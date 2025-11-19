@@ -1,0 +1,163 @@
+LEGAL NOTICE
+
+================================================================================
+IRONGATE QA NAVIGATOR PLATFORM
+================================================================================
+
+This repository contains proprietary software owned by IronGate Software LTD.
+
+⚠️  IMPORTANT LEGAL NOTICE  ⚠️
+
+================================================================================
+PROPRIETARY AND CONFIDENTIAL
+================================================================================
+
+This software is the confidential and proprietary information of IronGate
+Software LTD ("Confidential Information"). You shall not disclose such
+Confidential Information and shall use it only in accordance with the terms
+of the license agreement you entered into with IronGate Software LTD.
+
+================================================================================
+NO LICENSE GRANTED
+================================================================================
+
+The presence of this code in a publicly accessible repository does NOT grant
+you any license or right to use, copy, modify, or distribute the software.
+
+This code is made available for:
+   • Demonstration purposes only
+   • Evaluation by authorized parties
+   • Review by potential licensees
+
+All other uses are strictly prohibited without explicit written permission
+from IronGate Software LTD.
+
+================================================================================
+INTELLECTUAL PROPERTY RIGHTS
+================================================================================
+
+All intellectual property rights in and to this software are owned by or
+licensed to IronGate Software LTD. This includes, but is not limited to:
+
+   • Copyright in the source code and documentation
+   • Patent rights in any inventions embodied in the software
+   • Trademark rights in the IronGate name and logo
+   • Trade secret rights in the software's design and implementation
+
+================================================================================
+PROHIBITED ACTIONS
+================================================================================
+
+Without explicit written permission from IronGate Software LTD, you may NOT:
+
+   ❌ Fork this repository
+   ❌ Clone this repository for production use
+   ❌ Copy any code from this repository
+   ❌ Create derivative works
+   ❌ Distribute or share the code
+   ❌ Use the code in any commercial product
+   ❌ Remove or modify this notice
+   ❌ Remove or modify copyright notices
+   ❌ Reverse engineer the software
+   ❌ Create competing products
+
+================================================================================
+DMCA NOTICE
+================================================================================
+
+IronGate Software LTD actively monitors for unauthorized use of its software.
+
+If you believe this software has been used in violation of our copyright,
+please contact us immediately at: legal@irongate.com
+
+We will take appropriate action, including:
+   • Filing DMCA takedown notices
+   • Pursuing legal action for copyright infringement
+   • Seeking damages and injunctive relief
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+This software may include third-party open-source components. These components
+are used in accordance with their respective licenses and remain the property
+of their respective owners.
+
+The use of third-party components does NOT affect the proprietary nature of
+the IronGate QA Navigator Platform itself.
+
+Third-party licenses can be found in the respective component directories.
+
+================================================================================
+WARRANTY DISCLAIMER
+================================================================================
+
+THIS SOFTWARE IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND, EITHER EXPRESS
+OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, OR NON-INFRINGEMENT.
+
+================================================================================
+LIMITATION OF LIABILITY
+================================================================================
+
+IN NO EVENT SHALL IRONGATE SOFTWARE LTD BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA,
+OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+================================================================================
+EXPORT CONTROL
+================================================================================
+
+This software may be subject to export control laws and regulations. You agree
+to comply with all applicable international and national laws that apply to
+the software, including U.S. Export Administration Regulations, as well as
+end-user, end-use, and destination restrictions issued by U.S. and other
+governments.
+
+================================================================================
+GOVERNING LAW
+================================================================================
+
+This notice and any disputes arising from the use of this software shall be
+governed by and construed in accordance with the laws of [Your Jurisdiction],
+without regard to its conflict of law provisions.
+
+================================================================================
+CONTACT INFORMATION
+================================================================================
+
+For questions, licensing inquiries, or to report violations:
+
+IronGate Software LTD
+Legal Department
+Email: legal@irongate.com
+Website: https://irongate.com
+
+For security issues:
+Email: security@irongate.com
+
+For general inquiries:
+Email: info@irongate.com
+
+================================================================================
+ACKNOWLEDGMENT
+================================================================================
+
+By accessing, viewing, or using this software in any way, you acknowledge that
+you have read this notice, understand it, and agree to be bound by its terms.
+
+If you do not agree to these terms, you must immediately cease all use of the
+software and delete any copies in your possession.
+
+================================================================================
+
+Copyright (c) 2025 IronGate Software LTD. All Rights Reserved.
+
+This notice must not be removed or modified.
+Unauthorized use will be prosecuted to the fullest extent of the law.
+
+Last Updated: November 19, 2025

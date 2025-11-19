@@ -6,7 +6,7 @@
 
 **Enterprise-grade quality metrics and intelligence for Agile teams**
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
 [![React](https://img.shields.io/badge/React-19.2-blue.svg)](https://reactjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
 [![Vite](https://img.shields.io/badge/Vite-7.2-purple.svg)](https://vitejs.dev/)
@@ -326,21 +326,29 @@ See [BUSINESS_PROPOSAL.md](BUSINESS_PROPOSAL.md) for detailed ROI analysis.
 
 ---
 
-## 🤝 Contributing
+## 🔒 Proprietary Software
 
-Contributions are welcome! Please follow these steps:
+**This is proprietary software owned by IronGate Software LTD.**
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+⚠️ **IMPORTANT NOTICE**:
+- This software is **NOT open source**
+- Copying, modification, or distribution is **strictly prohibited**
+- Use is restricted to authorized parties only
+- See [LICENSE](LICENSE) file for complete terms
+
+For licensing inquiries, contact: legal@irongate.com
 
 ---
 
 ## 📝 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is proprietary software. **All rights reserved.**
+
+Copyright (c) 2025 IronGate Software LTD.
+
+**Unauthorized copying, modification, distribution, or use is strictly prohibited.**
+
+See the [LICENSE](LICENSE) file for complete terms and conditions.
 
 ---
 
