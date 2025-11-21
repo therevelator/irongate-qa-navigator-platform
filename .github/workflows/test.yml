@@ -65,14 +65,26 @@ jobs:
       - name: Run database tests
         run: npm run test:db
 
-      - name: Start application
+      - name: Start backend
         run: |
-          npm start > app.log 2>&1 &
-          echo "Application starting in background..."
-          echo "Waiting 60 seconds for startup..."
-          sleep 60
+          npm run server:prod > backend.log 2>&1 &
+          echo "Backend starting..."
+          echo "Backend PID: $!"
+          sleep 10
+          
+      - name: Start frontend
+        run: |
+          npm run dev > frontend.log 2>&1 &
+          echo "Frontend starting..."
+          echo "Frontend PID: $!"
+          sleep 10
+          
+      - name: Check processes
+        run: |
           echo "Checking running processes..."
-          ps aux | grep -E "(node|vite)" || true
+          ps aux | grep -E "(tsx|vite|node)" | grep -v grep || echo "No processes found"
+          echo "Checking ports..."
+          netstat -tuln | grep -E "(3000|5173)" || echo "Ports not listening yet"
           
       - name: Wait for backend to be ready
         run: |
@@ -86,6 +98,10 @@ jobs:
             sleep 2
           done
           echo "❌ Backend failed to start"
+          echo "=== Backend Logs ==="
+          cat backend.log || echo "No backend log found"
+          echo "=== Processes ==="
+          ps aux | grep -E "(tsx|node)" | grep -v grep || echo "No backend process"
           exit 1
           
       - name: Check frontend (optional)
@@ -116,7 +132,8 @@ jobs:
             test-results/
             playwright-report/
             coverage/
-            app.log
+            backend.log
+            frontend.log
 
       - name: Upload Playwright report
         if: always()
