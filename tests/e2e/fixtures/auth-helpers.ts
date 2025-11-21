@@ -15,36 +15,29 @@ export async function login(page: Page, email: string, password: string) {
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', password);
   
-  // Click sign in and wait for navigation
-  await Promise.all([
-    page.waitForNavigation({ timeout: 45000, waitUntil: 'domcontentloaded' }).catch(() => {
-      console.log('Navigation timeout - checking if login succeeded anyway');
-    }),
-    page.click('button:has-text("Sign In")'),
-  ]);
+  // Click sign in (no navigation wait since it's a SPA)
+  await page.click('button:has-text("Sign In")');
   
-  // Give page time to settle
-  await page.waitForTimeout(2000);
+  // Wait for login to complete - look for dashboard elements
+  await page.waitForSelector('button:has-text("Sign Out")', { state: 'visible', timeout: 10000 });
   
-  // Check if we're logged in by looking for elements that appear after login
-  // The app doesn't change URL, it just shows different content
-  const isLoggedIn = await page.locator('text=Admin Panel').isVisible().catch(() => false) ||
-                     await page.locator('text=All Teams').isVisible().catch(() => false) ||
-                     await page.locator('button:has-text("Sign Out")').isVisible().catch(() => false);
+  // Verify we're logged in by checking for multiple dashboard elements
+  const hasSignOut = await page.locator('button:has-text("Sign Out")').isVisible();
+  const hasAllTeams = await page.locator('text=All Teams').isVisible();
   
-  if (!isLoggedIn) {
+  if (!hasSignOut && !hasAllTeams) {
     throw new Error('Login failed - dashboard elements not found');
   }
   
   // Wait for any loaders to disappear
-  await page.waitForSelector('.irongate-loader', { state: 'hidden', timeout: 10000 }).catch(() => {});
-  await page.waitForSelector('[data-loading="true"]', { state: 'hidden', timeout: 10000 }).catch(() => {});
+  await page.waitForSelector('.irongate-loader', { state: 'hidden', timeout: 5000 }).catch(() => {});
+  await page.waitForSelector('[data-loading="true"]', { state: 'hidden', timeout: 5000 }).catch(() => {});
   
   // Wait for network to settle
-  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
   
-  // Extra buffer
-  await page.waitForTimeout(1000);
+  // Small buffer for UI to stabilize
+  await page.waitForTimeout(500);
 }
 
 export async function loginAsSuperAdmin(page: Page) {
