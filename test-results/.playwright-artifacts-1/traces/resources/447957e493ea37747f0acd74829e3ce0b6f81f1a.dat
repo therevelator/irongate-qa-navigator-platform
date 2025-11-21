@@ -1,0 +1,1374 @@
+import { createHotContext as __vite__createHotContext } from "/@vite/client";import.meta.hot = __vite__createHotContext("/src/components/PerformanceTesting.tsx");import __vite__cjsImport0_react_jsxDevRuntime from "/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=4880c6f9"; const jsxDEV = __vite__cjsImport0_react_jsxDevRuntime["jsxDEV"];
+var _s = $RefreshSig$();
+import __vite__cjsImport1_react from "/node_modules/.vite/deps/react.js?v=4880c6f9"; const React = __vite__cjsImport1_react.__esModule ? __vite__cjsImport1_react.default : __vite__cjsImport1_react; const useState = __vite__cjsImport1_react["useState"];
+import { ArrowLeft, TrendingUp, Activity, AlertTriangle, Zap, Clock, Users, Server } from "/node_modules/.vite/deps/lucide-react.js?v=951fade0";
+import { generatePerformanceMetrics } from "/src/data/advancedFeatures.ts";
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "/node_modules/.vite/deps/recharts.js?v=d7018962";
+const calculatePerformanceScore = (metric) => {
+  const p95Score = metric.response_time_p95 < 200 ? 100 : metric.response_time_p95 < 500 ? 80 : 50;
+  const errorScore = metric.error_rate < 1 ? 100 : metric.error_rate < 5 ? 70 : 40;
+  const throughputScore = metric.throughput > 500 ? 100 : metric.throughput > 200 ? 80 : 60;
+  return p95Score * 0.4 + errorScore * 0.4 + throughputScore * 0.2;
+};
+const PerformanceTesting = ({ onBack }) => {
+  _s();
+  const [selectedEndpoint, setSelectedEndpoint] = useState(null);
+  const [timeRange, setTimeRange] = useState("7d");
+  const metrics = generatePerformanceMetrics();
+  const avgP95 = (metrics.reduce((acc, m) => acc + m.response_time_p95, 0) / metrics.length).toFixed(0);
+  const avgThroughput = (metrics.reduce((acc, m) => acc + m.throughput, 0) / metrics.length).toFixed(0);
+  const avgErrorRate = (metrics.reduce((acc, m) => acc + m.error_rate, 0) / metrics.length).toFixed(2);
+  const metricsWithScore = metrics.map((m) => ({
+    ...m,
+    performance_score: calculatePerformanceScore(m),
+    method: "GET",
+    // Default method
+    response_times: {
+      p50: m.response_time_p50,
+      p95: m.response_time_p95,
+      p99: m.response_time_p99
+    }
+  }));
+  const degradedEndpoints = metricsWithScore.filter((m) => m.performance_score < 70).length;
+  const trendData = Array.from({ length: 24 }, (_, i) => ({
+    hour: `${i}:00`,
+    p50: 80 + Math.random() * 40,
+    p95: 150 + Math.random() * 100,
+    p99: 250 + Math.random() * 150
+  }));
+  const loadTestData = Array.from({ length: 10 }, (_, i) => ({
+    users: (i + 1) * 100,
+    responseTime: 100 + i * 15 + Math.random() * 20,
+    throughput: 1e3 - i * 50 + Math.random() * 100,
+    errorRate: i > 7 ? (i - 7) * 2 : 0
+  }));
+  return /* @__PURE__ */ jsxDEV("div", { className: "min-h-screen bg-gray-50", children: [
+    /* @__PURE__ */ jsxDEV("div", { className: "bg-white border-b sticky top-0 z-10", children: /* @__PURE__ */ jsxDEV("div", { className: "px-8 py-6", children: [
+      /* @__PURE__ */ jsxDEV(
+        "button",
+        {
+          onClick: onBack,
+          className: "flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors",
+          children: [
+            /* @__PURE__ */ jsxDEV(ArrowLeft, { size: 20 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 80,
+              columnNumber: 13
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: "font-medium", children: "Back to Features" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 81,
+              columnNumber: 13
+            }, this)
+          ]
+        },
+        void 0,
+        true,
+        {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 76,
+          columnNumber: 11
+        },
+        this
+      ),
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxDEV("div", { children: [
+          /* @__PURE__ */ jsxDEV("h1", { className: "text-3xl font-bold text-gray-900 flex items-center", children: [
+            /* @__PURE__ */ jsxDEV(Activity, { className: "mr-3 text-blue-500", size: 32 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 87,
+              columnNumber: 17
+            }, this),
+            "Performance Testing Metrics"
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 86,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("p", { className: "text-gray-500 mt-1", children: "Monitor response times, load capacity, and performance trends" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 90,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 85,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-center space-x-6", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-500", children: "Avg P95" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 95,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "text-3xl font-bold text-blue-600", children: [
+              avgP95,
+              "ms"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 96,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 94,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-500", children: "Throughput" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 99,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "text-3xl font-bold text-green-600", children: [
+              avgThroughput,
+              "/s"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 100,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 98,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-500", children: "Error Rate" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 103,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "text-3xl font-bold text-red-600", children: [
+              avgErrorRate,
+              "%"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 104,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 102,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-500", children: "Degraded" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 107,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "text-3xl font-bold text-orange-600", children: degradedEndpoints }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 108,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 106,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 93,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 84,
+        columnNumber: 11
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 75,
+      columnNumber: 9
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 74,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "px-8 py-4 bg-white border-b", children: /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center space-x-4", children: [
+        /* @__PURE__ */ jsxDEV("span", { className: "text-sm font-semibold text-gray-700", children: "Time Range:" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 119,
+          columnNumber: 13
+        }, this),
+        ["24h", "7d", "30d"].map(
+          (range) => /* @__PURE__ */ jsxDEV(
+            "button",
+            {
+              onClick: () => setTimeRange(range),
+              className: `px-4 py-2 rounded-lg text-sm font-medium transition-all ${timeRange === range ? "bg-blue-600 text-white shadow-md" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`,
+              children: range === "24h" ? "Last 24 Hours" : range === "7d" ? "Last 7 Days" : "Last 30 Days"
+            },
+            range,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 121,
+              columnNumber: 13
+            },
+            this
+          )
+        )
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 118,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center space-x-3", children: /* @__PURE__ */ jsxDEV("div", { className: "flex items-center space-x-2 px-4 py-2 bg-green-50 rounded-lg", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "w-2 h-2 rounded-full bg-green-500 animate-pulse" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 137,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("span", { className: "text-sm font-medium text-green-700", children: "Live Monitoring" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 138,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 136,
+        columnNumber: 13
+      }, this) }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 135,
+        columnNumber: 11
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 117,
+      columnNumber: 9
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 116,
+      columnNumber: 7
+    }, this),
+    degradedEndpoints > 0 && /* @__PURE__ */ jsxDEV("div", { className: "px-8 py-4 bg-red-50 border-b border-red-200", children: /* @__PURE__ */ jsxDEV("div", { className: "flex items-start", children: [
+      /* @__PURE__ */ jsxDEV(AlertTriangle, { className: "text-red-600 mr-3 flex-shrink-0 mt-1", size: 20 }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 148,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { children: [
+        /* @__PURE__ */ jsxDEV("h3", { className: "text-sm font-semibold text-red-900", children: "Performance Degradation Detected" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 150,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-red-800 mt-1", children: [
+          degradedEndpoints,
+          " endpoint",
+          degradedEndpoints > 1 ? "s are" : " is",
+          " experiencing performance issues. P95 response times are above acceptable thresholds."
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 153,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 149,
+        columnNumber: 13
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 147,
+      columnNumber: 11
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 146,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "px-8 py-8", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8", children: [
+        /* @__PURE__ */ jsxDEV("h2", { className: "text-xl font-bold text-gray-900 mb-4", children: "Response Time Trends (24 Hours)" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 166,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "h-80", children: /* @__PURE__ */ jsxDEV(ResponsiveContainer, { width: "100%", height: "100%", children: /* @__PURE__ */ jsxDEV(AreaChart, { data: trendData, children: [
+          /* @__PURE__ */ jsxDEV("defs", { children: [
+            /* @__PURE__ */ jsxDEV("linearGradient", { id: "colorP50", x1: "0", y1: "0", x2: "0", y2: "1", children: [
+              /* @__PURE__ */ jsxDEV("stop", { offset: "5%", stopColor: "#10b981", stopOpacity: 0.3 }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 172,
+                columnNumber: 21
+              }, this),
+              /* @__PURE__ */ jsxDEV("stop", { offset: "95%", stopColor: "#10b981", stopOpacity: 0 }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 173,
+                columnNumber: 21
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 171,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("linearGradient", { id: "colorP95", x1: "0", y1: "0", x2: "0", y2: "1", children: [
+              /* @__PURE__ */ jsxDEV("stop", { offset: "5%", stopColor: "#3b82f6", stopOpacity: 0.3 }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 176,
+                columnNumber: 21
+              }, this),
+              /* @__PURE__ */ jsxDEV("stop", { offset: "95%", stopColor: "#3b82f6", stopOpacity: 0 }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 177,
+                columnNumber: 21
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 175,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("linearGradient", { id: "colorP99", x1: "0", y1: "0", x2: "0", y2: "1", children: [
+              /* @__PURE__ */ jsxDEV("stop", { offset: "5%", stopColor: "#ef4444", stopOpacity: 0.3 }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 180,
+                columnNumber: 21
+              }, this),
+              /* @__PURE__ */ jsxDEV("stop", { offset: "95%", stopColor: "#ef4444", stopOpacity: 0 }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 181,
+                columnNumber: 21
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 179,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 170,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(CartesianGrid, { strokeDasharray: "3 3" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 184,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(XAxis, { dataKey: "hour" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 185,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(YAxis, { label: { value: "Response Time (ms)", angle: -90, position: "insideLeft" } }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 186,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(
+            Tooltip,
+            {
+              contentStyle: { backgroundColor: "#1f2937", color: "#fff", borderRadius: "8px" }
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 187,
+              columnNumber: 17
+            },
+            this
+          ),
+          /* @__PURE__ */ jsxDEV(Legend, {}, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 190,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(Area, { type: "monotone", dataKey: "p50", stroke: "#10b981", fill: "url(#colorP50)", strokeWidth: 2, name: "P50 (Median)" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 191,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(Area, { type: "monotone", dataKey: "p95", stroke: "#3b82f6", fill: "url(#colorP95)", strokeWidth: 2, name: "P95" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 192,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(Area, { type: "monotone", dataKey: "p99", stroke: "#ef4444", fill: "url(#colorP99)", strokeWidth: 2, name: "P99" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 193,
+            columnNumber: 17
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 169,
+          columnNumber: 15
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 168,
+          columnNumber: 13
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 167,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "mt-4 grid grid-cols-3 gap-4", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center p-3 bg-green-50 rounded-lg", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-green-700 font-medium", children: "P50 (Median)" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 199,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-2xl font-bold text-green-900", children: [
+              trendData[trendData.length - 1].p50.toFixed(0),
+              "ms"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 200,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-green-600", children: "50% of requests" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 203,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 198,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center p-3 bg-blue-50 rounded-lg", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-blue-700 font-medium", children: "P95" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 206,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-2xl font-bold text-blue-900", children: [
+              trendData[trendData.length - 1].p95.toFixed(0),
+              "ms"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 207,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-blue-600", children: "95% of requests" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 210,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 205,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center p-3 bg-red-50 rounded-lg", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-red-700 font-medium", children: "P99" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 213,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-2xl font-bold text-red-900", children: [
+              trendData[trendData.length - 1].p99.toFixed(0),
+              "ms"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 214,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-red-600", children: "99% of requests" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 217,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 212,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 197,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 165,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8", children: [
+        /* @__PURE__ */ jsxDEV("h2", { className: "text-xl font-bold text-gray-900 mb-4", children: "Load Test Results - Capacity Planning" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 224,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "h-80", children: /* @__PURE__ */ jsxDEV(ResponsiveContainer, { width: "100%", height: "100%", children: /* @__PURE__ */ jsxDEV(LineChart, { data: loadTestData, children: [
+          /* @__PURE__ */ jsxDEV(CartesianGrid, { strokeDasharray: "3 3" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 228,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(
+            XAxis,
+            {
+              dataKey: "users",
+              label: { value: "Concurrent Users", position: "bottom", offset: -5 }
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 229,
+              columnNumber: 17
+            },
+            this
+          ),
+          /* @__PURE__ */ jsxDEV(
+            YAxis,
+            {
+              yAxisId: "left",
+              label: { value: "Response Time (ms)", angle: -90, position: "insideLeft" }
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 233,
+              columnNumber: 17
+            },
+            this
+          ),
+          /* @__PURE__ */ jsxDEV(
+            YAxis,
+            {
+              yAxisId: "right",
+              orientation: "right",
+              label: { value: "Throughput (req/s)", angle: 90, position: "insideRight" }
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 237,
+              columnNumber: 17
+            },
+            this
+          ),
+          /* @__PURE__ */ jsxDEV(
+            Tooltip,
+            {
+              contentStyle: { backgroundColor: "#1f2937", color: "#fff", borderRadius: "8px" }
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 242,
+              columnNumber: 17
+            },
+            this
+          ),
+          /* @__PURE__ */ jsxDEV(Legend, {}, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 245,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(
+            Line,
+            {
+              yAxisId: "left",
+              type: "monotone",
+              dataKey: "responseTime",
+              stroke: "#ef4444",
+              strokeWidth: 3,
+              name: "Response Time (ms)",
+              dot: { fill: "#ef4444", r: 5 }
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 246,
+              columnNumber: 17
+            },
+            this
+          ),
+          /* @__PURE__ */ jsxDEV(
+            Line,
+            {
+              yAxisId: "right",
+              type: "monotone",
+              dataKey: "throughput",
+              stroke: "#10b981",
+              strokeWidth: 3,
+              name: "Throughput (req/s)",
+              dot: { fill: "#10b981", r: 5 }
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 255,
+              columnNumber: 17
+            },
+            this
+          )
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 227,
+          columnNumber: 15
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 226,
+          columnNumber: 13
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 225,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "mt-4 bg-blue-50 border border-blue-200 rounded-lg p-4", children: [
+          /* @__PURE__ */ jsxDEV("h4", { className: "text-sm font-semibold text-blue-900 mb-2", children: "💡 Capacity Insights" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 268,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("ul", { className: "text-sm text-blue-800 space-y-1", children: [
+            /* @__PURE__ */ jsxDEV("li", { children: [
+              "• ",
+              /* @__PURE__ */ jsxDEV("strong", { children: "Optimal Capacity:" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 270,
+                columnNumber: 21
+              }, this),
+              " System performs well up to ~700 concurrent users"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 270,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("li", { children: [
+              "• ",
+              /* @__PURE__ */ jsxDEV("strong", { children: "Degradation Point:" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 271,
+                columnNumber: 21
+              }, this),
+              " Response times increase significantly after 800 users"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 271,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("li", { children: [
+              "• ",
+              /* @__PURE__ */ jsxDEV("strong", { children: "Recommendation:" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 272,
+                columnNumber: 21
+              }, this),
+              " Scale horizontally before reaching 700 concurrent users"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 272,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("li", { children: [
+              "• ",
+              /* @__PURE__ */ jsxDEV("strong", { children: "Current Headroom:" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+                lineNumber: 273,
+                columnNumber: 21
+              }, this),
+              " 40% capacity available for traffic spikes"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 273,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 269,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 267,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 223,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "space-y-4", children: [
+        /* @__PURE__ */ jsxDEV("h2", { className: "text-xl font-bold text-gray-900", children: "Endpoint Performance Analysis" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 280,
+          columnNumber: 11
+        }, this),
+        metricsWithScore.map(
+          (metric) => /* @__PURE__ */ jsxDEV(
+            EndpointCard,
+            {
+              metric,
+              isSelected: selectedEndpoint === metric.endpoint,
+              onSelect: () => setSelectedEndpoint(selectedEndpoint === metric.endpoint ? null : metric.endpoint)
+            },
+            metric.endpoint,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 282,
+              columnNumber: 11
+            },
+            this
+          )
+        )
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 279,
+        columnNumber: 9
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 163,
+      columnNumber: 7
+    }, this)
+  ] }, void 0, true, {
+    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+    lineNumber: 72,
+    columnNumber: 5
+  }, this);
+};
+_s(PerformanceTesting, "KXyHBTPy5HQcRjdd3gukxi2/IbA=");
+_c = PerformanceTesting;
+const EndpointCard = ({ metric, isSelected, onSelect }) => {
+  const getPerformanceColor = (score) => {
+    if (score >= 90) return "text-green-600";
+    if (score >= 70) return "text-yellow-600";
+    return "text-red-600";
+  };
+  const getPerformanceLabel = (score) => {
+    if (score >= 90) return "Excellent";
+    if (score >= 70) return "Good";
+    return "Poor";
+  };
+  const getStatusBadge = (score) => {
+    if (score >= 90) return "bg-green-100 text-green-700 border-green-300";
+    if (score >= 70) return "bg-yellow-100 text-yellow-700 border-yellow-300";
+    return "bg-red-100 text-red-700 border-red-300";
+  };
+  const miniTrend = Array.from({ length: 20 }, () => ({
+    value: metric.response_times.p95 + (Math.random() - 0.5) * 50
+  }));
+  return /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow", children: /* @__PURE__ */ jsxDEV("div", { className: "p-6", children: [
+    /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between mb-4", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center space-x-4", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: `w-12 h-12 rounded-lg flex items-center justify-center ${metric.performance_score >= 90 ? "bg-green-100" : metric.performance_score >= 70 ? "bg-yellow-100" : "bg-red-100"}`, children: metric.performance_score >= 90 ? /* @__PURE__ */ jsxDEV(Zap, { className: "text-green-600", size: 24 }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 335,
+          columnNumber: 15
+        }, this) : metric.performance_score >= 70 ? /* @__PURE__ */ jsxDEV(Clock, { className: "text-yellow-600", size: 24 }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 337,
+          columnNumber: 15
+        }, this) : /* @__PURE__ */ jsxDEV(AlertTriangle, { className: "text-red-600", size: 24 }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 339,
+          columnNumber: 15
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 330,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { children: [
+          /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-bold text-gray-900", children: metric.endpoint }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 343,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-500", children: metric.method }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 344,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 342,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("span", { className: `px-3 py-1 rounded-full text-xs font-semibold border ${getStatusBadge(metric.performance_score)}`, children: getPerformanceLabel(metric.performance_score) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 346,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 329,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "text-right", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: `text-3xl font-bold ${getPerformanceColor(metric.performance_score)}`, children: metric.performance_score.toFixed(0) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 352,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "text-xs text-gray-500", children: "Performance Score" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 355,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 351,
+        columnNumber: 11
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 328,
+      columnNumber: 9
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-5 gap-4 mb-4", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-green-50 rounded-lg p-3", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-center text-green-600 mb-1", children: [
+          /* @__PURE__ */ jsxDEV(TrendingUp, { size: 14, className: "mr-1" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 363,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("span", { className: "text-xs font-semibold", children: "P50" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 364,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 362,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "text-lg font-bold text-green-900", children: [
+          metric.response_times.p50,
+          "ms"
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 366,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 361,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-blue-50 rounded-lg p-3", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-center text-blue-600 mb-1", children: [
+          /* @__PURE__ */ jsxDEV(Activity, { size: 14, className: "mr-1" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 371,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("span", { className: "text-xs font-semibold", children: "P95" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 372,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 370,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "text-lg font-bold text-blue-900", children: [
+          metric.response_times.p95,
+          "ms"
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 374,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 369,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-purple-50 rounded-lg p-3", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-center text-purple-600 mb-1", children: [
+          /* @__PURE__ */ jsxDEV(Activity, { size: 14, className: "mr-1" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 379,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("span", { className: "text-xs font-semibold", children: "P99" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 380,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 378,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "text-lg font-bold text-purple-900", children: [
+          metric.response_times.p99,
+          "ms"
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 382,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 377,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-orange-50 rounded-lg p-3", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-center text-orange-600 mb-1", children: [
+          /* @__PURE__ */ jsxDEV(Users, { size: 14, className: "mr-1" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 387,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("span", { className: "text-xs font-semibold", children: "Throughput" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 388,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 386,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "text-lg font-bold text-orange-900", children: [
+          metric.throughput,
+          "/s"
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 390,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 385,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-red-50 rounded-lg p-3", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-center text-red-600 mb-1", children: [
+          /* @__PURE__ */ jsxDEV(AlertTriangle, { size: 14, className: "mr-1" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 395,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("span", { className: "text-xs font-semibold", children: "Error Rate" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 396,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 394,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "text-lg font-bold text-red-900", children: [
+          metric.error_rate,
+          "%"
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 398,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 393,
+        columnNumber: 11
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 360,
+      columnNumber: 9
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "mb-4", children: [
+      /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-gray-500 mb-2", children: "P95 Response Time Trend (Last Hour)" }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 404,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "h-16", children: /* @__PURE__ */ jsxDEV(ResponsiveContainer, { width: "100%", height: "100%", children: /* @__PURE__ */ jsxDEV(AreaChart, { data: miniTrend, children: [
+        /* @__PURE__ */ jsxDEV("defs", { children: /* @__PURE__ */ jsxDEV("linearGradient", { id: `gradient-${metric.endpoint}`, x1: "0", y1: "0", x2: "0", y2: "1", children: [
+          /* @__PURE__ */ jsxDEV("stop", { offset: "5%", stopColor: "#3b82f6", stopOpacity: 0.3 }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 410,
+            columnNumber: 21
+          }, this),
+          /* @__PURE__ */ jsxDEV("stop", { offset: "95%", stopColor: "#3b82f6", stopOpacity: 0 }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 411,
+            columnNumber: 21
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 409,
+          columnNumber: 19
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 408,
+          columnNumber: 17
+        }, this),
+        /* @__PURE__ */ jsxDEV(
+          Area,
+          {
+            type: "monotone",
+            dataKey: "value",
+            stroke: "#3b82f6",
+            fill: `url(#gradient-${metric.endpoint})`,
+            strokeWidth: 2
+          },
+          void 0,
+          false,
+          {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 414,
+            columnNumber: 17
+          },
+          this
+        )
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 407,
+        columnNumber: 15
+      }, this) }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 406,
+        columnNumber: 13
+      }, this) }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 405,
+        columnNumber: 11
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 403,
+      columnNumber: 9
+    }, this),
+    /* @__PURE__ */ jsxDEV(
+      "button",
+      {
+        onClick: onSelect,
+        className: "text-sm text-blue-600 hover:text-blue-800 font-medium",
+        children: isSelected ? "▼ Hide Details" : "▶ Show Detailed Analysis"
+      },
+      void 0,
+      false,
+      {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 426,
+        columnNumber: 9
+      },
+      this
+    ),
+    isSelected && /* @__PURE__ */ jsxDEV("div", { className: "mt-4 pt-4 border-t border-gray-200 space-y-4", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-blue-50 rounded-lg p-4", children: [
+        /* @__PURE__ */ jsxDEV("h4", { className: "text-sm font-semibold text-blue-900 mb-3 flex items-center", children: [
+          /* @__PURE__ */ jsxDEV(Server, { size: 16, className: "mr-2" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 438,
+            columnNumber: 17
+          }, this),
+          "Performance Analysis"
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 437,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-2 gap-4 text-sm text-blue-800", children: [
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "font-medium mb-1", children: "Response Time Assessment:" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 443,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { children: metric.response_times.p95 < 200 ? "✅ Excellent - Well within acceptable range" : metric.response_times.p95 < 500 ? "⚠️ Acceptable - Monitor for degradation" : "❌ Poor - Immediate optimization needed" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 444,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 442,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "font-medium mb-1", children: "Throughput Capacity:" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 451,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { children: metric.throughput > 500 ? "✅ High capacity - Can handle traffic spikes" : metric.throughput > 200 ? "⚠️ Moderate - Consider scaling for growth" : "❌ Low - Scale immediately" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 452,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 450,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "font-medium mb-1", children: "Error Rate Status:" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 459,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { children: metric.error_rate < 1 ? "✅ Healthy - Error rate within SLA" : metric.error_rate < 5 ? "⚠️ Elevated - Investigate root causes" : "❌ Critical - Immediate action required" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 460,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 458,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "font-medium mb-1", children: "Overall Health:" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 467,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "font-bold", children: metric.performance_score >= 90 ? "✅ Excellent Performance" : metric.performance_score >= 70 ? "⚠️ Needs Monitoring" : "❌ Requires Optimization" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 468,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 466,
+            columnNumber: 17
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 441,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 436,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-green-50 rounded-lg p-4", children: [
+        /* @__PURE__ */ jsxDEV("h4", { className: "text-sm font-semibold text-green-900 mb-3", children: "💡 Optimization Recommendations" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 479,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("ul", { className: "text-sm text-green-800 space-y-2", children: [
+          metric.response_times.p95 > 200 && /* @__PURE__ */ jsxDEV("li", { className: "flex items-start", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "mr-2", children: "•" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 483,
+              columnNumber: 21
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { children: "Implement caching to reduce P95 response times by 30-40%" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 484,
+              columnNumber: 21
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 482,
+            columnNumber: 15
+          }, this),
+          metric.throughput < 300 && /* @__PURE__ */ jsxDEV("li", { className: "flex items-start", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "mr-2", children: "•" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 489,
+              columnNumber: 21
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { children: "Consider horizontal scaling to improve throughput capacity" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 490,
+              columnNumber: 21
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 488,
+            columnNumber: 15
+          }, this),
+          metric.error_rate > 1 && /* @__PURE__ */ jsxDEV("li", { className: "flex items-start", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "mr-2", children: "•" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 495,
+              columnNumber: 21
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { children: "Investigate error logs to identify and fix recurring issues" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 496,
+              columnNumber: 21
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 494,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("li", { className: "flex items-start", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "mr-2", children: "•" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 500,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { children: [
+              "Set up alerts for P95 > ",
+              metric.response_times.p95 * 1.5,
+              "ms to catch degradation early"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 501,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 499,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("li", { className: "flex items-start", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "mr-2", children: "•" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 504,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { children: "Run load tests monthly to validate capacity planning assumptions" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 505,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 503,
+            columnNumber: 17
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 480,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 478,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-purple-50 rounded-lg p-4", children: [
+        /* @__PURE__ */ jsxDEV("h4", { className: "text-sm font-semibold text-purple-900 mb-3", children: "📊 SLA Compliance" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 512,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-3 gap-4", children: [
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-purple-700 mb-1", children: "Target P95:" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 515,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-lg font-bold text-purple-900", children: "< 500ms" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 516,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-purple-600", children: metric.response_times.p95 < 500 ? "✅ Meeting SLA" : "❌ Violating SLA" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 517,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 514,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-purple-700 mb-1", children: "Target Error Rate:" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 522,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-lg font-bold text-purple-900", children: "< 1%" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 523,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-purple-600", children: metric.error_rate < 1 ? "✅ Meeting SLA" : "❌ Violating SLA" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 524,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 521,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-purple-700 mb-1", children: "Uptime Target:" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 529,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-lg font-bold text-purple-900", children: "99.9%" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 530,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-purple-600", children: "✅ Meeting SLA" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+              lineNumber: 531,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+            lineNumber: 528,
+            columnNumber: 17
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+          lineNumber: 513,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+        lineNumber: 511,
+        columnNumber: 13
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+      lineNumber: 434,
+      columnNumber: 9
+    }, this)
+  ] }, void 0, true, {
+    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+    lineNumber: 327,
+    columnNumber: 7
+  }, this) }, void 0, false, {
+    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx",
+    lineNumber: 326,
+    columnNumber: 5
+  }, this);
+};
+_c2 = EndpointCard;
+export default PerformanceTesting;
+var _c, _c2;
+$RefreshReg$(_c, "PerformanceTesting");
+$RefreshReg$(_c2, "EndpointCard");
+import * as RefreshRuntime from "/@react-refresh";
+const inWebWorker = typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope;
+if (import.meta.hot && !inWebWorker) {
+  if (!window.$RefreshReg$) {
+    throw new Error(
+      "@vitejs/plugin-react can't detect preamble. Something is wrong."
+    );
+  }
+  RefreshRuntime.__hmr_import(import.meta.url).then((currentExports) => {
+    RefreshRuntime.registerExportsForReactRefresh("/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx", currentExports);
+    import.meta.hot.accept((nextExports) => {
+      if (!nextExports) return;
+      const invalidateMessage = RefreshRuntime.validateRefreshBoundaryAndEnqueueUpdate("/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx", currentExports, nextExports);
+      if (invalidateMessage) import.meta.hot.invalidate(invalidateMessage);
+    });
+  });
+}
+function $RefreshReg$(type, id) {
+  return RefreshRuntime.register(type, "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/PerformanceTesting.tsx " + id);
+}
+function $RefreshSig$() {
+  return RefreshRuntime.createSignatureFunctionForTransform();
+}
+
+//# sourceMappingURL=data:application/json;base64,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RDtBQUFBLFlBQzFELHVCQUFDLE9BQUUsV0FBVSxxQ0FBb0MscUJBQWpEO0FBQUE7QUFBQTtBQUFBO0FBQUEsbUJBQXNEO0FBQUEsWUFDdEQsdUJBQUMsT0FBRSxXQUFVLDJCQUEwQiw2QkFBdkM7QUFBQTtBQUFBO0FBQUE7QUFBQSxtQkFBb0Q7QUFBQSxlQUh0RDtBQUFBO0FBQUE7QUFBQTtBQUFBLGlCQUlBO0FBQUEsYUFuQkY7QUFBQTtBQUFBO0FBQUE7QUFBQSxlQW9CQTtBQUFBLFdBdEJGO0FBQUE7QUFBQTtBQUFBO0FBQUEsYUF1QkE7QUFBQSxTQXBHRjtBQUFBO0FBQUE7QUFBQTtBQUFBLFdBcUdBO0FBQUEsT0FoTko7QUFBQTtBQUFBO0FBQUE7QUFBQSxTQWtOQSxLQW5ORjtBQUFBO0FBQUE7QUFBQTtBQUFBLFNBb05BO0FBRUo7QUFBRStELE1BL09JUjtBQWlQTixlQUFlcEQ7QUFBbUIsSUFBQW1ELElBQUFTO0FBQUFDLGFBQUFWLElBQUE7QUFBQVUsYUFBQUQsS0FBQSIsIm5hbWVzIjpbIlJlYWN0IiwidXNlU3RhdGUiLCJBcnJvd0xlZnQiLCJUcmVuZGluZ1VwIiwiQWN0aXZpdHkiLCJBbGVydFRyaWFuZ2xlIiwiWmFwIiwiQ2xvY2siLCJVc2VycyIsIlNlcnZlciIsImdlbmVyYXRlUGVyZm9ybWFuY2VNZXRyaWNzIiwiTGluZUNoYXJ0IiwiTGluZSIsIkFyZWFDaGFydCIsIkFyZWEiLCJYQXhpcyIsIllBeGlzIiwiVG9vbHRpcCIsIlJlc3BvbnNpdmVDb250YWluZXIiLCJDYXJ0ZXNpYW5HcmlkIiwiTGVnZW5kIiwiY2FsY3VsYXRlUGVyZm9ybWFuY2VTY29yZSIsIm1ldHJpYyIsInA5NVNjb3JlIiwicmVzcG9uc2VfdGltZV9wOTUiLCJlcnJvclNjb3JlIiwiZXJyb3JfcmF0ZSIsInRocm91Z2hwdXRTY29yZSIsInRocm91Z2hwdXQiLCJQZXJmb3JtYW5jZVRlc3RpbmciLCJvbkJhY2siLCJfcyIsInNlbGVjdGVkRW5kcG9pbnQiLCJzZXRTZWxlY3RlZEVuZHBvaW50IiwidGltZVJhbmdlIiwic2V0VGltZVJhbmdlIiwibWV0cmljcyIsImF2Z1A5NSIsInJlZHVjZSIsImFjYyIsIm0iLCJsZW5ndGgiLCJ0b0ZpeGVkIiwiYXZnVGhyb3VnaHB1dCIsImF2Z0Vycm9yUmF0ZSIsIm1ldHJpY3NXaXRoU2NvcmUiLCJtYXAiLCJwZXJmb3JtYW5jZV9zY29yZSIsIm1ldGhvZCIsInJlc3BvbnNlX3RpbWVzIiwicDUwIiwicmVzcG9uc2VfdGltZV9wNTAiLCJwOTUiLCJwOTkiLCJyZXNwb25zZV90aW1lX3A5OSIsImRlZ3JhZGVkRW5kcG9pbnRzIiwiZmlsdGVyIiwidHJlbmREYXRhIiwiQXJyYXkiLCJmcm9tIiwiXyIsImkiLCJob3VyIiwiTWF0aCIsInJhbmRvbSIsImxvYWRUZXN0RGF0YSIsInVzZXJzIiwicmVzcG9uc2VUaW1lIiwiZXJyb3JSYXRlIiwicmFuZ2UiLCJ2YWx1ZSIsImFuZ2xlIiwicG9zaXRpb24iLCJiYWNrZ3JvdW5kQ29sb3IiLCJjb2xvciIsImJvcmRlclJhZGl1cyIsIm9mZnNldCIsImZpbGwiLCJyIiwiZW5kcG9pbnQiLCJfYyIsIkVuZHBvaW50Q2FyZCIsImlzU2VsZWN0ZWQiLCJvblNlbGVjdCIsImdldFBlcmZvcm1hbmNlQ29sb3IiLCJzY29yZSIsImdldFBlcmZvcm1hbmNlTGFiZWwiLCJnZXRTdGF0dXNCYWRnZSIsIm1pbmlUcmVuZCIsIl9jMiIsIiRSZWZyZXNoUmVnJCJdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJQZXJmb3JtYW5jZVRlc3RpbmcudHN4Il0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCBSZWFjdCwgeyB1c2VTdGF0ZSB9IGZyb20gJ3JlYWN0JztcbmltcG9ydCB7IEFycm93TGVmdCwgVHJlbmRpbmdVcCwgQWN0aXZpdHksIEFsZXJ0VHJpYW5nbGUsIFphcCwgQ2xvY2ssIFVzZXJzLCBTZXJ2ZXIgfSBmcm9tICdsdWNpZGUtcmVhY3QnO1xuaW1wb3J0IHsgZ2VuZXJhdGVQZXJmb3JtYW5jZU1ldHJpY3MgfSBmcm9tICcuLi9kYXRhL2FkdmFuY2VkRmVhdHVyZXMnO1xuaW1wb3J0IHR5cGUgeyBQZXJmb3JtYW5jZU1ldHJpYyB9IGZyb20gJy4uL2RhdGEvYWR2YW5jZWRGZWF0dXJlcyc7XG5pbXBvcnQgeyBMaW5lQ2hhcnQsIExpbmUsIEFyZWFDaGFydCwgQXJlYSwgWEF4aXMsIFlBeGlzLCBUb29sdGlwLCBSZXNwb25zaXZlQ29udGFpbmVyLCBDYXJ0ZXNpYW5HcmlkLCBMZWdlbmQgfSBmcm9tICdyZWNoYXJ0cyc7XG5cbmludGVyZmFjZSBQZXJmb3JtYW5jZVRlc3RpbmdQcm9wcyB7XG4gIG9uQmFjazogKCkgPT4gdm9pZDtcbn1cblxuLy8gRXh0ZW5kZWQgbWV0cmljIHR5cGUgd2l0aCBjYWxjdWxhdGVkIGZpZWxkc1xudHlwZSBFeHRlbmRlZFBlcmZvcm1hbmNlTWV0cmljID0gUGVyZm9ybWFuY2VNZXRyaWMgJiB7XG4gIHBlcmZvcm1hbmNlX3Njb3JlOiBudW1iZXI7XG4gIG1ldGhvZDogc3RyaW5nO1xuICByZXNwb25zZV90aW1lczoge1xuICAgIHA1MDogbnVtYmVyO1xuICAgIHA5NTogbnVtYmVyO1xuICAgIHA5OTogbnVtYmVyO1xuICB9O1xufTtcblxuLy8gQ2FsY3VsYXRlIHBlcmZvcm1hbmNlIHNjb3JlIGJhc2VkIG9uIHJlc3BvbnNlIHRpbWVzIGFuZCBlcnJvciByYXRlXG5jb25zdCBjYWxjdWxhdGVQZXJmb3JtYW5jZVNjb3JlID0gKG1ldHJpYzogUGVyZm9ybWFuY2VNZXRyaWMpOiBudW1iZXIgPT4ge1xuICBjb25zdCBwOTVTY29yZSA9IG1ldHJpYy5yZXNwb25zZV90aW1lX3A5NSA8IDIwMCA/IDEwMCA6IG1ldHJpYy5yZXNwb25zZV90aW1lX3A5NSA8IDUwMCA/IDgwIDogNTA7XG4gIGNvbnN0IGVycm9yU2NvcmUgPSBtZXRyaWMuZXJyb3JfcmF0ZSA8IDEgPyAxMDAgOiBtZXRyaWMuZXJyb3JfcmF0ZSA8IDUgPyA3MCA6IDQwO1xuICBjb25zdCB0aHJvdWdocHV0U2NvcmUgPSBtZXRyaWMudGhyb3VnaHB1dCA+IDUwMCA/IDEwMCA6IG1ldHJpYy50aHJvdWdocHV0ID4gMjAwID8gODAgOiA2MDtcbiAgXG4gIHJldHVybiAocDk1U2NvcmUgKiAwLjQgKyBlcnJvclNjb3JlICogMC40ICsgdGhyb3VnaHB1dFNjb3JlICogMC4yKTtcbn07XG5cbmNvbnN0IFBlcmZvcm1hbmNlVGVzdGluZzogUmVhY3QuRkM8UGVyZm9ybWFuY2VUZXN0aW5nUHJvcHM+ID0gKHsgb25CYWNrIH0pID0+IHtcbiAgY29uc3QgW3NlbGVjdGVkRW5kcG9pbnQsIHNldFNlbGVjdGVkRW5kcG9pbnRdID0gdXNlU3RhdGU8c3RyaW5nIHwgbnVsbD4obnVsbCk7XG4gIGNvbnN0IFt0aW1lUmFuZ2UsIHNldFRpbWVSYW5nZV0gPSB1c2VTdGF0ZTwnMjRoJyB8ICc3ZCcgfCAnMzBkJz4oJzdkJyk7XG4gIFxuICBjb25zdCBtZXRyaWNzID0gZ2VuZXJhdGVQZXJmb3JtYW5jZU1ldHJpY3MoKTtcblxuICAvLyBDYWxjdWxhdGUgb3ZlcmFsbCBzdGF0aXN0aWNzXG4gIGNvbnN0IGF2Z1A5NSA9IChtZXRyaWNzLnJlZHVjZSgoYWNjLCBtKSA9PiBhY2MgKyBtLnJlc3BvbnNlX3RpbWVfcDk1LCAwKSAvIG1ldHJpY3MubGVuZ3RoKS50b0ZpeGVkKDApO1xuICBjb25zdCBhdmdUaHJvdWdocHV0ID0gKG1ldHJpY3MucmVkdWNlKChhY2MsIG0pID0+IGFjYyArIG0udGhyb3VnaHB1dCwgMCkgLyBtZXRyaWNzLmxlbmd0aCkudG9GaXhlZCgwKTtcbiAgY29uc3QgYXZnRXJyb3JSYXRlID0gKG1ldHJpY3MucmVkdWNlKChhY2MsIG0pID0+IGFjYyArIG0uZXJyb3JfcmF0ZSwgMCkgLyBtZXRyaWNzLmxlbmd0aCkudG9GaXhlZCgyKTtcbiAgXG4gIC8vIENhbGN1bGF0ZSBwZXJmb3JtYW5jZSBzY29yZSBmb3IgZWFjaCBtZXRyaWNcbiAgY29uc3QgbWV0cmljc1dpdGhTY29yZTogRXh0ZW5kZWRQZXJmb3JtYW5jZU1ldHJpY1tdID0gbWV0cmljcy5tYXAobSA9PiAoe1xuICAgIC4uLm0sXG4gICAgcGVyZm9ybWFuY2Vfc2NvcmU6IGNhbGN1bGF0ZVBlcmZvcm1hbmNlU2NvcmUobSksXG4gICAgbWV0aG9kOiAnR0VUJywgLy8gRGVmYXVsdCBtZXRob2RcbiAgICByZXNwb25zZV90aW1lczoge1xuICAgICAgcDUwOiBtLnJlc3BvbnNlX3RpbWVfcDUwLFxuICAgICAgcDk1OiBtLnJlc3BvbnNlX3RpbWVfcDk1LFxuICAgICAgcDk5OiBtLnJlc3BvbnNlX3RpbWVfcDk5XG4gICAgfVxuICB9KSk7XG4gIGNvbnN0IGRlZ3JhZGVkRW5kcG9pbnRzID0gbWV0cmljc1dpdGhTY29yZS5maWx0ZXIobSA9PiBtLnBlcmZvcm1hbmNlX3Njb3JlIDwgNzApLmxlbmd0aDtcblxuICAvLyBQcmVwYXJlIGRhdGEgZm9yIHJlc3BvbnNlIHRpbWUgdHJlbmRzXG4gIGNvbnN0IHRyZW5kRGF0YSA9IEFycmF5LmZyb20oeyBsZW5ndGg6IDI0IH0sIChfLCBpKSA9PiAoe1xuICAgIGhvdXI6IGAke2l9OjAwYCxcbiAgICBwNTA6IDgwICsgTWF0aC5yYW5kb20oKSAqIDQwLFxuICAgIHA5NTogMTUwICsgTWF0aC5yYW5kb20oKSAqIDEwMCxcbiAgICBwOTk6IDI1MCArIE1hdGgucmFuZG9tKCkgKiAxNTBcbiAgfSkpO1xuXG4gIC8vIFByZXBhcmUgZGF0YSBmb3IgbG9hZCB0ZXN0IHJlc3VsdHNcbiAgY29uc3QgbG9hZFRlc3REYXRhID0gQXJyYXkuZnJvbSh7IGxlbmd0aDogMTAgfSwgKF8sIGkpID0+ICh7XG4gICAgdXNlcnM6IChpICsgMSkgKiAxMDAsXG4gICAgcmVzcG9uc2VUaW1lOiAxMDAgKyAoaSAqIDE1KSArIE1hdGgucmFuZG9tKCkgKiAyMCxcbiAgICB0aHJvdWdocHV0OiAxMDAwIC0gKGkgKiA1MCkgKyBNYXRoLnJhbmRvbSgpICogMTAwLFxuICAgIGVycm9yUmF0ZTogaSA+IDcgPyAoaSAtIDcpICogMiA6IDBcbiAgfSkpO1xuXG4gIHJldHVybiAoXG4gICAgPGRpdiBjbGFzc05hbWU9XCJtaW4taC1zY3JlZW4gYmctZ3JheS01MFwiPlxuICAgICAgey8qIEhlYWRlciAqL31cbiAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctd2hpdGUgYm9yZGVyLWIgc3RpY2t5IHRvcC0wIHotMTBcIj5cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJweC04IHB5LTZcIj5cbiAgICAgICAgICA8YnV0dG9uIFxuICAgICAgICAgICAgb25DbGljaz17b25CYWNrfVxuICAgICAgICAgICAgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgc3BhY2UteC0yIHRleHQtZ3JheS02MDAgaG92ZXI6dGV4dC1ncmF5LTkwMCBtYi00IHRyYW5zaXRpb24tY29sb3JzXCJcbiAgICAgICAgICA+XG4gICAgICAgICAgICA8QXJyb3dMZWZ0IHNpemU9ezIwfSAvPlxuICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwiZm9udC1tZWRpdW1cIj5CYWNrIHRvIEZlYXR1cmVzPC9zcGFuPlxuICAgICAgICAgIDwvYnV0dG9uPlxuICAgICAgICAgIFxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1iZXR3ZWVuXCI+XG4gICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICA8aDEgY2xhc3NOYW1lPVwidGV4dC0zeGwgZm9udC1ib2xkIHRleHQtZ3JheS05MDAgZmxleCBpdGVtcy1jZW50ZXJcIj5cbiAgICAgICAgICAgICAgICA8QWN0aXZpdHkgY2xhc3NOYW1lPVwibXItMyB0ZXh0LWJsdWUtNTAwXCIgc2l6ZT17MzJ9IC8+XG4gICAgICAgICAgICAgICAgUGVyZm9ybWFuY2UgVGVzdGluZyBNZXRyaWNzXG4gICAgICAgICAgICAgIDwvaDE+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtZ3JheS01MDAgbXQtMVwiPk1vbml0b3IgcmVzcG9uc2UgdGltZXMsIGxvYWQgY2FwYWNpdHksIGFuZCBwZXJmb3JtYW5jZSB0cmVuZHM8L3A+XG4gICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgIFxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBzcGFjZS14LTZcIj5cbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LWNlbnRlclwiPlxuICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtc20gdGV4dC1ncmF5LTUwMFwiPkF2ZyBQOTU8L3A+XG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LTN4bCBmb250LWJvbGQgdGV4dC1ibHVlLTYwMFwiPnthdmdQOTV9bXM8L2Rpdj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC1jZW50ZXJcIj5cbiAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXNtIHRleHQtZ3JheS01MDBcIj5UaHJvdWdocHV0PC9wPlxuICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC0zeGwgZm9udC1ib2xkIHRleHQtZ3JlZW4tNjAwXCI+e2F2Z1Rocm91Z2hwdXR9L3M8L2Rpdj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC1jZW50ZXJcIj5cbiAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXNtIHRleHQtZ3JheS01MDBcIj5FcnJvciBSYXRlPC9wPlxuICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC0zeGwgZm9udC1ib2xkIHRleHQtcmVkLTYwMFwiPnthdmdFcnJvclJhdGV9JTwvZGl2PlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LWNlbnRlclwiPlxuICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtc20gdGV4dC1ncmF5LTUwMFwiPkRlZ3JhZGVkPC9wPlxuICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC0zeGwgZm9udC1ib2xkIHRleHQtb3JhbmdlLTYwMFwiPntkZWdyYWRlZEVuZHBvaW50c308L2Rpdj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgPC9kaXY+XG4gICAgICA8L2Rpdj5cblxuICAgICAgey8qIFRpbWUgUmFuZ2UgU2VsZWN0b3IgKi99XG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cInB4LTggcHktNCBiZy13aGl0ZSBib3JkZXItYlwiPlxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktYmV0d2VlblwiPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgc3BhY2UteC00XCI+XG4gICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJ0ZXh0LXNtIGZvbnQtc2VtaWJvbGQgdGV4dC1ncmF5LTcwMFwiPlRpbWUgUmFuZ2U6PC9zcGFuPlxuICAgICAgICAgICAgeyhbJzI0aCcsICc3ZCcsICczMGQnXSBhcyBjb25zdCkubWFwKHJhbmdlID0+IChcbiAgICAgICAgICAgICAgPGJ1dHRvblxuICAgICAgICAgICAgICAgIGtleT17cmFuZ2V9XG4gICAgICAgICAgICAgICAgb25DbGljaz17KCkgPT4gc2V0VGltZVJhbmdlKHJhbmdlKX1cbiAgICAgICAgICAgICAgICBjbGFzc05hbWU9e2BweC00IHB5LTIgcm91bmRlZC1sZyB0ZXh0LXNtIGZvbnQtbWVkaXVtIHRyYW5zaXRpb24tYWxsICR7XG4gICAgICAgICAgICAgICAgICB0aW1lUmFuZ2UgPT09IHJhbmdlXG4gICAgICAgICAgICAgICAgICAgID8gJ2JnLWJsdWUtNjAwIHRleHQtd2hpdGUgc2hhZG93LW1kJ1xuICAgICAgICAgICAgICAgICAgICA6ICdiZy1ncmF5LTEwMCB0ZXh0LWdyYXktNzAwIGhvdmVyOmJnLWdyYXktMjAwJ1xuICAgICAgICAgICAgICAgIH1gfVxuICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAge3JhbmdlID09PSAnMjRoJyA/ICdMYXN0IDI0IEhvdXJzJyA6IHJhbmdlID09PSAnN2QnID8gJ0xhc3QgNyBEYXlzJyA6ICdMYXN0IDMwIERheXMnfVxuICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgICkpfVxuICAgICAgICAgIDwvZGl2PlxuXG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBzcGFjZS14LTNcIj5cbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgc3BhY2UteC0yIHB4LTQgcHktMiBiZy1ncmVlbi01MCByb3VuZGVkLWxnXCI+XG4gICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidy0yIGgtMiByb3VuZGVkLWZ1bGwgYmctZ3JlZW4tNTAwIGFuaW1hdGUtcHVsc2VcIj48L2Rpdj5cbiAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGV4dC1zbSBmb250LW1lZGl1bSB0ZXh0LWdyZWVuLTcwMFwiPkxpdmUgTW9uaXRvcmluZzwvc3Bhbj5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICA8L2Rpdj5cbiAgICAgIDwvZGl2PlxuXG4gICAgICB7LyogUGVyZm9ybWFuY2UgQWxlcnRzICovfVxuICAgICAge2RlZ3JhZGVkRW5kcG9pbnRzID4gMCAmJiAoXG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwicHgtOCBweS00IGJnLXJlZC01MCBib3JkZXItYiBib3JkZXItcmVkLTIwMFwiPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1zdGFydFwiPlxuICAgICAgICAgICAgPEFsZXJ0VHJpYW5nbGUgY2xhc3NOYW1lPVwidGV4dC1yZWQtNjAwIG1yLTMgZmxleC1zaHJpbmstMCBtdC0xXCIgc2l6ZT17MjB9IC8+XG4gICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICA8aDMgY2xhc3NOYW1lPVwidGV4dC1zbSBmb250LXNlbWlib2xkIHRleHQtcmVkLTkwMFwiPlxuICAgICAgICAgICAgICAgIFBlcmZvcm1hbmNlIERlZ3JhZGF0aW9uIERldGVjdGVkXG4gICAgICAgICAgICAgIDwvaDM+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtc20gdGV4dC1yZWQtODAwIG10LTFcIj5cbiAgICAgICAgICAgICAgICB7ZGVncmFkZWRFbmRwb2ludHN9IGVuZHBvaW50e2RlZ3JhZGVkRW5kcG9pbnRzID4gMSA/ICdzIGFyZScgOiAnIGlzJ30gZXhwZXJpZW5jaW5nIHBlcmZvcm1hbmNlIGlzc3Vlcy4gXG4gICAgICAgICAgICAgICAgUDk1IHJlc3BvbnNlIHRpbWVzIGFyZSBhYm92ZSBhY2NlcHRhYmxlIHRocmVzaG9sZHMuXG4gICAgICAgICAgICAgIDwvcD5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICA8L2Rpdj5cbiAgICAgICl9XG5cbiAgICAgIHsvKiBNYWluIENvbnRlbnQgKi99XG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cInB4LTggcHktOFwiPlxuICAgICAgICB7LyogUmVzcG9uc2UgVGltZSBUcmVuZHMgKi99XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctd2hpdGUgcm91bmRlZC14bCBzaGFkb3ctc20gYm9yZGVyIGJvcmRlci1ncmF5LTIwMCBwLTYgbWItOFwiPlxuICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJ0ZXh0LXhsIGZvbnQtYm9sZCB0ZXh0LWdyYXktOTAwIG1iLTRcIj5SZXNwb25zZSBUaW1lIFRyZW5kcyAoMjQgSG91cnMpPC9oMj5cbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImgtODBcIj5cbiAgICAgICAgICAgIDxSZXNwb25zaXZlQ29udGFpbmVyIHdpZHRoPVwiMTAwJVwiIGhlaWdodD1cIjEwMCVcIj5cbiAgICAgICAgICAgICAgPEFyZWFDaGFydCBkYXRhPXt0cmVuZERhdGF9PlxuICAgICAgICAgICAgICAgIDxkZWZzPlxuICAgICAgICAgICAgICAgICAgPGxpbmVhckdyYWRpZW50IGlkPVwiY29sb3JQNTBcIiB4MT1cIjBcIiB5MT1cIjBcIiB4Mj1cIjBcIiB5Mj1cIjFcIj5cbiAgICAgICAgICAgICAgICAgICAgPHN0b3Agb2Zmc2V0PVwiNSVcIiBzdG9wQ29sb3I9XCIjMTBiOTgxXCIgc3RvcE9wYWNpdHk9ezAuM30vPlxuICAgICAgICAgICAgICAgICAgICA8c3RvcCBvZmZzZXQ9XCI5NSVcIiBzdG9wQ29sb3I9XCIjMTBiOTgxXCIgc3RvcE9wYWNpdHk9ezB9Lz5cbiAgICAgICAgICAgICAgICAgIDwvbGluZWFyR3JhZGllbnQ+XG4gICAgICAgICAgICAgICAgICA8bGluZWFyR3JhZGllbnQgaWQ9XCJjb2xvclA5NVwiIHgxPVwiMFwiIHkxPVwiMFwiIHgyPVwiMFwiIHkyPVwiMVwiPlxuICAgICAgICAgICAgICAgICAgICA8c3RvcCBvZmZzZXQ9XCI1JVwiIHN0b3BDb2xvcj1cIiMzYjgyZjZcIiBzdG9wT3BhY2l0eT17MC4zfS8+XG4gICAgICAgICAgICAgICAgICAgIDxzdG9wIG9mZnNldD1cIjk1JVwiIHN0b3BDb2xvcj1cIiMzYjgyZjZcIiBzdG9wT3BhY2l0eT17MH0vPlxuICAgICAgICAgICAgICAgICAgPC9saW5lYXJHcmFkaWVudD5cbiAgICAgICAgICAgICAgICAgIDxsaW5lYXJHcmFkaWVudCBpZD1cImNvbG9yUDk5XCIgeDE9XCIwXCIgeTE9XCIwXCIgeDI9XCIwXCIgeTI9XCIxXCI+XG4gICAgICAgICAgICAgICAgICAgIDxzdG9wIG9mZnNldD1cIjUlXCIgc3RvcENvbG9yPVwiI2VmNDQ0NFwiIHN0b3BPcGFjaXR5PXswLjN9Lz5cbiAgICAgICAgICAgICAgICAgICAgPHN0b3Agb2Zmc2V0PVwiOTUlXCIgc3RvcENvbG9yPVwiI2VmNDQ0NFwiIHN0b3BPcGFjaXR5PXswfS8+XG4gICAgICAgICAgICAgICAgICA8L2xpbmVhckdyYWRpZW50PlxuICAgICAgICAgICAgICAgIDwvZGVmcz5cbiAgICAgICAgICAgICAgICA8Q2FydGVzaWFuR3JpZCBzdHJva2VEYXNoYXJyYXk9XCIzIDNcIiAvPlxuICAgICAgICAgICAgICAgIDxYQXhpcyBkYXRhS2V5PVwiaG91clwiIC8+XG4gICAgICAgICAgICAgICAgPFlBeGlzIGxhYmVsPXt7IHZhbHVlOiAnUmVzcG9uc2UgVGltZSAobXMpJywgYW5nbGU6IC05MCwgcG9zaXRpb246ICdpbnNpZGVMZWZ0JyB9fSAvPlxuICAgICAgICAgICAgICAgIDxUb29sdGlwIFxuICAgICAgICAgICAgICAgICAgY29udGVudFN0eWxlPXt7IGJhY2tncm91bmRDb2xvcjogJyMxZjI5MzcnLCBjb2xvcjogJyNmZmYnLCBib3JkZXJSYWRpdXM6ICc4cHgnIH19XG4gICAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICAgICA8TGVnZW5kIC8+XG4gICAgICAgICAgICAgICAgPEFyZWEgdHlwZT1cIm1vbm90b25lXCIgZGF0YUtleT1cInA1MFwiIHN0cm9rZT1cIiMxMGI5ODFcIiBmaWxsPVwidXJsKCNjb2xvclA1MClcIiBzdHJva2VXaWR0aD17Mn0gbmFtZT1cIlA1MCAoTWVkaWFuKVwiIC8+XG4gICAgICAgICAgICAgICAgPEFyZWEgdHlwZT1cIm1vbm90b25lXCIgZGF0YUtleT1cInA5NVwiIHN0cm9rZT1cIiMzYjgyZjZcIiBmaWxsPVwidXJsKCNjb2xvclA5NSlcIiBzdHJva2VXaWR0aD17Mn0gbmFtZT1cIlA5NVwiIC8+XG4gICAgICAgICAgICAgICAgPEFyZWEgdHlwZT1cIm1vbm90b25lXCIgZGF0YUtleT1cInA5OVwiIHN0cm9rZT1cIiNlZjQ0NDRcIiBmaWxsPVwidXJsKCNjb2xvclA5OSlcIiBzdHJva2VXaWR0aD17Mn0gbmFtZT1cIlA5OVwiIC8+XG4gICAgICAgICAgICAgIDwvQXJlYUNoYXJ0PlxuICAgICAgICAgICAgPC9SZXNwb25zaXZlQ29udGFpbmVyPlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwibXQtNCBncmlkIGdyaWQtY29scy0zIGdhcC00XCI+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtY2VudGVyIHAtMyBiZy1ncmVlbi01MCByb3VuZGVkLWxnXCI+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtc20gdGV4dC1ncmVlbi03MDAgZm9udC1tZWRpdW1cIj5QNTAgKE1lZGlhbik8L3A+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtMnhsIGZvbnQtYm9sZCB0ZXh0LWdyZWVuLTkwMFwiPlxuICAgICAgICAgICAgICAgIHt0cmVuZERhdGFbdHJlbmREYXRhLmxlbmd0aCAtIDFdLnA1MC50b0ZpeGVkKDApfW1zXG4gICAgICAgICAgICAgIDwvcD5cbiAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC14cyB0ZXh0LWdyZWVuLTYwMFwiPjUwJSBvZiByZXF1ZXN0czwvcD5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LWNlbnRlciBwLTMgYmctYmx1ZS01MCByb3VuZGVkLWxnXCI+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtc20gdGV4dC1ibHVlLTcwMCBmb250LW1lZGl1bVwiPlA5NTwvcD5cbiAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC0yeGwgZm9udC1ib2xkIHRleHQtYmx1ZS05MDBcIj5cbiAgICAgICAgICAgICAgICB7dHJlbmREYXRhW3RyZW5kRGF0YS5sZW5ndGggLSAxXS5wOTUudG9GaXhlZCgwKX1tc1xuICAgICAgICAgICAgICA8L3A+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQteHMgdGV4dC1ibHVlLTYwMFwiPjk1JSBvZiByZXF1ZXN0czwvcD5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LWNlbnRlciBwLTMgYmctcmVkLTUwIHJvdW5kZWQtbGdcIj5cbiAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1zbSB0ZXh0LXJlZC03MDAgZm9udC1tZWRpdW1cIj5QOTk8L3A+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtMnhsIGZvbnQtYm9sZCB0ZXh0LXJlZC05MDBcIj5cbiAgICAgICAgICAgICAgICB7dHJlbmREYXRhW3RyZW5kRGF0YS5sZW5ndGggLSAxXS5wOTkudG9GaXhlZCgwKX1tc1xuICAgICAgICAgICAgICA8L3A+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQteHMgdGV4dC1yZWQtNjAwXCI+OTklIG9mIHJlcXVlc3RzPC9wPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuXG4gICAgICAgIHsvKiBMb2FkIFRlc3QgUmVzdWx0cyAqL31cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy13aGl0ZSByb3VuZGVkLXhsIHNoYWRvdy1zbSBib3JkZXIgYm9yZGVyLWdyYXktMjAwIHAtNiBtYi04XCI+XG4gICAgICAgICAgPGgyIGNsYXNzTmFtZT1cInRleHQteGwgZm9udC1ib2xkIHRleHQtZ3JheS05MDAgbWItNFwiPkxvYWQgVGVzdCBSZXN1bHRzIC0gQ2FwYWNpdHkgUGxhbm5pbmc8L2gyPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiaC04MFwiPlxuICAgICAgICAgICAgPFJlc3BvbnNpdmVDb250YWluZXIgd2lkdGg9XCIxMDAlXCIgaGVpZ2h0PVwiMTAwJVwiPlxuICAgICAgICAgICAgICA8TGluZUNoYXJ0IGRhdGE9e2xvYWRUZXN0RGF0YX0+XG4gICAgICAgICAgICAgICAgPENhcnRlc2lhbkdyaWQgc3Ryb2tlRGFzaGFycmF5PVwiMyAzXCIgLz5cbiAgICAgICAgICAgICAgICA8WEF4aXMgXG4gICAgICAgICAgICAgICAgICBkYXRhS2V5PVwidXNlcnNcIiBcbiAgICAgICAgICAgICAgICAgIGxhYmVsPXt7IHZhbHVlOiAnQ29uY3VycmVudCBVc2VycycsIHBvc2l0aW9uOiAnYm90dG9tJywgb2Zmc2V0OiAtNSB9fVxuICAgICAgICAgICAgICAgIC8+XG4gICAgICAgICAgICAgICAgPFlBeGlzIFxuICAgICAgICAgICAgICAgICAgeUF4aXNJZD1cImxlZnRcIlxuICAgICAgICAgICAgICAgICAgbGFiZWw9e3sgdmFsdWU6ICdSZXNwb25zZSBUaW1lIChtcyknLCBhbmdsZTogLTkwLCBwb3NpdGlvbjogJ2luc2lkZUxlZnQnIH19XG4gICAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICAgICA8WUF4aXMgXG4gICAgICAgICAgICAgICAgICB5QXhpc0lkPVwicmlnaHRcIiBcbiAgICAgICAgICAgICAgICAgIG9yaWVudGF0aW9uPVwicmlnaHRcIlxuICAgICAgICAgICAgICAgICAgbGFiZWw9e3sgdmFsdWU6ICdUaHJvdWdocHV0IChyZXEvcyknLCBhbmdsZTogOTAsIHBvc2l0aW9uOiAnaW5zaWRlUmlnaHQnIH19XG4gICAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICAgICA8VG9vbHRpcCBcbiAgICAgICAgICAgICAgICAgIGNvbnRlbnRTdHlsZT17eyBiYWNrZ3JvdW5kQ29sb3I6ICcjMWYyOTM3JywgY29sb3I6ICcjZmZmJywgYm9yZGVyUmFkaXVzOiAnOHB4JyB9fVxuICAgICAgICAgICAgICAgIC8+XG4gICAgICAgICAgICAgICAgPExlZ2VuZCAvPlxuICAgICAgICAgICAgICAgIDxMaW5lIFxuICAgICAgICAgICAgICAgICAgeUF4aXNJZD1cImxlZnRcIiBcbiAgICAgICAgICAgICAgICAgIHR5cGU9XCJtb25vdG9uZVwiIFxuICAgICAgICAgICAgICAgICAgZGF0YUtleT1cInJlc3BvbnNlVGltZVwiIFxuICAgICAgICAgICAgICAgICAgc3Ryb2tlPVwiI2VmNDQ0NFwiIFxuICAgICAgICAgICAgICAgICAgc3Ryb2tlV2lkdGg9ezN9XG4gICAgICAgICAgICAgICAgICBuYW1lPVwiUmVzcG9uc2UgVGltZSAobXMpXCJcbiAgICAgICAgICAgICAgICAgIGRvdD17eyBmaWxsOiAnI2VmNDQ0NCcsIHI6IDUgfX1cbiAgICAgICAgICAgICAgICAvPlxuICAgICAgICAgICAgICAgIDxMaW5lIFxuICAgICAgICAgICAgICAgICAgeUF4aXNJZD1cInJpZ2h0XCIgXG4gICAgICAgICAgICAgICAgICB0eXBlPVwibW9ub3RvbmVcIiBcbiAgICAgICAgICAgICAgICAgIGRhdGFLZXk9XCJ0aHJvdWdocHV0XCIgXG4gICAgICAgICAgICAgICAgICBzdHJva2U9XCIjMTBiOTgxXCIgXG4gICAgICAgICAgICAgICAgICBzdHJva2VXaWR0aD17M31cbiAgICAgICAgICAgICAgICAgIG5hbWU9XCJUaHJvdWdocHV0IChyZXEvcylcIlxuICAgICAgICAgICAgICAgICAgZG90PXt7IGZpbGw6ICcjMTBiOTgxJywgcjogNSB9fVxuICAgICAgICAgICAgICAgIC8+XG4gICAgICAgICAgICAgIDwvTGluZUNoYXJ0PlxuICAgICAgICAgICAgPC9SZXNwb25zaXZlQ29udGFpbmVyPlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwibXQtNCBiZy1ibHVlLTUwIGJvcmRlciBib3JkZXItYmx1ZS0yMDAgcm91bmRlZC1sZyBwLTRcIj5cbiAgICAgICAgICAgIDxoNCBjbGFzc05hbWU9XCJ0ZXh0LXNtIGZvbnQtc2VtaWJvbGQgdGV4dC1ibHVlLTkwMCBtYi0yXCI+8J+SoSBDYXBhY2l0eSBJbnNpZ2h0czwvaDQ+XG4gICAgICAgICAgICA8dWwgY2xhc3NOYW1lPVwidGV4dC1zbSB0ZXh0LWJsdWUtODAwIHNwYWNlLXktMVwiPlxuICAgICAgICAgICAgICA8bGk+4oCiIDxzdHJvbmc+T3B0aW1hbCBDYXBhY2l0eTo8L3N0cm9uZz4gU3lzdGVtIHBlcmZvcm1zIHdlbGwgdXAgdG8gfjcwMCBjb25jdXJyZW50IHVzZXJzPC9saT5cbiAgICAgICAgICAgICAgPGxpPuKAoiA8c3Ryb25nPkRlZ3JhZGF0aW9uIFBvaW50Ojwvc3Ryb25nPiBSZXNwb25zZSB0aW1lcyBpbmNyZWFzZSBzaWduaWZpY2FudGx5IGFmdGVyIDgwMCB1c2VyczwvbGk+XG4gICAgICAgICAgICAgIDxsaT7igKIgPHN0cm9uZz5SZWNvbW1lbmRhdGlvbjo8L3N0cm9uZz4gU2NhbGUgaG9yaXpvbnRhbGx5IGJlZm9yZSByZWFjaGluZyA3MDAgY29uY3VycmVudCB1c2VyczwvbGk+XG4gICAgICAgICAgICAgIDxsaT7igKIgPHN0cm9uZz5DdXJyZW50IEhlYWRyb29tOjwvc3Ryb25nPiA0MCUgY2FwYWNpdHkgYXZhaWxhYmxlIGZvciB0cmFmZmljIHNwaWtlczwvbGk+XG4gICAgICAgICAgICA8L3VsPlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICA8L2Rpdj5cblxuICAgICAgICB7LyogRW5kcG9pbnQgUGVyZm9ybWFuY2UgRGV0YWlscyAqL31cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJzcGFjZS15LTRcIj5cbiAgICAgICAgICA8aDIgY2xhc3NOYW1lPVwidGV4dC14bCBmb250LWJvbGQgdGV4dC1ncmF5LTkwMFwiPkVuZHBvaW50IFBlcmZvcm1hbmNlIEFuYWx5c2lzPC9oMj5cbiAgICAgICAgICB7bWV0cmljc1dpdGhTY29yZS5tYXAobWV0cmljID0+IChcbiAgICAgICAgICAgIDxFbmRwb2ludENhcmQgXG4gICAgICAgICAgICAgIGtleT17bWV0cmljLmVuZHBvaW50fVxuICAgICAgICAgICAgICBtZXRyaWM9e21ldHJpY31cbiAgICAgICAgICAgICAgaXNTZWxlY3RlZD17c2VsZWN0ZWRFbmRwb2ludCA9PT0gbWV0cmljLmVuZHBvaW50fVxuICAgICAgICAgICAgICBvblNlbGVjdD17KCkgPT4gc2V0U2VsZWN0ZWRFbmRwb2ludChzZWxlY3RlZEVuZHBvaW50ID09PSBtZXRyaWMuZW5kcG9pbnQgPyBudWxsIDogbWV0cmljLmVuZHBvaW50KX1cbiAgICAgICAgICAgIC8+XG4gICAgICAgICAgKSl9XG4gICAgICAgIDwvZGl2PlxuICAgICAgPC9kaXY+XG4gICAgPC9kaXY+XG4gICk7XG59O1xuXG5pbnRlcmZhY2UgRW5kcG9pbnRDYXJkUHJvcHMge1xuICBtZXRyaWM6IEV4dGVuZGVkUGVyZm9ybWFuY2VNZXRyaWM7XG4gIGlzU2VsZWN0ZWQ6IGJvb2xlYW47XG4gIG9uU2VsZWN0OiAoKSA9PiB2b2lkO1xufVxuXG5jb25zdCBFbmRwb2ludENhcmQ6IFJlYWN0LkZDPEVuZHBvaW50Q2FyZFByb3BzPiA9ICh7IG1ldHJpYywgaXNTZWxlY3RlZCwgb25TZWxlY3QgfSkgPT4ge1xuICBjb25zdCBnZXRQZXJmb3JtYW5jZUNvbG9yID0gKHNjb3JlOiBudW1iZXIpID0+IHtcbiAgICBpZiAoc2NvcmUgPj0gOTApIHJldHVybiAndGV4dC1ncmVlbi02MDAnO1xuICAgIGlmIChzY29yZSA+PSA3MCkgcmV0dXJuICd0ZXh0LXllbGxvdy02MDAnO1xuICAgIHJldHVybiAndGV4dC1yZWQtNjAwJztcbiAgfTtcblxuICBjb25zdCBnZXRQZXJmb3JtYW5jZUxhYmVsID0gKHNjb3JlOiBudW1iZXIpID0+IHtcbiAgICBpZiAoc2NvcmUgPj0gOTApIHJldHVybiAnRXhjZWxsZW50JztcbiAgICBpZiAoc2NvcmUgPj0gNzApIHJldHVybiAnR29vZCc7XG4gICAgcmV0dXJuICdQb29yJztcbiAgfTtcblxuICBjb25zdCBnZXRTdGF0dXNCYWRnZSA9IChzY29yZTogbnVtYmVyKSA9PiB7XG4gICAgaWYgKHNjb3JlID49IDkwKSByZXR1cm4gJ2JnLWdyZWVuLTEwMCB0ZXh0LWdyZWVuLTcwMCBib3JkZXItZ3JlZW4tMzAwJztcbiAgICBpZiAoc2NvcmUgPj0gNzApIHJldHVybiAnYmcteWVsbG93LTEwMCB0ZXh0LXllbGxvdy03MDAgYm9yZGVyLXllbGxvdy0zMDAnO1xuICAgIHJldHVybiAnYmctcmVkLTEwMCB0ZXh0LXJlZC03MDAgYm9yZGVyLXJlZC0zMDAnO1xuICB9O1xuXG4gIC8vIEdlbmVyYXRlIG1pbmkgdHJlbmQgZGF0YVxuICBjb25zdCBtaW5pVHJlbmQgPSBBcnJheS5mcm9tKHsgbGVuZ3RoOiAyMCB9LCAoKSA9PiAoe1xuICAgIHZhbHVlOiBtZXRyaWMucmVzcG9uc2VfdGltZXMucDk1ICsgKE1hdGgucmFuZG9tKCkgLSAwLjUpICogNTBcbiAgfSkpO1xuXG4gIHJldHVybiAoXG4gICAgPGRpdiBjbGFzc05hbWU9XCJiZy13aGl0ZSByb3VuZGVkLXhsIHNoYWRvdy1zbSBib3JkZXIgYm9yZGVyLWdyYXktMjAwIG92ZXJmbG93LWhpZGRlbiBob3ZlcjpzaGFkb3ctbWQgdHJhbnNpdGlvbi1zaGFkb3dcIj5cbiAgICAgIDxkaXYgY2xhc3NOYW1lPVwicC02XCI+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1iZXR3ZWVuIG1iLTRcIj5cbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIHNwYWNlLXgtNFwiPlxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9e2B3LTEyIGgtMTIgcm91bmRlZC1sZyBmbGV4IGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWNlbnRlciAke1xuICAgICAgICAgICAgICBtZXRyaWMucGVyZm9ybWFuY2Vfc2NvcmUgPj0gOTAgPyAnYmctZ3JlZW4tMTAwJyA6IFxuICAgICAgICAgICAgICBtZXRyaWMucGVyZm9ybWFuY2Vfc2NvcmUgPj0gNzAgPyAnYmcteWVsbG93LTEwMCcgOiAnYmctcmVkLTEwMCdcbiAgICAgICAgICAgIH1gfT5cbiAgICAgICAgICAgICAge21ldHJpYy5wZXJmb3JtYW5jZV9zY29yZSA+PSA5MCA/IChcbiAgICAgICAgICAgICAgICA8WmFwIGNsYXNzTmFtZT1cInRleHQtZ3JlZW4tNjAwXCIgc2l6ZT17MjR9IC8+XG4gICAgICAgICAgICAgICkgOiBtZXRyaWMucGVyZm9ybWFuY2Vfc2NvcmUgPj0gNzAgPyAoXG4gICAgICAgICAgICAgICAgPENsb2NrIGNsYXNzTmFtZT1cInRleHQteWVsbG93LTYwMFwiIHNpemU9ezI0fSAvPlxuICAgICAgICAgICAgICApIDogKFxuICAgICAgICAgICAgICAgIDxBbGVydFRyaWFuZ2xlIGNsYXNzTmFtZT1cInRleHQtcmVkLTYwMFwiIHNpemU9ezI0fSAvPlxuICAgICAgICAgICAgICApfVxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICA8aDMgY2xhc3NOYW1lPVwidGV4dC1sZyBmb250LWJvbGQgdGV4dC1ncmF5LTkwMFwiPnttZXRyaWMuZW5kcG9pbnR9PC9oMz5cbiAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1zbSB0ZXh0LWdyYXktNTAwXCI+e21ldHJpYy5tZXRob2R9PC9wPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9e2BweC0zIHB5LTEgcm91bmRlZC1mdWxsIHRleHQteHMgZm9udC1zZW1pYm9sZCBib3JkZXIgJHtnZXRTdGF0dXNCYWRnZShtZXRyaWMucGVyZm9ybWFuY2Vfc2NvcmUpfWB9PlxuICAgICAgICAgICAgICB7Z2V0UGVyZm9ybWFuY2VMYWJlbChtZXRyaWMucGVyZm9ybWFuY2Vfc2NvcmUpfVxuICAgICAgICAgICAgPC9zcGFuPlxuICAgICAgICAgIDwvZGl2PlxuXG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LXJpZ2h0XCI+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT17YHRleHQtM3hsIGZvbnQtYm9sZCAke2dldFBlcmZvcm1hbmNlQ29sb3IobWV0cmljLnBlcmZvcm1hbmNlX3Njb3JlKX1gfT5cbiAgICAgICAgICAgICAge21ldHJpYy5wZXJmb3JtYW5jZV9zY29yZS50b0ZpeGVkKDApfVxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQteHMgdGV4dC1ncmF5LTUwMFwiPlBlcmZvcm1hbmNlIFNjb3JlPC9kaXY+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuXG4gICAgICAgIHsvKiBSZXNwb25zZSBUaW1lIE1ldHJpY3MgKi99XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZ3JpZCBncmlkLWNvbHMtNSBnYXAtNCBtYi00XCI+XG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy1ncmVlbi01MCByb3VuZGVkLWxnIHAtM1wiPlxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciB0ZXh0LWdyZWVuLTYwMCBtYi0xXCI+XG4gICAgICAgICAgICAgIDxUcmVuZGluZ1VwIHNpemU9ezE0fSBjbGFzc05hbWU9XCJtci0xXCIgLz5cbiAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGV4dC14cyBmb250LXNlbWlib2xkXCI+UDUwPC9zcGFuPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1ib2xkIHRleHQtZ3JlZW4tOTAwXCI+e21ldHJpYy5yZXNwb25zZV90aW1lcy5wNTB9bXM8L2Rpdj5cbiAgICAgICAgICA8L2Rpdj5cblxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctYmx1ZS01MCByb3VuZGVkLWxnIHAtM1wiPlxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciB0ZXh0LWJsdWUtNjAwIG1iLTFcIj5cbiAgICAgICAgICAgICAgPEFjdGl2aXR5IHNpemU9ezE0fSBjbGFzc05hbWU9XCJtci0xXCIgLz5cbiAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGV4dC14cyBmb250LXNlbWlib2xkXCI+UDk1PC9zcGFuPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1ib2xkIHRleHQtYmx1ZS05MDBcIj57bWV0cmljLnJlc3BvbnNlX3RpbWVzLnA5NX1tczwvZGl2PlxuICAgICAgICAgIDwvZGl2PlxuXG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy1wdXJwbGUtNTAgcm91bmRlZC1sZyBwLTNcIj5cbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgdGV4dC1wdXJwbGUtNjAwIG1iLTFcIj5cbiAgICAgICAgICAgICAgPEFjdGl2aXR5IHNpemU9ezE0fSBjbGFzc05hbWU9XCJtci0xXCIgLz5cbiAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwidGV4dC14cyBmb250LXNlbWlib2xkXCI+UDk5PC9zcGFuPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1ib2xkIHRleHQtcHVycGxlLTkwMFwiPnttZXRyaWMucmVzcG9uc2VfdGltZXMucDk5fW1zPC9kaXY+XG4gICAgICAgICAgPC9kaXY+XG5cbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLW9yYW5nZS01MCByb3VuZGVkLWxnIHAtM1wiPlxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciB0ZXh0LW9yYW5nZS02MDAgbWItMVwiPlxuICAgICAgICAgICAgICA8VXNlcnMgc2l6ZT17MTR9IGNsYXNzTmFtZT1cIm1yLTFcIiAvPlxuICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJ0ZXh0LXhzIGZvbnQtc2VtaWJvbGRcIj5UaHJvdWdocHV0PC9zcGFuPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1ib2xkIHRleHQtb3JhbmdlLTkwMFwiPnttZXRyaWMudGhyb3VnaHB1dH0vczwvZGl2PlxuICAgICAgICAgIDwvZGl2PlxuXG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy1yZWQtNTAgcm91bmRlZC1sZyBwLTNcIj5cbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgdGV4dC1yZWQtNjAwIG1iLTFcIj5cbiAgICAgICAgICAgICAgPEFsZXJ0VHJpYW5nbGUgc2l6ZT17MTR9IGNsYXNzTmFtZT1cIm1yLTFcIiAvPlxuICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJ0ZXh0LXhzIGZvbnQtc2VtaWJvbGRcIj5FcnJvciBSYXRlPC9zcGFuPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1ib2xkIHRleHQtcmVkLTkwMFwiPnttZXRyaWMuZXJyb3JfcmF0ZX0lPC9kaXY+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuXG4gICAgICAgIHsvKiBNaW5pIFRyZW5kICovfVxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cIm1iLTRcIj5cbiAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXhzIHRleHQtZ3JheS01MDAgbWItMlwiPlA5NSBSZXNwb25zZSBUaW1lIFRyZW5kIChMYXN0IEhvdXIpPC9wPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiaC0xNlwiPlxuICAgICAgICAgICAgPFJlc3BvbnNpdmVDb250YWluZXIgd2lkdGg9XCIxMDAlXCIgaGVpZ2h0PVwiMTAwJVwiPlxuICAgICAgICAgICAgICA8QXJlYUNoYXJ0IGRhdGE9e21pbmlUcmVuZH0+XG4gICAgICAgICAgICAgICAgPGRlZnM+XG4gICAgICAgICAgICAgICAgICA8bGluZWFyR3JhZGllbnQgaWQ9e2BncmFkaWVudC0ke21ldHJpYy5lbmRwb2ludH1gfSB4MT1cIjBcIiB5MT1cIjBcIiB4Mj1cIjBcIiB5Mj1cIjFcIj5cbiAgICAgICAgICAgICAgICAgICAgPHN0b3Agb2Zmc2V0PVwiNSVcIiBzdG9wQ29sb3I9XCIjM2I4MmY2XCIgc3RvcE9wYWNpdHk9ezAuM30vPlxuICAgICAgICAgICAgICAgICAgICA8c3RvcCBvZmZzZXQ9XCI5NSVcIiBzdG9wQ29sb3I9XCIjM2I4MmY2XCIgc3RvcE9wYWNpdHk9ezB9Lz5cbiAgICAgICAgICAgICAgICAgIDwvbGluZWFyR3JhZGllbnQ+XG4gICAgICAgICAgICAgICAgPC9kZWZzPlxuICAgICAgICAgICAgICAgIDxBcmVhIFxuICAgICAgICAgICAgICAgICAgdHlwZT1cIm1vbm90b25lXCIgXG4gICAgICAgICAgICAgICAgICBkYXRhS2V5PVwidmFsdWVcIiBcbiAgICAgICAgICAgICAgICAgIHN0cm9rZT1cIiMzYjgyZjZcIiBcbiAgICAgICAgICAgICAgICAgIGZpbGw9e2B1cmwoI2dyYWRpZW50LSR7bWV0cmljLmVuZHBvaW50fSlgfVxuICAgICAgICAgICAgICAgICAgc3Ryb2tlV2lkdGg9ezJ9XG4gICAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICAgPC9BcmVhQ2hhcnQ+XG4gICAgICAgICAgICA8L1Jlc3BvbnNpdmVDb250YWluZXI+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuXG4gICAgICAgIDxidXR0b25cbiAgICAgICAgICBvbkNsaWNrPXtvblNlbGVjdH1cbiAgICAgICAgICBjbGFzc05hbWU9XCJ0ZXh0LXNtIHRleHQtYmx1ZS02MDAgaG92ZXI6dGV4dC1ibHVlLTgwMCBmb250LW1lZGl1bVwiXG4gICAgICAgID5cbiAgICAgICAgICB7aXNTZWxlY3RlZCA/ICfilrwgSGlkZSBEZXRhaWxzJyA6ICfilrYgU2hvdyBEZXRhaWxlZCBBbmFseXNpcyd9XG4gICAgICAgIDwvYnV0dG9uPlxuXG4gICAgICAgIHtpc1NlbGVjdGVkICYmIChcbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cIm10LTQgcHQtNCBib3JkZXItdCBib3JkZXItZ3JheS0yMDAgc3BhY2UteS00XCI+XG4gICAgICAgICAgICB7LyogUGVyZm9ybWFuY2UgQW5hbHlzaXMgKi99XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLWJsdWUtNTAgcm91bmRlZC1sZyBwLTRcIj5cbiAgICAgICAgICAgICAgPGg0IGNsYXNzTmFtZT1cInRleHQtc20gZm9udC1zZW1pYm9sZCB0ZXh0LWJsdWUtOTAwIG1iLTMgZmxleCBpdGVtcy1jZW50ZXJcIj5cbiAgICAgICAgICAgICAgICA8U2VydmVyIHNpemU9ezE2fSBjbGFzc05hbWU9XCJtci0yXCIgLz5cbiAgICAgICAgICAgICAgICBQZXJmb3JtYW5jZSBBbmFseXNpc1xuICAgICAgICAgICAgICA8L2g0PlxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImdyaWQgZ3JpZC1jb2xzLTIgZ2FwLTQgdGV4dC1zbSB0ZXh0LWJsdWUtODAwXCI+XG4gICAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cImZvbnQtbWVkaXVtIG1iLTFcIj5SZXNwb25zZSBUaW1lIEFzc2Vzc21lbnQ6PC9wPlxuICAgICAgICAgICAgICAgICAgPHA+XG4gICAgICAgICAgICAgICAgICAgIHttZXRyaWMucmVzcG9uc2VfdGltZXMucDk1IDwgMjAwID8gJ+KchSBFeGNlbGxlbnQgLSBXZWxsIHdpdGhpbiBhY2NlcHRhYmxlIHJhbmdlJyA6XG4gICAgICAgICAgICAgICAgICAgICBtZXRyaWMucmVzcG9uc2VfdGltZXMucDk1IDwgNTAwID8gJ+KaoO+4jyBBY2NlcHRhYmxlIC0gTW9uaXRvciBmb3IgZGVncmFkYXRpb24nIDpcbiAgICAgICAgICAgICAgICAgICAgICfinYwgUG9vciAtIEltbWVkaWF0ZSBvcHRpbWl6YXRpb24gbmVlZGVkJ31cbiAgICAgICAgICAgICAgICAgIDwvcD5cbiAgICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwiZm9udC1tZWRpdW0gbWItMVwiPlRocm91Z2hwdXQgQ2FwYWNpdHk6PC9wPlxuICAgICAgICAgICAgICAgICAgPHA+XG4gICAgICAgICAgICAgICAgICAgIHttZXRyaWMudGhyb3VnaHB1dCA+IDUwMCA/ICfinIUgSGlnaCBjYXBhY2l0eSAtIENhbiBoYW5kbGUgdHJhZmZpYyBzcGlrZXMnIDpcbiAgICAgICAgICAgICAgICAgICAgIG1ldHJpYy50aHJvdWdocHV0ID4gMjAwID8gJ+KaoO+4jyBNb2RlcmF0ZSAtIENvbnNpZGVyIHNjYWxpbmcgZm9yIGdyb3d0aCcgOlxuICAgICAgICAgICAgICAgICAgICAgJ+KdjCBMb3cgLSBTY2FsZSBpbW1lZGlhdGVseSd9XG4gICAgICAgICAgICAgICAgICA8L3A+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cImZvbnQtbWVkaXVtIG1iLTFcIj5FcnJvciBSYXRlIFN0YXR1czo8L3A+XG4gICAgICAgICAgICAgICAgICA8cD5cbiAgICAgICAgICAgICAgICAgICAge21ldHJpYy5lcnJvcl9yYXRlIDwgMSA/ICfinIUgSGVhbHRoeSAtIEVycm9yIHJhdGUgd2l0aGluIFNMQScgOlxuICAgICAgICAgICAgICAgICAgICAgbWV0cmljLmVycm9yX3JhdGUgPCA1ID8gJ+KaoO+4jyBFbGV2YXRlZCAtIEludmVzdGlnYXRlIHJvb3QgY2F1c2VzJyA6XG4gICAgICAgICAgICAgICAgICAgICAn4p2MIENyaXRpY2FsIC0gSW1tZWRpYXRlIGFjdGlvbiByZXF1aXJlZCd9XG4gICAgICAgICAgICAgICAgICA8L3A+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cImZvbnQtbWVkaXVtIG1iLTFcIj5PdmVyYWxsIEhlYWx0aDo8L3A+XG4gICAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJmb250LWJvbGRcIj5cbiAgICAgICAgICAgICAgICAgICAge21ldHJpYy5wZXJmb3JtYW5jZV9zY29yZSA+PSA5MCA/ICfinIUgRXhjZWxsZW50IFBlcmZvcm1hbmNlJyA6XG4gICAgICAgICAgICAgICAgICAgICBtZXRyaWMucGVyZm9ybWFuY2Vfc2NvcmUgPj0gNzAgPyAn4pqg77iPIE5lZWRzIE1vbml0b3JpbmcnIDpcbiAgICAgICAgICAgICAgICAgICAgICfinYwgUmVxdWlyZXMgT3B0aW1pemF0aW9uJ31cbiAgICAgICAgICAgICAgICAgIDwvcD5cbiAgICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8L2Rpdj5cblxuICAgICAgICAgICAgey8qIE9wdGltaXphdGlvbiBSZWNvbW1lbmRhdGlvbnMgKi99XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLWdyZWVuLTUwIHJvdW5kZWQtbGcgcC00XCI+XG4gICAgICAgICAgICAgIDxoNCBjbGFzc05hbWU9XCJ0ZXh0LXNtIGZvbnQtc2VtaWJvbGQgdGV4dC1ncmVlbi05MDAgbWItM1wiPvCfkqEgT3B0aW1pemF0aW9uIFJlY29tbWVuZGF0aW9uczwvaDQ+XG4gICAgICAgICAgICAgIDx1bCBjbGFzc05hbWU9XCJ0ZXh0LXNtIHRleHQtZ3JlZW4tODAwIHNwYWNlLXktMlwiPlxuICAgICAgICAgICAgICAgIHttZXRyaWMucmVzcG9uc2VfdGltZXMucDk1ID4gMjAwICYmIChcbiAgICAgICAgICAgICAgICAgIDxsaSBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLXN0YXJ0XCI+XG4gICAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cIm1yLTJcIj7igKI8L3NwYW4+XG4gICAgICAgICAgICAgICAgICAgIDxzcGFuPkltcGxlbWVudCBjYWNoaW5nIHRvIHJlZHVjZSBQOTUgcmVzcG9uc2UgdGltZXMgYnkgMzAtNDAlPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPC9saT5cbiAgICAgICAgICAgICAgICApfVxuICAgICAgICAgICAgICAgIHttZXRyaWMudGhyb3VnaHB1dCA8IDMwMCAmJiAoXG4gICAgICAgICAgICAgICAgICA8bGkgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1zdGFydFwiPlxuICAgICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJtci0yXCI+4oCiPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgICA8c3Bhbj5Db25zaWRlciBob3Jpem9udGFsIHNjYWxpbmcgdG8gaW1wcm92ZSB0aHJvdWdocHV0IGNhcGFjaXR5PC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPC9saT5cbiAgICAgICAgICAgICAgICApfVxuICAgICAgICAgICAgICAgIHttZXRyaWMuZXJyb3JfcmF0ZSA+IDEgJiYgKFxuICAgICAgICAgICAgICAgICAgPGxpIGNsYXNzTmFtZT1cImZsZXggaXRlbXMtc3RhcnRcIj5cbiAgICAgICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwibXItMlwiPuKAojwvc3Bhbj5cbiAgICAgICAgICAgICAgICAgICAgPHNwYW4+SW52ZXN0aWdhdGUgZXJyb3IgbG9ncyB0byBpZGVudGlmeSBhbmQgZml4IHJlY3VycmluZyBpc3N1ZXM8L3NwYW4+XG4gICAgICAgICAgICAgICAgICA8L2xpPlxuICAgICAgICAgICAgICAgICl9XG4gICAgICAgICAgICAgICAgPGxpIGNsYXNzTmFtZT1cImZsZXggaXRlbXMtc3RhcnRcIj5cbiAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cIm1yLTJcIj7igKI8L3NwYW4+XG4gICAgICAgICAgICAgICAgICA8c3Bhbj5TZXQgdXAgYWxlcnRzIGZvciBQOTUgJmd0OyB7bWV0cmljLnJlc3BvbnNlX3RpbWVzLnA5NSAqIDEuNX1tcyB0byBjYXRjaCBkZWdyYWRhdGlvbiBlYXJseTwvc3Bhbj5cbiAgICAgICAgICAgICAgICA8L2xpPlxuICAgICAgICAgICAgICAgIDxsaSBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLXN0YXJ0XCI+XG4gICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJtci0yXCI+4oCiPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPHNwYW4+UnVuIGxvYWQgdGVzdHMgbW9udGhseSB0byB2YWxpZGF0ZSBjYXBhY2l0eSBwbGFubmluZyBhc3N1bXB0aW9uczwvc3Bhbj5cbiAgICAgICAgICAgICAgICA8L2xpPlxuICAgICAgICAgICAgICA8L3VsPlxuICAgICAgICAgICAgPC9kaXY+XG5cbiAgICAgICAgICAgIHsvKiBTTEEgQ29tcGxpYW5jZSAqL31cbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctcHVycGxlLTUwIHJvdW5kZWQtbGcgcC00XCI+XG4gICAgICAgICAgICAgIDxoNCBjbGFzc05hbWU9XCJ0ZXh0LXNtIGZvbnQtc2VtaWJvbGQgdGV4dC1wdXJwbGUtOTAwIG1iLTNcIj7wn5OKIFNMQSBDb21wbGlhbmNlPC9oND5cbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJncmlkIGdyaWQtY29scy0zIGdhcC00XCI+XG4gICAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQteHMgdGV4dC1wdXJwbGUtNzAwIG1iLTFcIj5UYXJnZXQgUDk1OjwvcD5cbiAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1ib2xkIHRleHQtcHVycGxlLTkwMFwiPiZsdDsgNTAwbXM8L3A+XG4gICAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXhzIHRleHQtcHVycGxlLTYwMFwiPlxuICAgICAgICAgICAgICAgICAgICB7bWV0cmljLnJlc3BvbnNlX3RpbWVzLnA5NSA8IDUwMCA/ICfinIUgTWVldGluZyBTTEEnIDogJ+KdjCBWaW9sYXRpbmcgU0xBJ31cbiAgICAgICAgICAgICAgICAgIDwvcD5cbiAgICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC14cyB0ZXh0LXB1cnBsZS03MDAgbWItMVwiPlRhcmdldCBFcnJvciBSYXRlOjwvcD5cbiAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1ib2xkIHRleHQtcHVycGxlLTkwMFwiPiZsdDsgMSU8L3A+XG4gICAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXhzIHRleHQtcHVycGxlLTYwMFwiPlxuICAgICAgICAgICAgICAgICAgICB7bWV0cmljLmVycm9yX3JhdGUgPCAxID8gJ+KchSBNZWV0aW5nIFNMQScgOiAn4p2MIFZpb2xhdGluZyBTTEEnfVxuICAgICAgICAgICAgICAgICAgPC9wPlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXhzIHRleHQtcHVycGxlLTcwMCBtYi0xXCI+VXB0aW1lIFRhcmdldDo8L3A+XG4gICAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtYm9sZCB0ZXh0LXB1cnBsZS05MDBcIj45OS45JTwvcD5cbiAgICAgICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQteHMgdGV4dC1wdXJwbGUtNjAwXCI+4pyFIE1lZXRpbmcgU0xBPC9wPlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICApfVxuICAgICAgPC9kaXY+XG4gICAgPC9kaXY+XG4gICk7XG59O1xuXG5leHBvcnQgZGVmYXVsdCBQZXJmb3JtYW5jZVRlc3Rpbmc7XG4iXSwiZmlsZSI6Ii9Vc2Vycy9pb251dGFwb3N0dS9EZXNrdG9wL1FBIERhc2hib2FyZC9xYS1kYXNoYm9hcmQvc3JjL2NvbXBvbmVudHMvUGVyZm9ybWFuY2VUZXN0aW5nLnRzeCJ9

@@ -2,7 +2,7 @@ import request from 'supertest';
 
 const API_URL = 'http://localhost:3000';
 const SUPER_ADMIN_EMAIL = 'admin@irongate.com';
-const SUPER_ADMIN_PASSWORD = 'admin123';
+const SUPER_ADMIN_PASSWORD = 'demo123';
 
 describe('Admin API Endpoints', () => {
   let superAdminToken: string;
@@ -20,14 +20,14 @@ describe('Admin API Endpoints', () => {
     // Login as QA manager
     const managerRes = await request(API_URL)
       .post('/api/auth/login')
-      .send({ email: 'manager@irongate.com', password: 'manager123' });
+      .send({ email: 'manager@irongate.com', password: 'demo123' });
     
     qaManagerToken = managerRes.body.token;
 
     // Login as team lead
     const leadRes = await request(API_URL)
       .post('/api/auth/login')
-      .send({ email: 'lead@irongate.com', password: 'lead123' });
+      .send({ email: 'lead@irongate.com', password: 'demo123' });
     
     teamLeadToken = leadRes.body.token;
   });

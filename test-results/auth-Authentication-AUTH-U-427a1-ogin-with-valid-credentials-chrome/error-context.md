@@ -1,0 +1,262 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - img "IronGate" [ref=e7]
+        - generic [ref=e8]:
+          - heading "IronGate" [level=1] [ref=e9]
+          - paragraph [ref=e10]: SOFTWARE LTD
+      - paragraph [ref=e11]: QA Navigator Platform
+    - navigation [ref=e12]:
+      - button "All Teams" [ref=e13]:
+        - img [ref=e14]
+        - generic [ref=e19]: All Teams
+      - generic [ref=e20]: Departments
+      - button "E-Commerce" [ref=e21]:
+        - img [ref=e22]
+        - generic [ref=e26]: E-Commerce
+      - button "Platform" [ref=e27]:
+        - img [ref=e28]
+        - generic [ref=e31]: Platform
+      - button "Frontend" [ref=e32]:
+        - img [ref=e33]
+        - generic [ref=e35]: Frontend
+      - button "FinTech" [ref=e36]:
+        - img [ref=e37]
+        - generic [ref=e39]: FinTech
+      - generic [ref=e40]: Advanced
+      - button "Advanced Features" [ref=e41]:
+        - img [ref=e42]
+        - generic [ref=e45]: Advanced Features
+      - button "Admin Panel" [ref=e46]:
+        - img [ref=e47]
+        - generic [ref=e49]: Admin Panel
+      - button "Manage Teams" [ref=e50]:
+        - img [ref=e51]
+        - generic [ref=e54]: Manage Teams
+    - generic [ref=e55]:
+      - generic [ref=e56]:
+        - generic [ref=e57]:
+          - generic [ref=e58]: QM
+          - generic [ref=e59]:
+            - paragraph [ref=e60]: QA Manager
+            - paragraph [ref=e61]: manager@irongate.com
+        - generic [ref=e62]:
+          - generic [ref=e63]: 📊
+          - text: QA Manager
+      - button "Sign Out" [ref=e64]:
+        - img [ref=e65]
+        - generic [ref=e68]: Sign Out
+  - main [ref=e69]:
+    - generic [ref=e70]:
+      - generic [ref=e71]:
+        - heading "Organization Overview" [level=2] [ref=e72]
+        - paragraph [ref=e73]: Real-time quality metrics across 5 active teams
+      - generic [ref=e74]:
+        - generic [ref=e75]:
+          - paragraph [ref=e76]: Overall QA Score
+          - generic [ref=e77]: 82/100
+        - generic [ref=e78]: "82"
+    - generic [ref=e80]:
+      - generic [ref=e82] [cursor=pointer]:
+        - generic [ref=e84]:
+          - generic [ref=e85]:
+            - img [ref=e86]
+            - generic [ref=e89]: "92"
+          - generic [ref=e90]:
+            - heading "Checkout Service" [level=3] [ref=e91]
+            - paragraph [ref=e92]: E-Commerce
+        - generic [ref=e93]:
+          - paragraph [ref=e94]: Velocity (Last 5 Sprints)
+          - application [ref=e98]
+        - generic [ref=e126]:
+          - generic [ref=e127]:
+            - paragraph [ref=e128]: Flakiness
+            - generic [ref=e129]: 4.7%
+            - generic [ref=e130]:
+              - img [ref=e131]
+              - text: 0.3%
+          - generic [ref=e134]:
+            - paragraph [ref=e135]: Coverage
+            - generic [ref=e136]: 85%
+            - generic [ref=e137]:
+              - img [ref=e138]
+              - text: 1.4%
+          - generic [ref=e141]:
+            - paragraph [ref=e142]: Defect Density
+            - generic [ref=e143]: 0.07/1k
+            - generic [ref=e144]:
+              - img [ref=e145]
+              - text: 0.1%
+          - generic [ref=e148]:
+            - paragraph [ref=e149]: MTTR
+            - generic [ref=e150]: 11h
+            - generic [ref=e151]:
+              - img [ref=e152]
+              - text: 1%
+        - button [ref=e156]:
+          - img [ref=e157]
+      - generic [ref=e160] [cursor=pointer]:
+        - generic [ref=e162]:
+          - generic [ref=e163]:
+            - img [ref=e164]
+            - generic [ref=e167]: "78"
+          - generic [ref=e168]:
+            - heading "User Auth" [level=3] [ref=e169]
+            - paragraph [ref=e170]: Platform
+        - generic [ref=e171]:
+          - paragraph [ref=e172]: Velocity (Last 5 Sprints)
+          - application [ref=e176]
+        - generic [ref=e204]:
+          - generic [ref=e205]:
+            - paragraph [ref=e206]: Flakiness
+            - generic [ref=e207]: 0.8%
+            - generic [ref=e208]:
+              - img [ref=e209]
+              - text: 0.2%
+          - generic [ref=e212]:
+            - paragraph [ref=e213]: Coverage
+            - generic [ref=e214]: 79%
+            - generic [ref=e215]:
+              - img [ref=e216]
+              - text: 1%
+          - generic [ref=e219]:
+            - paragraph [ref=e220]: Defect Density
+            - generic [ref=e221]: 0.35/1k
+            - generic [ref=e222]:
+              - img [ref=e223]
+              - text: 0.1%
+          - generic [ref=e226]:
+            - paragraph [ref=e227]: MTTR
+            - generic [ref=e228]: 3h
+            - generic [ref=e229]:
+              - img [ref=e230]
+              - text: 1%
+        - button [ref=e234]:
+          - img [ref=e235]
+      - generic [ref=e238] [cursor=pointer]:
+        - generic [ref=e240]:
+          - generic [ref=e241]:
+            - img [ref=e242]
+            - generic [ref=e245]: "85"
+          - generic [ref=e246]:
+            - heading "Inventory Core" [level=3] [ref=e247]
+            - paragraph [ref=e248]: Logistics
+        - generic [ref=e249]:
+          - paragraph [ref=e250]: Velocity (Last 5 Sprints)
+          - application [ref=e254]
+        - generic [ref=e282]:
+          - generic [ref=e283]:
+            - paragraph [ref=e284]: Flakiness
+            - generic [ref=e285]: 4%
+            - generic [ref=e286]:
+              - img [ref=e287]
+              - text: 0.7%
+          - generic [ref=e290]:
+            - paragraph [ref=e291]: Coverage
+            - generic [ref=e292]: 90%
+            - generic [ref=e293]:
+              - img [ref=e294]
+              - text: 1%
+          - generic [ref=e297]:
+            - paragraph [ref=e298]: Defect Density
+            - generic [ref=e299]: 0.5/1k
+            - generic [ref=e300]:
+              - img [ref=e301]
+              - text: 0.1%
+          - generic [ref=e304]:
+            - paragraph [ref=e305]: MTTR
+            - generic [ref=e306]: 7h
+            - generic [ref=e307]:
+              - img [ref=e308]
+              - text: 1%
+        - button [ref=e312]:
+          - img [ref=e313]
+      - generic [ref=e316] [cursor=pointer]:
+        - generic [ref=e318]:
+          - generic [ref=e319]:
+            - img [ref=e320]
+            - generic [ref=e323]: "65"
+          - generic [ref=e324]:
+            - heading "Payment Gateway" [level=3] [ref=e325]
+            - paragraph [ref=e326]: FinTech
+        - generic [ref=e327]:
+          - paragraph [ref=e328]: Velocity (Last 5 Sprints)
+          - application [ref=e332]
+        - generic [ref=e360]:
+          - generic [ref=e361]:
+            - paragraph [ref=e362]: Flakiness
+            - generic [ref=e363]: 3.4%
+            - generic [ref=e364]:
+              - img [ref=e365]
+              - text: 0.4%
+          - generic [ref=e368]:
+            - paragraph [ref=e369]: Coverage
+            - generic [ref=e370]: 64%
+            - generic [ref=e371]:
+              - img [ref=e372]
+              - text: 2.8%
+          - generic [ref=e375]:
+            - paragraph [ref=e376]: Defect Density
+            - generic [ref=e377]: 1.01/1k
+            - generic [ref=e378]:
+              - img [ref=e379]
+              - text: 0.1%
+          - generic [ref=e382]:
+            - paragraph [ref=e383]: MTTR
+            - generic [ref=e384]: 3h
+            - generic [ref=e385]:
+              - img [ref=e386]
+              - text: 1%
+        - button [ref=e390]:
+          - img [ref=e391]
+      - generic [ref=e394] [cursor=pointer]:
+        - generic [ref=e396]:
+          - generic [ref=e397]:
+            - img [ref=e398]
+            - generic [ref=e401]: "88"
+          - generic [ref=e402]:
+            - heading "Mobile App" [level=3] [ref=e403]
+            - paragraph [ref=e404]: Frontend
+        - generic [ref=e405]:
+          - paragraph [ref=e406]: Velocity (Last 5 Sprints)
+          - application [ref=e410]
+        - generic [ref=e438]:
+          - generic [ref=e439]:
+            - paragraph [ref=e440]: Flakiness
+            - generic [ref=e441]: 0.4%
+            - generic [ref=e442]:
+              - img [ref=e443]
+              - text: 1%
+          - generic [ref=e446]:
+            - paragraph [ref=e447]: Coverage
+            - generic [ref=e448]: 91%
+            - generic [ref=e449]:
+              - img [ref=e450]
+              - text: 0.1%
+          - generic [ref=e453]:
+            - paragraph [ref=e454]: Defect Density
+            - generic [ref=e455]: 0/1k
+            - generic [ref=e456]:
+              - img [ref=e457]
+              - text: 0.1%
+          - generic [ref=e460]:
+            - paragraph [ref=e461]: MTTR
+            - generic [ref=e462]: 11h
+            - generic [ref=e463]:
+              - img [ref=e464]
+              - text: 1%
+        - button [ref=e468]:
+          - img [ref=e469]
+    - generic [ref=e472]:
+      - generic [ref=e473]:
+        - img "IronGate" [ref=e474]
+        - generic [ref=e475]: IronGate Software LTD
+      - generic [ref=e476]:
+        - generic [ref=e477]: © 2025 IronGate Software LTD. All rights reserved.
+        - generic [ref=e478]: "|"
+        - generic [ref=e479]: QA Navigator Platform v1.0
+```

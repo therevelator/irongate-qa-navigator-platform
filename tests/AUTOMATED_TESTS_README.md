@@ -119,11 +119,11 @@ npm run test:db
 All tests use real users from the database:
 
 ```typescript
-SUPER_ADMIN:   admin@irongate.com     / admin123
-QA_MANAGER:    manager@irongate.com   / manager123
-TEAM_LEAD:     lead@irongate.com      / lead123
-QA_ENGINEER:   engineer@irongate.com  / engineer123
-VIEWER:        viewer@irongate.com    / viewer123
+SUPER_ADMIN:   admin@irongate.com     / demo123
+QA_MANAGER:    manager@irongate.com   / demo123
+TEAM_LEAD:     lead@irongate.com      / demo123
+QA_ENGINEER:   engineer@irongate.com  / demo123
+VIEWER:        viewer@irongate.com    / demo123
 ```
 
 ## Configuration

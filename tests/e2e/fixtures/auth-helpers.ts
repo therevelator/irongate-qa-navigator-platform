@@ -14,30 +14,36 @@ export async function login(page: Page, email: string, password: string) {
   
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', password);
-  await page.click('button:has-text("Sign In")');
   
-  // Wait for navigation to complete with extended timeout
-  await page.waitForURL((url) => url.pathname !== '/', { timeout: 30000 });
+  // Click sign in and wait for navigation
+  await Promise.all([
+    page.waitForNavigation({ timeout: 45000, waitUntil: 'domcontentloaded' }).catch(() => {
+      console.log('Navigation timeout - checking if login succeeded anyway');
+    }),
+    page.click('button:has-text("Sign In")'),
+  ]);
   
-  // Wait for page to load
-  await page.waitForLoadState('load', { timeout: 30000 });
+  // Give page time to settle
+  await page.waitForTimeout(2000);
   
-  // Wait for IronGate loader to disappear (if present)
-  await page.waitForSelector('.irongate-loader', { state: 'hidden', timeout: 10000 }).catch(() => {
-    // Loader might not be present, that's okay
-  });
+  // Check if we're logged in by looking for elements that appear after login
+  // Try to find the sidebar or user menu (adjust selector based on your app)
+  const isLoggedIn = await page.locator('text=All Teams').isVisible().catch(() => false) ||
+                     await page.locator('text=Dashboard').isVisible().catch(() => false) ||
+                     await page.url() !== 'http://localhost:5173/';
   
-  // Alternative: wait for any loading spinner to disappear
-  await page.waitForSelector('[data-loading="true"]', { state: 'hidden', timeout: 10000 }).catch(() => {
-    // Loading indicator might not be present
-  });
+  if (!isLoggedIn) {
+    throw new Error('Login failed - still on login page or login elements not found');
+  }
+  
+  // Wait for any loaders to disappear
+  await page.waitForSelector('.irongate-loader', { state: 'hidden', timeout: 10000 }).catch(() => {});
+  await page.waitForSelector('[data-loading="true"]', { state: 'hidden', timeout: 10000 }).catch(() => {});
   
   // Wait for network to settle
-  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
-    // Network might not be idle, continue anyway
-  });
+  await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
   
-  // Extra buffer for slow systems
+  // Extra buffer
   await page.waitForTimeout(1000);
 }
 

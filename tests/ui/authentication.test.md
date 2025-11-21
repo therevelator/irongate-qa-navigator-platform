@@ -11,13 +11,13 @@
 **Type**: Positive
 
 ### Preconditions
-- User exists in database with email: `admin@irongate.com`, password: `admin123`
+- User exists in database with email: `admin@irongate.com`, password: `demo123`
 - User is not logged in
 
 ### Test Steps
 1. Navigate to login page (`/`)
 2. Enter email: `admin@irongate.com`
-3. Enter password: `admin123`
+3. Enter password: `demo123`
 4. Click "Sign In" button
 
 ### Expected Results
@@ -41,12 +41,12 @@ SELECT last_login, failed_login_attempts FROM users WHERE email = 'admin@irongat
 **Type**: Positive
 
 ### Preconditions
-- User exists: `manager@irongate.com`, password: `manager123`
+- User exists: `manager@irongate.com`, password: `demo123`
 
 ### Test Steps
 1. Navigate to login page
 2. Enter email: `manager@irongate.com`
-3. Enter password: `manager123`
+3. Enter password: `demo123`
 4. Click "Sign In" button
 
 ### Expected Results
@@ -69,12 +69,12 @@ SELECT role, department_id FROM users WHERE email = 'manager@irongate.com';
 **Type**: Positive
 
 ### Preconditions
-- User exists: `lead@irongate.com`, password: `lead123`
+- User exists: `lead@irongate.com`, password: `demo123`
 
 ### Test Steps
 1. Navigate to login page
 2. Enter email: `lead@irongate.com`
-3. Enter password: `lead123`
+3. Enter password: `demo123`
 4. Click "Sign In" button
 
 ### Expected Results
@@ -97,12 +97,12 @@ SELECT role, primary_team_id FROM users WHERE email = 'lead@irongate.com';
 **Type**: Positive
 
 ### Preconditions
-- User exists: `engineer@irongate.com`, password: `engineer123`
+- User exists: `engineer@irongate.com`, password: `demo123`
 
 ### Test Steps
 1. Navigate to login page
 2. Enter email: `engineer@irongate.com`
-3. Enter password: `engineer123`
+3. Enter password: `demo123`
 4. Click "Sign In" button
 
 ### Expected Results
@@ -119,12 +119,12 @@ SELECT role, primary_team_id FROM users WHERE email = 'lead@irongate.com';
 **Type**: Positive
 
 ### Preconditions
-- User exists: `viewer@irongate.com`, password: `viewer123`
+- User exists: `viewer@irongate.com`, password: `demo123`
 
 ### Test Steps
 1. Navigate to login page
 2. Enter email: `viewer@irongate.com`
-3. Enter password: `viewer123`
+3. Enter password: `demo123`
 4. Click "Sign In" button
 
 ### Expected Results
