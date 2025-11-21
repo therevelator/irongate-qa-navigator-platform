@@ -1,0 +1,124 @@
+name: Test Suite
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: testpassword
+          MYSQL_DATABASE: irongate_qa
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Setup database
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: 3306
+          DB_USER: root
+          DB_PASSWORD: testpassword
+          DB_NAME: irongate_qa
+        run: |
+          mysql -h 127.0.0.1 -u root -ptestpassword irongate_qa < schema.sql
+          mysql -h 127.0.0.1 -u root -ptestpassword irongate_qa < seed_data.sql
+          mysql -h 127.0.0.1 -u root -ptestpassword irongate_qa < seed_demo_users.sql
+
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          DB_HOST=127.0.0.1
+          DB_PORT=3306
+          DB_USER=root
+          DB_PASSWORD=testpassword
+          DB_NAME=irongate_qa
+          PORT=3000
+          NODE_ENV=test
+          FRONTEND_URL=http://localhost:5173
+          JWT_SECRET=test-jwt-secret-key
+          EOF
+
+      - name: Run API tests
+        run: npm run test:api
+
+      - name: Run database tests
+        run: npm run test:db
+
+      - name: Start application
+        run: |
+          npm start &
+          sleep 30
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            test-results/
+            playwright-report/
+            coverage/
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+      - name: Comment PR with test results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let comment = '## Test Results\n\n';
+            
+            try {
+              const results = fs.readFileSync('test-results/results.json', 'utf8');
+              const data = JSON.parse(results);
+              comment += `✅ Passed: ${data.passed}\n`;
+              comment += `❌ Failed: ${data.failed}\n`;
+              comment += `⏭️ Skipped: ${data.skipped}\n`;
+            } catch (e) {
+              comment += 'Test results not available\n';
+            }
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
