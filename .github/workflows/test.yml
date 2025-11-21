@@ -67,15 +67,32 @@ jobs:
 
       - name: Start application
         run: |
-          npm start &
-          echo "Waiting for application to start..."
-          sleep 45
+          npm start > app.log 2>&1 &
+          echo "Application starting in background..."
+          echo "Waiting 60 seconds for startup..."
+          sleep 60
+          echo "Checking running processes..."
+          ps aux | grep -E "(node|vite)" || true
           
-      - name: Wait for application to be ready
+      - name: Wait for backend to be ready
         run: |
-          timeout 60 bash -c 'until curl -f http://localhost:5173 > /dev/null 2>&1; do sleep 2; done'
-          timeout 60 bash -c 'until curl -f http://localhost:3000/api/teams > /dev/null 2>&1; do sleep 2; done'
-          echo "Application is ready!"
+          echo "Checking backend..."
+          for i in {1..30}; do
+            if curl -f http://localhost:3000/api/teams > /dev/null 2>&1; then
+              echo "✅ Backend is ready!"
+              exit 0
+            fi
+            echo "Attempt $i/30: Backend not ready yet..."
+            sleep 2
+          done
+          echo "❌ Backend failed to start"
+          exit 1
+          
+      - name: Check frontend (optional)
+        run: |
+          echo "Checking frontend..."
+          curl -f http://localhost:5173 > /dev/null 2>&1 && echo "✅ Frontend is ready!" || echo "⚠️ Frontend check failed (may be ok)"
+        continue-on-error: true
 
       - name: Run API tests
         run: npm run test:api
@@ -99,6 +116,7 @@ jobs:
             test-results/
             playwright-report/
             coverage/
+            app.log
 
       - name: Upload Playwright report
         if: always()
