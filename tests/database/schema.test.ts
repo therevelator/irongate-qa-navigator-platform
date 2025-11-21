@@ -1,11 +1,15 @@
 import mysql from 'mysql2/promise';
+import dotenv from 'dotenv';
+
+// Load environment variables
+dotenv.config();
 
 const DB_CONFIG = {
-  host: 'localhost',
-  port: 3306,
-  user: 'root',
-  password: 'l3v75th5n',
-  database: 'irongate_qa',
+  host: process.env.DB_HOST || 'localhost',
+  port: parseInt(process.env.DB_PORT || '3306'),
+  user: process.env.DB_USER || 'root',
+  password: process.env.DB_PASSWORD || 'l3v75th5n',
+  database: process.env.DB_NAME || 'irongate_qa',
 };
 
 describe('Database Schema Validation', () => {
