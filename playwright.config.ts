@@ -73,6 +73,23 @@ export default defineConfig({
         },
       },
     },
+    
+    // Chromium for CI/CD environments
+    {
+      name: 'chromium',
+      use: { 
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          args: [
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process',
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+          ],
+          slowMo: 100,
+        },
+      },
+    },
 
     // Uncomment to test on more browsers
     // {
