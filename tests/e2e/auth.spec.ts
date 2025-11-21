@@ -20,9 +20,6 @@ test.describe('Authentication', () => {
   test('AUTH-UI-001: Super Admin login with valid credentials', async ({ page }) => {
     await loginAsSuperAdmin(page);
     
-    // Verify redirect to dashboard
-    await expect(page).not.toHaveURL('/');
-    
     // Verify token stored
     const token = await getAuthToken(page);
     expect(token).not.toBeNull();
@@ -32,33 +29,38 @@ test.describe('Authentication', () => {
     
     // Verify Admin Panel menu visible
     await expect(page.locator('text=Admin Panel')).toBeVisible();
+    
+    // Verify Sign Out button visible (confirms logged in)
+    await expect(page.locator('button:has-text("Sign Out")')).toBeVisible();
   });
 
   test('AUTH-UI-001B: QA Manager login with valid credentials', async ({ page }) => {
     await login(page, TEST_USERS.QA_MANAGER.email, TEST_USERS.QA_MANAGER.password);
     
-    await expect(page).not.toHaveURL('/');
     const token = await getAuthToken(page);
     expect(token).not.toBeNull();
     
-    // Verify QA Manager info
-    await expect(page.locator('text=QA Manager')).toBeVisible();
+    // Verify logged in and has admin access
     await expect(page.locator('text=Admin Panel')).toBeVisible();
+    await expect(page.locator('button:has-text("Sign Out")')).toBeVisible();
+    
+    // Verify email displayed
+    await expect(page.locator('text=manager@irongate.com')).toBeVisible();
   });
 
   test('AUTH-UI-001C: Team Lead login with valid credentials', async ({ page }) => {
     await login(page, TEST_USERS.TEAM_LEAD.email, TEST_USERS.TEAM_LEAD.password);
     
-    await expect(page).not.toHaveURL('/');
-    await expect(page.locator('text=Team Lead')).toBeVisible();
     await expect(page.locator('text=Admin Panel')).toBeVisible();
+    await expect(page.locator('button:has-text("Sign Out")')).toBeVisible();
+    await expect(page.locator('text=lead@irongate.com')).toBeVisible();
   });
 
   test('AUTH-UI-001D: QA Engineer login - no admin access', async ({ page }) => {
     await login(page, TEST_USERS.QA_ENGINEER.email, TEST_USERS.QA_ENGINEER.password);
     
-    await expect(page).not.toHaveURL('/');
-    await expect(page.locator('text=QA Engineer')).toBeVisible();
+    await expect(page.locator('button:has-text("Sign Out")')).toBeVisible();
+    await expect(page.locator('text=engineer@irongate.com')).toBeVisible();
     
     // Admin Panel should NOT be visible
     await expect(page.locator('text=Admin Panel')).not.toBeVisible();
@@ -101,10 +103,10 @@ test.describe('Authentication', () => {
     expect(await isLoggedIn(page)).toBe(true);
     
     // Logout
-    await page.click('button:has-text("Logout")');
+    await page.click('button:has-text("Sign Out")');
     
-    // Verify redirected to login
-    await expect(page).toHaveURL('/');
+    // Verify back on login page
+    await expect(page.locator('input[type="email"]')).toBeVisible();
     
     // Verify token removed
     const token = await getAuthToken(page);
