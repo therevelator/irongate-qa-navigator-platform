@@ -1,11 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { loginAsSuperAdmin, loginAsQAManager, loginAsTeamLead, loginAsQAEngineer } from './fixtures/auth-helpers';
+import { loginAsSuperAdmin, loginAsQAManager, loginAsTeamLead, loginAsQAEngineer, logout } from './fixtures/auth-helpers';
 
 test.describe('Role-Based Permissions', () => {
   
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => localStorage.clear());
+  });
+
+  test.afterEach(async ({ page }) => {
+    await logout(page).catch(() => {
+      console.log('Logout failed or already logged out');
+    });
   });
 
   test('PERM-UI-001: Super Admin has full access', async ({ page }) => {

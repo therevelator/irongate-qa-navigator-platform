@@ -1,11 +1,17 @@
 import { test, expect } from '@playwright/test';
-import { loginAsSuperAdmin, loginAsTeamLead, waitForLoadingToComplete } from './fixtures/auth-helpers';
+import { loginAsSuperAdmin, loginAsTeamLead, waitForLoadingToComplete, logout } from './fixtures/auth-helpers';
 
 test.describe('User Management', () => {
   
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
     await page.evaluate(() => localStorage.clear());
+  });
+
+  test.afterEach(async ({ page }) => {
+    await logout(page).catch(() => {
+      console.log('Logout failed or already logged out');
+    });
   });
 
   test('USER-MGMT-UI-001: Create user as Super Admin', async ({ page }) => {

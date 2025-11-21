@@ -64,12 +64,19 @@ export async function loginAsQAEngineer(page: Page) {
 }
 
 export async function logout(page: Page) {
-  // Click user avatar/profile
-  await page.click('[data-testid="user-menu"]', { timeout: 5000 }).catch(() => {
-    // Fallback: look for logout button directly
-  });
-  await page.click('button:has-text("Logout")');
-  await page.waitForURL('/');
+  // Click the Sign Out button
+  await page.click('button:has-text("Sign Out")');
+  
+  // Wait for login page to appear
+  await page.waitForSelector('input[type="email"]', { state: 'visible', timeout: 10000 });
+  
+  // Verify we're back on login page
+  const hasEmailInput = await page.locator('input[type="email"]').isVisible();
+  const hasPasswordInput = await page.locator('input[type="password"]').isVisible();
+  
+  if (!hasEmailInput || !hasPasswordInput) {
+    throw new Error('Logout failed - login form not visible');
+  }
 }
 
 export async function getAuthToken(page: Page): Promise<string | null> {

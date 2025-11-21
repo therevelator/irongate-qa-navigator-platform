@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { TEST_USERS } from './fixtures/test-users';
-import { login, loginAsSuperAdmin, getAuthToken, isLoggedIn } from './fixtures/auth-helpers';
+import { login, loginAsSuperAdmin, getAuthToken, isLoggedIn, logout } from './fixtures/auth-helpers';
 
 test.describe('Authentication', () => {
   
@@ -8,6 +8,13 @@ test.describe('Authentication', () => {
     // Clear storage before each test
     await page.goto('/');
     await page.evaluate(() => localStorage.clear());
+  });
+
+  test.afterEach(async ({ page }) => {
+    // Logout after each test
+    await logout(page).catch(() => {
+      console.log('Logout failed or already logged out');
+    });
   });
 
   test('AUTH-UI-001: Super Admin login with valid credentials', async ({ page }) => {
