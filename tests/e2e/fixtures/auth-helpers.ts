@@ -27,13 +27,13 @@ export async function login(page: Page, email: string, password: string) {
   await page.waitForTimeout(2000);
   
   // Check if we're logged in by looking for elements that appear after login
-  // Try to find the sidebar or user menu (adjust selector based on your app)
-  const isLoggedIn = await page.locator('text=All Teams').isVisible().catch(() => false) ||
-                     await page.locator('text=Dashboard').isVisible().catch(() => false) ||
-                     await page.url() !== 'http://localhost:5173/';
+  // The app doesn't change URL, it just shows different content
+  const isLoggedIn = await page.locator('text=Admin Panel').isVisible().catch(() => false) ||
+                     await page.locator('text=All Teams').isVisible().catch(() => false) ||
+                     await page.locator('button:has-text("Sign Out")').isVisible().catch(() => false);
   
   if (!isLoggedIn) {
-    throw new Error('Login failed - still on login page or login elements not found');
+    throw new Error('Login failed - dashboard elements not found');
   }
   
   // Wait for any loaders to disappear
