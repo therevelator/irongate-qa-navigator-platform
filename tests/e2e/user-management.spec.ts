@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsSuperAdmin, loginAsTeamLead } from './fixtures/auth-helpers';
+import { loginAsSuperAdmin, loginAsTeamLead, waitForLoadingToComplete } from './fixtures/auth-helpers';
 
 test.describe('User Management', () => {
   
@@ -13,6 +13,7 @@ test.describe('User Management', () => {
     
     // Navigate to Admin Panel
     await page.click('text=Admin Panel');
+    await waitForLoadingToComplete(page);
     await expect(page.locator('h1:has-text("Admin Control Panel")')).toBeVisible();
     
     // Click Create User

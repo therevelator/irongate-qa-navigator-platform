@@ -1,0 +1,2046 @@
+import { createHotContext as __vite__createHotContext } from "/@vite/client";import.meta.hot = __vite__createHotContext("/src/components/AdminPanel.tsx");import __vite__cjsImport0_react_jsxDevRuntime from "/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=4880c6f9"; const Fragment = __vite__cjsImport0_react_jsxDevRuntime["Fragment"]; const jsxDEV = __vite__cjsImport0_react_jsxDevRuntime["jsxDEV"];
+var _s = $RefreshSig$();
+import __vite__cjsImport1_react from "/node_modules/.vite/deps/react.js?v=4880c6f9"; const React = __vite__cjsImport1_react.__esModule ? __vite__cjsImport1_react.default : __vite__cjsImport1_react; const useState = __vite__cjsImport1_react["useState"]; const useEffect = __vite__cjsImport1_react["useEffect"];
+import { Users, UserPlus, Key, Shield, X, ArrowLeft } from "/node_modules/.vite/deps/lucide-react.js?v=951fade0";
+import { useAuth } from "/src/contexts/AuthContext.tsx";
+const API_URL = "http://localhost:3000/api";
+const AdminPanel = ({ onBack }) => {
+  _s();
+  const { user } = useAuth();
+  const [users, setUsers] = useState([]);
+  const [teams, setTeams] = useState([]);
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const [showEditUser, setShowEditUser] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editUserData, setEditUserData] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    role: ""
+  });
+  const [newUser, setNewUser] = useState({
+    email: "",
+    password: "",
+    firstName: "",
+    lastName: "",
+    role: "",
+    teamId: ""
+  });
+  const [newTeam, setNewTeam] = useState({
+    name: "",
+    description: "",
+    platform: "Backend"
+  });
+  const [resetPasswordData, setResetPasswordData] = useState({
+    newPassword: "",
+    confirmPassword: ""
+  });
+  const token = localStorage.getItem("irongate_token");
+  useEffect(() => {
+    if (token) {
+      fetchData();
+    }
+  }, [token]);
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const usersRes = await fetch(`${API_URL}/admin/users`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (usersRes.ok) {
+        const usersData = await usersRes.json();
+        setUsers(Array.isArray(usersData) ? usersData : []);
+      } else {
+        console.error("Failed to fetch users:", await usersRes.text());
+        setUsers([]);
+      }
+      const teamsRes = await fetch(`${API_URL}/teams`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (teamsRes.ok) {
+        const teamsData = await teamsRes.json();
+        const teamsList = Array.isArray(teamsData) ? teamsData : teamsData.teams || [];
+        setTeams(teamsList);
+      } else {
+        console.error("Failed to fetch teams:", await teamsRes.text());
+        setTeams([]);
+      }
+      const rolesRes = await fetch(`${API_URL}/admin/available-roles`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (rolesRes.ok) {
+        const rolesData = await rolesRes.json();
+        setAvailableRoles(rolesData.availableRoles || []);
+      } else {
+        console.error("Failed to fetch roles:", await rolesRes.text());
+        setAvailableRoles([]);
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      setUsers([]);
+      setTeams([]);
+      setAvailableRoles([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const handleCreateUser = async (e) => {
+    e.preventDefault();
+    try {
+      const selectedTeamObj = teams.find((t) => t.id === newUser.teamId);
+      const departmentId = selectedTeamObj?.department_id || user?.departmentId;
+      const response = await fetch(`${API_URL}/admin/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          ...newUser,
+          departmentId
+        })
+      });
+      if (response.ok) {
+        alert("User created successfully!");
+        setShowCreateUser(false);
+        setNewUser({ email: "", password: "", firstName: "", lastName: "", role: "", teamId: "" });
+        await fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Error creating user:", error);
+      alert("Failed to create user");
+    }
+  };
+  const handleCreateTeam = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`${API_URL}/admin/teams`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(newTeam)
+      });
+      if (response.ok) {
+        alert("Team created successfully!");
+        setShowCreateTeam(false);
+        setNewTeam({ name: "", description: "", platform: "Backend" });
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Error creating team:", error);
+      alert("Failed to create team");
+    }
+  };
+  const handleResetPassword = async (e) => {
+    e.preventDefault();
+    if (resetPasswordData.newPassword !== resetPasswordData.confirmPassword) {
+      alert("Passwords do not match");
+      return;
+    }
+    if (resetPasswordData.newPassword.length < 6) {
+      alert("Password must be at least 6 characters");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({ newPassword: resetPasswordData.newPassword })
+      });
+      if (response.ok) {
+        alert("Password reset successfully!");
+        setShowResetPassword(false);
+        setSelectedUser(null);
+        setResetPasswordData({ newPassword: "", confirmPassword: "" });
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Error resetting password:", error);
+      alert("Failed to reset password");
+    }
+  };
+  const handleEditUser = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await fetch(`${API_URL}/users/${selectedUser?.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify(editUserData)
+      });
+      if (response.ok) {
+        alert("User updated successfully!");
+        setShowEditUser(false);
+        setSelectedUser(null);
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Error updating user:", error);
+      alert("Failed to update user");
+    }
+  };
+  const handleDeleteUser = async () => {
+    try {
+      const response = await fetch(`${API_URL}/users/${selectedUser?.id}`, {
+        method: "DELETE",
+        headers: {
+          "Authorization": `Bearer ${token}`
+        }
+      });
+      if (response.ok) {
+        alert("User deleted successfully!");
+        setShowDeleteConfirm(false);
+        setSelectedUser(null);
+        setSelectedTeam(null);
+        fetchData();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      alert("Failed to delete user");
+    }
+  };
+  const getRoleBadgeColor = (role) => {
+    const colors = {
+      super_admin: "bg-purple-100 text-purple-800",
+      qa_manager: "bg-blue-100 text-blue-800",
+      team_lead: "bg-green-100 text-green-800",
+      qa_engineer: "bg-yellow-100 text-yellow-800",
+      viewer: "bg-gray-100 text-gray-800"
+    };
+    return colors[role] || "bg-gray-100 text-gray-800";
+  };
+  const canCreateTeam = user?.role === "qa_manager" || user?.role === "super_admin";
+  const teamUsers = selectedTeam ? users.filter((u) => u.primary_team_id === selectedTeam.id) : [];
+  if (loading) {
+    return /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-center h-64", children: /* @__PURE__ */ jsxDEV("div", { className: "text-gray-500", children: "Loading..." }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 312,
+      columnNumber: 9
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 311,
+      columnNumber: 7
+    }, this);
+  }
+  return /* @__PURE__ */ jsxDEV(Fragment, { children: [
+    selectedTeam ? /* @__PURE__ */ jsxDEV("div", { className: "min-h-screen bg-gray-50 p-8", children: /* @__PURE__ */ jsxDEV("div", { className: "max-w-7xl mx-auto space-y-6", children: [
+      /* @__PURE__ */ jsxDEV(
+        "button",
+        {
+          onClick: () => setSelectedTeam(null),
+          className: "flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4",
+          children: [
+            /* @__PURE__ */ jsxDEV(ArrowLeft, { className: "w-5 h-5" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 328,
+              columnNumber: 15
+            }, this),
+            "Back to Teams"
+          ]
+        },
+        void 0,
+        true,
+        {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 324,
+          columnNumber: 13
+        },
+        this
+      ),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg shadow p-6", children: /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxDEV("div", { children: [
+          /* @__PURE__ */ jsxDEV("h1", { className: "text-2xl font-bold text-gray-900", children: selectedTeam.name }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 336,
+            columnNumber: 19
+          }, this),
+          /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-600 mt-1", children: selectedTeam.description || "No description" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 337,
+            columnNumber: 19
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "flex gap-2 mt-2", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800", children: selectedTeam.platform }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 339,
+              columnNumber: 21
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: `px-2 py-1 text-xs font-medium rounded-full ${selectedTeam.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`, children: selectedTeam.is_active ? "Active" : "Inactive" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 342,
+              columnNumber: 21
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 338,
+            columnNumber: 19
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 335,
+          columnNumber: 17
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "text-right", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "text-3xl font-bold text-blue-600", children: teamUsers.length }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 348,
+            columnNumber: 19
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "text-sm text-gray-600", children: "Team Members" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 349,
+            columnNumber: 19
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 347,
+          columnNumber: 17
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 334,
+        columnNumber: 15
+      }, this) }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 333,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg shadow", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "px-6 py-4 border-b border-gray-200", children: /* @__PURE__ */ jsxDEV("h2", { className: "text-lg font-semibold text-gray-900", children: "Team Members" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 357,
+          columnNumber: 17
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 356,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxDEV("table", { className: "w-full", children: [
+          /* @__PURE__ */ jsxDEV("thead", { className: "bg-gray-50", children: /* @__PURE__ */ jsxDEV("tr", { children: [
+            /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Name" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 363,
+              columnNumber: 23
+            }, this),
+            /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Email" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 364,
+              columnNumber: 23
+            }, this),
+            /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Role" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 365,
+              columnNumber: 23
+            }, this),
+            /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Status" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 366,
+              columnNumber: 23
+            }, this),
+            /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Actions" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 367,
+              columnNumber: 23
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 362,
+            columnNumber: 21
+          }, this) }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 361,
+            columnNumber: 19
+          }, this),
+          /* @__PURE__ */ jsxDEV("tbody", { className: "divide-y divide-gray-200", children: teamUsers.length === 0 ? /* @__PURE__ */ jsxDEV("tr", { children: /* @__PURE__ */ jsxDEV("td", { colSpan: 5, className: "px-6 py-8 text-center text-gray-500", children: "No team members found" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 373,
+            columnNumber: 25
+          }, this) }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 372,
+            columnNumber: 19
+          }, this) : teamUsers.map(
+            (u) => /* @__PURE__ */ jsxDEV("tr", { className: "hover:bg-gray-50", children: [
+              /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("div", { className: "font-medium text-gray-900", children: [
+                u.first_name,
+                " ",
+                u.last_name
+              ] }, void 0, true, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 381,
+                columnNumber: 29
+              }, this) }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 380,
+                columnNumber: 27
+              }, this),
+              /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-600", children: u.email }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 383,
+                columnNumber: 27
+              }, this),
+              /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("span", { className: `px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(u.role)}`, children: u.role.replace("_", " ") }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 385,
+                columnNumber: 29
+              }, this) }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 384,
+                columnNumber: 27
+              }, this),
+              /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("span", { className: `px-2 py-1 text-xs font-medium rounded-full ${u.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`, children: u.is_active ? "Active" : "Inactive" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 390,
+                columnNumber: 29
+              }, this) }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 389,
+                columnNumber: 27
+              }, this),
+              /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap text-sm space-x-2", children: [
+                /* @__PURE__ */ jsxDEV(
+                  "button",
+                  {
+                    onClick: () => {
+                      setSelectedUser(u);
+                      setEditUserData({
+                        firstName: u.first_name,
+                        lastName: u.last_name,
+                        email: u.email,
+                        role: u.role
+                      });
+                      setShowEditUser(true);
+                    },
+                    className: "text-blue-600 hover:text-blue-800 font-medium",
+                    children: "Edit"
+                  },
+                  void 0,
+                  false,
+                  {
+                    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                    lineNumber: 395,
+                    columnNumber: 29
+                  },
+                  this
+                ),
+                /* @__PURE__ */ jsxDEV(
+                  "button",
+                  {
+                    onClick: () => {
+                      setSelectedUser(u);
+                      setShowResetPassword(true);
+                    },
+                    className: "text-green-600 hover:text-green-800 font-medium",
+                    children: "Reset Password"
+                  },
+                  void 0,
+                  false,
+                  {
+                    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                    lineNumber: 410,
+                    columnNumber: 29
+                  },
+                  this
+                ),
+                u.id !== user?.id && /* @__PURE__ */ jsxDEV(
+                  "button",
+                  {
+                    onClick: () => {
+                      setSelectedUser(u);
+                      setShowDeleteConfirm(true);
+                    },
+                    className: "text-red-600 hover:text-red-800 font-medium",
+                    children: "Delete"
+                  },
+                  void 0,
+                  false,
+                  {
+                    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                    lineNumber: 420,
+                    columnNumber: 23
+                  },
+                  this
+                )
+              ] }, void 0, true, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 394,
+                columnNumber: 27
+              }, this)
+            ] }, u.id, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 379,
+              columnNumber: 19
+            }, this)
+          ) }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 370,
+            columnNumber: 19
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 360,
+          columnNumber: 17
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 359,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 355,
+        columnNumber: 13
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 322,
+      columnNumber: 11
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 321,
+      columnNumber: 7
+    }, this) : (
+      /* Main Admin Panel View */
+      /* @__PURE__ */ jsxDEV("div", { className: "min-h-screen bg-gray-50 p-8", children: /* @__PURE__ */ jsxDEV("div", { className: "max-w-7xl mx-auto space-y-6", children: [
+        onBack && /* @__PURE__ */ jsxDEV(
+          "button",
+          {
+            onClick: onBack,
+            className: "flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4",
+            children: [
+              /* @__PURE__ */ jsxDEV(ArrowLeft, { className: "w-5 h-5" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 450,
+                columnNumber: 13
+              }, this),
+              "Back to Dashboard"
+            ]
+          },
+          void 0,
+          true,
+          {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 446,
+            columnNumber: 11
+          },
+          this
+        ),
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "flex items-center gap-3", children: [
+            /* @__PURE__ */ jsxDEV(Shield, { className: "w-8 h-8 text-blue-600" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 458,
+              columnNumber: 13
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("h1", { className: "text-2xl font-bold text-gray-900", children: "Admin Control Panel" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 460,
+                columnNumber: 15
+              }, this),
+              /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-600", children: "Manage users and teams" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 461,
+                columnNumber: 15
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 459,
+              columnNumber: 13
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 457,
+            columnNumber: 11
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "flex gap-3", children: [
+            availableRoles.length > 0 && /* @__PURE__ */ jsxDEV(
+              "button",
+              {
+                onClick: () => setShowCreateUser(true),
+                className: "flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
+                children: [
+                  /* @__PURE__ */ jsxDEV(UserPlus, { className: "w-5 h-5" }, void 0, false, {
+                    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                    lineNumber: 470,
+                    columnNumber: 15
+                  }, this),
+                  "Create User"
+                ]
+              },
+              void 0,
+              true,
+              {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 466,
+                columnNumber: 15
+              },
+              this
+            ),
+            canCreateTeam && /* @__PURE__ */ jsxDEV(
+              "button",
+              {
+                onClick: () => setShowCreateTeam(true),
+                className: "flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700",
+                children: [
+                  /* @__PURE__ */ jsxDEV(Users, { className: "w-5 h-5" }, void 0, false, {
+                    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                    lineNumber: 479,
+                    columnNumber: 15
+                  }, this),
+                  "Create Team"
+                ]
+              },
+              void 0,
+              true,
+              {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 475,
+                columnNumber: 15
+              },
+              this
+            )
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 464,
+            columnNumber: 9
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 456,
+          columnNumber: 9
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg shadow", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "px-6 py-4 border-b border-gray-200", children: /* @__PURE__ */ jsxDEV("h2", { className: "text-lg font-semibold text-gray-900", children: "Users" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 489,
+            columnNumber: 11
+          }, this) }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 488,
+            columnNumber: 9
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxDEV("table", { className: "w-full", children: [
+            /* @__PURE__ */ jsxDEV("thead", { className: "bg-gray-50", children: /* @__PURE__ */ jsxDEV("tr", { children: [
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Name" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 495,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Email" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 496,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Role" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 497,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Team" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 498,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Department" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 499,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Status" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 500,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Actions" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 501,
+                columnNumber: 17
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 494,
+              columnNumber: 15
+            }, this) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 493,
+              columnNumber: 13
+            }, this),
+            /* @__PURE__ */ jsxDEV("tbody", { className: "divide-y divide-gray-200", children: users.map(
+              (u) => /* @__PURE__ */ jsxDEV("tr", { className: "hover:bg-gray-50", children: [
+                /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("div", { className: "font-medium text-gray-900", children: [
+                  u.first_name,
+                  " ",
+                  u.last_name
+                ] }, void 0, true, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 508,
+                  columnNumber: 21
+                }, this) }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 507,
+                  columnNumber: 19
+                }, this),
+                /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-600", children: u.email }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 510,
+                  columnNumber: 19
+                }, this),
+                /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("span", { className: `px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(u.role)}`, children: u.role.replace("_", " ") }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 512,
+                  columnNumber: 21
+                }, this) }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 511,
+                  columnNumber: 19
+                }, this),
+                /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-600", children: u.team_name }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 516,
+                  columnNumber: 19
+                }, this),
+                /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-600", children: u.department_name }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 517,
+                  columnNumber: 19
+                }, this),
+                /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("span", { className: `px-2 py-1 text-xs font-medium rounded-full ${u.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`, children: u.is_active ? "Active" : "Inactive" }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 519,
+                  columnNumber: 21
+                }, this) }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 518,
+                  columnNumber: 19
+                }, this),
+                /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap text-sm", children: /* @__PURE__ */ jsxDEV(
+                  "button",
+                  {
+                    onClick: () => {
+                      setSelectedUser(u);
+                      setShowResetPassword(true);
+                    },
+                    className: "flex items-center gap-1 text-blue-600 hover:text-blue-800",
+                    children: [
+                      /* @__PURE__ */ jsxDEV(Key, { className: "w-4 h-4" }, void 0, false, {
+                        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                        lineNumber: 531,
+                        columnNumber: 23
+                      }, this),
+                      "Reset Password"
+                    ]
+                  },
+                  void 0,
+                  true,
+                  {
+                    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                    lineNumber: 524,
+                    columnNumber: 21
+                  },
+                  this
+                ) }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 523,
+                  columnNumber: 19
+                }, this)
+              ] }, u.id, true, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 506,
+                columnNumber: 19
+              }, this)
+            ) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 504,
+              columnNumber: 13
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 492,
+            columnNumber: 11
+          }, this) }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 491,
+            columnNumber: 9
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 487,
+          columnNumber: 7
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg shadow", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "px-6 py-4 border-b border-gray-200", children: /* @__PURE__ */ jsxDEV("h2", { className: "text-lg font-semibold text-gray-900", children: "Teams" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 545,
+            columnNumber: 11
+          }, this) }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 544,
+            columnNumber: 9
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "overflow-x-auto", children: /* @__PURE__ */ jsxDEV("table", { className: "w-full", children: [
+            /* @__PURE__ */ jsxDEV("thead", { className: "bg-gray-50", children: /* @__PURE__ */ jsxDEV("tr", { children: [
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Team Name" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 551,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Platform" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 552,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Description" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 553,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Status" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 554,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("th", { className: "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase", children: "Created" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 555,
+                columnNumber: 17
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 550,
+              columnNumber: 15
+            }, this) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 549,
+              columnNumber: 13
+            }, this),
+            /* @__PURE__ */ jsxDEV("tbody", { className: "divide-y divide-gray-200", children: teams.map(
+              (team) => /* @__PURE__ */ jsxDEV(
+                "tr",
+                {
+                  onClick: () => setSelectedTeam(team),
+                  className: "hover:bg-blue-50 cursor-pointer transition-colors",
+                  children: [
+                    /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("div", { className: "font-medium text-blue-600 hover:text-blue-800", children: team.name }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 566,
+                      columnNumber: 21
+                    }, this) }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 565,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("span", { className: "px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800", children: team.platform }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 569,
+                      columnNumber: 21
+                    }, this) }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 568,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 text-sm text-gray-600 max-w-xs truncate", children: team.description || "No description" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 573,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap", children: /* @__PURE__ */ jsxDEV("span", { className: `px-2 py-1 text-xs font-medium rounded-full ${team.is_active ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`, children: team.is_active ? "Active" : "Inactive" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 577,
+                      columnNumber: 21
+                    }, this) }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 576,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("td", { className: "px-6 py-4 whitespace-nowrap text-sm text-gray-600", children: team.created_at ? new Date(team.created_at).toLocaleDateString() : "N/A" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 581,
+                      columnNumber: 19
+                    }, this)
+                  ]
+                },
+                team.id,
+                true,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 560,
+                  columnNumber: 19
+                },
+                this
+              )
+            ) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 558,
+              columnNumber: 13
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 548,
+            columnNumber: 11
+          }, this) }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 547,
+            columnNumber: 9
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 543,
+          columnNumber: 7
+        }, this),
+        showCreateUser && /* @__PURE__ */ jsxDEV("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", children: /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg p-6 w-full max-w-md", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between mb-4", children: [
+            /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-semibold", children: "Create New User" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 596,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("button", { onClick: () => setShowCreateUser(false), className: "text-gray-400 hover:text-gray-600", children: /* @__PURE__ */ jsxDEV(X, { className: "w-5 h-5" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 598,
+              columnNumber: 17
+            }, this) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 597,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 595,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("form", { onSubmit: handleCreateUser, className: "space-y-4", children: [
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Email" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 603,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "input",
+                {
+                  type: "email",
+                  required: true,
+                  value: newUser.email,
+                  onChange: (e) => setNewUser({ ...newUser, email: e.target.value }),
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 604,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 602,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Password" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 613,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "input",
+                {
+                  type: "password",
+                  required: true,
+                  minLength: 6,
+                  value: newUser.password,
+                  onChange: (e) => setNewUser({ ...newUser, password: e.target.value }),
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 614,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 612,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-2 gap-4", children: [
+              /* @__PURE__ */ jsxDEV("div", { children: [
+                /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "First Name" }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 625,
+                  columnNumber: 19
+                }, this),
+                /* @__PURE__ */ jsxDEV(
+                  "input",
+                  {
+                    type: "text",
+                    required: true,
+                    value: newUser.firstName,
+                    onChange: (e) => setNewUser({ ...newUser, firstName: e.target.value }),
+                    className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  },
+                  void 0,
+                  false,
+                  {
+                    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                    lineNumber: 626,
+                    columnNumber: 19
+                  },
+                  this
+                )
+              ] }, void 0, true, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 624,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV("div", { children: [
+                /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Last Name" }, void 0, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 635,
+                  columnNumber: 19
+                }, this),
+                /* @__PURE__ */ jsxDEV(
+                  "input",
+                  {
+                    type: "text",
+                    required: true,
+                    value: newUser.lastName,
+                    onChange: (e) => setNewUser({ ...newUser, lastName: e.target.value }),
+                    className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  },
+                  void 0,
+                  false,
+                  {
+                    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                    lineNumber: 636,
+                    columnNumber: 19
+                  },
+                  this
+                )
+              ] }, void 0, true, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 634,
+                columnNumber: 17
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 623,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Role" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 646,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "select",
+                {
+                  required: true,
+                  value: newUser.role,
+                  onChange: (e) => setNewUser({ ...newUser, role: e.target.value }),
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
+                  children: [
+                    /* @__PURE__ */ jsxDEV("option", { value: "", children: "Select role..." }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 653,
+                      columnNumber: 19
+                    }, this),
+                    availableRoles.map(
+                      (role) => /* @__PURE__ */ jsxDEV("option", { value: role, children: role.replace("_", " ") }, role, false, {
+                        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                        lineNumber: 655,
+                        columnNumber: 21
+                      }, this)
+                    )
+                  ]
+                },
+                void 0,
+                true,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 647,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 645,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Team" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 660,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "select",
+                {
+                  required: true,
+                  value: newUser.teamId,
+                  onChange: (e) => setNewUser({ ...newUser, teamId: e.target.value }),
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
+                  children: [
+                    /* @__PURE__ */ jsxDEV("option", { value: "", children: "Select team..." }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 667,
+                      columnNumber: 19
+                    }, this),
+                    teams.map(
+                      (team) => /* @__PURE__ */ jsxDEV("option", { value: team.id, children: [
+                        team.name,
+                        " (",
+                        team.platform,
+                        ")"
+                      ] }, team.id, true, {
+                        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                        lineNumber: 669,
+                        columnNumber: 21
+                      }, this)
+                    )
+                  ]
+                },
+                void 0,
+                true,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 661,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 659,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "flex gap-3 pt-4", children: [
+              /* @__PURE__ */ jsxDEV(
+                "button",
+                {
+                  type: "submit",
+                  className: "flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
+                  children: "Create User"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 674,
+                  columnNumber: 17
+                },
+                this
+              ),
+              /* @__PURE__ */ jsxDEV(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => setShowCreateUser(false),
+                  className: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300",
+                  children: "Cancel"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 680,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 673,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 601,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 594,
+          columnNumber: 11
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 593,
+          columnNumber: 11
+        }, this),
+        showCreateTeam && /* @__PURE__ */ jsxDEV("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", children: /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg p-6 w-full max-w-md", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between mb-4", children: [
+            /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-semibold", children: "Create New Team" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 698,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("button", { onClick: () => setShowCreateTeam(false), className: "text-gray-400 hover:text-gray-600", children: /* @__PURE__ */ jsxDEV(X, { className: "w-5 h-5" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 700,
+              columnNumber: 17
+            }, this) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 699,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 697,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("form", { onSubmit: handleCreateTeam, className: "space-y-4", children: [
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Team Name" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 705,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "input",
+                {
+                  type: "text",
+                  required: true,
+                  value: newTeam.name,
+                  onChange: (e) => setNewTeam({ ...newTeam, name: e.target.value }),
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 706,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 704,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Description" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 715,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "textarea",
+                {
+                  value: newTeam.description,
+                  onChange: (e) => setNewTeam({ ...newTeam, description: e.target.value }),
+                  rows: 3,
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 716,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 714,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Platform" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 724,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "select",
+                {
+                  required: true,
+                  value: newTeam.platform,
+                  onChange: (e) => setNewTeam({ ...newTeam, platform: e.target.value }),
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
+                  children: [
+                    /* @__PURE__ */ jsxDEV("option", { value: "Backend", children: "Backend" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 731,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("option", { value: "Frontend", children: "Frontend" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 732,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("option", { value: "Mobile", children: "Mobile" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 733,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("option", { value: "API", children: "API" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 734,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("option", { value: "DevOps", children: "DevOps" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 735,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("option", { value: "Web", children: "Web" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 736,
+                      columnNumber: 19
+                    }, this),
+                    /* @__PURE__ */ jsxDEV("option", { value: "Security", children: "Security" }, void 0, false, {
+                      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                      lineNumber: 737,
+                      columnNumber: 19
+                    }, this)
+                  ]
+                },
+                void 0,
+                true,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 725,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 723,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "flex gap-3 pt-4", children: [
+              /* @__PURE__ */ jsxDEV(
+                "button",
+                {
+                  type: "submit",
+                  className: "flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700",
+                  children: "Create Team"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 741,
+                  columnNumber: 17
+                },
+                this
+              ),
+              /* @__PURE__ */ jsxDEV(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => setShowCreateTeam(false),
+                  className: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300",
+                  children: "Cancel"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 747,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 740,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 703,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 696,
+          columnNumber: 11
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 695,
+          columnNumber: 11
+        }, this),
+        showResetPassword && selectedUser && /* @__PURE__ */ jsxDEV("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", children: /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg p-6 w-full max-w-md", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between mb-4", children: [
+            /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-semibold", children: "Reset Password" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 765,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("button", { onClick: () => setShowResetPassword(false), className: "text-gray-400 hover:text-gray-600", children: /* @__PURE__ */ jsxDEV(X, { className: "w-5 h-5" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 767,
+              columnNumber: 17
+            }, this) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 766,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 764,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-600 mb-4", children: [
+            "Resetting password for: ",
+            /* @__PURE__ */ jsxDEV("strong", { children: [
+              selectedUser.first_name,
+              " ",
+              selectedUser.last_name
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 771,
+              columnNumber: 39
+            }, this),
+            " (",
+            selectedUser.email,
+            ")"
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 770,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("form", { onSubmit: handleResetPassword, className: "space-y-4", children: [
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "New Password" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 775,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "input",
+                {
+                  type: "password",
+                  required: true,
+                  minLength: 6,
+                  value: resetPasswordData.newPassword,
+                  onChange: (e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value }),
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 776,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 774,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { children: [
+              /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Confirm Password" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 786,
+                columnNumber: 17
+              }, this),
+              /* @__PURE__ */ jsxDEV(
+                "input",
+                {
+                  type: "password",
+                  required: true,
+                  minLength: 6,
+                  value: resetPasswordData.confirmPassword,
+                  onChange: (e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value }),
+                  className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 787,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 785,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "flex gap-3 pt-4", children: [
+              /* @__PURE__ */ jsxDEV(
+                "button",
+                {
+                  type: "submit",
+                  className: "flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
+                  children: "Reset Password"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 797,
+                  columnNumber: 17
+                },
+                this
+              ),
+              /* @__PURE__ */ jsxDEV(
+                "button",
+                {
+                  type: "button",
+                  onClick: () => setShowResetPassword(false),
+                  className: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300",
+                  children: "Cancel"
+                },
+                void 0,
+                false,
+                {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 803,
+                  columnNumber: 17
+                },
+                this
+              )
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 796,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 773,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 763,
+          columnNumber: 11
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 762,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 443,
+        columnNumber: 7
+      }, this) }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 442,
+        columnNumber: 7
+      }, this)
+    ),
+    showResetPassword && selectedUser && /* @__PURE__ */ jsxDEV("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", children: /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg p-6 w-full max-w-md", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between mb-4", children: [
+        /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-semibold", children: "Reset Password" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 826,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("button", { onClick: () => setShowResetPassword(false), className: "text-gray-400 hover:text-gray-600", children: /* @__PURE__ */ jsxDEV(X, { className: "w-5 h-5" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 828,
+          columnNumber: 17
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 827,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 825,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-600 mb-4", children: [
+        "Resetting password for: ",
+        /* @__PURE__ */ jsxDEV("strong", { children: [
+          selectedUser.first_name,
+          " ",
+          selectedUser.last_name
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 832,
+          columnNumber: 39
+        }, this),
+        " (",
+        selectedUser.email,
+        ")"
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 831,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("form", { onSubmit: handleResetPassword, className: "space-y-4", children: [
+        /* @__PURE__ */ jsxDEV("div", { children: [
+          /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "New Password" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 836,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(
+            "input",
+            {
+              type: "password",
+              required: true,
+              minLength: 6,
+              value: resetPasswordData.newPassword,
+              onChange: (e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value }),
+              className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 837,
+              columnNumber: 17
+            },
+            this
+          )
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 835,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { children: [
+          /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Confirm Password" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 847,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(
+            "input",
+            {
+              type: "password",
+              required: true,
+              minLength: 6,
+              value: resetPasswordData.confirmPassword,
+              onChange: (e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value }),
+              className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 848,
+              columnNumber: 17
+            },
+            this
+          )
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 846,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "flex gap-3 pt-4", children: [
+          /* @__PURE__ */ jsxDEV(
+            "button",
+            {
+              type: "submit",
+              className: "flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
+              children: "Reset Password"
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 858,
+              columnNumber: 17
+            },
+            this
+          ),
+          /* @__PURE__ */ jsxDEV(
+            "button",
+            {
+              type: "button",
+              onClick: () => setShowResetPassword(false),
+              className: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300",
+              children: "Cancel"
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 864,
+              columnNumber: 17
+            },
+            this
+          )
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 857,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 834,
+        columnNumber: 13
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 824,
+      columnNumber: 11
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 823,
+      columnNumber: 7
+    }, this),
+    showEditUser && selectedUser && /* @__PURE__ */ jsxDEV("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", children: /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg p-6 w-full max-w-md", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between mb-4", children: [
+        /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-semibold", children: "Edit User" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 882,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("button", { onClick: () => setShowEditUser(false), className: "text-gray-400 hover:text-gray-600", children: /* @__PURE__ */ jsxDEV(X, { className: "w-5 h-5" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 884,
+          columnNumber: 17
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 883,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 881,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("form", { onSubmit: handleEditUser, className: "space-y-4", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-2 gap-4", children: [
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "First Name" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 890,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV(
+              "input",
+              {
+                type: "text",
+                required: true,
+                value: editUserData.firstName,
+                onChange: (e) => setEditUserData({ ...editUserData, firstName: e.target.value }),
+                className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              },
+              void 0,
+              false,
+              {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 891,
+                columnNumber: 19
+              },
+              this
+            )
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 889,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { children: [
+            /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Last Name" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 900,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV(
+              "input",
+              {
+                type: "text",
+                required: true,
+                value: editUserData.lastName,
+                onChange: (e) => setEditUserData({ ...editUserData, lastName: e.target.value }),
+                className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+              },
+              void 0,
+              false,
+              {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                lineNumber: 901,
+                columnNumber: 19
+              },
+              this
+            )
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 899,
+            columnNumber: 17
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 888,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { children: [
+          /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Email" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 911,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(
+            "input",
+            {
+              type: "email",
+              required: true,
+              value: editUserData.email,
+              onChange: (e) => setEditUserData({ ...editUserData, email: e.target.value }),
+              className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 912,
+              columnNumber: 17
+            },
+            this
+          )
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 910,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { children: [
+          /* @__PURE__ */ jsxDEV("label", { className: "block text-sm font-medium text-gray-700 mb-1", children: "Role" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 921,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV(
+            "select",
+            {
+              required: true,
+              value: editUserData.role,
+              onChange: (e) => setEditUserData({ ...editUserData, role: e.target.value }),
+              className: "w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500",
+              children: availableRoles.map(
+                (role) => /* @__PURE__ */ jsxDEV("option", { value: role, children: role.replace("_", " ") }, role, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+                  lineNumber: 929,
+                  columnNumber: 17
+                }, this)
+              )
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 922,
+              columnNumber: 17
+            },
+            this
+          )
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 920,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "flex gap-3 pt-4", children: [
+          /* @__PURE__ */ jsxDEV(
+            "button",
+            {
+              type: "submit",
+              className: "flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700",
+              children: "Update User"
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 934,
+              columnNumber: 17
+            },
+            this
+          ),
+          /* @__PURE__ */ jsxDEV(
+            "button",
+            {
+              type: "button",
+              onClick: () => setShowEditUser(false),
+              className: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300",
+              children: "Cancel"
+            },
+            void 0,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+              lineNumber: 940,
+              columnNumber: 17
+            },
+            this
+          )
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 933,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 887,
+        columnNumber: 13
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 880,
+      columnNumber: 11
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 879,
+      columnNumber: 7
+    }, this),
+    showDeleteConfirm && selectedUser && /* @__PURE__ */ jsxDEV("div", { className: "fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50", children: /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-lg p-6 w-full max-w-md", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between mb-4", children: [
+        /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-semibold text-red-600", children: "Delete User" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 958,
+          columnNumber: 15
+        }, this),
+        /* @__PURE__ */ jsxDEV("button", { onClick: () => setShowDeleteConfirm(false), className: "text-gray-400 hover:text-gray-600", children: /* @__PURE__ */ jsxDEV(X, { className: "w-5 h-5" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 960,
+          columnNumber: 17
+        }, this) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 959,
+          columnNumber: 15
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 957,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("p", { className: "text-gray-700 mb-6", children: [
+        "Are you sure you want to delete ",
+        /* @__PURE__ */ jsxDEV("strong", { children: [
+          selectedUser.first_name,
+          " ",
+          selectedUser.last_name
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+          lineNumber: 964,
+          columnNumber: 47
+        }, this),
+        " (",
+        selectedUser.email,
+        ")? This action cannot be undone."
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 963,
+        columnNumber: 13
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "flex gap-3", children: [
+        /* @__PURE__ */ jsxDEV(
+          "button",
+          {
+            onClick: handleDeleteUser,
+            className: "flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700",
+            children: "Delete User"
+          },
+          void 0,
+          false,
+          {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 968,
+            columnNumber: 15
+          },
+          this
+        ),
+        /* @__PURE__ */ jsxDEV(
+          "button",
+          {
+            onClick: () => setShowDeleteConfirm(false),
+            className: "flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300",
+            children: "Cancel"
+          },
+          void 0,
+          false,
+          {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+            lineNumber: 974,
+            columnNumber: 15
+          },
+          this
+        )
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+        lineNumber: 967,
+        columnNumber: 13
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 956,
+      columnNumber: 11
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+      lineNumber: 955,
+      columnNumber: 7
+    }, this)
+  ] }, void 0, true, {
+    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx",
+    lineNumber: 318,
+    columnNumber: 5
+  }, this);
+};
+_s(AdminPanel, "3EL7MjB3JbWvufSg4vwb0DJd7L0=", false, function() {
+  return [useAuth];
+});
+_c = AdminPanel;
+export default AdminPanel;
+var _c;
+$RefreshReg$(_c, "AdminPanel");
+import * as RefreshRuntime from "/@react-refresh";
+const inWebWorker = typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope;
+if (import.meta.hot && !inWebWorker) {
+  if (!window.$RefreshReg$) {
+    throw new Error(
+      "@vitejs/plugin-react can't detect preamble. Something is wrong."
+    );
+  }
+  RefreshRuntime.__hmr_import(import.meta.url).then((currentExports) => {
+    RefreshRuntime.registerExportsForReactRefresh("/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx", currentExports);
+    import.meta.hot.accept((nextExports) => {
+      if (!nextExports) return;
+      const invalidateMessage = RefreshRuntime.validateRefreshBoundaryAndEnqueueUpdate("/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx", currentExports, nextExports);
+      if (invalidateMessage) import.meta.hot.invalidate(invalidateMessage);
+    });
+  });
+}
+function $RefreshReg$(type, id) {
+  return RefreshRuntime.register(type, "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/AdminPanel.tsx " + id);
+}
+function $RefreshSig$() {
+  return RefreshRuntime.createSignatureFunctionForTransform();
+}
+
+//# sourceMappingURL=data:application/json;base64,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QUFBO0FBQUE7QUFBQTtBQUFBLGFBS0E7QUFBQSxNQUNBLHVCQUFDLE9BQUUsV0FBVSxzQkFBb0I7QUFBQTtBQUFBLFFBQ0MsdUJBQUMsWUFBUVA7QUFBQUEsdUJBQWFpRjtBQUFBQSxVQUFXO0FBQUEsVUFBRWpGLGFBQWFrRjtBQUFBQSxhQUFoRDtBQUFBO0FBQUE7QUFBQTtBQUFBLGVBQTBEO0FBQUEsUUFBUztBQUFBLFFBQUdsRixhQUFhWTtBQUFBQSxRQUFNO0FBQUEsV0FEM0g7QUFBQTtBQUFBO0FBQUE7QUFBQSxhQUdBO0FBQUEsTUFDQSx1QkFBQyxTQUFJLFdBQVUsY0FDYjtBQUFBO0FBQUEsVUFBQztBQUFBO0FBQUEsWUFDQyxTQUFTc0Q7QUFBQUEsWUFDVCxXQUFVO0FBQUEsWUFBb0U7QUFBQTtBQUFBLFVBRmhGO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQSxRQUtBO0FBQUEsUUFDQTtBQUFBLFVBQUM7QUFBQTtBQUFBLFlBQ0MsU0FBUyxNQUFNM0QscUJBQXFCLEtBQUs7QUFBQSxZQUN6QyxXQUFVO0FBQUEsWUFBeUU7QUFBQTtBQUFBLFVBRnJGO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQTtBQUFBO0FBQUE7QUFBQSxRQUtBO0FBQUEsV0FaRjtBQUFBO0FBQUE7QUFBQTtBQUFBLGFBYUE7QUFBQSxTQXhCRjtBQUFBO0FBQUE7QUFBQTtBQUFBLFdBeUJBLEtBMUJGO0FBQUE7QUFBQTtBQUFBO0FBQUEsV0EyQkE7QUFBQSxPQXhwQko7QUFBQTtBQUFBO0FBQUE7QUFBQSxTQTBwQkE7QUFFSjtBQUFFdkIsR0F4N0JJRixZQUFxQztBQUFBLFVBQ3hCRixPQUFPO0FBQUE7QUFBQWdILEtBRHBCOUc7QUEwN0JOLGVBQWVBO0FBQVcsSUFBQThHO0FBQUFDLGFBQUFELElBQUEiLCJuYW1lcyI6WyJSZWFjdCIsInVzZVN0YXRlIiwidXNlRWZmZWN0IiwiVXNlcnMiLCJVc2VyUGx1cyIsIktleSIsIlNoaWVsZCIsIlgiLCJBcnJvd0xlZnQiLCJ1c2VBdXRoIiwiQVBJX1VSTCIsIkFkbWluUGFuZWwiLCJvbkJhY2siLCJfcyIsInVzZXIiLCJ1c2VycyIsInNldFVzZXJzIiwidGVhbXMiLCJzZXRUZWFtcyIsImF2YWlsYWJsZVJvbGVzIiwic2V0QXZhaWxhYmxlUm9sZXMiLCJsb2FkaW5nIiwic2V0TG9hZGluZyIsInNob3dDcmVhdGVVc2VyIiwic2V0U2hvd0NyZWF0ZVVzZXIiLCJzaG93Q3JlYXRlVGVhbSIsInNldFNob3dDcmVhdGVUZWFtIiwic2hvd1Jlc2V0UGFzc3dvcmQiLCJzZXRTaG93UmVzZXRQYXNzd29yZCIsInNlbGVjdGVkVXNlciIsInNldFNlbGVjdGVkVXNlciIsInNlbGVjdGVkVGVhbSIsInNldFNlbGVjdGVkVGVhbSIsInNob3dFZGl0VXNlciIsInNldFNob3dFZGl0VXNlciIsInNob3dEZWxldGVDb25maXJtIiwic2V0U2hvd0RlbGV0ZUNvbmZpcm0iLCJlZGl0VXNlckRhdGEiLCJzZXRFZGl0VXNlckRhdGEiLCJmaXJzdE5hbWUiLCJsYXN0TmFtZSIsImVtYWlsIiwicm9sZSIsIm5ld1VzZXIiLCJzZXROZXdVc2VyIiwicGFzc3dvcmQiLCJ0ZWFtSWQiLCJuZXdUZWFtIiwic2V0TmV3VGVhbSIsIm5hbWUiLCJkZXNjcmlwdGlvbiIsInBsYXRmb3JtIiwicmVzZXRQYXNzd29yZERhdGEiLCJzZXRSZXNldFBhc3N3b3JkRGF0YSIsIm5ld1Bhc3N3b3JkIiwiY29uZmlybVBhc3N3b3JkIiwidG9rZW4iLCJsb2NhbFN0b3JhZ2UiLCJnZXRJdGVtIiwiZmV0Y2hEYXRhIiwidXNlcnNSZXMiLCJmZXRjaCIsImhlYWRlcnMiLCJvayIsInVzZXJzRGF0YSIsImpzb24iLCJBcnJheSIsImlzQXJyYXkiLCJjb25zb2xlIiwiZXJyb3IiLCJ0ZXh0IiwidGVhbXNSZXMiLCJ0ZWFtc0RhdGEiLCJ0ZWFtc0xpc3QiLCJyb2xlc1JlcyIsInJvbGVzRGF0YSIsImhhbmRsZUNyZWF0ZVVzZXIiLCJlIiwicHJldmVudERlZmF1bHQiLCJzZWxlY3RlZFRlYW1PYmoiLCJmaW5kIiwidCIsImlkIiwiZGVwYXJ0bWVudElkIiwiZGVwYXJ0bWVudF9pZCIsInJlc3BvbnNlIiwibWV0aG9kIiwiYm9keSIsIkpTT04iLCJzdHJpbmdpZnkiLCJhbGVydCIsImhhbmRsZUNyZWF0ZVRlYW0iLCJoYW5kbGVSZXNldFBhc3N3b3JkIiwibGVuZ3RoIiwiaGFuZGxlRWRpdFVzZXIiLCJoYW5kbGVEZWxldGVVc2VyIiwiZ2V0Um9sZUJhZGdlQ29sb3IiLCJjb2xvcnMiLCJzdXBlcl9hZG1pbiIsInFhX21hbmFnZXIiLCJ0ZWFtX2xlYWQiLCJxYV9lbmdpbmVlciIsInZpZXdlciIsImNhbkNyZWF0ZVRlYW0iLCJ0ZWFtVXNlcnMiLCJmaWx0ZXIiLCJ1IiwicHJpbWFyeV90ZWFtX2lkIiwiaXNfYWN0aXZlIiwibWFwIiwiZmlyc3RfbmFtZSIsImxhc3RfbmFtZSIsInJlcGxhY2UiLCJ0ZWFtX25hbWUiLCJkZXBhcnRtZW50X25hbWUiLCJ0ZWFtIiwiY3JlYXRlZF9hdCIsIkRhdGUiLCJ0b0xvY2FsZURhdGVTdHJpbmciLCJ0YXJnZXQiLCJ2YWx1ZSIsIl9jIiwiJFJlZnJlc2hSZWckIl0sImlnbm9yZUxpc3QiOltdLCJzb3VyY2VzIjpbIkFkbWluUGFuZWwudHN4Il0sInNvdXJjZXNDb250ZW50IjpbImltcG9ydCBSZWFjdCwgeyB1c2VTdGF0ZSwgdXNlRWZmZWN0IH0gZnJvbSAncmVhY3QnO1xuaW1wb3J0IHsgVXNlcnMsIFVzZXJQbHVzLCBLZXksIFNoaWVsZCwgWCwgQXJyb3dMZWZ0IH0gZnJvbSAnbHVjaWRlLXJlYWN0JztcbmltcG9ydCB7IHVzZUF1dGggfSBmcm9tICcuLi9jb250ZXh0cy9BdXRoQ29udGV4dCc7XG5cbmludGVyZmFjZSBVc2VyIHtcbiAgaWQ6IHN0cmluZztcbiAgZW1haWw6IHN0cmluZztcbiAgZmlyc3RfbmFtZTogc3RyaW5nO1xuICBsYXN0X25hbWU6IHN0cmluZztcbiAgcm9sZTogc3RyaW5nO1xuICB0ZWFtX25hbWU6IHN0cmluZztcbiAgZGVwYXJ0bWVudF9uYW1lOiBzdHJpbmc7XG4gIHByaW1hcnlfdGVhbV9pZDogc3RyaW5nO1xuICBpc19hY3RpdmU6IGJvb2xlYW47XG4gIGNyZWF0ZWRfYXQ6IHN0cmluZztcbn1cblxuaW50ZXJmYWNlIFRlYW0ge1xuICBpZDogc3RyaW5nO1xuICBuYW1lOiBzdHJpbmc7XG4gIHBsYXRmb3JtOiBzdHJpbmc7XG4gIGRlc2NyaXB0aW9uPzogc3RyaW5nO1xuICBpc19hY3RpdmU/OiBib29sZWFuO1xuICBjcmVhdGVkX2F0Pzogc3RyaW5nO1xuICBkZXBhcnRtZW50X2lkPzogc3RyaW5nO1xufVxuXG5jb25zdCBBUElfVVJMID0gJ2h0dHA6Ly9sb2NhbGhvc3Q6MzAwMC9hcGknO1xuXG5pbnRlcmZhY2UgQWRtaW5QYW5lbFByb3BzIHtcbiAgb25CYWNrPzogKCkgPT4gdm9pZDtcbn1cblxuY29uc3QgQWRtaW5QYW5lbDogUmVhY3QuRkM8QWRtaW5QYW5lbFByb3BzPiA9ICh7IG9uQmFjayB9KSA9PiB7XG4gIGNvbnN0IHsgdXNlciB9ID0gdXNlQXV0aCgpO1xuICBjb25zdCBbdXNlcnMsIHNldFVzZXJzXSA9IHVzZVN0YXRlPFVzZXJbXT4oW10pO1xuICBjb25zdCBbdGVhbXMsIHNldFRlYW1zXSA9IHVzZVN0YXRlPFRlYW1bXT4oW10pO1xuICBjb25zdCBbYXZhaWxhYmxlUm9sZXMsIHNldEF2YWlsYWJsZVJvbGVzXSA9IHVzZVN0YXRlPHN0cmluZ1tdPihbXSk7XG4gIGNvbnN0IFtsb2FkaW5nLCBzZXRMb2FkaW5nXSA9IHVzZVN0YXRlKHRydWUpO1xuICBjb25zdCBbc2hvd0NyZWF0ZVVzZXIsIHNldFNob3dDcmVhdGVVc2VyXSA9IHVzZVN0YXRlKGZhbHNlKTtcbiAgY29uc3QgW3Nob3dDcmVhdGVUZWFtLCBzZXRTaG93Q3JlYXRlVGVhbV0gPSB1c2VTdGF0ZShmYWxzZSk7XG4gIGNvbnN0IFtzaG93UmVzZXRQYXNzd29yZCwgc2V0U2hvd1Jlc2V0UGFzc3dvcmRdID0gdXNlU3RhdGUoZmFsc2UpO1xuICBjb25zdCBbc2VsZWN0ZWRVc2VyLCBzZXRTZWxlY3RlZFVzZXJdID0gdXNlU3RhdGU8VXNlciB8IG51bGw+KG51bGwpO1xuICBjb25zdCBbc2VsZWN0ZWRUZWFtLCBzZXRTZWxlY3RlZFRlYW1dID0gdXNlU3RhdGU8VGVhbSB8IG51bGw+KG51bGwpO1xuICBjb25zdCBbc2hvd0VkaXRVc2VyLCBzZXRTaG93RWRpdFVzZXJdID0gdXNlU3RhdGUoZmFsc2UpO1xuICBjb25zdCBbc2hvd0RlbGV0ZUNvbmZpcm0sIHNldFNob3dEZWxldGVDb25maXJtXSA9IHVzZVN0YXRlKGZhbHNlKTtcbiAgY29uc3QgW2VkaXRVc2VyRGF0YSwgc2V0RWRpdFVzZXJEYXRhXSA9IHVzZVN0YXRlKHtcbiAgICBmaXJzdE5hbWU6ICcnLFxuICAgIGxhc3ROYW1lOiAnJyxcbiAgICBlbWFpbDogJycsXG4gICAgcm9sZTogJydcbiAgfSk7XG5cbiAgY29uc3QgW25ld1VzZXIsIHNldE5ld1VzZXJdID0gdXNlU3RhdGUoe1xuICAgIGVtYWlsOiAnJyxcbiAgICBwYXNzd29yZDogJycsXG4gICAgZmlyc3ROYW1lOiAnJyxcbiAgICBsYXN0TmFtZTogJycsXG4gICAgcm9sZTogJycsXG4gICAgdGVhbUlkOiAnJ1xuICB9KTtcblxuICBjb25zdCBbbmV3VGVhbSwgc2V0TmV3VGVhbV0gPSB1c2VTdGF0ZSh7XG4gICAgbmFtZTogJycsXG4gICAgZGVzY3JpcHRpb246ICcnLFxuICAgIHBsYXRmb3JtOiAnQmFja2VuZCdcbiAgfSk7XG5cbiAgY29uc3QgW3Jlc2V0UGFzc3dvcmREYXRhLCBzZXRSZXNldFBhc3N3b3JkRGF0YV0gPSB1c2VTdGF0ZSh7XG4gICAgbmV3UGFzc3dvcmQ6ICcnLFxuICAgIGNvbmZpcm1QYXNzd29yZDogJydcbiAgfSk7XG5cbiAgY29uc3QgdG9rZW4gPSBsb2NhbFN0b3JhZ2UuZ2V0SXRlbSgnaXJvbmdhdGVfdG9rZW4nKTtcblxuICB1c2VFZmZlY3QoKCkgPT4ge1xuICAgIGlmICh0b2tlbikge1xuICAgICAgZmV0Y2hEYXRhKCk7XG4gICAgfVxuICB9LCBbdG9rZW5dKTtcblxuICBjb25zdCBmZXRjaERhdGEgPSBhc3luYyAoKSA9PiB7XG4gICAgdHJ5IHtcbiAgICAgIHNldExvYWRpbmcodHJ1ZSk7XG4gICAgICBcbiAgICAgIC8vIEZldGNoIHVzZXJzXG4gICAgICBjb25zdCB1c2Vyc1JlcyA9IGF3YWl0IGZldGNoKGAke0FQSV9VUkx9L2FkbWluL3VzZXJzYCwge1xuICAgICAgICBoZWFkZXJzOiB7ICdBdXRob3JpemF0aW9uJzogYEJlYXJlciAke3Rva2VufWAgfVxuICAgICAgfSk7XG4gICAgICBcbiAgICAgIGlmICh1c2Vyc1Jlcy5vaykge1xuICAgICAgICBjb25zdCB1c2Vyc0RhdGEgPSBhd2FpdCB1c2Vyc1Jlcy5qc29uKCk7XG4gICAgICAgIHNldFVzZXJzKEFycmF5LmlzQXJyYXkodXNlcnNEYXRhKSA/IHVzZXJzRGF0YSA6IFtdKTtcbiAgICAgIH0gZWxzZSB7XG4gICAgICAgIGNvbnNvbGUuZXJyb3IoJ0ZhaWxlZCB0byBmZXRjaCB1c2VyczonLCBhd2FpdCB1c2Vyc1Jlcy50ZXh0KCkpO1xuICAgICAgICBzZXRVc2VycyhbXSk7XG4gICAgICB9XG5cbiAgICAgIC8vIEZldGNoIHRlYW1zXG4gICAgICBjb25zdCB0ZWFtc1JlcyA9IGF3YWl0IGZldGNoKGAke0FQSV9VUkx9L3RlYW1zYCwge1xuICAgICAgICBoZWFkZXJzOiB7ICdBdXRob3JpemF0aW9uJzogYEJlYXJlciAke3Rva2VufWAgfVxuICAgICAgfSk7XG4gICAgICBcbiAgICAgIGlmICh0ZWFtc1Jlcy5vaykge1xuICAgICAgICBjb25zdCB0ZWFtc0RhdGEgPSBhd2FpdCB0ZWFtc1Jlcy5qc29uKCk7XG4gICAgICAgIC8vIEhhbmRsZSBib3RoIGFycmF5IGFuZCB7dGVhbXM6IGFycmF5fSByZXNwb25zZSBmb3JtYXRzXG4gICAgICAgIGNvbnN0IHRlYW1zTGlzdCA9IEFycmF5LmlzQXJyYXkodGVhbXNEYXRhKSA/IHRlYW1zRGF0YSA6ICh0ZWFtc0RhdGEudGVhbXMgfHwgW10pO1xuICAgICAgICBzZXRUZWFtcyh0ZWFtc0xpc3QpO1xuICAgICAgfSBlbHNlIHtcbiAgICAgICAgY29uc29sZS5lcnJvcignRmFpbGVkIHRvIGZldGNoIHRlYW1zOicsIGF3YWl0IHRlYW1zUmVzLnRleHQoKSk7XG4gICAgICAgIHNldFRlYW1zKFtdKTtcbiAgICAgIH1cblxuICAgICAgLy8gRmV0Y2ggYXZhaWxhYmxlIHJvbGVzXG4gICAgICBjb25zdCByb2xlc1JlcyA9IGF3YWl0IGZldGNoKGAke0FQSV9VUkx9L2FkbWluL2F2YWlsYWJsZS1yb2xlc2AsIHtcbiAgICAgICAgaGVhZGVyczogeyAnQXV0aG9yaXphdGlvbic6IGBCZWFyZXIgJHt0b2tlbn1gIH1cbiAgICAgIH0pO1xuICAgICAgXG4gICAgICBpZiAocm9sZXNSZXMub2spIHtcbiAgICAgICAgY29uc3Qgcm9sZXNEYXRhID0gYXdhaXQgcm9sZXNSZXMuanNvbigpO1xuICAgICAgICBzZXRBdmFpbGFibGVSb2xlcyhyb2xlc0RhdGEuYXZhaWxhYmxlUm9sZXMgfHwgW10pO1xuICAgICAgfSBlbHNlIHtcbiAgICAgICAgY29uc29sZS5lcnJvcignRmFpbGVkIHRvIGZldGNoIHJvbGVzOicsIGF3YWl0IHJvbGVzUmVzLnRleHQoKSk7XG4gICAgICAgIHNldEF2YWlsYWJsZVJvbGVzKFtdKTtcbiAgICAgIH1cblxuICAgIH0gY2F0Y2ggKGVycm9yKSB7XG4gICAgICBjb25zb2xlLmVycm9yKCdFcnJvciBmZXRjaGluZyBkYXRhOicsIGVycm9yKTtcbiAgICAgIHNldFVzZXJzKFtdKTtcbiAgICAgIHNldFRlYW1zKFtdKTtcbiAgICAgIHNldEF2YWlsYWJsZVJvbGVzKFtdKTtcbiAgICB9IGZpbmFsbHkge1xuICAgICAgc2V0TG9hZGluZyhmYWxzZSk7XG4gICAgfVxuICB9O1xuXG4gIGNvbnN0IGhhbmRsZUNyZWF0ZVVzZXIgPSBhc3luYyAoZTogUmVhY3QuRm9ybUV2ZW50KSA9PiB7XG4gICAgZS5wcmV2ZW50RGVmYXVsdCgpO1xuICAgIFxuICAgIHRyeSB7XG4gICAgICAvLyBHZXQgZGVwYXJ0bWVudCBmcm9tIHNlbGVjdGVkIHRlYW1cbiAgICAgIGNvbnN0IHNlbGVjdGVkVGVhbU9iaiA9IHRlYW1zLmZpbmQodCA9PiB0LmlkID09PSBuZXdVc2VyLnRlYW1JZCk7XG4gICAgICBjb25zdCBkZXBhcnRtZW50SWQgPSBzZWxlY3RlZFRlYW1PYmo/LmRlcGFydG1lbnRfaWQgfHwgdXNlcj8uZGVwYXJ0bWVudElkO1xuICAgICAgXG4gICAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IGZldGNoKGAke0FQSV9VUkx9L2FkbWluL3VzZXJzYCwge1xuICAgICAgICBtZXRob2Q6ICdQT1NUJyxcbiAgICAgICAgaGVhZGVyczoge1xuICAgICAgICAgICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicsXG4gICAgICAgICAgJ0F1dGhvcml6YXRpb24nOiBgQmVhcmVyICR7dG9rZW59YFxuICAgICAgICB9LFxuICAgICAgICBib2R5OiBKU09OLnN0cmluZ2lmeSh7XG4gICAgICAgICAgLi4ubmV3VXNlcixcbiAgICAgICAgICBkZXBhcnRtZW50SWRcbiAgICAgICAgfSlcbiAgICAgIH0pO1xuXG4gICAgICBpZiAocmVzcG9uc2Uub2spIHtcbiAgICAgICAgYWxlcnQoJ1VzZXIgY3JlYXRlZCBzdWNjZXNzZnVsbHkhJyk7XG4gICAgICAgIHNldFNob3dDcmVhdGVVc2VyKGZhbHNlKTtcbiAgICAgICAgc2V0TmV3VXNlcih7IGVtYWlsOiAnJywgcGFzc3dvcmQ6ICcnLCBmaXJzdE5hbWU6ICcnLCBsYXN0TmFtZTogJycsIHJvbGU6ICcnLCB0ZWFtSWQ6ICcnIH0pO1xuICAgICAgICBhd2FpdCBmZXRjaERhdGEoKTsgLy8gV2FpdCBmb3IgZGF0YSB0byByZWZyZXNoXG4gICAgICAgIC8vIElmIHdlJ3JlIHZpZXdpbmcgYSB0ZWFtLCB0aGUgdXNlcnMgbGlzdCB3aWxsIGJlIHVwZGF0ZWQgYXV0b21hdGljYWxseVxuICAgICAgfSBlbHNlIHtcbiAgICAgICAgY29uc3QgZXJyb3IgPSBhd2FpdCByZXNwb25zZS5qc29uKCk7XG4gICAgICAgIGFsZXJ0KGBFcnJvcjogJHtlcnJvci5lcnJvcn1gKTtcbiAgICAgIH1cbiAgICB9IGNhdGNoIChlcnJvcikge1xuICAgICAgY29uc29sZS5lcnJvcignRXJyb3IgY3JlYXRpbmcgdXNlcjonLCBlcnJvcik7XG4gICAgICBhbGVydCgnRmFpbGVkIHRvIGNyZWF0ZSB1c2VyJyk7XG4gICAgfVxuICB9O1xuXG4gIGNvbnN0IGhhbmRsZUNyZWF0ZVRlYW0gPSBhc3luYyAoZTogUmVhY3QuRm9ybUV2ZW50KSA9PiB7XG4gICAgZS5wcmV2ZW50RGVmYXVsdCgpO1xuICAgIFxuICAgIHRyeSB7XG4gICAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IGZldGNoKGAke0FQSV9VUkx9L2FkbWluL3RlYW1zYCwge1xuICAgICAgICBtZXRob2Q6ICdQT1NUJyxcbiAgICAgICAgaGVhZGVyczoge1xuICAgICAgICAgICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicsXG4gICAgICAgICAgJ0F1dGhvcml6YXRpb24nOiBgQmVhcmVyICR7dG9rZW59YFxuICAgICAgICB9LFxuICAgICAgICBib2R5OiBKU09OLnN0cmluZ2lmeShuZXdUZWFtKVxuICAgICAgfSk7XG5cbiAgICAgIGlmIChyZXNwb25zZS5vaykge1xuICAgICAgICBhbGVydCgnVGVhbSBjcmVhdGVkIHN1Y2Nlc3NmdWxseSEnKTtcbiAgICAgICAgc2V0U2hvd0NyZWF0ZVRlYW0oZmFsc2UpO1xuICAgICAgICBzZXROZXdUZWFtKHsgbmFtZTogJycsIGRlc2NyaXB0aW9uOiAnJywgcGxhdGZvcm06ICdCYWNrZW5kJyB9KTtcbiAgICAgICAgZmV0Y2hEYXRhKCk7XG4gICAgICB9IGVsc2Uge1xuICAgICAgICBjb25zdCBlcnJvciA9IGF3YWl0IHJlc3BvbnNlLmpzb24oKTtcbiAgICAgICAgYWxlcnQoYEVycm9yOiAke2Vycm9yLmVycm9yfWApO1xuICAgICAgfVxuICAgIH0gY2F0Y2ggKGVycm9yKSB7XG4gICAgICBjb25zb2xlLmVycm9yKCdFcnJvciBjcmVhdGluZyB0ZWFtOicsIGVycm9yKTtcbiAgICAgIGFsZXJ0KCdGYWlsZWQgdG8gY3JlYXRlIHRlYW0nKTtcbiAgICB9XG4gIH07XG5cbiAgY29uc3QgaGFuZGxlUmVzZXRQYXNzd29yZCA9IGFzeW5jIChlOiBSZWFjdC5Gb3JtRXZlbnQpID0+IHtcbiAgICBlLnByZXZlbnREZWZhdWx0KCk7XG4gICAgXG4gICAgaWYgKHJlc2V0UGFzc3dvcmREYXRhLm5ld1Bhc3N3b3JkICE9PSByZXNldFBhc3N3b3JkRGF0YS5jb25maXJtUGFzc3dvcmQpIHtcbiAgICAgIGFsZXJ0KCdQYXNzd29yZHMgZG8gbm90IG1hdGNoJyk7XG4gICAgICByZXR1cm47XG4gICAgfVxuXG4gICAgaWYgKHJlc2V0UGFzc3dvcmREYXRhLm5ld1Bhc3N3b3JkLmxlbmd0aCA8IDYpIHtcbiAgICAgIGFsZXJ0KCdQYXNzd29yZCBtdXN0IGJlIGF0IGxlYXN0IDYgY2hhcmFjdGVycycpO1xuICAgICAgcmV0dXJuO1xuICAgIH1cblxuICAgIHRyeSB7XG4gICAgICBjb25zdCByZXNwb25zZSA9IGF3YWl0IGZldGNoKGAke0FQSV9VUkx9L2FkbWluL3VzZXJzLyR7c2VsZWN0ZWRVc2VyPy5pZH0vcmVzZXQtcGFzc3dvcmRgLCB7XG4gICAgICAgIG1ldGhvZDogJ1BPU1QnLFxuICAgICAgICBoZWFkZXJzOiB7XG4gICAgICAgICAgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJyxcbiAgICAgICAgICAnQXV0aG9yaXphdGlvbic6IGBCZWFyZXIgJHt0b2tlbn1gXG4gICAgICAgIH0sXG4gICAgICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KHsgbmV3UGFzc3dvcmQ6IHJlc2V0UGFzc3dvcmREYXRhLm5ld1Bhc3N3b3JkIH0pXG4gICAgICB9KTtcblxuICAgICAgaWYgKHJlc3BvbnNlLm9rKSB7XG4gICAgICAgIGFsZXJ0KCdQYXNzd29yZCByZXNldCBzdWNjZXNzZnVsbHkhJyk7XG4gICAgICAgIHNldFNob3dSZXNldFBhc3N3b3JkKGZhbHNlKTtcbiAgICAgICAgc2V0U2VsZWN0ZWRVc2VyKG51bGwpO1xuICAgICAgICBzZXRSZXNldFBhc3N3b3JkRGF0YSh7IG5ld1Bhc3N3b3JkOiAnJywgY29uZmlybVBhc3N3b3JkOiAnJyB9KTtcbiAgICAgIH0gZWxzZSB7XG4gICAgICAgIGNvbnN0IGVycm9yID0gYXdhaXQgcmVzcG9uc2UuanNvbigpO1xuICAgICAgICBhbGVydChgRXJyb3I6ICR7ZXJyb3IuZXJyb3J9YCk7XG4gICAgICB9XG4gICAgfSBjYXRjaCAoZXJyb3IpIHtcbiAgICAgIGNvbnNvbGUuZXJyb3IoJ0Vycm9yIHJlc2V0dGluZyBwYXNzd29yZDonLCBlcnJvcik7XG4gICAgICBhbGVydCgnRmFpbGVkIHRvIHJlc2V0IHBhc3N3b3JkJyk7XG4gICAgfVxuICB9O1xuXG4gIGNvbnN0IGhhbmRsZUVkaXRVc2VyID0gYXN5bmMgKGU6IFJlYWN0LkZvcm1FdmVudCkgPT4ge1xuICAgIGUucHJldmVudERlZmF1bHQoKTtcbiAgICBcbiAgICB0cnkge1xuICAgICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCBmZXRjaChgJHtBUElfVVJMfS91c2Vycy8ke3NlbGVjdGVkVXNlcj8uaWR9YCwge1xuICAgICAgICBtZXRob2Q6ICdQVVQnLFxuICAgICAgICBoZWFkZXJzOiB7XG4gICAgICAgICAgJ0NvbnRlbnQtVHlwZSc6ICdhcHBsaWNhdGlvbi9qc29uJyxcbiAgICAgICAgICAnQXV0aG9yaXphdGlvbic6IGBCZWFyZXIgJHt0b2tlbn1gXG4gICAgICAgIH0sXG4gICAgICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KGVkaXRVc2VyRGF0YSlcbiAgICAgIH0pO1xuXG4gICAgICBpZiAocmVzcG9uc2Uub2spIHtcbiAgICAgICAgYWxlcnQoJ1VzZXIgdXBkYXRlZCBzdWNjZXNzZnVsbHkhJyk7XG4gICAgICAgIHNldFNob3dFZGl0VXNlcihmYWxzZSk7XG4gICAgICAgIHNldFNlbGVjdGVkVXNlcihudWxsKTtcbiAgICAgICAgZmV0Y2hEYXRhKCk7XG4gICAgICB9IGVsc2Uge1xuICAgICAgICBjb25zdCBlcnJvciA9IGF3YWl0IHJlc3BvbnNlLmpzb24oKTtcbiAgICAgICAgYWxlcnQoYEVycm9yOiAke2Vycm9yLmVycm9yfWApO1xuICAgICAgfVxuICAgIH0gY2F0Y2ggKGVycm9yKSB7XG4gICAgICBjb25zb2xlLmVycm9yKCdFcnJvciB1cGRhdGluZyB1c2VyOicsIGVycm9yKTtcbiAgICAgIGFsZXJ0KCdGYWlsZWQgdG8gdXBkYXRlIHVzZXInKTtcbiAgICB9XG4gIH07XG5cbiAgY29uc3QgaGFuZGxlRGVsZXRlVXNlciA9IGFzeW5jICgpID0+IHtcbiAgICB0cnkge1xuICAgICAgY29uc3QgcmVzcG9uc2UgPSBhd2FpdCBmZXRjaChgJHtBUElfVVJMfS91c2Vycy8ke3NlbGVjdGVkVXNlcj8uaWR9YCwge1xuICAgICAgICBtZXRob2Q6ICdERUxFVEUnLFxuICAgICAgICBoZWFkZXJzOiB7XG4gICAgICAgICAgJ0F1dGhvcml6YXRpb24nOiBgQmVhcmVyICR7dG9rZW59YFxuICAgICAgICB9XG4gICAgICB9KTtcblxuICAgICAgaWYgKHJlc3BvbnNlLm9rKSB7XG4gICAgICAgIGFsZXJ0KCdVc2VyIGRlbGV0ZWQgc3VjY2Vzc2Z1bGx5IScpO1xuICAgICAgICBzZXRTaG93RGVsZXRlQ29uZmlybShmYWxzZSk7XG4gICAgICAgIHNldFNlbGVjdGVkVXNlcihudWxsKTtcbiAgICAgICAgc2V0U2VsZWN0ZWRUZWFtKG51bGwpO1xuICAgICAgICBmZXRjaERhdGEoKTtcbiAgICAgIH0gZWxzZSB7XG4gICAgICAgIGNvbnN0IGVycm9yID0gYXdhaXQgcmVzcG9uc2UuanNvbigpO1xuICAgICAgICBhbGVydChgRXJyb3I6ICR7ZXJyb3IuZXJyb3J9YCk7XG4gICAgICB9XG4gICAgfSBjYXRjaCAoZXJyb3IpIHtcbiAgICAgIGNvbnNvbGUuZXJyb3IoJ0Vycm9yIGRlbGV0aW5nIHVzZXI6JywgZXJyb3IpO1xuICAgICAgYWxlcnQoJ0ZhaWxlZCB0byBkZWxldGUgdXNlcicpO1xuICAgIH1cbiAgfTtcblxuICBjb25zdCBnZXRSb2xlQmFkZ2VDb2xvciA9IChyb2xlOiBzdHJpbmcpID0+IHtcbiAgICBjb25zdCBjb2xvcnM6IFJlY29yZDxzdHJpbmcsIHN0cmluZz4gPSB7XG4gICAgICBzdXBlcl9hZG1pbjogJ2JnLXB1cnBsZS0xMDAgdGV4dC1wdXJwbGUtODAwJyxcbiAgICAgIHFhX21hbmFnZXI6ICdiZy1ibHVlLTEwMCB0ZXh0LWJsdWUtODAwJyxcbiAgICAgIHRlYW1fbGVhZDogJ2JnLWdyZWVuLTEwMCB0ZXh0LWdyZWVuLTgwMCcsXG4gICAgICBxYV9lbmdpbmVlcjogJ2JnLXllbGxvdy0xMDAgdGV4dC15ZWxsb3ctODAwJyxcbiAgICAgIHZpZXdlcjogJ2JnLWdyYXktMTAwIHRleHQtZ3JheS04MDAnXG4gICAgfTtcbiAgICByZXR1cm4gY29sb3JzW3JvbGVdIHx8ICdiZy1ncmF5LTEwMCB0ZXh0LWdyYXktODAwJztcbiAgfTtcblxuICBjb25zdCBjYW5DcmVhdGVUZWFtID0gdXNlcj8ucm9sZSA9PT0gJ3FhX21hbmFnZXInIHx8IHVzZXI/LnJvbGUgPT09ICdzdXBlcl9hZG1pbic7XG5cbiAgY29uc3QgdGVhbVVzZXJzID0gc2VsZWN0ZWRUZWFtIFxuICAgID8gdXNlcnMuZmlsdGVyKHUgPT4gdS5wcmltYXJ5X3RlYW1faWQgPT09IHNlbGVjdGVkVGVhbS5pZClcbiAgICA6IFtdO1xuXG4gIGlmIChsb2FkaW5nKSB7XG4gICAgcmV0dXJuIChcbiAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1jZW50ZXIgaC02NFwiPlxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtZ3JheS01MDBcIj5Mb2FkaW5nLi4uPC9kaXY+XG4gICAgICA8L2Rpdj5cbiAgICApO1xuICB9XG5cbiAgcmV0dXJuIChcbiAgICA8PlxuICAgICAgey8qIFRlYW0gRGV0YWlsIFZpZXcgKi99XG4gICAgICB7c2VsZWN0ZWRUZWFtID8gKFxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cIm1pbi1oLXNjcmVlbiBiZy1ncmF5LTUwIHAtOFwiPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwibWF4LXctN3hsIG14LWF1dG8gc3BhY2UteS02XCI+XG4gICAgICAgICAgICB7LyogQmFjayBCdXR0b24gKi99XG4gICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHNldFNlbGVjdGVkVGVhbShudWxsKX1cbiAgICAgICAgICAgICAgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgZ2FwLTIgdGV4dC1ncmF5LTYwMCBob3Zlcjp0ZXh0LWdyYXktOTAwIG1iLTRcIlxuICAgICAgICAgICAgPlxuICAgICAgICAgICAgICA8QXJyb3dMZWZ0IGNsYXNzTmFtZT1cInctNSBoLTVcIiAvPlxuICAgICAgICAgICAgICBCYWNrIHRvIFRlYW1zXG4gICAgICAgICAgICA8L2J1dHRvbj5cblxuICAgICAgICAgICAgey8qIFRlYW0gSGVhZGVyICovfVxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy13aGl0ZSByb3VuZGVkLWxnIHNoYWRvdyBwLTZcIj5cbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWJldHdlZW5cIj5cbiAgICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgICAgPGgxIGNsYXNzTmFtZT1cInRleHQtMnhsIGZvbnQtYm9sZCB0ZXh0LWdyYXktOTAwXCI+e3NlbGVjdGVkVGVhbS5uYW1lfTwvaDE+XG4gICAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXNtIHRleHQtZ3JheS02MDAgbXQtMVwiPntzZWxlY3RlZFRlYW0uZGVzY3JpcHRpb24gfHwgJ05vIGRlc2NyaXB0aW9uJ308L3A+XG4gICAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggZ2FwLTIgbXQtMlwiPlxuICAgICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJweC0yIHB5LTEgdGV4dC14cyBmb250LW1lZGl1bSByb3VuZGVkLWZ1bGwgYmctYmx1ZS0xMDAgdGV4dC1ibHVlLTgwMFwiPlxuICAgICAgICAgICAgICAgICAgICAgIHtzZWxlY3RlZFRlYW0ucGxhdGZvcm19XG4gICAgICAgICAgICAgICAgICAgIDwvc3Bhbj5cbiAgICAgICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPXtgcHgtMiBweS0xIHRleHQteHMgZm9udC1tZWRpdW0gcm91bmRlZC1mdWxsICR7c2VsZWN0ZWRUZWFtLmlzX2FjdGl2ZSA/ICdiZy1ncmVlbi0xMDAgdGV4dC1ncmVlbi04MDAnIDogJ2JnLXJlZC0xMDAgdGV4dC1yZWQtODAwJ31gfT5cbiAgICAgICAgICAgICAgICAgICAgICB7c2VsZWN0ZWRUZWFtLmlzX2FjdGl2ZSA/ICdBY3RpdmUnIDogJ0luYWN0aXZlJ31cbiAgICAgICAgICAgICAgICAgICAgPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LXJpZ2h0XCI+XG4gICAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtM3hsIGZvbnQtYm9sZCB0ZXh0LWJsdWUtNjAwXCI+e3RlYW1Vc2Vycy5sZW5ndGh9PC9kaXY+XG4gICAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtc20gdGV4dC1ncmF5LTYwMFwiPlRlYW0gTWVtYmVyczwvZGl2PlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgIDwvZGl2PlxuXG4gICAgICAgICAgICB7LyogVGVhbSBNZW1iZXJzIFRhYmxlICovfVxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy13aGl0ZSByb3VuZGVkLWxnIHNoYWRvd1wiPlxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInB4LTYgcHktNCBib3JkZXItYiBib3JkZXItZ3JheS0yMDBcIj5cbiAgICAgICAgICAgICAgICA8aDIgY2xhc3NOYW1lPVwidGV4dC1sZyBmb250LXNlbWlib2xkIHRleHQtZ3JheS05MDBcIj5UZWFtIE1lbWJlcnM8L2gyPlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJvdmVyZmxvdy14LWF1dG9cIj5cbiAgICAgICAgICAgICAgICA8dGFibGUgY2xhc3NOYW1lPVwidy1mdWxsXCI+XG4gICAgICAgICAgICAgICAgICA8dGhlYWQgY2xhc3NOYW1lPVwiYmctZ3JheS01MFwiPlxuICAgICAgICAgICAgICAgICAgICA8dHI+XG4gICAgICAgICAgICAgICAgICAgICAgPHRoIGNsYXNzTmFtZT1cInB4LTYgcHktMyB0ZXh0LWxlZnQgdGV4dC14cyBmb250LW1lZGl1bSB0ZXh0LWdyYXktNTAwIHVwcGVyY2FzZVwiPk5hbWU8L3RoPlxuICAgICAgICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5FbWFpbDwvdGg+XG4gICAgICAgICAgICAgICAgICAgICAgPHRoIGNsYXNzTmFtZT1cInB4LTYgcHktMyB0ZXh0LWxlZnQgdGV4dC14cyBmb250LW1lZGl1bSB0ZXh0LWdyYXktNTAwIHVwcGVyY2FzZVwiPlJvbGU8L3RoPlxuICAgICAgICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5TdGF0dXM8L3RoPlxuICAgICAgICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5BY3Rpb25zPC90aD5cbiAgICAgICAgICAgICAgICAgICAgPC90cj5cbiAgICAgICAgICAgICAgICAgIDwvdGhlYWQ+XG4gICAgICAgICAgICAgICAgICA8dGJvZHkgY2xhc3NOYW1lPVwiZGl2aWRlLXkgZGl2aWRlLWdyYXktMjAwXCI+XG4gICAgICAgICAgICAgICAgICAgIHt0ZWFtVXNlcnMubGVuZ3RoID09PSAwID8gKFxuICAgICAgICAgICAgICAgICAgICAgIDx0cj5cbiAgICAgICAgICAgICAgICAgICAgICAgIDx0ZCBjb2xTcGFuPXs1fSBjbGFzc05hbWU9XCJweC02IHB5LTggdGV4dC1jZW50ZXIgdGV4dC1ncmF5LTUwMFwiPlxuICAgICAgICAgICAgICAgICAgICAgICAgICBObyB0ZWFtIG1lbWJlcnMgZm91bmRcbiAgICAgICAgICAgICAgICAgICAgICAgIDwvdGQ+XG4gICAgICAgICAgICAgICAgICAgICAgPC90cj5cbiAgICAgICAgICAgICAgICAgICAgKSA6IChcbiAgICAgICAgICAgICAgICAgICAgICB0ZWFtVXNlcnMubWFwKCh1KSA9PiAoXG4gICAgICAgICAgICAgICAgICAgICAgICA8dHIga2V5PXt1LmlkfSBjbGFzc05hbWU9XCJob3ZlcjpiZy1ncmF5LTUwXCI+XG4gICAgICAgICAgICAgICAgICAgICAgICAgIDx0ZCBjbGFzc05hbWU9XCJweC02IHB5LTQgd2hpdGVzcGFjZS1ub3dyYXBcIj5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZvbnQtbWVkaXVtIHRleHQtZ3JheS05MDBcIj57dS5maXJzdF9uYW1lfSB7dS5sYXN0X25hbWV9PC9kaXY+XG4gICAgICAgICAgICAgICAgICAgICAgICAgIDwvdGQ+XG4gICAgICAgICAgICAgICAgICAgICAgICAgIDx0ZCBjbGFzc05hbWU9XCJweC02IHB5LTQgd2hpdGVzcGFjZS1ub3dyYXAgdGV4dC1zbSB0ZXh0LWdyYXktNjAwXCI+e3UuZW1haWx9PC90ZD5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgPHRkIGNsYXNzTmFtZT1cInB4LTYgcHktNCB3aGl0ZXNwYWNlLW5vd3JhcFwiPlxuICAgICAgICAgICAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT17YHB4LTIgcHktMSB0ZXh0LXhzIGZvbnQtbWVkaXVtIHJvdW5kZWQtZnVsbCAke2dldFJvbGVCYWRnZUNvbG9yKHUucm9sZSl9YH0+XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICB7dS5yb2xlLnJlcGxhY2UoJ18nLCAnICcpfVxuICAgICAgICAgICAgICAgICAgICAgICAgICAgIDwvc3Bhbj5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgPC90ZD5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgPHRkIGNsYXNzTmFtZT1cInB4LTYgcHktNCB3aGl0ZXNwYWNlLW5vd3JhcFwiPlxuICAgICAgICAgICAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT17YHB4LTIgcHktMSB0ZXh0LXhzIGZvbnQtbWVkaXVtIHJvdW5kZWQtZnVsbCAke3UuaXNfYWN0aXZlID8gJ2JnLWdyZWVuLTEwMCB0ZXh0LWdyZWVuLTgwMCcgOiAnYmctcmVkLTEwMCB0ZXh0LXJlZC04MDAnfWB9PlxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAge3UuaXNfYWN0aXZlID8gJ0FjdGl2ZScgOiAnSW5hY3RpdmUnfVxuICAgICAgICAgICAgICAgICAgICAgICAgICAgIDwvc3Bhbj5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgPC90ZD5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgPHRkIGNsYXNzTmFtZT1cInB4LTYgcHktNCB3aGl0ZXNwYWNlLW5vd3JhcCB0ZXh0LXNtIHNwYWNlLXgtMlwiPlxuICAgICAgICAgICAgICAgICAgICAgICAgICAgIDxidXR0b25cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHtcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgc2V0U2VsZWN0ZWRVc2VyKHUpO1xuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBzZXRFZGl0VXNlckRhdGEoe1xuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGZpcnN0TmFtZTogdS5maXJzdF9uYW1lLFxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIGxhc3ROYW1lOiB1Lmxhc3RfbmFtZSxcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBlbWFpbDogdS5lbWFpbCxcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICByb2xlOiB1LnJvbGVcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfSk7XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIHNldFNob3dFZGl0VXNlcih0cnVlKTtcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIH19XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJ0ZXh0LWJsdWUtNjAwIGhvdmVyOnRleHQtYmx1ZS04MDAgZm9udC1tZWRpdW1cIlxuICAgICAgICAgICAgICAgICAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIEVkaXRcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICBvbkNsaWNrPXsoKSA9PiB7XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIHNldFNlbGVjdGVkVXNlcih1KTtcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgc2V0U2hvd1Jlc2V0UGFzc3dvcmQodHJ1ZSk7XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICB9fVxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidGV4dC1ncmVlbi02MDAgaG92ZXI6dGV4dC1ncmVlbi04MDAgZm9udC1tZWRpdW1cIlxuICAgICAgICAgICAgICAgICAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIFJlc2V0IFBhc3N3b3JkXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAge3UuaWQgIT09IHVzZXI/LmlkICYmIChcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIDxidXR0b25cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgb25DbGljaz17KCkgPT4ge1xuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIHNldFNlbGVjdGVkVXNlcih1KTtcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICBzZXRTaG93RGVsZXRlQ29uZmlybSh0cnVlKTtcbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgfX1cbiAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidGV4dC1yZWQtNjAwIGhvdmVyOnRleHQtcmVkLTgwMCBmb250LW1lZGl1bVwiXG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgIERlbGV0ZVxuICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgICAgICAgICAgICAgICAgICAgKX1cbiAgICAgICAgICAgICAgICAgICAgICAgICAgPC90ZD5cbiAgICAgICAgICAgICAgICAgICAgICAgIDwvdHI+XG4gICAgICAgICAgICAgICAgICAgICAgKSlcbiAgICAgICAgICAgICAgICAgICAgKX1cbiAgICAgICAgICAgICAgICAgIDwvdGJvZHk+XG4gICAgICAgICAgICAgICAgPC90YWJsZT5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgPC9kaXY+XG4gICAgICApIDogKFxuICAgICAgICAvKiBNYWluIEFkbWluIFBhbmVsIFZpZXcgKi9cbiAgICA8ZGl2IGNsYXNzTmFtZT1cIm1pbi1oLXNjcmVlbiBiZy1ncmF5LTUwIHAtOFwiPlxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJtYXgtdy03eGwgbXgtYXV0byBzcGFjZS15LTZcIj5cbiAgICAgICAgey8qIEJhY2sgQnV0dG9uICovfVxuICAgICAgICB7b25CYWNrICYmIChcbiAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICBvbkNsaWNrPXtvbkJhY2t9XG4gICAgICAgICAgICBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBnYXAtMiB0ZXh0LWdyYXktNjAwIGhvdmVyOnRleHQtZ3JheS05MDAgbWItNFwiXG4gICAgICAgICAgPlxuICAgICAgICAgICAgPEFycm93TGVmdCBjbGFzc05hbWU9XCJ3LTUgaC01XCIgLz5cbiAgICAgICAgICAgIEJhY2sgdG8gRGFzaGJvYXJkXG4gICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICl9XG5cbiAgICAgICAgey8qIEhlYWRlciAqL31cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWJldHdlZW5cIj5cbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIGdhcC0zXCI+XG4gICAgICAgICAgICA8U2hpZWxkIGNsYXNzTmFtZT1cInctOCBoLTggdGV4dC1ibHVlLTYwMFwiIC8+XG4gICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICA8aDEgY2xhc3NOYW1lPVwidGV4dC0yeGwgZm9udC1ib2xkIHRleHQtZ3JheS05MDBcIj5BZG1pbiBDb250cm9sIFBhbmVsPC9oMT5cbiAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1zbSB0ZXh0LWdyYXktNjAwXCI+TWFuYWdlIHVzZXJzIGFuZCB0ZWFtczwvcD5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggZ2FwLTNcIj5cbiAgICAgICAgICB7YXZhaWxhYmxlUm9sZXMubGVuZ3RoID4gMCAmJiAoXG4gICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHNldFNob3dDcmVhdGVVc2VyKHRydWUpfVxuICAgICAgICAgICAgICBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBnYXAtMiBweC00IHB5LTIgYmctYmx1ZS02MDAgdGV4dC13aGl0ZSByb3VuZGVkLWxnIGhvdmVyOmJnLWJsdWUtNzAwXCJcbiAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgPFVzZXJQbHVzIGNsYXNzTmFtZT1cInctNSBoLTVcIiAvPlxuICAgICAgICAgICAgICBDcmVhdGUgVXNlclxuICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgKX1cbiAgICAgICAgICB7Y2FuQ3JlYXRlVGVhbSAmJiAoXG4gICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHNldFNob3dDcmVhdGVUZWFtKHRydWUpfVxuICAgICAgICAgICAgICBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBnYXAtMiBweC00IHB5LTIgYmctZ3JlZW4tNjAwIHRleHQtd2hpdGUgcm91bmRlZC1sZyBob3ZlcjpiZy1ncmVlbi03MDBcIlxuICAgICAgICAgICAgPlxuICAgICAgICAgICAgICA8VXNlcnMgY2xhc3NOYW1lPVwidy01IGgtNVwiIC8+XG4gICAgICAgICAgICAgIENyZWF0ZSBUZWFtXG4gICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICApfVxuICAgICAgICA8L2Rpdj5cbiAgICAgIDwvZGl2PlxuXG4gICAgICB7LyogVXNlcnMgVGFibGUgKi99XG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLXdoaXRlIHJvdW5kZWQtbGcgc2hhZG93XCI+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwicHgtNiBweS00IGJvcmRlci1iIGJvcmRlci1ncmF5LTIwMFwiPlxuICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtc2VtaWJvbGQgdGV4dC1ncmF5LTkwMFwiPlVzZXJzPC9oMj5cbiAgICAgICAgPC9kaXY+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwib3ZlcmZsb3cteC1hdXRvXCI+XG4gICAgICAgICAgPHRhYmxlIGNsYXNzTmFtZT1cInctZnVsbFwiPlxuICAgICAgICAgICAgPHRoZWFkIGNsYXNzTmFtZT1cImJnLWdyYXktNTBcIj5cbiAgICAgICAgICAgICAgPHRyPlxuICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5OYW1lPC90aD5cbiAgICAgICAgICAgICAgICA8dGggY2xhc3NOYW1lPVwicHgtNiBweS0zIHRleHQtbGVmdCB0ZXh0LXhzIGZvbnQtbWVkaXVtIHRleHQtZ3JheS01MDAgdXBwZXJjYXNlXCI+RW1haWw8L3RoPlxuICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5Sb2xlPC90aD5cbiAgICAgICAgICAgICAgICA8dGggY2xhc3NOYW1lPVwicHgtNiBweS0zIHRleHQtbGVmdCB0ZXh0LXhzIGZvbnQtbWVkaXVtIHRleHQtZ3JheS01MDAgdXBwZXJjYXNlXCI+VGVhbTwvdGg+XG4gICAgICAgICAgICAgICAgPHRoIGNsYXNzTmFtZT1cInB4LTYgcHktMyB0ZXh0LWxlZnQgdGV4dC14cyBmb250LW1lZGl1bSB0ZXh0LWdyYXktNTAwIHVwcGVyY2FzZVwiPkRlcGFydG1lbnQ8L3RoPlxuICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5TdGF0dXM8L3RoPlxuICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5BY3Rpb25zPC90aD5cbiAgICAgICAgICAgICAgPC90cj5cbiAgICAgICAgICAgIDwvdGhlYWQ+XG4gICAgICAgICAgICA8dGJvZHkgY2xhc3NOYW1lPVwiZGl2aWRlLXkgZGl2aWRlLWdyYXktMjAwXCI+XG4gICAgICAgICAgICAgIHt1c2Vycy5tYXAoKHUpID0+IChcbiAgICAgICAgICAgICAgICA8dHIga2V5PXt1LmlkfSBjbGFzc05hbWU9XCJob3ZlcjpiZy1ncmF5LTUwXCI+XG4gICAgICAgICAgICAgICAgICA8dGQgY2xhc3NOYW1lPVwicHgtNiBweS00IHdoaXRlc3BhY2Utbm93cmFwXCI+XG4gICAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZm9udC1tZWRpdW0gdGV4dC1ncmF5LTkwMFwiPnt1LmZpcnN0X25hbWV9IHt1Lmxhc3RfbmFtZX08L2Rpdj5cbiAgICAgICAgICAgICAgICAgIDwvdGQ+XG4gICAgICAgICAgICAgICAgICA8dGQgY2xhc3NOYW1lPVwicHgtNiBweS00IHdoaXRlc3BhY2Utbm93cmFwIHRleHQtc20gdGV4dC1ncmF5LTYwMFwiPnt1LmVtYWlsfTwvdGQ+XG4gICAgICAgICAgICAgICAgICA8dGQgY2xhc3NOYW1lPVwicHgtNiBweS00IHdoaXRlc3BhY2Utbm93cmFwXCI+XG4gICAgICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT17YHB4LTIgcHktMSB0ZXh0LXhzIGZvbnQtbWVkaXVtIHJvdW5kZWQtZnVsbCAke2dldFJvbGVCYWRnZUNvbG9yKHUucm9sZSl9YH0+XG4gICAgICAgICAgICAgICAgICAgICAge3Uucm9sZS5yZXBsYWNlKCdfJywgJyAnKX1cbiAgICAgICAgICAgICAgICAgICAgPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPC90ZD5cbiAgICAgICAgICAgICAgICAgIDx0ZCBjbGFzc05hbWU9XCJweC02IHB5LTQgd2hpdGVzcGFjZS1ub3dyYXAgdGV4dC1zbSB0ZXh0LWdyYXktNjAwXCI+e3UudGVhbV9uYW1lfTwvdGQ+XG4gICAgICAgICAgICAgICAgICA8dGQgY2xhc3NOYW1lPVwicHgtNiBweS00IHdoaXRlc3BhY2Utbm93cmFwIHRleHQtc20gdGV4dC1ncmF5LTYwMFwiPnt1LmRlcGFydG1lbnRfbmFtZX08L3RkPlxuICAgICAgICAgICAgICAgICAgPHRkIGNsYXNzTmFtZT1cInB4LTYgcHktNCB3aGl0ZXNwYWNlLW5vd3JhcFwiPlxuICAgICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9e2BweC0yIHB5LTEgdGV4dC14cyBmb250LW1lZGl1bSByb3VuZGVkLWZ1bGwgJHt1LmlzX2FjdGl2ZSA/ICdiZy1ncmVlbi0xMDAgdGV4dC1ncmVlbi04MDAnIDogJ2JnLXJlZC0xMDAgdGV4dC1yZWQtODAwJ31gfT5cbiAgICAgICAgICAgICAgICAgICAgICB7dS5pc19hY3RpdmUgPyAnQWN0aXZlJyA6ICdJbmFjdGl2ZSd9XG4gICAgICAgICAgICAgICAgICAgIDwvc3Bhbj5cbiAgICAgICAgICAgICAgICAgIDwvdGQ+XG4gICAgICAgICAgICAgICAgICA8dGQgY2xhc3NOYW1lPVwicHgtNiBweS00IHdoaXRlc3BhY2Utbm93cmFwIHRleHQtc21cIj5cbiAgICAgICAgICAgICAgICAgICAgPGJ1dHRvblxuICAgICAgICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHtcbiAgICAgICAgICAgICAgICAgICAgICAgIHNldFNlbGVjdGVkVXNlcih1KTtcbiAgICAgICAgICAgICAgICAgICAgICAgIHNldFNob3dSZXNldFBhc3N3b3JkKHRydWUpO1xuICAgICAgICAgICAgICAgICAgICAgIH19XG4gICAgICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgZ2FwLTEgdGV4dC1ibHVlLTYwMCBob3Zlcjp0ZXh0LWJsdWUtODAwXCJcbiAgICAgICAgICAgICAgICAgICAgPlxuICAgICAgICAgICAgICAgICAgICAgIDxLZXkgY2xhc3NOYW1lPVwidy00IGgtNFwiIC8+XG4gICAgICAgICAgICAgICAgICAgICAgUmVzZXQgUGFzc3dvcmRcbiAgICAgICAgICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgICAgICAgICA8L3RkPlxuICAgICAgICAgICAgICAgIDwvdHI+XG4gICAgICAgICAgICAgICkpfVxuICAgICAgICAgICAgPC90Ym9keT5cbiAgICAgICAgICA8L3RhYmxlPlxuICAgICAgICA8L2Rpdj5cbiAgICAgIDwvZGl2PlxuXG4gICAgICB7LyogVGVhbXMgVGFibGUgKi99XG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLXdoaXRlIHJvdW5kZWQtbGcgc2hhZG93XCI+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwicHgtNiBweS00IGJvcmRlci1iIGJvcmRlci1ncmF5LTIwMFwiPlxuICAgICAgICAgIDxoMiBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtc2VtaWJvbGQgdGV4dC1ncmF5LTkwMFwiPlRlYW1zPC9oMj5cbiAgICAgICAgPC9kaXY+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwib3ZlcmZsb3cteC1hdXRvXCI+XG4gICAgICAgICAgPHRhYmxlIGNsYXNzTmFtZT1cInctZnVsbFwiPlxuICAgICAgICAgICAgPHRoZWFkIGNsYXNzTmFtZT1cImJnLWdyYXktNTBcIj5cbiAgICAgICAgICAgICAgPHRyPlxuICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5UZWFtIE5hbWU8L3RoPlxuICAgICAgICAgICAgICAgIDx0aCBjbGFzc05hbWU9XCJweC02IHB5LTMgdGV4dC1sZWZ0IHRleHQteHMgZm9udC1tZWRpdW0gdGV4dC1ncmF5LTUwMCB1cHBlcmNhc2VcIj5QbGF0Zm9ybTwvdGg+XG4gICAgICAgICAgICAgICAgPHRoIGNsYXNzTmFtZT1cInB4LTYgcHktMyB0ZXh0LWxlZnQgdGV4dC14cyBmb250LW1lZGl1bSB0ZXh0LWdyYXktNTAwIHVwcGVyY2FzZVwiPkRlc2NyaXB0aW9uPC90aD5cbiAgICAgICAgICAgICAgICA8dGggY2xhc3NOYW1lPVwicHgtNiBweS0zIHRleHQtbGVmdCB0ZXh0LXhzIGZvbnQtbWVkaXVtIHRleHQtZ3JheS01MDAgdXBwZXJjYXNlXCI+U3RhdHVzPC90aD5cbiAgICAgICAgICAgICAgICA8dGggY2xhc3NOYW1lPVwicHgtNiBweS0zIHRleHQtbGVmdCB0ZXh0LXhzIGZvbnQtbWVkaXVtIHRleHQtZ3JheS01MDAgdXBwZXJjYXNlXCI+Q3JlYXRlZDwvdGg+XG4gICAgICAgICAgICAgIDwvdHI+XG4gICAgICAgICAgICA8L3RoZWFkPlxuICAgICAgICAgICAgPHRib2R5IGNsYXNzTmFtZT1cImRpdmlkZS15IGRpdmlkZS1ncmF5LTIwMFwiPlxuICAgICAgICAgICAgICB7dGVhbXMubWFwKCh0ZWFtKSA9PiAoXG4gICAgICAgICAgICAgICAgPHRyIFxuICAgICAgICAgICAgICAgICAga2V5PXt0ZWFtLmlkfSBcbiAgICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHNldFNlbGVjdGVkVGVhbSh0ZWFtKX1cbiAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT1cImhvdmVyOmJnLWJsdWUtNTAgY3Vyc29yLXBvaW50ZXIgdHJhbnNpdGlvbi1jb2xvcnNcIlxuICAgICAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgICAgIDx0ZCBjbGFzc05hbWU9XCJweC02IHB5LTQgd2hpdGVzcGFjZS1ub3dyYXBcIj5cbiAgICAgICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmb250LW1lZGl1bSB0ZXh0LWJsdWUtNjAwIGhvdmVyOnRleHQtYmx1ZS04MDBcIj57dGVhbS5uYW1lfTwvZGl2PlxuICAgICAgICAgICAgICAgICAgPC90ZD5cbiAgICAgICAgICAgICAgICAgIDx0ZCBjbGFzc05hbWU9XCJweC02IHB5LTQgd2hpdGVzcGFjZS1ub3dyYXBcIj5cbiAgICAgICAgICAgICAgICAgICAgPHNwYW4gY2xhc3NOYW1lPVwicHgtMiBweS0xIHRleHQteHMgZm9udC1tZWRpdW0gcm91bmRlZC1mdWxsIGJnLWJsdWUtMTAwIHRleHQtYmx1ZS04MDBcIj5cbiAgICAgICAgICAgICAgICAgICAgICB7dGVhbS5wbGF0Zm9ybX1cbiAgICAgICAgICAgICAgICAgICAgPC9zcGFuPlxuICAgICAgICAgICAgICAgICAgPC90ZD5cbiAgICAgICAgICAgICAgICAgIDx0ZCBjbGFzc05hbWU9XCJweC02IHB5LTQgdGV4dC1zbSB0ZXh0LWdyYXktNjAwIG1heC13LXhzIHRydW5jYXRlXCI+XG4gICAgICAgICAgICAgICAgICAgIHt0ZWFtLmRlc2NyaXB0aW9uIHx8ICdObyBkZXNjcmlwdGlvbid9XG4gICAgICAgICAgICAgICAgICA8L3RkPlxuICAgICAgICAgICAgICAgICAgPHRkIGNsYXNzTmFtZT1cInB4LTYgcHktNCB3aGl0ZXNwYWNlLW5vd3JhcFwiPlxuICAgICAgICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9e2BweC0yIHB5LTEgdGV4dC14cyBmb250LW1lZGl1bSByb3VuZGVkLWZ1bGwgJHt0ZWFtLmlzX2FjdGl2ZSA/ICdiZy1ncmVlbi0xMDAgdGV4dC1ncmVlbi04MDAnIDogJ2JnLXJlZC0xMDAgdGV4dC1yZWQtODAwJ31gfT5cbiAgICAgICAgICAgICAgICAgICAgICB7dGVhbS5pc19hY3RpdmUgPyAnQWN0aXZlJyA6ICdJbmFjdGl2ZSd9XG4gICAgICAgICAgICAgICAgICAgIDwvc3Bhbj5cbiAgICAgICAgICAgICAgICAgIDwvdGQ+XG4gICAgICAgICAgICAgICAgICA8dGQgY2xhc3NOYW1lPVwicHgtNiBweS00IHdoaXRlc3BhY2Utbm93cmFwIHRleHQtc20gdGV4dC1ncmF5LTYwMFwiPlxuICAgICAgICAgICAgICAgICAgICB7dGVhbS5jcmVhdGVkX2F0ID8gbmV3IERhdGUodGVhbS5jcmVhdGVkX2F0KS50b0xvY2FsZURhdGVTdHJpbmcoKSA6ICdOL0EnfVxuICAgICAgICAgICAgICAgICAgPC90ZD5cbiAgICAgICAgICAgICAgICA8L3RyPlxuICAgICAgICAgICAgICApKX1cbiAgICAgICAgICAgIDwvdGJvZHk+XG4gICAgICAgICAgPC90YWJsZT5cbiAgICAgICAgPC9kaXY+XG4gICAgICA8L2Rpdj5cblxuICAgICAgey8qIENyZWF0ZSBVc2VyIE1vZGFsICovfVxuICAgICAge3Nob3dDcmVhdGVVc2VyICYmIChcbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmaXhlZCBpbnNldC0wIGJnLWJsYWNrIGJnLW9wYWNpdHktNTAgZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1jZW50ZXIgei01MFwiPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctd2hpdGUgcm91bmRlZC1sZyBwLTYgdy1mdWxsIG1heC13LW1kXCI+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktYmV0d2VlbiBtYi00XCI+XG4gICAgICAgICAgICAgIDxoMyBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtc2VtaWJvbGRcIj5DcmVhdGUgTmV3IFVzZXI8L2gzPlxuICAgICAgICAgICAgICA8YnV0dG9uIG9uQ2xpY2s9eygpID0+IHNldFNob3dDcmVhdGVVc2VyKGZhbHNlKX0gY2xhc3NOYW1lPVwidGV4dC1ncmF5LTQwMCBob3Zlcjp0ZXh0LWdyYXktNjAwXCI+XG4gICAgICAgICAgICAgICAgPFggY2xhc3NOYW1lPVwidy01IGgtNVwiIC8+XG4gICAgICAgICAgICAgIDwvYnV0dG9uPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8Zm9ybSBvblN1Ym1pdD17aGFuZGxlQ3JlYXRlVXNlcn0gY2xhc3NOYW1lPVwic3BhY2UteS00XCI+XG4gICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgPGxhYmVsIGNsYXNzTmFtZT1cImJsb2NrIHRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1ncmF5LTcwMCBtYi0xXCI+RW1haWw8L2xhYmVsPlxuICAgICAgICAgICAgICAgIDxpbnB1dFxuICAgICAgICAgICAgICAgICAgdHlwZT1cImVtYWlsXCJcbiAgICAgICAgICAgICAgICAgIHJlcXVpcmVkXG4gICAgICAgICAgICAgICAgICB2YWx1ZT17bmV3VXNlci5lbWFpbH1cbiAgICAgICAgICAgICAgICAgIG9uQ2hhbmdlPXsoZSkgPT4gc2V0TmV3VXNlcih7IC4uLm5ld1VzZXIsIGVtYWlsOiBlLnRhcmdldC52YWx1ZSB9KX1cbiAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT1cInctZnVsbCBweC0zIHB5LTIgYm9yZGVyIGJvcmRlci1ncmF5LTMwMCByb3VuZGVkLWxnIGZvY3VzOnJpbmctMiBmb2N1czpyaW5nLWJsdWUtNTAwXCJcbiAgICAgICAgICAgICAgICAvPlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICA8bGFiZWwgY2xhc3NOYW1lPVwiYmxvY2sgdGV4dC1zbSBmb250LW1lZGl1bSB0ZXh0LWdyYXktNzAwIG1iLTFcIj5QYXNzd29yZDwvbGFiZWw+XG4gICAgICAgICAgICAgICAgPGlucHV0XG4gICAgICAgICAgICAgICAgICB0eXBlPVwicGFzc3dvcmRcIlxuICAgICAgICAgICAgICAgICAgcmVxdWlyZWRcbiAgICAgICAgICAgICAgICAgIG1pbkxlbmd0aD17Nn1cbiAgICAgICAgICAgICAgICAgIHZhbHVlPXtuZXdVc2VyLnBhc3N3b3JkfVxuICAgICAgICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXROZXdVc2VyKHsgLi4ubmV3VXNlciwgcGFzc3dvcmQ6IGUudGFyZ2V0LnZhbHVlIH0pfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidy1mdWxsIHB4LTMgcHktMiBib3JkZXIgYm9yZGVyLWdyYXktMzAwIHJvdW5kZWQtbGcgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctYmx1ZS01MDBcIlxuICAgICAgICAgICAgICAgIC8+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImdyaWQgZ3JpZC1jb2xzLTIgZ2FwLTRcIj5cbiAgICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgICAgPGxhYmVsIGNsYXNzTmFtZT1cImJsb2NrIHRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1ncmF5LTcwMCBtYi0xXCI+Rmlyc3QgTmFtZTwvbGFiZWw+XG4gICAgICAgICAgICAgICAgICA8aW5wdXRcbiAgICAgICAgICAgICAgICAgICAgdHlwZT1cInRleHRcIlxuICAgICAgICAgICAgICAgICAgICByZXF1aXJlZFxuICAgICAgICAgICAgICAgICAgICB2YWx1ZT17bmV3VXNlci5maXJzdE5hbWV9XG4gICAgICAgICAgICAgICAgICAgIG9uQ2hhbmdlPXsoZSkgPT4gc2V0TmV3VXNlcih7IC4uLm5ld1VzZXIsIGZpcnN0TmFtZTogZS50YXJnZXQudmFsdWUgfSl9XG4gICAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT1cInctZnVsbCBweC0zIHB5LTIgYm9yZGVyIGJvcmRlci1ncmF5LTMwMCByb3VuZGVkLWxnIGZvY3VzOnJpbmctMiBmb2N1czpyaW5nLWJsdWUtNTAwXCJcbiAgICAgICAgICAgICAgICAgIC8+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICAgIDxsYWJlbCBjbGFzc05hbWU9XCJibG9jayB0ZXh0LXNtIGZvbnQtbWVkaXVtIHRleHQtZ3JheS03MDAgbWItMVwiPkxhc3QgTmFtZTwvbGFiZWw+XG4gICAgICAgICAgICAgICAgICA8aW5wdXRcbiAgICAgICAgICAgICAgICAgICAgdHlwZT1cInRleHRcIlxuICAgICAgICAgICAgICAgICAgICByZXF1aXJlZFxuICAgICAgICAgICAgICAgICAgICB2YWx1ZT17bmV3VXNlci5sYXN0TmFtZX1cbiAgICAgICAgICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXROZXdVc2VyKHsgLi4ubmV3VXNlciwgbGFzdE5hbWU6IGUudGFyZ2V0LnZhbHVlIH0pfVxuICAgICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJ3LWZ1bGwgcHgtMyBweS0yIGJvcmRlciBib3JkZXItZ3JheS0zMDAgcm91bmRlZC1sZyBmb2N1czpyaW5nLTIgZm9jdXM6cmluZy1ibHVlLTUwMFwiXG4gICAgICAgICAgICAgICAgICAvPlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICA8bGFiZWwgY2xhc3NOYW1lPVwiYmxvY2sgdGV4dC1zbSBmb250LW1lZGl1bSB0ZXh0LWdyYXktNzAwIG1iLTFcIj5Sb2xlPC9sYWJlbD5cbiAgICAgICAgICAgICAgICA8c2VsZWN0XG4gICAgICAgICAgICAgICAgICByZXF1aXJlZFxuICAgICAgICAgICAgICAgICAgdmFsdWU9e25ld1VzZXIucm9sZX1cbiAgICAgICAgICAgICAgICAgIG9uQ2hhbmdlPXsoZSkgPT4gc2V0TmV3VXNlcih7IC4uLm5ld1VzZXIsIHJvbGU6IGUudGFyZ2V0LnZhbHVlIH0pfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidy1mdWxsIHB4LTMgcHktMiBib3JkZXIgYm9yZGVyLWdyYXktMzAwIHJvdW5kZWQtbGcgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctYmx1ZS01MDBcIlxuICAgICAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9XCJcIj5TZWxlY3Qgcm9sZS4uLjwvb3B0aW9uPlxuICAgICAgICAgICAgICAgICAge2F2YWlsYWJsZVJvbGVzLm1hcCgocm9sZSkgPT4gKFxuICAgICAgICAgICAgICAgICAgICA8b3B0aW9uIGtleT17cm9sZX0gdmFsdWU9e3JvbGV9Pntyb2xlLnJlcGxhY2UoJ18nLCAnICcpfTwvb3B0aW9uPlxuICAgICAgICAgICAgICAgICAgKSl9XG4gICAgICAgICAgICAgICAgPC9zZWxlY3Q+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgIDxsYWJlbCBjbGFzc05hbWU9XCJibG9jayB0ZXh0LXNtIGZvbnQtbWVkaXVtIHRleHQtZ3JheS03MDAgbWItMVwiPlRlYW08L2xhYmVsPlxuICAgICAgICAgICAgICAgIDxzZWxlY3RcbiAgICAgICAgICAgICAgICAgIHJlcXVpcmVkXG4gICAgICAgICAgICAgICAgICB2YWx1ZT17bmV3VXNlci50ZWFtSWR9XG4gICAgICAgICAgICAgICAgICBvbkNoYW5nZT17KGUpID0+IHNldE5ld1VzZXIoeyAuLi5uZXdVc2VyLCB0ZWFtSWQ6IGUudGFyZ2V0LnZhbHVlIH0pfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidy1mdWxsIHB4LTMgcHktMiBib3JkZXIgYm9yZGVyLWdyYXktMzAwIHJvdW5kZWQtbGcgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctYmx1ZS01MDBcIlxuICAgICAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgICAgIDxvcHRpb24gdmFsdWU9XCJcIj5TZWxlY3QgdGVhbS4uLjwvb3B0aW9uPlxuICAgICAgICAgICAgICAgICAge3RlYW1zLm1hcCgodGVhbSkgPT4gKFxuICAgICAgICAgICAgICAgICAgICA8b3B0aW9uIGtleT17dGVhbS5pZH0gdmFsdWU9e3RlYW0uaWR9Pnt0ZWFtLm5hbWV9ICh7dGVhbS5wbGF0Zm9ybX0pPC9vcHRpb24+XG4gICAgICAgICAgICAgICAgICApKX1cbiAgICAgICAgICAgICAgICA8L3NlbGVjdD5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBnYXAtMyBwdC00XCI+XG4gICAgICAgICAgICAgICAgPGJ1dHRvblxuICAgICAgICAgICAgICAgICAgdHlwZT1cInN1Ym1pdFwiXG4gICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJmbGV4LTEgcHgtNCBweS0yIGJnLWJsdWUtNjAwIHRleHQtd2hpdGUgcm91bmRlZC1sZyBob3ZlcjpiZy1ibHVlLTcwMFwiXG4gICAgICAgICAgICAgICAgPlxuICAgICAgICAgICAgICAgICAgQ3JlYXRlIFVzZXJcbiAgICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgICAgICB0eXBlPVwiYnV0dG9uXCJcbiAgICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHNldFNob3dDcmVhdGVVc2VyKGZhbHNlKX1cbiAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT1cImZsZXgtMSBweC00IHB5LTIgYmctZ3JheS0yMDAgdGV4dC1ncmF5LTcwMCByb3VuZGVkLWxnIGhvdmVyOmJnLWdyYXktMzAwXCJcbiAgICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAgICBDYW5jZWxcbiAgICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8L2Zvcm0+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuICAgICAgKX1cblxuICAgICAgey8qIENyZWF0ZSBUZWFtIE1vZGFsICovfVxuICAgICAge3Nob3dDcmVhdGVUZWFtICYmIChcbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmaXhlZCBpbnNldC0wIGJnLWJsYWNrIGJnLW9wYWNpdHktNTAgZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1jZW50ZXIgei01MFwiPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctd2hpdGUgcm91bmRlZC1sZyBwLTYgdy1mdWxsIG1heC13LW1kXCI+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktYmV0d2VlbiBtYi00XCI+XG4gICAgICAgICAgICAgIDxoMyBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtc2VtaWJvbGRcIj5DcmVhdGUgTmV3IFRlYW08L2gzPlxuICAgICAgICAgICAgICA8YnV0dG9uIG9uQ2xpY2s9eygpID0+IHNldFNob3dDcmVhdGVUZWFtKGZhbHNlKX0gY2xhc3NOYW1lPVwidGV4dC1ncmF5LTQwMCBob3Zlcjp0ZXh0LWdyYXktNjAwXCI+XG4gICAgICAgICAgICAgICAgPFggY2xhc3NOYW1lPVwidy01IGgtNVwiIC8+XG4gICAgICAgICAgICAgIDwvYnV0dG9uPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8Zm9ybSBvblN1Ym1pdD17aGFuZGxlQ3JlYXRlVGVhbX0gY2xhc3NOYW1lPVwic3BhY2UteS00XCI+XG4gICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgPGxhYmVsIGNsYXNzTmFtZT1cImJsb2NrIHRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1ncmF5LTcwMCBtYi0xXCI+VGVhbSBOYW1lPC9sYWJlbD5cbiAgICAgICAgICAgICAgICA8aW5wdXRcbiAgICAgICAgICAgICAgICAgIHR5cGU9XCJ0ZXh0XCJcbiAgICAgICAgICAgICAgICAgIHJlcXVpcmVkXG4gICAgICAgICAgICAgICAgICB2YWx1ZT17bmV3VGVhbS5uYW1lfVxuICAgICAgICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXROZXdUZWFtKHsgLi4ubmV3VGVhbSwgbmFtZTogZS50YXJnZXQudmFsdWUgfSl9XG4gICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJ3LWZ1bGwgcHgtMyBweS0yIGJvcmRlciBib3JkZXItZ3JheS0zMDAgcm91bmRlZC1sZyBmb2N1czpyaW5nLTIgZm9jdXM6cmluZy1ibHVlLTUwMFwiXG4gICAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgPGxhYmVsIGNsYXNzTmFtZT1cImJsb2NrIHRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1ncmF5LTcwMCBtYi0xXCI+RGVzY3JpcHRpb248L2xhYmVsPlxuICAgICAgICAgICAgICAgIDx0ZXh0YXJlYVxuICAgICAgICAgICAgICAgICAgdmFsdWU9e25ld1RlYW0uZGVzY3JpcHRpb259XG4gICAgICAgICAgICAgICAgICBvbkNoYW5nZT17KGUpID0+IHNldE5ld1RlYW0oeyAuLi5uZXdUZWFtLCBkZXNjcmlwdGlvbjogZS50YXJnZXQudmFsdWUgfSl9XG4gICAgICAgICAgICAgICAgICByb3dzPXszfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidy1mdWxsIHB4LTMgcHktMiBib3JkZXIgYm9yZGVyLWdyYXktMzAwIHJvdW5kZWQtbGcgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctYmx1ZS01MDBcIlxuICAgICAgICAgICAgICAgIC8+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgIDxsYWJlbCBjbGFzc05hbWU9XCJibG9jayB0ZXh0LXNtIGZvbnQtbWVkaXVtIHRleHQtZ3JheS03MDAgbWItMVwiPlBsYXRmb3JtPC9sYWJlbD5cbiAgICAgICAgICAgICAgICA8c2VsZWN0XG4gICAgICAgICAgICAgICAgICByZXF1aXJlZFxuICAgICAgICAgICAgICAgICAgdmFsdWU9e25ld1RlYW0ucGxhdGZvcm19XG4gICAgICAgICAgICAgICAgICBvbkNoYW5nZT17KGUpID0+IHNldE5ld1RlYW0oeyAuLi5uZXdUZWFtLCBwbGF0Zm9ybTogZS50YXJnZXQudmFsdWUgfSl9XG4gICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJ3LWZ1bGwgcHgtMyBweS0yIGJvcmRlciBib3JkZXItZ3JheS0zMDAgcm91bmRlZC1sZyBmb2N1czpyaW5nLTIgZm9jdXM6cmluZy1ibHVlLTUwMFwiXG4gICAgICAgICAgICAgICAgPlxuICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT1cIkJhY2tlbmRcIj5CYWNrZW5kPC9vcHRpb24+XG4gICAgICAgICAgICAgICAgICA8b3B0aW9uIHZhbHVlPVwiRnJvbnRlbmRcIj5Gcm9udGVuZDwvb3B0aW9uPlxuICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT1cIk1vYmlsZVwiPk1vYmlsZTwvb3B0aW9uPlxuICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT1cIkFQSVwiPkFQSTwvb3B0aW9uPlxuICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT1cIkRldk9wc1wiPkRldk9wczwvb3B0aW9uPlxuICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT1cIldlYlwiPldlYjwvb3B0aW9uPlxuICAgICAgICAgICAgICAgICAgPG9wdGlvbiB2YWx1ZT1cIlNlY3VyaXR5XCI+U2VjdXJpdHk8L29wdGlvbj5cbiAgICAgICAgICAgICAgICA8L3NlbGVjdD5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBnYXAtMyBwdC00XCI+XG4gICAgICAgICAgICAgICAgPGJ1dHRvblxuICAgICAgICAgICAgICAgICAgdHlwZT1cInN1Ym1pdFwiXG4gICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJmbGV4LTEgcHgtNCBweS0yIGJnLWdyZWVuLTYwMCB0ZXh0LXdoaXRlIHJvdW5kZWQtbGcgaG92ZXI6YmctZ3JlZW4tNzAwXCJcbiAgICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAgICBDcmVhdGUgVGVhbVxuICAgICAgICAgICAgICAgIDwvYnV0dG9uPlxuICAgICAgICAgICAgICAgIDxidXR0b25cbiAgICAgICAgICAgICAgICAgIHR5cGU9XCJidXR0b25cIlxuICAgICAgICAgICAgICAgICAgb25DbGljaz17KCkgPT4gc2V0U2hvd0NyZWF0ZVRlYW0oZmFsc2UpfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwiZmxleC0xIHB4LTQgcHktMiBiZy1ncmF5LTIwMCB0ZXh0LWdyYXktNzAwIHJvdW5kZWQtbGcgaG92ZXI6YmctZ3JheS0zMDBcIlxuICAgICAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgICAgIENhbmNlbFxuICAgICAgICAgICAgICAgIDwvYnV0dG9uPlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgIDwvZm9ybT5cbiAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgPC9kaXY+XG4gICAgICApfVxuXG4gICAgICB7LyogUmVzZXQgUGFzc3dvcmQgTW9kYWwgKi99XG4gICAgICB7c2hvd1Jlc2V0UGFzc3dvcmQgJiYgc2VsZWN0ZWRVc2VyICYmIChcbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmaXhlZCBpbnNldC0wIGJnLWJsYWNrIGJnLW9wYWNpdHktNTAgZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1jZW50ZXIgei01MFwiPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctd2hpdGUgcm91bmRlZC1sZyBwLTYgdy1mdWxsIG1heC13LW1kXCI+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktYmV0d2VlbiBtYi00XCI+XG4gICAgICAgICAgICAgIDxoMyBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtc2VtaWJvbGRcIj5SZXNldCBQYXNzd29yZDwvaDM+XG4gICAgICAgICAgICAgIDxidXR0b24gb25DbGljaz17KCkgPT4gc2V0U2hvd1Jlc2V0UGFzc3dvcmQoZmFsc2UpfSBjbGFzc05hbWU9XCJ0ZXh0LWdyYXktNDAwIGhvdmVyOnRleHQtZ3JheS02MDBcIj5cbiAgICAgICAgICAgICAgICA8WCBjbGFzc05hbWU9XCJ3LTUgaC01XCIgLz5cbiAgICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtc20gdGV4dC1ncmF5LTYwMCBtYi00XCI+XG4gICAgICAgICAgICAgIFJlc2V0dGluZyBwYXNzd29yZCBmb3I6IDxzdHJvbmc+e3NlbGVjdGVkVXNlci5maXJzdF9uYW1lfSB7c2VsZWN0ZWRVc2VyLmxhc3RfbmFtZX08L3N0cm9uZz4gKHtzZWxlY3RlZFVzZXIuZW1haWx9KVxuICAgICAgICAgICAgPC9wPlxuICAgICAgICAgICAgPGZvcm0gb25TdWJtaXQ9e2hhbmRsZVJlc2V0UGFzc3dvcmR9IGNsYXNzTmFtZT1cInNwYWNlLXktNFwiPlxuICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgIDxsYWJlbCBjbGFzc05hbWU9XCJibG9jayB0ZXh0LXNtIGZvbnQtbWVkaXVtIHRleHQtZ3JheS03MDAgbWItMVwiPk5ldyBQYXNzd29yZDwvbGFiZWw+XG4gICAgICAgICAgICAgICAgPGlucHV0XG4gICAgICAgICAgICAgICAgICB0eXBlPVwicGFzc3dvcmRcIlxuICAgICAgICAgICAgICAgICAgcmVxdWlyZWRcbiAgICAgICAgICAgICAgICAgIG1pbkxlbmd0aD17Nn1cbiAgICAgICAgICAgICAgICAgIHZhbHVlPXtyZXNldFBhc3N3b3JkRGF0YS5uZXdQYXNzd29yZH1cbiAgICAgICAgICAgICAgICAgIG9uQ2hhbmdlPXsoZSkgPT4gc2V0UmVzZXRQYXNzd29yZERhdGEoeyAuLi5yZXNldFBhc3N3b3JkRGF0YSwgbmV3UGFzc3dvcmQ6IGUudGFyZ2V0LnZhbHVlIH0pfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidy1mdWxsIHB4LTMgcHktMiBib3JkZXIgYm9yZGVyLWdyYXktMzAwIHJvdW5kZWQtbGcgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctYmx1ZS01MDBcIlxuICAgICAgICAgICAgICAgIC8+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8ZGl2PlxuICAgICAgICAgICAgICAgIDxsYWJlbCBjbGFzc05hbWU9XCJibG9jayB0ZXh0LXNtIGZvbnQtbWVkaXVtIHRleHQtZ3JheS03MDAgbWItMVwiPkNvbmZpcm0gUGFzc3dvcmQ8L2xhYmVsPlxuICAgICAgICAgICAgICAgIDxpbnB1dFxuICAgICAgICAgICAgICAgICAgdHlwZT1cInBhc3N3b3JkXCJcbiAgICAgICAgICAgICAgICAgIHJlcXVpcmVkXG4gICAgICAgICAgICAgICAgICBtaW5MZW5ndGg9ezZ9XG4gICAgICAgICAgICAgICAgICB2YWx1ZT17cmVzZXRQYXNzd29yZERhdGEuY29uZmlybVBhc3N3b3JkfVxuICAgICAgICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXRSZXNldFBhc3N3b3JkRGF0YSh7IC4uLnJlc2V0UGFzc3dvcmREYXRhLCBjb25maXJtUGFzc3dvcmQ6IGUudGFyZ2V0LnZhbHVlIH0pfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidy1mdWxsIHB4LTMgcHktMiBib3JkZXIgYm9yZGVyLWdyYXktMzAwIHJvdW5kZWQtbGcgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctYmx1ZS01MDBcIlxuICAgICAgICAgICAgICAgIC8+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggZ2FwLTMgcHQtNFwiPlxuICAgICAgICAgICAgICAgIDxidXR0b25cbiAgICAgICAgICAgICAgICAgIHR5cGU9XCJzdWJtaXRcIlxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwiZmxleC0xIHB4LTQgcHktMiBiZy1ibHVlLTYwMCB0ZXh0LXdoaXRlIHJvdW5kZWQtbGcgaG92ZXI6YmctYmx1ZS03MDBcIlxuICAgICAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgICAgIFJlc2V0IFBhc3N3b3JkXG4gICAgICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgICAgICAgPGJ1dHRvblxuICAgICAgICAgICAgICAgICAgdHlwZT1cImJ1dHRvblwiXG4gICAgICAgICAgICAgICAgICBvbkNsaWNrPXsoKSA9PiBzZXRTaG93UmVzZXRQYXNzd29yZChmYWxzZSl9XG4gICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJmbGV4LTEgcHgtNCBweS0yIGJnLWdyYXktMjAwIHRleHQtZ3JheS03MDAgcm91bmRlZC1sZyBob3ZlcjpiZy1ncmF5LTMwMFwiXG4gICAgICAgICAgICAgICAgPlxuICAgICAgICAgICAgICAgICAgQ2FuY2VsXG4gICAgICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgPC9mb3JtPlxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICA8L2Rpdj5cbiAgICAgICl9XG5cbiAgICAgIDwvZGl2PlxuICAgIDwvZGl2PlxuICAgICAgKX1cblxuICAgICAgey8qIE1vZGFscyAtIEFsd2F5cyByZW5kZXJlZCBmb3IgYm90aCB2aWV3cyAqL31cbiAgICAgIHsvKiBSZXNldCBQYXNzd29yZCBNb2RhbCAqL31cbiAgICAgIHtzaG93UmVzZXRQYXNzd29yZCAmJiBzZWxlY3RlZFVzZXIgJiYgKFxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZpeGVkIGluc2V0LTAgYmctYmxhY2sgYmctb3BhY2l0eS01MCBmbGV4IGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWNlbnRlciB6LTUwXCI+XG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy13aGl0ZSByb3VuZGVkLWxnIHAtNiB3LWZ1bGwgbWF4LXctbWRcIj5cbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1iZXR3ZWVuIG1iLTRcIj5cbiAgICAgICAgICAgICAgPGgzIGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1zZW1pYm9sZFwiPlJlc2V0IFBhc3N3b3JkPC9oMz5cbiAgICAgICAgICAgICAgPGJ1dHRvbiBvbkNsaWNrPXsoKSA9PiBzZXRTaG93UmVzZXRQYXNzd29yZChmYWxzZSl9IGNsYXNzTmFtZT1cInRleHQtZ3JheS00MDAgaG92ZXI6dGV4dC1ncmF5LTYwMFwiPlxuICAgICAgICAgICAgICAgIDxYIGNsYXNzTmFtZT1cInctNSBoLTVcIiAvPlxuICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1zbSB0ZXh0LWdyYXktNjAwIG1iLTRcIj5cbiAgICAgICAgICAgICAgUmVzZXR0aW5nIHBhc3N3b3JkIGZvcjogPHN0cm9uZz57c2VsZWN0ZWRVc2VyLmZpcnN0X25hbWV9IHtzZWxlY3RlZFVzZXIubGFzdF9uYW1lfTwvc3Ryb25nPiAoe3NlbGVjdGVkVXNlci5lbWFpbH0pXG4gICAgICAgICAgICA8L3A+XG4gICAgICAgICAgICA8Zm9ybSBvblN1Ym1pdD17aGFuZGxlUmVzZXRQYXNzd29yZH0gY2xhc3NOYW1lPVwic3BhY2UteS00XCI+XG4gICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgPGxhYmVsIGNsYXNzTmFtZT1cImJsb2NrIHRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1ncmF5LTcwMCBtYi0xXCI+TmV3IFBhc3N3b3JkPC9sYWJlbD5cbiAgICAgICAgICAgICAgICA8aW5wdXRcbiAgICAgICAgICAgICAgICAgIHR5cGU9XCJwYXNzd29yZFwiXG4gICAgICAgICAgICAgICAgICByZXF1aXJlZFxuICAgICAgICAgICAgICAgICAgbWluTGVuZ3RoPXs2fVxuICAgICAgICAgICAgICAgICAgdmFsdWU9e3Jlc2V0UGFzc3dvcmREYXRhLm5ld1Bhc3N3b3JkfVxuICAgICAgICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXRSZXNldFBhc3N3b3JkRGF0YSh7IC4uLnJlc2V0UGFzc3dvcmREYXRhLCBuZXdQYXNzd29yZDogZS50YXJnZXQudmFsdWUgfSl9XG4gICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJ3LWZ1bGwgcHgtMyBweS0yIGJvcmRlciBib3JkZXItZ3JheS0zMDAgcm91bmRlZC1sZyBmb2N1czpyaW5nLTIgZm9jdXM6cmluZy1ibHVlLTUwMFwiXG4gICAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgPGxhYmVsIGNsYXNzTmFtZT1cImJsb2NrIHRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1ncmF5LTcwMCBtYi0xXCI+Q29uZmlybSBQYXNzd29yZDwvbGFiZWw+XG4gICAgICAgICAgICAgICAgPGlucHV0XG4gICAgICAgICAgICAgICAgICB0eXBlPVwicGFzc3dvcmRcIlxuICAgICAgICAgICAgICAgICAgcmVxdWlyZWRcbiAgICAgICAgICAgICAgICAgIG1pbkxlbmd0aD17Nn1cbiAgICAgICAgICAgICAgICAgIHZhbHVlPXtyZXNldFBhc3N3b3JkRGF0YS5jb25maXJtUGFzc3dvcmR9XG4gICAgICAgICAgICAgICAgICBvbkNoYW5nZT17KGUpID0+IHNldFJlc2V0UGFzc3dvcmREYXRhKHsgLi4ucmVzZXRQYXNzd29yZERhdGEsIGNvbmZpcm1QYXNzd29yZDogZS50YXJnZXQudmFsdWUgfSl9XG4gICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJ3LWZ1bGwgcHgtMyBweS0yIGJvcmRlciBib3JkZXItZ3JheS0zMDAgcm91bmRlZC1sZyBmb2N1czpyaW5nLTIgZm9jdXM6cmluZy1ibHVlLTUwMFwiXG4gICAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBnYXAtMyBwdC00XCI+XG4gICAgICAgICAgICAgICAgPGJ1dHRvblxuICAgICAgICAgICAgICAgICAgdHlwZT1cInN1Ym1pdFwiXG4gICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJmbGV4LTEgcHgtNCBweS0yIGJnLWJsdWUtNjAwIHRleHQtd2hpdGUgcm91bmRlZC1sZyBob3ZlcjpiZy1ibHVlLTcwMFwiXG4gICAgICAgICAgICAgICAgPlxuICAgICAgICAgICAgICAgICAgUmVzZXQgUGFzc3dvcmRcbiAgICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgICAgICB0eXBlPVwiYnV0dG9uXCJcbiAgICAgICAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHNldFNob3dSZXNldFBhc3N3b3JkKGZhbHNlKX1cbiAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT1cImZsZXgtMSBweC00IHB5LTIgYmctZ3JheS0yMDAgdGV4dC1ncmF5LTcwMCByb3VuZGVkLWxnIGhvdmVyOmJnLWdyYXktMzAwXCJcbiAgICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAgICBDYW5jZWxcbiAgICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8L2Zvcm0+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuICAgICAgKX1cblxuICAgICAgey8qIEVkaXQgVXNlciBNb2RhbCAqL31cbiAgICAgIHtzaG93RWRpdFVzZXIgJiYgc2VsZWN0ZWRVc2VyICYmIChcbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmaXhlZCBpbnNldC0wIGJnLWJsYWNrIGJnLW9wYWNpdHktNTAgZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1jZW50ZXIgei01MFwiPlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctd2hpdGUgcm91bmRlZC1sZyBwLTYgdy1mdWxsIG1heC13LW1kXCI+XG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktYmV0d2VlbiBtYi00XCI+XG4gICAgICAgICAgICAgIDxoMyBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtc2VtaWJvbGRcIj5FZGl0IFVzZXI8L2gzPlxuICAgICAgICAgICAgICA8YnV0dG9uIG9uQ2xpY2s9eygpID0+IHNldFNob3dFZGl0VXNlcihmYWxzZSl9IGNsYXNzTmFtZT1cInRleHQtZ3JheS00MDAgaG92ZXI6dGV4dC1ncmF5LTYwMFwiPlxuICAgICAgICAgICAgICAgIDxYIGNsYXNzTmFtZT1cInctNSBoLTVcIiAvPlxuICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgPGZvcm0gb25TdWJtaXQ9e2hhbmRsZUVkaXRVc2VyfSBjbGFzc05hbWU9XCJzcGFjZS15LTRcIj5cbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJncmlkIGdyaWQtY29scy0yIGdhcC00XCI+XG4gICAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICAgIDxsYWJlbCBjbGFzc05hbWU9XCJibG9jayB0ZXh0LXNtIGZvbnQtbWVkaXVtIHRleHQtZ3JheS03MDAgbWItMVwiPkZpcnN0IE5hbWU8L2xhYmVsPlxuICAgICAgICAgICAgICAgICAgPGlucHV0XG4gICAgICAgICAgICAgICAgICAgIHR5cGU9XCJ0ZXh0XCJcbiAgICAgICAgICAgICAgICAgICAgcmVxdWlyZWRcbiAgICAgICAgICAgICAgICAgICAgdmFsdWU9e2VkaXRVc2VyRGF0YS5maXJzdE5hbWV9XG4gICAgICAgICAgICAgICAgICAgIG9uQ2hhbmdlPXsoZSkgPT4gc2V0RWRpdFVzZXJEYXRhKHsgLi4uZWRpdFVzZXJEYXRhLCBmaXJzdE5hbWU6IGUudGFyZ2V0LnZhbHVlIH0pfVxuICAgICAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJ3LWZ1bGwgcHgtMyBweS0yIGJvcmRlciBib3JkZXItZ3JheS0zMDAgcm91bmRlZC1sZyBmb2N1czpyaW5nLTIgZm9jdXM6cmluZy1ibHVlLTUwMFwiXG4gICAgICAgICAgICAgICAgICAvPlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgICA8bGFiZWwgY2xhc3NOYW1lPVwiYmxvY2sgdGV4dC1zbSBmb250LW1lZGl1bSB0ZXh0LWdyYXktNzAwIG1iLTFcIj5MYXN0IE5hbWU8L2xhYmVsPlxuICAgICAgICAgICAgICAgICAgPGlucHV0XG4gICAgICAgICAgICAgICAgICAgIHR5cGU9XCJ0ZXh0XCJcbiAgICAgICAgICAgICAgICAgICAgcmVxdWlyZWRcbiAgICAgICAgICAgICAgICAgICAgdmFsdWU9e2VkaXRVc2VyRGF0YS5sYXN0TmFtZX1cbiAgICAgICAgICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXRFZGl0VXNlckRhdGEoeyAuLi5lZGl0VXNlckRhdGEsIGxhc3ROYW1lOiBlLnRhcmdldC52YWx1ZSB9KX1cbiAgICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidy1mdWxsIHB4LTMgcHktMiBib3JkZXIgYm9yZGVyLWdyYXktMzAwIHJvdW5kZWQtbGcgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctYmx1ZS01MDBcIlxuICAgICAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDxkaXY+XG4gICAgICAgICAgICAgICAgPGxhYmVsIGNsYXNzTmFtZT1cImJsb2NrIHRleHQtc20gZm9udC1tZWRpdW0gdGV4dC1ncmF5LTcwMCBtYi0xXCI+RW1haWw8L2xhYmVsPlxuICAgICAgICAgICAgICAgIDxpbnB1dFxuICAgICAgICAgICAgICAgICAgdHlwZT1cImVtYWlsXCJcbiAgICAgICAgICAgICAgICAgIHJlcXVpcmVkXG4gICAgICAgICAgICAgICAgICB2YWx1ZT17ZWRpdFVzZXJEYXRhLmVtYWlsfVxuICAgICAgICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXRFZGl0VXNlckRhdGEoeyAuLi5lZGl0VXNlckRhdGEsIGVtYWlsOiBlLnRhcmdldC52YWx1ZSB9KX1cbiAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT1cInctZnVsbCBweC0zIHB5LTIgYm9yZGVyIGJvcmRlci1ncmF5LTMwMCByb3VuZGVkLWxnIGZvY3VzOnJpbmctMiBmb2N1czpyaW5nLWJsdWUtNTAwXCJcbiAgICAgICAgICAgICAgICAvPlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgICA8bGFiZWwgY2xhc3NOYW1lPVwiYmxvY2sgdGV4dC1zbSBmb250LW1lZGl1bSB0ZXh0LWdyYXktNzAwIG1iLTFcIj5Sb2xlPC9sYWJlbD5cbiAgICAgICAgICAgICAgICA8c2VsZWN0XG4gICAgICAgICAgICAgICAgICByZXF1aXJlZFxuICAgICAgICAgICAgICAgICAgdmFsdWU9e2VkaXRVc2VyRGF0YS5yb2xlfVxuICAgICAgICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXRFZGl0VXNlckRhdGEoeyAuLi5lZGl0VXNlckRhdGEsIHJvbGU6IGUudGFyZ2V0LnZhbHVlIH0pfVxuICAgICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwidy1mdWxsIHB4LTMgcHktMiBib3JkZXIgYm9yZGVyLWdyYXktMzAwIHJvdW5kZWQtbGcgZm9jdXM6cmluZy0yIGZvY3VzOnJpbmctYmx1ZS01MDBcIlxuICAgICAgICAgICAgICAgID5cbiAgICAgICAgICAgICAgICAgIHthdmFpbGFibGVSb2xlcy5tYXAoKHJvbGUpID0+IChcbiAgICAgICAgICAgICAgICAgICAgPG9wdGlvbiBrZXk9e3JvbGV9IHZhbHVlPXtyb2xlfT57cm9sZS5yZXBsYWNlKCdfJywgJyAnKX08L29wdGlvbj5cbiAgICAgICAgICAgICAgICAgICkpfVxuICAgICAgICAgICAgICAgIDwvc2VsZWN0PlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGdhcC0zIHB0LTRcIj5cbiAgICAgICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgICAgICB0eXBlPVwic3VibWl0XCJcbiAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT1cImZsZXgtMSBweC00IHB5LTIgYmctYmx1ZS02MDAgdGV4dC13aGl0ZSByb3VuZGVkLWxnIGhvdmVyOmJnLWJsdWUtNzAwXCJcbiAgICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAgICBVcGRhdGUgVXNlclxuICAgICAgICAgICAgICAgIDwvYnV0dG9uPlxuICAgICAgICAgICAgICAgIDxidXR0b25cbiAgICAgICAgICAgICAgICAgIHR5cGU9XCJidXR0b25cIlxuICAgICAgICAgICAgICAgICAgb25DbGljaz17KCkgPT4gc2V0U2hvd0VkaXRVc2VyKGZhbHNlKX1cbiAgICAgICAgICAgICAgICAgIGNsYXNzTmFtZT1cImZsZXgtMSBweC00IHB5LTIgYmctZ3JheS0yMDAgdGV4dC1ncmF5LTcwMCByb3VuZGVkLWxnIGhvdmVyOmJnLWdyYXktMzAwXCJcbiAgICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAgICBDYW5jZWxcbiAgICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICA8L2Zvcm0+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuICAgICAgKX1cblxuICAgICAgey8qIERlbGV0ZSBDb25maXJtIE1vZGFsICovfVxuICAgICAge3Nob3dEZWxldGVDb25maXJtICYmIHNlbGVjdGVkVXNlciAmJiAoXG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZml4ZWQgaW5zZXQtMCBiZy1ibGFjayBiZy1vcGFjaXR5LTUwIGZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktY2VudGVyIHotNTBcIj5cbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLXdoaXRlIHJvdW5kZWQtbGcgcC02IHctZnVsbCBtYXgtdy1tZFwiPlxuICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWJldHdlZW4gbWItNFwiPlxuICAgICAgICAgICAgICA8aDMgY2xhc3NOYW1lPVwidGV4dC1sZyBmb250LXNlbWlib2xkIHRleHQtcmVkLTYwMFwiPkRlbGV0ZSBVc2VyPC9oMz5cbiAgICAgICAgICAgICAgPGJ1dHRvbiBvbkNsaWNrPXsoKSA9PiBzZXRTaG93RGVsZXRlQ29uZmlybShmYWxzZSl9IGNsYXNzTmFtZT1cInRleHQtZ3JheS00MDAgaG92ZXI6dGV4dC1ncmF5LTYwMFwiPlxuICAgICAgICAgICAgICAgIDxYIGNsYXNzTmFtZT1cInctNSBoLTVcIiAvPlxuICAgICAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1ncmF5LTcwMCBtYi02XCI+XG4gICAgICAgICAgICAgIEFyZSB5b3Ugc3VyZSB5b3Ugd2FudCB0byBkZWxldGUgPHN0cm9uZz57c2VsZWN0ZWRVc2VyLmZpcnN0X25hbWV9IHtzZWxlY3RlZFVzZXIubGFzdF9uYW1lfTwvc3Ryb25nPiAoe3NlbGVjdGVkVXNlci5lbWFpbH0pPyBcbiAgICAgICAgICAgICAgVGhpcyBhY3Rpb24gY2Fubm90IGJlIHVuZG9uZS5cbiAgICAgICAgICAgIDwvcD5cbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBnYXAtM1wiPlxuICAgICAgICAgICAgICA8YnV0dG9uXG4gICAgICAgICAgICAgICAgb25DbGljaz17aGFuZGxlRGVsZXRlVXNlcn1cbiAgICAgICAgICAgICAgICBjbGFzc05hbWU9XCJmbGV4LTEgcHgtNCBweS0yIGJnLXJlZC02MDAgdGV4dC13aGl0ZSByb3VuZGVkLWxnIGhvdmVyOmJnLXJlZC03MDBcIlxuICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAgRGVsZXRlIFVzZXJcbiAgICAgICAgICAgICAgPC9idXR0b24+XG4gICAgICAgICAgICAgIDxidXR0b25cbiAgICAgICAgICAgICAgICBvbkNsaWNrPXsoKSA9PiBzZXRTaG93RGVsZXRlQ29uZmlybShmYWxzZSl9XG4gICAgICAgICAgICAgICAgY2xhc3NOYW1lPVwiZmxleC0xIHB4LTQgcHktMiBiZy1ncmF5LTIwMCB0ZXh0LWdyYXktNzAwIHJvdW5kZWQtbGcgaG92ZXI6YmctZ3JheS0zMDBcIlxuICAgICAgICAgICAgICA+XG4gICAgICAgICAgICAgICAgQ2FuY2VsXG4gICAgICAgICAgICAgIDwvYnV0dG9uPlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuICAgICAgKX1cbiAgICA8Lz5cbiAgKTtcbn07XG5cbmV4cG9ydCBkZWZhdWx0IEFkbWluUGFuZWw7XG4iXSwiZmlsZSI6Ii9Vc2Vycy9pb251dGFwb3N0dS9EZXNrdG9wL1FBIERhc2hib2FyZC9xYS1kYXNoYm9hcmQvc3JjL2NvbXBvbmVudHMvQWRtaW5QYW5lbC50c3gifQ==

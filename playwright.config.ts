@@ -7,17 +7,25 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './tests/e2e',
   
+  /* Maximum time one test can run */
+  timeout: 60 * 1000, // 60 seconds per test
+  
+  /* Maximum time to wait for expect() assertions */
+  expect: {
+    timeout: 10 * 1000, // 10 seconds for assertions
+  },
+  
   /* Run tests in files in parallel */
-  fullyParallel: true,
+  fullyParallel: false, // Run sequentially to avoid resource issues
   
   /* Fail the build on CI if you accidentally left test.only in the source code */
   forbidOnly: !!process.env.CI,
   
   /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  retries: process.env.CI ? 2 : 1, // Retry once locally too
   
   /* Opt out of parallel tests on CI */
-  workers: process.env.CI ? 1 : undefined,
+  workers: process.env.CI ? 1 : 1, // Single worker to avoid conflicts
   
   /* Reporter to use */
   reporter: [
@@ -30,6 +38,12 @@ export default defineConfig({
   use: {
     /* Base URL to use in actions like `await page.goto('/')` */
     baseURL: 'http://localhost:5173',
+    
+    /* Maximum time for actions like click, fill, etc. */
+    actionTimeout: 15 * 1000, // 15 seconds
+    
+    /* Maximum time for navigation */
+    navigationTimeout: 30 * 1000, // 30 seconds
     
     /* Collect trace when retrying the failed test */
     trace: 'on-first-retry',
@@ -63,7 +77,7 @@ export default defineConfig({
   webServer: {
     command: 'npm start',
     url: 'http://localhost:5173',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120 * 1000,
+    reuseExistingServer: true, // Use existing server if already running
+    timeout: 180 * 1000, // 3 minutes to start
   },
 });

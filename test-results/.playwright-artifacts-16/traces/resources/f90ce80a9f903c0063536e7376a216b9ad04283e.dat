@@ -1,0 +1,91 @@
+export const advancedFeatures = [
+  {
+    id: "test-execution-timeline",
+    name: "Test Execution Timeline",
+    description: "Gantt chart view of test execution with bottleneck identification",
+    icon: "BarChart3",
+    enabled: true,
+    route: "/test-execution-timeline",
+    category: "testing"
+  },
+  {
+    id: "test-case-management",
+    name: "Test Case Management",
+    description: "Link test cases to requirements and track effectiveness",
+    icon: "TestTube",
+    enabled: true,
+    route: "/test-cases",
+    category: "testing"
+  },
+  {
+    id: "flaky-test-intelligence",
+    name: "Flaky Test Intelligence",
+    description: "Dedicated tracker with pattern analysis and suggested fixes",
+    icon: "Zap",
+    enabled: true,
+    route: "/flaky-tests",
+    category: "testing"
+  },
+  {
+    id: "performance-metrics",
+    name: "Performance Testing",
+    description: "Response times, load test results, and capacity planning",
+    icon: "TrendingUp",
+    enabled: true,
+    route: "/performance",
+    category: "performance"
+  },
+  {
+    id: "developer-productivity",
+    name: "Developer Productivity",
+    description: "Code review time, PR metrics, and happiness scores",
+    icon: "Code",
+    enabled: true,
+    route: "/developer-metrics",
+    category: "productivity"
+  },
+  {
+    id: "technical-debt",
+    name: "Technical Debt Tracker",
+    description: "Debt inventory with prioritization and paydown velocity",
+    icon: "Wrench",
+    enabled: true,
+    route: "/technical-debt",
+    category: "productivity"
+  },
+  {
+    id: "pipeline-visualization",
+    name: "CI/CD Pipeline Insights",
+    description: "Interactive pipeline flow with optimization suggestions",
+    icon: "GitBranch",
+    enabled: true,
+    route: "/pipeline",
+    category: "performance"
+  },
+  {
+    id: "business-impact",
+    name: "Business Impact Analysis",
+    description: "Correlate quality metrics with business KPIs and revenue",
+    icon: "DollarSign",
+    enabled: true,
+    route: "/business-impact",
+    category: "business"
+  },
+  {
+    id: "team-gamification",
+    name: "Team Gamification",
+    description: "Leaderboards, badges, and achievements to motivate teams",
+    icon: "Trophy",
+    enabled: true,
+    route: "/team-gamification",
+    category: "business"
+  }
+];
+export const getFeaturesByCategory = (category) => {
+  return advancedFeatures.filter((f) => f.category === category && f.enabled);
+};
+export const getEnabledFeatures = () => {
+  return advancedFeatures.filter((f) => f.enabled);
+};
+
+//# sourceMappingURL=data:application/json;base64,eyJ2ZXJzaW9uIjozLCJzb3VyY2VzIjpbImZlYXR1cmVzLnRzIl0sInNvdXJjZXNDb250ZW50IjpbImV4cG9ydCBpbnRlcmZhY2UgRmVhdHVyZU1vZHVsZSB7XG4gIGlkOiBzdHJpbmc7XG4gIG5hbWU6IHN0cmluZztcbiAgZGVzY3JpcHRpb246IHN0cmluZztcbiAgaWNvbjogc3RyaW5nO1xuICBlbmFibGVkOiBib29sZWFuO1xuICByb3V0ZTogc3RyaW5nO1xuICBjYXRlZ29yeTogJ3Rlc3RpbmcnIHwgJ3BlcmZvcm1hbmNlJyB8ICdwcm9kdWN0aXZpdHknIHwgJ2J1c2luZXNzJztcbn1cblxuZXhwb3J0IGNvbnN0IGFkdmFuY2VkRmVhdHVyZXM6IEZlYXR1cmVNb2R1bGVbXSA9IFtcbiAge1xuICAgIGlkOiAndGVzdC1leGVjdXRpb24tdGltZWxpbmUnLFxuICAgIG5hbWU6ICdUZXN0IEV4ZWN1dGlvbiBUaW1lbGluZScsXG4gICAgZGVzY3JpcHRpb246ICdHYW50dCBjaGFydCB2aWV3IG9mIHRlc3QgZXhlY3V0aW9uIHdpdGggYm90dGxlbmVjayBpZGVudGlmaWNhdGlvbicsXG4gICAgaWNvbjogJ0JhckNoYXJ0MycsXG4gICAgZW5hYmxlZDogdHJ1ZSxcbiAgICByb3V0ZTogJy90ZXN0LWV4ZWN1dGlvbi10aW1lbGluZScsXG4gICAgY2F0ZWdvcnk6ICd0ZXN0aW5nJ1xuICB9LFxuICB7XG4gICAgaWQ6ICd0ZXN0LWNhc2UtbWFuYWdlbWVudCcsXG4gICAgbmFtZTogJ1Rlc3QgQ2FzZSBNYW5hZ2VtZW50JyxcbiAgICBkZXNjcmlwdGlvbjogJ0xpbmsgdGVzdCBjYXNlcyB0byByZXF1aXJlbWVudHMgYW5kIHRyYWNrIGVmZmVjdGl2ZW5lc3MnLFxuICAgIGljb246ICdUZXN0VHViZScsXG4gICAgZW5hYmxlZDogdHJ1ZSxcbiAgICByb3V0ZTogJy90ZXN0LWNhc2VzJyxcbiAgICBjYXRlZ29yeTogJ3Rlc3RpbmcnXG4gIH0sXG4gIHtcbiAgICBpZDogJ2ZsYWt5LXRlc3QtaW50ZWxsaWdlbmNlJyxcbiAgICBuYW1lOiAnRmxha3kgVGVzdCBJbnRlbGxpZ2VuY2UnLFxuICAgIGRlc2NyaXB0aW9uOiAnRGVkaWNhdGVkIHRyYWNrZXIgd2l0aCBwYXR0ZXJuIGFuYWx5c2lzIGFuZCBzdWdnZXN0ZWQgZml4ZXMnLFxuICAgIGljb246ICdaYXAnLFxuICAgIGVuYWJsZWQ6IHRydWUsXG4gICAgcm91dGU6ICcvZmxha3ktdGVzdHMnLFxuICAgIGNhdGVnb3J5OiAndGVzdGluZydcbiAgfSxcbiAge1xuICAgIGlkOiAncGVyZm9ybWFuY2UtbWV0cmljcycsXG4gICAgbmFtZTogJ1BlcmZvcm1hbmNlIFRlc3RpbmcnLFxuICAgIGRlc2NyaXB0aW9uOiAnUmVzcG9uc2UgdGltZXMsIGxvYWQgdGVzdCByZXN1bHRzLCBhbmQgY2FwYWNpdHkgcGxhbm5pbmcnLFxuICAgIGljb246ICdUcmVuZGluZ1VwJyxcbiAgICBlbmFibGVkOiB0cnVlLFxuICAgIHJvdXRlOiAnL3BlcmZvcm1hbmNlJyxcbiAgICBjYXRlZ29yeTogJ3BlcmZvcm1hbmNlJ1xuICB9LFxuICB7XG4gICAgaWQ6ICdkZXZlbG9wZXItcHJvZHVjdGl2aXR5JyxcbiAgICBuYW1lOiAnRGV2ZWxvcGVyIFByb2R1Y3Rpdml0eScsXG4gICAgZGVzY3JpcHRpb246ICdDb2RlIHJldmlldyB0aW1lLCBQUiBtZXRyaWNzLCBhbmQgaGFwcGluZXNzIHNjb3JlcycsXG4gICAgaWNvbjogJ0NvZGUnLFxuICAgIGVuYWJsZWQ6IHRydWUsXG4gICAgcm91dGU6ICcvZGV2ZWxvcGVyLW1ldHJpY3MnLFxuICAgIGNhdGVnb3J5OiAncHJvZHVjdGl2aXR5J1xuICB9LFxuICB7XG4gICAgaWQ6ICd0ZWNobmljYWwtZGVidCcsXG4gICAgbmFtZTogJ1RlY2huaWNhbCBEZWJ0IFRyYWNrZXInLFxuICAgIGRlc2NyaXB0aW9uOiAnRGVidCBpbnZlbnRvcnkgd2l0aCBwcmlvcml0aXphdGlvbiBhbmQgcGF5ZG93biB2ZWxvY2l0eScsXG4gICAgaWNvbjogJ1dyZW5jaCcsXG4gICAgZW5hYmxlZDogdHJ1ZSxcbiAgICByb3V0ZTogJy90ZWNobmljYWwtZGVidCcsXG4gICAgY2F0ZWdvcnk6ICdwcm9kdWN0aXZpdHknXG4gIH0sXG4gIHtcbiAgICBpZDogJ3BpcGVsaW5lLXZpc3VhbGl6YXRpb24nLFxuICAgIG5hbWU6ICdDSS9DRCBQaXBlbGluZSBJbnNpZ2h0cycsXG4gICAgZGVzY3JpcHRpb246ICdJbnRlcmFjdGl2ZSBwaXBlbGluZSBmbG93IHdpdGggb3B0aW1pemF0aW9uIHN1Z2dlc3Rpb25zJyxcbiAgICBpY29uOiAnR2l0QnJhbmNoJyxcbiAgICBlbmFibGVkOiB0cnVlLFxuICAgIHJvdXRlOiAnL3BpcGVsaW5lJyxcbiAgICBjYXRlZ29yeTogJ3BlcmZvcm1hbmNlJ1xuICB9LFxuICB7XG4gICAgaWQ6ICdidXNpbmVzcy1pbXBhY3QnLFxuICAgIG5hbWU6ICdCdXNpbmVzcyBJbXBhY3QgQW5hbHlzaXMnLFxuICAgIGRlc2NyaXB0aW9uOiAnQ29ycmVsYXRlIHF1YWxpdHkgbWV0cmljcyB3aXRoIGJ1c2luZXNzIEtQSXMgYW5kIHJldmVudWUnLFxuICAgIGljb246ICdEb2xsYXJTaWduJyxcbiAgICBlbmFibGVkOiB0cnVlLFxuICAgIHJvdXRlOiAnL2J1c2luZXNzLWltcGFjdCcsXG4gICAgY2F0ZWdvcnk6ICdidXNpbmVzcydcbiAgfSxcbiAge1xuICAgIGlkOiAndGVhbS1nYW1pZmljYXRpb24nLFxuICAgIG5hbWU6ICdUZWFtIEdhbWlmaWNhdGlvbicsXG4gICAgZGVzY3JpcHRpb246ICdMZWFkZXJib2FyZHMsIGJhZGdlcywgYW5kIGFjaGlldmVtZW50cyB0byBtb3RpdmF0ZSB0ZWFtcycsXG4gICAgaWNvbjogJ1Ryb3BoeScsXG4gICAgZW5hYmxlZDogdHJ1ZSxcbiAgICByb3V0ZTogJy90ZWFtLWdhbWlmaWNhdGlvbicsXG4gICAgY2F0ZWdvcnk6ICdidXNpbmVzcydcbiAgfVxuXTtcblxuZXhwb3J0IGNvbnN0IGdldEZlYXR1cmVzQnlDYXRlZ29yeSA9IChjYXRlZ29yeTogc3RyaW5nKSA9PiB7XG4gIHJldHVybiBhZHZhbmNlZEZlYXR1cmVzLmZpbHRlcihmID0+IGYuY2F0ZWdvcnkgPT09IGNhdGVnb3J5ICYmIGYuZW5hYmxlZCk7XG59O1xuXG5leHBvcnQgY29uc3QgZ2V0RW5hYmxlZEZlYXR1cmVzID0gKCkgPT4ge1xuICByZXR1cm4gYWR2YW5jZWRGZWF0dXJlcy5maWx0ZXIoZiA9PiBmLmVuYWJsZWQpO1xufTtcbiJdLCJtYXBwaW5ncyI6IkFBVU8sYUFBTSxtQkFBb0M7QUFBQSxFQUMvQztBQUFBLElBQ0UsSUFBSTtBQUFBLElBQ0osTUFBTTtBQUFBLElBQ04sYUFBYTtBQUFBLElBQ2IsTUFBTTtBQUFBLElBQ04sU0FBUztBQUFBLElBQ1QsT0FBTztBQUFBLElBQ1AsVUFBVTtBQUFBLEVBQ1o7QUFBQSxFQUNBO0FBQUEsSUFDRSxJQUFJO0FBQUEsSUFDSixNQUFNO0FBQUEsSUFDTixhQUFhO0FBQUEsSUFDYixNQUFNO0FBQUEsSUFDTixTQUFTO0FBQUEsSUFDVCxPQUFPO0FBQUEsSUFDUCxVQUFVO0FBQUEsRUFDWjtBQUFBLEVBQ0E7QUFBQSxJQUNFLElBQUk7QUFBQSxJQUNKLE1BQU07QUFBQSxJQUNOLGFBQWE7QUFBQSxJQUNiLE1BQU07QUFBQSxJQUNOLFNBQVM7QUFBQSxJQUNULE9BQU87QUFBQSxJQUNQLFVBQVU7QUFBQSxFQUNaO0FBQUEsRUFDQTtBQUFBLElBQ0UsSUFBSTtBQUFBLElBQ0osTUFBTTtBQUFBLElBQ04sYUFBYTtBQUFBLElBQ2IsTUFBTTtBQUFBLElBQ04sU0FBUztBQUFBLElBQ1QsT0FBTztBQUFBLElBQ1AsVUFBVTtBQUFBLEVBQ1o7QUFBQSxFQUNBO0FBQUEsSUFDRSxJQUFJO0FBQUEsSUFDSixNQUFNO0FBQUEsSUFDTixhQUFhO0FBQUEsSUFDYixNQUFNO0FBQUEsSUFDTixTQUFTO0FBQUEsSUFDVCxPQUFPO0FBQUEsSUFDUCxVQUFVO0FBQUEsRUFDWjtBQUFBLEVBQ0E7QUFBQSxJQUNFLElBQUk7QUFBQSxJQUNKLE1BQU07QUFBQSxJQUNOLGFBQWE7QUFBQSxJQUNiLE1BQU07QUFBQSxJQUNOLFNBQVM7QUFBQSxJQUNULE9BQU87QUFBQSxJQUNQLFVBQVU7QUFBQSxFQUNaO0FBQUEsRUFDQTtBQUFBLElBQ0UsSUFBSTtBQUFBLElBQ0osTUFBTTtBQUFBLElBQ04sYUFBYTtBQUFBLElBQ2IsTUFBTTtBQUFBLElBQ04sU0FBUztBQUFBLElBQ1QsT0FBTztBQUFBLElBQ1AsVUFBVTtBQUFBLEVBQ1o7QUFBQSxFQUNBO0FBQUEsSUFDRSxJQUFJO0FBQUEsSUFDSixNQUFNO0FBQUEsSUFDTixhQUFhO0FBQUEsSUFDYixNQUFNO0FBQUEsSUFDTixTQUFTO0FBQUEsSUFDVCxPQUFPO0FBQUEsSUFDUCxVQUFVO0FBQUEsRUFDWjtBQUFBLEVBQ0E7QUFBQSxJQUNFLElBQUk7QUFBQSxJQUNKLE1BQU07QUFBQSxJQUNOLGFBQWE7QUFBQSxJQUNiLE1BQU07QUFBQSxJQUNOLFNBQVM7QUFBQSxJQUNULE9BQU87QUFBQSxJQUNQLFVBQVU7QUFBQSxFQUNaO0FBQ0Y7QUFFTyxhQUFNLHdCQUF3QixDQUFDLGFBQXFCO0FBQ3pELFNBQU8saUJBQWlCLE9BQU8sT0FBSyxFQUFFLGFBQWEsWUFBWSxFQUFFLE9BQU87QUFDMUU7QUFFTyxhQUFNLHFCQUFxQixNQUFNO0FBQ3RDLFNBQU8saUJBQWlCLE9BQU8sT0FBSyxFQUFFLE9BQU87QUFDL0M7IiwibmFtZXMiOltdfQ==

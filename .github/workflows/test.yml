@@ -42,15 +42,11 @@ jobs:
 
       - name: Setup database
         env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: 3306
-          DB_USER: root
-          DB_PASSWORD: testpassword
-          DB_NAME: irongate_qa
+          MYSQL_PWD: testpassword
         run: |
-          mysql -h 127.0.0.1 -u root -ptestpassword irongate_qa < schema.sql
-          mysql -h 127.0.0.1 -u root -ptestpassword irongate_qa < seed_data.sql
-          mysql -h 127.0.0.1 -u root -ptestpassword irongate_qa < seed_demo_users.sql
+          mysql -h 127.0.0.1 -u root irongate_qa < schema.sql
+          mysql -h 127.0.0.1 -u root irongate_qa < seed_data.sql
+          mysql -h 127.0.0.1 -u root irongate_qa < seed_demo_users.sql
 
       - name: Create .env file
         run: |

@@ -1,0 +1,763 @@
+import { createHotContext as __vite__createHotContext } from "/@vite/client";import.meta.hot = __vite__createHotContext("/src/components/TeamGamification.tsx");import __vite__cjsImport0_react_jsxDevRuntime from "/node_modules/.vite/deps/react_jsx-dev-runtime.js?v=4880c6f9"; const jsxDEV = __vite__cjsImport0_react_jsxDevRuntime["jsxDEV"];
+var _s = $RefreshSig$();
+import __vite__cjsImport1_react from "/node_modules/.vite/deps/react.js?v=4880c6f9"; const React = __vite__cjsImport1_react.__esModule ? __vite__cjsImport1_react.default : __vite__cjsImport1_react; const useState = __vite__cjsImport1_react["useState"];
+import { ArrowLeft, Trophy, Star, Target, Award, TrendingUp, Zap, Crown, Medal } from "/node_modules/.vite/deps/lucide-react.js?v=951fade0";
+import { generateGamificationData } from "/src/data/advancedFeatures.ts";
+const TeamGamification = ({ onBack }) => {
+  _s();
+  const [selectedTeam, setSelectedTeam] = useState(null);
+  const gamificationData = generateGamificationData();
+  if (!gamificationData.enabled) {
+    return /* @__PURE__ */ jsxDEV("div", { className: "min-h-screen bg-gray-50 flex items-center justify-center", children: /* @__PURE__ */ jsxDEV("div", { className: "text-center", children: [
+      /* @__PURE__ */ jsxDEV(Trophy, { className: "mx-auto text-gray-400 mb-4", size: 64 }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 18,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("h2", { className: "text-2xl font-bold text-gray-900 mb-2", children: "Gamification Disabled" }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 19,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("p", { className: "text-gray-600 mb-6", children: "Contact your administrator to enable team gamification features." }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 20,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV(
+        "button",
+        {
+          onClick: onBack,
+          className: "px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors",
+          children: "Back to Features"
+        },
+        void 0,
+        false,
+        {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 21,
+          columnNumber: 11
+        },
+        this
+      )
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 17,
+      columnNumber: 9
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 16,
+      columnNumber: 7
+    }, this);
+  }
+  const leaderboard = gamificationData.leaderboard.sort((a, b) => b.points - a.points);
+  const topTeam = leaderboard[0];
+  const avgPoints = (leaderboard.reduce((acc, t) => acc + t.points, 0) / leaderboard.length).toFixed(0);
+  return /* @__PURE__ */ jsxDEV("div", { className: "min-h-screen bg-gray-50", children: [
+    /* @__PURE__ */ jsxDEV("div", { className: "bg-gradient-to-r from-purple-600 to-blue-600 text-white", children: /* @__PURE__ */ jsxDEV("div", { className: "px-8 py-6", children: [
+      /* @__PURE__ */ jsxDEV(
+        "button",
+        {
+          onClick: onBack,
+          className: "flex items-center space-x-2 text-white/80 hover:text-white mb-4 transition-colors",
+          children: [
+            /* @__PURE__ */ jsxDEV(ArrowLeft, { size: 20 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 45,
+              columnNumber: 13
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: "font-medium", children: "Back to Features" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 46,
+              columnNumber: 13
+            }, this)
+          ]
+        },
+        void 0,
+        true,
+        {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 41,
+          columnNumber: 11
+        },
+        this
+      ),
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxDEV("div", { children: [
+          /* @__PURE__ */ jsxDEV("h1", { className: "text-3xl font-bold flex items-center", children: [
+            /* @__PURE__ */ jsxDEV(Trophy, { className: "mr-3", size: 32 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 52,
+              columnNumber: 17
+            }, this),
+            "Team Gamification"
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 51,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("p", { className: "text-white/80 mt-1", children: "Compete, achieve, and celebrate quality excellence!" }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 55,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 50,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-center space-x-6", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center bg-white/10 rounded-lg px-6 py-3", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-white/80", children: "Top Team" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 60,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "text-2xl font-bold", children: topTeam.team_name }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 61,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 59,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center bg-white/10 rounded-lg px-6 py-3", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-white/80", children: "Top Score" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 64,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "text-2xl font-bold", children: topTeam.points.toLocaleString() }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 65,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 63,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "text-center bg-white/10 rounded-lg px-6 py-3", children: [
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-white/80", children: "Avg Points" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 68,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "text-2xl font-bold", children: avgPoints }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 69,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 67,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 58,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 49,
+        columnNumber: 11
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 40,
+      columnNumber: 9
+    }, this) }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 39,
+      columnNumber: 7
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "px-8 py-8", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "mb-8", children: [
+        /* @__PURE__ */ jsxDEV("h2", { className: "text-2xl font-bold text-gray-900 mb-6 text-center", children: "🏆 Top 3 Teams 🏆" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 80,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "flex items-end justify-center space-x-8", children: [
+          leaderboard[1] && /* @__PURE__ */ jsxDEV("div", { className: "flex flex-col items-center", children: [
+            /* @__PURE__ */ jsxDEV("div", { className: "bg-gradient-to-br from-gray-300 to-gray-400 rounded-full w-24 h-24 flex items-center justify-center mb-3 shadow-lg", children: /* @__PURE__ */ jsxDEV(Medal, { className: "text-white", size: 48 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 86,
+              columnNumber: 19
+            }, this) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 85,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-xl shadow-lg p-6 w-64 text-center border-4 border-gray-300", children: [
+              /* @__PURE__ */ jsxDEV("div", { className: "text-4xl font-bold text-gray-600 mb-2", children: "2nd" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 89,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-bold text-gray-900 mb-2", children: leaderboard[1].team_name }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 90,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("div", { className: "text-2xl font-bold text-gray-700 mb-2", children: leaderboard[1].points.toLocaleString() }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 91,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("div", { className: "flex justify-center space-x-1 text-2xl", children: leaderboard[1].badges.map(
+                (badge, i) => /* @__PURE__ */ jsxDEV("span", { children: badge }, i, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                  lineNumber: 94,
+                  columnNumber: 19
+                }, this)
+              ) }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 92,
+                columnNumber: 19
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 88,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 84,
+            columnNumber: 13
+          }, this),
+          leaderboard[0] && /* @__PURE__ */ jsxDEV("div", { className: "flex flex-col items-center -mt-8", children: [
+            /* @__PURE__ */ jsxDEV("div", { className: "bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full w-32 h-32 flex items-center justify-center mb-3 shadow-2xl animate-pulse", children: /* @__PURE__ */ jsxDEV(Crown, { className: "text-white", size: 64 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 105,
+              columnNumber: 19
+            }, this) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 104,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-xl shadow-2xl p-8 w-72 text-center border-4 border-yellow-400", children: [
+              /* @__PURE__ */ jsxDEV("div", { className: "text-5xl font-bold text-yellow-600 mb-2", children: "1st" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 108,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("h3", { className: "text-xl font-bold text-gray-900 mb-2", children: leaderboard[0].team_name }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 109,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("div", { className: "text-3xl font-bold text-yellow-600 mb-3", children: leaderboard[0].points.toLocaleString() }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 110,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("div", { className: "flex justify-center space-x-1 text-3xl", children: leaderboard[0].badges.map(
+                (badge, i) => /* @__PURE__ */ jsxDEV("span", { children: badge }, i, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                  lineNumber: 113,
+                  columnNumber: 19
+                }, this)
+              ) }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 111,
+                columnNumber: 19
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 107,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 103,
+            columnNumber: 13
+          }, this),
+          leaderboard[2] && /* @__PURE__ */ jsxDEV("div", { className: "flex flex-col items-center", children: [
+            /* @__PURE__ */ jsxDEV("div", { className: "bg-gradient-to-br from-orange-400 to-orange-600 rounded-full w-24 h-24 flex items-center justify-center mb-3 shadow-lg", children: /* @__PURE__ */ jsxDEV(Award, { className: "text-white", size: 48 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 124,
+              columnNumber: 19
+            }, this) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 123,
+              columnNumber: 17
+            }, this),
+            /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-xl shadow-lg p-6 w-64 text-center border-4 border-orange-400", children: [
+              /* @__PURE__ */ jsxDEV("div", { className: "text-4xl font-bold text-orange-600 mb-2", children: "3rd" }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 127,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-bold text-gray-900 mb-2", children: leaderboard[2].team_name }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 128,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("div", { className: "text-2xl font-bold text-orange-700 mb-2", children: leaderboard[2].points.toLocaleString() }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 129,
+                columnNumber: 19
+              }, this),
+              /* @__PURE__ */ jsxDEV("div", { className: "flex justify-center space-x-1 text-2xl", children: leaderboard[2].badges.map(
+                (badge, i) => /* @__PURE__ */ jsxDEV("span", { children: badge }, i, false, {
+                  fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                  lineNumber: 132,
+                  columnNumber: 19
+                }, this)
+              ) }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 130,
+                columnNumber: 19
+              }, this)
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 126,
+              columnNumber: 17
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 122,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 81,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 79,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8", children: [
+        /* @__PURE__ */ jsxDEV("h2", { className: "text-xl font-bold text-gray-900 mb-4", children: "Full Leaderboard" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 143,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "space-y-3", children: leaderboard.map(
+          (team, index) => /* @__PURE__ */ jsxDEV(
+            LeaderboardRow,
+            {
+              team,
+              rank: index + 1,
+              isSelected: selectedTeam === team.team_id,
+              onSelect: () => setSelectedTeam(selectedTeam === team.team_id ? null : team.team_id)
+            },
+            team.team_id,
+            false,
+            {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 146,
+              columnNumber: 13
+            },
+            this
+          )
+        ) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 144,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 142,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "grid grid-cols-3 gap-6", children: [
+        /* @__PURE__ */ jsxDEV(
+          AchievementCategory,
+          {
+            icon: /* @__PURE__ */ jsxDEV(Trophy, { className: "text-yellow-500", size: 32 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 160,
+              columnNumber: 19
+            }, this),
+            title: "Quality Champions",
+            description: "Teams maintaining 95%+ test coverage",
+            count: 3
+          },
+          void 0,
+          false,
+          {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 159,
+            columnNumber: 11
+          },
+          this
+        ),
+        /* @__PURE__ */ jsxDEV(
+          AchievementCategory,
+          {
+            icon: /* @__PURE__ */ jsxDEV(Zap, { className: "text-blue-500", size: 32 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 166,
+              columnNumber: 19
+            }, this),
+            title: "Speed Demons",
+            description: "Fastest CI/CD pipeline execution",
+            count: 2
+          },
+          void 0,
+          false,
+          {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 165,
+            columnNumber: 11
+          },
+          this
+        ),
+        /* @__PURE__ */ jsxDEV(
+          AchievementCategory,
+          {
+            icon: /* @__PURE__ */ jsxDEV(Target, { className: "text-green-500", size: 32 }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 172,
+              columnNumber: 19
+            }, this),
+            title: "Bug Hunters",
+            description: "Most bugs caught in testing",
+            count: 4
+          },
+          void 0,
+          false,
+          {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 171,
+            columnNumber: 11
+          },
+          this
+        )
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 158,
+        columnNumber: 9
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 77,
+      columnNumber: 7
+    }, this)
+  ] }, void 0, true, {
+    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+    lineNumber: 37,
+    columnNumber: 5
+  }, this);
+};
+_s(TeamGamification, "eqN+G1oLwScSKTXhlnHomHnK2Ds=");
+_c = TeamGamification;
+const LeaderboardRow = ({ team, rank, isSelected, onSelect }) => {
+  const getRankColor = (rank2) => {
+    if (rank2 === 1) return "bg-yellow-100 border-yellow-300 text-yellow-900";
+    if (rank2 === 2) return "bg-gray-100 border-gray-300 text-gray-900";
+    if (rank2 === 3) return "bg-orange-100 border-orange-300 text-orange-900";
+    return "bg-white border-gray-200 text-gray-900";
+  };
+  const getRankIcon = (rank2) => {
+    if (rank2 === 1) return "👑";
+    if (rank2 === 2) return "🥈";
+    if (rank2 === 3) return "🥉";
+    return `#${rank2}`;
+  };
+  return /* @__PURE__ */ jsxDEV("div", { className: `rounded-lg border-2 p-4 transition-all ${getRankColor(rank)} ${isSelected ? "ring-2 ring-blue-500" : ""}`, children: [
+    /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between", children: [
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center space-x-4 flex-1", children: [
+        /* @__PURE__ */ jsxDEV("div", { className: "text-3xl font-bold w-16 text-center", children: getRankIcon(rank) }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 209,
+          columnNumber: 11
+        }, this),
+        /* @__PURE__ */ jsxDEV("div", { className: "flex-1", children: [
+          /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-bold", children: team.team_name }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 213,
+            columnNumber: 13
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "flex items-center space-x-4 text-sm mt-1", children: [
+            /* @__PURE__ */ jsxDEV("span", { className: "flex items-center", children: [
+              /* @__PURE__ */ jsxDEV(Star, { className: "text-yellow-500 mr-1", size: 14 }, void 0, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 216,
+                columnNumber: 17
+              }, this),
+              team.points.toLocaleString(),
+              " points"
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 215,
+              columnNumber: 15
+            }, this),
+            /* @__PURE__ */ jsxDEV("span", { className: "flex items-center space-x-1", children: team.badges.map(
+              (badge, i) => /* @__PURE__ */ jsxDEV("span", { className: "text-lg", children: badge }, i, false, {
+                fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+                lineNumber: 221,
+                columnNumber: 17
+              }, this)
+            ) }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 219,
+              columnNumber: 15
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 214,
+            columnNumber: 13
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 212,
+          columnNumber: 11
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 208,
+        columnNumber: 9
+      }, this),
+      /* @__PURE__ */ jsxDEV(
+        "button",
+        {
+          onClick: onSelect,
+          className: "px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium",
+          children: isSelected ? "Hide Details" : "View Achievements"
+        },
+        void 0,
+        false,
+        {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 228,
+          columnNumber: 9
+        },
+        this
+      )
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 207,
+      columnNumber: 7
+    }, this),
+    isSelected && /* @__PURE__ */ jsxDEV("div", { className: "mt-4 pt-4 border-t border-gray-300", children: [
+      /* @__PURE__ */ jsxDEV("h4", { className: "font-semibold mb-3", children: "🏆 Achievements" }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 238,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "space-y-2", children: team.achievements.map(
+        (achievement) => /* @__PURE__ */ jsxDEV("div", { className: "bg-white/50 rounded-lg p-3 flex items-start space-x-3", children: [
+          /* @__PURE__ */ jsxDEV("div", { className: "text-3xl", children: achievement.icon }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 242,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("div", { className: "flex-1", children: [
+            /* @__PURE__ */ jsxDEV("h5", { className: "font-semibold text-gray-900", children: achievement.name }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 244,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-600", children: achievement.description }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 245,
+              columnNumber: 19
+            }, this),
+            /* @__PURE__ */ jsxDEV("p", { className: "text-xs text-gray-500 mt-1", children: [
+              "Earned: ",
+              new Date(achievement.earned_date).toLocaleDateString()
+            ] }, void 0, true, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 246,
+              columnNumber: 19
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 243,
+            columnNumber: 17
+          }, this),
+          /* @__PURE__ */ jsxDEV("span", { className: "px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold", children: achievement.category }, void 0, false, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 250,
+            columnNumber: 17
+          }, this)
+        ] }, achievement.id, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 241,
+          columnNumber: 11
+        }, this)
+      ) }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 239,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "mt-4 bg-blue-50 rounded-lg p-4", children: [
+        /* @__PURE__ */ jsxDEV("h5", { className: "font-semibold text-blue-900 mb-2", children: "💡 How to Earn More Points" }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 258,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV("ul", { className: "text-sm text-blue-800 space-y-1", children: [
+          /* @__PURE__ */ jsxDEV("li", { children: [
+            "• Maintain 95%+ test coverage: ",
+            /* @__PURE__ */ jsxDEV("strong", { children: "+500 points" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 260,
+              columnNumber: 50
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 260,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("li", { children: [
+            "• Zero production bugs for a sprint: ",
+            /* @__PURE__ */ jsxDEV("strong", { children: "+1000 points" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 261,
+              columnNumber: 56
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 261,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("li", { children: [
+            "• Fastest CI/CD pipeline: ",
+            /* @__PURE__ */ jsxDEV("strong", { children: "+300 points" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 262,
+              columnNumber: 45
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 262,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("li", { children: [
+            "• Improve code quality score by 10%: ",
+            /* @__PURE__ */ jsxDEV("strong", { children: "+400 points" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 263,
+              columnNumber: 56
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 263,
+            columnNumber: 15
+          }, this),
+          /* @__PURE__ */ jsxDEV("li", { children: [
+            "• Complete all tests on time: ",
+            /* @__PURE__ */ jsxDEV("strong", { children: "+200 points" }, void 0, false, {
+              fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+              lineNumber: 264,
+              columnNumber: 49
+            }, this)
+          ] }, void 0, true, {
+            fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+            lineNumber: 264,
+            columnNumber: 15
+          }, this)
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 259,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 257,
+        columnNumber: 11
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 237,
+      columnNumber: 7
+    }, this)
+  ] }, void 0, true, {
+    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+    lineNumber: 206,
+    columnNumber: 5
+  }, this);
+};
+_c2 = LeaderboardRow;
+const AchievementCategory = ({ icon, title, description, count }) => {
+  return /* @__PURE__ */ jsxDEV("div", { className: "bg-white rounded-xl shadow-sm border border-gray-200 p-6", children: /* @__PURE__ */ jsxDEV("div", { className: "flex items-start space-x-4", children: [
+    /* @__PURE__ */ jsxDEV("div", { className: "flex-shrink-0", children: icon }, void 0, false, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 284,
+      columnNumber: 9
+    }, this),
+    /* @__PURE__ */ jsxDEV("div", { className: "flex-1", children: [
+      /* @__PURE__ */ jsxDEV("h3", { className: "text-lg font-bold text-gray-900 mb-1", children: title }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 286,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("p", { className: "text-sm text-gray-600 mb-3", children: description }, void 0, false, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 287,
+        columnNumber: 11
+      }, this),
+      /* @__PURE__ */ jsxDEV("div", { className: "flex items-center justify-between", children: [
+        /* @__PURE__ */ jsxDEV("span", { className: "text-sm text-gray-500", children: [
+          count,
+          " teams qualified"
+        ] }, void 0, true, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 289,
+          columnNumber: 13
+        }, this),
+        /* @__PURE__ */ jsxDEV(TrendingUp, { className: "text-green-500", size: 20 }, void 0, false, {
+          fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+          lineNumber: 290,
+          columnNumber: 13
+        }, this)
+      ] }, void 0, true, {
+        fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+        lineNumber: 288,
+        columnNumber: 11
+      }, this)
+    ] }, void 0, true, {
+      fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+      lineNumber: 285,
+      columnNumber: 9
+    }, this)
+  ] }, void 0, true, {
+    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+    lineNumber: 283,
+    columnNumber: 7
+  }, this) }, void 0, false, {
+    fileName: "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx",
+    lineNumber: 282,
+    columnNumber: 5
+  }, this);
+};
+_c3 = AchievementCategory;
+export default TeamGamification;
+var _c, _c2, _c3;
+$RefreshReg$(_c, "TeamGamification");
+$RefreshReg$(_c2, "LeaderboardRow");
+$RefreshReg$(_c3, "AchievementCategory");
+import * as RefreshRuntime from "/@react-refresh";
+const inWebWorker = typeof WorkerGlobalScope !== "undefined" && self instanceof WorkerGlobalScope;
+if (import.meta.hot && !inWebWorker) {
+  if (!window.$RefreshReg$) {
+    throw new Error(
+      "@vitejs/plugin-react can't detect preamble. Something is wrong."
+    );
+  }
+  RefreshRuntime.__hmr_import(import.meta.url).then((currentExports) => {
+    RefreshRuntime.registerExportsForReactRefresh("/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx", currentExports);
+    import.meta.hot.accept((nextExports) => {
+      if (!nextExports) return;
+      const invalidateMessage = RefreshRuntime.validateRefreshBoundaryAndEnqueueUpdate("/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx", currentExports, nextExports);
+      if (invalidateMessage) import.meta.hot.invalidate(invalidateMessage);
+    });
+  });
+}
+function $RefreshReg$(type, id) {
+  return RefreshRuntime.register(type, "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/src/components/TeamGamification.tsx " + id);
+}
+function $RefreshSig$() {
+  return RefreshRuntime.createSignatureFunctionForTransform();
+}
+
+//# sourceMappingURL=data:application/json;base64,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QUFJLFdBQVUsaUJBQWlCWCxrQkFBaEM7QUFBQTtBQUFBO0FBQUE7QUFBQSxXQUFxQztBQUFBLElBQ3JDLHVCQUFDLFNBQUksV0FBVSxVQUNiO0FBQUEsNkJBQUMsUUFBRyxXQUFVLHdDQUF3Q1UsbUJBQXREO0FBQUE7QUFBQTtBQUFBO0FBQUEsYUFBNEQ7QUFBQSxNQUM1RCx1QkFBQyxPQUFFLFdBQVUsOEJBQThCUix5QkFBM0M7QUFBQTtBQUFBO0FBQUE7QUFBQSxhQUF1RDtBQUFBLE1BQ3ZELHVCQUFDLFNBQUksV0FBVSxxQ0FDYjtBQUFBLCtCQUFDLFVBQUssV0FBVSx5QkFBeUJTO0FBQUFBO0FBQUFBLFVBQU07QUFBQSxhQUEvQztBQUFBO0FBQUE7QUFBQTtBQUFBLGVBQStEO0FBQUEsUUFDL0QsdUJBQUMsY0FBVyxXQUFVLGtCQUFpQixNQUFNLE1BQTdDO0FBQUE7QUFBQTtBQUFBO0FBQUEsZUFBZ0Q7QUFBQSxXQUZsRDtBQUFBO0FBQUE7QUFBQTtBQUFBLGFBR0E7QUFBQSxTQU5GO0FBQUE7QUFBQTtBQUFBO0FBQUEsV0FPQTtBQUFBLE9BVEY7QUFBQTtBQUFBO0FBQUE7QUFBQSxTQVVBLEtBWEY7QUFBQTtBQUFBO0FBQUE7QUFBQSxTQVlBO0FBRUo7QUFBRUMsTUFoQklIO0FBa0JOLGVBQWU5QztBQUFpQixJQUFBNEIsSUFBQWlCLEtBQUFJO0FBQUFDLGFBQUF0QixJQUFBO0FBQUFzQixhQUFBTCxLQUFBO0FBQUFLLGFBQUFELEtBQUEiLCJuYW1lcyI6WyJSZWFjdCIsInVzZVN0YXRlIiwiQXJyb3dMZWZ0IiwiVHJvcGh5IiwiU3RhciIsIlRhcmdldCIsIkF3YXJkIiwiVHJlbmRpbmdVcCIsIlphcCIsIkNyb3duIiwiTWVkYWwiLCJnZW5lcmF0ZUdhbWlmaWNhdGlvbkRhdGEiLCJUZWFtR2FtaWZpY2F0aW9uIiwib25CYWNrIiwiX3MiLCJzZWxlY3RlZFRlYW0iLCJzZXRTZWxlY3RlZFRlYW0iLCJnYW1pZmljYXRpb25EYXRhIiwiZW5hYmxlZCIsImxlYWRlcmJvYXJkIiwic29ydCIsImEiLCJiIiwicG9pbnRzIiwidG9wVGVhbSIsImF2Z1BvaW50cyIsInJlZHVjZSIsImFjYyIsInQiLCJsZW5ndGgiLCJ0b0ZpeGVkIiwidGVhbV9uYW1lIiwidG9Mb2NhbGVTdHJpbmciLCJiYWRnZXMiLCJtYXAiLCJiYWRnZSIsImkiLCJ0ZWFtIiwiaW5kZXgiLCJ0ZWFtX2lkIiwiX2MiLCJMZWFkZXJib2FyZFJvdyIsInJhbmsiLCJpc1NlbGVjdGVkIiwib25TZWxlY3QiLCJnZXRSYW5rQ29sb3IiLCJnZXRSYW5rSWNvbiIsImFjaGlldmVtZW50cyIsImFjaGlldmVtZW50IiwiaWNvbiIsIm5hbWUiLCJkZXNjcmlwdGlvbiIsIkRhdGUiLCJlYXJuZWRfZGF0ZSIsInRvTG9jYWxlRGF0ZVN0cmluZyIsImNhdGVnb3J5IiwiaWQiLCJfYzIiLCJBY2hpZXZlbWVudENhdGVnb3J5IiwidGl0bGUiLCJjb3VudCIsIl9jMyIsIiRSZWZyZXNoUmVnJCJdLCJpZ25vcmVMaXN0IjpbXSwic291cmNlcyI6WyJUZWFtR2FtaWZpY2F0aW9uLnRzeCJdLCJzb3VyY2VzQ29udGVudCI6WyJpbXBvcnQgUmVhY3QsIHsgdXNlU3RhdGUgfSBmcm9tICdyZWFjdCc7XG5pbXBvcnQgeyBBcnJvd0xlZnQsIFRyb3BoeSwgU3RhciwgVGFyZ2V0LCBBd2FyZCwgVHJlbmRpbmdVcCwgWmFwLCBDcm93biwgTWVkYWwgfSBmcm9tICdsdWNpZGUtcmVhY3QnO1xuaW1wb3J0IHsgZ2VuZXJhdGVHYW1pZmljYXRpb25EYXRhIH0gZnJvbSAnLi4vZGF0YS9hZHZhbmNlZEZlYXR1cmVzJztcbmltcG9ydCB0eXBlIHsgR2FtaWZpY2F0aW9uRGF0YSB9IGZyb20gJy4uL2RhdGEvYWR2YW5jZWRGZWF0dXJlcyc7XG5cbmludGVyZmFjZSBUZWFtR2FtaWZpY2F0aW9uUHJvcHMge1xuICBvbkJhY2s6ICgpID0+IHZvaWQ7XG59XG5cbmNvbnN0IFRlYW1HYW1pZmljYXRpb246IFJlYWN0LkZDPFRlYW1HYW1pZmljYXRpb25Qcm9wcz4gPSAoeyBvbkJhY2sgfSkgPT4ge1xuICBjb25zdCBbc2VsZWN0ZWRUZWFtLCBzZXRTZWxlY3RlZFRlYW1dID0gdXNlU3RhdGU8c3RyaW5nIHwgbnVsbD4obnVsbCk7XG4gIGNvbnN0IGdhbWlmaWNhdGlvbkRhdGEgPSBnZW5lcmF0ZUdhbWlmaWNhdGlvbkRhdGEoKTtcblxuICBpZiAoIWdhbWlmaWNhdGlvbkRhdGEuZW5hYmxlZCkge1xuICAgIHJldHVybiAoXG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cIm1pbi1oLXNjcmVlbiBiZy1ncmF5LTUwIGZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktY2VudGVyXCI+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC1jZW50ZXJcIj5cbiAgICAgICAgICA8VHJvcGh5IGNsYXNzTmFtZT1cIm14LWF1dG8gdGV4dC1ncmF5LTQwMCBtYi00XCIgc2l6ZT17NjR9IC8+XG4gICAgICAgICAgPGgyIGNsYXNzTmFtZT1cInRleHQtMnhsIGZvbnQtYm9sZCB0ZXh0LWdyYXktOTAwIG1iLTJcIj5HYW1pZmljYXRpb24gRGlzYWJsZWQ8L2gyPlxuICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtZ3JheS02MDAgbWItNlwiPkNvbnRhY3QgeW91ciBhZG1pbmlzdHJhdG9yIHRvIGVuYWJsZSB0ZWFtIGdhbWlmaWNhdGlvbiBmZWF0dXJlcy48L3A+XG4gICAgICAgICAgPGJ1dHRvblxuICAgICAgICAgICAgb25DbGljaz17b25CYWNrfVxuICAgICAgICAgICAgY2xhc3NOYW1lPVwicHgtNiBweS0zIGJnLWJsdWUtNjAwIHRleHQtd2hpdGUgcm91bmRlZC1sZyBob3ZlcjpiZy1ibHVlLTcwMCB0cmFuc2l0aW9uLWNvbG9yc1wiXG4gICAgICAgICAgPlxuICAgICAgICAgICAgQmFjayB0byBGZWF0dXJlc1xuICAgICAgICAgIDwvYnV0dG9uPlxuICAgICAgICA8L2Rpdj5cbiAgICAgIDwvZGl2PlxuICAgICk7XG4gIH1cblxuICBjb25zdCBsZWFkZXJib2FyZCA9IGdhbWlmaWNhdGlvbkRhdGEubGVhZGVyYm9hcmQuc29ydCgoYSwgYikgPT4gYi5wb2ludHMgLSBhLnBvaW50cyk7XG4gIGNvbnN0IHRvcFRlYW0gPSBsZWFkZXJib2FyZFswXTtcbiAgY29uc3QgYXZnUG9pbnRzID0gKGxlYWRlcmJvYXJkLnJlZHVjZSgoYWNjLCB0KSA9PiBhY2MgKyB0LnBvaW50cywgMCkgLyBsZWFkZXJib2FyZC5sZW5ndGgpLnRvRml4ZWQoMCk7XG5cbiAgcmV0dXJuIChcbiAgICA8ZGl2IGNsYXNzTmFtZT1cIm1pbi1oLXNjcmVlbiBiZy1ncmF5LTUwXCI+XG4gICAgICB7LyogSGVhZGVyICovfVxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy1ncmFkaWVudC10by1yIGZyb20tcHVycGxlLTYwMCB0by1ibHVlLTYwMCB0ZXh0LXdoaXRlXCI+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwicHgtOCBweS02XCI+XG4gICAgICAgICAgPGJ1dHRvbiBcbiAgICAgICAgICAgIG9uQ2xpY2s9e29uQmFja31cbiAgICAgICAgICAgIGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIHNwYWNlLXgtMiB0ZXh0LXdoaXRlLzgwIGhvdmVyOnRleHQtd2hpdGUgbWItNCB0cmFuc2l0aW9uLWNvbG9yc1wiXG4gICAgICAgICAgPlxuICAgICAgICAgICAgPEFycm93TGVmdCBzaXplPXsyMH0gLz5cbiAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cImZvbnQtbWVkaXVtXCI+QmFjayB0byBGZWF0dXJlczwvc3Bhbj5cbiAgICAgICAgICA8L2J1dHRvbj5cbiAgICAgICAgICBcbiAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktYmV0d2VlblwiPlxuICAgICAgICAgICAgPGRpdj5cbiAgICAgICAgICAgICAgPGgxIGNsYXNzTmFtZT1cInRleHQtM3hsIGZvbnQtYm9sZCBmbGV4IGl0ZW1zLWNlbnRlclwiPlxuICAgICAgICAgICAgICAgIDxUcm9waHkgY2xhc3NOYW1lPVwibXItM1wiIHNpemU9ezMyfSAvPlxuICAgICAgICAgICAgICAgIFRlYW0gR2FtaWZpY2F0aW9uXG4gICAgICAgICAgICAgIDwvaDE+XG4gICAgICAgICAgICAgIDxwIGNsYXNzTmFtZT1cInRleHQtd2hpdGUvODAgbXQtMVwiPkNvbXBldGUsIGFjaGlldmUsIGFuZCBjZWxlYnJhdGUgcXVhbGl0eSBleGNlbGxlbmNlITwvcD5cbiAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgXG4gICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIHNwYWNlLXgtNlwiPlxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtY2VudGVyIGJnLXdoaXRlLzEwIHJvdW5kZWQtbGcgcHgtNiBweS0zXCI+XG4gICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1zbSB0ZXh0LXdoaXRlLzgwXCI+VG9wIFRlYW08L3A+XG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LTJ4bCBmb250LWJvbGRcIj57dG9wVGVhbS50ZWFtX25hbWV9PC9kaXY+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtY2VudGVyIGJnLXdoaXRlLzEwIHJvdW5kZWQtbGcgcHgtNiBweS0zXCI+XG4gICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1zbSB0ZXh0LXdoaXRlLzgwXCI+VG9wIFNjb3JlPC9wPlxuICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC0yeGwgZm9udC1ib2xkXCI+e3RvcFRlYW0ucG9pbnRzLnRvTG9jYWxlU3RyaW5nKCl9PC9kaXY+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtY2VudGVyIGJnLXdoaXRlLzEwIHJvdW5kZWQtbGcgcHgtNiBweS0zXCI+XG4gICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC1zbSB0ZXh0LXdoaXRlLzgwXCI+QXZnIFBvaW50czwvcD5cbiAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtMnhsIGZvbnQtYm9sZFwiPnthdmdQb2ludHN9PC9kaXY+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuICAgICAgPC9kaXY+XG5cbiAgICAgIHsvKiBNYWluIENvbnRlbnQgKi99XG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cInB4LTggcHktOFwiPlxuICAgICAgICB7LyogUG9kaXVtICovfVxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cIm1iLThcIj5cbiAgICAgICAgICA8aDIgY2xhc3NOYW1lPVwidGV4dC0yeGwgZm9udC1ib2xkIHRleHQtZ3JheS05MDAgbWItNiB0ZXh0LWNlbnRlclwiPvCfj4YgVG9wIDMgVGVhbXMg8J+PhjwvaDI+XG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWVuZCBqdXN0aWZ5LWNlbnRlciBzcGFjZS14LThcIj5cbiAgICAgICAgICAgIHsvKiAybmQgUGxhY2UgKi99XG4gICAgICAgICAgICB7bGVhZGVyYm9hcmRbMV0gJiYgKFxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggZmxleC1jb2wgaXRlbXMtY2VudGVyXCI+XG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy1ncmFkaWVudC10by1iciBmcm9tLWdyYXktMzAwIHRvLWdyYXktNDAwIHJvdW5kZWQtZnVsbCB3LTI0IGgtMjQgZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1jZW50ZXIgbWItMyBzaGFkb3ctbGdcIj5cbiAgICAgICAgICAgICAgICAgIDxNZWRhbCBjbGFzc05hbWU9XCJ0ZXh0LXdoaXRlXCIgc2l6ZT17NDh9IC8+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy13aGl0ZSByb3VuZGVkLXhsIHNoYWRvdy1sZyBwLTYgdy02NCB0ZXh0LWNlbnRlciBib3JkZXItNCBib3JkZXItZ3JheS0zMDBcIj5cbiAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC00eGwgZm9udC1ib2xkIHRleHQtZ3JheS02MDAgbWItMlwiPjJuZDwvZGl2PlxuICAgICAgICAgICAgICAgICAgPGgzIGNsYXNzTmFtZT1cInRleHQtbGcgZm9udC1ib2xkIHRleHQtZ3JheS05MDAgbWItMlwiPntsZWFkZXJib2FyZFsxXS50ZWFtX25hbWV9PC9oMz5cbiAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC0yeGwgZm9udC1ib2xkIHRleHQtZ3JheS03MDAgbWItMlwiPntsZWFkZXJib2FyZFsxXS5wb2ludHMudG9Mb2NhbGVTdHJpbmcoKX08L2Rpdj5cbiAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBqdXN0aWZ5LWNlbnRlciBzcGFjZS14LTEgdGV4dC0yeGxcIj5cbiAgICAgICAgICAgICAgICAgICAge2xlYWRlcmJvYXJkWzFdLmJhZGdlcy5tYXAoKGJhZGdlLCBpKSA9PiAoXG4gICAgICAgICAgICAgICAgICAgICAgPHNwYW4ga2V5PXtpfT57YmFkZ2V9PC9zcGFuPlxuICAgICAgICAgICAgICAgICAgICApKX1cbiAgICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICl9XG5cbiAgICAgICAgICAgIHsvKiAxc3QgUGxhY2UgKi99XG4gICAgICAgICAgICB7bGVhZGVyYm9hcmRbMF0gJiYgKFxuICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggZmxleC1jb2wgaXRlbXMtY2VudGVyIC1tdC04XCI+XG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy1ncmFkaWVudC10by1iciBmcm9tLXllbGxvdy00MDAgdG8teWVsbG93LTYwMCByb3VuZGVkLWZ1bGwgdy0zMiBoLTMyIGZsZXggaXRlbXMtY2VudGVyIGp1c3RpZnktY2VudGVyIG1iLTMgc2hhZG93LTJ4bCBhbmltYXRlLXB1bHNlXCI+XG4gICAgICAgICAgICAgICAgICA8Q3Jvd24gY2xhc3NOYW1lPVwidGV4dC13aGl0ZVwiIHNpemU9ezY0fSAvPlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiYmctd2hpdGUgcm91bmRlZC14bCBzaGFkb3ctMnhsIHAtOCB3LTcyIHRleHQtY2VudGVyIGJvcmRlci00IGJvcmRlci15ZWxsb3ctNDAwXCI+XG4gICAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtNXhsIGZvbnQtYm9sZCB0ZXh0LXllbGxvdy02MDAgbWItMlwiPjFzdDwvZGl2PlxuICAgICAgICAgICAgICAgICAgPGgzIGNsYXNzTmFtZT1cInRleHQteGwgZm9udC1ib2xkIHRleHQtZ3JheS05MDAgbWItMlwiPntsZWFkZXJib2FyZFswXS50ZWFtX25hbWV9PC9oMz5cbiAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC0zeGwgZm9udC1ib2xkIHRleHQteWVsbG93LTYwMCBtYi0zXCI+e2xlYWRlcmJvYXJkWzBdLnBvaW50cy50b0xvY2FsZVN0cmluZygpfTwvZGl2PlxuICAgICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGp1c3RpZnktY2VudGVyIHNwYWNlLXgtMSB0ZXh0LTN4bFwiPlxuICAgICAgICAgICAgICAgICAgICB7bGVhZGVyYm9hcmRbMF0uYmFkZ2VzLm1hcCgoYmFkZ2UsIGkpID0+IChcbiAgICAgICAgICAgICAgICAgICAgICA8c3BhbiBrZXk9e2l9PntiYWRnZX08L3NwYW4+XG4gICAgICAgICAgICAgICAgICAgICkpfVxuICAgICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgKX1cblxuICAgICAgICAgICAgey8qIDNyZCBQbGFjZSAqL31cbiAgICAgICAgICAgIHtsZWFkZXJib2FyZFsyXSAmJiAoXG4gICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBmbGV4LWNvbCBpdGVtcy1jZW50ZXJcIj5cbiAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLWdyYWRpZW50LXRvLWJyIGZyb20tb3JhbmdlLTQwMCB0by1vcmFuZ2UtNjAwIHJvdW5kZWQtZnVsbCB3LTI0IGgtMjQgZmxleCBpdGVtcy1jZW50ZXIganVzdGlmeS1jZW50ZXIgbWItMyBzaGFkb3ctbGdcIj5cbiAgICAgICAgICAgICAgICAgIDxBd2FyZCBjbGFzc05hbWU9XCJ0ZXh0LXdoaXRlXCIgc2l6ZT17NDh9IC8+XG4gICAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJiZy13aGl0ZSByb3VuZGVkLXhsIHNoYWRvdy1sZyBwLTYgdy02NCB0ZXh0LWNlbnRlciBib3JkZXItNCBib3JkZXItb3JhbmdlLTQwMFwiPlxuICAgICAgICAgICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LTR4bCBmb250LWJvbGQgdGV4dC1vcmFuZ2UtNjAwIG1iLTJcIj4zcmQ8L2Rpdj5cbiAgICAgICAgICAgICAgICAgIDxoMyBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtYm9sZCB0ZXh0LWdyYXktOTAwIG1iLTJcIj57bGVhZGVyYm9hcmRbMl0udGVhbV9uYW1lfTwvaDM+XG4gICAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cInRleHQtMnhsIGZvbnQtYm9sZCB0ZXh0LW9yYW5nZS03MDAgbWItMlwiPntsZWFkZXJib2FyZFsyXS5wb2ludHMudG9Mb2NhbGVTdHJpbmcoKX08L2Rpdj5cbiAgICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBqdXN0aWZ5LWNlbnRlciBzcGFjZS14LTEgdGV4dC0yeGxcIj5cbiAgICAgICAgICAgICAgICAgICAge2xlYWRlcmJvYXJkWzJdLmJhZGdlcy5tYXAoKGJhZGdlLCBpKSA9PiAoXG4gICAgICAgICAgICAgICAgICAgICAgPHNwYW4ga2V5PXtpfT57YmFkZ2V9PC9zcGFuPlxuICAgICAgICAgICAgICAgICAgICApKX1cbiAgICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICAgICl9XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuXG4gICAgICAgIHsvKiBGdWxsIExlYWRlcmJvYXJkICovfVxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLXdoaXRlIHJvdW5kZWQteGwgc2hhZG93LXNtIGJvcmRlciBib3JkZXItZ3JheS0yMDAgcC02IG1iLThcIj5cbiAgICAgICAgICA8aDIgY2xhc3NOYW1lPVwidGV4dC14bCBmb250LWJvbGQgdGV4dC1ncmF5LTkwMCBtYi00XCI+RnVsbCBMZWFkZXJib2FyZDwvaDI+XG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJzcGFjZS15LTNcIj5cbiAgICAgICAgICAgIHtsZWFkZXJib2FyZC5tYXAoKHRlYW0sIGluZGV4KSA9PiAoXG4gICAgICAgICAgICAgIDxMZWFkZXJib2FyZFJvd1xuICAgICAgICAgICAgICAgIGtleT17dGVhbS50ZWFtX2lkfVxuICAgICAgICAgICAgICAgIHRlYW09e3RlYW19XG4gICAgICAgICAgICAgICAgcmFuaz17aW5kZXggKyAxfVxuICAgICAgICAgICAgICAgIGlzU2VsZWN0ZWQ9e3NlbGVjdGVkVGVhbSA9PT0gdGVhbS50ZWFtX2lkfVxuICAgICAgICAgICAgICAgIG9uU2VsZWN0PXsoKSA9PiBzZXRTZWxlY3RlZFRlYW0oc2VsZWN0ZWRUZWFtID09PSB0ZWFtLnRlYW1faWQgPyBudWxsIDogdGVhbS50ZWFtX2lkKX1cbiAgICAgICAgICAgICAgLz5cbiAgICAgICAgICAgICkpfVxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICA8L2Rpdj5cblxuICAgICAgICB7LyogQWNoaWV2ZW1lbnQgQ2F0ZWdvcmllcyAqL31cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJncmlkIGdyaWQtY29scy0zIGdhcC02XCI+XG4gICAgICAgICAgPEFjaGlldmVtZW50Q2F0ZWdvcnlcbiAgICAgICAgICAgIGljb249ezxUcm9waHkgY2xhc3NOYW1lPVwidGV4dC15ZWxsb3ctNTAwXCIgc2l6ZT17MzJ9IC8+fVxuICAgICAgICAgICAgdGl0bGU9XCJRdWFsaXR5IENoYW1waW9uc1wiXG4gICAgICAgICAgICBkZXNjcmlwdGlvbj1cIlRlYW1zIG1haW50YWluaW5nIDk1JSsgdGVzdCBjb3ZlcmFnZVwiXG4gICAgICAgICAgICBjb3VudD17M31cbiAgICAgICAgICAvPlxuICAgICAgICAgIDxBY2hpZXZlbWVudENhdGVnb3J5XG4gICAgICAgICAgICBpY29uPXs8WmFwIGNsYXNzTmFtZT1cInRleHQtYmx1ZS01MDBcIiBzaXplPXszMn0gLz59XG4gICAgICAgICAgICB0aXRsZT1cIlNwZWVkIERlbW9uc1wiXG4gICAgICAgICAgICBkZXNjcmlwdGlvbj1cIkZhc3Rlc3QgQ0kvQ0QgcGlwZWxpbmUgZXhlY3V0aW9uXCJcbiAgICAgICAgICAgIGNvdW50PXsyfVxuICAgICAgICAgIC8+XG4gICAgICAgICAgPEFjaGlldmVtZW50Q2F0ZWdvcnlcbiAgICAgICAgICAgIGljb249ezxUYXJnZXQgY2xhc3NOYW1lPVwidGV4dC1ncmVlbi01MDBcIiBzaXplPXszMn0gLz59XG4gICAgICAgICAgICB0aXRsZT1cIkJ1ZyBIdW50ZXJzXCJcbiAgICAgICAgICAgIGRlc2NyaXB0aW9uPVwiTW9zdCBidWdzIGNhdWdodCBpbiB0ZXN0aW5nXCJcbiAgICAgICAgICAgIGNvdW50PXs0fVxuICAgICAgICAgIC8+XG4gICAgICAgIDwvZGl2PlxuICAgICAgPC9kaXY+XG4gICAgPC9kaXY+XG4gICk7XG59O1xuXG5pbnRlcmZhY2UgTGVhZGVyYm9hcmRSb3dQcm9wcyB7XG4gIHRlYW06IEdhbWlmaWNhdGlvbkRhdGFbJ2xlYWRlcmJvYXJkJ11bMF07XG4gIHJhbms6IG51bWJlcjtcbiAgaXNTZWxlY3RlZDogYm9vbGVhbjtcbiAgb25TZWxlY3Q6ICgpID0+IHZvaWQ7XG59XG5cbmNvbnN0IExlYWRlcmJvYXJkUm93OiBSZWFjdC5GQzxMZWFkZXJib2FyZFJvd1Byb3BzPiA9ICh7IHRlYW0sIHJhbmssIGlzU2VsZWN0ZWQsIG9uU2VsZWN0IH0pID0+IHtcbiAgY29uc3QgZ2V0UmFua0NvbG9yID0gKHJhbms6IG51bWJlcikgPT4ge1xuICAgIGlmIChyYW5rID09PSAxKSByZXR1cm4gJ2JnLXllbGxvdy0xMDAgYm9yZGVyLXllbGxvdy0zMDAgdGV4dC15ZWxsb3ctOTAwJztcbiAgICBpZiAocmFuayA9PT0gMikgcmV0dXJuICdiZy1ncmF5LTEwMCBib3JkZXItZ3JheS0zMDAgdGV4dC1ncmF5LTkwMCc7XG4gICAgaWYgKHJhbmsgPT09IDMpIHJldHVybiAnYmctb3JhbmdlLTEwMCBib3JkZXItb3JhbmdlLTMwMCB0ZXh0LW9yYW5nZS05MDAnO1xuICAgIHJldHVybiAnYmctd2hpdGUgYm9yZGVyLWdyYXktMjAwIHRleHQtZ3JheS05MDAnO1xuICB9O1xuXG4gIGNvbnN0IGdldFJhbmtJY29uID0gKHJhbms6IG51bWJlcikgPT4ge1xuICAgIGlmIChyYW5rID09PSAxKSByZXR1cm4gJ/CfkZEnO1xuICAgIGlmIChyYW5rID09PSAyKSByZXR1cm4gJ/CfpYgnO1xuICAgIGlmIChyYW5rID09PSAzKSByZXR1cm4gJ/CfpYknO1xuICAgIHJldHVybiBgIyR7cmFua31gO1xuICB9O1xuXG4gIHJldHVybiAoXG4gICAgPGRpdiBjbGFzc05hbWU9e2Byb3VuZGVkLWxnIGJvcmRlci0yIHAtNCB0cmFuc2l0aW9uLWFsbCAke2dldFJhbmtDb2xvcihyYW5rKX0gJHtpc1NlbGVjdGVkID8gJ3JpbmctMiByaW5nLWJsdWUtNTAwJyA6ICcnfWB9PlxuICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWJldHdlZW5cIj5cbiAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBzcGFjZS14LTQgZmxleC0xXCI+XG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJ0ZXh0LTN4bCBmb250LWJvbGQgdy0xNiB0ZXh0LWNlbnRlclwiPlxuICAgICAgICAgICAge2dldFJhbmtJY29uKHJhbmspfVxuICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleC0xXCI+XG4gICAgICAgICAgICA8aDMgY2xhc3NOYW1lPVwidGV4dC1sZyBmb250LWJvbGRcIj57dGVhbS50ZWFtX25hbWV9PC9oMz5cbiAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleCBpdGVtcy1jZW50ZXIgc3BhY2UteC00IHRleHQtc20gbXQtMVwiPlxuICAgICAgICAgICAgICA8c3BhbiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlclwiPlxuICAgICAgICAgICAgICAgIDxTdGFyIGNsYXNzTmFtZT1cInRleHQteWVsbG93LTUwMCBtci0xXCIgc2l6ZT17MTR9IC8+XG4gICAgICAgICAgICAgICAge3RlYW0ucG9pbnRzLnRvTG9jYWxlU3RyaW5nKCl9IHBvaW50c1xuICAgICAgICAgICAgICA8L3NwYW4+XG4gICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cImZsZXggaXRlbXMtY2VudGVyIHNwYWNlLXgtMVwiPlxuICAgICAgICAgICAgICAgIHt0ZWFtLmJhZGdlcy5tYXAoKGJhZGdlLCBpKSA9PiAoXG4gICAgICAgICAgICAgICAgICA8c3BhbiBrZXk9e2l9IGNsYXNzTmFtZT1cInRleHQtbGdcIj57YmFkZ2V9PC9zcGFuPlxuICAgICAgICAgICAgICAgICkpfVxuICAgICAgICAgICAgICA8L3NwYW4+XG4gICAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgPC9kaXY+XG5cbiAgICAgICAgPGJ1dHRvblxuICAgICAgICAgIG9uQ2xpY2s9e29uU2VsZWN0fVxuICAgICAgICAgIGNsYXNzTmFtZT1cInB4LTQgcHktMiBiZy1ibHVlLTYwMCB0ZXh0LXdoaXRlIHJvdW5kZWQtbGcgaG92ZXI6YmctYmx1ZS03MDAgdHJhbnNpdGlvbi1jb2xvcnMgdGV4dC1zbSBmb250LW1lZGl1bVwiXG4gICAgICAgID5cbiAgICAgICAgICB7aXNTZWxlY3RlZCA/ICdIaWRlIERldGFpbHMnIDogJ1ZpZXcgQWNoaWV2ZW1lbnRzJ31cbiAgICAgICAgPC9idXR0b24+XG4gICAgICA8L2Rpdj5cblxuICAgICAge2lzU2VsZWN0ZWQgJiYgKFxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cIm10LTQgcHQtNCBib3JkZXItdCBib3JkZXItZ3JheS0zMDBcIj5cbiAgICAgICAgICA8aDQgY2xhc3NOYW1lPVwiZm9udC1zZW1pYm9sZCBtYi0zXCI+8J+PhiBBY2hpZXZlbWVudHM8L2g0PlxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwic3BhY2UteS0yXCI+XG4gICAgICAgICAgICB7dGVhbS5hY2hpZXZlbWVudHMubWFwKGFjaGlldmVtZW50ID0+IChcbiAgICAgICAgICAgICAgPGRpdiBrZXk9e2FjaGlldmVtZW50LmlkfSBjbGFzc05hbWU9XCJiZy13aGl0ZS81MCByb3VuZGVkLWxnIHAtMyBmbGV4IGl0ZW1zLXN0YXJ0IHNwYWNlLXgtM1wiPlxuICAgICAgICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwidGV4dC0zeGxcIj57YWNoaWV2ZW1lbnQuaWNvbn08L2Rpdj5cbiAgICAgICAgICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXgtMVwiPlxuICAgICAgICAgICAgICAgICAgPGg1IGNsYXNzTmFtZT1cImZvbnQtc2VtaWJvbGQgdGV4dC1ncmF5LTkwMFwiPnthY2hpZXZlbWVudC5uYW1lfTwvaDU+XG4gICAgICAgICAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXNtIHRleHQtZ3JheS02MDBcIj57YWNoaWV2ZW1lbnQuZGVzY3JpcHRpb259PC9wPlxuICAgICAgICAgICAgICAgICAgPHAgY2xhc3NOYW1lPVwidGV4dC14cyB0ZXh0LWdyYXktNTAwIG10LTFcIj5cbiAgICAgICAgICAgICAgICAgICAgRWFybmVkOiB7bmV3IERhdGUoYWNoaWV2ZW1lbnQuZWFybmVkX2RhdGUpLnRvTG9jYWxlRGF0ZVN0cmluZygpfVxuICAgICAgICAgICAgICAgICAgPC9wPlxuICAgICAgICAgICAgICAgIDwvZGl2PlxuICAgICAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInB4LTIgcHktMSBiZy1wdXJwbGUtMTAwIHRleHQtcHVycGxlLTcwMCByb3VuZGVkIHRleHQteHMgZm9udC1zZW1pYm9sZFwiPlxuICAgICAgICAgICAgICAgICAge2FjaGlldmVtZW50LmNhdGVnb3J5fVxuICAgICAgICAgICAgICAgIDwvc3Bhbj5cbiAgICAgICAgICAgICAgPC9kaXY+XG4gICAgICAgICAgICApKX1cbiAgICAgICAgICA8L2Rpdj5cblxuICAgICAgICAgIDxkaXYgY2xhc3NOYW1lPVwibXQtNCBiZy1ibHVlLTUwIHJvdW5kZWQtbGcgcC00XCI+XG4gICAgICAgICAgICA8aDUgY2xhc3NOYW1lPVwiZm9udC1zZW1pYm9sZCB0ZXh0LWJsdWUtOTAwIG1iLTJcIj7wn5KhIEhvdyB0byBFYXJuIE1vcmUgUG9pbnRzPC9oNT5cbiAgICAgICAgICAgIDx1bCBjbGFzc05hbWU9XCJ0ZXh0LXNtIHRleHQtYmx1ZS04MDAgc3BhY2UteS0xXCI+XG4gICAgICAgICAgICAgIDxsaT7igKIgTWFpbnRhaW4gOTUlKyB0ZXN0IGNvdmVyYWdlOiA8c3Ryb25nPis1MDAgcG9pbnRzPC9zdHJvbmc+PC9saT5cbiAgICAgICAgICAgICAgPGxpPuKAoiBaZXJvIHByb2R1Y3Rpb24gYnVncyBmb3IgYSBzcHJpbnQ6IDxzdHJvbmc+KzEwMDAgcG9pbnRzPC9zdHJvbmc+PC9saT5cbiAgICAgICAgICAgICAgPGxpPuKAoiBGYXN0ZXN0IENJL0NEIHBpcGVsaW5lOiA8c3Ryb25nPiszMDAgcG9pbnRzPC9zdHJvbmc+PC9saT5cbiAgICAgICAgICAgICAgPGxpPuKAoiBJbXByb3ZlIGNvZGUgcXVhbGl0eSBzY29yZSBieSAxMCU6IDxzdHJvbmc+KzQwMCBwb2ludHM8L3N0cm9uZz48L2xpPlxuICAgICAgICAgICAgICA8bGk+4oCiIENvbXBsZXRlIGFsbCB0ZXN0cyBvbiB0aW1lOiA8c3Ryb25nPisyMDAgcG9pbnRzPC9zdHJvbmc+PC9saT5cbiAgICAgICAgICAgIDwvdWw+XG4gICAgICAgICAgPC9kaXY+XG4gICAgICAgIDwvZGl2PlxuICAgICAgKX1cbiAgICA8L2Rpdj5cbiAgKTtcbn07XG5cbmludGVyZmFjZSBBY2hpZXZlbWVudENhdGVnb3J5UHJvcHMge1xuICBpY29uOiBSZWFjdC5SZWFjdE5vZGU7XG4gIHRpdGxlOiBzdHJpbmc7XG4gIGRlc2NyaXB0aW9uOiBzdHJpbmc7XG4gIGNvdW50OiBudW1iZXI7XG59XG5cbmNvbnN0IEFjaGlldmVtZW50Q2F0ZWdvcnk6IFJlYWN0LkZDPEFjaGlldmVtZW50Q2F0ZWdvcnlQcm9wcz4gPSAoeyBpY29uLCB0aXRsZSwgZGVzY3JpcHRpb24sIGNvdW50IH0pID0+IHtcbiAgcmV0dXJuIChcbiAgICA8ZGl2IGNsYXNzTmFtZT1cImJnLXdoaXRlIHJvdW5kZWQteGwgc2hhZG93LXNtIGJvcmRlciBib3JkZXItZ3JheS0yMDAgcC02XCI+XG4gICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXggaXRlbXMtc3RhcnQgc3BhY2UteC00XCI+XG4gICAgICAgIDxkaXYgY2xhc3NOYW1lPVwiZmxleC1zaHJpbmstMFwiPntpY29ufTwvZGl2PlxuICAgICAgICA8ZGl2IGNsYXNzTmFtZT1cImZsZXgtMVwiPlxuICAgICAgICAgIDxoMyBjbGFzc05hbWU9XCJ0ZXh0LWxnIGZvbnQtYm9sZCB0ZXh0LWdyYXktOTAwIG1iLTFcIj57dGl0bGV9PC9oMz5cbiAgICAgICAgICA8cCBjbGFzc05hbWU9XCJ0ZXh0LXNtIHRleHQtZ3JheS02MDAgbWItM1wiPntkZXNjcmlwdGlvbn08L3A+XG4gICAgICAgICAgPGRpdiBjbGFzc05hbWU9XCJmbGV4IGl0ZW1zLWNlbnRlciBqdXN0aWZ5LWJldHdlZW5cIj5cbiAgICAgICAgICAgIDxzcGFuIGNsYXNzTmFtZT1cInRleHQtc20gdGV4dC1ncmF5LTUwMFwiPntjb3VudH0gdGVhbXMgcXVhbGlmaWVkPC9zcGFuPlxuICAgICAgICAgICAgPFRyZW5kaW5nVXAgY2xhc3NOYW1lPVwidGV4dC1ncmVlbi01MDBcIiBzaXplPXsyMH0gLz5cbiAgICAgICAgICA8L2Rpdj5cbiAgICAgICAgPC9kaXY+XG4gICAgICA8L2Rpdj5cbiAgICA8L2Rpdj5cbiAgKTtcbn07XG5cbmV4cG9ydCBkZWZhdWx0IFRlYW1HYW1pZmljYXRpb247XG4iXSwiZmlsZSI6Ii9Vc2Vycy9pb251dGFwb3N0dS9EZXNrdG9wL1FBIERhc2hib2FyZC9xYS1kYXNoYm9hcmQvc3JjL2NvbXBvbmVudHMvVGVhbUdhbWlmaWNhdGlvbi50c3gifQ==
