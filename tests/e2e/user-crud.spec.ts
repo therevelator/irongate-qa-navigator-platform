@@ -26,16 +26,16 @@ test.describe('User CRUD Operations', () => {
     
     // Click Create User
     await page.click('button:has-text("Create User")');
-    await page.waitForSelector('input[type="email"]', { state: 'visible' });
+    await page.waitForTimeout(1000);
     
-    // Fill form
+    // Fill form (use nth(1) to get modal inputs, not login inputs)
     const timestamp = Date.now();
     const testEmail = `qa-engineer-${timestamp}@irongate.com`;
     
-    await page.fill('input[type="email"]', testEmail);
-    await page.fill('input[type="password"]', 'TestPass123!');
-    await page.fill('input[placeholder*="First"]', 'Test');
-    await page.fill('input[placeholder*="Last"]', 'Engineer');
+    await page.locator('input[type="email"]').nth(1).fill(testEmail);
+    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
+    await page.locator('input[placeholder*="First"]').fill('Test');
+    await page.locator('input[placeholder*="Last"]').fill('Engineer');
     
     // Select role
     const roleSelect = page.locator('select').first();
@@ -65,15 +65,15 @@ test.describe('User CRUD Operations', () => {
     await waitForLoadingToComplete(page);
     
     await page.click('button:has-text("Create User")');
-    await page.waitForSelector('input[type="email"]', { state: 'visible' });
+    await page.waitForTimeout(1000);
     
     const timestamp = Date.now();
     const testEmail = `team-lead-${timestamp}@irongate.com`;
     
-    await page.fill('input[type="email"]', testEmail);
-    await page.fill('input[type="password"]', 'TestPass123!');
-    await page.fill('input[placeholder*="First"]', 'Test');
-    await page.fill('input[placeholder*="Last"]', 'Lead');
+    await page.locator('input[type="email"]').nth(1).fill(testEmail);
+    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
+    await page.locator('input[placeholder*="First"]').fill('Test');
+    await page.locator('input[placeholder*="Last"]').fill('Lead');
     
     // QA Manager should only see team_lead role
     const roleSelect = page.locator('select').first();
@@ -98,15 +98,15 @@ test.describe('User CRUD Operations', () => {
     await waitForLoadingToComplete(page);
     
     await page.click('button:has-text("Create User")');
-    await page.waitForSelector('input[type="email"]', { state: 'visible' });
+    await page.waitForTimeout(1000);
     
     const timestamp = Date.now();
     const testEmail = `engineer-${timestamp}@irongate.com`;
     
-    await page.fill('input[type="email"]', testEmail);
-    await page.fill('input[type="password"]', 'TestPass123!');
-    await page.fill('input[placeholder*="First"]', 'Test');
-    await page.fill('input[placeholder*="Last"]', 'Eng');
+    await page.locator('input[type="email"]').nth(1).fill(testEmail);
+    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
+    await page.locator('input[placeholder*="First"]').fill('Test');
+    await page.locator('input[placeholder*="Last"]').fill('Eng');
     
     // Team Lead should only see qa_engineer role
     const roleSelect = page.locator('select').first();
@@ -141,13 +141,13 @@ test.describe('User CRUD Operations', () => {
     await waitForLoadingToComplete(page);
     
     await page.click('button:has-text("Create User")');
-    await page.waitForSelector('input[type="email"]', { state: 'visible' });
+    await page.waitForTimeout(1000);
     
     // Try to create with existing email
-    await page.fill('input[type="email"]', 'admin@irongate.com');
-    await page.fill('input[type="password"]', 'TestPass123!');
-    await page.fill('input[placeholder*="First"]', 'Test');
-    await page.fill('input[placeholder*="Last"]', 'Duplicate');
+    await page.locator('input[type="email"]').nth(1).fill('admin@irongate.com');
+    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
+    await page.locator('input[placeholder*="First"]').fill('Test');
+    await page.locator('input[placeholder*="Last"]').fill('Duplicate');
     
     const roleSelect = page.locator('select').first();
     await roleSelect.selectOption('qa_engineer');
@@ -282,15 +282,15 @@ test.describe('User CRUD Operations', () => {
     
     // Create test user
     await page.click('button:has-text("Create User")');
-    await page.waitForSelector('input[type="email"]', { state: 'visible' });
+    await page.waitForTimeout(1000);
     
     const timestamp = Date.now();
     const testEmail = `delete-me-${timestamp}@irongate.com`;
     
-    await page.fill('input[type="email"]', testEmail);
-    await page.fill('input[type="password"]', 'TestPass123!');
-    await page.fill('input[placeholder*="First"]', 'Delete');
-    await page.fill('input[placeholder*="Last"]', 'Me');
+    await page.locator('input[type="email"]').nth(1).fill(testEmail);
+    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
+    await page.locator('input[placeholder*="First"]').fill('Delete');
+    await page.locator('input[placeholder*="Last"]').fill('Me');
     
     const roleSelect = page.locator('select').first();
     await roleSelect.selectOption('qa_engineer');
