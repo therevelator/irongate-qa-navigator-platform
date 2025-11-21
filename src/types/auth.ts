@@ -11,7 +11,13 @@ export interface User {
   firstName: string;
   lastName: string;
   role: UserRole;
-  assignedTeams: string[]; // Team IDs user has access to
+  
+  // Organizational context
+  companyId: string;
+  departmentId: string;
+  primaryTeamId: string; // User's main team
+  assignedTeams: string[]; // All team IDs user has access to (for cross-team roles)
+  
   avatar?: string;
   createdAt: string;
   lastLogin?: string;
@@ -38,6 +44,11 @@ export interface RegisterData {
   firstName: string;
   lastName: string;
   role?: UserRole; // Only admins can set role during registration
+  
+  // Organizational assignment
+  companyId: string;
+  departmentId: string;
+  teamId: string;
 }
 
 export interface Permission {

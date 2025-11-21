@@ -64,11 +64,65 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // DEMO MODE: Mock authentication
-      // In production, replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+      // Real API authentication
+      const response = await fetch('http://localhost:3000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(credentials)
+      });
 
-      // Mock user lookup
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Login failed');
+      }
+
+      const { user: userData, token } = await response.json();
+
+      // Map backend user to frontend User type
+      const user: User = {
+        id: userData.id,
+        email: userData.email,
+        firstName: userData.first_name,
+        lastName: userData.last_name,
+        role: userData.role,
+        companyId: userData.company_id,
+        departmentId: userData.department_id,
+        primaryTeamId: userData.primary_team_id,
+        assignedTeams: [],
+        createdAt: userData.created_at,
+        lastLogin: new Date().toISOString(),
+        isActive: userData.is_active,
+        emailVerified: userData.email_verified
+      };
+
+      // Store token and user
+      localStorage.setItem('irongate_token', token);
+      localStorage.setItem('irongate_user', JSON.stringify(user));
+
+      setAuthState({
+        user,
+        isAuthenticated: true,
+        isLoading: false,
+        error: null,
+      });
+    } catch (error: any) {
+      console.error('Login error:', error);
+      setAuthState(prev => ({
+        ...prev,
+        isLoading: false,
+        error: error.message || 'Login failed. Please check your credentials.',
+      }));
+      throw error;
+    }
+  };
+
+  // FALLBACK: Mock authentication (kept for reference)
+  const loginMock = async (credentials: LoginCredentials): Promise<void> => {
+    setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
+
+    try {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
       const mockUsers: Record<string, User> = {
         'admin@irongate.com': {
           id: 'user-1',
@@ -76,6 +130,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           firstName: 'Admin',
           lastName: 'User',
           role: 'super_admin',
+          companyId: 'company-mastercard',
+          departmentId: 'dept-decision-mgmt',
+          primaryTeamId: 'team-quasars',
           assignedTeams: [],
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString(),
@@ -88,6 +145,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           firstName: 'QA',
           lastName: 'Manager',
           role: 'qa_manager',
+          companyId: 'company-mastercard',
+          departmentId: 'dept-decision-mgmt',
+          primaryTeamId: 'team-pulsars',
           assignedTeams: [],
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString(),
@@ -100,7 +160,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           firstName: 'Team',
           lastName: 'Lead',
           role: 'team_lead',
-          assignedTeams: ['team-0', 'team-1'],
+          companyId: 'company-mastercard',
+          departmentId: 'dept-decision-mgmt',
+          primaryTeamId: 'team-watchmen',
+          assignedTeams: ['team-watchmen', 'team-astronauts'],
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString(),
           isActive: true,
@@ -112,7 +175,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           firstName: 'QA',
           lastName: 'Engineer',
           role: 'qa_engineer',
-          assignedTeams: ['team-0'],
+          companyId: 'company-mastercard',
+          departmentId: 'dept-decision-mgmt',
+          primaryTeamId: 'team-quasars',
+          assignedTeams: ['team-quasars'],
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString(),
           isActive: true,
@@ -124,7 +190,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           firstName: 'Guest',
           lastName: 'Viewer',
           role: 'viewer',
-          assignedTeams: ['team-0'],
+          companyId: 'company-mastercard',
+          departmentId: 'dept-decision-mgmt',
+          primaryTeamId: 'team-grid',
+          assignedTeams: ['team-grid'],
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString(),
           isActive: true,
@@ -202,7 +271,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         firstName: data.firstName,
         lastName: data.lastName,
         role: data.role || 'qa_engineer', // Default role
-        assignedTeams: [],
+        companyId: data.companyId,
+        departmentId: data.departmentId,
+        primaryTeamId: data.teamId,
+        assignedTeams: [data.teamId],
         createdAt: new Date().toISOString(),
         isActive: true,
         emailVerified: false,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { LayoutDashboard, Smartphone, ShoppingCart, Server, CreditCard, Sparkles, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Smartphone, ShoppingCart, Server, CreditCard, Sparkles, Settings, LogOut, Shield } from 'lucide-react';
 import { generateMockData } from './data/mockData';
 import type { Team } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
@@ -17,12 +17,13 @@ import TestCaseManagement from './components/TestCaseManagement';
 import TestExecutionTimeline from './components/TestExecutionTimeline';
 import TeamGamification from './components/TeamGamification';
 import TeamManagement from './components/TeamManagement';
+import AdminPanel from './components/AdminPanel';
 
 function App() {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('all');
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | string>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | 'admin-panel' | string>('dashboard');
   const [teams, setTeams] = useState<Team[]>(generateMockData());
 
   // Calculate overall stats
@@ -86,6 +87,10 @@ function App() {
 
   if (currentView === 'manage-teams') {
     return <TeamManagement teams={teams} onBack={() => setCurrentView('dashboard')} onUpdateTeams={setTeams} />;
+  }
+
+  if (currentView === 'admin-panel') {
+    return <AdminPanel onBack={() => setCurrentView('dashboard')} />;
   }
 
   return (
@@ -159,6 +164,16 @@ function App() {
             <Sparkles size={20} />
             <span>Advanced Features</span>
           </button>
+          
+          {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
+            <button
+              onClick={() => setCurrentView('admin-panel')}
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors"
+            >
+              <Shield size={20} />
+              <span>Admin Panel</span>
+            </button>
+          )}
           
           <button
             onClick={() => setCurrentView('manage-teams')}

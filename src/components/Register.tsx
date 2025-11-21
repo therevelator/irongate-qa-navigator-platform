@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { Shield, Mail, Lock, Eye, EyeOff, User, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Shield, Mail, Lock, Eye, EyeOff, User, AlertCircle, CheckCircle, Building2, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { UserRole } from '../types/auth';
 import { ROLE_PERMISSIONS, getRoleIcon } from '../types/auth';
+import { mockCompany, mockDepartments, getTeamsByDepartment } from '../data/organizationData';
 
 interface RegisterProps {
   onSwitchToLogin: () => void;
@@ -17,7 +18,16 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
     password: '',
     confirmPassword: '',
     role: 'qa_engineer' as UserRole,
+    companyId: mockCompany.id,
+    departmentId: '',
+    teamId: '',
   });
+
+  // Get teams for selected department
+  const availableTeams = useMemo(() => {
+    if (!formData.departmentId) return [];
+    return getTeamsByDepartment(formData.departmentId);
+  }, [formData.departmentId]);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -47,6 +57,11 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
       return;
     }
 
+    if (!formData.departmentId || !formData.teamId) {
+      setError('Please select your department and team');
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError('Passwords do not match');
       return;
@@ -64,6 +79,9 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
         email: formData.email,
         password: formData.password,
         role: formData.role,
+        companyId: formData.companyId,
+        departmentId: formData.departmentId,
+        teamId: formData.teamId,
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');
@@ -178,6 +196,79 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   disabled={isLoading}
                 />
               </div>
+            </div>
+
+            {/* Company (Read-only) */}
+            <div>
+              <label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-2">
+                Company
+              </label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <input
+                  id="company"
+                  type="text"
+                  value={mockCompany.name}
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  disabled
+                />
+              </div>
+            </div>
+
+            {/* Department Selection */}
+            <div>
+              <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-2">
+                Department / Program *
+              </label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <select
+                  id="department"
+                  value={formData.departmentId}
+                  onChange={(e) => setFormData({ ...formData, departmentId: e.target.value, teamId: '' })}
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  disabled={isLoading}
+                >
+                  <option value="">Select your department...</option>
+                  {mockDepartments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                e.g., Decision Management, Payments Processing, etc.
+              </p>
+            </div>
+
+            {/* Team Selection */}
+            <div>
+              <label htmlFor="team" className="block text-sm font-medium text-gray-700 mb-2">
+                Team *
+              </label>
+              <div className="relative">
+                <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <select
+                  id="team"
+                  value={formData.teamId}
+                  onChange={(e) => setFormData({ ...formData, teamId: e.target.value })}
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                  disabled={isLoading || !formData.departmentId}
+                >
+                  <option value="">
+                    {formData.departmentId ? 'Select your team...' : 'Select department first...'}
+                  </option>
+                  {availableTeams.map((team) => (
+                    <option key={team.id} value={team.id}>
+                      {team.name} ({team.platform})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                e.g., Quasars, Pulsars, Watchmen, etc.
+              </p>
             </div>
 
             {/* Role Selection */}
