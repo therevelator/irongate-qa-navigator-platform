@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Key, Shield, X, ArrowLeft } from 'lucide-react';
+import { Users, UserPlus, Shield, X, ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import toast, { Toaster } from 'react-hot-toast';
 
 interface User {
   id: string;
@@ -155,18 +156,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       });
 
       if (response.ok) {
-        alert('User created successfully!');
+        toast.success('User created successfully!');
         setShowCreateUser(false);
         setNewUser({ email: '', password: '', firstName: '', lastName: '', role: '', teamId: '' });
         await fetchData(); // Wait for data to refresh
         // If we're viewing a team, the users list will be updated automatically
       } else {
         const error = await response.json();
-        alert(`Error: ${error.error}`);
+        toast.error(`Error: ${error.error}`);
       }
     } catch (error) {
       console.error('Error creating user:', error);
-      alert('Failed to create user');
+      toast.error('Failed to create user');
     }
   };
 
@@ -184,17 +185,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       });
 
       if (response.ok) {
-        alert('Team created successfully!');
+        toast.success('Team created successfully!');
         setShowCreateTeam(false);
         setNewTeam({ name: '', description: '', platform: 'Backend' });
         fetchData();
       } else {
         const error = await response.json();
-        alert(`Error: ${error.error}`);
+        toast.error(`Error: ${error.error}`);
       }
     } catch (error) {
       console.error('Error creating team:', error);
-      alert('Failed to create team');
+      toast.error('Failed to create team');
     }
   };
 
@@ -202,12 +203,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     e.preventDefault();
     
     if (resetPasswordData.newPassword !== resetPasswordData.confirmPassword) {
-      alert('Passwords do not match');
+      toast.error('Passwords do not match');
       return;
     }
 
     if (resetPasswordData.newPassword.length < 6) {
-      alert('Password must be at least 6 characters');
+      toast.error('Password must be at least 6 characters');
       return;
     }
 
@@ -222,17 +223,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       });
 
       if (response.ok) {
-        alert('Password reset successfully!');
+        toast.success('Password reset successfully!');
         setShowResetPassword(false);
         setSelectedUser(null);
         setResetPasswordData({ newPassword: '', confirmPassword: '' });
       } else {
         const error = await response.json();
-        alert(`Error: ${error.error}`);
+        toast.error(`Error: ${error.error}`);
       }
     } catch (error) {
       console.error('Error resetting password:', error);
-      alert('Failed to reset password');
+      toast.error('Failed to reset password');
     }
   };
 
@@ -250,23 +251,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       });
 
       if (response.ok) {
-        alert('User updated successfully!');
+        toast.success('User updated successfully!');
         setShowEditUser(false);
         setSelectedUser(null);
         fetchData();
       } else {
         const error = await response.json();
-        alert(`Error: ${error.error}`);
+        toast.error(`Error: ${error.error}`);
       }
     } catch (error) {
       console.error('Error updating user:', error);
-      alert('Failed to update user');
+      toast.error('Failed to update user');
     }
   };
 
   const handleDeleteUser = async () => {
     try {
-      const response = await fetch(`${API_URL}/users/${selectedUser?.id}`, {
+      const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -274,18 +275,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       });
 
       if (response.ok) {
-        alert('User deleted successfully!');
+        toast.success('User deleted successfully!');
         setShowDeleteConfirm(false);
         setSelectedUser(null);
         setSelectedTeam(null);
         fetchData();
       } else {
         const error = await response.json();
-        alert(`Error: ${error.error}`);
+        toast.error(`Error: ${error.error}`);
       }
     } catch (error) {
       console.error('Error deleting user:', error);
-      alert('Failed to delete user');
+      toast.error('Failed to delete user');
     }
   };
 
@@ -316,6 +317,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   return (
     <>
+      <Toaster position="top-right" />
       {/* Team Detail View */}
       {selectedTeam ? (
         <div className="min-h-screen bg-gray-50 p-8">
@@ -520,17 +522,42 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                       {u.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                  <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                    <button
+                      onClick={() => {
+                        setSelectedUser(u);
+                        setEditUserData({
+                          firstName: u.first_name,
+                          lastName: u.last_name,
+                          email: u.email,
+                          role: u.role
+                        });
+                        setShowEditUser(true);
+                      }}
+                      className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Edit
+                    </button>
                     <button
                       onClick={() => {
                         setSelectedUser(u);
                         setShowResetPassword(true);
                       }}
-                      className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                      className="text-green-600 hover:text-green-800 font-medium"
                     >
-                      <Key className="w-4 h-4" />
                       Reset Password
                     </button>
+                    {u.id !== user?.id && (
+                      <button
+                        onClick={() => {
+                          setSelectedUser(u);
+                          setShowDeleteConfirm(true);
+                        }}
+                        className="text-red-600 hover:text-red-800 font-medium"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}
