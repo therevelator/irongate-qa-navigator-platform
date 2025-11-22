@@ -810,6 +810,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   type="password"
                   required
                   minLength={6}
+                  data-testid="reset-password-new"
                   value={resetPasswordData.newPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -821,6 +822,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   type="password"
                   required
                   minLength={6}
+                  data-testid="reset-password-confirm"
                   value={resetPasswordData.confirmPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -871,6 +873,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   type="password"
                   required
                   minLength={6}
+                  data-testid="reset-password-new"
                   value={resetPasswordData.newPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -882,6 +885,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   type="password"
                   required
                   minLength={6}
+                  data-testid="reset-password-confirm"
                   value={resetPasswordData.confirmPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -912,7 +916,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Edit User</h3>
+              <div>
+                <h3 className="text-lg font-semibold">Edit User</h3>
+                <p className="text-sm text-gray-500 mt-1">Editing: {selectedUser.email}</p>
+              </div>
               <button onClick={() => setShowEditUser(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="w-5 h-5" />
               </button>
@@ -924,6 +931,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   <input
                     type="text"
                     required
+                    data-testid="edit-user-firstname"
                     value={editUserData.firstName}
                     onChange={(e) => setEditUserData({ ...editUserData, firstName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -934,6 +942,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   <input
                     type="text"
                     required
+                    data-testid="edit-user-lastname"
                     value={editUserData.lastName}
                     onChange={(e) => setEditUserData({ ...editUserData, lastName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -945,6 +954,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <input
                   type="email"
                   required
+                  data-testid="edit-user-email"
                   value={editUserData.email}
                   onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -954,6 +964,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select
                   required
+                  data-testid="edit-user-role"
                   value={editUserData.role}
                   onChange={(e) => setEditUserData({ ...editUserData, role: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
