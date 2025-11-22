@@ -94,9 +94,12 @@ router.get('/users', authenticateToken, async (req: any, res) => {
     }
 
     res.json(users);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error fetching users:', error);
-    res.status(500).json({ error: 'Failed to fetch users' });
+    res.status(500).json({ 
+      error: 'Failed to fetch users',
+      details: error.message || String(error)
+    });
   }
 });
 
@@ -169,9 +172,12 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     );
 
     res.status(201).json(newUser);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating user:', error);
-    res.status(500).json({ error: 'Failed to create user' });
+    res.status(500).json({ 
+      error: 'Failed to create user',
+      details: error.message || String(error)
+    });
   }
 });
 
