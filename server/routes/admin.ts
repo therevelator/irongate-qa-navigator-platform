@@ -8,8 +8,8 @@ const router = express.Router();
 // Role hierarchy and permissions
 const ROLE_HIERARCHY = {
   super_admin: ['qa_manager', 'team_lead', 'qa_engineer', 'viewer'],
-  qa_manager: ['team_lead'],
-  team_lead: ['qa_engineer'],
+  qa_manager: ['team_lead', 'qa_engineer', 'viewer'],
+  team_lead: ['qa_engineer', 'viewer'],
   qa_engineer: [],
   viewer: []
 };
@@ -134,11 +134,38 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Determine department (use creator's dept if not super_admin, or from targetDeptId)
-    const finalDeptId = targetDeptId || departmentId;
+    // Determine department and validate team assignment
+    let finalDeptId = targetDeptId || departmentId;
     
     if (!finalDeptId) {
       return res.status(400).json({ error: 'Department ID is required' });
+    }
+
+    // Get team to validate department
+    const team = await queryOne<any>(
+      'SELECT department_id FROM teams WHERE id = ?',
+      [teamId]
+    );
+
+    if (!team) {
+      return res.status(400).json({ error: 'Invalid team ID' });
+    }
+
+    // QA Manager can only assign users to teams in their department
+    if (creatorRole === 'qa_manager') {
+      if (team.department_id !== departmentId) {
+        return res.status(403).json({ 
+          error: 'Can only assign users to teams in your department' 
+        });
+      }
+      finalDeptId = departmentId; // Force QA Manager's department
+    }
+
+    // Super Admin can assign to any department, but team must match
+    if (creatorRole === 'super_admin' && targetDeptId && team.department_id !== targetDeptId) {
+      return res.status(400).json({ 
+        error: 'Team must be in the specified department' 
+      });
     }
 
     // Generate UUID for user
@@ -249,6 +276,141 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error creating team:', error);
     res.status(500).json({ error: 'Failed to create team' });
+  }
+});
+
+// Update team
+router.put('/teams/:id', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, departmentId: userDeptId } = req.user;
+    const { id: teamId } = req.params;
+    const { name, description, platform } = req.body;
+
+    // Only Super Admin and QA Manager can update teams
+    if (role !== 'super_admin' && role !== 'qa_manager') {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    // Get team to check department
+    const team = await queryOne<any>('SELECT department_id FROM teams WHERE id = ?', [teamId]);
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    // QA Manager can only update teams in their department
+    if (role === 'qa_manager' && team.department_id !== userDeptId) {
+      return res.status(403).json({ error: 'Can only update teams in your department' });
+    }
+
+    await query(
+      'UPDATE teams SET name = ?, description = ?, platform = ? WHERE id = ?',
+      [name, description, platform, teamId]
+    );
+
+    const updatedTeam = await queryOne<any>('SELECT * FROM teams WHERE id = ?', [teamId]);
+    res.json(updatedTeam);
+  } catch (error: any) {
+    console.error('Error updating team:', error);
+    res.status(500).json({ error: 'Failed to update team', details: error.message });
+  }
+});
+
+// Delete team
+router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, departmentId: userDeptId } = req.user;
+    const { id: teamId } = req.params;
+
+    // Only Super Admin and QA Manager can delete teams
+    if (role !== 'super_admin' && role !== 'qa_manager') {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    // Get team to check department
+    const team = await queryOne<any>('SELECT department_id FROM teams WHERE id = ?', [teamId]);
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    // QA Manager can only delete teams in their department
+    if (role === 'qa_manager' && team.department_id !== userDeptId) {
+      return res.status(403).json({ error: 'Can only delete teams in your department' });
+    }
+
+    // Check if team has members
+    const memberCount = await queryOne<any>(
+      'SELECT COUNT(*) as count FROM team_members WHERE team_id = ?',
+      [teamId]
+    );
+
+    if (memberCount && memberCount.count > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete team with members',
+        warning: `Team has ${memberCount.count} member(s). Remove all members before deleting.`
+      });
+    }
+
+    await query('DELETE FROM teams WHERE id = ?', [teamId]);
+    res.json({ message: 'Team deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting team:', error);
+    res.status(500).json({ error: 'Failed to delete team', details: error.message });
+  }
+});
+
+// Delete user
+router.delete('/users/:id', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, id: userId, departmentId: userDeptId } = req.user;
+    const { id: targetUserId } = req.params;
+
+    // QA Engineers cannot delete users (including themselves)
+    if (role === 'qa_engineer' || role === 'viewer') {
+      return res.status(403).json({ error: 'Insufficient permissions to delete users' });
+    }
+
+    // Get target user
+    const targetUser = await queryOne<any>(
+      'SELECT role, department_id, created_by FROM users WHERE id = ?',
+      [targetUserId]
+    );
+
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Super Admin can delete any user except themselves
+    if (role === 'super_admin') {
+      if (userId === targetUserId) {
+        return res.status(403).json({ error: 'Cannot delete your own account' });
+      }
+    }
+    // QA Manager can delete users in their department that they created
+    else if (role === 'qa_manager') {
+      if (targetUser.department_id !== userDeptId) {
+        return res.status(403).json({ error: 'Can only delete users in your department' });
+      }
+      if (targetUser.created_by !== userId) {
+        return res.status(403).json({ error: 'Can only delete users you created' });
+      }
+    }
+    // Team Lead can delete users they created
+    else if (role === 'team_lead') {
+      if (targetUser.created_by !== userId) {
+        return res.status(403).json({ error: 'Can only delete users you created' });
+      }
+    }
+
+    // Delete user from team_members first
+    await query('DELETE FROM team_members WHERE user_id = ?', [targetUserId]);
+    
+    // Delete user
+    await query('DELETE FROM users WHERE id = ?', [targetUserId]);
+    
+    res.json({ message: 'User deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting user:', error);
+    res.status(500).json({ error: 'Failed to delete user', details: error.message });
   }
 });
 
