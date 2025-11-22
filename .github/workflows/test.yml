@@ -88,20 +88,19 @@ jobs:
           
       - name: Wait for backend to be ready
         run: |
-          echo "Checking backend..."
+          echo "Checking backend port..."
           for i in {1..30}; do
-            if curl -f http://localhost:3000/api/teams > /dev/null 2>&1; then
-              echo "✅ Backend is ready!"
+            if nc -z localhost 3000 2>/dev/null; then
+              echo "✅ Backend port 3000 is listening!"
+              sleep 2
               exit 0
             fi
-            echo "Attempt $i/30: Backend not ready yet..."
+            echo "Attempt $i/30: Port 3000 not ready..."
             sleep 2
           done
           echo "❌ Backend failed to start"
           echo "=== Backend Logs ==="
-          cat backend.log || echo "No backend log found"
-          echo "=== Processes ==="
-          ps aux | grep -E "(tsx|node)" | grep -v grep || echo "No backend process"
+          cat backend.log 2>/dev/null || echo "No backend log"
           exit 1
           
       - name: Check frontend (optional)
