@@ -67,10 +67,19 @@ jobs:
 
       - name: Start backend
         run: |
-          npm run server:prod > backend.log 2>&1 &
-          echo "Backend starting..."
-          echo "Backend PID: $!"
+          nohup npm run server:prod > backend.log 2>&1 &
+          BACKEND_PID=$!
+          echo "Backend starting with PID: $BACKEND_PID"
           sleep 10
+          
+          # Verify process is still running
+          if ps -p $BACKEND_PID > /dev/null; then
+            echo "✅ Backend process is running"
+          else
+            echo "❌ Backend process died"
+            cat backend.log
+            exit 1
+          fi
           
       - name: Start frontend
         run: |
@@ -93,15 +102,28 @@ jobs:
             if nc -z localhost 3000 2>/dev/null; then
               echo "✅ Backend port 3000 is listening!"
               sleep 2
-              exit 0
+              break
             fi
             echo "Attempt $i/30: Port 3000 not ready..."
             sleep 2
           done
-          echo "❌ Backend failed to start"
-          echo "=== Backend Logs ==="
-          cat backend.log 2>/dev/null || echo "No backend log"
-          exit 1
+          
+          # Test actual login to ensure backend is responding
+          echo "Testing backend login..."
+          response=$(curl -s -X POST http://localhost:3000/api/auth/login \
+            -H "Content-Type: application/json" \
+            -d '{"email":"admin@irongate.com","password":"demo123"}')
+          
+          if echo "$response" | grep -q "token"; then
+            echo "✅ Backend login successful!"
+            exit 0
+          else
+            echo "❌ Backend login failed!"
+            echo "Response: $response"
+            echo "=== Backend Logs ==="
+            cat backend.log 2>/dev/null || echo "No backend log"
+            exit 1
+          fi
           
       - name: Check frontend (optional)
         run: |
