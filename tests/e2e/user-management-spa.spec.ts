@@ -33,25 +33,25 @@ test.describe('User Management (SPA)', () => {
     await page.click('button:has-text("Create User")');
     
     // Modal should appear (SPA behavior)
-    await expect(page.locator('input[type="email"]').nth(1)).toBeVisible();
+    await expect(page.getByTestId('create-user-email')).toBeVisible();
     
     // Fill form
     const timestamp = Date.now();
     const testEmail = `test-user-${timestamp}@irongate.com`;
     
-    await page.locator('input[type="email"]').nth(1).fill(testEmail);
-    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
-    await page.locator('input[placeholder*="First"]').fill('Test');
-    await page.locator('input[placeholder*="Last"]').fill('User');
+    await page.getByTestId('create-user-email').fill(testEmail);
+    await page.getByTestId('create-user-password').fill('TestPass123!');
+    await page.getByTestId('create-user-firstname').fill('Test');
+    await page.getByTestId('create-user-lastname').fill('User');
     
     // Select role
-    await page.locator('select').first().selectOption('qa_engineer');
+    await page.getByTestId('create-user-role').selectOption('qa_engineer');
     
     // Select team
-    await page.locator('select').last().selectOption({ index: 1 });
+    await page.getByTestId('create-user-team').selectOption({ index: 1 });
     
     // Submit
-    await page.click('button:has-text("Create User")');
+    await page.click('button[type="submit"]:has-text("Create User")');
     await page.waitForTimeout(2000);
     
     // Modal should close (SPA behavior)
@@ -70,21 +70,21 @@ test.describe('User Management (SPA)', () => {
     await waitForLoadingToComplete(page);
     
     await page.click('button:has-text("Create User")');
-    await expect(page.locator('input[type="email"]').nth(1)).toBeVisible();
+    await expect(page.getByTestId('create-user-email')).toBeVisible();
     
     const timestamp = Date.now();
     const testEmail = `team-lead-${timestamp}@irongate.com`;
     
-    await page.locator('input[type="email"]').nth(1).fill(testEmail);
-    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
-    await page.locator('input[placeholder*="First"]').fill('Team');
-    await page.locator('input[placeholder*="Last"]').fill('Lead');
+    await page.getByTestId('create-user-email').fill(testEmail);
+    await page.getByTestId('create-user-password').fill('TestPass123!');
+    await page.getByTestId('create-user-firstname').fill('Team');
+    await page.getByTestId('create-user-lastname').fill('Lead');
     
-    // QA Manager should only see team_lead option
-    await page.locator('select').first().selectOption('team_lead');
-    await page.locator('select').last().selectOption({ index: 1 });
+    // QA Manager should see team_lead, qa_engineer, viewer options
+    await page.getByTestId('create-user-role').selectOption('team_lead');
+    await page.getByTestId('create-user-team').selectOption({ index: 1 });
     
-    await page.click('button:has-text("Create User")');
+    await page.click('button[type="submit"]:has-text("Create User")');
     await page.waitForTimeout(2000);
     
     await expect(page.locator(`text=${testEmail}`)).toBeVisible();
@@ -98,21 +98,21 @@ test.describe('User Management (SPA)', () => {
     await waitForLoadingToComplete(page);
     
     await page.click('button:has-text("Create User")');
-    await expect(page.locator('input[type="email"]').nth(1)).toBeVisible();
+    await expect(page.getByTestId('create-user-email')).toBeVisible();
     
     const timestamp = Date.now();
     const testEmail = `engineer-${timestamp}@irongate.com`;
     
-    await page.locator('input[type="email"]').nth(1).fill(testEmail);
-    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
-    await page.locator('input[placeholder*="First"]').fill('QA');
-    await page.locator('input[placeholder*="Last"]').fill('Engineer');
+    await page.getByTestId('create-user-email').fill(testEmail);
+    await page.getByTestId('create-user-password').fill('TestPass123!');
+    await page.getByTestId('create-user-firstname').fill('QA');
+    await page.getByTestId('create-user-lastname').fill('Engineer');
     
-    // Team Lead should only see qa_engineer option
-    await page.locator('select').first().selectOption('qa_engineer');
-    await page.locator('select').last().selectOption({ index: 1 });
+    // Team Lead should see qa_engineer and viewer options
+    await page.getByTestId('create-user-role').selectOption('qa_engineer');
+    await page.getByTestId('create-user-team').selectOption({ index: 1 });
     
-    await page.click('button:has-text("Create User")');
+    await page.click('button[type="submit"]:has-text("Create User")');
     await page.waitForTimeout(2000);
     
     await expect(page.locator(`text=${testEmail}`)).toBeVisible();

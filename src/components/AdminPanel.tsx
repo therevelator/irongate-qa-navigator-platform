@@ -631,6 +631,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <input
                   type="email"
                   required
+                  data-testid="create-user-email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -642,6 +643,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   type="password"
                   required
                   minLength={6}
+                  data-testid="create-user-password"
                   value={newUser.password}
                   onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -653,6 +655,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   <input
                     type="text"
                     required
+                    data-testid="create-user-firstname"
                     value={newUser.firstName}
                     onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -663,6 +666,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   <input
                     type="text"
                     required
+                    data-testid="create-user-lastname"
                     value={newUser.lastName}
                     onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -673,6 +677,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
                 <select
                   required
+                  data-testid="create-user-role"
                   value={newUser.role}
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -687,6 +692,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
                 <select
                   required
+                  data-testid="create-user-team"
                   value={newUser.teamId}
                   onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
