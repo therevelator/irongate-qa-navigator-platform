@@ -194,22 +194,151 @@ describe('Admin API Endpoints', () => {
       expect(response.body.availableRoles).toContain('viewer');
     });
 
-    it('API-ADMIN-016: should return only team_lead for QA Manager', async () => {
+    it('API-ADMIN-016: should return team_lead, qa_engineer, viewer for QA Manager', async () => {
       const response = await request(API_URL)
         .get('/api/admin/available-roles')
         .set('Authorization', `Bearer ${qaManagerToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.availableRoles).toEqual(['team_lead']);
+      expect(response.body.availableRoles).toContain('team_lead');
+      expect(response.body.availableRoles).toContain('qa_engineer');
+      expect(response.body.availableRoles).toContain('viewer');
+      expect(response.body.availableRoles.length).toBe(3);
     });
 
-    it('API-ADMIN-017: should return only qa_engineer for Team Lead', async () => {
+    it('API-ADMIN-017: should return qa_engineer and viewer for Team Lead', async () => {
       const response = await request(API_URL)
         .get('/api/admin/available-roles')
         .set('Authorization', `Bearer ${teamLeadToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.availableRoles).toEqual(['qa_engineer']);
+      expect(response.body.availableRoles).toContain('qa_engineer');
+      expect(response.body.availableRoles).toContain('viewer');
+      expect(response.body.availableRoles.length).toBe(2);
+    });
+  });
+
+  describe('POST /api/admin/teams', () => {
+    it('API-ADMIN-018: Super Admin should create team', async () => {
+      const timestamp = Date.now();
+      const newTeam = {
+        name: `Test Team ${timestamp}`,
+        description: 'Test team description',
+        platform: 'Web',
+      };
+
+      const response = await request(API_URL)
+        .post('/api/admin/teams')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send(newTeam);
+
+      expect(response.status).toBe(201);
+      expect(response.body).toHaveProperty('id');
+      expect(response.body.name).toBe(newTeam.name);
+    });
+
+    it('API-ADMIN-019: QA Manager should create team in their department', async () => {
+      const timestamp = Date.now();
+      const newTeam = {
+        name: `QA Manager Team ${timestamp}`,
+        description: 'Team created by QA Manager',
+        platform: 'API',
+      };
+
+      const response = await request(API_URL)
+        .post('/api/admin/teams')
+        .set('Authorization', `Bearer ${qaManagerToken}`)
+        .send(newTeam);
+
+      expect(response.status).toBe(201);
+      expect(response.body).toHaveProperty('id');
+    });
+
+    it('API-ADMIN-020: Team Lead should NOT be able to create team', async () => {
+      const response = await request(API_URL)
+        .post('/api/admin/teams')
+        .set('Authorization', `Bearer ${teamLeadToken}`)
+        .send({
+          name: 'Unauthorized Team',
+          platform: 'Web',
+        });
+
+      expect(response.status).toBe(403);
+    });
+  });
+
+  describe('DELETE /api/admin/teams/:id', () => {
+    it('API-ADMIN-021: should fail to delete team with members', async () => {
+      // team-quasars has members
+      const response = await request(API_URL)
+        .delete('/api/admin/teams/team-quasars')
+        .set('Authorization', `Bearer ${superAdminToken}`);
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toContain('Cannot delete team with members');
+      expect(response.body.warning).toBeDefined();
+    });
+  });
+
+  describe('DELETE /api/admin/users/:id', () => {
+    let createdUserId: string;
+
+    beforeAll(async () => {
+      // Create a test user to delete
+      const timestamp = Date.now();
+      const response = await request(API_URL)
+        .post('/api/admin/users')
+        .set('Authorization', `Bearer ${superAdminToken}`)
+        .send({
+          email: `delete-test-${timestamp}@irongate.com`,
+          password: 'TestPass123!',
+          firstName: 'Delete',
+          lastName: 'Test',
+          role: 'qa_engineer',
+          teamId: 'team-quasars',
+          departmentId: 'dept-decision-mgmt',
+        });
+      
+      createdUserId = response.body.id;
+    });
+
+    it('API-ADMIN-022: Super Admin should delete user', async () => {
+      const response = await request(API_URL)
+        .delete(`/api/admin/users/${createdUserId}`)
+        .set('Authorization', `Bearer ${superAdminToken}`);
+
+      expect(response.status).toBe(200);
+      expect(response.body.message).toContain('deleted successfully');
+    });
+
+    it('API-ADMIN-023: Super Admin should NOT delete themselves', async () => {
+      // Get super admin user ID
+      const usersResponse = await request(API_URL)
+        .get('/api/admin/users')
+        .set('Authorization', `Bearer ${superAdminToken}`);
+      
+      const superAdmin = usersResponse.body.find((u: any) => u.email === 'admin@irongate.com');
+
+      const response = await request(API_URL)
+        .delete(`/api/admin/users/${superAdmin.id}`)
+        .set('Authorization', `Bearer ${superAdminToken}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toContain('Cannot delete your own account');
+    });
+
+    it('API-ADMIN-024: QA Engineer should NOT delete users', async () => {
+      // Login as QA Engineer
+      const engineerRes = await request(API_URL)
+        .post('/api/auth/login')
+        .send({ email: 'engineer@irongate.com', password: 'demo123' });
+
+      const response = await request(API_URL)
+        .delete('/api/admin/users/user-admin')
+        .set('Authorization', `Bearer ${engineerRes.body.token}`);
+
+      expect(response.status).toBe(403);
+      expect(response.body.error).toContain('Insufficient permissions');
     });
   });
 });
