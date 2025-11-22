@@ -126,21 +126,22 @@ test.describe('User Management (SPA)', () => {
     await waitForLoadingToComplete(page);
     
     await page.click('button:has-text("Create User")');
+    await expect(page.getByTestId('create-user-email')).toBeVisible();
     
     // Try to create with existing email
-    await page.locator('input[type="email"]').nth(1).fill('admin@irongate.com');
-    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
-    await page.locator('input[placeholder*="First"]').fill('Duplicate');
-    await page.locator('input[placeholder*="Last"]').fill('User');
+    await page.getByTestId('create-user-email').fill('admin@irongate.com');
+    await page.getByTestId('create-user-password').fill('TestPass123!');
+    await page.getByTestId('create-user-firstname').fill('Duplicate');
+    await page.getByTestId('create-user-lastname').fill('User');
     
-    await page.locator('select').first().selectOption('qa_engineer');
-    await page.locator('select').last().selectOption({ index: 1 });
+    await page.getByTestId('create-user-role').selectOption('qa_engineer');
+    await page.getByTestId('create-user-team').selectOption({ index: 1 });
     
-    await page.click('button:has-text("Create User")');
+    await page.click('button[type="submit"]:has-text("Create User")');
     await page.waitForTimeout(1000);
     
-    // Modal should still be open (error occurred)
-    await expect(page.locator('input[type="email"]').nth(1)).toBeVisible();
+    // Should show error toast
+    await expect(page.locator('text=/already exists|duplicate/i')).toBeVisible({ timeout: 3000 });
     
     console.log('✅ Duplicate email correctly rejected');
   });
@@ -152,17 +153,17 @@ test.describe('User Management (SPA)', () => {
     await waitForLoadingToComplete(page);
     
     await page.click('button:has-text("Create User")');
-    await expect(page.locator('input[type="email"]').nth(1)).toBeVisible();
+    await expect(page.getByTestId('create-user-email')).toBeVisible();
     
     // Fill some data
-    await page.locator('input[type="email"]').nth(1).fill('cancel@test.com');
+    await page.getByTestId('create-user-email').fill('cancel@test.com');
     
     // Click Cancel
     await page.click('button:has-text("Cancel")');
     await page.waitForTimeout(500);
     
     // Modal should close
-    await expect(page.locator('input[type="email"]').nth(1)).not.toBeVisible();
+    await expect(page.getByTestId('create-user-email')).not.toBeVisible();
     
     // User should NOT be created
     await expect(page.locator('text=cancel@test.com')).not.toBeVisible();
@@ -184,19 +185,18 @@ test.describe('User Management (SPA)', () => {
     await userRow.locator('button:has-text("Edit")').click();
     
     // Edit modal should appear
-    await expect(page.locator('h3:has-text("Edit User")')).toBeVisible();
+    await expect(page.getByTestId('edit-user-email')).toBeVisible();
     
     // Change first name
-    const firstNameInput = page.locator('input[placeholder*="First"]');
-    await firstNameInput.clear();
-    await firstNameInput.fill('Updated');
+    await page.getByTestId('edit-user-firstname').clear();
+    await page.getByTestId('edit-user-firstname').fill('Updated');
     
     // Save
-    await page.click('button:has-text("Update User")');
+    await page.click('button[type="submit"]:has-text("Update User")');
     await page.waitForTimeout(2000);
     
     // Modal should close
-    await expect(page.locator('h3:has-text("Edit User")')).not.toBeVisible();
+    await expect(page.getByTestId('edit-user-email')).not.toBeVisible();
     
     // Updated name should appear
     await expect(page.locator('text=Updated')).toBeVisible();
@@ -213,20 +213,19 @@ test.describe('User Management (SPA)', () => {
     const userRow = page.locator('tr:has-text("engineer@irongate.com")').first();
     await userRow.locator('button:has-text("Edit")').click();
     
-    await expect(page.locator('h3:has-text("Edit User")')).toBeVisible();
+    await expect(page.getByTestId('edit-user-email')).toBeVisible();
     
     // Make a change
-    const firstNameInput = page.locator('input[placeholder*="First"]');
-    const originalValue = await firstNameInput.inputValue();
-    await firstNameInput.clear();
-    await firstNameInput.fill('CancelledChange');
+    const originalValue = await page.getByTestId('edit-user-firstname').inputValue();
+    await page.getByTestId('edit-user-firstname').clear();
+    await page.getByTestId('edit-user-firstname').fill('CancelledChange');
     
     // Click Cancel
     await page.click('button:has-text("Cancel")');
     await page.waitForTimeout(500);
     
     // Modal should close
-    await expect(page.locator('h3:has-text("Edit User")')).not.toBeVisible();
+    await expect(page.getByTestId('edit-user-email')).not.toBeVisible();
     
     // Change should NOT be saved
     await expect(page.locator('text=CancelledChange')).not.toBeVisible();
@@ -245,19 +244,20 @@ test.describe('User Management (SPA)', () => {
     
     // Create test user
     await page.click('button:has-text("Create User")');
+    await expect(page.getByTestId('create-user-email')).toBeVisible();
     
     const timestamp = Date.now();
     const testEmail = `delete-me-${timestamp}@irongate.com`;
     
-    await page.locator('input[type="email"]').nth(1).fill(testEmail);
-    await page.locator('input[type="password"]').nth(1).fill('TestPass123!');
-    await page.locator('input[placeholder*="First"]').fill('Delete');
-    await page.locator('input[placeholder*="Last"]').fill('Me');
+    await page.getByTestId('create-user-email').fill(testEmail);
+    await page.getByTestId('create-user-password').fill('TestPass123!');
+    await page.getByTestId('create-user-firstname').fill('Delete');
+    await page.getByTestId('create-user-lastname').fill('Me');
     
-    await page.locator('select').first().selectOption('qa_engineer');
-    await page.locator('select').last().selectOption({ index: 1 });
+    await page.getByTestId('create-user-role').selectOption('qa_engineer');
+    await page.getByTestId('create-user-team').selectOption({ index: 1 });
     
-    await page.click('button:has-text("Create User")');
+    await page.click('button[type="submit"]:has-text("Create User")');
     await page.waitForTimeout(2000);
     
     // Verify user created
@@ -371,19 +371,18 @@ test.describe('User Management (SPA)', () => {
     await userRow.locator('button:has-text("Reset Password")').click();
     
     // Reset password modal should appear
-    await expect(page.locator('h3:has-text("Reset Password")')).toBeVisible();
+    await expect(page.getByTestId('reset-password-new')).toBeVisible();
     
     // Fill new password
-    const passwordInputs = page.locator('input[type="password"]');
-    await passwordInputs.nth(1).fill('NewPass123!');
-    await passwordInputs.nth(2).fill('NewPass123!');
+    await page.getByTestId('reset-password-new').fill('NewPass123!');
+    await page.getByTestId('reset-password-confirm').fill('NewPass123!');
     
     // Submit
-    await page.click('button:has-text("Reset Password")');
+    await page.click('button[type="submit"]:has-text("Reset Password")');
     await page.waitForTimeout(1000);
     
     // Modal should close
-    await expect(page.locator('h3:has-text("Reset Password")')).not.toBeVisible();
+    await expect(page.getByTestId('reset-password-new')).not.toBeVisible();
     
     console.log('✅ Password reset successfully');
   });
