@@ -41,7 +41,8 @@ describe('Admin API Endpoints', () => {
         firstName: 'Test',
         lastName: 'User',
         role: 'qa_engineer',
-        teamId: 'team-quasars', // Use existing team
+        teamId: 'team-quasars',
+        departmentId: 'dept-decision-mgmt',
       };
 
       const response = await request(API_URL)
