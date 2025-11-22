@@ -15,6 +15,10 @@ describe('Admin API Endpoints', () => {
       .post('/api/auth/login')
       .send({ email: SUPER_ADMIN_EMAIL, password: SUPER_ADMIN_PASSWORD });
     
+    if (!adminRes.body.token) {
+      console.error('Super admin login failed:', adminRes.body);
+      throw new Error('Failed to get super admin token');
+    }
     superAdminToken = adminRes.body.token;
 
     // Login as QA manager
@@ -22,6 +26,10 @@ describe('Admin API Endpoints', () => {
       .post('/api/auth/login')
       .send({ email: 'manager@irongate.com', password: 'demo123' });
     
+    if (!managerRes.body.token) {
+      console.error('QA Manager login failed:', managerRes.body);
+      throw new Error('Failed to get QA manager token');
+    }
     qaManagerToken = managerRes.body.token;
 
     // Login as team lead
@@ -29,6 +37,10 @@ describe('Admin API Endpoints', () => {
       .post('/api/auth/login')
       .send({ email: 'lead@irongate.com', password: 'demo123' });
     
+    if (!leadRes.body.token) {
+      console.error('Team lead login failed:', leadRes.body);
+      throw new Error('Failed to get team lead token');
+    }
     teamLeadToken = leadRes.body.token;
   });
 
@@ -50,6 +62,9 @@ describe('Admin API Endpoints', () => {
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send(newUser);
 
+      if (response.status !== 201) {
+        console.error('Create user failed:', response.status, response.body);
+      }
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('id');
       expect(response.body.email).toBe(newUser.email);
@@ -143,6 +158,9 @@ describe('Admin API Endpoints', () => {
         .get('/api/admin/users')
         .set('Authorization', `Bearer ${qaManagerToken}`);
 
+      if (response.status !== 200) {
+        console.error('QA Manager get users failed:', response.status, response.body);
+      }
       expect(response.status).toBe(200);
       expect(Array.isArray(response.body)).toBe(true);
       
