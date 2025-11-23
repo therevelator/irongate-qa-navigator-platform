@@ -462,7 +462,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-gray-500 dark:text-slate-400">Loading...</div>
       </div>
     );
   }
@@ -472,7 +472,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       <Toaster position="top-right" />
       {/* Team Detail View */}
       {selectedTeam ? (
-        <div className="min-h-screen bg-gray-50 p-8">
+        <div className="min-h-screen bg-gray-50 dark:bg-slate-900 p-8">
           <div className="max-w-7xl mx-auto space-y-6">
             {/* Back Button */}
             <button
@@ -484,10 +484,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             </button>
 
             {/* Team Header */}
-            <div className="bg-white rounded-lg shadow p-6">
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h1 className="text-2xl font-bold text-gray-900">{selectedTeam.name}</h1>
+                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedTeam.name}</h1>
                   <p className="text-sm text-gray-600 mt-1">{selectedTeam.description || 'No description'}</p>
                   <div className="flex gap-2 mt-2">
                     <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
@@ -500,19 +500,19 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </div>
                 <div className="text-right">
                   <div className="text-3xl font-bold text-blue-600">{teamUsers.length}</div>
-                  <div className="text-sm text-gray-600">Team Members</div>
+                  <div className="text-sm text-gray-600 dark:text-slate-400">Team Members</div>
                 </div>
               </div>
             </div>
 
             {/* Team Members Table */}
-            <div className="bg-white rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h2 className="text-lg font-semibold text-gray-900">Team Members</h2>
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow">
+              <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Team Members</h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-gray-50">
+                  <thead className="bg-gray-50 dark:bg-slate-700">
                     <tr>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
@@ -524,17 +524,17 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   <tbody className="divide-y divide-gray-200">
                     {teamUsers.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">
                           No team members found
                         </td>
                       </tr>
                     ) : (
                       teamUsers.map((u) => (
-                        <tr key={u.id} className="hover:bg-gray-50">
+                        <tr key={u.id} className="hover:bg-gray-50 dark:bg-slate-700">
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="font-medium text-gray-900">{u.first_name} {u.last_name}</div>
+                            <div className="font-medium text-gray-900 dark:text-white">{u.first_name} {u.last_name}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">{u.email}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 dark:text-slate-400">{u.email}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(u.role)}`}>
                               {u.role.replace('_', ' ')}
@@ -593,7 +593,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         </div>
       ) : (
         /* Main Admin Panel View */
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Back Button */}
         {onBack && (
@@ -611,8 +611,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           <div className="flex items-center gap-3">
             <Shield className="w-8 h-8 text-blue-600" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Admin Control Panel</h1>
-              <p className="text-sm text-gray-600">Manage users and teams</p>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Control Panel</h1>
+              <p className="text-sm text-gray-600 dark:text-slate-400">Manage users and teams</p>
             </div>
           </div>
         <div className="flex gap-3">
@@ -647,14 +647,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       </div>
 
       {/* Hierarchical View: Departments → Teams → Users */}
-      <div className="bg-white rounded-lg shadow">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Organization Structure</h2>
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow">
+        <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Organization Structure</h2>
           <p className="text-sm text-gray-600 mt-1">Departments → Teams → Users</p>
         </div>
         <div className="divide-y divide-gray-200">
           {departments.length === 0 ? (
-            <div className="text-center py-12 text-gray-500">
+            <div className="text-center py-12 text-gray-500 dark:text-slate-400">
               <Building2 className="w-16 h-16 mx-auto mb-3 text-gray-300" />
               <p className="text-lg font-medium">No departments yet</p>
               <p className="text-sm mt-1">Create a department to get started</p>
@@ -684,7 +684,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         <h3 className="font-bold text-gray-900 text-lg">{dept.name}</h3>
                         <p className="text-sm text-gray-600 mt-0.5">{dept.description || 'No description'}</p>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                      <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-slate-400">
                         <span className="font-medium">{deptTeams.length} {deptTeams.length === 1 ? 'Team' : 'Teams'}</span>
                         <span className="text-gray-400">•</span>
                         <span>{new Date(dept.created_at).toLocaleDateString()}</span>
@@ -726,14 +726,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                   </div>
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2">
-                                      <h4 className="font-semibold text-gray-900">{team.name}</h4>
+                                      <h4 className="font-semibold text-gray-900 dark:text-white">{team.name}</h4>
                                       <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${team.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                         {team.is_active ? 'Active' : 'Inactive'}
                                       </span>
                                     </div>
                                     <p className="text-xs text-gray-600 mt-0.5">{team.description || 'No description'}</p>
                                   </div>
-                                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                                  <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-slate-400">
                                     <span className="font-medium">{teamUsers.length} {teamUsers.length === 1 ? 'User' : 'Users'}</span>
                                   </div>
                                 </div>
@@ -741,16 +741,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
                               {/* Team Users - Expandable */}
                               {isTeamExpanded && (
-                                <div className="bg-white px-6 py-3 ml-16">
+                                <div className="bg-white dark:bg-slate-800 px-6 py-3 ml-16">
                                   {teamUsers.length === 0 ? (
-                                    <div className="text-center py-6 text-gray-500">
+                                    <div className="text-center py-6 text-gray-500 dark:text-slate-400">
                                       <Users className="w-10 h-10 mx-auto mb-2 text-gray-300" />
                                       <p className="text-sm">No users in this team yet</p>
                                     </div>
                                   ) : (
                                     <div className="overflow-x-auto">
                                       <table className="w-full">
-                                        <thead className="bg-gray-50">
+                                        <thead className="bg-gray-50 dark:bg-slate-700">
                                           <tr>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
@@ -761,11 +761,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                         </thead>
                                         <tbody className="bg-white divide-y divide-gray-100">
                                           {teamUsers.map((u) => (
-                                            <tr key={u.id} className="hover:bg-gray-50">
+                                            <tr key={u.id} className="hover:bg-gray-50 dark:bg-slate-700">
                                               <td className="px-3 py-2 whitespace-nowrap">
                                                 <div className="font-medium text-gray-900 text-sm">{u.first_name} {u.last_name}</div>
                                               </td>
-                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{u.email}</td>
+                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600 dark:text-slate-400">{u.email}</td>
                                               <td className="px-3 py-2 whitespace-nowrap">
                                                 <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getRoleBadgeColor(u.role)}`}>
                                                   {u.role.replace('_', ' ')}
@@ -845,10 +845,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       {/* Create User Modal */}
       {showCreateUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Create New User</h3>
-              <button onClick={() => setShowCreateUser(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowCreateUser(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -965,10 +965,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       {/* Create Team Modal */}
       {showCreateTeam && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Create New Team</h3>
-              <button onClick={() => setShowCreateTeam(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowCreateTeam(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1039,10 +1039,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       {/* Reset Password Modal */}
       {showResetPassword && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Reset Password</h3>
-              <button onClick={() => setShowResetPassword(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowResetPassword(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1102,10 +1102,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       {/* Reset Password Modal */}
       {showResetPassword && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">Reset Password</h3>
-              <button onClick={() => setShowResetPassword(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowResetPassword(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1160,13 +1160,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       {/* Edit User Modal */}
       {showEditUser && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <div>
                 <h3 className="text-lg font-semibold">Edit User</h3>
                 <p className="text-sm text-gray-500 mt-1">Editing: {selectedUser.email}</p>
               </div>
-              <button onClick={() => setShowEditUser(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowEditUser(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1243,10 +1243,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       {/* Delete Confirm Modal */}
       {showDeleteConfirm && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-red-600">Delete User</h3>
-              <button onClick={() => setShowDeleteConfirm(false)} className="text-gray-400 hover:text-gray-600">
+              <button onClick={() => setShowDeleteConfirm(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -1275,7 +1275,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       {/* Create/Edit Department Modal */}
       {(showCreateDepartment || showEditDepartment) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold">
                 {showEditDepartment ? 'Edit Department' : 'Create New Department'}
@@ -1349,7 +1349,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       {/* Delete Department Confirmation */}
       {showDeleteDepartmentConfirm && selectedDepartment && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-semibold mb-4">Delete Department?</h3>
             <p className="text-gray-600 mb-6">
               Are you sure you want to delete <strong>{selectedDepartment.name}</strong>? 
