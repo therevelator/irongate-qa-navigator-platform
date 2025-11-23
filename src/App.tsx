@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { LayoutDashboard, Smartphone, ShoppingCart, Server, CreditCard, Sparkles, Settings, LogOut, Shield, Building2 } from 'lucide-react';
-import { generateMockData } from './data/mockData';
 import type { Team } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
 import { ROLE_PERMISSIONS, getRoleIcon, getRoleBadgeColor } from './types/auth';
@@ -31,7 +30,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('all');
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | 'admin-panel' | string>('dashboard');
-  const [teams, setTeams] = useState<Team[]>(generateMockData());
+  const [teams, setTeams] = useState<Team[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [userTeams, setUserTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
