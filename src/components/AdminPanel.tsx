@@ -125,6 +125,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         const teamsData = await teamsRes.json();
         // Handle both array and {teams: array} response formats
         const teamsList = Array.isArray(teamsData) ? teamsData : (teamsData.teams || []);
+        console.log('Fetched teams:', teamsList);
         setTeams(teamsList);
       } else {
         console.error('Failed to fetch teams:', await teamsRes.text());
@@ -909,19 +910,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Team</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Team {teams.length > 0 && <span className="text-gray-500 font-normal">({teams.length} available)</span>}
+                </label>
                 <select
                   required
                   data-testid="create-user-team"
                   value={newUser.teamId}
                   onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  disabled={teams.length === 0}
                 >
-                  <option value="">Select team...</option>
+                  <option value="">
+                    {teams.length === 0 ? 'No teams available - create a team first' : 'Select team...'}
+                  </option>
                   {teams.map((team) => (
-                    <option key={team.id} value={team.id}>{team.name} ({team.platform})</option>
+                    <option key={team.id} value={team.id}>
+                      {team.name} ({team.platform})
+                    </option>
                   ))}
                 </select>
+                {teams.length === 0 && (
+                  <p className="mt-1 text-sm text-red-600">
+                    Please create a team first before adding users.
+                  </p>
+                )}
               </div>
               <div className="flex gap-3 pt-4">
                 <button
