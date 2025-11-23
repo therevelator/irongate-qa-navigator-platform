@@ -282,20 +282,20 @@ function App() {
   return (
     <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
       {/* Main Dashboard Content */}
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full bg-white dark:bg-slate-900">
         {/* Hero Header */}
-        <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 px-8 py-8">
+        <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-8 py-8">
           <div className="max-w-7xl mx-auto">
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
                   {activeTab === 'all' ? 'Organization Overview' : departments.find(d => d.id === activeTab)?.name || 'Teams'}
                 </h1>
-                <p className="text-slate-600 flex items-center gap-2">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                <p className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
                     {filteredTeams.length} Active Teams
                   </span>
-                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-400 dark:text-slate-600">•</span>
                   <span className="text-sm">Real-time quality metrics</span>
                 </p>
               </div>

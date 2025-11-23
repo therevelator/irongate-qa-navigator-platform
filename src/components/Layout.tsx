@@ -66,7 +66,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
   };
 
   return (
-    <div className={`flex h-screen ${isDark ? 'dark' : ''}`}>
+    <div className="flex h-screen">
       {/* Sidebar Navigation */}
       <aside className="w-64 bg-slate-900 dark:bg-slate-950 text-white flex flex-col border-r border-slate-800">
         {/* Logo */}
