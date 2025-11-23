@@ -11,14 +11,12 @@ const testDepartment = {
 
 const testTeam = {
   name: `QA Team ${Date.now()}`,
-  description: 'Test team for E2E testing',
-  platform: 'Backend'
+  description: 'Test team for E2E testing'
 };
 
 const updatedTeam = {
   name: `Updated QA Team ${Date.now()}`,
-  description: 'Updated description for testing',
-  platform: 'Frontend'
+  description: 'Updated description for testing'
 };
 
 test.describe('Team Management CRUD Operations', () => {
@@ -94,7 +92,6 @@ test.describe('Team Management CRUD Operations', () => {
     // Verify form fields are present
     await expect(page.getByTestId('create-team-name')).toBeVisible();
     await expect(page.getByTestId('create-team-description')).toBeVisible();
-    await expect(page.getByTestId('create-team-platform')).toBeVisible();
     await expect(page.getByTestId('create-team-department')).toBeVisible();
   });
 
@@ -113,7 +110,6 @@ test.describe('Team Management CRUD Operations', () => {
     // Fill in team details
     await page.getByTestId('create-team-name').fill(testTeam.name);
     await page.getByTestId('create-team-description').fill(testTeam.description);
-    await page.getByTestId('create-team-platform').selectOption(testTeam.platform);
     await page.getByTestId('create-team-department').selectOption(createdDepartmentId);
 
     // Submit form
@@ -172,7 +168,6 @@ test.describe('Team Management CRUD Operations', () => {
 
     // Verify team is visible in the list
     await expect(page.getByText(teamData.name)).toBeVisible();
-    await expect(page.getByText(testTeam.platform)).toBeVisible();
   });
 
   test('should expand and collapse team to view users', async ({ page, request }) => {
@@ -260,7 +255,6 @@ test.describe('Team Management CRUD Operations', () => {
     
     expect(updatedTeamData.name).toBe(updatedTeam.name);
     expect(updatedTeamData.description).toBe(updatedTeam.description);
-    expect(updatedTeamData.platform).toBe(updatedTeam.platform);
   });
 
   test('should delete team via API', async ({ request }) => {
