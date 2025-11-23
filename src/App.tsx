@@ -38,44 +38,60 @@ function App() {
 
   // Fetch departments and teams based on user role
   useEffect(() => {
-    if (user) {
+    if (user?.id) {
       fetchDepartmentsAndTeams();
     }
-  }, [user]);
+  }, [user?.id]);
 
   const fetchDepartmentsAndTeams = async () => {
     try {
       setLoading(true);
       const token = localStorage.getItem('irongate_token');
+      
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+      
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       };
 
       // Fetch departments
-      const deptResponse = await fetch('http://localhost:3000/api/admin/departments', { headers });
-      if (deptResponse.ok) {
-        const deptData = await deptResponse.json();
-        
-        // Filter departments based on user role
-        if (user?.role === 'super_admin') {
-          setDepartments(deptData);
-        } else if (user?.role === 'qa_manager') {
-          // QA Manager sees their department
-          const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
-          setDepartments(userDept);
-        } else if (user?.role === 'team_lead' || user?.role === 'qa_engineer') {
-          // Team Lead and QA Engineer see only their department
-          const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
-          setDepartments(userDept);
+      try {
+        const deptResponse = await fetch('http://localhost:3000/api/admin/departments', { headers });
+        if (deptResponse.ok) {
+          const deptData = await deptResponse.json();
+          
+          // Filter departments based on user role
+          if (user?.role === 'super_admin') {
+            setDepartments(deptData);
+          } else if (user?.role === 'qa_manager') {
+            // QA Manager sees their department
+            const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
+            setDepartments(userDept);
+          } else if (user?.role === 'team_lead' || user?.role === 'qa_engineer') {
+            // Team Lead and QA Engineer see only their department
+            const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
+            setDepartments(userDept);
+          }
         }
+      } catch (err) {
+        console.error('Error fetching departments:', err);
+        // Continue even if departments fail
       }
 
       // Fetch teams
-      const teamsResponse = await fetch('http://localhost:3000/api/admin/teams', { headers });
-      if (teamsResponse.ok) {
-        const teamsData = await teamsResponse.json();
-        setUserTeams(teamsData);
+      try {
+        const teamsResponse = await fetch('http://localhost:3000/api/admin/teams', { headers });
+        if (teamsResponse.ok) {
+          const teamsData = await teamsResponse.json();
+          setUserTeams(teamsData);
+        }
+      } catch (err) {
+        console.error('Error fetching teams:', err);
+        // Continue even if teams fail
       }
 
       setLoading(false);
