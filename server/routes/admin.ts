@@ -7,11 +7,50 @@ const router = express.Router();
 
 // Role hierarchy and permissions
 const ROLE_HIERARCHY = {
-  super_admin: ['qa_manager', 'team_lead', 'qa_engineer', 'viewer'],
-  qa_manager: ['team_lead', 'qa_engineer', 'viewer'],
+  super_admin: ['manager', 'team_lead', 'qa_engineer', 'viewer'],
+  manager: ['team_lead', 'qa_engineer', 'viewer'],
   team_lead: ['qa_engineer', 'viewer'],
   qa_engineer: [],
   viewer: []
+};
+
+// Permission levels for each role
+const ROLE_PERMISSIONS = {
+  super_admin: {
+    departments: { create: true, read: true, update: true, delete: true },
+    teams: { create: true, read: true, update: true, delete: true },
+    users: { create: true, read: true, update: true, delete: true },
+    resetPassword: true,
+    advancedFeatures: true
+  },
+  manager: {
+    departments: { create: false, read: true, update: false, delete: false },
+    teams: { create: true, read: true, update: true, delete: true },
+    users: { create: true, read: true, update: true, delete: true },
+    resetPassword: true,
+    advancedFeatures: true
+  },
+  team_lead: {
+    departments: { create: false, read: true, update: false, delete: false },
+    teams: { create: true, read: true, update: true, delete: false },
+    users: { create: true, read: true, update: true, delete: false },
+    resetPassword: true,
+    advancedFeatures: true
+  },
+  qa_engineer: {
+    departments: { create: false, read: true, update: false, delete: false },
+    teams: { create: false, read: true, update: false, delete: false },
+    users: { create: false, read: true, update: false, delete: false },
+    resetPassword: true, // Only their own
+    advancedFeatures: true // Can see metrics but not generate reports
+  },
+  viewer: {
+    departments: { create: false, read: true, update: false, delete: false },
+    teams: { create: false, read: true, update: false, delete: false },
+    users: { create: false, read: true, update: false, delete: false },
+    resetPassword: false,
+    advancedFeatures: false
+  }
 };
 
 // Check if user can create a specific role
@@ -51,8 +90,8 @@ router.get('/users', authenticateToken, async (req: any, res) => {
          ORDER BY u.created_at DESC`,
         [companyId]
       );
-    } else if (role === 'qa_manager') {
-      // QA Manager sees users they created and in their department
+    } else if (role === 'manager') {
+      // Manager sees users in their department
       users = await query<any>(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
                 u.department_id, u.primary_team_id, u.is_active, u.created_at,
@@ -67,7 +106,7 @@ router.get('/users', authenticateToken, async (req: any, res) => {
         [companyId, userId, userId]
       );
     } else if (role === 'team_lead') {
-      // Team Lead sees only users in their team
+      // Team Lead sees users in their department
       users = await query<any>(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
                 u.department_id, u.primary_team_id, u.is_active, u.created_at,
@@ -75,9 +114,9 @@ router.get('/users', authenticateToken, async (req: any, res) => {
          FROM users u
          LEFT JOIN teams t ON u.primary_team_id = t.id
          LEFT JOIN departments d ON u.department_id = d.id
-         WHERE u.primary_team_id = ?
+         WHERE u.department_id = (SELECT department_id FROM users WHERE id = ?)
          ORDER BY u.created_at DESC`,
-        [primaryTeamId]
+        [userId]
       );
     } else {
       // QA Engineer and Viewer see only themselves
@@ -152,7 +191,7 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     }
 
     // QA Manager can only assign users to teams in their department
-    if (creatorRole === 'qa_manager') {
+    if (creatorRole === 'manager') {
       if (team.department_id !== departmentId) {
         return res.status(403).json({ 
           error: 'Can only assign users to teams in your department' 
@@ -258,8 +297,8 @@ router.get('/teams', authenticateToken, async (req: any, res) => {
          ORDER BY t.created_at DESC`,
         [companyId]
       );
-    } else if (role === 'qa_manager' || role === 'team_lead') {
-      // QA Manager and Team Lead see teams in their department
+    } else if (role === 'manager' || role === 'team_lead') {
+      // Manager and Team Lead see teams in their department
       teams = await query<any>(
         `SELECT t.*, d.name as department_name 
          FROM teams t 
@@ -287,7 +326,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
     const { name, description, departmentId: requestDepartmentId } = req.body;
 
     // Only QA Manager and Super Admin can create teams
-    if (role !== 'qa_manager' && role !== 'super_admin') {
+    if (role !== 'manager' && role !== 'super_admin') {
       return res.status(403).json({ error: 'Only QA Managers and Super Admins can create teams' });
     }
 
@@ -338,7 +377,7 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
     const { name, description, platform } = req.body;
 
     // Only Super Admin and QA Manager can update teams
-    if (role !== 'super_admin' && role !== 'qa_manager') {
+    if (role !== 'super_admin' && role !== 'manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -349,7 +388,7 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
     }
 
     // QA Manager can only update teams in their department
-    if (role === 'qa_manager' && team.department_id !== userDeptId) {
+    if (role === 'manager' && team.department_id !== userDeptId) {
       return res.status(403).json({ error: 'Can only update teams in your department' });
     }
 
@@ -373,7 +412,7 @@ router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
     const { id: teamId } = req.params;
 
     // Only Super Admin and QA Manager can delete teams
-    if (role !== 'super_admin' && role !== 'qa_manager') {
+    if (role !== 'super_admin' && role !== 'manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -384,7 +423,7 @@ router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
     }
 
     // QA Manager can only delete teams in their department
-    if (role === 'qa_manager' && team.department_id !== userDeptId) {
+    if (role === 'manager' && team.department_id !== userDeptId) {
       return res.status(403).json({ error: 'Can only delete teams in your department' });
     }
 
@@ -437,7 +476,7 @@ router.delete('/users/:id', authenticateToken, async (req: any, res) => {
       }
     }
     // QA Manager can delete users in their department that they created
-    else if (role === 'qa_manager') {
+    else if (role === 'manager') {
       if (targetUser.department_id !== userDeptId) {
         return res.status(403).json({ error: 'Can only delete users in your department' });
       }
@@ -680,6 +719,23 @@ router.delete('/departments/:id', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error deleting department:', error);
     res.status(500).json({ error: 'Failed to delete department' });
+  }
+});
+
+// Get permissions for current user's role
+router.get('/permissions', authenticateToken, async (req: any, res) => {
+  try {
+    const { role } = req.user;
+    const permissions = ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS] || ROLE_PERMISSIONS.viewer;
+    
+    res.json({
+      role,
+      permissions,
+      availableRoles: ROLE_HIERARCHY[role as keyof typeof ROLE_HIERARCHY] || []
+    });
+  } catch (error) {
+    console.error('Error fetching permissions:', error);
+    res.status(500).json({ error: 'Failed to fetch permissions' });
   }
 });
 

@@ -17,6 +17,9 @@ import TeamGamification from './components/TeamGamification';
 import TeamManagement from './components/TeamManagement';
 import AdminPanel from './components/AdminPanel';
 import PDFReportGenerator from './components/PDFReportGenerator';
+import UsersView from './components/UsersView';
+import TeamsView from './components/TeamsView';
+import DepartmentsView from './components/DepartmentsView';
 import Layout from './components/Layout';
 
 interface Department {
@@ -63,7 +66,7 @@ function App() {
           // Filter departments based on user role
           if (user?.role === 'super_admin') {
             setDepartments(deptData);
-          } else if (user?.role === 'qa_manager') {
+          } else if (user?.role === 'manager') {
             // QA Manager sees their department
             const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
             setDepartments(userDept);
@@ -91,11 +94,11 @@ function App() {
             qaScore: 75, // Default score, will be replaced with real data later
             status: 'good' as const,
             velocity: [
-              { sprint: 'S1', points: 45 },
-              { sprint: 'S2', points: 52 },
-              { sprint: 'S3', points: 48 },
-              { sprint: 'S4', points: 55 },
-              { sprint: 'S5', points: 50 }
+              { sprint: 'S1', committed: 50, delivered: 45 },
+              { sprint: 'S2', committed: 55, delivered: 52 },
+              { sprint: 'S3', committed: 50, delivered: 48 },
+              { sprint: 'S4', committed: 58, delivered: 55 },
+              { sprint: 'S5', committed: 52, delivered: 50 }
             ],
             metrics: [
               { id: 1, name: 'Test Coverage', value: '85%', trend: 'up', change: 5.2 },
@@ -138,7 +141,7 @@ function App() {
   if (user?.role === 'team_lead' || user?.role === 'qa_engineer') {
     // Team leads and QA engineers see only their team
     filteredTeams = filteredTeams.filter((t: any) => t.id === user?.primaryTeamId);
-  } else if (user?.role === 'qa_manager') {
+  } else if (user?.role === 'manager') {
     // QA managers see teams in their department
     if (activeTab === 'all') {
       filteredTeams = filteredTeams.filter((t: any) => t.department_id === user?.departmentId);
@@ -173,7 +176,34 @@ function App() {
     );
   }
 
-  // If features menu is open
+  // Users View
+  if (currentView === 'users') {
+    return (
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
+        <UsersView />
+      </Layout>
+    );
+  }
+
+  // Teams View
+  if (currentView === 'teams') {
+    return (
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
+        <TeamsView />
+      </Layout>
+    );
+  }
+
+  // Departments View
+  if (currentView === 'departments') {
+    return (
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
+        <DepartmentsView />
+      </Layout>
+    );
+  }
+
+  // If features menu is open (Analytics)
   if (currentView === 'features') {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
@@ -274,7 +304,7 @@ function App() {
   if (currentView === 'admin-panel') {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <AdminPanel onBack={() => setCurrentView('dashboard')} />
+        <AdminPanel />
       </Layout>
     );
   }
@@ -282,65 +312,38 @@ function App() {
   return (
     <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
       {/* Main Dashboard Content */}
-      <div className="flex flex-col h-full bg-white dark:bg-slate-900">
-        {/* Hero Header with Teams */}
-        <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-8 py-8">
-          <div className="max-w-7xl mx-auto">
-            {/* Header Title and Score */}
-            <div className="flex justify-between items-start mb-6">
-              <div>
-                <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
-                  {activeTab === 'all' ? 'Organization Overview' : departments.find(d => d.id === activeTab)?.name || 'Teams'}
-                </h1>
-                <p className="text-slate-600 dark:text-slate-400 flex items-center gap-2">
-                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200">
-                    {filteredTeams.length} Active Teams
-                  </span>
-                  <span className="text-slate-400 dark:text-slate-600">•</span>
-                  <span className="text-sm">Real-time quality metrics</span>
-                </p>
-              </div>
-              
-              {/* Score Card */}
-              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 min-w-[180px]">
-                <p className="text-blue-100 text-sm font-medium mb-1">Overall QA Score</p>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-5xl font-bold text-white">{avgScore}</span>
-                  <span className="text-2xl text-blue-100">/100</span>
-                </div>
-                <div className="mt-3 h-2 bg-blue-400/30 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-white rounded-full transition-all duration-500"
-                    style={{ width: `${avgScore}%` }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Teams List */}
-            <div className="space-y-4">
-              {filteredTeams.length === 0 ? (
-                <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl border-2 border-dashed border-gray-300 dark:border-slate-600 p-12 text-center">
-                  <div className="text-gray-400 dark:text-slate-500 mb-4">
-                    <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                    </svg>
-                  </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Teams Found</h3>
-                  <p className="text-gray-500 dark:text-slate-400">There are no teams to display. Create a team in the Admin Panel to get started.</p>
-                </div>
-              ) : (
-                filteredTeams.map(team => (
-                  <TeamRow key={team.id} team={team} onClick={() => setSelectedTeam(team)} />
-                ))
-              )}
+      <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-950">
+        {/* Header */}
+        <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-8 py-6">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
+                Quality Engineering
+              </h1>
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                {filteredTeams.length} Active Teams • Real-time Metrics
+              </p>
             </div>
           </div>
-        </header>
+        </div>
 
-        {/* Main Content Area - Now empty, can be used for other content */}
-        <div className="flex-1 overflow-auto">
-          {/* Future content can go here */}
+        {/* Teams Table */}
+        <div className="flex-1 overflow-auto p-8">
+          {filteredTeams.length === 0 ? (
+            <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 p-12 text-center">
+              <div className="text-gray-400 dark:text-slate-500 mb-4">
+                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Teams Found</h3>
+              <p className="text-gray-500 dark:text-slate-400">There are no teams to display. Create a team in the Admin Panel to get started.</p>
+            </div>
+          ) : (
+            filteredTeams.map(team => (
+              <TeamRow key={team.id} team={team} onClick={() => setSelectedTeam(team)} />
+            ))
+          )}
         </div>
 
         {/* Footer */}

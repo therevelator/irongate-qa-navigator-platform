@@ -26,13 +26,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
   };
 
   const getCategoryColor = (category: string) => {
-    const colors: Record<string, string> = {
-      testing: 'from-blue-500 to-blue-600',
-      performance: 'from-purple-500 to-purple-600',
-      productivity: 'from-green-500 to-green-600',
-      business: 'from-orange-500 to-orange-600'
-    };
-    return colors[category] || 'from-gray-500 to-gray-600';
+    return 'from-gray-700 to-gray-800 dark:from-slate-700 dark:to-slate-800';
   };
 
   const categories = [
@@ -47,18 +41,8 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
       {/* Header */}
       <div className="bg-white dark:bg-slate-800 border-b dark:border-slate-700">
         <div className="px-8 py-6">
-          <button 
-            onClick={onBack}
-            className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            <span className="font-medium">Back to Dashboard</span>
-          </button>
-          
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Advanced Features</h1>
-            <p className="text-gray-500 dark:text-slate-400 mt-1">Explore powerful analytics and intelligence tools</p>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics</h1>
+          <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Explore powerful analytics and intelligence tools</p>
         </div>
       </div>
 
@@ -71,8 +55,8 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
           
           return (
             <div key={category.id} className="mb-12">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center">
-                <span className="text-3xl mr-3">{category.emoji}</span>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                <span className="text-2xl mr-2">{category.emoji}</span>
                 {category.name}
               </h2>
               
@@ -112,7 +96,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, getIcon, getCategory
         {getIcon(feature.icon)}
       </div>
       
-      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
+      <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2 transition-colors">
         {feature.name}
       </h3>
       
@@ -120,7 +104,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, getIcon, getCategory
         {feature.description}
       </p>
       
-      <div className="mt-4 flex items-center text-blue-600 dark:text-blue-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
+      <div className="mt-4 flex items-center text-gray-600 dark:text-slate-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
         <span>Explore</span>
         <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

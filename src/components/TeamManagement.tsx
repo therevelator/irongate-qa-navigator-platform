@@ -223,7 +223,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
             {canCreate && (
               <button
                 onClick={() => setShowAddForm(true)}
-                className="flex items-center space-x-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                className="flex items-center space-x-2 px-6 py-3 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors shadow-md"
               >
                 <Plus size={20} />
                 <span className="font-semibold">Add New Team</span>
@@ -302,7 +302,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
               <button
                 onClick={handleAdd}
                 disabled={!formData.name || !formData.department_id}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Add Team
               </button>
@@ -319,7 +319,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
             {canCreate && (
               <button
                 onClick={() => setShowAddForm(true)}
-                className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                className="inline-flex items-center space-x-2 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
               >
                 <Plus size={16} />
                 <span>Create First Team</span>
@@ -365,7 +365,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
                       </button>
                       <button
                         onClick={handleSave}
-                        className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="flex items-center space-x-2 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
                       >
                         <Save size={16} />
                         <span>Save Changes</span>
@@ -375,8 +375,8 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
                 ) : (
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 rounded-lg bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                        <Users className="w-6 h-6 text-blue-600 dark:text-blue-400" />
+                      <div className="w-12 h-12 rounded-lg bg-gray-100 dark:bg-slate-800 flex items-center justify-center">
+                        <Users className="w-6 h-6 text-gray-600 dark:text-slate-400" />
                       </div>
                       <div>
                         <h3 className="text-xl font-bold text-gray-900 dark:text-white">{team.name}</h3>
@@ -393,7 +393,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
                       {canEdit && (
                         <button
                           onClick={() => handleEdit(team)}
-                          className="p-2 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded-lg transition-colors"
+                          className="p-2 text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                           title="Edit team"
                         >
                           <Edit2 size={20} />
@@ -402,7 +402,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
                       {canDelete && (
                         <button
                           onClick={() => handleDelete(team.id)}
-                          className="p-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg transition-colors"
+                          className="p-2 text-gray-600 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
                           title="Delete team"
                         >
                           <Trash2 size={20} />

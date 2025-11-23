@@ -36,11 +36,9 @@ interface Department {
 
 const API_URL = 'http://localhost:3000/api';
 
-interface AdminPanelProps {
-  onBack?: () => void;
-}
+interface AdminPanelProps {}
 
-const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
+const AdminPanel: React.FC<AdminPanelProps> = () => {
   const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
@@ -420,9 +418,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   const getRoleBadgeColor = (role: string) => {
     const colors: Record<string, string> = {
-      super_admin: 'bg-purple-100 text-purple-800',
-      qa_manager: 'bg-blue-100 text-blue-800',
-      team_lead: 'bg-green-100 text-green-800',
+      super_admin: 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300',
+      qa_manager: 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300',
+      team_lead: 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300',
       qa_engineer: 'bg-yellow-100 text-yellow-800',
       viewer: 'bg-gray-100 text-gray-800'
     };
@@ -488,18 +486,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               <div className="flex items-center justify-between">
                 <div>
                   <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedTeam.name}</h1>
-                  <p className="text-sm text-gray-600 mt-1">{selectedTeam.description || 'No description'}</p>
+                  <p className="text-sm text-gray-400 dark:text-slate-400 mt-1">{selectedTeam.description || 'No description'}</p>
                   <div className="flex gap-2 mt-2">
-                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300">
                       {selectedTeam.platform}
                     </span>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${selectedTeam.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${selectedTeam.is_active ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300' : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300'}`}>
                       {selectedTeam.is_active ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-3xl font-bold text-blue-600">{teamUsers.length}</div>
+                  <div className="text-3xl font-bold text-gray-600 dark:text-slate-400">{teamUsers.length}</div>
                   <div className="text-sm text-gray-600 dark:text-slate-400">Team Members</div>
                 </div>
               </div>
@@ -514,11 +512,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <table className="w-full">
                   <thead className="bg-gray-50 dark:bg-slate-700">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Name</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Email</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Role</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Status</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -541,7 +539,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                            <span className={`px-2 py-1 text-xs font-medium rounded-full ${u.is_active ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300' : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300'}`}>
                               {u.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </td>
@@ -557,7 +555,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 });
                                 setShowEditUser(true);
                               }}
-                              className="text-blue-600 hover:text-blue-800 font-medium"
+                              className="text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white font-medium"
                             >
                               Edit
                             </button>
@@ -566,7 +564,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                 setSelectedUser(u);
                                 setShowResetPassword(true);
                               }}
-                              className="text-green-600 hover:text-green-800 font-medium"
+                              className="text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white font-medium"
                             >
                               Reset Password
                             </button>
@@ -576,7 +574,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                   setSelectedUser(u);
                                   setShowDeleteConfirm(true);
                                 }}
-                                className="text-red-600 hover:text-red-800 font-medium"
+                                className="text-gray-700 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white font-medium"
                               >
                                 Delete
                               </button>
@@ -595,31 +593,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         /* Main Admin Panel View */
     <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
-        {/* Back Button */}
-        {onBack && (
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
-          >
-            <ArrowLeft className="w-5 h-5" />
-            Back to Dashboard
-          </button>
-        )}
-
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <Shield className="w-8 h-8 text-blue-600" />
+            <Shield className="w-8 h-8 text-gray-600 dark:text-slate-400" />
             <div>
               <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Control Panel</h1>
-              <p className="text-sm text-gray-600 dark:text-slate-400">Manage users and teams</p>
+              <p className="text-sm text-gray-500 dark:text-slate-400">Manage users and teams</p>
             </div>
           </div>
         <div className="flex gap-3">
           {availableRoles.length > 0 && (
             <button
               onClick={() => setShowCreateUser(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
             >
               <UserPlus className="w-5 h-5" />
               Create User
@@ -628,7 +615,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           {canCreateTeam && (
             <button
               onClick={() => setShowCreateTeam(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
             >
               <Users className="w-5 h-5" />
               Create Team
@@ -637,7 +624,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           {user?.role === 'super_admin' && (
             <button
               onClick={() => setShowCreateDepartment(true)}
-              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+              className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
             >
               <Building2 className="w-5 h-5" />
               Create Department
@@ -650,7 +637,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       <div className="bg-white dark:bg-slate-800 rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Organization Structure</h2>
-          <p className="text-sm text-gray-600 mt-1">Departments → Teams → Users</p>
+          <p className="text-sm text-gray-400 dark:text-slate-400 mt-1">Departments → Teams → Users</p>
         </div>
         <div className="divide-y divide-gray-200">
           {departments.length === 0 ? (
@@ -674,11 +661,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     <div className="flex items-center gap-4 flex-1">
                       <div className="flex items-center gap-2">
                         {isDeptExpanded ? (
-                          <ChevronDown className="w-6 h-6 text-purple-600" />
+                          <ChevronDown className="w-6 h-6 text-gray-600 dark:text-slate-400" />
                         ) : (
-                          <ChevronRight className="w-6 h-6 text-purple-600" />
+                          <ChevronRight className="w-6 h-6 text-gray-600 dark:text-slate-400" />
                         )}
-                        <Building2 className="w-6 h-6 text-purple-600" />
+                        <Building2 className="w-6 h-6 text-gray-600 dark:text-slate-400" />
                       </div>
                       <div className="flex-1">
                         <h3 className="font-bold text-gray-900 dark:text-white text-lg">{dept.name}</h3>
@@ -694,9 +681,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
                   {/* Department Teams - Expandable */}
                   {isDeptExpanded && (
-                    <div className="bg-gray-50 dark:bg-slate-800/50 border-l-4 border-purple-200 dark:border-purple-800">
+                    <div className="bg-gray-50 dark:bg-slate-800/50">
                       {deptTeams.length === 0 ? (
-                        <div className="text-center py-8 text-gray-500 ml-12">
+                        <div className="text-center py-8 text-gray-400 dark:text-slate-400 ml-12">
                           <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
                           <p>No teams in this department yet</p>
                         </div>
@@ -713,25 +700,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                   e.stopPropagation();
                                   toggleTeam(team.id);
                                 }}
-                                className="px-6 py-3 ml-8 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
+                                className="px-6 py-3 ml-8 hover:bg-gray-50 dark:hover:bg-slate-800 cursor-pointer flex items-center justify-between"
                               >
                                 <div className="flex items-center gap-3 flex-1">
                                   <div className="flex items-center gap-2">
                                     {isTeamExpanded ? (
-                                      <ChevronDown className="w-5 h-5 text-blue-600" />
+                                      <ChevronDown className="w-5 h-5 text-gray-600 dark:text-slate-400" />
                                     ) : (
-                                      <ChevronRight className="w-5 h-5 text-blue-600" />
+                                      <ChevronRight className="w-5 h-5 text-gray-600 dark:text-slate-400" />
                                     )}
-                                    <Users className="w-5 h-5 text-blue-600" />
+                                    <Users className="w-5 h-5 text-gray-600 dark:text-slate-400" />
                                   </div>
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2">
                                       <h4 className="font-semibold text-gray-900 dark:text-white">{team.name}</h4>
-                                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${team.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${team.is_active ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300' : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300'}`}>
                                         {team.is_active ? 'Active' : 'Inactive'}
                                       </span>
                                     </div>
-                                    <p className="text-xs text-gray-600 mt-0.5">{team.description || 'No description'}</p>
+                                    <p className="text-xs text-gray-400 dark:text-slate-400 mt-0.5">{team.description || 'No description'}</p>
                                   </div>
                                   <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-slate-400">
                                     <span className="font-medium">{teamUsers.length} {teamUsers.length === 1 ? 'User' : 'Users'}</span>
@@ -752,18 +739,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                       <table className="w-full">
                                         <thead className="bg-gray-50 dark:bg-slate-700">
                                           <tr>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Name</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Email</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Role</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Status</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Actions</th>
                                           </tr>
                                         </thead>
-                                        <tbody className="bg-white divide-y divide-gray-100">
+                                        <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-100 dark:divide-slate-700">
                                           {teamUsers.map((u) => (
                                             <tr key={u.id} className="hover:bg-gray-50 dark:bg-slate-700">
                                               <td className="px-3 py-2 whitespace-nowrap">
-                                                <div className="font-medium text-gray-900 text-sm">{u.first_name} {u.last_name}</div>
+                                                <div className="font-medium text-gray-900 dark:text-white text-sm">{u.first_name} {u.last_name}</div>
                                               </td>
                                               <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600 dark:text-slate-400">{u.email}</td>
                                               <td className="px-3 py-2 whitespace-nowrap">
@@ -772,7 +759,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                                 </span>
                                               </td>
                                               <td className="px-3 py-2 whitespace-nowrap">
-                                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${u.is_active ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300' : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300'}`}>
                                                   {u.is_active ? 'Active' : 'Inactive'}
                                                 </span>
                                               </td>
@@ -790,7 +777,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                                       });
                                                       setShowEditUser(true);
                                                     }}
-                                                    className="p-1 text-blue-600 hover:bg-blue-100 rounded"
+                                                    className="p-1 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded"
                                                     title="Edit User"
                                                   >
                                                     <Edit2 className="w-4 h-4" />
@@ -801,7 +788,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                                       setSelectedUser(u);
                                                       setShowResetPassword(true);
                                                     }}
-                                                    className="p-1 text-green-600 hover:bg-green-100 rounded"
+                                                    className="p-1 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded"
                                                     title="Reset Password"
                                                   >
                                                     <Key className="w-4 h-4" />
@@ -813,7 +800,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                                                         setSelectedUser(u);
                                                         setShowDeleteConfirm(true);
                                                       }}
-                                                      className="p-1 text-red-600 hover:bg-red-100 rounded"
+                                                      className="p-1 text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded"
                                                       title="Delete User"
                                                     >
                                                       <Trash2 className="w-4 h-4" />
@@ -847,25 +834,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Create New User</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Create New User</h3>
               <button onClick={() => setShowCreateUser(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleCreateUser} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Email</label>
                 <input
                   type="email"
                   required
                   data-testid="create-user-email"
                   value={newUser.email}
                   onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Password</label>
                 <input
                   type="password"
                   required
@@ -873,41 +860,41 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   data-testid="create-user-password"
                   value={newUser.password}
                   onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">First Name</label>
                   <input
                     type="text"
                     required
                     data-testid="create-user-firstname"
                     value={newUser.firstName}
                     onChange={(e) => setNewUser({ ...newUser, firstName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Last Name</label>
                   <input
                     type="text"
                     required
                     data-testid="create-user-lastname"
                     value={newUser.lastName}
                     onChange={(e) => setNewUser({ ...newUser, lastName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Role</label>
                 <select
                   required
                   data-testid="create-user-role"
                   value={newUser.role}
                   onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="">Select role...</option>
                   {availableRoles.map((role) => (
@@ -916,7 +903,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">
                   Team {teams.length > 0 && <span className="text-gray-500 font-normal">({teams.length} available)</span>}
                 </label>
                 <select
@@ -924,7 +911,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   data-testid="create-user-team"
                   value={newUser.teamId}
                   onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   disabled={teams.length === 0}
                 >
                   <option value="">
@@ -937,7 +924,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   ))}
                 </select>
                 {teams.length === 0 && (
-                  <p className="mt-1 text-sm text-red-600">
+                  <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
                     Please create a team first before adding users.
                   </p>
                 )}
@@ -945,7 +932,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="flex-1 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
                 >
                   Create User
                 </button>
@@ -967,14 +954,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Create New Team</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Create New Team</h3>
               <button onClick={() => setShowCreateTeam(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
             </div>
             <form onSubmit={handleCreateTeam} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Team Name</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Team Name</label>
                 <input
                   type="text"
                   required
@@ -982,23 +969,23 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   data-testid="create-team-name"
                   value={newTeam.name}
                   onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Description</label>
                 <textarea
                   name="description"
                   data-testid="create-team-description"
                   value={newTeam.description}
                   onChange={(e) => setNewTeam({ ...newTeam, description: e.target.value })}
                   rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               {user?.role === 'super_admin' && departments.length > 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">
                     Department {departments.length > 0 && <span className="text-gray-500 font-normal">({departments.length} available)</span>}
                   </label>
                   <select
@@ -1007,7 +994,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                     data-testid="create-team-department"
                     value={newTeam.departmentId}
                     onChange={(e) => setNewTeam({ ...newTeam, departmentId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   >
                     <option value="">Select department...</option>
                     {departments.map((dept) => (
@@ -1019,7 +1006,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                  className="flex-1 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
                 >
                   Create Team
                 </button>
@@ -1041,7 +1028,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Reset Password</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Reset Password</h3>
               <button onClick={() => setShowResetPassword(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
@@ -1051,7 +1038,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             </p>
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">New Password</label>
                 <input
                   type="password"
                   required
@@ -1059,11 +1046,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   data-testid="reset-password-new"
                   value={resetPasswordData.newPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Confirm Password</label>
                 <input
                   type="password"
                   required
@@ -1071,13 +1058,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   data-testid="reset-password-confirm"
                   value={resetPasswordData.confirmPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="flex-1 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
                 >
                   Reset Password
                 </button>
@@ -1104,7 +1091,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">Reset Password</h3>
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Reset Password</h3>
               <button onClick={() => setShowResetPassword(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
@@ -1114,7 +1101,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             </p>
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">New Password</label>
                 <input
                   type="password"
                   required
@@ -1122,11 +1109,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   data-testid="reset-password-new"
                   value={resetPasswordData.newPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Confirm Password</label>
                 <input
                   type="password"
                   required
@@ -1134,13 +1121,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   data-testid="reset-password-confirm"
                   value={resetPasswordData.confirmPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="flex-1 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
                 >
                   Reset Password
                 </button>
@@ -1163,7 +1150,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <div>
-                <h3 className="text-lg font-semibold">Edit User</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Edit User</h3>
                 <p className="text-sm text-gray-500 mt-1">Editing: {selectedUser.email}</p>
               </div>
               <button onClick={() => setShowEditUser(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
@@ -1173,47 +1160,47 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             <form onSubmit={handleEditUser} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">First Name</label>
                   <input
                     type="text"
                     required
                     data-testid="edit-user-firstname"
                     value={editUserData.firstName}
                     onChange={(e) => setEditUserData({ ...editUserData, firstName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Last Name</label>
                   <input
                     type="text"
                     required
                     data-testid="edit-user-lastname"
                     value={editUserData.lastName}
                     onChange={(e) => setEditUserData({ ...editUserData, lastName: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Email</label>
                 <input
                   type="email"
                   required
                   data-testid="edit-user-email"
                   value={editUserData.email}
                   onChange={(e) => setEditUserData({ ...editUserData, email: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Role</label>
                 <select
                   required
                   data-testid="edit-user-role"
                   value={editUserData.role}
                   onChange={(e) => setEditUserData({ ...editUserData, role: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 >
                   {availableRoles.map((role) => (
                     <option key={role} value={role}>{role.replace('_', ' ')}</option>
@@ -1223,7 +1210,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               <div className="flex gap-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                  className="flex-1 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors"
                 >
                   Update User
                 </button>
@@ -1245,7 +1232,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-red-600">Delete User</h3>
+              <h3 className="text-lg font-semibold text-gray-600 dark:text-slate-400">Delete User</h3>
               <button onClick={() => setShowDeleteConfirm(false)} className="text-gray-400 hover:text-gray-600 dark:text-slate-400">
                 <X className="w-5 h-5" />
               </button>
@@ -1277,7 +1264,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white dark:bg-slate-800 rounded-lg p-6 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
                 {showEditDepartment ? 'Edit Department' : 'Create New Department'}
               </h3>
               <button 
@@ -1294,27 +1281,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
             </div>
             <form onSubmit={showEditDepartment ? handleEditDepartment : handleCreateDepartment} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">
                   Department Name *
                 </label>
                 <input
                   type="text"
                   value={newDepartment.name}
                   onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="e.g., Engineering, Quality Assurance"
                   required
                   data-testid="dept-name-input"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">
                   Description
                 </label>
                 <textarea
                   value={newDepartment.description}
                   onChange={(e) => setNewDepartment({ ...newDepartment, description: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                   placeholder="Brief description of the department"
                   rows={3}
                   data-testid="dept-description-input"

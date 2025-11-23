@@ -3,7 +3,7 @@
  * IronGate QA Navigator - Full RBAC System
  */
 
-export type UserRole = 'super_admin' | 'qa_manager' | 'team_lead' | 'qa_engineer' | 'viewer';
+export type UserRole = 'super_admin' | 'manager' | 'team_lead' | 'qa_engineer' | 'viewer';
 
 export interface User {
   id: string;
@@ -116,7 +116,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
       gamification: true,
     },
   },
-  qa_manager: {
+  manager: {
     name: 'QA Manager',
     description: 'Organization-wide QA oversight',
     level: 4,
@@ -253,7 +253,7 @@ export const canManageUser = (currentUser: User | null, targetUser: User): boole
   if (currentUser.role === 'super_admin') return true;
   
   // QA Manager can manage everyone except super admins
-  if (currentUser.role === 'qa_manager' && targetUser.role !== 'super_admin') return true;
+  if (currentUser.role === 'manager' && targetUser.role !== 'super_admin') return true;
   
   // Team Lead can only manage users in their teams with lower level
   if (currentUser.role === 'team_lead') {
@@ -270,7 +270,7 @@ export const canManageUser = (currentUser: User | null, targetUser: User): boole
 export const getRoleBadgeColor = (role: UserRole): string => {
   const colors: Record<UserRole, string> = {
     super_admin: 'bg-purple-100 text-purple-800 border-purple-300',
-    qa_manager: 'bg-blue-100 text-blue-800 border-blue-300',
+    manager: 'bg-blue-100 text-blue-800 border-blue-300',
     team_lead: 'bg-green-100 text-green-800 border-green-300',
     qa_engineer: 'bg-yellow-100 text-yellow-800 border-yellow-300',
     viewer: 'bg-gray-100 text-gray-800 border-gray-300',
@@ -282,7 +282,7 @@ export const getRoleBadgeColor = (role: UserRole): string => {
 export const getRoleIcon = (role: UserRole): string => {
   const icons: Record<UserRole, string> = {
     super_admin: '👑',
-    qa_manager: '📊',
+    manager: '📊',
     team_lead: '👥',
     qa_engineer: '🧪',
     viewer: '👁️',
