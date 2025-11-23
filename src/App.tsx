@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { LayoutDashboard, Smartphone, ShoppingCart, Server, CreditCard, Sparkles, Settings, LogOut, Shield } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { LayoutDashboard, Smartphone, ShoppingCart, Server, CreditCard, Sparkles, Settings, LogOut, Shield, Building2 } from 'lucide-react';
 import { generateMockData } from './data/mockData';
 import type { Team } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
@@ -20,19 +20,108 @@ import TeamManagement from './components/TeamManagement';
 import AdminPanel from './components/AdminPanel';
 import PDFReportGenerator from './components/PDFReportGenerator';
 
+interface Department {
+  id: string;
+  name: string;
+  company_id: string;
+}
+
 function App() {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('all');
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | 'admin-panel' | string>('dashboard');
   const [teams, setTeams] = useState<Team[]>(generateMockData());
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [userTeams, setUserTeams] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch departments and teams based on user role
+  useEffect(() => {
+    if (user) {
+      fetchDepartmentsAndTeams();
+    }
+  }, [user]);
+
+  const fetchDepartmentsAndTeams = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('irongate_token');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      };
+
+      // Fetch departments
+      const deptResponse = await fetch('http://localhost:3000/api/admin/departments', { headers });
+      if (deptResponse.ok) {
+        const deptData = await deptResponse.json();
+        
+        // Filter departments based on user role
+        if (user?.role === 'super_admin') {
+          setDepartments(deptData);
+        } else if (user?.role === 'qa_manager') {
+          // QA Manager sees their department
+          const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
+          setDepartments(userDept);
+        } else if (user?.role === 'team_lead' || user?.role === 'qa_engineer') {
+          // Team Lead and QA Engineer see only their department
+          const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
+          setDepartments(userDept);
+        }
+      }
+
+      // Fetch teams
+      const teamsResponse = await fetch('http://localhost:3000/api/admin/teams', { headers });
+      if (teamsResponse.ok) {
+        const teamsData = await teamsResponse.json();
+        setUserTeams(teamsData);
+      }
+
+      setLoading(false);
+    } catch (error) {
+      console.error('Error fetching departments and teams:', error);
+      setLoading(false);
+    }
+  };
 
   // Calculate overall stats
-  const avgScore = Math.round(teams.reduce((acc, t) => acc + t.qaScore, 0) / teams.length);
+  const avgScore = teams.length > 0 ? Math.round(teams.reduce((acc, t) => acc + t.qaScore, 0) / teams.length) : 0;
   
-  const filteredTeams = activeTab === 'all' 
-    ? teams 
-    : teams.filter(t => t.department.toLowerCase() === activeTab);
+  // Filter teams based on active tab and user permissions
+  let filteredTeams = teams;
+  
+  if (activeTab !== 'all') {
+    // Filter by department ID
+    const selectedDept = departments.find(d => d.id === activeTab);
+    if (selectedDept) {
+      // For now, keep using mock data department names
+      // In production, you'd filter userTeams by department_id
+      filteredTeams = teams.filter(t => t.department.toLowerCase() === selectedDept.name.toLowerCase());
+    }
+  }
+  
+  // Apply role-based filtering
+  if (user?.role === 'team_lead' || user?.role === 'qa_engineer') {
+    // Team leads and QA engineers see only their team
+    if (user.primaryTeamId) {
+      const userTeamData = userTeams.find(t => t.id === user.primaryTeamId);
+      if (userTeamData) {
+        // Filter to show only user's team
+        filteredTeams = filteredTeams.filter(t => t.name === userTeamData.name);
+      }
+    }
+  }
+
+  // Get icon for department
+  const getDepartmentIcon = (deptName: string) => {
+    const name = deptName.toLowerCase();
+    if (name.includes('payment') || name.includes('fintech')) return CreditCard;
+    if (name.includes('platform') || name.includes('backend')) return Server;
+    if (name.includes('mobile') || name.includes('frontend') || name.includes('digital')) return Smartphone;
+    if (name.includes('commerce')) return ShoppingCart;
+    return Building2;
+  };
 
   // Handle feature navigation
   const handleFeatureSelect = (featureId: string) => {
@@ -122,41 +211,29 @@ function App() {
             <span>All Teams</span>
           </button>
           
-          <div className="pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Departments
-          </div>
+          {departments.length > 0 && (
+            <>
+              <div className="pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                Departments
+              </div>
 
-          <button 
-            onClick={() => setActiveTab('e-commerce')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'e-commerce' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
-          >
-            <ShoppingCart size={20} />
-            <span>E-Commerce</span>
-          </button>
-          
-          <button 
-            onClick={() => setActiveTab('platform')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'platform' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
-          >
-            <Server size={20} />
-            <span>Platform</span>
-          </button>
-          
-          <button 
-            onClick={() => setActiveTab('frontend')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'frontend' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
-          >
-            <Smartphone size={20} />
-            <span>Frontend</span>
-          </button>
-
-           <button 
-            onClick={() => setActiveTab('fintech')}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'fintech' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
-          >
-            <CreditCard size={20} />
-            <span>FinTech</span>
-          </button>
+              {departments.map((dept) => {
+                const Icon = getDepartmentIcon(dept.name);
+                return (
+                  <button
+                    key={dept.id}
+                    onClick={() => setActiveTab(dept.id)}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                      activeTab === dept.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'
+                    }`}
+                  >
+                    <Icon size={20} />
+                    <span>{dept.name}</span>
+                  </button>
+                );
+              })}
+            </>
+          )}
 
           <div className="pt-4 pb-2 px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">
             Advanced
@@ -220,7 +297,7 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
+      <main className="flex-1 overflow-y-auto flex flex-col">
         <header className="bg-white shadow-sm border-b px-8 py-6 flex justify-between items-center">
           <div>
             <h2 className="text-2xl font-bold text-gray-900">
@@ -240,7 +317,7 @@ function App() {
           </div>
         </header>
 
-        <div className="p-8">
+        <div className="p-8 flex-1">
           <div className="space-y-6">
              {filteredTeams.map(team => (
                <TeamRow key={team.id} team={team} onClick={() => setSelectedTeam(team)} />

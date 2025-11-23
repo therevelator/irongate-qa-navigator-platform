@@ -427,4 +427,32 @@ router.get('/available-roles', authenticateToken, async (req: any, res) => {
   }
 });
 
+// Get departments based on user role
+router.get('/departments', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, companyId, departmentId } = req.user;
+
+    let departments;
+
+    if (role === 'super_admin') {
+      // Super admin sees all departments in their company
+      departments = await query<any>(
+        'SELECT id, name, company_id, created_at FROM departments WHERE company_id = ? ORDER BY name',
+        [companyId]
+      );
+    } else {
+      // All other roles see only their department
+      departments = await query<any>(
+        'SELECT id, name, company_id, created_at FROM departments WHERE id = ? AND company_id = ?',
+        [departmentId, companyId]
+      );
+    }
+
+    res.json(departments);
+  } catch (error) {
+    console.error('Error fetching departments:', error);
+    res.status(500).json({ error: 'Failed to fetch departments' });
+  }
+});
+
 export default router;
