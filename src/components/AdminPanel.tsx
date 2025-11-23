@@ -78,7 +78,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [newTeam, setNewTeam] = useState({
     name: '',
     description: '',
-    platform: 'Backend'
+    platform: 'Backend',
+    departmentId: ''
   });
 
   const [newDepartment, setNewDepartment] = useState({
@@ -223,7 +224,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       if (response.ok) {
         toast.success('Team created successfully!');
         setShowCreateTeam(false);
-        setNewTeam({ name: '', description: '', platform: 'Backend' });
+        setNewTeam({ name: '', description: '', platform: 'Backend', departmentId: '' });
         fetchData();
       } else {
         const error = await response.json();
@@ -990,6 +991,26 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
+              {user?.role === 'super_admin' && departments.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Department {departments.length > 0 && <span className="text-gray-500 font-normal">({departments.length} available)</span>}
+                  </label>
+                  <select
+                    required
+                    name="departmentId"
+                    data-testid="create-team-department"
+                    value={newTeam.departmentId}
+                    onChange={(e) => setNewTeam({ ...newTeam, departmentId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select department...</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.id}>{dept.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
                 <select

@@ -241,19 +241,31 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
   }
 });
 
-// Create team (QA Manager only)
+// Create team (QA Manager and Super Admin)
 router.post('/teams', authenticateToken, async (req: any, res) => {
   try {
-    const { role, companyId, departmentId } = req.user;
-    const { name, description, platform } = req.body;
+    const { role, companyId, departmentId: userDepartmentId } = req.user;
+    const { name, description, platform, departmentId: requestDepartmentId } = req.body;
 
     // Only QA Manager and Super Admin can create teams
     if (role !== 'qa_manager' && role !== 'super_admin') {
-      return res.status(403).json({ error: 'Only QA Managers can create teams' });
+      return res.status(403).json({ error: 'Only QA Managers and Super Admins can create teams' });
     }
 
     if (!name || !platform) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    // Determine department ID
+    // Super admin can specify department, others use their own
+    let targetDepartmentId;
+    if (role === 'super_admin') {
+      targetDepartmentId = requestDepartmentId || userDepartmentId;
+      if (!targetDepartmentId) {
+        return res.status(400).json({ error: 'Department is required' });
+      }
+    } else {
+      targetDepartmentId = userDepartmentId;
     }
 
     // Generate UUID for team
@@ -263,7 +275,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
     await query<any>(
       `INSERT INTO teams (id, company_id, department_id, name, description, platform, is_active)
        VALUES (?, ?, ?, ?, ?, ?, true)`,
-      [teamId, companyId, departmentId, name, description || '', platform]
+      [teamId, companyId, targetDepartmentId, name, description || '', platform]
     );
 
     // Fetch created team
