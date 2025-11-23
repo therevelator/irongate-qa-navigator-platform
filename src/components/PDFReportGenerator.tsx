@@ -175,17 +175,18 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
       yPos = 30;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(16);
-      doc.text('📊 Testing Metrics Overview', 15, yPos);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Testing Metrics Overview', 15, yPos);
 
       // Metrics Cards
       yPos += 10;
       const metrics = [
-        { label: 'Total Tests Executed', value: data.summary.testsExecuted.toLocaleString(), icon: '✓', color: [34, 197, 94] },
-        { label: 'Pass Rate', value: data.summary.passRate.toFixed(1) + '%', icon: '✓', color: [34, 197, 94] },
-        { label: 'Fail Rate', value: data.summary.failRate.toFixed(1) + '%', icon: '✗', color: [239, 68, 68] },
-        { label: 'Avg Execution Time', value: data.summary.avgExecutionTime.toFixed(0) + 'ms', icon: '⏱', color: [59, 130, 246] },
-        { label: 'Code Coverage', value: data.summary.codeCoverage.toFixed(1) + '%', icon: '📈', color: [168, 85, 247] },
-        { label: 'Bugs Found', value: data.summary.bugsFound.toString(), icon: '🐛', color: [249, 115, 22] },
+        { label: 'Total Tests Executed', value: data.summary.testsExecuted.toLocaleString(), icon: 'T', color: [34, 197, 94] },
+        { label: 'Pass Rate', value: data.summary.passRate.toFixed(1) + '%', icon: 'P', color: [34, 197, 94] },
+        { label: 'Fail Rate', value: data.summary.failRate.toFixed(1) + '%', icon: 'F', color: [239, 68, 68] },
+        { label: 'Avg Execution Time', value: data.summary.avgExecutionTime.toFixed(0) + 'ms', icon: 'T', color: [59, 130, 246] },
+        { label: 'Code Coverage', value: data.summary.codeCoverage.toFixed(1) + '%', icon: 'C', color: [168, 85, 247] },
+        { label: 'Bugs Found', value: data.summary.bugsFound.toString(), icon: 'B', color: [249, 115, 22] },
       ];
 
       const cardWidth = (pageWidth - 40) / 2;
@@ -232,7 +233,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text('👥 Team Performance', 15, yPos);
+      doc.text('Team Performance', 15, yPos);
 
       yPos += 5;
 
@@ -267,7 +268,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
 
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
-      doc.text('⚠️ Top Issues', 15, yPos);
+      doc.text('Top Issues', 15, yPos);
 
       yPos += 5;
 
@@ -320,7 +321,8 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
       yPos = 30;
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(16);
-      doc.text('💰 ROI Analysis', 15, yPos);
+      doc.setFont('helvetica', 'bold');
+      doc.text('ROI Analysis', 15, yPos);
 
       yPos += 15;
 
@@ -376,7 +378,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
       doc.setFontSize(16);
       doc.setFont('helvetica', 'bold');
       doc.setTextColor(0, 0, 0);
-      doc.text('📈 Trends & Insights', 15, yPos);
+      doc.text('Trends & Insights', 15, yPos);
 
       yPos += 10;
 
@@ -385,21 +387,21 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
           title: 'Quality Improvement',
           value: data.trends.qualityImprovement,
           desc: 'Overall test pass rate has improved, indicating better code quality and more stable releases.',
-          icon: '✓',
+          icon: 'Q',
           color: [34, 197, 94],
         },
         {
           title: 'Test Coverage Growth',
           value: data.trends.testGrowth,
           desc: 'Test suite expansion shows commitment to comprehensive quality assurance.',
-          icon: '📊',
+          icon: 'T',
           color: [59, 130, 246],
         },
         {
           title: 'Velocity Increase',
           value: data.trends.velocityIncrease,
           desc: 'Team productivity has increased through better testing practices and automation.',
-          icon: '⚡',
+          icon: 'V',
           color: [249, 115, 22],
         },
       ];
