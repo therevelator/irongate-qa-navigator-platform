@@ -472,7 +472,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       <Toaster position="top-right" />
       {/* Team Detail View */}
       {selectedTeam ? (
-        <div className="min-h-screen bg-gray-50 dark:bg-slate-900 p-8">
+        <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
           <div className="max-w-7xl mx-auto space-y-6">
             {/* Back Button */}
             <button
@@ -593,7 +593,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         </div>
       ) : (
         /* Main Admin Panel View */
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 p-8">
+    <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Back Button */}
         {onBack && (
