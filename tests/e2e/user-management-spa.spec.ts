@@ -167,8 +167,8 @@ test.describe('User Management (SPA)', () => {
     await page.click('button[type="submit"]:has-text("Create User")');
     await page.waitForTimeout(1000);
     
-    // Should show error toast
-    await expect(page.locator('text=/already exists|duplicate/i')).toBeVisible({ timeout: 3000 });
+    // Should show error toast with specific message
+    await expect(page.locator('text=/Email already registered/i')).toBeVisible({ timeout: 3000 });
     
     console.log('✅ Duplicate email correctly rejected');
   });
@@ -222,11 +222,14 @@ test.describe('User Management (SPA)', () => {
     await page.click('button[type="submit"]:has-text("Update User")');
     await page.waitForTimeout(2000);
     
+    // Should show success toast
+    await expect(page.locator('text=/User updated successfully/i')).toBeVisible({ timeout: 3000 });
+    
     // Modal should close
     await expect(page.getByTestId('edit-user-email')).not.toBeVisible();
     
-    // Updated name should appear
-    await expect(page.locator('text=Updated')).toBeVisible();
+    // Updated name should appear in the user table
+    await expect(page.locator('tr:has-text("engineer@irongate.com")').locator('text=Updated')).toBeVisible();
     
     console.log('✅ User edited successfully');
   });
