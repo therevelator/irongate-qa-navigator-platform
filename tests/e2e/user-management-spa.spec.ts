@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { loginAsSuperAdmin, loginAsQAManager, loginAsTeamLead, logout, waitForLoadingToComplete } from './fixtures/auth-helpers';
+import { loginAsSuperAdmin, loginAsQAManager, loginAsTeamLead, loginAsQAEngineer, logout, waitForLoadingToComplete } from './fixtures/auth-helpers';
 
 /**
  * User Management Tests for SPA
@@ -418,6 +418,56 @@ test.describe('User Management (SPA)', () => {
     await expect(page.getByTestId('reset-password-new')).not.toBeVisible();
     
     console.log('✅ Password reset successfully');
+  });
+
+  // ==================== RBAC NAVIGATION TESTS ====================
+
+  test('RBAC-SPA-001: Super Admin can see Admin Panel link', async ({ page }) => {
+    await loginAsSuperAdmin(page);
+    
+    // Admin Panel link should be visible
+    await expect(page.locator('text=Admin Panel')).toBeVisible();
+    
+    // Manage Teams link should be visible
+    await expect(page.locator('text=Manage Teams')).toBeVisible();
+    
+    console.log('✅ Super Admin can see Admin Panel and Manage Teams links');
+  });
+
+  test('RBAC-SPA-002: QA Manager can see Admin Panel link', async ({ page }) => {
+    await loginAsQAManager(page);
+    
+    // Admin Panel link should be visible
+    await expect(page.locator('text=Admin Panel')).toBeVisible();
+    
+    // Manage Teams link should be visible
+    await expect(page.locator('text=Manage Teams')).toBeVisible();
+    
+    console.log('✅ QA Manager can see Admin Panel and Manage Teams links');
+  });
+
+  test('RBAC-SPA-003: Team Lead cannot see Admin Panel link', async ({ page }) => {
+    await loginAsTeamLead(page);
+    
+    // Admin Panel link should NOT be visible
+    await expect(page.locator('text=Admin Panel')).not.toBeVisible();
+    
+    // Manage Teams link should NOT be visible
+    await expect(page.locator('text=Manage Teams')).not.toBeVisible();
+    
+    console.log('✅ Team Lead correctly cannot see Admin Panel or Manage Teams links');
+  });
+
+  test('RBAC-SPA-004: QA Engineer cannot see Admin Panel link', async ({ page }) => {
+    await loginAsQAEngineer(page);
+    
+    // Admin Panel link should NOT be visible
+    await expect(page.locator('text=Admin Panel')).not.toBeVisible();
+    
+    // Manage Teams link should NOT be visible
+    await expect(page.locator('text=Manage Teams')).not.toBeVisible();
+    
+    console.log('✅ QA Engineer correctly cannot see Admin Panel or Manage Teams links');
   });
 
   // ==================== TEAM MANAGEMENT TESTS ====================

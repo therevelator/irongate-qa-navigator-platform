@@ -165,7 +165,7 @@ function App() {
             <span>Advanced Features</span>
           </button>
           
-          {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
+          {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
             <button
               onClick={() => setCurrentView('admin-panel')}
               className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors"
@@ -175,13 +175,15 @@ function App() {
             </button>
           )}
           
-          <button
-            onClick={() => setCurrentView('manage-teams')}
-            className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors mt-auto"
-          >
-            <Settings size={20} />
-            <span>Manage Teams</span>
-          </button>
+          {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
+            <button
+              onClick={() => setCurrentView('manage-teams')}
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors mt-auto"
+            >
+              <Settings size={20} />
+              <span>Manage Teams</span>
+            </button>
+          )}
         </nav>
         
         <div className="p-4 border-t border-slate-800">
