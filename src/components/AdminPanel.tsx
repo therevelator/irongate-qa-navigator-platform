@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Shield, X, ArrowLeft } from 'lucide-react';
+import { Users, UserPlus, Shield, X, ArrowLeft, Building2, Edit2, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 
@@ -26,6 +26,14 @@ interface Team {
   department_id?: string;
 }
 
+interface Department {
+  id: string;
+  name: string;
+  description: string;
+  company_id: string;
+  created_at: string;
+}
+
 const API_URL = 'http://localhost:3000/api';
 
 interface AdminPanelProps {
@@ -36,15 +44,20 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
   const [availableRoles, setAvailableRoles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [showCreateTeam, setShowCreateTeam] = useState(false);
+  const [showCreateDepartment, setShowCreateDepartment] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [selectedDepartment, setSelectedDepartment] = useState<Department | null>(null);
   const [showEditUser, setShowEditUser] = useState(false);
+  const [showEditDepartment, setShowEditDepartment] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeleteDepartmentConfirm, setShowDeleteDepartmentConfirm] = useState(false);
   const [editUserData, setEditUserData] = useState({
     firstName: '',
     lastName: '',
@@ -65,6 +78,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     name: '',
     description: '',
     platform: 'Backend'
+  });
+
+  const [newDepartment, setNewDepartment] = useState({
+    name: '',
+    description: ''
   });
 
   const [resetPasswordData, setResetPasswordData] = useState({
@@ -125,11 +143,27 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         setAvailableRoles([]);
       }
 
+      // Fetch departments (Super Admin only)
+      if (user?.role === 'super_admin') {
+        const deptsRes = await fetch(`${API_URL}/admin/departments/all`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        
+        if (deptsRes.ok) {
+          const deptsData = await deptsRes.json();
+          setDepartments(Array.isArray(deptsData) ? deptsData : []);
+        } else {
+          console.error('Failed to fetch departments:', await deptsRes.text());
+          setDepartments([]);
+        }
+      }
+
     } catch (error) {
       console.error('Error fetching data:', error);
       setUsers([]);
       setTeams([]);
       setAvailableRoles([]);
+      setDepartments([]);
     } finally {
       setLoading(false);
     }
@@ -234,6 +268,97 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
     } catch (error) {
       console.error('Error resetting password:', error);
       toast.error('Failed to reset password');
+    }
+  };
+
+  // Department handlers
+  const handleCreateDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newDepartment.name.trim()) {
+      toast.error('Department name is required');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/admin/departments`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newDepartment)
+      });
+
+      if (response.ok) {
+        toast.success('Department created successfully!');
+        setShowCreateDepartment(false);
+        setNewDepartment({ name: '', description: '' });
+        fetchData();
+      } else {
+        const error = await response.json();
+        toast.error(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error creating department:', error);
+      toast.error('Failed to create department');
+    }
+  };
+
+  const handleEditDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!selectedDepartment) return;
+
+    try {
+      const response = await fetch(`${API_URL}/admin/departments/${selectedDepartment.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(newDepartment)
+      });
+
+      if (response.ok) {
+        toast.success('Department updated successfully!');
+        setShowEditDepartment(false);
+        setSelectedDepartment(null);
+        setNewDepartment({ name: '', description: '' });
+        fetchData();
+      } else {
+        const error = await response.json();
+        toast.error(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error updating department:', error);
+      toast.error('Failed to update department');
+    }
+  };
+
+  const handleDeleteDepartment = async () => {
+    if (!selectedDepartment) return;
+
+    try {
+      const response = await fetch(`${API_URL}/admin/departments/${selectedDepartment.id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (response.ok) {
+        toast.success('Department deleted successfully!');
+        setShowDeleteDepartmentConfirm(false);
+        setSelectedDepartment(null);
+        fetchData();
+      } else {
+        const error = await response.json();
+        toast.error(`Error: ${error.error}`);
+      }
+    } catch (error) {
+      console.error('Error deleting department:', error);
+      toast.error('Failed to delete department');
     }
   };
 
@@ -482,6 +607,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               Create Team
             </button>
           )}
+          {user?.role === 'super_admin' && (
+            <button
+              onClick={() => setShowCreateDepartment(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+            >
+              <Building2 className="w-5 h-5" />
+              Create Department
+            </button>
+          )}
         </div>
       </div>
 
@@ -614,6 +748,66 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
           </table>
         </div>
       </div>
+
+      {/* Departments Table (Super Admin only) */}
+      {user?.role === 'super_admin' && departments.length > 0 && (
+        <div className="bg-white rounded-lg shadow">
+          <div className="px-6 py-4 border-b border-gray-200">
+            <h2 className="text-lg font-semibold text-gray-900">Departments</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {departments.map((dept) => (
+                  <tr key={dept.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex items-center">
+                        <Building2 className="w-5 h-5 text-purple-600 mr-2" />
+                        <div className="text-sm font-medium text-gray-900">{dept.name}</div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-600">{dept.description || 'No description'}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {new Date(dept.created_at).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                      <button
+                        onClick={() => {
+                          setSelectedDepartment(dept);
+                          setNewDepartment({ name: dept.name, description: dept.description || '' });
+                          setShowEditDepartment(true);
+                        }}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        <Edit2 className="w-4 h-4 inline" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedDepartment(dept);
+                          setShowDeleteDepartmentConfirm(true);
+                        }}
+                        className="text-red-600 hover:text-red-900"
+                      >
+                        <Trash2 className="w-4 h-4 inline" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Create User Modal */}
       {showCreateUser && (
@@ -1023,6 +1217,111 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               </button>
               <button
                 onClick={() => setShowDeleteConfirm(false)}
+                className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Create/Edit Department Modal */}
+      {(showCreateDepartment || showEditDepartment) && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold">
+                {showEditDepartment ? 'Edit Department' : 'Create New Department'}
+              </h3>
+              <button 
+                onClick={() => {
+                  setShowCreateDepartment(false);
+                  setShowEditDepartment(false);
+                  setSelectedDepartment(null);
+                  setNewDepartment({ name: '', description: '' });
+                }} 
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <form onSubmit={showEditDepartment ? handleEditDepartment : handleCreateDepartment} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Department Name *
+                </label>
+                <input
+                  type="text"
+                  value={newDepartment.name}
+                  onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="e.g., Engineering, Quality Assurance"
+                  required
+                  data-testid="dept-name-input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={newDepartment.description}
+                  onChange={(e) => setNewDepartment({ ...newDepartment, description: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  placeholder="Brief description of the department"
+                  rows={3}
+                  data-testid="dept-description-input"
+                />
+              </div>
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateDepartment(false);
+                    setShowEditDepartment(false);
+                    setSelectedDepartment(null);
+                    setNewDepartment({ name: '', description: '' });
+                  }}
+                  className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                  data-testid="save-dept-button"
+                >
+                  {showEditDepartment ? 'Update' : 'Create'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Department Confirmation */}
+      {showDeleteDepartmentConfirm && selectedDepartment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Delete Department?</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete <strong>{selectedDepartment.name}</strong>? 
+              This action cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeleteDepartment}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                data-testid="confirm-delete-dept"
+              >
+                Delete Department
+              </button>
+              <button
+                onClick={() => {
+                  setShowDeleteDepartmentConfirm(false);
+                  setSelectedDepartment(null);
+                }}
                 className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
               >
                 Cancel
