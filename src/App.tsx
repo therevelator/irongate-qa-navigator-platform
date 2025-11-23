@@ -83,7 +83,29 @@ function App() {
         const teamsResponse = await fetch('http://localhost:3000/api/admin/teams', { headers });
         if (teamsResponse.ok) {
           const teamsData = await teamsResponse.json();
-          setUserTeams(teamsData);
+          
+          // Transform API teams to match TeamRow expected structure
+          const transformedTeams = teamsData.map((team: any) => ({
+            ...team,
+            department: team.department_name || 'Unknown',
+            qaScore: 75, // Default score, will be replaced with real data later
+            status: 'good' as const,
+            velocity: [
+              { sprint: 'S1', points: 45 },
+              { sprint: 'S2', points: 52 },
+              { sprint: 'S3', points: 48 },
+              { sprint: 'S4', points: 55 },
+              { sprint: 'S5', points: 50 }
+            ],
+            metrics: [
+              { id: 1, name: 'Test Coverage', value: '85%', trend: 'up' },
+              { id: 2, name: 'Pass Rate', value: '92%', trend: 'up' },
+              { id: 3, name: 'Defect Density', value: '0.8', trend: 'down' },
+              { id: 4, name: 'Automation', value: '78%', trend: 'up' }
+            ]
+          }));
+          
+          setUserTeams(transformedTeams);
         }
       } catch (error) {
         console.error('Error fetching data:', error);
