@@ -149,8 +149,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange }) 
           </div>
 
           {/* Admin Links */}
-          {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
-            <div className="pt-2 space-y-1">
+          <div className="pt-2 space-y-1">
+            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
               <button
                 onClick={() => onViewChange('admin-panel')}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
@@ -162,7 +162,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange }) 
                 <Shield size={20} />
                 <span>Admin Panel</span>
               </button>
-              
+            )}
+            
+            {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
               <button
                 onClick={() => onViewChange('manage-teams')}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
@@ -174,8 +176,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange }) 
                 <Settings size={20} />
                 <span>Manage Teams</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </nav>
 
         {/* Logout */}
