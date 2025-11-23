@@ -14,15 +14,16 @@ interface LayoutProps {
   children: React.ReactNode;
   currentView: string;
   onViewChange: (view: string) => void;
+  activeTab?: string;
+  onTabChange?: (tab: string) => void;
 }
 
 const API_URL = 'http://localhost:3000/api';
 
-const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange }) => {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [activeTab, setActiveTab] = useState('all');
 
   useEffect(() => {
     if (user?.id) {
@@ -51,12 +52,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange }) 
   };
 
   const handleDepartmentClick = (deptId: string) => {
-    setActiveTab(deptId);
+    if (onTabChange) {
+      onTabChange(deptId);
+    }
     onViewChange('dashboard');
   };
 
   const handleAllClick = () => {
-    setActiveTab('all');
+    if (onTabChange) {
+      onTabChange('all');
+    }
     onViewChange('dashboard');
   };
 

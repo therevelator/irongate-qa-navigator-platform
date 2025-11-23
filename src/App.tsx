@@ -93,31 +93,28 @@ function App() {
     }
   };
 
+  // Use API teams if available, otherwise fall back to mock teams
+  const apiTeams = userTeams.length > 0 ? userTeams : teams;
+  
   // Calculate overall stats
-  const avgScore = teams.length > 0 ? Math.round(teams.reduce((acc, t) => acc + t.qaScore, 0) / teams.length) : 0;
+  const avgScore = apiTeams.length > 0 ? Math.round(apiTeams.reduce((acc: any, t: any) => acc + (t.qaScore || 75), 0) / apiTeams.length) : 0;
   
   // Filter teams based on active tab and user permissions
-  let filteredTeams = teams;
+  let filteredTeams = apiTeams;
   
   if (activeTab !== 'all') {
-    // Filter by department ID
-    const selectedDept = departments.find(d => d.id === activeTab);
-    if (selectedDept) {
-      // For now, keep using mock data department names
-      // In production, you'd filter userTeams by department_id
-      filteredTeams = teams.filter(t => t.department.toLowerCase() === selectedDept.name.toLowerCase());
-    }
+    // Filter by department ID from API teams
+    filteredTeams = apiTeams.filter((t: any) => t.department_id === activeTab);
   }
   
   // Apply role-based filtering
   if (user?.role === 'team_lead' || user?.role === 'qa_engineer') {
     // Team leads and QA engineers see only their team
-    if (user.primaryTeamId) {
-      const userTeamData = userTeams.find(t => t.id === user.primaryTeamId);
-      if (userTeamData) {
-        // Filter to show only user's team
-        filteredTeams = filteredTeams.filter(t => t.name === userTeamData.name);
-      }
+    filteredTeams = filteredTeams.filter((t: any) => t.id === user?.primaryTeamId);
+  } else if (user?.role === 'qa_manager') {
+    // QA managers see teams in their department
+    if (activeTab === 'all') {
+      filteredTeams = filteredTeams.filter((t: any) => t.department_id === user?.departmentId);
     }
   }
 
@@ -139,7 +136,7 @@ function App() {
   // If a team is selected, show detail view
   if (selectedTeam) {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <TeamDetailView team={selectedTeam} onBack={() => setSelectedTeam(null)} />
       </Layout>
     );
@@ -148,7 +145,7 @@ function App() {
   // If features menu is open
   if (currentView === 'features') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <FeaturesMenu onBack={() => setCurrentView('dashboard')} onSelectFeature={handleFeatureSelect} />
       </Layout>
     );
@@ -157,7 +154,7 @@ function App() {
   // If a specific feature is selected
   if (currentView === 'flaky-test-intelligence') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <FlakyTestIntelligence onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -165,7 +162,7 @@ function App() {
 
   if (currentView === 'technical-debt-tracker') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <TechnicalDebtTracker onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -173,7 +170,7 @@ function App() {
 
   if (currentView === 'pipeline-visualization') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <PipelineVisualization onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -181,7 +178,7 @@ function App() {
 
   if (currentView === 'business-impact-analysis') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <BusinessImpactAnalysis onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -189,7 +186,7 @@ function App() {
 
   if (currentView === 'performance-testing') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <PerformanceTesting onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -197,7 +194,7 @@ function App() {
 
   if (currentView === 'developer-productivity') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <DeveloperProductivity onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -205,7 +202,7 @@ function App() {
 
   if (currentView === 'test-case-management') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <TestCaseManagement onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -213,7 +210,7 @@ function App() {
 
   if (currentView === 'test-execution-timeline') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <TestExecutionTimeline onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -221,7 +218,7 @@ function App() {
 
   if (currentView === 'team-gamification') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <TeamGamification onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -229,7 +226,7 @@ function App() {
 
   if (currentView === 'pdf-report-generator') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <PDFReportGenerator onBack={() => setCurrentView('features')} />
       </Layout>
     );
@@ -237,7 +234,7 @@ function App() {
 
   if (currentView === 'manage-teams') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <TeamManagement teams={teams} onBack={() => setCurrentView('dashboard')} onUpdateTeams={setTeams} />
       </Layout>
     );
@@ -245,14 +242,14 @@ function App() {
 
   if (currentView === 'admin-panel') {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView}>
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <AdminPanel onBack={() => setCurrentView('dashboard')} />
       </Layout>
     );
   }
 
   return (
-    <Layout currentView={currentView} onViewChange={setCurrentView}>
+    <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
       {/* Main Dashboard Content */}
       <div className="flex flex-col h-full">
         {/* Hero Header */}
