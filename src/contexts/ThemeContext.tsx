@@ -22,13 +22,19 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
     
     // Update document class
+    const htmlElement = document.documentElement;
     if (isDark) {
-      document.documentElement.classList.add('dark');
+      htmlElement.classList.add('dark');
     } else {
-      document.documentElement.classList.remove('dark');
+      htmlElement.classList.remove('dark');
     }
     
+    // Force a reflow to ensure styles are applied
+    void htmlElement.offsetHeight;
+    
     console.log('Theme changed to:', isDark ? 'dark' : 'light');
+    console.log('HTML classes:', htmlElement.className);
+    console.log('Computed background:', window.getComputedStyle(document.body).backgroundColor);
   }, [isDark]);
 
   const toggleTheme = () => {
