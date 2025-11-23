@@ -503,8 +503,9 @@ test.describe('User Management (SPA)', () => {
     await page.click('text=Admin Panel');
     await waitForLoadingToComplete(page);
     
-    // Click on a team
-    const teamRow = page.locator('tr:has-text("Nebula")').first();
+    // Scroll to teams section and click on a team
+    await page.locator('h2:has-text("Teams")').scrollIntoViewIfNeeded();
+    const teamRow = page.locator('h2:has-text("Teams") ~ div table tr:has-text("Nebula")');
     await teamRow.click();
     await page.waitForTimeout(1000);
     
@@ -525,8 +526,9 @@ test.describe('User Management (SPA)', () => {
     await page.click('text=Admin Panel');
     await waitForLoadingToComplete(page);
     
-    // Click on a team that has members (Nebula)
-    const teamRow = page.locator('tr:has-text("Nebula")').first();
+    // Scroll to teams section and click on a team that has members (Nebula)
+    await page.locator('h2:has-text("Teams")').scrollIntoViewIfNeeded();
+    const teamRow = page.locator('h2:has-text("Teams") ~ div table tr:has-text("Nebula")');
     await teamRow.click();
     await page.waitForTimeout(1000);
     
