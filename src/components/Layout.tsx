@@ -68,20 +68,20 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
   return (
     <div className="flex h-screen">
       {/* Sidebar Navigation */}
-      <aside className="w-64 bg-slate-900 dark:bg-slate-950 text-white flex flex-col border-r border-slate-800">
+      <aside className="w-64 bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white flex flex-col border-r border-slate-200 dark:border-slate-200 dark:border-slate-800">
         {/* Logo */}
-        <div className="p-6 border-b border-slate-800">
+        <div className="p-6 border-b border-slate-200 dark:border-slate-200 dark:border-slate-800">
           <div className="flex items-center space-x-3">
             <img src="/irongate-logo.png" alt="Irongate" className="w-10 h-10" />
             <div>
               <h1 className="text-xl font-bold">Irongate QA</h1>
-              <p className="text-xs text-slate-400">Navigator Platform</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Navigator Platform</p>
             </div>
           </div>
         </div>
 
         {/* User Info */}
-        <div className="px-4 py-3 border-b border-slate-800 bg-slate-800/50">
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-200/50 dark:bg-slate-800/50">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
               <User size={20} />
@@ -107,7 +107,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
               activeTab === 'all' && currentView === 'dashboard'
                 ? 'bg-blue-600 text-white'
-                : 'text-slate-400 hover:bg-slate-800'
+                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
             }`}
           >
             <LayoutDashboard size={20} />
@@ -117,7 +117,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           {/* Departments */}
           {departments.length > 0 && (
             <div className="pt-4">
-              <div className="px-4 py-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              <div className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-500 uppercase tracking-wider">
                 Departments
               </div>
               <div className="space-y-1 max-h-64 overflow-y-auto">
@@ -128,7 +128,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                     className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm transition-colors ${
                       activeTab === dept.id && currentView === 'dashboard'
                         ? 'bg-purple-600 text-white'
-                        : 'text-slate-400 hover:bg-slate-800'
+                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                     }`}
                   >
                     <Building2 size={18} />
@@ -139,13 +139,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             </div>
           )}
 
-          <div className="pt-4 border-t border-slate-800">
+          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
             <button
               onClick={() => onViewChange('features')}
               className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                 currentView === 'features'
                   ? 'bg-blue-600 text-white'
-                  : 'text-slate-400 hover:bg-slate-800'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
               }`}
             >
               <Sparkles size={20} />
@@ -161,7 +161,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                   currentView === 'admin-panel'
                     ? 'bg-blue-600 text-white'
-                    : 'text-slate-400 hover:bg-slate-800'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                 }`}
               >
                 <Shield size={20} />
@@ -175,7 +175,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
                   currentView === 'manage-teams'
                     ? 'bg-blue-600 text-white'
-                    : 'text-slate-400 hover:bg-slate-800'
+                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                 }`}
               >
                 <Settings size={20} />
@@ -186,7 +186,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-slate-800">
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800">
           <button
             onClick={logout}
             className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium"
