@@ -669,7 +669,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                   {/* Department Header */}
                   <div
                     onClick={() => toggleDepartment(dept.id)}
-                    className="px-6 py-4 hover:bg-purple-50 cursor-pointer flex items-center justify-between bg-gradient-to-r from-purple-50/50 to-transparent"
+                    className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer flex items-center justify-between"
                   >
                     <div className="flex items-center gap-4 flex-1">
                       <div className="flex items-center gap-2">
@@ -681,8 +681,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                         <Building2 className="w-6 h-6 text-purple-600" />
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-bold text-gray-900 text-lg">{dept.name}</h3>
-                        <p className="text-sm text-gray-600 mt-0.5">{dept.description || 'No description'}</p>
+                        <h3 className="font-bold text-gray-900 dark:text-white text-lg">{dept.name}</h3>
+                        <p className="text-sm text-gray-600 dark:text-slate-400 mt-0.5">{dept.description || 'No description'}</p>
                       </div>
                       <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-slate-400">
                         <span className="font-medium">{deptTeams.length} {deptTeams.length === 1 ? 'Team' : 'Teams'}</span>
@@ -694,7 +694,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
                   {/* Department Teams - Expandable */}
                   {isDeptExpanded && (
-                    <div className="bg-gray-50/50 border-l-4 border-purple-200">
+                    <div className="bg-gray-50 dark:bg-slate-800/50 border-l-4 border-purple-200 dark:border-purple-800">
                       {deptTeams.length === 0 ? (
                         <div className="text-center py-8 text-gray-500 ml-12">
                           <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
