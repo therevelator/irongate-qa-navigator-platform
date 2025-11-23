@@ -283,10 +283,11 @@ function App() {
     <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
       {/* Main Dashboard Content */}
       <div className="flex flex-col h-full bg-white dark:bg-slate-900">
-        {/* Hero Header */}
+        {/* Hero Header with Teams */}
         <header className="bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-8 py-8">
           <div className="max-w-7xl mx-auto">
-            <div className="flex justify-between items-start">
+            {/* Header Title and Score */}
+            <div className="flex justify-between items-start mb-6">
               <div>
                 <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-2">
                   {activeTab === 'all' ? 'Organization Overview' : departments.find(d => d.id === activeTab)?.name || 'Teams'}
@@ -315,28 +316,31 @@ function App() {
                 </div>
               </div>
             </div>
+
+            {/* Teams List */}
+            <div className="space-y-4">
+              {filteredTeams.length === 0 ? (
+                <div className="bg-gray-50 dark:bg-slate-700/50 rounded-xl border-2 border-dashed border-gray-300 dark:border-slate-600 p-12 text-center">
+                  <div className="text-gray-400 dark:text-slate-500 mb-4">
+                    <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Teams Found</h3>
+                  <p className="text-gray-500 dark:text-slate-400">There are no teams to display. Create a team in the Admin Panel to get started.</p>
+                </div>
+              ) : (
+                filteredTeams.map(team => (
+                  <TeamRow key={team.id} team={team} onClick={() => setSelectedTeam(team)} />
+                ))
+              )}
+            </div>
           </div>
         </header>
 
-        {/* Main Content Area */}
-        <div className="flex-1 px-8 py-6">
-          <div className="max-w-7xl mx-auto space-y-4">
-            {filteredTeams.length === 0 ? (
-              <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 p-12 text-center">
-                <div className="text-gray-400 dark:text-slate-500 mb-4">
-                  <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                  </svg>
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Teams Found</h3>
-                <p className="text-gray-500 dark:text-slate-400">There are no teams to display. Create a team in the Admin Panel to get started.</p>
-              </div>
-            ) : (
-              filteredTeams.map(team => (
-                <TeamRow key={team.id} team={team} onClick={() => setSelectedTeam(team)} />
-              ))
-            )}
-          </div>
+        {/* Main Content Area - Now empty, can be used for other content */}
+        <div className="flex-1 overflow-auto">
+          {/* Future content can go here */}
         </div>
 
         {/* Footer */}
