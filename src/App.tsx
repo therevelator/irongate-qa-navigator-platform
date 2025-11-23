@@ -98,10 +98,10 @@ function App() {
               { sprint: 'S5', points: 50 }
             ],
             metrics: [
-              { id: 1, name: 'Test Coverage', value: '85%', trend: 'up' },
-              { id: 2, name: 'Pass Rate', value: '92%', trend: 'up' },
-              { id: 3, name: 'Defect Density', value: '0.8', trend: 'down' },
-              { id: 4, name: 'Automation', value: '78%', trend: 'up' }
+              { id: 1, name: 'Test Coverage', value: '85%', trend: 'up', change: 5.2 },
+              { id: 2, name: 'Pass Rate', value: '92%', trend: 'up', change: 3.1 },
+              { id: 3, name: 'Defect Density', value: '0.8', trend: 'down', change: -2.5 },
+              { id: 4, name: 'Automation', value: '78%', trend: 'up', change: 4.8 }
             ]
           }));
           
