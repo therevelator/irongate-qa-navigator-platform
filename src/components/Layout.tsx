@@ -66,22 +66,24 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
   };
 
   return (
-    <div className="flex h-screen">
+    <div className="flex h-screen bg-gray-50 dark:bg-slate-950">
       {/* Sidebar Navigation */}
-      <aside className="w-64 bg-slate-100 dark:bg-slate-900 text-slate-900 dark:text-white flex flex-col border-r border-slate-200 dark:border-slate-200 dark:border-slate-800">
+      <aside className="w-64 bg-white dark:bg-slate-900 flex flex-col border-r border-gray-200 dark:border-slate-800 shadow-sm">
         {/* Logo */}
-        <div className="p-6 border-b border-slate-200 dark:border-slate-200 dark:border-slate-800">
+        <div className="p-6">
           <div className="flex items-center space-x-3">
-            <img src="/irongate-logo.png" alt="Irongate" className="w-10 h-10" />
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-lg">
+              <Shield size={24} className="text-white" />
+            </div>
             <div>
-              <h1 className="text-xl font-bold">Irongate QA</h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">Navigator Platform</p>
+              <h1 className="text-lg font-bold text-gray-900 dark:text-white">Irongate QA</h1>
+              <p className="text-xs text-gray-500 dark:text-slate-400">Navigator</p>
             </div>
           </div>
         </div>
 
         {/* User Info */}
-        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-200/50 dark:bg-slate-800/50">
+        <div className="px-4 py-3 mx-3 mb-4 rounded-lg bg-gray-50 dark:bg-slate-800/50 border border-gray-200 dark:border-slate-700">
           <div className="flex items-center space-x-3">
             <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center">
               <User size={20} />
@@ -100,24 +102,24 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+        <nav className="flex-1 overflow-y-auto py-2 px-3 space-y-1">
           {/* Dashboard - All Teams */}
           <button
             onClick={handleAllClick}
-            className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+            className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
               activeTab === 'all' && currentView === 'dashboard'
-                ? 'bg-blue-600 text-white'
-                : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                ? 'bg-blue-500 text-white shadow-md shadow-blue-500/30'
+                : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
             }`}
           >
-            <LayoutDashboard size={20} />
-            <span>All Teams</span>
+            <LayoutDashboard size={19} />
+            <span className="font-medium">All Teams</span>
           </button>
 
           {/* Departments */}
           {departments.length > 0 && (
             <div className="pt-4">
-              <div className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-500 uppercase tracking-wider">
+              <div className="px-4 py-2 text-xs font-semibold text-gray-500 dark:text-slate-500 uppercase tracking-wider">
                 Departments
               </div>
               <div className="space-y-1 max-h-64 overflow-y-auto">
@@ -125,10 +127,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   <button
                     key={dept.id}
                     onClick={() => handleDepartmentClick(dept.id)}
-                    className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm transition-colors ${
+                    className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg text-sm transition-all duration-200 ${
                       activeTab === dept.id && currentView === 'dashboard'
-                        ? 'bg-purple-600 text-white'
-                        : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                        ? 'bg-blue-500 text-white shadow-md shadow-blue-500/30'
+                        : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
                     }`}
                   >
                     <Building2 size={18} />
@@ -139,17 +141,17 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             </div>
           )}
 
-          <div className="pt-4 border-t border-slate-200 dark:border-slate-800">
+          <div className="pt-4 mt-4 border-t border-gray-200 dark:border-slate-800">
             <button
               onClick={() => onViewChange('features')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+              className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
                 currentView === 'features'
-                  ? 'bg-blue-600 text-white'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                  ? 'bg-blue-500 text-white shadow-md shadow-blue-500/30'
+                  : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
               }`}
             >
-              <Sparkles size={20} />
-              <span>Advanced Features</span>
+              <Sparkles size={19} />
+              <span className="font-medium">Advanced Features</span>
             </button>
           </div>
 
@@ -158,64 +160,64 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
               <button
                 onClick={() => onViewChange('admin-panel')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
                   currentView === 'admin-panel'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                    ? 'bg-blue-500 text-white shadow-md shadow-blue-500/30'
+                    : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <Shield size={20} />
-                <span>Admin Panel</span>
+                <Shield size={19} />
+                <span className="font-medium">Admin Panel</span>
               </button>
             )}
             
             {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
               <button
                 onClick={() => onViewChange('manage-teams')}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-all duration-200 ${
                   currentView === 'manage-teams'
-                    ? 'bg-blue-600 text-white'
-                    : 'text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
+                    ? 'bg-blue-500 text-white shadow-md shadow-blue-500/30'
+                    : 'text-gray-700 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800'
                 }`}
               >
-                <Settings size={20} />
-                <span>Manage Teams</span>
+                <Settings size={19} />
+                <span className="font-medium">Manage Teams</span>
               </button>
             )}
           </div>
         </nav>
 
         {/* Logout */}
-        <div className="p-4 border-t border-slate-200 dark:border-slate-800">
+        <div className="p-3 border-t border-gray-200 dark:border-slate-800">
           <button
             onClick={logout}
-            className="w-full flex items-center justify-center space-x-2 px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors text-sm font-medium"
+            className="w-full flex items-center justify-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white rounded-lg transition-all duration-200 text-sm font-medium shadow-md hover:shadow-lg"
           >
-            <LogOut size={16} />
+            <LogOut size={17} />
             <span>Sign Out</span>
           </button>
         </div>
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-900">
+      <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar with Welcome and Theme Toggle */}
-        <div className="bg-white dark:bg-slate-800 border-b border-gray-200 dark:border-slate-700 px-6 py-3 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-6 py-4 flex items-center justify-between shadow-sm">
           <div className="flex items-center space-x-4">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              Welcome, {user?.firstName}!
+            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+              Welcome, <span className="text-blue-500">{user?.firstName}</span>!
             </h2>
           </div>
           
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-lg bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 transition-colors"
+            className="p-2.5 rounded-lg bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 transition-all duration-200 border border-gray-200 dark:border-slate-700"
             title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {isDark ? (
               <Sun size={20} className="text-yellow-500" />
             ) : (
-              <Moon size={20} className="text-slate-600" />
+              <Moon size={20} className="text-gray-600" />
             )}
           </button>
         </div>
