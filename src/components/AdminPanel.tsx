@@ -59,6 +59,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showDeleteDepartmentConfirm, setShowDeleteDepartmentConfirm] = useState(false);
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  const [expandedDepartments, setExpandedDepartments] = useState<Set<string>>(new Set());
   const [editUserData, setEditUserData] = useState({
     firstName: '',
     lastName: '',
@@ -431,6 +432,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
 
   const canCreateTeam = user?.role === 'qa_manager' || user?.role === 'super_admin';
 
+  const toggleDepartment = (deptId: string) => {
+    const newExpanded = new Set(expandedDepartments);
+    if (newExpanded.has(deptId)) {
+      newExpanded.delete(deptId);
+    } else {
+      newExpanded.add(deptId);
+    }
+    setExpandedDepartments(newExpanded);
+  };
+
   const toggleTeam = (teamId: string) => {
     const newExpanded = new Set(expandedTeams);
     if (newExpanded.has(teamId)) {
@@ -439,6 +450,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
       newExpanded.add(teamId);
     }
     setExpandedTeams(newExpanded);
+  };
+
+  const getTeamsByDepartment = (deptId: string) => {
+    return teams.filter(t => t.department_id === deptId);
   };
 
   const getUsersByTeam = (teamId: string) => {
@@ -632,210 +647,204 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
         </div>
       </div>
 
-      {/* Teams & Users Grouped View */}
+      {/* Hierarchical View: Departments → Teams → Users */}
       <div className="bg-white rounded-lg shadow">
         <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Teams & Users</h2>
-          <p className="text-sm text-gray-600 mt-1">Click on a team to view and manage its users</p>
+          <h2 className="text-lg font-semibold text-gray-900">Organization Structure</h2>
+          <p className="text-sm text-gray-600 mt-1">Departments → Teams → Users</p>
         </div>
         <div className="divide-y divide-gray-200">
-          {teams.map((team) => {
-            const teamUsers = getUsersByTeam(team.id);
-            const isExpanded = expandedTeams.has(team.id);
-            
-            return (
-              <div key={team.id} className="transition-all">
-                {/* Team Header - Clickable */}
-                <div
-                  onClick={() => toggleTeam(team.id)}
-                  className="px-6 py-4 hover:bg-gray-50 cursor-pointer flex items-center justify-between"
-                >
-                  <div className="flex items-center gap-4 flex-1">
-                    <div className="flex items-center gap-2">
-                      {isExpanded ? (
-                        <ChevronDown className="w-5 h-5 text-gray-400" />
-                      ) : (
-                        <ChevronRight className="w-5 h-5 text-gray-400" />
-                      )}
-                      <Users className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <h3 className="font-semibold text-gray-900">{team.name}</h3>
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
-                          {team.platform}
-                        </span>
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${team.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                          {team.is_active ? 'Active' : 'Inactive'}
-                        </span>
+          {departments.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <Building2 className="w-16 h-16 mx-auto mb-3 text-gray-300" />
+              <p className="text-lg font-medium">No departments yet</p>
+              <p className="text-sm mt-1">Create a department to get started</p>
+            </div>
+          ) : (
+            departments.map((dept) => {
+              const deptTeams = getTeamsByDepartment(dept.id);
+              const isDeptExpanded = expandedDepartments.has(dept.id);
+              
+              return (
+                <div key={dept.id} className="transition-all">
+                  {/* Department Header */}
+                  <div
+                    onClick={() => toggleDepartment(dept.id)}
+                    className="px-6 py-4 hover:bg-purple-50 cursor-pointer flex items-center justify-between bg-gradient-to-r from-purple-50/50 to-transparent"
+                  >
+                    <div className="flex items-center gap-4 flex-1">
+                      <div className="flex items-center gap-2">
+                        {isDeptExpanded ? (
+                          <ChevronDown className="w-6 h-6 text-purple-600" />
+                        ) : (
+                          <ChevronRight className="w-6 h-6 text-purple-600" />
+                        )}
+                        <Building2 className="w-6 h-6 text-purple-600" />
                       </div>
-                      <p className="text-sm text-gray-600 mt-1">{team.description || 'No description'}</p>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-600">
-                      <span className="font-medium">{teamUsers.length} {teamUsers.length === 1 ? 'User' : 'Users'}</span>
-                      <span className="text-gray-400">•</span>
-                      <span>{team.created_at ? new Date(team.created_at).toLocaleDateString() : 'N/A'}</span>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-gray-900 text-lg">{dept.name}</h3>
+                        <p className="text-sm text-gray-600 mt-0.5">{dept.description || 'No description'}</p>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-gray-600">
+                        <span className="font-medium">{deptTeams.length} {deptTeams.length === 1 ? 'Team' : 'Teams'}</span>
+                        <span className="text-gray-400">•</span>
+                        <span>{new Date(dept.created_at).toLocaleDateString()}</span>
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Team Users - Expandable */}
-                {isExpanded && (
-                  <div className="bg-gray-50 px-6 py-4">
-                    {teamUsers.length === 0 ? (
-                      <div className="text-center py-8 text-gray-500">
-                        <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                        <p>No users in this team yet</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full">
-                          <thead className="bg-white">
-                            <tr>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Department</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody className="bg-white divide-y divide-gray-200">
-                            {teamUsers.map((u) => (
-                              <tr key={u.id} className="hover:bg-gray-50">
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  <div className="font-medium text-gray-900">{u.first_name} {u.last_name}</div>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{u.email}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getRoleBadgeColor(u.role)}`}>
-                                    {u.role.replace('_', ' ')}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-600">{u.department_name}</td>
-                                <td className="px-4 py-3 whitespace-nowrap">
-                                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                    {u.is_active ? 'Active' : 'Inactive'}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 whitespace-nowrap text-sm">
-                                  <div className="flex gap-2">
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedUser(u);
-                                        setEditUserData({
-                                          firstName: u.first_name,
-                                          lastName: u.last_name,
-                                          email: u.email,
-                                          role: u.role
-                                        });
-                                        setShowEditUser(true);
-                                      }}
-                                      className="p-1 text-blue-600 hover:bg-blue-100 rounded"
-                                      title="Edit User"
-                                    >
-                                      <Edit2 className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedUser(u);
-                                        setShowResetPassword(true);
-                                      }}
-                                      className="p-1 text-green-600 hover:bg-green-100 rounded"
-                                      title="Reset Password"
-                                    >
-                                      <Key className="w-4 h-4" />
-                                    </button>
-                                    {u.id !== user?.id && (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedUser(u);
-                                          setShowDeleteConfirm(true);
-                                        }}
-                                        className="p-1 text-red-600 hover:bg-red-100 rounded"
-                                        title="Delete User"
-                                      >
-                                        <Trash2 className="w-4 h-4" />
-                                      </button>
+                  {/* Department Teams - Expandable */}
+                  {isDeptExpanded && (
+                    <div className="bg-gray-50/50 border-l-4 border-purple-200">
+                      {deptTeams.length === 0 ? (
+                        <div className="text-center py-8 text-gray-500 ml-12">
+                          <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                          <p>No teams in this department yet</p>
+                        </div>
+                      ) : (
+                        deptTeams.map((team) => {
+                          const teamUsers = getUsersByTeam(team.id);
+                          const isTeamExpanded = expandedTeams.has(team.id);
+                          
+                          return (
+                            <div key={team.id} className="border-b border-gray-200 last:border-b-0">
+                              {/* Team Header */}
+                              <div
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleTeam(team.id);
+                                }}
+                                className="px-6 py-3 ml-8 hover:bg-blue-50 cursor-pointer flex items-center justify-between"
+                              >
+                                <div className="flex items-center gap-3 flex-1">
+                                  <div className="flex items-center gap-2">
+                                    {isTeamExpanded ? (
+                                      <ChevronDown className="w-5 h-5 text-blue-600" />
+                                    ) : (
+                                      <ChevronRight className="w-5 h-5 text-blue-600" />
                                     )}
+                                    <Users className="w-5 h-5 text-blue-600" />
                                   </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2">
+                                      <h4 className="font-semibold text-gray-900">{team.name}</h4>
+                                      <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                                        {team.platform}
+                                      </span>
+                                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${team.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                        {team.is_active ? 'Active' : 'Inactive'}
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-gray-600 mt-0.5">{team.description || 'No description'}</p>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-sm text-gray-600">
+                                    <span className="font-medium">{teamUsers.length} {teamUsers.length === 1 ? 'User' : 'Users'}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Team Users - Expandable */}
+                              {isTeamExpanded && (
+                                <div className="bg-white px-6 py-3 ml-16">
+                                  {teamUsers.length === 0 ? (
+                                    <div className="text-center py-6 text-gray-500">
+                                      <Users className="w-10 h-10 mx-auto mb-2 text-gray-300" />
+                                      <p className="text-sm">No users in this team yet</p>
+                                    </div>
+                                  ) : (
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full">
+                                        <thead className="bg-gray-50">
+                                          <tr>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody className="bg-white divide-y divide-gray-100">
+                                          {teamUsers.map((u) => (
+                                            <tr key={u.id} className="hover:bg-gray-50">
+                                              <td className="px-3 py-2 whitespace-nowrap">
+                                                <div className="font-medium text-gray-900 text-sm">{u.first_name} {u.last_name}</div>
+                                              </td>
+                                              <td className="px-3 py-2 whitespace-nowrap text-sm text-gray-600">{u.email}</td>
+                                              <td className="px-3 py-2 whitespace-nowrap">
+                                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${getRoleBadgeColor(u.role)}`}>
+                                                  {u.role.replace('_', ' ')}
+                                                </span>
+                                              </td>
+                                              <td className="px-3 py-2 whitespace-nowrap">
+                                                <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${u.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                                                  {u.is_active ? 'Active' : 'Inactive'}
+                                                </span>
+                                              </td>
+                                              <td className="px-3 py-2 whitespace-nowrap text-sm">
+                                                <div className="flex gap-1">
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setSelectedUser(u);
+                                                      setEditUserData({
+                                                        firstName: u.first_name,
+                                                        lastName: u.last_name,
+                                                        email: u.email,
+                                                        role: u.role
+                                                      });
+                                                      setShowEditUser(true);
+                                                    }}
+                                                    className="p-1 text-blue-600 hover:bg-blue-100 rounded"
+                                                    title="Edit User"
+                                                  >
+                                                    <Edit2 className="w-4 h-4" />
+                                                  </button>
+                                                  <button
+                                                    onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      setSelectedUser(u);
+                                                      setShowResetPassword(true);
+                                                    }}
+                                                    className="p-1 text-green-600 hover:bg-green-100 rounded"
+                                                    title="Reset Password"
+                                                  >
+                                                    <Key className="w-4 h-4" />
+                                                  </button>
+                                                  {u.id !== user?.id && (
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedUser(u);
+                                                        setShowDeleteConfirm(true);
+                                                      }}
+                                                      className="p-1 text-red-600 hover:bg-red-100 rounded"
+                                                      title="Delete User"
+                                                    >
+                                                      <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                  )}
+                                                </div>
+                                              </td>
+                                            </tr>
+                                          ))}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
-
-      {/* Departments Table (Super Admin only) */}
-      {user?.role === 'super_admin' && departments.length > 0 && (
-        <div className="bg-white rounded-lg shadow">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">Departments</h2>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Description</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {departments.map((dept) => (
-                  <tr key={dept.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <Building2 className="w-5 h-5 text-purple-600 mr-2" />
-                        <div className="text-sm font-medium text-gray-900">{dept.name}</div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-600">{dept.description || 'No description'}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {new Date(dept.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <button
-                        onClick={() => {
-                          setSelectedDepartment(dept);
-                          setNewDepartment({ name: dept.name, description: dept.description || '' });
-                          setShowEditDepartment(true);
-                        }}
-                        className="text-blue-600 hover:text-blue-900 mr-4"
-                      >
-                        <Edit2 className="w-4 h-4 inline" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setSelectedDepartment(dept);
-                          setShowDeleteDepartmentConfirm(true);
-                        }}
-                        className="text-red-600 hover:text-red-900"
-                      >
-                        <Trash2 className="w-4 h-4 inline" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Create User Modal */}
       {showCreateUser && (
