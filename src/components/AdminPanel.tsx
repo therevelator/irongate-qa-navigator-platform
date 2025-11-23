@@ -739,6 +739,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <input
                   type="text"
                   required
+                  name="name"
+                  data-testid="create-team-name"
                   value={newTeam.name}
                   onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -747,6 +749,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                 <textarea
+                  name="description"
+                  data-testid="create-team-description"
                   value={newTeam.description}
                   onChange={(e) => setNewTeam({ ...newTeam, description: e.target.value })}
                   rows={3}
@@ -757,6 +761,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ onBack }) => {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
                 <select
                   required
+                  name="platform"
+                  data-testid="create-team-platform"
                   value={newTeam.platform}
                   onChange={(e) => setNewTeam({ ...newTeam, platform: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"

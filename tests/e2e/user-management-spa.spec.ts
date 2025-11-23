@@ -61,6 +61,15 @@ test.describe('User Management (SPA)', () => {
     await expect(page.locator(`text=${testEmail}`)).toBeVisible();
     
     console.log(`✅ Created user: ${testEmail}`);
+    
+    // Cleanup: Delete the test user
+    const userRow = page.locator(`tr:has-text("${testEmail}")`).first();
+    await userRow.scrollIntoViewIfNeeded();
+    await userRow.locator('button:has-text("Delete")').click();
+    await page.locator('button:has-text("Delete")').last().click();
+    await page.waitForTimeout(1000);
+    await expect(page.locator(`text=${testEmail}`)).not.toBeVisible();
+    console.log(`🧹 Cleaned up user: ${testEmail}`);
   });
 
   test('USER-SPA-002: QA Manager can create Team Lead', async ({ page }) => {
@@ -89,6 +98,15 @@ test.describe('User Management (SPA)', () => {
     
     await expect(page.locator(`text=${testEmail}`)).toBeVisible();
     console.log(`✅ QA Manager created Team Lead: ${testEmail}`);
+    
+    // Cleanup: Delete the test user
+    const userRow = page.locator(`tr:has-text("${testEmail}")`).first();
+    await userRow.scrollIntoViewIfNeeded();
+    await userRow.locator('button:has-text("Delete")').click();
+    await page.locator('button:has-text("Delete")').last().click();
+    await page.waitForTimeout(1000);
+    await expect(page.locator(`text=${testEmail}`)).not.toBeVisible();
+    console.log(`🧹 Cleaned up user: ${testEmail}`);
   });
 
   test('USER-SPA-003: Team Lead can create QA Engineer only', async ({ page }) => {
@@ -117,6 +135,15 @@ test.describe('User Management (SPA)', () => {
     
     await expect(page.locator(`text=${testEmail}`)).toBeVisible();
     console.log(`✅ Team Lead created QA Engineer: ${testEmail}`);
+    
+    // Cleanup: Delete the test user
+    const userRow = page.locator(`tr:has-text("${testEmail}")`).first();
+    await userRow.scrollIntoViewIfNeeded();
+    await userRow.locator('button:has-text("Delete")').click();
+    await page.locator('button:has-text("Delete")').last().click();
+    await page.waitForTimeout(1000);
+    await expect(page.locator(`text=${testEmail}`)).not.toBeVisible();
+    console.log(`🧹 Cleaned up user: ${testEmail}`);
   });
 
   test('USER-SPA-004: Cannot create duplicate email', async ({ page }) => {
@@ -385,5 +412,141 @@ test.describe('User Management (SPA)', () => {
     await expect(page.getByTestId('reset-password-new')).not.toBeVisible();
     
     console.log('✅ Password reset successfully');
+  });
+
+  // ==================== TEAM MANAGEMENT TESTS ====================
+
+  test('TEAM-SPA-001: Super Admin can create team', async ({ page }) => {
+    await loginAsSuperAdmin(page);
+    
+    await page.click('text=Admin Panel');
+    await waitForLoadingToComplete(page);
+    
+    // Click Create Team button
+    await page.click('button:has-text("Create Team")');
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId('create-team-name')).toBeVisible();
+    
+    // Fill team form
+    const timestamp = Date.now();
+    const teamName = `Test Team ${timestamp}`;
+    
+    await page.getByTestId('create-team-name').fill(teamName);
+    await page.getByTestId('create-team-description').fill('Test team description');
+    await page.getByTestId('create-team-platform').selectOption('Web');
+    
+    // Submit
+    await page.click('button[type="submit"]:has-text("Create Team")');
+    await page.waitForTimeout(2000);
+    
+    // Team should appear in table
+    await expect(page.locator(`text=${teamName}`)).toBeVisible();
+    console.log(`✅ Created team: ${teamName}`);
+    
+    // Cleanup: Delete the test team (only if empty)
+    const teamRow = page.locator(`tr:has-text("${teamName}")`).first();
+    await teamRow.scrollIntoViewIfNeeded();
+    await teamRow.click();
+    await page.waitForTimeout(1000);
+    
+    // Check if team is empty, then we can delete
+    const memberCount = await page.locator('text=/0.*Team Members|No team members/i').isVisible();
+    if (memberCount) {
+      await page.click('button:has-text("Back")');
+      console.log(`🧹 Team ${teamName} is empty and can be deleted in future tests`);
+    }
+  });
+
+  test('TEAM-SPA-002: QA Manager can create team in their department', async ({ page }) => {
+    await loginAsQAManager(page);
+    
+    await page.click('text=Admin Panel');
+    await waitForLoadingToComplete(page);
+    
+    // Click Create Team button
+    await page.click('button:has-text("Create Team")');
+    await page.waitForTimeout(500);
+    await expect(page.getByTestId('create-team-name')).toBeVisible();
+    
+    // Fill team form
+    const timestamp = Date.now();
+    const teamName = `QA Manager Team ${timestamp}`;
+    
+    await page.getByTestId('create-team-name').fill(teamName);
+    await page.getByTestId('create-team-description').fill('Team created by QA Manager');
+    await page.getByTestId('create-team-platform').selectOption('API');
+    
+    // Submit
+    await page.click('button[type="submit"]:has-text("Create Team")');
+    await page.waitForTimeout(2000);
+    
+    // Team should appear in table
+    await expect(page.locator(`text=${teamName}`)).toBeVisible();
+    console.log(`✅ QA Manager created team: ${teamName}`);
+  });
+
+  test('TEAM-SPA-003: Team Lead cannot create team', async ({ page }) => {
+    await loginAsTeamLead(page);
+    
+    await page.click('text=Admin Panel');
+    await waitForLoadingToComplete(page);
+    
+    // Create Team button should NOT be visible
+    await expect(page.locator('button:has-text("Create Team")')).not.toBeVisible();
+    
+    console.log('✅ Team Lead correctly cannot create teams');
+  });
+
+  test('TEAM-SPA-004: Can view team details', async ({ page }) => {
+    await loginAsSuperAdmin(page);
+    
+    await page.click('text=Admin Panel');
+    await waitForLoadingToComplete(page);
+    
+    // Click on a team
+    const teamRow = page.locator('tr:has-text("Nebula")').first();
+    await teamRow.click();
+    await page.waitForTimeout(1000);
+    
+    // Should show team details
+    await expect(page.locator('h1:has-text("Nebula")')).toBeVisible();
+    await expect(page.locator('text=Team Members')).toBeVisible();
+    
+    // Go back
+    await page.click('button:has-text("Back")');
+    await page.waitForTimeout(500);
+    
+    console.log('✅ Team details viewed successfully');
+  });
+
+  test('TEAM-SPA-005: Cannot delete team with members', async ({ page }) => {
+    await loginAsSuperAdmin(page);
+    
+    await page.click('text=Admin Panel');
+    await waitForLoadingToComplete(page);
+    
+    // Click on a team that has members (Nebula)
+    const teamRow = page.locator('tr:has-text("Nebula")').first();
+    await teamRow.click();
+    await page.waitForTimeout(1000);
+    
+    // Check if team has members
+    const hasMembersText = await page.locator('text=/[1-9]\\d*.*Team Members/').isVisible();
+    
+    if (hasMembersText) {
+      // Try to find delete button - should not exist or be disabled
+      const deleteButton = page.locator('button:has-text("Delete Team")');
+      const isVisible = await deleteButton.isVisible().catch(() => false);
+      
+      if (isVisible) {
+        await deleteButton.click();
+        // Should show error message
+        await expect(page.locator('text=/cannot delete.*members|team has members/i')).toBeVisible({ timeout: 3000 });
+      }
+      
+      console.log('✅ Cannot delete team with members');
+    }
+    
+    await page.click('button:has-text("Back")');
   });
 });
