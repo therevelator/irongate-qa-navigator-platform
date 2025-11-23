@@ -89,6 +89,15 @@ export const advancedFeatures: FeatureModule[] = [
     enabled: true,
     route: '/team-gamification',
     category: 'business'
+  },
+  {
+    id: 'pdf-report-generator',
+    name: 'PDF Report Generator',
+    description: 'Generate comprehensive PDF reports with rich graphics and business insights',
+    icon: 'FileText',
+    enabled: true,
+    route: '/pdf-reports',
+    category: 'business'
   }
 ];
 

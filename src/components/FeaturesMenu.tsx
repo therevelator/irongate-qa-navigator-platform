@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, BarChart3, TestTube, Zap, TrendingUp, Code, Wrench, GitBranch, DollarSign, Trophy } from 'lucide-react';
+import { ArrowLeft, BarChart3, TestTube, Zap, TrendingUp, Code, Wrench, GitBranch, DollarSign, Trophy, FileText } from 'lucide-react';
 import { advancedFeatures } from '../data/features';
 import type { FeatureModule } from '../data/features';
 
@@ -19,7 +19,8 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
       Wrench: <Wrench size={24} />,
       GitBranch: <GitBranch size={24} />,
       DollarSign: <DollarSign size={24} />,
-      Trophy: <Trophy size={24} />
+      Trophy: <Trophy size={24} />,
+      FileText: <FileText size={24} />
     };
     return icons[iconName] || <BarChart3 size={24} />;
   };

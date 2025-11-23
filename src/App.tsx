@@ -18,6 +18,7 @@ import TestExecutionTimeline from './components/TestExecutionTimeline';
 import TeamGamification from './components/TeamGamification';
 import TeamManagement from './components/TeamManagement';
 import AdminPanel from './components/AdminPanel';
+import PDFReportGenerator from './components/PDFReportGenerator';
 
 function App() {
   const { user, logout } = useAuth();
@@ -83,6 +84,10 @@ function App() {
 
   if (currentView === 'team-gamification') {
     return <TeamGamification onBack={() => setCurrentView('features')} />;
+  }
+
+  if (currentView === 'pdf-report-generator') {
+    return <PDFReportGenerator onBack={() => setCurrentView('features')} />;
   }
 
   if (currentView === 'manage-teams') {
