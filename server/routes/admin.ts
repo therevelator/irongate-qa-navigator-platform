@@ -455,4 +455,181 @@ router.get('/departments', authenticateToken, async (req: any, res) => {
   }
 });
 
+// Get all departments with description (Super Admin only)
+router.get('/departments/all', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, companyId } = req.user;
+
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only Super Admins can access all departments' });
+    }
+
+    const departments = await query<any>(
+      'SELECT id, name, description, company_id, created_at FROM departments WHERE company_id = ? ORDER BY name',
+      [companyId]
+    );
+
+    res.json(departments);
+  } catch (error) {
+    console.error('Error fetching all departments:', error);
+    res.status(500).json({ error: 'Failed to fetch departments' });
+  }
+});
+
+// Create department (Super Admin only)
+router.post('/departments', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, companyId } = req.user;
+    const { name, description } = req.body;
+
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only Super Admins can create departments' });
+    }
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Department name is required' });
+    }
+
+    // Check for duplicate name
+    const existing = await queryOne<any>(
+      'SELECT id FROM departments WHERE name = ? AND company_id = ?',
+      [name.trim(), companyId]
+    );
+
+    if (existing) {
+      return res.status(400).json({ error: 'Department name already exists' });
+    }
+
+    // Generate unique ID
+    const departmentId = `dept-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+
+    // Insert department
+    await query(
+      'INSERT INTO departments (id, name, description, company_id) VALUES (?, ?, ?, ?)',
+      [departmentId, name.trim(), description?.trim() || null, companyId]
+    );
+
+    const newDepartment = await queryOne<any>(
+      'SELECT id, name, description, company_id, created_at FROM departments WHERE id = ?',
+      [departmentId]
+    );
+
+    res.status(201).json(newDepartment);
+  } catch (error: any) {
+    console.error('Error creating department:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      res.status(400).json({ error: 'Department already exists' });
+    } else {
+      res.status(500).json({ error: 'Failed to create department' });
+    }
+  }
+});
+
+// Update department (Super Admin only)
+router.put('/departments/:id', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, companyId } = req.user;
+    const { id } = req.params;
+    const { name, description } = req.body;
+
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only Super Admins can update departments' });
+    }
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Department name is required' });
+    }
+
+    // Check if department exists and belongs to company
+    const department = await queryOne<any>(
+      'SELECT id FROM departments WHERE id = ? AND company_id = ?',
+      [id, companyId]
+    );
+
+    if (!department) {
+      return res.status(404).json({ error: 'Department not found' });
+    }
+
+    // Check for duplicate name (excluding current department)
+    const existing = await queryOne<any>(
+      'SELECT id FROM departments WHERE name = ? AND company_id = ? AND id != ?',
+      [name.trim(), companyId, id]
+    );
+
+    if (existing) {
+      return res.status(400).json({ error: 'Department name already exists' });
+    }
+
+    // Update department
+    await query(
+      'UPDATE departments SET name = ?, description = ? WHERE id = ? AND company_id = ?',
+      [name.trim(), description?.trim() || null, id, companyId]
+    );
+
+    const updatedDepartment = await queryOne<any>(
+      'SELECT id, name, description, company_id, created_at FROM departments WHERE id = ?',
+      [id]
+    );
+
+    res.json(updatedDepartment);
+  } catch (error: any) {
+    console.error('Error updating department:', error);
+    if (error.code === 'ER_DUP_ENTRY') {
+      res.status(400).json({ error: 'Department name already exists' });
+    } else {
+      res.status(500).json({ error: 'Failed to update department' });
+    }
+  }
+});
+
+// Delete department (Super Admin only)
+router.delete('/departments/:id', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, companyId } = req.user;
+    const { id } = req.params;
+
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only Super Admins can delete departments' });
+    }
+
+    // Check if department exists and belongs to company
+    const department = await queryOne<any>(
+      'SELECT id FROM departments WHERE id = ? AND company_id = ?',
+      [id, companyId]
+    );
+
+    if (!department) {
+      return res.status(404).json({ error: 'Department not found' });
+    }
+
+    // Check if department has teams
+    const teams = await query<any>(
+      'SELECT id FROM teams WHERE department_id = ?',
+      [id]
+    );
+
+    if (teams.length > 0) {
+      return res.status(400).json({ error: 'Cannot delete department with existing teams' });
+    }
+
+    // Check if department has users
+    const users = await query<any>(
+      'SELECT id FROM users WHERE department_id = ?',
+      [id]
+    );
+
+    if (users.length > 0) {
+      return res.status(400).json({ error: 'Cannot delete department with assigned users' });
+    }
+
+    // Delete department
+    await query('DELETE FROM departments WHERE id = ? AND company_id = ?', [id, companyId]);
+
+    res.json({ message: 'Department deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting department:', error);
+    res.status(500).json({ error: 'Failed to delete department' });
+  }
+});
+
 export default router;

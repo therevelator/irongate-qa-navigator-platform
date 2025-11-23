@@ -18,6 +18,7 @@ import TeamGamification from './components/TeamGamification';
 import TeamManagement from './components/TeamManagement';
 import AdminPanel from './components/AdminPanel';
 import PDFReportGenerator from './components/PDFReportGenerator';
+import DepartmentManagement from './components/DepartmentManagement';
 
 interface Department {
   id: string;
@@ -194,6 +195,10 @@ function App() {
     return <PDFReportGenerator onBack={() => setCurrentView('features')} />;
   }
 
+  if (currentView === 'manage-departments') {
+    return <DepartmentManagement onBack={() => setCurrentView('dashboard')} />;
+  }
+
   if (currentView === 'manage-teams') {
     return <TeamManagement teams={teams} onBack={() => setCurrentView('dashboard')} onUpdateTeams={setTeams} />;
   }
@@ -261,6 +266,16 @@ function App() {
             <Sparkles size={20} />
             <span>Advanced Features</span>
           </button>
+          
+          {user?.role === 'super_admin' && (
+            <button
+              onClick={() => setCurrentView('manage-departments')}
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors"
+            >
+              <Building2 size={20} />
+              <span>Manage Departments</span>
+            </button>
+          )}
           
           {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
             <>
