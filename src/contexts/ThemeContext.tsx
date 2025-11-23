@@ -10,20 +10,30 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [isDark, setIsDark] = useState(() => {
     const saved = localStorage.getItem('theme');
+    // If no saved preference, default to light mode
+    if (saved === null) {
+      return false;
+    }
     return saved === 'dark';
   });
 
   useEffect(() => {
+    // Update localStorage
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
+    
+    // Update document class
     if (isDark) {
       document.documentElement.classList.add('dark');
     } else {
       document.documentElement.classList.remove('dark');
     }
+    
+    console.log('Theme changed to:', isDark ? 'dark' : 'light');
   }, [isDark]);
 
   const toggleTheme = () => {
-    setIsDark(!isDark);
+    console.log('Toggle theme clicked. Current:', isDark ? 'dark' : 'light', '-> New:', !isDark ? 'dark' : 'light');
+    setIsDark(prev => !prev);
   };
 
   return (
