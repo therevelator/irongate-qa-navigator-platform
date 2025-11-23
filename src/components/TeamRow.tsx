@@ -17,12 +17,14 @@ const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
   return (
     <div 
       onClick={onClick}
-      className="bg-white rounded-xl shadow-sm border border-gray-100 mb-4 overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
+      className="bg-white rounded-2xl shadow-md hover:shadow-xl border border-slate-200/60 overflow-hidden transition-all duration-300 cursor-pointer group hover:scale-[1.01]"
     >
-      <div className="flex items-center p-4 h-32">
+      <div className="flex items-center p-6 h-36">
         {/* Status Strip */}
-        <div className={`w-1.5 self-stretch rounded-full mr-4 ${
-          team.status === 'good' ? 'bg-green-500' : team.status === 'warning' ? 'bg-yellow-500' : 'bg-red-500'
+        <div className={`w-2 self-stretch rounded-full mr-5 ${
+          team.status === 'good' ? 'bg-gradient-to-b from-green-400 to-green-600' : 
+          team.status === 'warning' ? 'bg-gradient-to-b from-amber-400 to-amber-600' : 
+          'bg-gradient-to-b from-red-400 to-red-600'
         }`} />
 
         {/* Team Info & Score */}
@@ -54,14 +56,14 @@ const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
             </div>
           </div>
           <div>
-            <h3 className="font-bold text-gray-900 text-lg">{team.name}</h3>
-            <p className="text-xs text-gray-500 uppercase tracking-wide">{team.department}</p>
+            <h3 className="font-bold text-slate-900 text-xl mb-1">{team.name}</h3>
+            <p className="text-xs text-slate-500 uppercase tracking-wider font-medium">{team.department}</p>
           </div>
         </div>
 
         {/* Velocity Chart */}
-        <div className="w-64 h-full px-4 border-l border-gray-100 flex flex-col justify-center">
-           <p className="text-xs text-gray-400 mb-2 text-center">Velocity (Last 5 Sprints)</p>
+        <div className="w-64 h-full px-6 border-l border-slate-200 flex flex-col justify-center">
+           <p className="text-xs text-slate-500 font-medium mb-2 text-center">Velocity (Last 5 Sprints)</p>
            <div className="h-16 w-full">
              <ResponsiveContainer width="100%" height="100%">
                <BarChart data={team.velocity} barGap={2}>
@@ -77,13 +79,13 @@ const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
         </div>
 
         {/* Key Metrics Grid */}
-        <div className="flex-1 grid grid-cols-4 gap-4 px-6 border-l border-gray-100">
+        <div className="flex-1 grid grid-cols-4 gap-6 px-8 border-l border-slate-200">
           {team.metrics.map(metric => (
             <div key={metric.id} className="text-center">
-              <p className="text-xs text-gray-400 mb-1">{metric.name}</p>
-              <div className="font-bold text-gray-900 text-lg">
+              <p className="text-xs text-slate-500 font-medium mb-1.5">{metric.name}</p>
+              <div className="font-bold text-slate-900 text-xl">
                 {metric.value}
-                <span className="text-xs font-normal text-gray-400 ml-0.5">{metric.unit}</span>
+                <span className="text-sm font-normal text-slate-400 ml-0.5">{metric.unit}</span>
               </div>
               <div className={`flex items-center justify-center text-xs font-medium mt-1 ${
                 metric.trend === 'up' ? (metric.id === 'coverage' ? 'text-green-600' : 'text-red-600') : 
@@ -97,9 +99,9 @@ const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
         </div>
 
         {/* Action */}
-        <div className="pl-4 border-l border-gray-100">
-          <button className="p-2 rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
-            <ChevronRight size={20} />
+        <div className="pl-6 border-l border-slate-200">
+          <button className="p-3 rounded-full bg-slate-50 group-hover:bg-blue-500 text-slate-400 group-hover:text-white transition-all duration-300">
+            <ChevronRight size={22} />
           </button>
         </div>
       </div>

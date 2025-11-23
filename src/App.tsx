@@ -239,12 +239,12 @@ function App() {
                   <button
                     key={dept.id}
                     onClick={() => setActiveTab(dept.id)}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
+                    className={`w-full flex items-center space-x-3 px-4 py-2.5 rounded-lg transition-colors ${
                       activeTab === dept.id ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'
                     }`}
                   >
-                    <Icon size={20} />
-                    <span>{dept.name}</span>
+                    <Icon size={18} className="flex-shrink-0" />
+                    <span className="text-sm truncate">{dept.name}</span>
                   </button>
                 );
               })}
@@ -313,28 +313,45 @@ function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto flex flex-col">
-        <header className="bg-white shadow-sm border-b px-8 py-6 flex justify-between items-center">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              {activeTab === 'all' ? 'Organization Overview' : `${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} Teams`}
-            </h2>
-            <p className="text-sm text-gray-500 mt-1">Real-time quality metrics across {filteredTeams.length} active teams</p>
-          </div>
-          
-          <div className="flex items-center space-x-6">
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Overall QA Score</p>
-              <div className="text-3xl font-bold text-gray-900">{avgScore}/100</div>
-            </div>
-            <div className="h-12 w-12 rounded-full border-4 border-green-500 flex items-center justify-center font-bold text-green-600">
-              {avgScore}
+      <main className="flex-1 overflow-y-auto flex flex-col bg-gradient-to-br from-slate-50 via-blue-50 to-slate-50">
+        {/* Hero Header */}
+        <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 px-8 py-8">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-3xl font-bold text-slate-900 mb-2">
+                  {activeTab === 'all' ? 'Organization Overview' : departments.find(d => d.id === activeTab)?.name || 'Teams'}
+                </h1>
+                <p className="text-slate-600 flex items-center gap-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                    {filteredTeams.length} Active Teams
+                  </span>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-sm">Real-time quality metrics</span>
+                </p>
+              </div>
+              
+              {/* Score Card */}
+              <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-2xl shadow-lg p-6 min-w-[180px]">
+                <p className="text-blue-100 text-sm font-medium mb-1">Overall QA Score</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-5xl font-bold text-white">{avgScore}</span>
+                  <span className="text-2xl text-blue-100">/100</span>
+                </div>
+                <div className="mt-3 h-2 bg-blue-400/30 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-white rounded-full transition-all duration-500"
+                    style={{ width: `${avgScore}%` }}
+                  />
+                </div>
+              </div>
             </div>
           </div>
         </header>
 
-        <div className="p-8 flex-1">
-          <div className="space-y-6">
+        {/* Main Content Area */}
+        <div className="flex-1 px-8 py-6">
+          <div className="max-w-7xl mx-auto space-y-4">
              {filteredTeams.map(team => (
                <TeamRow key={team.id} team={team} onClick={() => setSelectedTeam(team)} />
              ))}
