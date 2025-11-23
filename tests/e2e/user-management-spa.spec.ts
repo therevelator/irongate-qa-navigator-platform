@@ -408,6 +408,9 @@ test.describe('User Management (SPA)', () => {
     await page.click('button[type="submit"]:has-text("Reset Password")');
     await page.waitForTimeout(1000);
     
+    // Should show success toast
+    await expect(page.locator('text=/Password reset successfully/i')).toBeVisible({ timeout: 3000 });
+    
     // Modal should close
     await expect(page.getByTestId('reset-password-new')).not.toBeVisible();
     
@@ -443,18 +446,25 @@ test.describe('User Management (SPA)', () => {
     await expect(page.locator(`text=${teamName}`)).toBeVisible();
     console.log(`✅ Created team: ${teamName}`);
     
-    // Cleanup: Delete the test team (only if empty)
+    // Cleanup: Navigate to team details to check if empty
     const teamRow = page.locator(`tr:has-text("${teamName}")`).first();
     await teamRow.scrollIntoViewIfNeeded();
     await teamRow.click();
     await page.waitForTimeout(1000);
     
-    // Check if team is empty, then we can delete
+    // Check if team is empty
     const memberCount = await page.locator('text=/0.*Team Members|No team members/i').isVisible();
     if (memberCount) {
-      await page.click('button:has-text("Back")');
       console.log(`🧹 Team ${teamName} is empty and can be deleted in future tests`);
     }
+    
+    // Navigate back: Team detail -> Admin Panel -> Dashboard
+    await page.click('button:has-text("Back to Dashboard")');
+    await page.waitForTimeout(500);
+    
+    // Verify we're back on dashboard
+    await expect(page.locator('h1:has-text("QA Dashboard")')).toBeVisible();
+    console.log('✅ Navigated back to dashboard');
   });
 
   test('TEAM-SPA-002: QA Manager can create team in their department', async ({ page }) => {
