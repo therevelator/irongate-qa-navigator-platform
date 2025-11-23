@@ -202,7 +202,7 @@ function App() {
           <p className="text-slate-500 text-xs mt-2">QA Navigator Platform</p>
         </div>
         
-        <nav className="flex-1 px-4 space-y-2">
+        <nav className="flex-1 px-4 py-4 space-y-2 overflow-y-auto">
           <button 
             onClick={() => setActiveTab('all')}
             className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'all' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}
@@ -248,23 +248,23 @@ function App() {
           </button>
           
           {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
-            <button
-              onClick={() => setCurrentView('admin-panel')}
-              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors"
-            >
-              <Shield size={20} />
-              <span>Admin Panel</span>
-            </button>
-          )}
-          
-          {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
-            <button
-              onClick={() => setCurrentView('manage-teams')}
-              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors mt-auto"
-            >
-              <Settings size={20} />
-              <span>Manage Teams</span>
-            </button>
+            <>
+              <button
+                onClick={() => setCurrentView('admin-panel')}
+                className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors"
+              >
+                <Shield size={20} />
+                <span>Admin Panel</span>
+              </button>
+              
+              <button
+                onClick={() => setCurrentView('manage-teams')}
+                className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-slate-400 hover:bg-slate-800 transition-colors"
+              >
+                <Settings size={20} />
+                <span>Manage Teams</span>
+              </button>
+            </>
           )}
         </nav>
         
