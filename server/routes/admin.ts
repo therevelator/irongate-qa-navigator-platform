@@ -241,6 +241,45 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
   }
 });
 
+// Get all teams (with department names)
+router.get('/teams', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, companyId, departmentId } = req.user;
+
+    let teams;
+    
+    if (role === 'super_admin') {
+      // Super admin sees all teams in their company
+      teams = await query<any>(
+        `SELECT t.*, d.name as department_name 
+         FROM teams t 
+         LEFT JOIN departments d ON t.department_id = d.id 
+         WHERE t.company_id = ? 
+         ORDER BY t.created_at DESC`,
+        [companyId]
+      );
+    } else if (role === 'qa_manager' || role === 'team_lead') {
+      // QA Manager and Team Lead see teams in their department
+      teams = await query<any>(
+        `SELECT t.*, d.name as department_name 
+         FROM teams t 
+         LEFT JOIN departments d ON t.department_id = d.id 
+         WHERE t.company_id = ? AND t.department_id = ? 
+         ORDER BY t.created_at DESC`,
+        [companyId, departmentId]
+      );
+    } else {
+      // Other roles don't have access to teams list
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    res.json(teams);
+  } catch (error) {
+    console.error('Error fetching teams:', error);
+    res.status(500).json({ error: 'Failed to fetch teams' });
+  }
+});
+
 // Create team (QA Manager and Super Admin)
 router.post('/teams', authenticateToken, async (req: any, res) => {
   try {
