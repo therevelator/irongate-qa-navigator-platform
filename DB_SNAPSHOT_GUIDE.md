@@ -42,16 +42,54 @@ mysqldump -u root -p irongate_qa > db_snapshots/manual_snapshot.sql
 
 ## 🔐 Password Management
 
-The hook will ask for your MySQL password once per terminal session. The password is stored in the `MYSQL_PASSWORD` environment variable for that session only.
+The hook supports three methods (in order of preference):
 
-### Skip Password Prompt
-Set the password in your shell session:
+### Method 1: MySQL Config File (Recommended) ⭐
+**One-time setup, never enter password again!**
+
+Run the setup script:
+```bash
+./setup_mysql_credentials.sh
+```
+
+This creates `~/.my.cnf` with your credentials (secure, readable only by you).
+
+**Manual setup:**
+```bash
+# Create the file
+cat > ~/.my.cnf << 'EOF'
+[client]
+user=root
+password=your_password
+
+[mysqldump]
+user=root
+password=your_password
+EOF
+
+# Secure it (important!)
+chmod 600 ~/.my.cnf
+```
+
+### Method 2: Environment Variable
+Set once per terminal session:
 ```bash
 export MYSQL_PASSWORD="your_password"
 git commit -m "your message"
 ```
 
-**⚠️ Security Note:** Never commit your password to Git!
+Add to your `~/.zshrc` or `~/.bashrc` for permanent setup:
+```bash
+echo 'export MYSQL_PASSWORD="your_password"' >> ~/.zshrc
+```
+
+### Method 3: Manual Prompt (Default)
+If neither method above is configured, you'll be prompted once per session.
+
+**⚠️ Security Notes:**
+- Never commit passwords to Git
+- `~/.my.cnf` is the most secure method
+- Always use `chmod 600` on credential files
 
 ## 📊 What Gets Committed
 
