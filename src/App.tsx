@@ -50,38 +50,19 @@ function App() {
         'Authorization': `Bearer ${token}`
       };
 
-      // Fetch teams
+      // Fetch teams with metrics from database
       try {
-        const teamsResponse = await fetch('http://localhost:3000/api/admin/teams', { headers });
+        const teamsResponse = await fetch('http://localhost:3000/api/teams', { headers });
         if (teamsResponse.ok) {
-          const teamsData = await teamsResponse.json();
+          const { teams: teamsData } = await teamsResponse.json();
           
-          // Transform API teams to match TeamRow expected structure
-          const transformedTeams = teamsData.map((team: any) => ({
-            ...team,
-            department: team.department_name || 'Unknown',
-            qaScore: 75, // Default score, will be replaced with real data later
-            status: 'good' as const,
-            velocity: [
-              { sprint: 'S1', committed: 50, delivered: 45 },
-              { sprint: 'S2', committed: 55, delivered: 52 },
-              { sprint: 'S3', committed: 50, delivered: 48 },
-              { sprint: 'S4', committed: 58, delivered: 55 },
-              { sprint: 'S5', committed: 52, delivered: 50 }
-            ],
-            metrics: [
-              { id: 1, name: 'Test Coverage', value: '85%', trend: 'up', change: 5.2 },
-              { id: 2, name: 'Pass Rate', value: '92%', trend: 'up', change: 3.1 },
-              { id: 3, name: 'Defect Density', value: '0.8', trend: 'down', change: -2.5 },
-              { id: 4, name: 'Automation', value: '78%', trend: 'up', change: 4.8 }
-            ]
-          }));
-          
-          setUserTeams(transformedTeams);
-          console.log('Fetched and transformed teams:', transformedTeams);
+          // Teams are already transformed by the API
+          setTeams(teamsData);
+          setUserTeams(teamsData);
+          console.log('Fetched teams from database:', teamsData);
         }
       } catch (error) {
-        console.error('Error fetching data:', error);
+        console.error('Error fetching teams:', error);
       }
     } catch (error) {
       console.error('Error fetching departments and teams:', error);
@@ -193,7 +174,7 @@ function App() {
     );
   }
 
-  if (currentView === 'business-impact-analysis') {
+  if (currentView === 'business-impact') {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <BusinessImpactAnalysis onBack={() => setCurrentView('features')} />

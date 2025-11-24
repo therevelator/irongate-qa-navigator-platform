@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3 } from 'lucide-react';
 import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
+import TypingAnimation from './TypingAnimation';
 
 interface NewDashboardProps {
   teams: Team[];
@@ -18,15 +19,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
     ? teams.filter(team => team.id === user?.primaryTeamId)
     : teams;
 
-  // Calculate overall metrics based on visible teams
-  const avgQualityScore = userTeams.length > 0 
-    ? (userTeams.reduce((acc, t) => acc + t.qaScore, 0) / userTeams.length).toFixed(1)
-    : '0.0';
-
-  const testCoverage = '94.7';
-  const defectDensity = '0.23';
-  const automationRate = '76.4';
-
   // Filter teams
   const filteredTeams = userTeams.filter(team => {
     if (filter === 'all') return true;
@@ -37,101 +29,37 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-950 overflow-auto">
-      {/* Hero Section */}
-      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 p-6 sm:p-8 md:p-10 relative overflow-hidden min-h-[200px] sm:min-h-[240px]">
+      {/* Hero Section - Fixed 150px height */}
+      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 p-4 sm:p-6 relative overflow-hidden" style={{ minHeight: '150px' }}>
         <div className="relative z-10 max-w-7xl mx-auto">
-          <div className="flex items-center gap-4 mb-4">
+          <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-3">
             <img 
               src="/irongate-logo.png" 
               alt="IronGate QA Navigator" 
-              className="h-12 sm:h-16 w-auto object-contain"
+              className="h-8 sm:h-10 md:h-12 w-auto object-contain"
               onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
-            <div className="h-12 sm:h-16 w-px bg-gray-300 dark:bg-gray-600"></div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-gray-900 dark:text-white">
+            <div className="h-8 sm:h-10 md:h-12 w-px bg-gray-300 dark:bg-gray-600"></div>
+            <div className="flex-1 min-w-0">
+              <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white truncate">
                 {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
                   ? `${userTeams[0]?.name || 'My Team'} Dashboard`
                   : 'Quality Assurance Dashboard'}
               </h1>
             </div>
           </div>
-          <p className="text-sm sm:text-base lg:text-lg text-gray-600 dark:text-gray-300 max-w-4xl">
-            Monitor, analyze, and optimize your quality assurance processes with real-time insights and comprehensive metrics.
-          </p>
+          <TypingAnimation className="max-w-4xl" />
         </div>
         {/* Animated background elements */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-4 -right-4 w-48 h-48 sm:w-72 sm:h-72 bg-blue-200 dark:bg-blue-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-30 animate-pulse"></div>
-          <div className="absolute -bottom-4 -left-4 w-48 h-48 sm:w-72 sm:h-72 bg-cyan-200 dark:bg-cyan-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-30 animate-pulse" style={{ animationDelay: '1s' }}></div>
+          <div className="absolute -top-4 -right-4 w-32 h-32 sm:w-48 sm:h-48 bg-blue-200 dark:bg-blue-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-30 animate-pulse"></div>
+          <div className="absolute -bottom-4 -left-4 w-32 h-32 sm:w-48 sm:h-48 bg-cyan-200 dark:bg-cyan-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-30 animate-pulse" style={{ animationDelay: '1s' }}></div>
         </div>
       </div>
 
-      {/* Key Metrics Overview */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 p-4 sm:p-6">
-        {/* Overall Quality Score */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <div className="p-2 sm:p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
-              <BarChart3 className="text-blue-600 dark:text-blue-300" size={20} />
-            </div>
-            <span className="text-xs sm:text-sm text-green-600 flex items-center">
-              <TrendingUp size={14} className="mr-1" />
-              +5.2%
-            </span>
-          </div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-1">{avgQualityScore}%</h3>
-          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Overall Quality Score</p>
-        </div>
-
-        {/* Test Coverage */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <div className="p-2 sm:p-3 bg-green-100 dark:bg-green-900 rounded-lg">
-              <Shield className="text-green-600 dark:text-green-300" size={20} />
-            </div>
-            <span className="text-xs sm:text-sm text-green-600 flex items-center">
-              <TrendingUp size={14} className="mr-1" />
-              +2.1%
-            </span>
-          </div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-1">{testCoverage}%</h3>
-          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Test Coverage</p>
-        </div>
-
-        {/* Defect Density */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <div className="p-2 sm:p-3 bg-amber-100 dark:bg-amber-900 rounded-lg">
-              <Bug className="text-amber-600 dark:text-amber-300" size={20} />
-            </div>
-            <span className="text-xs sm:text-sm text-red-600 flex items-center">
-              <TrendingDown size={14} className="mr-1" />
-              -12%
-            </span>
-          </div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-1">{defectDensity}</h3>
-          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Defect Density</p>
-        </div>
-
-        {/* Automation Rate */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-shadow">
-          <div className="flex items-center justify-between mb-3 sm:mb-4">
-            <div className="p-2 sm:p-3 bg-purple-100 dark:bg-purple-900 rounded-lg">
-              <Bot className="text-purple-600 dark:text-purple-300" size={20} />
-            </div>
-            <span className="text-xs sm:text-sm text-green-600 flex items-center">
-              <TrendingUp size={14} className="mr-1" />
-              +8.3%
-            </span>
-          </div>
-          <h3 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-1">{automationRate}%</h3>
-          <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400">Automation Rate</p>
-        </div>
-      </div>
 
       {/* Teams Overview */}
-      <div className="px-4 sm:px-6 pb-4 sm:pb-6">
+      <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-[15px]">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-4">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
             {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
@@ -141,9 +69,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setFilter('all')}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-colors ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${
                 filter === 'all'
-                  ? 'bg-cyan-600 text-white'
+                  ? 'bg-cyan-600 text-white shadow-lg scale-105'
                   : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
               }`}
             >
@@ -151,9 +79,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
             </button>
             <button
               onClick={() => setFilter('high')}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-colors ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${
                 filter === 'high'
-                  ? 'bg-cyan-600 text-white'
+                  ? 'bg-cyan-600 text-white shadow-lg scale-105'
                   : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
               }`}
             >
@@ -161,9 +89,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
             </button>
             <button
               onClick={() => setFilter('needs-attention')}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-colors ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${
                 filter === 'needs-attention'
-                  ? 'bg-cyan-600 text-white'
+                  ? 'bg-cyan-600 text-white shadow-lg scale-105'
                   : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
               }`}
             >
@@ -172,87 +100,156 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           </div>
         </div>
 
-        {/* Teams Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-          {filteredTeams.map(team => (
+        {/* Teams as Rows - Responsive */}
+        <div className="space-y-3">
+          {filteredTeams.map((team, index) => (
             <div
               key={team.id}
               onClick={() => onTeamClick?.(team)}
-              className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-6 border border-gray-200 dark:border-slate-800 hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group active:scale-95"
+              className="bg-white dark:bg-slate-900 rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-slate-800 hover:shadow-xl hover:scale-[1.01] transition-all duration-300 cursor-pointer relative overflow-hidden group"
+              style={{ animationDelay: `${index * 50}ms` }}
             >
-              {/* Colored top border */}
-              <div className={`absolute top-0 left-0 right-0 h-1 ${
-                team.qaScore >= 85 ? 'bg-gradient-to-r from-green-500 to-emerald-500' :
-                team.qaScore >= 75 ? 'bg-gradient-to-r from-yellow-500 to-amber-500' :
-                'bg-gradient-to-r from-red-500 to-rose-500'
-              }`}></div>
-
-              {/* Team Header */}
-              <div className="flex items-start justify-between mb-3 sm:mb-4">
-                <div className="flex-1 min-w-0 pr-2">
-                  <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-1 truncate">{team.name}</h3>
-                  <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
+              {/* Animated gradient border on hover */}
+              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-blue-500/0 to-purple-500/0 group-hover:from-cyan-500/10 group-hover:via-blue-500/10 group-hover:to-purple-500/10 transition-all duration-500"></div>
+              
+              {/* Mobile Layout (< 768px) */}
+              <div className="relative md:hidden">
+                <div className="flex items-start justify-between mb-3">
+                  {/* Team Info */}
+                  <div className="flex-1 min-w-0 pr-3">
+                    <h3 className="text-base font-bold text-gray-900 dark:text-white mb-1 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors truncate">
+                      {team.name}
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
+                  </div>
+                  
+                  {/* QA Score Circle - Smaller on mobile */}
+                  <div className="flex-shrink-0">
+                    <div className="relative w-16 h-16 group-hover:scale-110 transition-transform duration-300">
+                      <svg className="w-full h-full transform -rotate-90">
+                        <circle cx="32" cy="32" r="28" stroke="#e5e7eb" strokeWidth="5" fill="transparent" className="dark:stroke-slate-700" />
+                        <circle
+                          cx="32" cy="32" r="28"
+                          stroke={team.qaScore >= 85 ? '#10b981' : team.qaScore >= 75 ? '#eab308' : team.qaScore >= 50 ? '#f97316' : '#ef4444'}
+                          strokeWidth="5" fill="transparent"
+                          strokeDasharray={2 * Math.PI * 28}
+                          strokeDashoffset={2 * Math.PI * 28 - (team.qaScore / 100) * 2 * Math.PI * 28}
+                          strokeLinecap="round" className="transition-all duration-1000"
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <span className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400">Score</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
+                
+                {/* Metrics Grid - 2 columns on mobile */}
+                <div className="grid grid-cols-2 gap-3">
+                  {team.metrics && team.metrics.length > 0 ? (
+                    team.metrics.slice(0, 4).map((metric: any, idx: number) => (
+                      <div key={idx} className="bg-gray-50 dark:bg-slate-800 rounded-lg p-2">
+                        <div className="flex items-center gap-1.5 mb-1">
+                          <div className={`p-1 rounded ${
+                            idx === 0 ? 'bg-green-100 dark:bg-green-900' :
+                            idx === 1 ? 'bg-amber-100 dark:bg-amber-900' :
+                            idx === 2 ? 'bg-purple-100 dark:bg-purple-900' :
+                            'bg-blue-100 dark:bg-blue-900'
+                          }`}>
+                            {idx === 0 ? <Shield className="text-green-600 dark:text-green-300" size={12} /> :
+                             idx === 1 ? <Bug className="text-amber-600 dark:text-amber-300" size={12} /> :
+                             idx === 2 ? <Bot className="text-purple-600 dark:text-purple-300" size={12} /> :
+                             <BarChart3 className="text-blue-600 dark:text-blue-300" size={12} />}
+                          </div>
+                          <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{metric.name}</span>
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-lg font-bold text-gray-900 dark:text-white">{metric.value}</span>
+                          {metric.unit && <span className="text-xs text-gray-500">{metric.unit}</span>}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-2">
+                        <span className="text-xs text-gray-500">No metrics</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Desktop/Tablet Layout (>= 768px) */}
+              <div className="relative hidden md:flex items-center gap-4 lg:gap-6">
+                {/* Team Info */}
+                <div className="flex-shrink-0 w-32 lg:w-48">
+                  <h3 className="text-base lg:text-lg font-bold text-gray-900 dark:text-white mb-1 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors truncate">
+                    {team.name}
+                  </h3>
+                  <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
+                </div>
+
+                {/* QA Score with animated circle */}
                 <div className="flex-shrink-0">
-                  {/* Circular QA Score */}
-                  <div className="relative w-16 h-16">
+                  <div className="relative w-16 h-16 lg:w-20 lg:h-20 group-hover:scale-110 transition-transform duration-300">
                     <svg className="w-full h-full transform -rotate-90">
+                      <circle cx="50%" cy="50%" r="28" stroke="#e5e7eb" strokeWidth="6" fill="transparent" className="dark:stroke-slate-700" />
                       <circle
-                        cx="32"
-                        cy="32"
-                        r="28"
-                        stroke="#e5e7eb"
-                        strokeWidth="6"
-                        fill="transparent"
-                        className="dark:stroke-slate-700"
-                      />
-                      <circle
-                        cx="32"
-                        cy="32"
-                        r="28"
-                        stroke={
-                          team.qaScore >= 75 ? '#10b981' :
-                          team.qaScore >= 50 ? '#eab308' :
-                          team.qaScore >= 30 ? '#f97316' :
-                          '#ef4444'
-                        }
-                        strokeWidth="6"
-                        fill="transparent"
+                        cx="50%" cy="50%" r="28"
+                        stroke={team.qaScore >= 85 ? '#10b981' : team.qaScore >= 75 ? '#eab308' : team.qaScore >= 50 ? '#f97316' : '#ef4444'}
+                        strokeWidth="6" fill="transparent"
                         strokeDasharray={2 * Math.PI * 28}
                         strokeDashoffset={2 * Math.PI * 28 - (team.qaScore / 100) * 2 * Math.PI * 28}
-                        strokeLinecap="round"
+                        strokeLinecap="round" className="transition-all duration-1000"
                       />
                     </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <span className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
+                      <span className="text-[10px] lg:text-xs text-gray-500 dark:text-gray-400">Score</span>
                     </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Metrics */}
-              <div className="space-y-1.5 sm:space-y-2">
-                {team.metrics.slice(0, 3).map(metric => (
-                  <div key={metric.id} className="flex items-center justify-between text-xs sm:text-sm">
-                    <span className="text-gray-600 dark:text-gray-400 truncate pr-2">{metric.name}</span>
-                    <div className="flex items-center space-x-1.5 sm:space-x-2 flex-shrink-0">
-                      <span className="font-medium text-gray-900 dark:text-white">
-                        {typeof metric.value === 'number' ? metric.value.toFixed(1) : metric.value}
-                        {metric.unit || ''}
-                      </span>
-                      {metric.trend === 'up' && (
-                        <TrendingUp size={12} className="text-green-600" />
-                      )}
-                      {metric.trend === 'down' && (
-                        <TrendingDown size={12} className="text-red-600" />
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                {/* Inline Metrics */}
+                <div className="flex-1 grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+                  {team.metrics && team.metrics.length > 0 ? (
+                    team.metrics.slice(0, 4).map((metric: any, idx: number) => (
+                      <div key={idx} className="group/metric hover:scale-105 transition-transform">
+                        <div className="flex items-center gap-1.5 lg:gap-2 mb-1">
+                          <div className={`p-1 lg:p-1.5 rounded ${
+                            idx === 0 ? 'bg-green-100 dark:bg-green-900' :
+                            idx === 1 ? 'bg-amber-100 dark:bg-amber-900' :
+                            idx === 2 ? 'bg-purple-100 dark:bg-purple-900' :
+                            'bg-blue-100 dark:bg-blue-900'
+                          }`}>
+                            {idx === 0 ? <Shield className="text-green-600 dark:text-green-300" size={12} /> :
+                             idx === 1 ? <Bug className="text-amber-600 dark:text-amber-300" size={12} /> :
+                             idx === 2 ? <Bot className="text-purple-600 dark:text-purple-300" size={12} /> :
+                             <BarChart3 className="text-blue-600 dark:text-blue-300" size={12} />}
+                          </div>
+                          <span className="text-[10px] lg:text-xs text-gray-500 dark:text-gray-400 truncate">{metric.name}</span>
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                          <span className="text-lg lg:text-2xl font-bold text-gray-900 dark:text-white">{metric.value}</span>
+                          {metric.unit && <span className="text-xs lg:text-sm text-gray-500">{metric.unit}</span>}
+                          {metric.trend === 'up' && <TrendingUp size={12} className="text-green-600 ml-1 hidden lg:block" />}
+                          {metric.trend === 'down' && <TrendingDown size={12} className="text-green-600 ml-1 hidden lg:block" />}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="col-span-4 text-center text-gray-500">No metrics available</div>
+                  )}
+                </div>
 
-              {/* Hover effect */}
-              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 to-blue-500/0 group-hover:from-cyan-500/5 group-hover:to-blue-500/5 transition-all pointer-events-none"></div>
+                {/* Arrow indicator - Hidden on tablet, shown on desktop */}
+                <div className="hidden lg:block flex-shrink-0 text-gray-400 group-hover:text-cyan-600 group-hover:translate-x-1 transition-all">
+                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </div>
+              </div>
             </div>
           ))}
         </div>
