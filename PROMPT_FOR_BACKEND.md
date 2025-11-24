@@ -395,7 +395,7 @@ async function getMetricsWithFallback(teamId) {
 
 **Level 1: Redis (5 min TTL)** - Real-time metrics  
 **Level 2: PostgreSQL (1 hour TTL)** - Historical data  
-**Level 3: Mock Data** - Fallback when APIs unavailable
+**Level 3: Mock Data** - Fallback when APIs unavailable - for demo purposes
 
 ```javascript
 async function getMetrics(teamId) {

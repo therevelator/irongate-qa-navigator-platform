@@ -1,8 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, ShoppingCart, Server, CreditCard, Building2 } from 'lucide-react';
 import type { Team } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
-import TeamRow from './components/TeamRow';
 import TeamDetailView from './components/TeamDetailView';
 import FeaturesMenu from './components/FeaturesMenu';
 import FlakyTestIntelligence from './components/FlakyTestIntelligence';
@@ -21,12 +19,7 @@ import UsersView from './components/UsersView';
 import TeamsView from './components/TeamsView';
 import DepartmentsView from './components/DepartmentsView';
 import Layout from './components/Layout';
-
-interface Department {
-  id: string;
-  name: string;
-  company_id: string;
-}
+import NewDashboard from './components/NewDashboard';
 
 function App() {
   const { user } = useAuth();
@@ -34,7 +27,6 @@ function App() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | 'admin-panel' | string>('dashboard');
   const [teams, setTeams] = useState<Team[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [userTeams, setUserTeams] = useState<any[]>([]);
 
   // Fetch departments and teams based on user role
@@ -56,30 +48,6 @@ function App() {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${token}`
       };
-
-      // Fetch departments
-      try {
-        const deptResponse = await fetch('http://localhost:3000/api/admin/departments', { headers });
-        if (deptResponse.ok) {
-          const deptData = await deptResponse.json();
-          
-          // Filter departments based on user role
-          if (user?.role === 'super_admin') {
-            setDepartments(deptData);
-          } else if (user?.role === 'manager') {
-            // QA Manager sees their department
-            const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
-            setDepartments(userDept);
-          } else if (user?.role === 'team_lead' || user?.role === 'qa_engineer') {
-            // Team Lead and QA Engineer see only their department
-            const userDept = deptData.filter((d: Department) => d.id === user.departmentId);
-            setDepartments(userDept);
-          }
-        }
-      } catch (err) {
-        console.error('Error fetching departments:', err);
-        // Continue even if departments fail
-      }
 
       // Fetch teams
       try {
@@ -122,13 +90,6 @@ function App() {
   // Use API teams if available, otherwise fall back to mock teams
   const apiTeams = userTeams.length > 0 ? userTeams : teams;
   
-  console.log('API Teams:', apiTeams);
-  console.log('User Teams:', userTeams);
-  console.log('Mock Teams:', teams);
-  
-  // Calculate overall stats
-  const avgScore = apiTeams.length > 0 ? Math.round(apiTeams.reduce((acc: any, t: any) => acc + (t.qaScore || 75), 0) / apiTeams.length) : 0;
-  
   // Filter teams based on active tab and user permissions
   let filteredTeams = apiTeams;
   
@@ -148,20 +109,6 @@ function App() {
     }
   }
   
-  console.log('Active Tab:', activeTab);
-  console.log('Filtered Teams:', filteredTeams);
-  console.log('User Role:', user?.role);
-
-  // Get icon for department
-  const getDepartmentIcon = (deptName: string) => {
-    const name = deptName.toLowerCase();
-    if (name.includes('payment') || name.includes('fintech')) return CreditCard;
-    if (name.includes('platform') || name.includes('backend')) return Server;
-    if (name.includes('mobile') || name.includes('frontend') || name.includes('digital')) return Smartphone;
-    if (name.includes('commerce')) return ShoppingCart;
-    return Building2;
-  };
-
   // Handle feature navigation
   const handleFeatureSelect = (featureId: string) => {
     setCurrentView(featureId);
@@ -311,56 +258,7 @@ function App() {
 
   return (
     <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-      {/* Main Dashboard Content */}
-      <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-950">
-        {/* Header */}
-        <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-8 py-6">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-                Quality Engineering
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-slate-400">
-                {filteredTeams.length} Active Teams • Real-time Metrics
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Teams Table */}
-        <div className="flex-1 overflow-auto p-8">
-          {filteredTeams.length === 0 ? (
-            <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 p-12 text-center">
-              <div className="text-gray-400 dark:text-slate-500 mb-4">
-                <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Teams Found</h3>
-              <p className="text-gray-500 dark:text-slate-400">There are no teams to display. Create a team in the Admin Panel to get started.</p>
-            </div>
-          ) : (
-            filteredTeams.map(team => (
-              <TeamRow key={team.id} team={team} onClick={() => setSelectedTeam(team)} />
-            ))
-          )}
-        </div>
-
-        {/* Footer */}
-        <footer className="bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 px-8 py-6 mt-auto">
-          <div className="flex items-center justify-between text-sm text-gray-600 dark:text-slate-400">
-            <div className="flex items-center space-x-2">
-              <img src="/irongate-logo.png" alt="IronGate" className="w-6 h-6 rounded" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
-              <span className="font-semibold">IronGate Software LTD</span>
-            </div>
-            <div className="flex items-center space-x-6">
-              <span>© {new Date().getFullYear()} IronGate Software LTD. All rights reserved.</span>
-              <span className="text-gray-400 dark:text-slate-600">|</span>
-              <span className="text-gray-500 dark:text-slate-500">QA Navigator Platform v1.0</span>
-            </div>
-          </div>
-        </footer>
-      </div>
+      <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} />
     </Layout>
   );
 }

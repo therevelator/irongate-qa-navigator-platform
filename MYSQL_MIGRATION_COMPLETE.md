@@ -90,9 +90,9 @@ export const pool = mysql.createPool({
 
 ### ✅ Organizational Hierarchy
 ```
-Company (Mastercard)
-  └── Department (Decision Management)
-      └── Team (Quasars, Pulsars, Watchmen, etc.)
+Company (CompanyName)
+  └── Department (Payments)
+      └── Team (FrontEnd Heroes, Backend Warriors, etc)
           └── Users (with roles)
 ```
 
