@@ -27,3 +27,7 @@ coverage/
 *.njsproj
 *.sln
 *.sw?
+
+# Database snapshots (keep only latest)
+db_snapshots/snapshot_*.sql
+!db_snapshots/latest_snapshot.sql
