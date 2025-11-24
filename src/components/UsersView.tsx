@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, Edit2, Key, Trash2, UserPlus } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Users, Search, Edit2, Key, Trash2, UserPlus, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import Modal from './Modal';
 
 interface User {
   id: string;
@@ -10,6 +12,8 @@ interface User {
   role: string;
   team_name: string;
   department_name: string;
+  department_id: string;
+  primary_team_id: string;
   is_active: boolean;
 }
 
@@ -18,8 +22,24 @@ const API_URL = 'http://localhost:3000/api';
 const UsersView: React.FC = () => {
   const { user } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
+  const [teams, setTeams] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [userForm, setUserForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    role: '',
+    departmentId: '',
+    primaryTeamId: '',
+    password: ''
+  });
 
   useEffect(() => {
     fetchUsers();
@@ -27,17 +47,61 @@ const UsersView: React.FC = () => {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch(`${API_URL}/admin/users`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-        }
-      });
-      if (response.ok) {
-        const data = await response.json();
+      const [usersRes, teamsRes, deptsRes, rolesRes] = await Promise.all([
+        fetch(`${API_URL}/admin/users`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
+        }),
+        fetch(`${API_URL}/admin/teams`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
+        }),
+        fetch(`${API_URL}/admin/departments`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
+        }),
+        fetch(`${API_URL}/admin/available-roles`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
+        })
+      ]);
+      
+      if (usersRes.ok) {
+        const data = await usersRes.json();
         setUsers(data);
+      }
+      if (teamsRes.ok) {
+        const data = await teamsRes.json();
+        setTeams(data);
+      }
+      if (deptsRes.ok) {
+        const data = await deptsRes.json();
+        setDepartments(data);
+      }
+      if (rolesRes.ok) {
+        const data = await rolesRes.json();
+        // API returns { availableRoles: [...] }
+        const rolesList = data.availableRoles || [];
+        setRoles(rolesList.map((r: string) => ({ 
+          id: r, 
+          name: r.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+        })));
+      } else {
+        // Fallback roles if API fails
+        setRoles([
+          { id: 'super_admin', name: 'Super Admin' },
+          { id: 'manager', name: 'Manager' },
+          { id: 'team_lead', name: 'Team Lead' },
+          { id: 'qa_engineer', name: 'QA Engineer' },
+          { id: 'viewer', name: 'Viewer' }
+        ]);
       }
     } catch (error) {
       console.error('Error fetching users:', error);
+      // Fallback roles on error
+      setRoles([
+        { id: 'super_admin', name: 'Super Admin' },
+        { id: 'manager', name: 'Manager' },
+        { id: 'team_lead', name: 'Team Lead' },
+        { id: 'qa_engineer', name: 'QA Engineer' },
+        { id: 'viewer', name: 'Viewer' }
+      ]);
     } finally {
       setLoading(false);
     }
@@ -84,7 +148,21 @@ const UsersView: React.FC = () => {
           </div>
           
           {canManageUsers && (
-            <button className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors">
+            <button 
+              onClick={() => {
+                setUserForm({
+                  firstName: '',
+                  lastName: '',
+                  email: '',
+                  role: '',
+                  departmentId: user?.departmentId || '',
+                  primaryTeamId: '',
+                  password: ''
+                });
+                setShowCreateModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700 text-white rounded-md transition-colors"
+            >
               <UserPlus size={20} />
               Create User
             </button>
@@ -171,19 +249,59 @@ const UsersView: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex gap-2">
                         <button
-                          className="p-2 text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
+                          onClick={() => {
+                            setSelectedUser(u);
+                            setUserForm({
+                              firstName: u.first_name,
+                              lastName: u.last_name,
+                              email: u.email,
+                              role: u.role,
+                              departmentId: u.department_id || '',
+                              primaryTeamId: u.primary_team_id || '',
+                              password: ''
+                            });
+                            setShowEditModal(true);
+                          }}
+                          className="p-2 text-gray-400 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
                           title="Edit user"
                         >
                           <Edit2 size={18} />
                         </button>
                         <button
-                          className="p-2 text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
+                          onClick={() => {
+                            setSelectedUser(u);
+                            setUserForm({ ...userForm, password: '' });
+                            setShowPasswordModal(true);
+                          }}
+                          className="p-2 text-gray-400 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
                           title="Reset password"
                         >
                           <Key size={18} />
                         </button>
-                        {canManageUsers && (
+                        {canManageUsers && u.id !== user?.id && (
                           <button
+                            onClick={async () => {
+                              if (confirm(`Are you sure you want to delete ${u.first_name} ${u.last_name}?`)) {
+                                try {
+                                  const response = await fetch(`${API_URL}/admin/users/${u.id}`, {
+                                    method: 'DELETE',
+                                    headers: {
+                                      'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
+                                    }
+                                  });
+                                  
+                                  if (response.ok) {
+                                    toast.success('User deleted successfully!');
+                                    fetchUsers();
+                                  } else {
+                                    toast.error('Failed to delete user');
+                                  }
+                                } catch (error) {
+                                  console.error('Error deleting user:', error);
+                                  toast.error('Error deleting user');
+                                }
+                              }
+                            }}
                             className="p-2 text-gray-400 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                             title="Delete user"
                           >
@@ -199,6 +317,208 @@ const UsersView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Create User Modal */}
+      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New User" size="md">
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            const response = await fetch(`${API_URL}/admin/users`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
+              },
+              body: JSON.stringify({
+                firstName: userForm.firstName,
+                lastName: userForm.lastName,
+                email: userForm.email,
+                password: userForm.password,
+                role: userForm.role,
+                departmentId: userForm.departmentId,
+                primaryTeamId: userForm.primaryTeamId || null
+              })
+            });
+            
+            if (response.ok) {
+              setShowCreateModal(false);
+              setUserForm({ firstName: '', lastName: '', email: '', role: '', departmentId: '', primaryTeamId: '', password: '' });
+              toast.success('User created successfully!');
+              fetchUsers();
+            } else {
+              const errorData = await response.json();
+              toast.error(`Failed to create user: ${errorData.error || 'Unknown error'}`);
+            }
+          } catch (error) {
+            console.error('Error creating user:', error);
+            toast.error('Error creating user');
+          }
+        }}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">First Name</label>
+                <input type="text" value={userForm.firstName} onChange={(e) => setUserForm({ ...userForm, firstName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Last Name</label>
+                <input type="text" value={userForm.lastName} onChange={(e) => setUserForm({ ...userForm, lastName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
+              <input type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
+              <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required minLength={6} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>
+              <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required>
+                <option value="">Select a role</option>
+                {roles.map(role => (<option key={role.id} value={role.id}>{role.name}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Department</label>
+              <select value={userForm.departmentId} onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required>
+                <option value="">Select a department</option>
+                {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Team (Optional)</label>
+              <select value={userForm.primaryTeamId} onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                <option value="">No team</option>
+                {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">Cancel</button>
+            <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors"><UserPlus size={18} />Create User</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Edit User Modal */}
+      <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title={`Edit User: ${selectedUser?.first_name} ${selectedUser?.last_name}`} size="md">
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
+              },
+              body: JSON.stringify({
+                firstName: userForm.firstName,
+                lastName: userForm.lastName,
+                email: userForm.email,
+                role: userForm.role,
+                departmentId: userForm.departmentId,
+                primaryTeamId: userForm.primaryTeamId || null
+              })
+            });
+            
+            if (response.ok) {
+              setShowEditModal(false);
+              toast.success('User updated successfully!');
+              fetchUsers();
+            } else {
+              const errorData = await response.json();
+              toast.error(`Failed to update user: ${errorData.error || 'Unknown error'}`);
+            }
+          } catch (error) {
+            console.error('Error updating user:', error);
+            toast.error('Error updating user');
+          }
+        }}>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">First Name</label>
+                <input type="text" value={userForm.firstName} onChange={(e) => setUserForm({ ...userForm, firstName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Last Name</label>
+                <input type="text" value={userForm.lastName} onChange={(e) => setUserForm({ ...userForm, lastName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
+              <input type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>
+              <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required>
+                <option value="">Select a role</option>
+                {roles.map(role => (<option key={role.id} value={role.id}>{role.name}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Department</label>
+              <select value={userForm.departmentId} onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required>
+                <option value="">Select a department</option>
+                {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Team (Optional)</label>
+              <select value={userForm.primaryTeamId} onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+                <option value="">No team</option>
+                {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
+              </select>
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">Cancel</button>
+            <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors"><Save size={18} />Save Changes</button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Reset Password Modal */}
+      <Modal isOpen={showPasswordModal} onClose={() => setShowPasswordModal(false)} title={`Reset Password: ${selectedUser?.first_name} ${selectedUser?.last_name}`} size="sm">
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}/reset-password`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
+              },
+              body: JSON.stringify({ newPassword: userForm.password })
+            });
+            
+            if (response.ok) {
+              setShowPasswordModal(false);
+              setUserForm({ ...userForm, password: '' });
+              toast.success('Password reset successfully!');
+            } else {
+              const errorData = await response.json();
+              toast.error(`Failed to reset password: ${errorData.error || 'Unknown error'}`);
+            }
+          } catch (error) {
+            console.error('Error resetting password:', error);
+            toast.error('Error resetting password');
+          }
+        }}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
+              <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required minLength={6} placeholder="Enter new password" />
+            </div>
+          </div>
+          <div className="flex justify-end gap-3 mt-6">
+            <button type="button" onClick={() => setShowPasswordModal(false)} className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">Cancel</button>
+            <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors"><Key size={18} />Reset Password</button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

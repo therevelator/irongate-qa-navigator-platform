@@ -17,6 +17,8 @@ export interface Team {
   status: 'good' | 'warning' | 'critical';
   velocity: { sprint: string; committed: number; delivered: number }[];
   metrics: KPIMetric[];
+  technicalDebtScore?: number;  // Lower is better (0-100 scale)
+  taskSizingAccuracy?: number;  // 1.0 is perfect, <1 overestimated, >1 underestimated
 }
 
 export const generateMockData = (): Team[] => {
@@ -46,6 +48,10 @@ export const generateMockData = (): Team[] => {
     department: t.dept,
     qaScore: t.baseScore,
     status: t.baseScore > 90 ? 'good' : t.baseScore > 75 ? 'warning' : 'critical',
+    // Mock: Random 15-85. PROD: Use calculateTechnicalDebtScore() from metricsAggregator
+    technicalDebtScore: Number((15 + Math.random() * 70).toFixed(1)),
+    // Mock: Random 0.7-1.3. PROD: Use calculateTaskSizingAccuracy() from metricsAggregator
+    taskSizingAccuracy: Number((0.7 + Math.random() * 0.6).toFixed(2)),
     velocity: Array.from({ length: 5 }, (_, i) => ({
       sprint: `S${10 + i}`,
       committed: Math.floor(40 + Math.random() * 20),

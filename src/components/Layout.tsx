@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, Settings, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Sun, Moon } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Settings, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Sun, Moon, Menu, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getRoleBadgeColor } from '../types/auth';
@@ -24,6 +24,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -63,15 +64,48 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       onTabChange('all');
     }
     onViewChange('dashboard');
+    setIsMobileMenuOpen(false);
+  };
+
+  const handleNavClick = (view: string) => {
+    onViewChange(view);
+    setIsMobileMenuOpen(false);
   };
 
   return (
     <div className="flex h-screen bg-gray-50 dark:bg-slate-950">
+      {/* Mobile Menu Overlay */}
+      {isMobileMenuOpen && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
       {/* Sidebar Navigation */}
-      <aside className="w-64 bg-white dark:bg-slate-900 flex flex-col border-r border-gray-200 dark:border-slate-800">
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-900 flex flex-col border-r border-gray-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out ${
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+      }`}>
         {/* Logo */}
-        <div className="px-6 py-8 border-b border-gray-200 dark:border-slate-800">
-          <h1 className="text-xl font-semibold text-gray-900 dark:text-white">QA Navigator</h1>
+        <div className="px-6 py-6 sm:py-8 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img 
+              src="/irongate-logo.png" 
+              alt="IronGate" 
+              className="h-8 w-auto object-contain"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+            <div>
+              <h1 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">QA Navigator</h1>
+              <p className="text-xs text-gray-500 dark:text-gray-400">IronGate Platform</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800"
+          >
+            <X size={20} className="text-gray-600 dark:text-gray-400" />
+          </button>
         </div>
 
         {/* Navigation */}
@@ -90,36 +124,40 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
               <span>Dashboard</span>
             </button>
 
-            {/* Users */}
-            <button
-              onClick={() => onViewChange('users')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                currentView === 'users'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <UsersIcon size={20} />
-              <span>Users</span>
-            </button>
+            {/* Users - Super Admin, Manager, Team Lead only */}
+            {(user?.role === 'super_admin' || user?.role === 'manager' || user?.role === 'team_lead') && (
+              <button
+                onClick={() => handleNavClick('users')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  currentView === 'users'
+                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                <UsersIcon size={20} />
+                <span>Users</span>
+              </button>
+            )}
 
-            {/* Teams */}
-            <button
-              onClick={() => onViewChange('teams')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                currentView === 'teams'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <TeamsIcon size={20} />
-              <span>Teams</span>
-            </button>
+            {/* Teams - Super Admin, Manager, Team Lead only */}
+            {(user?.role === 'super_admin' || user?.role === 'manager' || user?.role === 'team_lead') && (
+              <button
+                onClick={() => handleNavClick('teams')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  currentView === 'teams'
+                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                <TeamsIcon size={20} />
+                <span>Teams</span>
+              </button>
+            )}
 
             {/* Departments - Super Admin only */}
             {user?.role === 'super_admin' && (
               <button
-                onClick={() => onViewChange('departments')}
+                onClick={() => handleNavClick('departments')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
                   currentView === 'departments'
                     ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
@@ -133,7 +171,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
 
             {/* Analytics */}
             <button
-              onClick={() => onViewChange('features')}
+              onClick={() => handleNavClick('features')}
               className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
                 currentView === 'features'
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
@@ -147,7 +185,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {/* Admin Panel - Admin only */}
             {(user?.role === 'super_admin' || user?.role === 'manager') && (
               <button
-                onClick={() => onViewChange('admin-panel')}
+                onClick={() => handleNavClick('admin-panel')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
                   currentView === 'admin-panel'
                     ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
@@ -176,16 +214,24 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar with Welcome and Theme Toggle */}
-        <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <h2 className="text-sm font-medium text-gray-600 dark:text-slate-400">
+        <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center space-x-3 sm:space-x-4">
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Menu size={20} className="text-gray-600 dark:text-gray-400" />
+            </button>
+            
+            <h2 className="text-xs sm:text-sm font-medium text-gray-600 dark:text-slate-400 truncate">
               Welcome, {user?.firstName}
             </h2>
           </div>
           
           <button
             onClick={toggleTheme}
-            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
             title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
           >
             {isDark ? (

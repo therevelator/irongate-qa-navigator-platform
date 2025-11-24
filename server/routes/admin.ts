@@ -247,6 +247,53 @@ router.post('/users', authenticateToken, async (req: any, res) => {
   }
 });
 
+// Update user
+router.put('/users/:id', authenticateToken, async (req: any, res) => {
+  try {
+    const { role: creatorRole, companyId, departmentId: userDeptId } = req.user;
+    const { id: userId } = req.params;
+    const { firstName, lastName, email, role, departmentId, primaryTeamId } = req.body;
+
+    // Only Super Admin and Manager can update users
+    if (creatorRole !== 'super_admin' && creatorRole !== 'manager') {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    // Get user to check department
+    const existingUser = await queryOne<any>('SELECT department_id FROM users WHERE id = ?', [userId]);
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Manager can only update users in their department
+    if (creatorRole === 'manager' && existingUser.department_id !== userDeptId) {
+      return res.status(403).json({ error: 'Can only update users in your department' });
+    }
+
+    await query(
+      `UPDATE users 
+       SET first_name = ?, last_name = ?, email = ?, role = ?, 
+           department_id = ?, primary_team_id = ?, updated_at = NOW() 
+       WHERE id = ?`,
+      [firstName, lastName, email, role, departmentId, primaryTeamId, userId]
+    );
+
+    const updatedUser = await queryOne<any>(
+      `SELECT u.*, d.name as department_name, t.name as team_name 
+       FROM users u 
+       LEFT JOIN departments d ON u.department_id = d.id 
+       LEFT JOIN teams t ON u.primary_team_id = t.id 
+       WHERE u.id = ?`,
+      [userId]
+    );
+    
+    res.json(updatedUser);
+  } catch (error: any) {
+    console.error('Error updating user:', error);
+    res.status(500).json({ error: 'Failed to update user', details: error.message });
+  }
+});
+
 // Reset password (for users you created or yourself)
 router.post('/users/:id/reset-password', authenticateToken, async (req: any, res) => {
   try {
@@ -374,7 +421,7 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
   try {
     const { role, departmentId: userDeptId } = req.user;
     const { id: teamId } = req.params;
-    const { name, description, platform } = req.body;
+    const { name, description } = req.body;
 
     // Only Super Admin and QA Manager can update teams
     if (role !== 'super_admin' && role !== 'manager') {
@@ -393,8 +440,8 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
     }
 
     await query(
-      'UPDATE teams SET name = ?, description = ?, platform = ? WHERE id = ?',
-      [name, description, platform, teamId]
+      'UPDATE teams SET name = ?, description = ? WHERE id = ?',
+      [name, description, teamId]
     );
 
     const updatedTeam = await queryOne<any>('SELECT * FROM teams WHERE id = ?', [teamId]);

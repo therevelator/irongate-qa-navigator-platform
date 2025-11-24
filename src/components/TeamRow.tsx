@@ -9,7 +9,15 @@ interface TeamRowProps {
 }
 
 const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
-  const scoreColor = team.status === 'good' ? '#10b981' : team.status === 'warning' ? '#f59e0b' : '#ef4444';
+  // Color based on QA Score ranges
+  const getScoreColor = (score: number) => {
+    if (score >= 75) return '#10b981'; // Green (75-100)
+    if (score >= 50) return '#eab308'; // Yellow (50-75)
+    if (score >= 30) return '#f97316'; // Orange (30-50)
+    return '#ef4444'; // Red (0-30)
+  };
+  
+  const scoreColor = getScoreColor(team.qaScore);
   const radius = 30;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (team.qaScore / 100) * circumference;
@@ -21,11 +29,18 @@ const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
     >
       <div className="flex items-center p-6 h-36">
         {/* Status Strip */}
-        <div className={`w-2 self-stretch rounded-full mr-5 ${
-          team.status === 'good' ? 'bg-gradient-to-b from-green-400 to-green-600' : 
-          team.status === 'warning' ? 'bg-gradient-to-b from-amber-400 to-amber-600' : 
-          'bg-gradient-to-b from-red-400 to-red-600'
-        }`} />
+        <div 
+          className="w-2 self-stretch rounded-full mr-5"
+          style={{
+            background: team.qaScore >= 75 
+              ? 'linear-gradient(to bottom, #34d399, #10b981)' // Green
+              : team.qaScore >= 50 
+              ? 'linear-gradient(to bottom, #fde047, #eab308)' // Yellow
+              : team.qaScore >= 30 
+              ? 'linear-gradient(to bottom, #fb923c, #f97316)' // Orange
+              : 'linear-gradient(to bottom, #f87171, #ef4444)' // Red
+          }}
+        />
 
         {/* Team Info & Score */}
         <div className="w-64 flex items-center space-x-6">

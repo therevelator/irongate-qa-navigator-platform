@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Search, Edit2, Trash2, UserPlus } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Users, Search, Edit2, Trash2, UserPlus, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import Modal from './Modal';
 
 interface Team {
   id: string;
@@ -18,8 +20,13 @@ const TeamsView: React.FC = () => {
   const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
   const [users, setUsers] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', description: '', departmentId: '' });
 
   useEffect(() => {
     fetchData();
@@ -27,11 +34,14 @@ const TeamsView: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [teamsRes, usersRes] = await Promise.all([
+      const [teamsRes, usersRes, deptsRes] = await Promise.all([
         fetch(`${API_URL}/admin/teams`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
         }),
         fetch(`${API_URL}/admin/users`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
+        }),
+        fetch(`${API_URL}/admin/departments`, {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
         })
       ]);
@@ -44,6 +54,11 @@ const TeamsView: React.FC = () => {
       if (usersRes.ok) {
         const usersData = await usersRes.json();
         setUsers(usersData);
+      }
+      
+      if (deptsRes.ok) {
+        const deptsData = await deptsRes.json();
+        setDepartments(deptsData);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -88,7 +103,13 @@ const TeamsView: React.FC = () => {
           </div>
           
           {canManageTeams && (
-            <button className="flex items-center gap-2 px-4 py-2 bg-gray-900 dark:bg-slate-700 text-white rounded-md hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors">
+            <button 
+              onClick={() => {
+                setEditForm({ name: '', description: '', departmentId: user?.departmentId || '' });
+                setShowCreateModal(true);
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700 text-white rounded-md transition-colors"
+            >
               <UserPlus size={20} />
               Create Team
             </button>
@@ -173,13 +194,44 @@ const TeamsView: React.FC = () => {
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex gap-2">
                           <button
-                            className="p-2 text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
+                            onClick={() => {
+                              setSelectedTeam(team);
+                              setEditForm({
+                                name: team.name,
+                                description: team.description || '',
+                                departmentId: team.department_id
+                              });
+                              setShowEditModal(true);
+                            }}
+                            className="p-2 text-gray-400 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
                             title="Edit team"
                           >
                             <Edit2 size={18} />
                           </button>
                           {canManageTeams && (
                             <button
+                              onClick={async () => {
+                                if (confirm(`Are you sure you want to delete team "${team.name}"?`)) {
+                                  try {
+                                    const response = await fetch(`${API_URL}/admin/teams/${team.id}`, {
+                                      method: 'DELETE',
+                                      headers: {
+                                        'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
+                                      }
+                                    });
+                                    
+                                    if (response.ok) {
+                                      toast.success('Team deleted successfully!');
+                                      fetchData(); // Refresh the list
+                                    } else {
+                                      toast.error('Failed to delete team');
+                                    }
+                                  } catch (error) {
+                                    console.error('Error deleting team:', error);
+                                    toast.error('Error deleting team');
+                                  }
+                                }
+                              }}
                               className="p-2 text-gray-400 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
                               title="Delete team"
                             >
@@ -196,6 +248,190 @@ const TeamsView: React.FC = () => {
           </table>
         </div>
       </div>
+
+      {/* Edit Team Modal */}
+      <Modal
+        isOpen={showEditModal}
+        onClose={() => setShowEditModal(false)}
+        title={`Edit Team: ${selectedTeam?.name}`}
+        size="md"
+      >
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            const response = await fetch(`${API_URL}/admin/teams/${selectedTeam?.id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
+              },
+              body: JSON.stringify({
+                name: editForm.name,
+                description: editForm.description || null
+              })
+            });
+            
+            if (response.ok) {
+              setShowEditModal(false);
+              toast.success('Team updated successfully!');
+              fetchData(); // Refresh the list
+            } else {
+              const errorData = await response.json();
+              console.error('Update error:', errorData);
+              toast.error(`Failed to update team: ${errorData.error || 'Unknown error'}`);
+            }
+          } catch (error) {
+            console.error('Error updating team:', error);
+            toast.error('Error updating team');
+          }
+        }}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Team Name
+              </label>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                required
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description
+              </label>
+              <textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+          
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              type="button"
+              onClick={() => setShowEditModal(false)}
+              className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors"
+            >
+              <Save size={18} />
+              Save Changes
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Create Team Modal */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        title="Create New Team"
+        size="md"
+      >
+        <form onSubmit={async (e) => {
+          e.preventDefault();
+          try {
+            const response = await fetch(`${API_URL}/admin/teams`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
+              },
+              body: JSON.stringify({
+                name: editForm.name,
+                description: editForm.description || null,
+                departmentId: editForm.departmentId
+              })
+            });
+            
+            if (response.ok) {
+              setShowCreateModal(false);
+              setEditForm({ name: '', description: '', departmentId: '' });
+              toast.success('Team created successfully!');
+              fetchData(); // Refresh the list
+            } else {
+              const errorData = await response.json();
+              toast.error(`Failed to create team: ${errorData.error || 'Unknown error'}`);
+            }
+          } catch (error) {
+            console.error('Error creating team:', error);
+            toast.error('Error creating team');
+          }
+        }}>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Team Name
+              </label>
+              <input
+                type="text"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                required
+                placeholder="Enter team name"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Department
+              </label>
+              <select
+                value={editForm.departmentId}
+                onChange={(e) => setEditForm({ ...editForm, departmentId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                required
+              >
+                <option value="">Select a department</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Description
+              </label>
+              <textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                placeholder="Brief description of the team"
+              />
+            </div>
+          </div>
+          
+          <div className="flex justify-end gap-3 mt-6">
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(false)}
+              className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors"
+            >
+              <UserPlus size={18} />
+              Create Team
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };

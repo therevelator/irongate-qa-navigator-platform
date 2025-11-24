@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
 import type { Team } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
 import TeamDetailView from './components/TeamDetailView';
@@ -117,7 +118,15 @@ function App() {
   // If a team is selected, show detail view
   if (selectedTeam) {
     return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
+      <Layout 
+        currentView={currentView} 
+        onViewChange={(view) => {
+          setSelectedTeam(null); // Clear selected team when navigating
+          setCurrentView(view);
+        }} 
+        activeTab={activeTab} 
+        onTabChange={setActiveTab}
+      >
         <TeamDetailView team={selectedTeam} onBack={() => setSelectedTeam(null)} />
       </Layout>
     );
@@ -192,7 +201,7 @@ function App() {
     );
   }
 
-  if (currentView === 'performance-testing') {
+  if (currentView === 'performance-metrics') {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <PerformanceTesting onBack={() => setCurrentView('features')} />
@@ -257,9 +266,33 @@ function App() {
   }
 
   return (
-    <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-      <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} />
-    </Layout>
+    <>
+      <Toaster 
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#333',
+            color: '#fff',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
+        <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} />
+      </Layout>
+    </>
   );
 }
 
