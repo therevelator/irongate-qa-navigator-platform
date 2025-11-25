@@ -96,8 +96,9 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    // Check if user is inactive - return same error as invalid credentials for security
     if (!user.is_active) {
-      return res.status(403).json({ error: 'Account is inactive' });
+      return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Verify password
@@ -161,6 +162,12 @@ router.get('/me', async (req, res) => {
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.is_active) {
+      return res.status(403).json({ 
+        error: 'Your account has been deactivated. Please contact your administrator for assistance.' 
+      });
     }
 
     // Get assigned teams

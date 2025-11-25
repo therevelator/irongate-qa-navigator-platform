@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ArrowLeft, FileText, Download, Calendar, TrendingUp, CheckCircle, AlertTriangle, Clock } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { showError } from '../utils/alerts';
 
 interface PDFReportGeneratorProps {
   onBack: () => void;
@@ -464,7 +465,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
     } catch (error) {
       console.error('Error generating PDF:', error);
       setIsGenerating(false);
-      alert('Failed to generate PDF report');
+      showError('Failed to generate PDF report');
     }
   };
 

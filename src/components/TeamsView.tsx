@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { Users, Search, Edit2, Trash2, UserPlus, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
+import { confirmDelete } from '../utils/alerts';
 
 interface Team {
   id: string;
@@ -211,7 +212,8 @@ const TeamsView: React.FC = () => {
                           {canManageTeams && (
                             <button
                               onClick={async () => {
-                                if (confirm(`Are you sure you want to delete team "${team.name}"?`)) {
+                                const result = await confirmDelete(team.name, 'team');
+                                if (result.isConfirmed) {
                                   try {
                                     const response = await fetch(`${API_URL}/admin/teams/${team.id}`, {
                                       method: 'DELETE',

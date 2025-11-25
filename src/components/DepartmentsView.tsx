@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { Building2, Search, Plus, Edit2, Trash2, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
+import { confirmDelete } from '../utils/alerts';
 
 interface Department {
   id: string;
@@ -203,7 +204,11 @@ const DepartmentsView: React.FC = () => {
                           </button>
                           <button
                             onClick={async () => {
-                              if (confirm(`Are you sure you want to delete department "${dept.name}"?\n\nThis will also affect ${counts.teams} teams and ${counts.users} users.`)) {
+                              const result = await confirmDelete(
+                                dept.name,
+                                `department<br><small>This will affect ${counts.teams} teams and ${counts.users} users</small>`
+                              );
+                              if (result.isConfirmed) {
                                 try {
                                   const response = await fetch(`${API_URL}/admin/departments/${dept.id}`, {
                                     method: 'DELETE',

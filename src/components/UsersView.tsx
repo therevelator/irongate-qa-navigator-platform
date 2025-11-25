@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Users, Search, Edit2, Key, Trash2, UserPlus, Save } from 'lucide-react';
+import { Users, Search, Edit2, Key, Trash2, UserPlus, Save, UserCheck, UserX } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
+import { confirmDelete } from '../utils/alerts';
 
 interface User {
   id: string;
@@ -188,25 +189,25 @@ const UsersView: React.FC = () => {
           <table className="w-full">
             <thead className="bg-gray-50 dark:bg-slate-700">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider w-[180px]">
                   Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider w-[220px]">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider w-[120px]">
                   Role
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider w-[160px]">
                   Department
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider w-[160px]">
                   Team
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider w-[100px]">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase tracking-wider w-[140px]">
                   Actions
                 </th>
               </tr>
@@ -222,32 +223,36 @@ const UsersView: React.FC = () => {
               ) : (
                 filteredUsers.map((u) => (
                   <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="font-medium text-gray-900 dark:text-white">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="font-medium text-sm text-gray-900 dark:text-white">
                         {u.first_name} {u.last_name}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-600 dark:text-slate-400">{u.email}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-3 py-1 text-xs font-medium rounded-md bg-gray-700 dark:bg-slate-600 text-white">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className="px-2 py-1 text-xs font-medium rounded-md bg-gray-700 dark:bg-slate-600 text-white">
                         {getRoleDisplay(u.role)}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-600 dark:text-slate-400">{u.department_name || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <div className="text-sm text-gray-600 dark:text-slate-400">{u.team_name || '-'}</div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-3 py-1 text-xs font-medium rounded-md bg-gray-700 dark:bg-slate-600 text-white">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-1 text-xs font-medium rounded-md ${
+                        u.is_active 
+                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
+                          : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                      }`}>
                         {u.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex gap-2">
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <div className="flex items-center gap-1">
                         <button
                           onClick={() => {
                             setSelectedUser(u);
@@ -262,10 +267,10 @@ const UsersView: React.FC = () => {
                             });
                             setShowEditModal(true);
                           }}
-                          className="p-2 text-gray-400 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors"
+                          className="p-1.5 text-gray-400 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-slate-700"
                           title="Edit user"
                         >
-                          <Edit2 size={18} />
+                          <Edit2 size={16} />
                         </button>
                         <button
                           onClick={() => {
@@ -273,40 +278,73 @@ const UsersView: React.FC = () => {
                             setUserForm({ ...userForm, password: '' });
                             setShowPasswordModal(true);
                           }}
-                          className="p-2 text-gray-400 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+                          className="p-1.5 text-gray-400 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-slate-700"
                           title="Reset password"
                         >
-                          <Key size={18} />
+                          <Key size={16} />
                         </button>
                         {canManageUsers && u.id !== user?.id && (
-                          <button
-                            onClick={async () => {
-                              if (confirm(`Are you sure you want to delete ${u.first_name} ${u.last_name}?`)) {
+                          <>
+                            <button
+                              onClick={async () => {
                                 try {
-                                  const response = await fetch(`${API_URL}/admin/users/${u.id}`, {
-                                    method: 'DELETE',
+                                  const response = await fetch(`${API_URL}/admin/users/${u.id}/toggle-status`, {
+                                    method: 'POST',
                                     headers: {
                                       'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
                                     }
                                   });
                                   
                                   if (response.ok) {
-                                    toast.success('User deleted successfully!');
+                                    toast.success(`User ${u.is_active ? 'deactivated' : 'activated'} successfully!`);
                                     fetchUsers();
                                   } else {
-                                    toast.error('Failed to delete user');
+                                    toast.error('Failed to update user status');
                                   }
                                 } catch (error) {
-                                  console.error('Error deleting user:', error);
-                                  toast.error('Error deleting user');
+                                  console.error('Error toggling user status:', error);
+                                  toast.error('Error updating user status');
                                 }
-                              }
-                            }}
-                            className="p-2 text-gray-400 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors"
-                            title="Delete user"
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                              }}
+                              className={`p-1.5 transition-colors rounded hover:bg-gray-100 dark:hover:bg-slate-700 ${
+                                u.is_active
+                                  ? 'text-gray-400 dark:text-slate-400 hover:text-orange-500 dark:hover:text-orange-400'
+                                  : 'text-gray-400 dark:text-slate-400 hover:text-green-500 dark:hover:text-green-400'
+                              }`}
+                              title={u.is_active ? 'Deactivate user' : 'Activate user'}
+                            >
+                              {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
+                            </button>
+                            <button
+                              onClick={async () => {
+                                const result = await confirmDelete(`${u.first_name} ${u.last_name}`, 'user');
+                                if (result.isConfirmed) {
+                                  try {
+                                    const response = await fetch(`${API_URL}/admin/users/${u.id}`, {
+                                      method: 'DELETE',
+                                      headers: {
+                                        'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
+                                      }
+                                    });
+                                    
+                                    if (response.ok) {
+                                      toast.success('User deleted successfully!');
+                                      fetchUsers();
+                                    } else {
+                                      toast.error('Failed to delete user');
+                                    }
+                                  } catch (error) {
+                                    console.error('Error deleting user:', error);
+                                    toast.error('Error deleting user');
+                                  }
+                                }
+                              }}
+                              className="p-1.5 text-gray-400 dark:text-slate-400 hover:text-red-500 dark:hover:text-red-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-slate-700"
+                              title="Delete user"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </>
                         )}
                       </div>
                     </td>
@@ -453,10 +491,21 @@ const UsersView: React.FC = () => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>
-              <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required>
-                <option value="">Select a role</option>
-                {roles.map(role => (<option key={role.id} value={role.id}>{role.name}</option>))}
-              </select>
+              {selectedUser?.role === 'super_admin' ? (
+                <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white">
+                  <span className="flex items-center gap-2">
+                    <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">
+                      Super Admin
+                    </span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">(Role cannot be changed)</span>
+                  </span>
+                </div>
+              ) : (
+                <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required>
+                  <option value="">Select a role</option>
+                  {roles.map(role => (<option key={role.id} value={role.id}>{role.name}</option>))}
+                </select>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Department</label>

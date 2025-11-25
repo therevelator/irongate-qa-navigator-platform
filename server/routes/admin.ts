@@ -294,6 +294,78 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
   }
 });
 
+// Toggle user active status
+router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res) => {
+  try {
+    const { role: creatorRole, companyId, departmentId: userDeptId } = req.user;
+    const { id: userId } = req.params;
+
+    // Only Super Admin and Manager can toggle user status
+    if (creatorRole !== 'super_admin' && creatorRole !== 'manager') {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    // Get user to check department and current status
+    const existingUser = await queryOne<any>('SELECT department_id, is_active FROM users WHERE id = ?', [userId]);
+    if (!existingUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Manager can only toggle users in their department
+    if (creatorRole === 'manager' && existingUser.department_id !== userDeptId) {
+      return res.status(403).json({ error: 'Can only manage users in your department' });
+    }
+
+    // Toggle the status
+    const newStatus = !existingUser.is_active;
+    await query(
+      'UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ?',
+      [newStatus, userId]
+    );
+
+    res.json({ message: `User ${newStatus ? 'activated' : 'deactivated'} successfully`, is_active: newStatus });
+  } catch (error: any) {
+    console.error('Error toggling user status:', error);
+    res.status(500).json({ error: 'Failed to toggle user status', details: error.message });
+  }
+});
+
+// Toggle team active status
+router.post('/teams/:id/toggle-status', authenticateToken, async (req: any, res) => {
+  try {
+    const { role: userRole, companyId, departmentId: userDeptId } = req.user;
+    const { id: teamId } = req.params;
+
+    // Only Super Admin and Manager can toggle team status
+    if (userRole !== 'super_admin' && userRole !== 'manager') {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    // Get team to check department and current status
+    const existingTeam = await queryOne<any>('SELECT department_id, is_active FROM teams WHERE id = ?', [teamId]);
+    if (!existingTeam) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    // Manager can only toggle teams in their department
+    if (userRole === 'manager' && existingTeam.department_id !== userDeptId) {
+      return res.status(403).json({ error: 'Can only manage teams in your department' });
+    }
+
+    // Toggle the status
+    const newStatus = !existingTeam.is_active;
+    await query(
+      'UPDATE teams SET is_active = ?, updated_at = NOW() WHERE id = ?',
+      [newStatus, teamId]
+    );
+
+    res.json({ message: `Team ${newStatus ? 'activated' : 'deactivated'} successfully`, is_active: newStatus });
+  } catch (error: any) {
+    console.error('Error toggling team status:', error);
+    res.status(500).json({ error: 'Failed to toggle team status', details: error.message });
+  }
+});
+
 // Reset password (for users you created or yourself)
 router.post('/users/:id/reset-password', authenticateToken, async (req: any, res) => {
   try {

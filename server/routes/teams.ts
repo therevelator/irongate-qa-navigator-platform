@@ -181,22 +181,22 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    // Get team members from team_members table
+    // Get team members from team_members table (only active users)
     const teamMembers = await query<any[]>(
       `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.avatar_url,
               tm.role as team_role, tm.joined_at
        FROM team_members tm
        JOIN users u ON tm.user_id = u.id
-       WHERE tm.team_id = ?`,
+       WHERE tm.team_id = ? AND u.is_active = true`,
       [req.params.id]
     );
 
-    // Also get users who have this as their primary team
+    // Also get users who have this as their primary team (only active users)
     const primaryTeamMembers = await query<any[]>(
       `SELECT id, email, first_name, last_name, role, avatar_url,
               'member' as team_role, created_at as joined_at
        FROM users
-       WHERE primary_team_id = ?`,
+       WHERE primary_team_id = ? AND is_active = true`,
       [req.params.id]
     );
 

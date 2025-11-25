@@ -18,7 +18,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
       FROM users u
       LEFT JOIN departments d ON u.department_id = d.id
       LEFT JOIN teams t ON u.primary_team_id = t.id
-      WHERE u.company_id = ?
+      WHERE u.company_id = ? AND u.is_active = true
     `;
 
     const params: any[] = [req.companyId];

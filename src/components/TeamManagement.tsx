@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Trash2, Edit2, Save, X, Building2, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import { confirmDelete } from '../utils/alerts';
 
 interface Team {
   id: string;
@@ -74,7 +75,9 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
   };
 
   const handleDelete = async (teamId: string) => {
-    if (!window.confirm('Are you sure you want to delete this team?')) return;
+    const team = teams.find(t => t.id === teamId);
+    const result = await confirmDelete(team?.name || 'this team', 'team');
+    if (!result.isConfirmed) return;
 
     try {
       const token = localStorage.getItem('irongate_token');

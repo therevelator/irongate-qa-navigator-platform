@@ -158,7 +158,7 @@ function App() {
     );
   }
 
-  if (currentView === 'technical-debt-tracker') {
+  if (currentView === 'technical-debt') {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <TechnicalDebtTracker onBack={() => setCurrentView('features')} />

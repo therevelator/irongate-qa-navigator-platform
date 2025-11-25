@@ -243,8 +243,28 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
         </div>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-auto">
-          {children}
+        <div className="flex-1 overflow-auto flex flex-col">
+          <div className="flex-1">
+            {children}
+          </div>
+          
+          {/* Footer */}
+          <footer className="bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 px-4 sm:px-6 py-4 mt-auto">
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-gray-500 dark:text-slate-400">
+              <div className="flex items-center gap-2">
+                <span>© {new Date().getFullYear()} IronGate QA Navigator</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">All rights reserved</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <a href="#" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Privacy Policy</a>
+                <span>•</span>
+                <a href="#" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Terms of Service</a>
+                <span>•</span>
+                <a href="#" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Support</a>
+              </div>
+            </div>
+          </footer>
         </div>
       </div>
     </div>
