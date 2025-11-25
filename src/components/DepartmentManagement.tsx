@@ -168,8 +168,8 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h2>
-          <p className="text-gray-600 mb-4">Only Super Admins can manage departments</p>
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Access Denied</h2>
+          <p className="text-gray-600 dark:text-slate-400 mb-4">Only Super Admins can manage departments</p>
           <button
             onClick={onBack}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -186,7 +186,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
       <Toaster position="top-right" />
       
       {/* Header */}
-      <header className="bg-white/80 backdrop-blur-sm border-b border-slate-200 px-8 py-6">
+      <header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-800 px-8 py-6">
         <div className="max-w-7xl mx-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -201,7 +201,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
                   <Building2 size={32} className="text-blue-600" />
                   Department Management
                 </h1>
-                <p className="text-slate-600 mt-1">Create, edit, and manage departments</p>
+                <p className="text-slate-600 dark:text-slate-400 mt-1">Create, edit, and manage departments</p>
               </div>
             </div>
             <button
@@ -220,13 +220,13 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
         {loading ? (
           <div className="text-center py-12">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-            <p className="mt-4 text-slate-600">Loading departments...</p>
+            <p className="mt-4 text-slate-600 dark:text-slate-400">Loading departments...</p>
           </div>
         ) : departments.length === 0 ? (
-          <div className="bg-white rounded-2xl shadow-md p-12 text-center">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-md p-12 text-center">
             <Building2 size={64} className="mx-auto text-slate-300 mb-4" />
             <h3 className="text-xl font-semibold text-slate-900 mb-2">No Departments Yet</h3>
-            <p className="text-slate-600 mb-6">Create your first department to get started</p>
+            <p className="text-slate-600 dark:text-slate-400 mb-6">Create your first department to get started</p>
             <button
               onClick={() => setShowCreateModal(true)}
               className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors"
@@ -240,13 +240,13 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
             {departments.map((dept) => (
               <div
                 key={dept.id}
-                className="bg-white rounded-2xl shadow-md hover:shadow-xl border border-slate-200/60 overflow-hidden transition-all duration-300 group"
+                className="bg-white dark:bg-slate-900 rounded-2xl shadow-md hover:shadow-xl border border-slate-200 dark:border-slate-800/60 overflow-hidden transition-all duration-300 group"
               >
                 <div className="p-6">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <h3 className="text-xl font-bold text-slate-900 mb-2">{dept.name}</h3>
-                      <p className="text-sm text-slate-600 line-clamp-2">
+                      <p className="text-sm text-slate-600 dark:text-slate-400 line-clamp-2">
                         {dept.description || 'No description provided'}
                       </p>
                     </div>
@@ -262,7 +262,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
                   <div className="flex gap-2">
                     <button
                       onClick={() => openEditModal(dept)}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-700 rounded-lg transition-colors"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-blue-100 text-slate-700 dark:text-slate-300 hover:text-blue-700 rounded-lg transition-colors"
                       data-testid={`edit-dept-${dept.id}`}
                     >
                       <Edit2 size={16} />
@@ -270,7 +270,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
                     </button>
                     <button
                       onClick={() => setDeletingDepartment(dept)}
-                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-red-100 text-slate-700 hover:text-red-700 rounded-lg transition-colors"
+                      className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-red-100 text-slate-700 dark:text-slate-300 hover:text-red-700 rounded-lg transition-colors"
                       data-testid={`delete-dept-${dept.id}`}
                     >
                       <Trash2 size={16} />
@@ -287,7 +287,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
       {/* Create/Edit Modal */}
       {(showCreateModal || editingDepartment) && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full">
             <div className="p-6 border-b border-slate-200">
               <h2 className="text-2xl font-bold text-slate-900">
                 {editingDepartment ? 'Edit Department' : 'Create Department'}
@@ -296,7 +296,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
 
             <form onSubmit={editingDepartment ? handleUpdate : handleCreate} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Department Name *
                 </label>
                 <input
@@ -311,7 +311,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   Description
                 </label>
                 <textarea
@@ -328,7 +328,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
                 <button
                   type="button"
                   onClick={closeModals}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 border border-slate-300 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
                 >
                   <X size={18} />
                   Cancel
@@ -350,13 +350,13 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
       {/* Delete Confirmation Modal */}
       {deletingDepartment && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl max-w-md w-full p-6">
             <div className="text-center mb-6">
               <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <Trash2 size={32} className="text-red-600" />
               </div>
               <h2 className="text-2xl font-bold text-slate-900 mb-2">Delete Department?</h2>
-              <p className="text-slate-600">
+              <p className="text-slate-600 dark:text-slate-400">
                 Are you sure you want to delete <strong>{deletingDepartment.name}</strong>?
                 This action cannot be undone.
               </p>
@@ -365,7 +365,7 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
             <div className="flex gap-3">
               <button
                 onClick={() => setDeletingDepartment(null)}
-                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50 transition-colors"
+                className="flex-1 px-4 py-2 border border-slate-300 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </button>

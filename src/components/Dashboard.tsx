@@ -91,7 +91,7 @@ const Dashboard: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-gray-600">Loading dashboard...</div>
+        <div className="text-gray-600 dark:text-slate-400">Loading dashboard...</div>
       </div>
     );
   }
@@ -100,13 +100,13 @@ const Dashboard: React.FC = () => {
     <div className="min-h-screen bg-gray-50 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Welcome Header */}
-        <div className="bg-white rounded-lg shadow p-6">
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
                 Welcome back, {user ? `${user.firstName} ${user.lastName}` : 'Guest'}!
               </h1>
-              <p className="text-sm text-gray-600 mt-1">
+              <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">
                 Here's what's happening with {user?.role === 'team_lead' ? 'your team' : 'our QA teams'} today.
               </p>
             </div>
@@ -121,71 +121,71 @@ const Dashboard: React.FC = () => {
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Total Teams */}
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow p-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
                 <Users className="w-6 h-6 text-blue-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Total Teams</div>
-                <div className="text-3xl font-bold text-gray-900">{stats.totalTeams}</div>
+                <div className="text-sm text-gray-600 dark:text-slate-400">Total Teams</div>
+                <div className="text-3xl font-bold text-gray-900 dark:text-white">{stats.totalTeams}</div>
               </div>
             </div>
           </div>
 
           {/* Overall Pass Rate */}
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow p-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <CheckCircle className="w-6 h-6 text-green-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Overall Pass Rate</div>
-                <div className="text-3xl font-bold text-gray-900">{stats.overallPassRate.toFixed(1)}%</div>
+                <div className="text-sm text-gray-600 dark:text-slate-400">Overall Pass Rate</div>
+                <div className="text-3xl font-bold text-gray-900 dark:text-white">{stats.overallPassRate.toFixed(1)}%</div>
               </div>
             </div>
           </div>
 
           {/* Open Defects */}
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow p-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-red-100 rounded-lg flex items-center justify-center">
                 <AlertCircle className="w-6 h-6 text-red-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Open Defects</div>
-                <div className="text-3xl font-bold text-gray-900">{stats.openDefects}</div>
+                <div className="text-sm text-gray-600 dark:text-slate-400">Open Defects</div>
+                <div className="text-3xl font-bold text-gray-900 dark:text-white">{stats.openDefects}</div>
               </div>
             </div>
           </div>
 
           {/* Critical Defects */}
-          <div className="bg-white rounded-lg shadow p-6">
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow p-6">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-yellow-100 rounded-lg flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 text-yellow-600" />
               </div>
               <div>
-                <div className="text-sm text-gray-600">Critical Defects</div>
-                <div className="text-3xl font-bold text-gray-900">{stats.criticalDefects}</div>
+                <div className="text-sm text-gray-600 dark:text-slate-400">Critical Defects</div>
+                <div className="text-3xl font-bold text-gray-900 dark:text-white">{stats.criticalDefects}</div>
               </div>
             </div>
           </div>
         </div>
 
         {/* Top Performing Teams */}
-        <div className="bg-white rounded-lg shadow">
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow">
           <div className="px-6 py-4 border-b border-gray-200">
             <div className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600" />
-              <h2 className="text-lg font-semibold text-gray-900">Top Performing Teams</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Top Performing Teams</h2>
             </div>
-            <p className="text-sm text-gray-600 mt-1">Teams with the highest pass rates in the last 30 days</p>
+            <p className="text-sm text-gray-600 dark:text-slate-400 mt-1">Teams with the highest pass rates in the last 30 days</p>
           </div>
           
           <div className="p-6 space-y-4">
             {topTeams.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
+              <div className="text-center py-8 text-gray-500 dark:text-slate-400">
                 No team data available yet
               </div>
             ) : (
@@ -199,8 +199,8 @@ const Dashboard: React.FC = () => {
                       <Users className="w-6 h-6 text-blue-600" />
                     </div>
                     <div>
-                      <div className="font-semibold text-gray-900">{team.name}</div>
-                      <div className="text-sm text-gray-600">
+                      <div className="font-semibold text-gray-900 dark:text-white">{team.name}</div>
+                      <div className="text-sm text-gray-600 dark:text-slate-400">
                         {team.platform} • {team.totalTests} tests
                       </div>
                     </div>
@@ -208,8 +208,8 @@ const Dashboard: React.FC = () => {
                   
                   <div className="flex items-center gap-4">
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-gray-900">{team.passRate.toFixed(1)}%</div>
-                      <div className="text-sm text-gray-600">Pass Rate</div>
+                      <div className="text-2xl font-bold text-gray-900 dark:text-white">{team.passRate.toFixed(1)}%</div>
+                      <div className="text-sm text-gray-600 dark:text-slate-400">Pass Rate</div>
                     </div>
                     
                     {canManageTeam(team.id) && (

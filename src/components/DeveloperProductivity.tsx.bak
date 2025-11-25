@@ -54,13 +54,13 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack })
   }));
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-10">
+      <div className="bg-white border-b sticky top-0 z-10">
         <div className="px-8 py-6">
           <button 
             onClick={onBack}
-            className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
+            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
           >
             <ArrowLeft size={20} />
             <span className="font-medium">Back to Features</span>
@@ -68,29 +68,29 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack })
           
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
+              <h1 className="text-3xl font-bold text-gray-900 flex items-center">
                 <Code className="mr-3 text-purple-500" size={32} />
                 Developer Productivity Metrics
               </h1>
-              <p className="text-gray-500 mt-1 dark:text-slate-400">Track team efficiency, happiness, and work-life balance</p>
+              <p className="text-gray-500 mt-1">Track team efficiency, happiness, and work-life balance</p>
             </div>
             
             <div className="flex items-center space-x-6">
               <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Avg Happiness</p>
-                <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">{avgHappiness}/10</div>
+                <p className="text-sm text-gray-500">Avg Happiness</p>
+                <div className="text-3xl font-bold text-purple-600">{avgHappiness}/10</div>
               </div>
               <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Avg PR Time</p>
-                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{avgPRTime}h</div>
+                <p className="text-sm text-gray-500">Avg PR Time</p>
+                <div className="text-3xl font-bold text-blue-600">{avgPRTime}h</div>
               </div>
               <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Avg Review</p>
-                <div className="text-3xl font-bold text-green-600 dark:text-green-400">{avgReviewTime}h</div>
+                <p className="text-sm text-gray-500">Avg Review</p>
+                <div className="text-3xl font-bold text-green-600">{avgReviewTime}h</div>
               </div>
               <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Focus Time</p>
-                <div className="text-3xl font-bold text-orange-600 dark:text-orange-400">{avgFocusTime}h/day</div>
+                <p className="text-sm text-gray-500">Focus Time</p>
+                <div className="text-3xl font-bold text-orange-600">{avgFocusTime}h/day</div>
               </div>
             </div>
           </div>
@@ -98,10 +98,10 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack })
       </div>
 
       {/* Sort Controls */}
-      <div className="px-8 py-4 bg-white dark:bg-slate-900 border-b dark:border-slate-800">
+      <div className="px-8 py-4 bg-white border-b">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
-            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300 dark:text-slate-300">Sort by:</span>
+            <span className="text-sm font-semibold text-gray-700">Sort by:</span>
             <button
               onClick={() => setSortBy('happiness')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
@@ -171,8 +171,8 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack })
       <div className="px-8 py-8">
         {/* Team Balance Radar */}
         <div className="grid grid-cols-2 gap-8 mb-8">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Team Balance Overview</h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Team Balance Overview</h2>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart data={teamBalanceData}>
@@ -189,8 +189,8 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack })
             </p>
           </div>
 
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Team Comparison</h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <h2 className="text-xl font-bold text-gray-900 mb-4">Team Comparison</h2>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={teamOverviewData}>
@@ -210,8 +210,8 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack })
         </div>
 
         {/* Historical Trends */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6 mb-8">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">12-Month Trends</h2>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-xl font-bold text-gray-900 mb-4">12-Month Trends</h2>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={trendData}>
@@ -233,7 +233,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack })
 
         {/* Developer Cards */}
         <div className="space-y-4">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white dark:text-white">Individual Developer Metrics</h2>
+          <h2 className="text-xl font-bold text-gray-900">Individual Developer Metrics</h2>
           {sortedDevelopers.map(dev => (
             <DeveloperCard 
               key={dev.developer_id}
@@ -257,18 +257,18 @@ interface InsightCardProps {
 
 const InsightCard: React.FC<InsightCardProps> = ({ icon, title, description, status }) => {
   const statusColors = {
-    positive: 'bg-green-100 dark:bg-green-900/20 border-green-200 dark:border-green-700',
-    warning: 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700',
-    negative: 'bg-red-100 dark:bg-red-900/20 border-red-200 dark:border-red-700'
+    positive: 'bg-green-100 border-green-200',
+    warning: 'bg-yellow-100 border-yellow-200',
+    negative: 'bg-red-100 border-red-200'
   };
 
   return (
-    <div className={`bg-white dark:bg-slate-900 rounded-lg p-4 border ${statusColors[status]}`}>
+    <div className={`bg-white rounded-lg p-4 border ${statusColors[status]}`}>
       <div className="flex items-start space-x-3">
         <div className="flex-shrink-0">{icon}</div>
         <div className="flex-1">
-          <h3 className="font-semibold text-gray-900 dark:text-white mb-1">{title}</h3>
-          <p className="text-sm text-gray-600 dark:text-slate-400">{description}</p>
+          <h3 className="font-semibold text-gray-900 mb-1">{title}</h3>
+          <p className="text-sm text-gray-600">{description}</p>
         </div>
       </div>
     </div>
@@ -297,7 +297,7 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ developer, isSelected, on
   const workLifeBalance = ((developer.focus_time_hours / (developer.focus_time_hours + developer.meeting_time_hours)) * 100).toFixed(0);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
       <div className="p-6">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
@@ -305,8 +305,8 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ developer, isSelected, on
               {developer.name.split(' ').map(n => n[0]).join('')}
             </div>
             <div>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white dark:text-white">{developer.name}</h3>
-              <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Developer ID: {developer.developer_id}</p>
+              <h3 className="text-lg font-bold text-gray-900">{developer.name}</h3>
+              <p className="text-sm text-gray-500">Developer ID: {developer.developer_id}</p>
             </div>
           </div>
 
@@ -314,66 +314,66 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ developer, isSelected, on
             <div className={`text-4xl font-bold ${getHappinessColor(developer.happiness_score)}`}>
               {getHappinessEmoji(developer.happiness_score)} {developer.happiness_score.toFixed(1)}
             </div>
-            <div className="text-xs text-gray-500 dark:text-slate-400">Happiness Score</div>
+            <div className="text-xs text-gray-500">Happiness Score</div>
           </div>
         </div>
 
         {/* Key Metrics Grid */}
         <div className="grid grid-cols-5 gap-4 mb-4">
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+          <div className="bg-blue-50 rounded-lg p-3">
             <div className="flex items-center text-blue-600 mb-1">
               <GitPullRequest size={14} className="mr-1" />
               <span className="text-xs font-semibold">PR Time</span>
             </div>
-            <div className="text-lg font-bold text-blue-900 dark:text-blue-200">{developer.pr_merge_time_avg.toFixed(1)}h</div>
+            <div className="text-lg font-bold text-blue-900">{developer.pr_merge_time_avg.toFixed(1)}h</div>
           </div>
 
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
+          <div className="bg-green-50 rounded-lg p-3">
             <div className="flex items-center text-green-600 mb-1">
               <Code size={14} className="mr-1" />
               <span className="text-xs font-semibold">Review Time</span>
             </div>
-            <div className="text-lg font-bold text-green-900 dark:text-green-200">{developer.code_review_time_avg.toFixed(1)}h</div>
+            <div className="text-lg font-bold text-green-900">{developer.code_review_time_avg.toFixed(1)}h</div>
           </div>
 
-          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
-            <div className="flex items-center text-orange-600 dark:text-orange-400 mb-1">
+          <div className="bg-orange-50 rounded-lg p-3">
+            <div className="flex items-center text-orange-600 mb-1">
               <Coffee size={14} className="mr-1" />
               <span className="text-xs font-semibold">Focus Time</span>
             </div>
-            <div className="text-lg font-bold text-orange-900 dark:text-orange-200">{developer.focus_time_hours.toFixed(1)}h</div>
+            <div className="text-lg font-bold text-orange-900">{developer.focus_time_hours.toFixed(1)}h</div>
           </div>
 
-          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-            <div className="flex items-center text-purple-600 dark:text-purple-400 mb-1">
+          <div className="bg-purple-50 rounded-lg p-3">
+            <div className="flex items-center text-purple-600 mb-1">
               <Calendar size={14} className="mr-1" />
               <span className="text-xs font-semibold">Meetings</span>
             </div>
-            <div className="text-lg font-bold text-purple-900 dark:text-purple-200">{developer.meeting_time_hours.toFixed(1)}h</div>
+            <div className="text-lg font-bold text-purple-900">{developer.meeting_time_hours.toFixed(1)}h</div>
           </div>
 
-          <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3">
+          <div className="bg-red-50 rounded-lg p-3">
             <div className="flex items-center text-red-600 mb-1">
               <Zap size={14} className="mr-1" />
               <span className="text-xs font-semibold">Context Sw.</span>
             </div>
-            <div className="text-lg font-bold text-red-900 dark:text-red-200">{developer.context_switches_per_day}</div>
+            <div className="text-lg font-bold text-red-900">{developer.context_switches_per_day}</div>
           </div>
         </div>
 
         {/* Work-Life Balance Bar */}
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300 dark:text-slate-300">Work-Life Balance</span>
-            <span className="text-sm font-bold text-gray-900 dark:text-white">{workLifeBalance}% Focus Time</span>
+            <span className="text-sm font-semibold text-gray-700">Work-Life Balance</span>
+            <span className="text-sm font-bold text-gray-900">{workLifeBalance}% Focus Time</span>
           </div>
-          <div className="w-full h-3 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+          <div className="w-full h-3 bg-gray-200 rounded-full overflow-hidden">
             <div 
               className="h-full bg-gradient-to-r from-green-500 to-blue-500"
               style={{ width: `${workLifeBalance}%` }}
             ></div>
           </div>
-          <div className="flex justify-between text-xs text-gray-500 mt-1 dark:text-slate-400">
+          <div className="flex justify-between text-xs text-gray-500 mt-1">
             <span>Focus: {developer.focus_time_hours}h</span>
             <span>Meetings: {developer.meeting_time_hours}h</span>
           </div>
@@ -381,13 +381,13 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ developer, isSelected, on
 
         <button
           onClick={onSelect}
-          className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
+          className="text-sm text-blue-600 hover:text-blue-800 font-medium"
         >
           {isSelected ? '▼ Hide Insights' : '▶ Show Detailed Insights'}
         </button>
 
         {isSelected && (
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-700 space-y-4">
+          <div className="mt-4 pt-4 border-t border-gray-200 space-y-4">
             {/* Productivity Analysis */}
             <div className="bg-blue-50 rounded-lg p-4">
               <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center">
@@ -480,18 +480,18 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ developer, isSelected, on
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-purple-700 mb-1">Work-Life Balance:</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
+                  <p className="text-lg font-bold text-purple-900">
                     {parseInt(workLifeBalance) > 70 ? '✅ Healthy' : parseInt(workLifeBalance) > 50 ? '⚠️ Fair' : '❌ Concerning'}
                   </p>
-                  <p className="text-xs text-purple-600 dark:text-purple-400">{workLifeBalance}% productive time</p>
+                  <p className="text-xs text-purple-600">{workLifeBalance}% productive time</p>
                 </div>
                 <div>
                   <p className="text-xs text-purple-700 mb-1">Burnout Risk:</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
+                  <p className="text-lg font-bold text-purple-900">
                     {developer.happiness_score > 7 && developer.focus_time_hours > 4 ? '✅ Low' :
                      developer.happiness_score > 5 ? '⚠️ Moderate' : '❌ High'}
                   </p>
-                  <p className="text-xs text-purple-600 dark:text-purple-400">Based on happiness & workload</p>
+                  <p className="text-xs text-purple-600">Based on happiness & workload</p>
                 </div>
               </div>
             </div>

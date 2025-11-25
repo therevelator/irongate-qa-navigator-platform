@@ -54,9 +54,9 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
         </div>
 
         {/* Login Card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome Back</h2>
-          <p className="text-gray-600 mb-6">Sign in to your account to continue</p>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Welcome Back</h2>
+          <p className="text-gray-600 dark:text-slate-400 mb-6">Sign in to your account to continue</p>
 
           {/* Demo Credentials Info */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
@@ -86,7 +86,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Email Address
               </label>
               <div className="relative">
@@ -105,7 +105,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Password
               </label>
               <div className="relative">
@@ -122,7 +122,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-slate-400"
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -139,7 +139,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   disabled={isLoading}
                 />
-                <span className="ml-2 text-sm text-gray-700">Remember me</span>
+                <span className="ml-2 text-sm text-gray-700 dark:text-slate-300">Remember me</span>
               </label>
               <button
                 type="button"
@@ -171,7 +171,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
 
           {/* Register Link */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-slate-400">
               Don't have an account?{' '}
               <button
                 onClick={onSwitchToRegister}

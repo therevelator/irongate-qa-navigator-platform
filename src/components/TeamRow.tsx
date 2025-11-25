@@ -25,7 +25,7 @@ const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
   return (
     <div 
       onClick={onClick}
-      className="bg-white rounded-2xl shadow-md hover:shadow-xl border border-slate-200/60 overflow-hidden transition-all duration-300 cursor-pointer group hover:scale-[1.01]"
+      className="bg-white dark:bg-slate-900 rounded-2xl shadow-md hover:shadow-xl border border-slate-200 dark:border-slate-800/60 overflow-hidden transition-all duration-300 cursor-pointer group hover:scale-[1.01]"
     >
       <div className="flex items-center p-6 h-36">
         {/* Status Strip */}
@@ -66,7 +66,7 @@ const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
                 strokeLinecap="round"
               />
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-700">
+            <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-700 dark:text-slate-300">
               {team.qaScore}
             </div>
           </div>
@@ -104,7 +104,7 @@ const TeamRow: React.FC<TeamRowProps> = ({ team, onClick }) => {
               </div>
               <div className={`flex items-center justify-center text-xs font-medium mt-1 ${
                 metric.trend === 'up' ? (metric.id === 'coverage' ? 'text-green-600' : 'text-red-600') : 
-                metric.trend === 'down' ? (metric.id === 'coverage' ? 'text-red-600' : 'text-green-600') : 'text-gray-500'
+                metric.trend === 'down' ? (metric.id === 'coverage' ? 'text-red-600' : 'text-green-600') : 'text-gray-500 dark:text-slate-400'
               }`}>
                 {metric.change > 0 ? <TrendingUp size={12} className="mr-1"/> : metric.change < 0 ? <TrendingDown size={12} className="mr-1"/> : <Minus size={12} className="mr-1"/>}
                 {Math.abs(metric.change)}%

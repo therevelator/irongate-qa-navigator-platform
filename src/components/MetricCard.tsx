@@ -14,11 +14,11 @@ const MetricCard: React.FC<MetricCardProps> = ({ metric }) => {
   const color = isGood ? '#10b981' : isWarning ? '#f59e0b' : '#ef4444'; // green-500, yellow-500, red-500
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow flex flex-col h-48">
+    <div className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 hover:shadow-md transition-shadow flex flex-col h-48">
       <div className="flex justify-between items-start mb-4">
         <div>
-          <p className="text-sm text-gray-500 font-medium">{metric.name}</p>
-          <h3 className="text-2xl font-bold text-gray-900 mt-1">
+          <p className="text-sm text-gray-500 dark:text-slate-400 font-medium">{metric.name}</p>
+          <h3 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">
             {metric.value} <span className="text-sm text-gray-400 font-normal">{metric.unit}</span>
           </h3>
         </div>

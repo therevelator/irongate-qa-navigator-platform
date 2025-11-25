@@ -171,7 +171,7 @@ CREATE TABLE `kpi_snapshots` (
 
 LOCK TABLES `kpi_snapshots` WRITE;
 /*!40000 ALTER TABLE `kpi_snapshots` DISABLE KEYS */;
-INSERT INTO `kpi_snapshots` VALUES ('21f57de2-ca35-11f0-ac53-364ad037a080','team-1764098322554-4r4dpedwc','2025-11-25',63.14,0.01,0.871,2.61,74,16,20,16,4.40,9.82,92.10,39,93.20,5.89,74.41,24,85.59,391.55,8.87,87,99.785,2,88,'good','2025-11-25 19:30:00'),('7e9bb2b2-c98d-11f0-ac53-364ad037a080','team-1764026202608-vcbic0w8g','2025-11-25',91.46,4.75,0.159,1.83,72,15,56,5,1.54,9.83,76.70,43,93.46,13.62,67.61,20,78.82,281.34,6.69,110,99.018,5,91,'good','2025-11-24 23:30:00'),('7e9c66f8-c98d-11f0-ac53-364ad037a080','team-1764026220944-y6sngw6ms','2025-11-25',77.00,1.30,1.457,6.39,74,6,40,5,1.85,8.90,70.45,32,75.05,14.23,62.40,15,64.64,280.81,2.27,150,99.380,1,78,'warning','2025-11-24 23:30:00'),('7e9c91d2-c98d-11f0-ac53-364ad037a080','team-1764026236967-uphpblii4','2025-11-25',70.55,4.01,0.633,0.07,78,11,24,8,3.14,3.36,70.88,55,86.77,12.41,83.80,13,69.34,227.47,3.56,152,99.928,7,76,'warning','2025-11-24 23:30:00');
+INSERT INTO `kpi_snapshots` VALUES ('21f57de2-ca35-11f0-ac53-364ad037a080','team-1764098322554-4r4dpedwc','2025-11-25',73.38,2.50,0.496,1.79,78,5,45,14,1.84,8.02,82.40,55,89.70,5.16,71.77,23,78.00,362.52,1.90,96,99.531,5,91,'good','2025-11-25 19:30:00'),('7e9bb2b2-c98d-11f0-ac53-364ad037a080','team-1764026202608-vcbic0w8g','2025-11-25',70.43,1.78,1.038,5.23,84,15,31,6,1.07,7.54,74.48,40,75.94,11.16,60.10,24,87.73,235.22,1.79,118,99.868,5,89,'good','2025-11-24 23:30:00'),('7e9c66f8-c98d-11f0-ac53-364ad037a080','team-1764026220944-y6sngw6ms','2025-11-25',68.36,0.24,1.314,3.61,82,9,26,9,3.60,3.07,70.50,40,89.64,23.02,67.72,14,65.23,233.10,2.75,115,99.929,3,78,'warning','2025-11-24 23:30:00'),('7e9c91d2-c98d-11f0-ac53-364ad037a080','team-1764026236967-uphpblii4','2025-11-25',76.40,2.89,1.448,6.76,90,15,33,11,1.93,7.78,91.81,31,92.93,12.00,71.93,28,69.00,280.50,2.49,108,99.458,7,84,'warning','2025-11-24 23:30:00');
 /*!40000 ALTER TABLE `kpi_snapshots` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -271,7 +271,7 @@ CREATE TABLE `teams` (
 
 LOCK TABLES `teams` WRITE;
 /*!40000 ALTER TABLE `teams` DISABLE KEYS */;
-INSERT INTO `teams` VALUES ('team-1764026202608-vcbic0w8g','company-mastercard','dept-digital','Mavericks','test',NULL,'2025-11-24 23:16:42','2025-11-24 23:16:42',1),('team-1764026220944-y6sngw6ms','company-mastercard','dept-digital','LegacyCode Warriors','test 001',NULL,'2025-11-24 23:17:00','2025-11-25 20:31:37',1),('team-1764026236967-uphpblii4','company-mastercard','dept-payments','QualityCowboys','tttt',NULL,'2025-11-24 23:17:16','2025-11-25 20:36:54',1),('team-1764098322554-4r4dpedwc','company-mastercard','dept-payments','fvgbhnjm','dcfvgbhnj',NULL,'2025-11-25 19:18:42','2025-11-25 19:18:42',1);
+INSERT INTO `teams` VALUES ('team-1764026202608-vcbic0w8g','company-mastercard','dept-digital','Mavericks','test',NULL,'2025-11-24 23:16:42','2025-11-24 23:16:42',1),('team-1764026220944-y6sngw6ms','company-mastercard','dept-digital','LegacyCode Warriors','test 001',NULL,'2025-11-24 23:17:00','2025-11-25 20:31:37',1),('team-1764026236967-uphpblii4','company-mastercard','dept-payments','QualityCowboys','tttt',NULL,'2025-11-24 23:17:16','2025-11-25 21:31:50',0),('team-1764098322554-4r4dpedwc','company-mastercard','dept-payments','fvgbhnjm','dcfvgbhnj',NULL,'2025-11-25 19:18:42','2025-11-25 19:18:42',1);
 /*!40000 ALTER TABLE `teams` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -339,4 +339,4 @@ UNLOCK TABLES;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2025-11-25 22:42:39
+-- Dump completed on 2025-11-25 23:32:27

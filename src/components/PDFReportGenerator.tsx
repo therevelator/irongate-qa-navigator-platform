@@ -470,13 +470,13 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
       {/* Header */}
-      <div className="bg-white border-b">
+      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800">
         <div className="px-8 py-6">
           <button
             onClick={onBack}
-            className="flex items-center space-x-2 text-gray-600 hover:text-gray-900 mb-4 transition-colors"
+            className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
           >
             <ArrowLeft size={20} />
             <span className="font-medium">Back to Features</span>
@@ -487,8 +487,8 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
               <FileText className="text-white" size={24} />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-gray-900">PDF Report Generator</h1>
-              <p className="text-gray-500 mt-1">Generate comprehensive quality assurance reports</p>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">PDF Report Generator</h1>
+              <p className="text-gray-500 dark:text-slate-400 mt-1">Generate comprehensive quality assurance reports</p>
             </div>
           </div>
         </div>
@@ -497,12 +497,12 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
       {/* Content */}
       <div className="px-8 py-8 max-w-4xl mx-auto">
         {/* Report Configuration Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Report Configuration</h2>
+        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-8">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">Report Configuration</h2>
 
           {/* Time Period Selection */}
           <div className="mb-8">
-            <label className="block text-sm font-medium text-gray-700 mb-3">
+            <label className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-3">
               <Calendar className="inline mr-2" size={16} />
               Select Time Period
             </label>
@@ -513,8 +513,8 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
                   onClick={() => setSelectedPeriod(period.id)}
                   className={`p-4 rounded-lg border-2 transition-all ${
                     selectedPeriod === period.id
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:border-gray-300 text-gray-700'
+                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300'
+                      : 'border-gray-200 dark:border-slate-700 hover:border-gray-300 dark:hover:border-slate-600 text-gray-700 dark:text-slate-300'
                   }`}
                 >
                   <div className="font-semibold">{period.label}</div>
@@ -526,37 +526,37 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
 
           {/* Report Contents Preview */}
           <div className="mb-8">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Report Contents</h3>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Report Contents</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-start space-x-3 p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
                 <CheckCircle className="text-green-500 flex-shrink-0" size={20} />
                 <div>
-                  <div className="font-medium text-gray-900">Executive Summary</div>
-                  <div className="text-sm text-gray-600">High-level overview of key metrics and trends</div>
+                  <div className="font-medium text-gray-900 dark:text-white">Executive Summary</div>
+                  <div className="text-sm text-gray-600 dark:text-slate-400">High-level overview of key metrics and trends</div>
                 </div>
               </div>
 
-              <div className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-start space-x-3 p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
                 <TrendingUp className="text-blue-500 flex-shrink-0" size={20} />
                 <div>
-                  <div className="font-medium text-gray-900">Performance Metrics</div>
-                  <div className="text-sm text-gray-600">Test execution, pass rates, and coverage</div>
+                  <div className="font-medium text-gray-900 dark:text-white">Performance Metrics</div>
+                  <div className="text-sm text-gray-600 dark:text-slate-400">Test execution, pass rates, and coverage</div>
                 </div>
               </div>
 
-              <div className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-start space-x-3 p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
                 <AlertTriangle className="text-orange-500 flex-shrink-0" size={20} />
                 <div>
-                  <div className="font-medium text-gray-900">Issue Analysis</div>
-                  <div className="text-sm text-gray-600">Top issues, bugs, and quality concerns</div>
+                  <div className="font-medium text-gray-900 dark:text-white">Issue Analysis</div>
+                  <div className="text-sm text-gray-600 dark:text-slate-400">Top issues, bugs, and quality concerns</div>
                 </div>
               </div>
 
-              <div className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-start space-x-3 p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
                 <Clock className="text-purple-500 flex-shrink-0" size={20} />
                 <div>
-                  <div className="font-medium text-gray-900">ROI & Business Impact</div>
-                  <div className="text-sm text-gray-600">Cost savings, time saved, and productivity gains</div>
+                  <div className="font-medium text-gray-900 dark:text-white">ROI & Business Impact</div>
+                  <div className="text-sm text-gray-600 dark:text-slate-400">Cost savings, time saved, and productivity gains</div>
                 </div>
               </div>
             </div>
@@ -586,8 +586,8 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
           </button>
 
           {/* Info Note */}
-          <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <p className="text-sm text-blue-800">
+          <div className="mt-6 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
               <strong>Note:</strong> The generated report includes comprehensive analytics, team performance data,
               issue tracking, ROI calculations, and trend analysis. Perfect for stakeholder presentations and
               executive reviews.

@@ -126,9 +126,9 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
         </div>
 
         {/* Register Card */}
-        <div className="bg-white rounded-2xl shadow-2xl p-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Create Account</h2>
-          <p className="text-gray-600 mb-6">Join IronGate QA Navigator today</p>
+        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8">
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Create Account</h2>
+          <p className="text-gray-600 dark:text-slate-400 mb-6">Join IronGate QA Navigator today</p>
 
           {/* Error Message */}
           {(error || authError) && (
@@ -146,7 +146,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
             {/* Name Fields */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                   First Name *
                 </label>
                 <div className="relative">
@@ -164,7 +164,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
               </div>
 
               <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 mb-2">
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                   Last Name *
                 </label>
                 <input
@@ -181,7 +181,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
 
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Email Address *
               </label>
               <div className="relative">
@@ -200,7 +200,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
 
             {/* Company (Read-only) */}
             <div>
-              <label htmlFor="company" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="company" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Company
               </label>
               <div className="relative">
@@ -209,7 +209,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   id="company"
                   type="text"
                   value={mockCompany.name}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600"
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 dark:text-slate-400"
                   disabled
                 />
               </div>
@@ -217,7 +217,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
 
             {/* Department Selection */}
             <div>
-              <label htmlFor="department" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="department" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Department / Program *
               </label>
               <div className="relative">
@@ -237,14 +237,14 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   ))}
                 </select>
               </div>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                 e.g., Decision Management, Payments Processing, etc.
               </p>
             </div>
 
             {/* Team Selection */}
             <div>
-              <label htmlFor="team" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="team" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Team *
               </label>
               <div className="relative">
@@ -266,14 +266,14 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   ))}
                 </select>
               </div>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                 e.g., Quasars, Pulsars, Watchmen, etc.
               </p>
             </div>
 
             {/* Role Selection */}
             <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="role" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Role
               </label>
               <select
@@ -289,14 +289,14 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   </option>
                 ))}
               </select>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
                 Note: Role can be changed by administrators after registration
               </p>
             </div>
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Password *
               </label>
               <div className="relative">
@@ -313,7 +313,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-slate-400"
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -323,7 +323,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
               {formData.password && (
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-600">Password Strength:</span>
+                    <span className="text-xs text-gray-600 dark:text-slate-400">Password Strength:</span>
                     <span className={`text-xs font-semibold ${
                       passwordStrength <= 2 ? 'text-red-600' :
                       passwordStrength === 3 ? 'text-yellow-600' :
@@ -350,7 +350,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
 
             {/* Confirm Password Field */}
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-2">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
                 Confirm Password *
               </label>
               <div className="relative">
@@ -392,7 +392,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
 
           {/* Login Link */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-slate-400">
               Already have an account?{' '}
               <button
                 onClick={onSwitchToLogin}
@@ -421,7 +421,7 @@ const PasswordRequirement: React.FC<{ met: boolean; text: string }> = ({ met, te
     ) : (
       <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 mr-2" />
     )}
-    <span className={met ? 'text-green-600' : 'text-gray-500'}>{text}</span>
+    <span className={met ? 'text-green-600' : 'text-gray-500 dark:text-slate-400'}>{text}</span>
   </div>
 );
 
