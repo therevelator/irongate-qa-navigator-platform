@@ -257,7 +257,7 @@ netlify init
 
 # Set environment variables
 netlify env:set DATABASE_URL "mysql://admin:password@endpoint.rds.amazonaws.com:3306/qa_dashboard"
-netlify env:set JWT_SECRET "$(openssl rand -base64 32)"
+netlify env:set secrettoken "$(openssl rand -base64 32)"
 
 # Build and deploy
 npm run build

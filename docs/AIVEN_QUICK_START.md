@@ -60,7 +60,7 @@ mysql --user avnadmin \
 ```bash
 cat > .env.local << 'EOF'
 DATABASE_URL=mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED
-JWT_SECRET=your-secret-key-here
+secrettoken=your-secret-key-here
 VITE_API_URL=http://localhost:8888/api
 EOF
 ```
@@ -93,7 +93,7 @@ netlify init
 # Set environment variables
 netlify env:set DATABASE_URL "mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED"
 
-netlify env:set JWT_SECRET "$(openssl rand -base64 32)"
+netlify env:set secrettoken "$(openssl rand -base64 32)"
 
 # Build and deploy
 npm run build

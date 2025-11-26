@@ -65,7 +65,7 @@ DB_PORT=3306
 DB_USER=irongate_user
 DB_PASSWORD=your_password
 DB_NAME=irongate_qa
-JWT_SECRET=your_jwt_secret
+secrettoken=your_secrettoken
 EOF
 ```
 

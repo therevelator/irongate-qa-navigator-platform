@@ -70,7 +70,7 @@ netlify init
 netlify env:set DATABASE_URL "mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED"
 
 # Set JWT secret for authentication
-netlify env:set JWT_SECRET "your-generated-jwt-secret-here"
+netlify env:set secrettoken "your-generated-jwt-secret-here"
 
 # Verify they were set
 netlify env:list
@@ -247,7 +247,7 @@ netlify env:list
 
 # Should show:
 # DATABASE_URL
-# JWT_SECRET
+# secrettoken
 ```
 
 ### Issue: "Can't login or register"
@@ -263,7 +263,7 @@ netlify functions:log
 **Common causes:**
 - DATABASE_URL not set correctly
 - Database connection timeout
-- Missing JWT_SECRET
+- Missing secrettoken
 
 ### Issue: "Data doesn't persist"
 
@@ -349,7 +349,7 @@ netlify functions:log
 - [ ] Netlify CLI installed
 - [ ] Logged in to Netlify
 - [ ] Site initialized
-- [ ] Environment variables set (DATABASE_URL, JWT_SECRET)
+- [ ] Environment variables set (DATABASE_URL, secrettoken)
 - [ ] Project built successfully
 - [ ] Deployed to production
 - [ ] Site URL accessible

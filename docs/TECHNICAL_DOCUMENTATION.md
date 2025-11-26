@@ -85,7 +85,7 @@ docker-compose down               # Stop services
 **Frontend (.env)**:
 ```bash
 VITE_API_URL=http://localhost:3000/api
-VITE_JWT_SECRET=your-secret-key
+VITE_secrettoken=your-secret-key
 ```
 
 **Backend (.env)**:
@@ -93,7 +93,7 @@ VITE_JWT_SECRET=your-secret-key
 NODE_ENV=production
 PORT=3000
 DATABASE_URL=postgresql://user:pass@localhost:5432/irongate_qa
-JWT_SECRET=your-jwt-secret
+secrettoken=your-jwt-secret
 JWT_EXPIRATION=24h
 
 # Integrations
@@ -363,7 +363,7 @@ logger.info('Event', { userId, action, timestamp });
 - Verify credentials
 
 **JWT token invalid**
-- Check JWT_SECRET matches
+- Check secrettoken matches
 - Verify token not expired
 - Check token format
 

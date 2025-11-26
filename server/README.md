@@ -126,7 +126,7 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
 
 # JWT
-JWT_SECRET=your-secret-key
+secrettoken=your-secret-key
 
 # External APIs (optional)
 JENKINS_URL=

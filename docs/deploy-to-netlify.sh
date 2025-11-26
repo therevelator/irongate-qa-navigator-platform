@@ -23,7 +23,7 @@ echo ""
 
 # Your database credentials
 DATABASE_URL="mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED"
-JWT_SECRET="your-generated-jwt-secret-here"
+secrettoken="your-generated-jwt-secret-here"
 
 echo "🔐 Step 1: Login to Netlify"
 echo "This will open your browser..."
@@ -47,7 +47,7 @@ echo "🔑 Step 3: Setting environment variables..."
 
 # Set environment variables
 netlify env:set DATABASE_URL "$DATABASE_URL" --force
-netlify env:set JWT_SECRET "$JWT_SECRET" --force
+netlify env:set secrettoken "$secrettoken" --force
 
 echo "✅ Environment variables set!"
 echo ""

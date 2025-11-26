@@ -77,7 +77,7 @@ Once build succeeds, you MUST set these:
 ```bash
 DATABASE_URL = mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED
 
-JWT_SECRET = your-generated-jwt-secret-here
+secrettoken = your-generated-jwt-secret-here
 ```
 
 3. **Trigger redeploy**: Go to Deploys tab → "Trigger deploy" → "Deploy site"
@@ -108,7 +108,7 @@ Visit your Netlify URL and verify:
 
 **Issue: Build succeeds but site doesn't work**
 - Check if environment variables are set
-- Solution: Add DATABASE_URL and JWT_SECRET, then redeploy
+- Solution: Add DATABASE_URL and secrettoken, then redeploy
 
 **Issue: Database connection fails**
 - Check connection string is correct

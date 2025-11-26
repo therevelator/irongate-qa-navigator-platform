@@ -112,7 +112,7 @@ DB_PORT=3306
 DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=irongate_qa
-JWT_SECRET=your-secret-key
+secrettoken=your-secret-key
 ```
 
 ### Step 3: Start Backend Server
@@ -345,7 +345,7 @@ export function connectWebSocket() {
 ```env
 NODE_ENV=production
 DB_HOST=your-production-db.com
-JWT_SECRET=super-secure-random-string-here
+secrettoken=super-secure-random-string-here
 ```
 
 ### 2. Process Manager (PM2)

@@ -52,7 +52,7 @@ DB_HOST=localhost
 DB_USER=root
 DB_PASSWORD=YOUR_MYSQL_PASSWORD_HERE
 DB_NAME=irongate_qa
-JWT_SECRET=change-this-to-random-string
+secrettoken=change-this-to-random-string
 ```
 
 ---

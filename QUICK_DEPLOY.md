@@ -112,7 +112,7 @@ netlify init
 
 # 5. Set environment variables (CRITICAL!)
 netlify env:set DATABASE_URL "your-mysql-connection-string"
-netlify env:set JWT_SECRET "your-secret-key-here"
+netlify env:set secrettoken "your-secret-key-here"
 
 # 6. Build and deploy
 npm run build
@@ -136,7 +136,7 @@ netlify deploy --prod
 
 3. **Set Environment Variables**
    - Site configuration → Environment variables
-   - Add `DATABASE_URL` and `JWT_SECRET`
+   - Add `DATABASE_URL` and `secrettoken`
    - Trigger redeploy
 
 4. **Done!** Auto-deploys on every push ✅

@@ -121,7 +121,7 @@ DB_USER=root
 DB_PASSWORD=YOUR_MYSQL_PASSWORD_HERE
 DB_NAME=irongate_qa
 
-JWT_SECRET=change-this-to-a-random-secure-string-in-production
+secrettoken=change-this-to-a-random-secure-string-in-production
 
 PORT=3000
 NODE_ENV=development

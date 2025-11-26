@@ -11,7 +11,7 @@ You need these two variables:
 ```bash
 DATABASE_URL = mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED
 
-JWT_SECRET = your-generated-jwt-secret-here
+secrettoken = your-generated-jwt-secret-here
 ```
 
 **If these are NOT set:**

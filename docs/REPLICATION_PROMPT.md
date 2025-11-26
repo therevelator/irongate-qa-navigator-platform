@@ -382,7 +382,7 @@ NODE_ENV=development
 FRONTEND_URL=http://localhost:5173
 
 # JWT
-JWT_SECRET=your-super-secret-jwt-key-change-in-production
+secrettoken=your-super-secret-jwt-key-change-in-production
 
 # Optional: External APIs for sync
 JENKINS_URL=

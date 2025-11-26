@@ -308,7 +308,7 @@ ws.onmessage = (event) => console.log(JSON.parse(event.data));
 
 Before deploying to production:
 
-- [ ] Change `JWT_SECRET` to secure random string
+- [ ] Change `secrettoken` to secure random string
 - [ ] Set `NODE_ENV=production`
 - [ ] Use production database credentials
 - [ ] Enable HTTPS/SSL

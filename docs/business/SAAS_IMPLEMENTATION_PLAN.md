@@ -61,7 +61,7 @@ interface User {
 // Auth0, Clerk, or custom JWT
 const authMiddleware = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1];
-  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const decoded = jwt.verify(token, process.env.secrettoken);
   
   req.user = {
     id: decoded.userId,
@@ -280,7 +280,7 @@ const signup = async (req, res) => {
   // 5. Return JWT
   const token = jwt.sign(
     { userId: user.id, tenantId: tenant.id, role: 'admin' },
-    process.env.JWT_SECRET
+    process.env.secrettoken
   );
   
   res.json({ token, tenant, user });

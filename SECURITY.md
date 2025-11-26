@@ -29,7 +29,7 @@
    ```bash
    # .env (NEVER commit this!)
    DATABASE_URL=mysql://user:REAL_PASSWORD@host:port/db
-   JWT_SECRET=your-actual-secret-key
+   secrettoken=your-actual-secret-key
    ```
 
 3. **Verify .gitignore:**
@@ -50,7 +50,7 @@
 2. **Or use Netlify CLI:**
    ```bash
    netlify env:set DATABASE_URL "your-secret-value"
-   netlify env:set JWT_SECRET "your-secret-value"
+   netlify env:set secrettoken "your-secret-value"
    ```
 
 ---
@@ -76,13 +76,13 @@ node -e "console.log(require('crypto').randomBytes(20).toString('hex'))"
 ### ✅ Good Examples:
 ```markdown
 DATABASE_URL=mysql://user:YOUR_PASSWORD@host:port/db
-JWT_SECRET=your-generated-jwt-secret-here
+secrettoken=your-generated-jwt-secret-here
 ```
 
 ### ❌ Bad Examples:
 ```markdown
 DATABASE_URL=mysql://admin:P@ssw0rd123@prod.db.com:3306/app
-JWT_SECRET=6hVmrBsWmrOmL6BtYex+hK7RlGda7JguXXhMD1VZzUs=
+secret key for auth in the db=6hVmrBsWmrOmL6BtYex+hK7RlGda7JguXXhMD1VZzUs=
 ```
 
 ---
@@ -152,7 +152,7 @@ Our `netlify.toml` excludes documentation:
 - [ ] `.env.example` only has placeholders
 - [ ] Documentation uses `YOUR_*` placeholders
 - [ ] Secrets are set in Netlify dashboard
-- [ ] JWT_SECRET is randomly generated
+- [ ] secrettoken is randomly generated
 - [ ] Database credentials are secure
 
 ---

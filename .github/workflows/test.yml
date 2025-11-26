@@ -59,7 +59,7 @@ jobs:
           PORT=3000
           NODE_ENV=test
           FRONTEND_URL=http://localhost:5173
-          JWT_SECRET=test-jwt-secret-key
+          secrettoken=test-jwt-secret-key
           EOF
 
       - name: Run database tests

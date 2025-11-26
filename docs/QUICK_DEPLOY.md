@@ -101,7 +101,7 @@ netlify init
 
 # 4. Set environment variables
 netlify env:set DATABASE_URL "your-mysql-connection-string"
-netlify env:set JWT_SECRET "your-secret-key-here"
+netlify env:set secrettoken "your-secret-key-here"
 
 # 5. Build and deploy
 npm run build

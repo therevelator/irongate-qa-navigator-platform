@@ -35,8 +35,8 @@ echo ""
 read -p "Enter your DATABASE_URL (MySQL connection string): " DATABASE_URL
 
 # Generate a random JWT secret
-JWT_SECRET=$(openssl rand -base64 32)
-echo "Generated JWT_SECRET: $JWT_SECRET"
+secrettoken=$(openssl rand -base64 32)
+echo "Generated secrettoken: $secrettoken"
 
 echo ""
 echo "🔧 Configuring Netlify..."
@@ -54,7 +54,7 @@ netlify init
 echo ""
 echo "Setting environment variables..."
 netlify env:set DATABASE_URL "$DATABASE_URL"
-netlify env:set JWT_SECRET "$JWT_SECRET"
+netlify env:set secrettoken "$secrettoken"
 
 echo ""
 echo "✅ Environment variables set!"

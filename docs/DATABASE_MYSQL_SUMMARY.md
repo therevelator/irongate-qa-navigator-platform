@@ -206,7 +206,7 @@ PORT=3000
 NODE_ENV=development
 
 # JWT
-JWT_SECRET=your_jwt_secret_key_here
+secrettoken=your_secrettoken_key_here
 JWT_EXPIRES_IN=7d
 
 # External APIs (for 15-min sync)
@@ -403,7 +403,7 @@ const isValid = await bcrypt.compare(password, hashedPassword)
 ```typescript
 import jwt from 'jsonwebtoken'
 
-const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
+const token = jwt.sign({ userId: user.id }, process.env.secrettoken, {
   expiresIn: '7d'
 })
 ```
@@ -413,7 +413,7 @@ const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET, {
 // Use dotenv
 import 'dotenv/config'
 
-const secret = process.env.JWT_SECRET
+const secret = process.env.secrettoken
 ```
 
 ---

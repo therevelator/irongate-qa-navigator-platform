@@ -76,7 +76,7 @@ cat > .env.local << EOF
 DATABASE_URL=$DATABASE_URL
 
 # JWT Secret for authentication
-JWT_SECRET=$(openssl rand -base64 32)
+secrettoken=$(openssl rand -base64 32)
 
 # API URL (will be updated after Netlify deployment)
 VITE_API_URL=http://localhost:8888/api
@@ -160,7 +160,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     
     echo "Setting environment variables..."
     netlify env:set DATABASE_URL "$DATABASE_URL"
-    netlify env:set JWT_SECRET "$(openssl rand -base64 32)"
+    netlify env:set secrettoken "$(openssl rand -base64 32)"
     
     echo "Building project..."
     npm run build
@@ -215,7 +215,7 @@ netlify init
 ### 4. Set Environment Variables
 \`\`\`bash
 netlify env:set DATABASE_URL "$DATABASE_URL"
-netlify env:set JWT_SECRET "\$(openssl rand -base64 32)"
+netlify env:set secrettoken "\$(openssl rand -base64 32)"
 \`\`\`
 
 ### 5. Build and Deploy

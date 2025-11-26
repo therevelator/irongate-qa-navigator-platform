@@ -79,7 +79,7 @@ router.get('/dashboard', async (req: AuthRequest, res) => {
       // Try to decode token to get user info
       try {
         const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production-12345') as any;
+        const decoded = jwt.verify(token, process.env.secrettoken || 'your-super-secret-jwt-key-change-in-production-12345') as any;
         userRole = decoded.role;
         userId = decoded.userId;
         primaryTeamId = decoded.primaryTeamId;

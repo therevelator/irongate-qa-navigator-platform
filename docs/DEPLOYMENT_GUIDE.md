@@ -408,7 +408,7 @@ netlify init
 
 # Set environment variables
 netlify env:set DATABASE_URL "your-mysql-connection-string"
-netlify env:set JWT_SECRET "your-secret-key-here"
+netlify env:set secrettoken "your-secret-key-here"
 
 # Deploy
 netlify deploy --prod
@@ -438,7 +438,7 @@ netlify deploy --prod
 4. **Add Environment Variables**
    ```
    DATABASE_URL = your-mysql-connection-string
-   JWT_SECRET = your-secret-key
+   secrettoken = your-secret-key
    ```
 
 5. **Deploy**
@@ -456,7 +456,7 @@ Never commit these to Git! Add to `.env.local`:
 ```bash
 # .env.local (DO NOT COMMIT)
 DATABASE_URL=mysql://user:pass@host/database
-JWT_SECRET=your-super-secret-key-change-this
+secrettoken=your-super-secret-key-change-this
 VITE_API_URL=https://your-app.netlify.app/api
 ```
 

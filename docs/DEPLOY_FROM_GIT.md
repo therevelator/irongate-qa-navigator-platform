@@ -100,9 +100,9 @@ Your app won't work without these!
    - Value: `mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED`
    - Click "Create variable"
 
-3. **Add JWT_SECRET**
+3. **Add secrettoken**
    - Click "Add a variable" → "Add a single variable"
-   - Key: `JWT_SECRET`
+   - Key: `secrettoken`
    - Value: `your-generated-jwt-secret-here`
    - Click "Create variable"
 
@@ -211,7 +211,7 @@ git push
 
 **Verify they're set:**
 1. Site configuration → Environment variables
-2. Should see: `DATABASE_URL` and `JWT_SECRET`
+2. Should see: `DATABASE_URL` and `secrettoken`
 3. If missing, add them and redeploy
 
 ### Database Connection Fails
@@ -261,7 +261,7 @@ mysql --user=avnadmin \
 
 ✅ **Do:**
 - Store DATABASE_URL in Netlify env vars
-- Store JWT_SECRET in Netlify env vars
+- Store secrettoken in Netlify env vars
 - Keep `.env.local` in `.gitignore`
 
 ❌ **Don't:**
@@ -379,7 +379,7 @@ git push
 - [ ] Netlify connected to Git repo
 - [ ] Build settings configured (npm run build, dist)
 - [ ] DATABASE_URL environment variable set
-- [ ] JWT_SECRET environment variable set
+- [ ] secrettoken environment variable set
 - [ ] First deploy successful
 - [ ] Site URL accessible
 - [ ] Can register/login

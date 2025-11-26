@@ -10,7 +10,7 @@ const broadcast = (_wss: any, _data: any) => {}; // No-op in serverless
 const wss = null; // Not available in serverless
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+const secrettoken = process.env.secrettoken || 'your-secret-key-change-in-production';
 
 // Register
 router.post('/register', async (req, res) => {
@@ -68,7 +68,7 @@ router.post('/register', async (req, res) => {
     // Generate token
     const token = jwt.sign(
       { userId: user.id, role: user.role, companyId: user.company_id },
-      JWT_SECRET,
+      secrettoken,
       { expiresIn: '7d' }
     );
 
@@ -133,7 +133,7 @@ router.post('/login', async (req, res) => {
         departmentId: user.department_id,
         primaryTeamId: user.primary_team_id
       },
-      JWT_SECRET,
+      secrettoken,
       { expiresIn: '7d' }
     );
 
@@ -154,7 +154,7 @@ router.get('/me', async (req, res) => {
       return res.status(401).json({ error: 'Token required' });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, secrettoken) as any;
 
     const user = await queryOne<any>(
       `SELECT id, email, first_name, last_name, role, 
