@@ -144,7 +144,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           email: 'manager@irongate.com',
           firstName: 'QA',
           lastName: 'Manager',
-          role: 'qa_manager',
+          role: 'manager' as const,
           companyId: 'company-mastercard',
           departmentId: 'dept-decision-mgmt',
           primaryTeamId: 'team-pulsars',
