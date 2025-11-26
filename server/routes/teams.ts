@@ -44,8 +44,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
              k.infrastructure_failures,
              k.snapshot_date
       FROM teams t
-      JOIN departments d ON t.department_id = d.id
-      JOIN companies c ON t.company_id = c.id
+      LEFT JOIN departments d ON t.department_id = d.id
+      LEFT JOIN companies c ON t.company_id = c.id
       LEFT JOIN users u ON t.lead_id = u.id
       LEFT JOIN (
         SELECT ks.* FROM kpi_snapshots ks

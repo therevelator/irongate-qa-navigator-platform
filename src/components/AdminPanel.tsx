@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Shield, X, ArrowLeft, Building2, Edit2, Trash2, ChevronDown, ChevronRight, Key, UserCheck, UserX } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
-import { confirmDelete } from '../utils/alerts';
+import { confirmDelete, showCannotDeleteWarning, confirmDeactivate, showSuccess } from '../utils/alerts';
 
 interface User {
   id: string;
@@ -351,13 +351,31 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       });
 
       if (response.ok) {
-        toast.success('Department deleted successfully!');
+        showSuccess(`${selectedDepartment.name} has been deleted`);
         setShowDeleteDepartmentConfirm(false);
         setSelectedDepartment(null);
         fetchData();
       } else {
         const error = await response.json();
-        toast.error(`Error: ${error.error}`);
+        
+        // Show detailed warning if department has active teams or users
+        if (error.hasActiveTeams) {
+          showCannotDeleteWarning(
+            'department',
+            `This department has ${error.teamCount} active team(s). Please deactivate or reassign all teams first.`,
+            error.teams
+          );
+        } else if (error.hasActiveUsers) {
+          showCannotDeleteWarning(
+            'department',
+            `This department has ${error.userCount} active user(s). Please deactivate or reassign all users first.`,
+            error.users
+          );
+        } else {
+          toast.error(`Error: ${error.error}`);
+        }
+        
+        setShowDeleteDepartmentConfirm(false);
       }
     } catch (error) {
       console.error('Error deleting department:', error);
@@ -394,8 +412,19 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
   };
 
   const handleDeleteUser = async () => {
+    if (!selectedUser) return;
+    
+    // Show deactivation confirmation instead of delete
+    const userName = `${selectedUser.first_name} ${selectedUser.last_name}`;
+    const { isConfirmed } = await confirmDeactivate(userName, 'user');
+    
+    if (!isConfirmed) {
+      setShowDeleteConfirm(false);
+      return;
+    }
+
     try {
-      const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}`, {
+      const response = await fetch(`${API_URL}/admin/users/${selectedUser.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -403,7 +432,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       });
 
       if (response.ok) {
-        toast.success('User deleted successfully!');
+        showSuccess(`${userName} has been deactivated`);
         setShowDeleteConfirm(false);
         setSelectedUser(null);
         setSelectedTeam(null);
@@ -413,8 +442,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
         toast.error(`Error: ${error.error}`);
       }
     } catch (error) {
-      console.error('Error deleting user:', error);
-      toast.error('Failed to delete user');
+      console.error('Error deactivating user:', error);
+      toast.error('Failed to deactivate user');
     }
   };
 
@@ -795,10 +824,21 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                           });
                                           
                                           if (response.ok) {
-                                            toast.success('Team deleted successfully!');
+                                            showSuccess(`${team.name} has been deactivated`);
                                             fetchData();
                                           } else {
-                                            toast.error('Failed to delete team');
+                                            const error = await response.json();
+                                            
+                                            // Show detailed warning if team has active users
+                                            if (error.hasActiveUsers) {
+                                              showCannotDeleteWarning(
+                                                'team',
+                                                `This team has ${error.userCount} active user(s). Please reassign or deactivate all users first.`,
+                                                error.users
+                                              );
+                                            } else {
+                                              toast.error(`Error: ${error.error}`);
+                                            }
                                           }
                                         } catch (error) {
                                           console.error('Error deleting team:', error);

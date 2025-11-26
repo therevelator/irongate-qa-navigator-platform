@@ -475,6 +475,23 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
       [teamId, companyId, targetDepartmentId, name, description || '']
     );
 
+    // Create initial KPI snapshot with default values
+    const snapshotId = `kpi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    await query<any>(
+      `INSERT INTO kpi_snapshots (
+        id, team_id, snapshot_date, qa_score, status,
+        test_coverage, test_flakiness_rate, defect_density, defect_escape_rate,
+        code_quality_score, avg_build_time_minutes, test_execution_time_minutes,
+        deployment_frequency_per_week, lead_time_days, mttr_hours,
+        parallel_test_efficiency, sprint_velocity, sprint_commitment_rate,
+        sprint_carryover, first_time_pass_rate, blocked_time_hours,
+        automation_coverage, automation_roi, change_failure_rate,
+        mtbf_hours, system_availability, infrastructure_failures
+      ) VALUES (?, ?, CURDATE(), 0, 'needs_attention',
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0)`,
+      [snapshotId, teamId]
+    );
+
     // Fetch created team
     const newTeam = await queryOne<any>(
       'SELECT * FROM teams WHERE id = ?',
@@ -546,21 +563,24 @@ router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Can only delete teams in your department' });
     }
 
-    // Check if team has members
-    const memberCount = await queryOne<any>(
-      'SELECT COUNT(*) as count FROM team_members WHERE team_id = ?',
+    // Check if team has active users assigned to it
+    const activeUsers = await query<any>(
+      'SELECT id, first_name, last_name FROM users WHERE primary_team_id = ? AND is_active = true',
       [teamId]
     );
 
-    if (memberCount && memberCount.count > 0) {
+    if (activeUsers && activeUsers.length > 0) {
       return res.status(400).json({ 
-        error: 'Cannot delete team with members',
-        warning: `Team has ${memberCount.count} member(s). Remove all members before deleting.`
+        error: 'Cannot delete team with active users',
+        hasActiveUsers: true,
+        userCount: activeUsers.length,
+        users: activeUsers.slice(0, 5).map((u: any) => `${u.first_name} ${u.last_name}`)
       });
     }
 
-    await query('DELETE FROM teams WHERE id = ?', [teamId]);
-    res.json({ message: 'Team deleted successfully' });
+    // Soft delete - deactivate the team instead of hard delete
+    await query('UPDATE teams SET is_active = false, updated_at = NOW() WHERE id = ?', [teamId]);
+    res.json({ message: 'Team deactivated successfully' });
   } catch (error: any) {
     console.error('Error deleting team:', error);
     res.status(500).json({ error: 'Failed to delete team', details: error.message });
@@ -610,13 +630,13 @@ router.delete('/users/:id', authenticateToken, async (req: any, res) => {
       }
     }
 
-    // Delete user from team_members first
-    await query('DELETE FROM team_members WHERE user_id = ?', [targetUserId]);
+    // Deactivate user instead of deleting
+    await query(
+      'UPDATE users SET is_active = false, updated_at = NOW() WHERE id = ?',
+      [targetUserId]
+    );
     
-    // Delete user
-    await query('DELETE FROM users WHERE id = ?', [targetUserId]);
-    
-    res.json({ message: 'User deleted successfully' });
+    res.json({ message: 'User deactivated successfully', deactivated: true });
   } catch (error: any) {
     console.error('Error deleting user:', error);
     res.status(500).json({ error: 'Failed to delete user', details: error.message });
@@ -811,28 +831,38 @@ router.delete('/departments/:id', authenticateToken, async (req: any, res) => {
       return res.status(404).json({ error: 'Department not found' });
     }
 
-    // Check if department has teams
-    const teams = await query<any>(
-      'SELECT id FROM teams WHERE department_id = ?',
+    // Check if department has active teams
+    const activeTeams = await query<any>(
+      'SELECT id, name FROM teams WHERE department_id = ? AND is_active = true',
       [id]
     );
 
-    if (teams.length > 0) {
-      return res.status(400).json({ error: 'Cannot delete department with existing teams' });
+    if (activeTeams.length > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete department with active teams',
+        hasActiveTeams: true,
+        teamCount: activeTeams.length,
+        teams: activeTeams.slice(0, 5).map((t: any) => t.name)
+      });
     }
 
-    // Check if department has users
-    const users = await query<any>(
-      'SELECT id FROM users WHERE department_id = ?',
+    // Check if department has active users
+    const activeUsers = await query<any>(
+      'SELECT id, first_name, last_name FROM users WHERE department_id = ? AND is_active = true',
       [id]
     );
 
-    if (users.length > 0) {
-      return res.status(400).json({ error: 'Cannot delete department with assigned users' });
+    if (activeUsers.length > 0) {
+      return res.status(400).json({ 
+        error: 'Cannot delete department with active users',
+        hasActiveUsers: true,
+        userCount: activeUsers.length,
+        users: activeUsers.slice(0, 5).map((u: any) => `${u.first_name} ${u.last_name}`)
+      });
     }
 
-    // Delete department
-    await query('DELETE FROM departments WHERE id = ? AND company_id = ?', [id, companyId]);
+    // Soft delete - deactivate the department
+    await query('UPDATE departments SET is_active = false, updated_at = NOW() WHERE id = ? AND company_id = ?', [id, companyId]);
 
     res.json({ message: 'Department deleted successfully' });
   } catch (error) {

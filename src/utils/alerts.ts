@@ -134,3 +134,59 @@ export const showAlert = (title: string, message: string, icon: 'success' | 'err
     }
   });
 };
+
+// Warning for items that cannot be deleted due to dependencies
+export const showCannotDeleteWarning = (
+  itemType: 'team' | 'department' | 'user',
+  reason: string,
+  dependencyList?: string[]
+) => {
+  let html = `<p class="mb-3">${reason}</p>`;
+  
+  if (dependencyList && dependencyList.length > 0) {
+    html += `<div class="text-left bg-gray-100 dark:bg-slate-700 rounded-lg p-3 mt-2">
+      <p class="font-medium mb-2">Active ${itemType === 'department' ? 'teams/users' : 'users'}:</p>
+      <ul class="list-disc list-inside text-sm">
+        ${dependencyList.map(item => `<li>${item}</li>`).join('')}
+      </ul>
+      ${dependencyList.length >= 5 ? '<p class="text-xs text-gray-500 mt-2">...and more</p>' : ''}
+    </div>`;
+  }
+
+  return swalWithStyledButtons.fire({
+    title: `Cannot Delete ${itemType.charAt(0).toUpperCase() + itemType.slice(1)}`,
+    html,
+    icon: 'warning',
+    confirmButtonText: 'I Understand',
+    customClass: {
+      popup: 'swal2-compact dark:bg-slate-800',
+      title: 'text-lg font-semibold dark:text-white text-amber-600',
+      htmlContainer: 'text-sm dark:text-slate-300',
+      confirmButton: 'px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition-colors'
+    }
+  });
+};
+
+// Confirm deactivation instead of deletion
+export const confirmDeactivate = async (itemName: string, itemType: string = 'user') => {
+  const result = await swalWithStyledButtons.fire({
+    title: 'Deactivate User?',
+    html: `<strong>${itemName}</strong> will be deactivated and will no longer be able to log in.<br><br>
+           <span class="text-sm text-gray-500">This action can be reversed by reactivating the user later.</span>`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Yes, deactivate',
+    cancelButtonText: 'Cancel',
+    reverseButtons: true,
+    customClass: {
+      popup: 'swal2-compact dark:bg-slate-800',
+      title: 'text-lg font-semibold dark:text-white',
+      htmlContainer: 'text-sm dark:text-slate-300',
+      confirmButton: 'px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-lg transition-colors',
+      cancelButton: 'px-5 py-2.5 bg-gray-500 hover:bg-gray-600 text-white font-medium rounded-lg transition-colors mr-2',
+      actions: 'gap-2'
+    }
+  });
+
+  return { isConfirmed: result.isConfirmed };
+};

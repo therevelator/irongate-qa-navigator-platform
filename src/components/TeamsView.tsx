@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { Users, Search, Edit2, Trash2, UserPlus, Save } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
-import { confirmDelete } from '../utils/alerts';
+import { confirmDelete, showCannotDeleteWarning, showSuccess } from '../utils/alerts';
 
 interface Team {
   id: string;
@@ -223,10 +223,21 @@ const TeamsView: React.FC = () => {
                                     });
                                     
                                     if (response.ok) {
-                                      toast.success('Team deleted successfully!');
+                                      showSuccess(`${team.name} has been deactivated`);
                                       fetchData(); // Refresh the list
                                     } else {
-                                      toast.error('Failed to delete team');
+                                      const error = await response.json();
+                                      
+                                      // Show detailed warning if team has active users
+                                      if (error.hasActiveUsers) {
+                                        showCannotDeleteWarning(
+                                          'team',
+                                          `This team has ${error.userCount} active user(s). Please reassign or deactivate all users first.`,
+                                          error.users
+                                        );
+                                      } else {
+                                        toast.error(error.error || 'Failed to delete team');
+                                      }
                                     }
                                   } catch (error) {
                                     console.error('Error deleting team:', error);

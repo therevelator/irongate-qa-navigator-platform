@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Plus, Trash2, Edit2, Save, X, Building2, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
-import { confirmDelete } from '../utils/alerts';
+import { confirmDelete, showCannotDeleteWarning, showSuccess } from '../utils/alerts';
 
 interface Team {
   id: string;
@@ -89,11 +89,21 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
       });
 
       if (response.ok) {
-        toast.success('Team deleted successfully');
+        showSuccess(`${team?.name || 'Team'} has been deactivated`);
         fetchData();
       } else {
         const error = await response.json();
-        toast.error(error.error || 'Failed to delete team');
+        
+        // Show detailed warning if team has active users
+        if (error.hasActiveUsers) {
+          showCannotDeleteWarning(
+            'team',
+            `This team has ${error.userCount} active user(s). Please reassign or deactivate all users first.`,
+            error.users
+          );
+        } else {
+          toast.error(error.error || 'Failed to delete team');
+        }
       }
     } catch (error) {
       console.error('Error deleting team:', error);
