@@ -2,8 +2,12 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
-import { broadcast } from '../websocket';
-import { wss } from '../index';
+
+// WebSocket imports - disabled for Netlify Functions compatibility
+// import { broadcast } from '../websocket';
+// import { wss } from '../index';
+const broadcast = (_wss: any, _data: any) => {}; // No-op in serverless
+const wss = null; // Not available in serverless
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';

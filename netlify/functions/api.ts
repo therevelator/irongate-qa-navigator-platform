@@ -3,7 +3,7 @@ import serverless from 'serverless-http';
 import cors from 'cors';
 import { testConnection } from '../../src/lib/db';
 
-// Import routes
+// Import routes - Note: These will be bundled by esbuild
 import authRoutes from '../../server/routes/auth';
 import teamsRoutes from '../../server/routes/teams';
 import metricsRoutes from '../../server/routes/metrics';

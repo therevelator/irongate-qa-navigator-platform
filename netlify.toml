@@ -6,6 +6,10 @@
 [build.environment]
   NODE_VERSION = "18"
 
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["mysql2"]
+
 # Redirect API calls to serverless functions
 [[redirects]]
   from = "/api/*"
