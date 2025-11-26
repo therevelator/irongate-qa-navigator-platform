@@ -429,7 +429,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
 
-  const canCreateTeam = user?.role === 'qa_manager' || user?.role === 'super_admin';
+  const canCreateTeam = user?.role === 'manager' || user?.role === 'super_admin';
 
   const toggleDepartment = (deptId: string) => {
     const newExpanded = new Set(expandedDepartments);
@@ -471,65 +471,69 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     <>
       <Toaster position="top-right" />
       {/* Team Detail View */}
-      {selectedTeam ? (
-        <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
-          <div className="max-w-7xl mx-auto space-y-6">
-            {/* Back Button */}
-            <button
-              onClick={() => setSelectedTeam(null)}
-              className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
-            >
-              <ArrowLeft className="w-5 h-5" />
-              Back to Teams
-            </button>
+      {selectedTeam ? (() => {
+        // Get team members for the selected team
+        const teamUsers = getUsersByTeam(selectedTeam.id);
+        
+        return (
+          <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
+            <div className="max-w-7xl mx-auto space-y-6">
+              {/* Back Button */}
+              <button
+                onClick={() => setSelectedTeam(null)}
+                className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-4"
+              >
+                <ArrowLeft className="w-5 h-5" />
+                Back to Teams
+              </button>
 
-            {/* Team Header */}
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedTeam.name}</h1>
-                  <p className="text-sm text-gray-400 dark:text-slate-400 mt-1">{selectedTeam.description || 'No description'}</p>
-                  <div className="flex gap-2 mt-2">
-                    <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300">
-                      {selectedTeam.platform}
-                    </span>
-                    <span className={`px-2 py-1 text-xs font-medium rounded-full ${selectedTeam.is_active ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300' : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300'}`}>
-                      {selectedTeam.is_active ? 'Active' : 'Inactive'}
-                    </span>
+              {/* Team Header */}
+              <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{selectedTeam.name}</h1>
+                    <p className="text-sm text-gray-400 dark:text-slate-400 mt-1">{selectedTeam.description || 'No description'}</p>
+                    <div className="flex gap-2 mt-2">
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300">
+                        {selectedTeam.platform}
+                      </span>
+                      <span className={`px-2 py-1 text-xs font-medium rounded-full ${selectedTeam.is_active ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300' : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-300'}`}>
+                        {selectedTeam.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-3xl font-bold text-gray-600 dark:text-slate-400">{teamUsers.length}</div>
+                    <div className="text-sm text-gray-600 dark:text-slate-400">Team Members</div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <div className="text-3xl font-bold text-gray-600 dark:text-slate-400">{teamUsers.length}</div>
-                  <div className="text-sm text-gray-600 dark:text-slate-400">Team Members</div>
-                </div>
               </div>
-            </div>
 
-            {/* Team Members Table */}
-            <div className="bg-white dark:bg-slate-800 rounded-lg shadow">
-              <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
-                <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Team Members</h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 dark:bg-slate-700">
-                    <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Name</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Email</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Role</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Status</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {teamUsers.length === 0 ? (
+              {/* Team Members Table */}
+              <div className="bg-white dark:bg-slate-800 rounded-lg shadow">
+                <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">Team Members</h2>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50 dark:bg-slate-700">
                       <tr>
-                        <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">
-                          No team members found
-                        </td>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Name</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Email</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Role</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 dark:text-slate-300 uppercase">Actions</th>
                       </tr>
-                    ) : (
-                      teamUsers.map((u) => (
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {teamUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={5} className="px-6 py-8 text-center text-gray-500 dark:text-slate-400">
+                            No team members found
+                          </td>
+                        </tr>
+                      ) : (
+                        teamUsers.map((u: User) => (
                         <tr key={u.id} className="hover:bg-gray-50 dark:bg-slate-700">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="font-medium text-gray-900 dark:text-white">{u.first_name} {u.last_name}</div>
@@ -591,7 +595,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
             </div>
           </div>
         </div>
-      ) : (
+        );
+      })() : (
         /* Main Admin Panel View */
     <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
       <div className="max-w-7xl mx-auto space-y-6">
