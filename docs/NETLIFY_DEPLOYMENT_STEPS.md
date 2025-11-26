@@ -67,10 +67,10 @@ netlify init
 
 ```bash
 # Set your Aiven database URL
-netlify env:set DATABASE_URL "mysql://avnadmin:AVNS_jfRJN8oWbmU8xXWDX3u@mysql-11d3e650-ionut-817b.b.aivencloud.com:16234/defaultdb?ssl-mode=REQUIRED"
+netlify env:set DATABASE_URL "mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED"
 
 # Set JWT secret for authentication
-netlify env:set JWT_SECRET "6hVmrBsWmrOmL6BtYex+hK7RlGda7JguXXhMD1VZzUs="
+netlify env:set JWT_SECRET "your-generated-jwt-secret-here"
 
 # Verify they were set
 netlify env:list
@@ -201,7 +201,7 @@ Your app should already be configured to use relative URLs (`/api/*`), which Net
 ```bash
 # Connect to your database
 mysql --user=avnadmin \
-      --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+      --password=YOUR_AIVEN_PASSWORD \
       --host=mysql-11d3e650-ionut-817b.b.aivencloud.com \
       --port=16234 \
       --ssl-mode=REQUIRED \
@@ -271,7 +271,7 @@ netlify functions:log
 ```bash
 # Test from your local machine
 mysql --user=avnadmin \
-      --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+      --password=YOUR_AIVEN_PASSWORD \
       --host=mysql-11d3e650-ionut-817b.b.aivencloud.com \
       --port=16234 \
       --ssl-mode=REQUIRED \

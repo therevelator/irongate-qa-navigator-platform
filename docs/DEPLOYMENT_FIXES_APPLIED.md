@@ -75,9 +75,9 @@ Once build succeeds, you MUST set these:
 2. Add these two variables:
 
 ```bash
-DATABASE_URL = mysql://avnadmin:AVNS_jfRJN8oWbmU8xXWDX3u@mysql-11d3e650-ionut-817b.b.aivencloud.com:16234/defaultdb?ssl-mode=REQUIRED
+DATABASE_URL = mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED
 
-JWT_SECRET = 6hVmrBsWmrOmL6BtYex+hK7RlGda7JguXXhMD1VZzUs=
+JWT_SECRET = your-generated-jwt-secret-here
 ```
 
 3. **Trigger redeploy**: Go to Deploys tab → "Trigger deploy" → "Deploy site"

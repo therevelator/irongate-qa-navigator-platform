@@ -74,6 +74,14 @@ source database/schema.sql
 
 ## 🚀 Step 3: Deploy to Netlify (8 minutes)
 
+### Prerequisites
+
+The app is configured for Netlify with:
+- ✅ **Serverless Functions** - Backend runs as Netlify Functions (no separate server needed)
+- ✅ **esbuild bundler** - Automatically bundles TypeScript
+- ✅ **API redirects** - `/api/*` routes to functions
+- ✅ **Environment variables** - Secure config management
+
 ### Automated Deployment (Easiest)
 
 ```bash
@@ -90,35 +98,130 @@ source database/schema.sql
 ### Manual Deployment
 
 ```bash
-# 1. Install Netlify CLI
+# 1. Install dependencies (includes serverless-http)
+npm install
+
+# 2. Install Netlify CLI
 npm install -g netlify-cli
 
-# 2. Login
+# 3. Login
 netlify login
 
-# 3. Initialize site
+# 4. Initialize site
 netlify init
 
-# 4. Set environment variables
+# 5. Set environment variables (CRITICAL!)
 netlify env:set DATABASE_URL "your-mysql-connection-string"
 netlify env:set JWT_SECRET "your-secret-key-here"
 
-# 5. Build and deploy
+# 6. Build and deploy
 npm run build
 netlify deploy --prod
 ```
+
+### Deploy from Git (Recommended)
+
+1. **Push to GitHub**
+   ```bash
+   git add -A
+   git commit -m "Deploy to Netlify"
+   git push origin main
+   ```
+
+2. **Connect to Netlify**
+   - Go to [app.netlify.com](https://app.netlify.com)
+   - Click "Add new site" → "Import an existing project"
+   - Choose GitHub → Select your repo
+   - Build settings are auto-detected from `netlify.toml`
+
+3. **Set Environment Variables**
+   - Site configuration → Environment variables
+   - Add `DATABASE_URL` and `JWT_SECRET`
+   - Trigger redeploy
+
+4. **Done!** Auto-deploys on every push ✅
 
 ---
 
 ## ✅ Verify Deployment
 
-1. **Visit your site**: `https://your-app.netlify.app`
-2. **Test login**: Use demo credentials or create account
-3. **Check database**: Verify data is saving
+1. **Test Function Health**
+   ```
+   https://your-app.netlify.app/.netlify/functions/api/health
+   ```
+   Should return: `{"status":"ok","timestamp":"...","environment":"netlify-functions"}`
+
+2. **Visit your site**: `https://your-app.netlify.app`
+
+3. **Test login**: Use demo credentials or create account
+
+4. **Check database**: Verify data is saving
+
+5. **Check Network Tab** (F12 → Network)
+   - API calls should go to `/api/*` (same domain)
+   - No CORS errors ✅
+
+---
+
+## 🏗️ Architecture (How It Works)
+
+### Monorepo Structure
+```
+qa-dashboard/
+├── src/                    # Frontend (React + Vite)
+├── server/                 # Backend routes (Express)
+├── netlify/functions/      # Serverless wrapper
+│   └── api.ts             # Wraps Express with serverless-http
+├── netlify.toml           # Netlify configuration
+└── package.json           # Dependencies
+```
+
+### Request Flow
+```
+Browser Request
+    ↓
+https://your-app.netlify.app/api/auth/login
+    ↓
+Netlify redirects to /.netlify/functions/api/auth/login
+    ↓
+Serverless Function (Express backend)
+    ↓
+MySQL Database (Aiven/AWS/Railway)
+    ↓
+Response back to browser
+```
+
+**Key Benefits:**
+- ✅ No CORS issues (same domain)
+- ✅ No separate backend server needed
+- ✅ Auto-scales with traffic
+- ✅ Single deployment for frontend + backend
 
 ---
 
 ## 🔧 Common Issues
+
+### CORS Errors
+**Symptom**: "Access to fetch at '...' from origin '...' has been blocked by CORS policy"
+
+**Cause**: Frontend using hardcoded localhost URLs or function not deployed
+
+**Fix**:
+1. Verify all components import from `src/config/api.ts`
+2. Check function deployed: `https://your-app.netlify.app/.netlify/functions/api/health`
+3. Clear browser cache (Ctrl+Shift+R)
+
+### Function Build Fails
+**Symptom**: "TypeError: argument handler must be a function"
+
+**Cause**: TypeScript imports not bundled correctly
+
+**Fix**: Already configured! Check `netlify.toml`:
+```toml
+[functions]
+  node_bundler = "esbuild"
+  external_node_modules = ["mysql2"]
+```
 
 ### Build Fails
 ```bash
@@ -128,9 +231,13 @@ npm run build
 ```
 
 ### Database Connection Error
-- Check your DATABASE_URL is correct
-- Ensure SSL mode is set: `?ssl-mode=REQUIRED`
-- Verify firewall allows connections
+**Symptom**: 500 errors on API calls
+
+**Fix**:
+- Check `DATABASE_URL` is set in Netlify env vars
+- Ensure SSL mode: `?ssl-mode=REQUIRED`
+- Verify database is running (Aiven/AWS console)
+- Check function logs in Netlify dashboard
 
 ### Environment Variables Not Working
 ```bash
@@ -139,7 +246,15 @@ netlify env:list
 
 # Re-set if needed
 netlify env:set DATABASE_URL "your-connection-string"
+
+# Trigger redeploy after setting
+netlify deploy --prod
 ```
+
+### WebSocket Errors in Logs
+**Note**: WebSocket is disabled in serverless (not needed for core functionality)
+- This is expected and doesn't affect the app
+- Real-time features work via polling in production
 
 ---
 

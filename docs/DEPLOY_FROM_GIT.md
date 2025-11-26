@@ -97,13 +97,13 @@ Your app won't work without these!
 2. **Add DATABASE_URL**
    - Click "Add a variable" → "Add a single variable"
    - Key: `DATABASE_URL`
-   - Value: `mysql://avnadmin:AVNS_jfRJN8oWbmU8xXWDX3u@mysql-11d3e650-ionut-817b.b.aivencloud.com:16234/defaultdb?ssl-mode=REQUIRED`
+   - Value: `mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED`
    - Click "Create variable"
 
 3. **Add JWT_SECRET**
    - Click "Add a variable" → "Add a single variable"
    - Key: `JWT_SECRET`
-   - Value: `6hVmrBsWmrOmL6BtYex+hK7RlGda7JguXXhMD1VZzUs=`
+   - Value: `your-generated-jwt-secret-here`
    - Click "Create variable"
 
 4. **Trigger Redeploy**
@@ -220,7 +220,7 @@ git push
 ```bash
 # Test locally first
 mysql --user=avnadmin \
-      --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+      --password=YOUR_AIVEN_PASSWORD \
       --host=mysql-11d3e650-ionut-817b.b.aivencloud.com \
       --port=16234 \
       --ssl-mode=REQUIRED \

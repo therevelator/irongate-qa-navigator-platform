@@ -13,7 +13,7 @@ echo ""
 AIVEN_HOST="mysql-11d3e650-ionut-817b.b.aivencloud.com"
 AIVEN_PORT="16234"
 AIVEN_USER="avnadmin"
-AIVEN_PASSWORD="AVNS_jfRJN8oWbmU8xXWDX3u"
+AIVEN_PASSWORD="YOUR_AIVEN_PASSWORD"
 AIVEN_DATABASE="defaultdb"
 
 # Build connection URL for Netlify

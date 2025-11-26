@@ -22,8 +22,8 @@ fi
 echo ""
 
 # Your database credentials
-DATABASE_URL="mysql://avnadmin:AVNS_jfRJN8oWbmU8xXWDX3u@mysql-11d3e650-ionut-817b.b.aivencloud.com:16234/defaultdb?ssl-mode=REQUIRED"
-JWT_SECRET="6hVmrBsWmrOmL6BtYex+hK7RlGda7JguXXhMD1VZzUs="
+DATABASE_URL="mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED"
+JWT_SECRET="your-generated-jwt-secret-here"
 
 echo "🔐 Step 1: Login to Netlify"
 echo "This will open your browser..."

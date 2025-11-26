@@ -9,9 +9,9 @@ Go to: **https://app.netlify.com/sites/irongate-qa/configuration/env**
 You need these two variables:
 
 ```bash
-DATABASE_URL = mysql://avnadmin:AVNS_jfRJN8oWbmU8xXWDX3u@mysql-11d3e650-ionut-817b.b.aivencloud.com:16234/defaultdb?ssl-mode=REQUIRED
+DATABASE_URL = mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED
 
-JWT_SECRET = 6hVmrBsWmrOmL6BtYex+hK7RlGda7JguXXhMD1VZzUs=
+JWT_SECRET = your-generated-jwt-secret-here
 ```
 
 **If these are NOT set:**

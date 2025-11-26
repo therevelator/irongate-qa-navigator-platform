@@ -35,7 +35,7 @@ Database: defaultdb
 #### Step 1: Test Connection
 ```bash
 mysql --user avnadmin \
-      --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+      --password=YOUR_AIVEN_PASSWORD \
       --host mysql-11d3e650-ionut-817b.b.aivencloud.com \
       --port 16234 \
       --ssl-mode=REQUIRED \
@@ -47,7 +47,7 @@ mysql --user avnadmin \
 #### Step 2: Initialize Database
 ```bash
 mysql --user avnadmin \
-      --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+      --password=YOUR_AIVEN_PASSWORD \
       --host mysql-11d3e650-ionut-817b.b.aivencloud.com \
       --port 16234 \
       --ssl-mode=REQUIRED \
@@ -59,7 +59,7 @@ mysql --user avnadmin \
 #### Step 3: Create Environment File
 ```bash
 cat > .env.local << 'EOF'
-DATABASE_URL=mysql://avnadmin:AVNS_jfRJN8oWbmU8xXWDX3u@mysql-11d3e650-ionut-817b.b.aivencloud.com:16234/defaultdb?ssl-mode=REQUIRED
+DATABASE_URL=mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED
 JWT_SECRET=your-secret-key-here
 VITE_API_URL=http://localhost:8888/api
 EOF
@@ -91,7 +91,7 @@ netlify login
 netlify init
 
 # Set environment variables
-netlify env:set DATABASE_URL "mysql://avnadmin:AVNS_jfRJN8oWbmU8xXWDX3u@mysql-11d3e650-ionut-817b.b.aivencloud.com:16234/defaultdb?ssl-mode=REQUIRED"
+netlify env:set DATABASE_URL "mysql://avnadmin:YOUR_AIVEN_PASSWORD@your-mysql-host.aivencloud.com:PORT/defaultdb?ssl-mode=REQUIRED"
 
 netlify env:set JWT_SECRET "$(openssl rand -base64 32)"
 
@@ -107,7 +107,7 @@ netlify deploy --prod
 ### 1. Check Tables Were Created
 ```bash
 mysql --user avnadmin \
-      --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+      --password=YOUR_AIVEN_PASSWORD \
       --host mysql-11d3e650-ionut-817b.b.aivencloud.com \
       --port 16234 \
       --ssl-mode=REQUIRED \
@@ -146,7 +146,7 @@ netlify open
 ### Issue: "Access denied for user"
 **Solution:** Check password is correct (no spaces)
 ```bash
-# Password: AVNS_jfRJN8oWbmU8xXWDX3u
+# Password: YOUR_AIVEN_PASSWORD
 ```
 
 ### Issue: "Can't connect to MySQL server"
@@ -177,7 +177,7 @@ ls -la database/schema.sql
 ```bash
 # Connect to database
 mysql --user avnadmin \
-      --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+      --password=YOUR_AIVEN_PASSWORD \
       --host mysql-11d3e650-ionut-817b.b.aivencloud.com \
       --port 16234 \
       --ssl-mode=REQUIRED \
@@ -192,7 +192,7 @@ SELECT * FROM teams;
 ### Backup Your Database
 ```bash
 mysqldump --user avnadmin \
-          --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+          --password=YOUR_AIVEN_PASSWORD \
           --host mysql-11d3e650-ionut-817b.b.aivencloud.com \
           --port 16234 \
           --ssl-mode=REQUIRED \
@@ -202,7 +202,7 @@ mysqldump --user avnadmin \
 ### Restore from Backup
 ```bash
 mysql --user avnadmin \
-      --password=AVNS_jfRJN8oWbmU8xXWDX3u \
+      --password=YOUR_AIVEN_PASSWORD \
       --host mysql-11d3e650-ionut-817b.b.aivencloud.com \
       --port 16234 \
       --ssl-mode=REQUIRED \

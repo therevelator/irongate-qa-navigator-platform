@@ -6,6 +6,18 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# Secrets scanning configuration
+[build.processing]
+  skip_processing = false
+
+[build.processing.secrets]
+  # Omit documentation files from secrets scanning
+  omit_paths = [
+    "docs/**/*.md",
+    "*.md",
+    "**/*.sh"
+  ]
+
 [functions]
   node_bundler = "esbuild"
   external_node_modules = ["mysql2"]
