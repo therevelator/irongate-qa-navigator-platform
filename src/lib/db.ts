@@ -1,21 +1,45 @@
 import mysql from 'mysql2/promise';
 
+// Parse DATABASE_URL or use individual env vars
+function getDatabaseConfig() {
+  // If DATABASE_URL is set (Netlify/production), parse it
+  if (process.env.DATABASE_URL) {
+    const url = new URL(process.env.DATABASE_URL);
+    return {
+      host: url.hostname,
+      port: parseInt(url.port || '3306'),
+      user: url.username,
+      password: url.password,
+      database: url.pathname.slice(1), // Remove leading slash
+      ssl: url.searchParams.get('ssl-mode') === 'REQUIRED' ? { rejectUnauthorized: true } : undefined
+    };
+  }
+  
+  // Otherwise use individual env vars (local development)
+  return {
+    host: process.env.DB_HOST || 'localhost',
+    port: parseInt(process.env.DB_PORT || '3306'),
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'irongate_qa'
+  };
+}
+
+const dbConfig = getDatabaseConfig();
+
 // Debug: Log connection config (remove in production)
 console.log('🔍 Database config:', {
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || '3306',
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD ? '***' + process.env.DB_PASSWORD.slice(-3) : 'EMPTY',
-  database: process.env.DB_NAME || 'irongate_qa'
+  host: dbConfig.host,
+  port: dbConfig.port,
+  user: dbConfig.user,
+  password: dbConfig.password ? '***' + dbConfig.password.slice(-3) : 'EMPTY',
+  database: dbConfig.database,
+  ssl: dbConfig.ssl ? 'enabled' : 'disabled'
 });
 
 // Create connection pool
 export const pool = mysql.createPool({
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '3306'),
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || '',
-  database: process.env.DB_NAME || 'irongate_qa',
+  ...dbConfig,
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
