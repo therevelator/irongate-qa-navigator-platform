@@ -11,7 +11,7 @@ function getDatabaseConfig() {
       user: url.username,
       password: url.password,
       database: url.pathname.slice(1), // Remove leading slash
-      ssl: url.searchParams.get('ssl-mode') === 'REQUIRED' ? { rejectUnauthorized: true } : undefined
+      ssl: url.searchParams.get('ssl-mode') === 'REQUIRED' ? { rejectUnauthorized: false } : undefined
     };
   }
   
