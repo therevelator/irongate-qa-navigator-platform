@@ -15,7 +15,9 @@
   omit_paths = [
     "docs/**/*.md",
     "*.md",
-    "**/*.sh"
+    "**/*.sh",
+    ".env",
+    ".env.*"
   ]
 
 [functions]
