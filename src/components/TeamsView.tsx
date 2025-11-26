@@ -15,7 +15,7 @@ interface Team {
   is_active: boolean;
 }
 
-const API_URL = 'http://localhost:3000/api';
+import API_URL from '../config/api';
 
 const TeamsView: React.FC = () => {
   const { user } = useAuth();

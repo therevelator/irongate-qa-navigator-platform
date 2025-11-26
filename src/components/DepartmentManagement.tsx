@@ -3,7 +3,7 @@ import { ArrowLeft, Plus, Edit2, Trash2, Building2, Save, X } from 'lucide-react
 import { useAuth } from '../contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 
-const API_URL = 'http://localhost:3000/api';
+import API_URL from '../config/api';
 
 interface Department {
   id: string;

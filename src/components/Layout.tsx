@@ -18,7 +18,7 @@ interface LayoutProps {
   onTabChange?: (tab: string) => void;
 }
 
-const API_URL = 'http://localhost:3000/api';
+import API_URL from '../config/api';
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange }) => {
   const { user, logout } = useAuth();

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Users, CheckCircle, AlertCircle, AlertTriangle, TrendingUp, Edit, Trash2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
-const API_URL = 'http://localhost:3000/api';
+import API_URL from '../config/api';
 
 interface DashboardStats {
   totalTeams: number;
