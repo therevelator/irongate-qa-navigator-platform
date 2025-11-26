@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Team } from '../data/mockData';
 import { generateDetailedKPIs } from '../data/detailedKPIs';
+import API_URL from '../config/api';
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Bug, Bot, BarChart3, Clock, GitPullRequest, Zap, Users } from 'lucide-react';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -47,7 +48,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
         }
 
         console.log(`Fetching members for team: ${team.id} (${team.name})`);
-        const response = await fetch(`http://localhost:3000/api/teams/${team.id}`, {
+        const response = await fetch(`${API_URL}/teams/${team.id}`, {
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'

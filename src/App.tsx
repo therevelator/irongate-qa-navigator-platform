@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Toaster } from 'react-hot-toast';
 import type { Team } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
+import API_URL from './config/api';
 import TeamDetailView from './components/TeamDetailView';
 import FeaturesMenu from './components/FeaturesMenu';
 import FlakyTestIntelligence from './components/FlakyTestIntelligence';
@@ -52,7 +53,7 @@ function App() {
 
       // Fetch teams with metrics from database
       try {
-        const teamsResponse = await fetch('http://localhost:3000/api/teams', { headers });
+        const teamsResponse = await fetch(`${API_URL}/teams`, { headers });
         if (teamsResponse.ok) {
           const { teams: teamsData } = await teamsResponse.json();
           
