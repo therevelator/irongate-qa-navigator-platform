@@ -15,33 +15,41 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
   const { themeName, isDark } = useTheme();
   const [filter, setFilter] = useState<'all' | 'high' | 'needs-attention'>('all');
   
-  // Theme-aware colors
-  const themeColors = {
+  // Theme detection
+  const isOcean = themeName === 'ocean';
+  const isAurora = themeName === 'aurora';
+  const isMinimal = themeName === 'minimal';
+  
+  // Theme-specific configurations
+  const themeConfig = {
     ocean: {
-      primary: 'cyan',
-      gradient: isDark 
-        ? 'from-slate-900 via-cyan-900/30 to-slate-800' 
-        : 'from-blue-50 via-cyan-50 to-teal-50',
-      accent: isDark ? 'bg-cyan-500' : 'bg-cyan-600',
-      accentHover: isDark ? 'hover:bg-cyan-400' : 'hover:bg-cyan-700',
-      glow: isDark ? 'shadow-cyan-500/20' : 'shadow-cyan-500/30',
-      blob1: isDark ? 'bg-cyan-500/20' : 'bg-cyan-200',
-      blob2: isDark ? 'bg-blue-500/20' : 'bg-blue-200',
+      heroGradient: isDark 
+        ? 'from-slate-950 via-cyan-950/40 to-slate-900' 
+        : 'from-sky-50 via-cyan-50 to-blue-50',
+      blob1: isDark ? 'bg-cyan-500/30' : 'bg-cyan-300/50',
+      blob2: isDark ? 'bg-blue-500/30' : 'bg-blue-300/50',
+      accentColor: isDark ? 'text-cyan-400' : 'text-cyan-600',
+      btnActive: 'filter-btn-active',
     },
     aurora: {
-      primary: 'emerald',
-      gradient: isDark 
-        ? 'from-slate-950 via-emerald-950/30 to-slate-900' 
-        : 'from-emerald-50 via-teal-50 to-lime-50',
-      accent: isDark ? 'bg-emerald-500' : 'bg-emerald-600',
-      accentHover: isDark ? 'hover:bg-emerald-400' : 'hover:bg-emerald-700',
-      glow: isDark ? 'shadow-emerald-500/20' : 'shadow-emerald-500/30',
-      blob1: isDark ? 'bg-emerald-500/20' : 'bg-emerald-200',
-      blob2: isDark ? 'bg-teal-500/20' : 'bg-teal-200',
+      heroGradient: isDark 
+        ? 'from-emerald-950 via-teal-950/40 to-slate-950' 
+        : 'from-emerald-50 via-teal-50 to-green-50',
+      blob1: isDark ? 'bg-emerald-500/25' : 'bg-emerald-300/40',
+      blob2: isDark ? 'bg-teal-500/25' : 'bg-teal-300/40',
+      accentColor: isDark ? 'text-emerald-400' : 'text-emerald-600',
+      btnActive: 'filter-btn-active',
+    },
+    minimal: {
+      heroGradient: isDark ? 'from-gray-900 to-gray-900' : 'from-gray-50 to-gray-50',
+      blob1: 'bg-transparent',
+      blob2: 'bg-transparent',
+      accentColor: isDark ? 'text-gray-300' : 'text-gray-700',
+      btnActive: isDark ? 'bg-gray-700' : 'bg-gray-800',
     }
   };
   
-  const colors = themeColors[themeName];
+  const config = themeConfig[themeName] || themeConfig.ocean;
 
   // Filter teams based on user role
   // QA Engineers and Viewers only see their own team
@@ -57,19 +65,22 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
     return true;
   });
 
-  // Aurora-specific classes
-  const isAurora = themeName === 'aurora';
+  // Main background based on theme
   const mainBg = isAurora
     ? isDark 
       ? 'bg-gradient-to-b from-slate-950 to-emerald-950'
       : 'bg-gradient-to-b from-emerald-50 to-teal-100'
-    : 'bg-gray-50 dark:bg-slate-950';
+    : isOcean
+      ? isDark
+        ? 'bg-gradient-to-b from-slate-950 to-cyan-950'
+        : 'bg-gradient-to-b from-sky-50 to-cyan-50'
+      : 'bg-gray-50 dark:bg-slate-950';
 
   return (
     <div className={`flex flex-col h-full overflow-auto ${mainBg}`}>
       {/* Hero Section - Theme-aware gradient */}
-      <div className={`bg-gradient-to-br ${colors.gradient} p-4 sm:p-6 relative overflow-hidden ${
-        isAurora && isDark ? 'border-b border-emerald-500/25' : ''
+      <div className={`bg-gradient-to-br ${config.heroGradient} p-4 sm:p-6 relative overflow-hidden ${
+        isAurora && isDark ? 'border-b border-emerald-500/25' : isOcean && isDark ? 'border-b border-cyan-500/20' : ''
       }`} style={{ minHeight: '150px' }}>
         <div className="relative z-10 max-w-7xl mx-auto">
           <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-3">
@@ -109,8 +120,12 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
         </div>
         {/* Animated background elements - Theme-aware */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className={`absolute -top-4 -right-4 w-32 h-32 sm:w-48 sm:h-48 ${colors.blob1} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`}></div>
-          <div className={`absolute -bottom-4 -left-4 w-32 h-32 sm:w-48 sm:h-48 ${colors.blob2} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`} style={{ animationDelay: '2s' }}></div>
+          {!isMinimal && (
+            <>
+              <div className={`absolute -top-4 -right-4 w-32 h-32 sm:w-48 sm:h-48 ${config.blob1} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`}></div>
+              <div className={`absolute -bottom-4 -left-4 w-32 h-32 sm:w-48 sm:h-48 ${config.blob2} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`} style={{ animationDelay: '2s' }}></div>
+            </>
+          )}
           {isAurora && isDark && (
             <>
               <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-emerald-400 rounded-full animate-pulse opacity-70"></div>
@@ -118,9 +133,17 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
               <div className="absolute top-1/2 right-1/3 w-1.5 h-1.5 bg-lime-300 rounded-full animate-pulse opacity-75" style={{ animationDelay: '1s' }}></div>
             </>
           )}
-          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-96 sm:h-96 rounded-full filter blur-3xl ${
-            isAurora && isDark ? 'bg-emerald-500/15' : isDark ? 'bg-white/5' : 'bg-white/30'
-          }`}></div>
+          {isOcean && isDark && (
+            <>
+              <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-cyan-400 rounded-full animate-pulse opacity-60"></div>
+              <div className="absolute bottom-1/4 left-1/4 w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse opacity-70" style={{ animationDelay: '0.7s' }}></div>
+            </>
+          )}
+          {!isMinimal && (
+            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-96 sm:h-96 rounded-full filter blur-3xl ${
+              isAurora && isDark ? 'bg-emerald-500/15' : isOcean && isDark ? 'bg-cyan-500/10' : isDark ? 'bg-white/5' : 'bg-white/30'
+            }`}></div>
+          )}
         </div>
       </div>
 
@@ -138,8 +161,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
               onClick={() => setFilter('all')}
               className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
                 filter === 'all'
-                  ? `${colors.accent} text-white shadow-lg ${colors.glow} scale-105`
-                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 hover:scale-102'
+                  ? `${config.btnActive} text-white shadow-lg scale-105`
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
               }`}
             >
               All Teams
@@ -148,8 +171,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
               onClick={() => setFilter('high')}
               className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
                 filter === 'high'
-                  ? `${colors.accent} text-white shadow-lg ${colors.glow} scale-105`
-                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 hover:scale-102'
+                  ? `${config.btnActive} text-white shadow-lg scale-105`
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
               }`}
             >
               High Performing
@@ -158,8 +181,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
               onClick={() => setFilter('needs-attention')}
               className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
                 filter === 'needs-attention'
-                  ? `${colors.accent} text-white shadow-lg ${colors.glow} scale-105`
-                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 hover:scale-102'
+                  ? `${config.btnActive} text-white shadow-lg scale-105`
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
               }`}
             >
               Needs Attention
@@ -167,34 +190,29 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           </div>
         </div>
 
-        {/* Teams as Rows - Responsive with Card Glow Effect */}
+        {/* Teams as Rows - Theme-specific card styles */}
         <div className="space-y-3">
           {filteredTeams.map((team, index) => (
             <div
               key={team.id}
               onClick={() => onTeamClick?.(team)}
-              className={`rounded-xl p-3 sm:p-4 hover:scale-[1.01] transition-all duration-300 cursor-pointer relative overflow-hidden group card-glow ${
-                isAurora
+              className={`team-card p-3 sm:p-4 cursor-pointer relative overflow-hidden group ${
+                isMinimal
                   ? isDark
-                    ? 'bg-[#1e0a3c]/80 backdrop-blur-md border border-purple-500/20 hover:border-purple-500/50 hover:shadow-[0_0_30px_rgba(192,132,252,0.3)]'
-                    : 'bg-white/70 backdrop-blur-md border border-fuchsia-200 hover:border-fuchsia-400 hover:shadow-[0_0_30px_rgba(192,38,211,0.2)]'
-                  : 'bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 hover:shadow-xl'
+                    ? 'bg-gray-800 border border-gray-700 rounded-xl hover:border-gray-600 transition-all duration-200'
+                    : 'bg-white border border-gray-200 rounded-xl hover:border-gray-300 hover:shadow-md transition-all duration-200'
+                  : ''
               }`}
               style={{ animationDelay: `${index * 50}ms` }}
             >
-              {/* Animated gradient border on hover - Theme-aware */}
-              <div className={`absolute inset-0 transition-all duration-500 ${
-                isAurora 
-                  ? 'bg-gradient-to-r from-violet-500/0 via-fuchsia-500/0 to-pink-500/0 group-hover:from-violet-500/15 group-hover:via-fuchsia-500/15 group-hover:to-pink-500/15'
-                  : 'bg-gradient-to-r from-cyan-500/0 via-blue-500/0 to-teal-500/0 group-hover:from-cyan-500/10 group-hover:via-blue-500/10 group-hover:to-teal-500/10'
-              }`}></div>
-              {/* Aurora neon border effect */}
-              {isAurora && isDark && (
-                <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
-                  style={{
-                    background: 'linear-gradient(45deg, transparent, rgba(192,132,252,0.1), transparent)',
-                    animation: 'gradientRotate 3s ease infinite'
-                  }}
+              {/* Soft theme-aware hover overlay (not on minimal) */}
+              {!isMinimal && (
+                <div
+                  className={`absolute inset-0 pointer-events-none rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${
+                    isAurora
+                      ? 'bg-emerald-500/5'
+                      : 'bg-cyan-500/5'
+                  }`}
                 />
               )}
               
@@ -204,9 +222,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                   {/* Team Info */}
                   <div className="flex-1 min-w-0 pr-3">
                     <h3 className={`text-base font-bold text-gray-900 dark:text-white mb-1 transition-colors truncate ${
-                      themeName === 'ocean' 
-                        ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
-                        : 'group-hover:text-violet-600 dark:group-hover:text-violet-400'
+                      isMinimal
+                        ? 'group-hover:text-gray-700 dark:group-hover:text-gray-200'
+                        : themeName === 'ocean' 
+                          ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
+                          : 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
                     }`}>
                       {team.name}
                     </h3>
@@ -275,9 +295,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 {/* Team Info */}
                 <div className="flex-shrink-0 w-32 lg:w-48">
                   <h3 className={`text-base lg:text-lg font-bold text-gray-900 dark:text-white mb-1 transition-colors truncate ${
-                    themeName === 'ocean' 
-                      ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
-                      : 'group-hover:text-violet-600 dark:group-hover:text-violet-400'
+                    isMinimal
+                      ? 'group-hover:text-gray-700 dark:group-hover:text-gray-200'
+                      : themeName === 'ocean' 
+                        ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
+                        : 'group-hover:text-emerald-600 dark:group-hover:text-emerald-400'
                   }`}>
                     {team.name}
                   </h3>
@@ -339,9 +361,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
 
                 {/* Arrow indicator - Hidden on tablet, shown on desktop - Theme-aware */}
                 <div className={`hidden lg:block flex-shrink-0 text-gray-400 group-hover:translate-x-1 transition-all ${
-                  themeName === 'ocean' 
-                    ? 'group-hover:text-cyan-600' 
-                    : 'group-hover:text-violet-600'
+                  isMinimal
+                    ? 'group-hover:text-gray-600'
+                    : themeName === 'ocean' 
+                      ? 'group-hover:text-cyan-600' 
+                      : 'group-hover:text-emerald-600'
                 }`}>
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />

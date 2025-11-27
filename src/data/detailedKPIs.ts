@@ -13,7 +13,51 @@ export interface DetailedKPI {
   history: { date: string; value: number }[];
 }
 
-export const generateDetailedKPIs = (team: Team): DetailedKPI[] => {
+// Extended Team type that includes kpiData from the API
+interface TeamWithKPI extends Team {
+  kpiData?: {
+    testCoverage?: number;
+    testFlakinessRate?: number;
+    defectDensity?: number;
+    defectEscapeRate?: number;
+    codeQualityScore?: number;
+    avgBuildTimeMinutes?: number;
+    testExecutionTimeMinutes?: number;
+    deploymentFrequencyPerWeek?: number;
+    leadTimeDays?: number;
+    mttrHours?: number;
+    parallelTestEfficiency?: number;
+    sprintVelocity?: number;
+    sprintCommitmentRate?: number;
+    sprintCarryover?: number;
+    firstTimePassRate?: number;
+    blockedTimeHours?: number;
+    automationCoverage?: number;
+    automationRoi?: number;
+    changeFailureRate?: number;
+    mtbfHours?: number;
+    systemAvailability?: number;
+    infrastructureFailures?: number;
+  };
+}
+
+// Helper to determine status based on value and thresholds
+const getStatus = (value: number | null | undefined, goodThreshold: number, warningThreshold: number, lowerIsBetter = false): 'good' | 'warning' | 'critical' => {
+  if (value === null || value === undefined) return 'warning';
+  if (lowerIsBetter) {
+    if (value <= goodThreshold) return 'good';
+    if (value <= warningThreshold) return 'warning';
+    return 'critical';
+  } else {
+    if (value >= goodThreshold) return 'good';
+    if (value >= warningThreshold) return 'warning';
+    return 'critical';
+  }
+};
+
+export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
+  const kpi = team.kpiData || {};
+  
   const generateHistory = (base: number, variance: number) => {
     const dates = Array.from({ length: 30 }, (_, i) => {
       const d = new Date();
@@ -26,473 +70,343 @@ export const generateDetailedKPIs = (team: Team): DetailedKPI[] => {
     }));
   };
 
+  // Use real data from kpiData if available, otherwise generate mock data
+  const getValue = (realValue: number | null | undefined, mockMin: number, mockMax: number): number => {
+    if (realValue !== null && realValue !== undefined) {
+      return Number(realValue);
+    }
+    return Number((mockMin + Math.random() * (mockMax - mockMin)).toFixed(2));
+  };
+
   return [
     // Quality & Reliability
     
-    /**
-     * TEST COVERAGE
-     * What: Percentage of codebase covered by automated tests (unit, integration, E2E)
-     * Why: Higher coverage reduces risk of undetected bugs and increases confidence in refactoring
-     * How: (Lines of code executed by tests / Total lines of code) × 100
-     * Target: >80% for critical paths, >70% overall
-     */
+    // TEST COVERAGE - Target: >80% for critical paths, >70% overall
     {
       id: 'test-coverage',
       name: 'Test Coverage',
-      value: Math.floor(60 + Math.random() * 35), // Mock: Random 60-95%. PROD: From coverage reports (Jest/Istanbul/Jacoco)
+      value: getValue(kpi.testCoverage, 60, 95),
       unit: '%',
-      change: Number((Math.random() * 5 - 2).toFixed(1)), // Mock: Random -2 to +5. PROD: Compare current vs previous sprint
+      change: Number((Math.random() * 5 - 2).toFixed(1)),
       trend: 'up',
-      status: 'good',
+      status: getStatus(kpi.testCoverage, 80, 70),
       category: 'quality',
       description: 'Percentage of code covered by automated tests',
-      history: generateHistory(75, 5) // Mock: 30 days of data around 75%. PROD: Daily coverage from CI/CD pipeline
+      history: generateHistory(getValue(kpi.testCoverage, 75, 75), 5)
     },
     
-    /**
-     * TEST FLAKINESS RATE
-     * What: Tests that produce inconsistent results without code changes
-     * Why: Flaky tests erode trust in CI/CD, waste developer time, and mask real issues
-     * How: (Number of flaky test runs / Total test runs) × 100
-     * Target: <2% (lower is better)
-     */
+    // TEST FLAKINESS RATE - Target: <2% (lower is better)
     {
       id: 'flakiness-rate',
       name: 'Test Flakiness Rate',
-      value: Number((Math.random() * 5).toFixed(1)), // Mock: Random 0-5%. PROD: Track test reruns in CI (Jenkins/CircleCI/GitHub Actions)
+      value: getValue(kpi.testFlakinessRate, 0, 5),
       unit: '%',
-      change: Number((Math.random() * 2 - 1).toFixed(1)), // Mock: Random -1 to +2. PROD: Week-over-week comparison
+      change: Number((Math.random() * 2 - 1).toFixed(1)),
       trend: 'down',
-      status: Math.random() > 0.7 ? 'warning' : 'good',
+      status: getStatus(kpi.testFlakinessRate, 2, 5, true),
       category: 'quality',
       description: 'Tests that fail intermittently without code changes',
-      history: generateHistory(2.5, 1) // Mock: 30 days around 2.5%. PROD: Daily flaky test count from test runner logs
+      history: generateHistory(getValue(kpi.testFlakinessRate, 2.5, 2.5), 1)
     },
     
-    /**
-     * DEFECT DENSITY
-     * What: Number of confirmed defects per thousand lines of code
-     * Why: Indicates code quality and helps predict maintenance effort
-     * How: (Total defects found / Total lines of code) × 1000
-     * Target: <0.5 defects per 1k LOC for mature code
-     */
+    // DEFECT DENSITY - Target: <0.5 defects per 1k LOC
     {
       id: 'defect-density',
       name: 'Defect Density',
-      value: Number((Math.random() * 1.5).toFixed(2)), // Mock: Random 0-1.5. PROD: Jira bugs / SonarQube LOC count
+      value: getValue(kpi.defectDensity, 0, 1.5),
       unit: '/1k LOC',
-      change: -0.1, // Mock: Fixed -0.1. PROD: Current sprint vs previous sprint density
+      change: -0.1,
       trend: 'down',
-      status: 'good',
+      status: getStatus(kpi.defectDensity, 0.5, 1.0, true),
       category: 'quality',
       description: 'Number of defects per thousand lines of code',
-      history: generateHistory(0.8, 0.2) // Mock: 30 days around 0.8. PROD: Sprint-by-sprint defect density from bug tracker
+      history: generateHistory(getValue(kpi.defectDensity, 0.8, 0.8), 0.2)
     },
     
-    /**
-     * DEFECT ESCAPE RATE
-     * What: Percentage of defects found in production vs. caught during testing
-     * Why: Measures testing effectiveness and user impact of quality issues
-     * How: (Defects found in production / Total defects found) × 100
-     * Target: <5% (most bugs caught before production)
-     */
+    // DEFECT ESCAPE RATE - Target: <5%
     {
       id: 'defect-escape-rate',
       name: 'Defect Escape Rate',
-      value: Number((Math.random() * 8).toFixed(1)), // Mock: Random 0-8%. PROD: Production bugs / Total bugs from Jira labels
+      value: getValue(kpi.defectEscapeRate, 0, 8),
       unit: '%',
-      change: -0.5, // Mock: Fixed -0.5. PROD: Compare production bug ratio sprint-over-sprint
+      change: -0.5,
       trend: 'down',
-      status: 'good',
+      status: getStatus(kpi.defectEscapeRate, 5, 10, true),
       category: 'quality',
       description: 'Bugs found in production vs. caught in testing',
-      history: generateHistory(4, 1) // Mock: 30 days around 4%. PROD: Weekly production incident count
+      history: generateHistory(getValue(kpi.defectEscapeRate, 4, 4), 1)
     },
     
-    /**
-     * CODE QUALITY SCORE
-     * What: Composite score from static analysis tools (SonarQube, CodeClimate, etc.)
-     * Why: Identifies technical debt, security vulnerabilities, and maintainability issues
-     * How: Weighted average of complexity, duplication, security issues, and code smells
-     * Target: >85/100 (A rating)
-     */
+    // CODE QUALITY SCORE - Target: >85/100
     {
       id: 'code-quality-score',
       name: 'Code Quality Score',
-      value: Math.floor(70 + Math.random() * 25), // Mock: Random 70-95. PROD: SonarQube/CodeClimate API quality gate score
+      value: getValue(kpi.codeQualityScore, 70, 95),
       unit: '/100',
-      change: 2, // Mock: Fixed +2. PROD: Current scan vs previous scan score delta
+      change: 2,
       trend: 'up',
-      status: 'good',
+      status: getStatus(kpi.codeQualityScore, 85, 70),
       category: 'quality',
       description: 'SonarQube or similar static analysis score',
-      history: generateHistory(85, 5) // Mock: 30 days around 85. PROD: Daily SonarQube scan results
+      history: generateHistory(getValue(kpi.codeQualityScore, 85, 85), 5)
     },
 
     // Speed & Efficiency
     
-    /**
-     * AVERAGE BUILD TIME
-     * What: Mean duration for CI/CD pipeline to compile, test, and package code
-     * Why: Faster builds enable quicker feedback and more frequent deployments
-     * How: Sum of all build times / Number of builds (over last 30 days)
-     * Target: <10 minutes for fast feedback loop
-     */
+    // AVERAGE BUILD TIME - Target: <10 minutes
     {
       id: 'build-time',
       name: 'Avg Build Time',
-      value: Math.floor(5 + Math.random() * 15), // Mock: Random 5-20 min. PROD: Average from Jenkins/CircleCI build duration API
+      value: getValue(kpi.avgBuildTimeMinutes, 5, 20),
       unit: 'min',
-      change: -1.5, // Mock: Fixed -1.5. PROD: This week's avg vs last week's avg
+      change: -1.5,
       trend: 'down',
-      status: 'good',
+      status: getStatus(kpi.avgBuildTimeMinutes, 10, 15, true),
       category: 'speed',
       description: 'Average time to complete CI/CD build',
-      history: generateHistory(12, 3) // Mock: 30 days around 12 min. PROD: Daily average build times from CI system
+      history: generateHistory(getValue(kpi.avgBuildTimeMinutes, 12, 12), 3)
     },
     
-    /**
-     * TEST EXECUTION TIME
-     * What: Total time to run entire automated test suite (unit + integration + E2E)
-     * Why: Long test times slow down CI/CD and reduce deployment frequency
-     * How: Sum of execution time for all test types in the pipeline
-     * Target: <30 minutes for full suite, <5 minutes for critical path
-     */
+    // TEST EXECUTION TIME - Target: <30 minutes
     {
       id: 'test-execution-time',
       name: 'Test Execution Time',
-      value: Math.floor(20 + Math.random() * 40), // Mock: Random 20-60 min. PROD: Sum of test stage durations from CI pipeline
+      value: getValue(kpi.testExecutionTimeMinutes, 20, 60),
       unit: 'min',
-      change: -2, // Mock: Fixed -2. PROD: Current sprint avg vs previous sprint avg
+      change: -2,
       trend: 'down',
-      status: 'good',
+      status: getStatus(kpi.testExecutionTimeMinutes, 30, 45, true),
       category: 'speed',
       description: 'Total time to run all automated tests',
-      history: generateHistory(45, 8) // Mock: 30 days around 45 min. PROD: Daily test execution time from test runner
+      history: generateHistory(getValue(kpi.testExecutionTimeMinutes, 45, 45), 8)
     },
     
-    /**
-     * DEPLOYMENT FREQUENCY
-     * What: Number of successful production deployments per week
-     * Why: High deployment frequency indicates mature DevOps practices and faster value delivery
-     * How: Count of production deployments / Number of weeks
-     * Target: >5 per week (daily or more for elite performers)
-     */
+    // DEPLOYMENT FREQUENCY - Target: >5 per week
     {
       id: 'deployment-frequency',
       name: 'Deployment Frequency',
-      value: Math.floor(5 + Math.random() * 15), // Mock: Random 5-20/week. PROD: Count production deploys from CD tool (Spinnaker/ArgoCD)
+      value: getValue(kpi.deploymentFrequencyPerWeek, 5, 20),
       unit: '/week',
-      change: 3, // Mock: Fixed +3. PROD: This week's count vs last week's count
+      change: 3,
       trend: 'up',
-      status: 'good',
+      status: getStatus(kpi.deploymentFrequencyPerWeek, 5, 2),
       category: 'speed',
       description: 'Number of deployments to production per week',
-      history: generateHistory(8, 2) // Mock: 30 days around 8/week. PROD: Daily deployment count aggregated weekly
+      history: generateHistory(getValue(kpi.deploymentFrequencyPerWeek, 8, 8), 2)
     },
     
-    /**
-     * LEAD TIME FOR CHANGES
-     * What: Time from code commit to running in production (DORA metric)
-     * Why: Shorter lead time means faster feature delivery and bug fixes
-     * How: Median time between commit timestamp and production deployment timestamp
-     * Target: <1 day (elite), <1 week (high), <1 month (medium)
-     */
+    // LEAD TIME FOR CHANGES - Target: <1 day (elite), <7 days (high)
     {
       id: 'lead-time',
       name: 'Lead Time for Changes',
-      value: Number((1 + Math.random() * 4).toFixed(1)), // Mock: Random 1-5 days. PROD: Median(deploy_time - commit_time) from Git + CD logs
+      value: getValue(kpi.leadTimeDays, 1, 5),
       unit: 'days',
-      change: -0.3, // Mock: Fixed -0.3. PROD: Current period median vs previous period
+      change: -0.3,
       trend: 'down',
-      status: 'good',
+      status: getStatus(kpi.leadTimeDays, 1, 7, true),
       category: 'speed',
       description: 'Time from commit to production deployment',
-      history: generateHistory(2.5, 0.5) // Mock: 30 days around 2.5 days. PROD: Daily median lead time calculation
+      history: generateHistory(getValue(kpi.leadTimeDays, 2.5, 2.5), 0.5)
     },
     
-    /**
-     * MEAN TIME TO REPAIR (MTTR)
-     * What: Average time to restore service after an incident (DORA metric)
-     * Why: Measures team's ability to quickly diagnose and fix production issues
-     * How: Sum of (incident resolution time - incident detection time) / Number of incidents
-     * Target: <1 hour (elite), <1 day (high)
-     */
+    // MEAN TIME TO REPAIR - Target: <1 hour (elite), <24 hours (high)
     {
       id: 'mttr',
       name: 'Mean Time to Repair',
-      value: Number((2 + Math.random() * 8).toFixed(1)), // Mock: Random 2-10 hrs. PROD: Avg(resolved_time - detected_time) from PagerDuty/Jira
+      value: getValue(kpi.mttrHours, 2, 10),
       unit: 'hours',
-      change: -1, // Mock: Fixed -1. PROD: This month's MTTR vs last month's MTTR
+      change: -1,
       trend: 'down',
-      status: 'good',
+      status: getStatus(kpi.mttrHours, 1, 24, true),
       category: 'speed',
       description: 'Average time to diagnose and fix failures',
-      history: generateHistory(5, 2) // Mock: 30 days around 5 hrs. PROD: Daily incident resolution times
+      history: generateHistory(getValue(kpi.mttrHours, 5, 5), 2)
     },
     
-    /**
-     * PARALLEL TEST EFFICIENCY
-     * What: How effectively tests run in parallel vs. sequential execution
-     * Why: Better parallelization reduces total test time and speeds up CI/CD
-     * How: (Sequential time / Parallel time) / Number of parallel workers × 100
-     * Target: >80% (near-linear scaling with workers)
-     */
+    // PARALLEL TEST EFFICIENCY - Target: >80%
     {
       id: 'parallel-efficiency',
       name: 'Parallel Test Efficiency',
-      value: Math.floor(70 + Math.random() * 25), // Mock: Random 70-95%. PROD: (Sequential time / Parallel time) / Workers from test logs
+      value: getValue(kpi.parallelTestEfficiency, 70, 95),
       unit: '%',
-      change: 2, // Mock: Fixed +2. PROD: Current efficiency vs previous sprint
+      change: 2,
       trend: 'up',
-      status: 'good',
+      status: getStatus(kpi.parallelTestEfficiency, 80, 60),
       category: 'speed',
       description: 'Efficiency of parallel test execution',
-      history: generateHistory(82, 5) // Mock: 30 days around 82%. PROD: Daily parallel execution metrics
+      history: generateHistory(getValue(kpi.parallelTestEfficiency, 82, 82), 5)
     },
 
     // Agile & Process
     
-    /**
-     * SPRINT VELOCITY
-     * What: Total story points completed in a sprint
-     * Why: Helps predict capacity and plan future sprints
-     * How: Sum of story points for all completed user stories in the sprint
-     * Target: Stable velocity (±10%) over 3-4 sprints indicates predictability
-     */
+    // SPRINT VELOCITY - Target: Stable velocity (±10%)
     {
       id: 'sprint-velocity',
       name: 'Sprint Velocity',
-      value: Math.floor(30 + Math.random() * 30), // Mock: Random 30-60 pts. PROD: Sum of completed story points from Jira/Azure DevOps
+      value: getValue(kpi.sprintVelocity, 30, 60),
       unit: 'pts',
-      change: 5, // Mock: Fixed +5. PROD: Current sprint vs previous sprint velocity
+      change: 5,
       trend: 'up',
-      status: 'good',
+      status: 'good', // Velocity doesn't have good/bad, just consistency
       category: 'agile',
       description: 'Story points completed per sprint',
-      history: generateHistory(45, 8) // Mock: 30 days around 45 pts. PROD: Sprint-by-sprint velocity history
+      history: generateHistory(getValue(kpi.sprintVelocity, 45, 45), 8)
     },
     
-    /**
-     * SPRINT COMMITMENT RATE
-     * What: Percentage of committed sprint work actually completed
-     * Why: Indicates planning accuracy and team's ability to meet commitments
-     * How: (Completed story points / Committed story points) × 100
-     * Target: >85% (high predictability)
-     */
+    // SPRINT COMMITMENT RATE - Target: >85%
     {
       id: 'sprint-commitment',
       name: 'Sprint Commitment Rate',
-      value: Math.floor(75 + Math.random() * 20), // Mock: Random 75-95%. PROD: (Completed points / Committed points) from sprint board
+      value: getValue(kpi.sprintCommitmentRate, 75, 95),
       unit: '%',
-      change: -2, // Mock: Fixed -2. PROD: Current sprint rate vs previous sprint rate
+      change: -2,
       trend: 'down',
-      status: 'warning',
+      status: getStatus(kpi.sprintCommitmentRate, 85, 70),
       category: 'agile',
       description: 'Percentage of committed work completed',
-      history: generateHistory(88, 5) // Mock: 30 days around 88%. PROD: Sprint-by-sprint commitment tracking
+      history: generateHistory(getValue(kpi.sprintCommitmentRate, 88, 88), 5)
     },
     
-    /**
-     * SPRINT CARRYOVER
-     * What: Work items not completed and moved to the next sprint
-     * Why: High carryover indicates poor estimation, scope creep, or blockers
-     * How: (Incomplete story points / Total committed story points) × 100
-     * Target: <10% (most work completed within sprint)
-     */
+    // SPRINT CARRYOVER - Target: <10%
     {
       id: 'sprint-carryover',
       name: 'Sprint Carryover',
-      value: Math.floor(5 + Math.random() * 20), // Mock: Random 5-25%. PROD: (Incomplete points / Committed points) from Jira query
+      value: getValue(kpi.sprintCarryover, 5, 25),
       unit: '%',
-      change: 3, // Mock: Fixed +3. PROD: Current sprint carryover vs previous sprint
+      change: 3,
       trend: 'up',
-      status: 'warning',
+      status: getStatus(kpi.sprintCarryover, 10, 20, true),
       category: 'agile',
       description: 'Work not completed and moved to next sprint',
-      history: generateHistory(12, 4) // Mock: 30 days around 12%. PROD: Sprint-by-sprint carryover percentage
+      history: generateHistory(getValue(kpi.sprintCarryover, 12, 12), 4)
     },
     
-    /**
-     * FIRST-TIME PASS RATE
-     * What: User stories that pass QA testing on the first attempt
-     * Why: Higher rate means better quality from development and clearer acceptance criteria
-     * How: (Stories passing QA first time / Total stories tested) × 100
-     * Target: >75% (most stories meet acceptance criteria initially)
-     */
+    // FIRST-TIME PASS RATE - Target: >75%
     {
       id: 'first-time-pass',
       name: 'First-Time Pass Rate',
-      value: Math.floor(60 + Math.random() * 30), // Mock: Random 60-90%. PROD: Stories with 0 QA rejections / Total stories from workflow
+      value: getValue(kpi.firstTimePassRate, 60, 90),
       unit: '%',
-      change: 2, // Mock: Fixed +2. PROD: Current sprint FTP vs previous sprint
+      change: 2,
       trend: 'up',
-      status: 'warning',
+      status: getStatus(kpi.firstTimePassRate, 75, 60),
       category: 'agile',
       description: 'Stories passing QA on first attempt',
-      history: generateHistory(70, 8) // Mock: 30 days around 70%. PROD: Sprint-by-sprint first-time pass tracking
+      history: generateHistory(getValue(kpi.firstTimePassRate, 70, 70), 8)
     },
     
-    /**
-     * BLOCKED TIME
-     * What: Total hours work items spend in "blocked" status per sprint
-     * Why: Identifies process bottlenecks and external dependencies
-     * How: Sum of (unblock time - block time) for all blocked tickets
-     * Target: <15 hours per sprint (minimal blocking)
-     */
+    // BLOCKED TIME - Target: <15 hours per sprint
     {
       id: 'blocked-time',
       name: 'Blocked Time',
-      value: Math.floor(10 + Math.random() * 20), // Mock: Random 10-30 hrs. PROD: Sum of time in 'Blocked' status from Jira workflow
+      value: getValue(kpi.blockedTimeHours, 10, 30),
       unit: 'hrs',
-      change: -4, // Mock: Fixed -4. PROD: Current sprint blocked time vs previous sprint
+      change: -4,
       trend: 'down',
-      status: 'good',
+      status: getStatus(kpi.blockedTimeHours, 15, 25, true),
       category: 'agile',
       description: 'Total hours tickets spent blocked per sprint',
-      history: generateHistory(18, 5) // Mock: 30 days around 18 hrs. PROD: Daily blocked time aggregated per sprint
+      history: generateHistory(getValue(kpi.blockedTimeHours, 18, 18), 5)
     },
     
-    /**
-     * TEST AUTOMATION COVERAGE
-     * What: Percentage of test cases that are automated vs. manual
-     * Why: Automation enables faster regression testing and continuous delivery
-     * How: (Automated test cases / Total test cases) × 100
-     * Target: >70% for regression tests, >50% overall
-     */
+    // TEST AUTOMATION COVERAGE - Target: >70%
     {
       id: 'automation-coverage',
       name: 'Test Automation Coverage',
-      value: Math.floor(60 + Math.random() * 35), // Mock: Random 60-95%. PROD: (Automated tests / Total test cases) from TestRail/Zephyr
+      value: getValue(kpi.automationCoverage, 60, 95),
       unit: '%',
-      change: 3, // Mock: Fixed +3. PROD: Current coverage vs previous sprint coverage
+      change: 3,
       trend: 'up',
-      status: 'good',
+      status: getStatus(kpi.automationCoverage, 70, 50),
       category: 'agile',
       description: 'Percentage of test cases automated',
-      history: generateHistory(75, 5) // Mock: 30 days around 75%. PROD: Sprint-by-sprint automation coverage growth
+      history: generateHistory(getValue(kpi.automationCoverage, 75, 75), 5)
     },
     
-    /**
-     * AUTOMATION ROI
-     * What: Return on investment from test automation efforts
-     * Why: Justifies automation investment and identifies high-value automation opportunities
-     * How: (Time saved by automation / Time invested in automation) × 100
-     * Target: >200% (automation saves more time than it costs)
-     */
+    // AUTOMATION ROI - Target: >200%
     {
       id: 'automation-roi',
       name: 'Automation ROI',
-      value: Math.floor(200 + Math.random() * 200), // Mock: Random 200-400%. PROD: (Time saved / Time invested) × 100 from time tracking
+      value: getValue(kpi.automationRoi, 200, 400),
       unit: '%',
-      change: 15, // Mock: Fixed +15. PROD: Current quarter ROI vs previous quarter
+      change: 15,
       trend: 'up',
-      status: 'good',
+      status: getStatus(kpi.automationRoi, 200, 100),
       category: 'agile',
       description: 'Return on investment for test automation',
-      history: generateHistory(280, 30) // Mock: 30 days around 280%. PROD: Monthly ROI calculation from automation metrics
+      history: generateHistory(getValue(kpi.automationRoi, 280, 280), 30)
     },
 
     // Reliability
     
-    /**
-     * CHANGE FAILURE RATE
-     * What: Percentage of deployments that cause production failures (DORA metric)
-     * Why: Measures deployment quality and risk; lower rate means more stable releases
-     * How: (Failed deployments requiring hotfix or rollback / Total deployments) × 100
-     * Target: <5% (elite), <15% (high), <30% (medium)
-     */
+    // CHANGE FAILURE RATE - Target: <5% (elite), <15% (high)
     {
       id: 'change-failure-rate',
       name: 'Change Failure Rate',
-      value: Number((Math.random() * 10).toFixed(1)), // Mock: Random 0-10%. PROD: (Failed deploys / Total deploys) from CD logs + incidents
+      value: getValue(kpi.changeFailureRate, 0, 10),
       unit: '%',
-      change: 0.5, // Mock: Fixed +0.5. PROD: This month's CFR vs last month's CFR
+      change: 0.5,
       trend: 'up',
-      status: 'warning',
+      status: getStatus(kpi.changeFailureRate, 5, 15, true),
       category: 'reliability',
       description: 'Deployments causing failures or rollbacks',
-      history: generateHistory(5, 2) // Mock: 30 days around 5%. PROD: Daily deployment success/failure tracking
+      history: generateHistory(getValue(kpi.changeFailureRate, 5, 5), 2)
     },
     
-    /**
-     * MEAN TIME BETWEEN FAILURES (MTBF)
-     * What: Average time the system operates without failure
-     * Why: Indicates system stability and reliability; higher is better
-     * How: Total operational time / Number of failures
-     * Target: >100 hours (stable system with infrequent failures)
-     */
+    // MEAN TIME BETWEEN FAILURES - Target: >100 hours
     {
       id: 'mtbf',
       name: 'Mean Time Between Failures',
-      value: Math.floor(80 + Math.random() * 80), // Mock: Random 80-160 hrs. PROD: Total uptime / Incident count from monitoring tools
+      value: getValue(kpi.mtbfHours, 80, 160),
       unit: 'hours',
-      change: 10, // Mock: Fixed +10. PROD: Current period MTBF vs previous period
+      change: 10,
       trend: 'up',
-      status: 'good',
+      status: getStatus(kpi.mtbfHours, 100, 50),
       category: 'reliability',
       description: 'Average time between system failures',
-      history: generateHistory(120, 20) // Mock: 30 days around 120 hrs. PROD: Daily MTBF calculation from incident logs
+      history: generateHistory(getValue(kpi.mtbfHours, 120, 120), 20)
     },
     
-    /**
-     * SYSTEM AVAILABILITY
-     * What: Percentage of time the system is operational and accessible
-     * Why: Critical for user satisfaction and SLA compliance
-     * How: (Total uptime / Total time) × 100
-     * Target: >99.9% (three nines), >99.99% (four nines for critical systems)
-     */
+    // SYSTEM AVAILABILITY - Target: >99.9%
     {
       id: 'availability',
       name: 'System Availability',
-      value: Number((99 + Math.random()).toFixed(2)), // Mock: Random 99-100%. PROD: (Uptime / Total time) × 100 from Datadog/New Relic
+      value: getValue(kpi.systemAvailability, 99, 100),
       unit: '%',
-      change: 0.1, // Mock: Fixed +0.1. PROD: Current month vs previous month availability
+      change: 0.1,
       trend: 'up',
-      status: 'good',
+      status: getStatus(kpi.systemAvailability, 99.9, 99),
       category: 'reliability',
       description: 'Uptime percentage',
-      history: generateHistory(99.5, 0.3) // Mock: 30 days around 99.5%. PROD: Hourly uptime checks aggregated daily
+      history: generateHistory(getValue(kpi.systemAvailability, 99.5, 99.5), 0.3)
     },
     
-    /**
-     * INFRASTRUCTURE FAILURES
-     * What: Test failures caused by infrastructure issues (not code defects)
-     * Why: Identifies environmental instability that impacts test reliability
-     * How: Count of test failures attributed to infrastructure (network, DB, services)
-     * Target: <5 per sprint (stable test infrastructure)
-     */
+    // INFRASTRUCTURE FAILURES - Target: <5 per sprint
     {
       id: 'infra-failures',
       name: 'Infrastructure Failures',
-      value: Math.floor(Math.random() * 8), // Mock: Random 0-8 count. PROD: Count of test failures tagged 'infrastructure' in test results
+      value: getValue(kpi.infrastructureFailures, 0, 8),
       unit: 'count',
-      change: -1, // Mock: Fixed -1. PROD: Current sprint count vs previous sprint count
+      change: -1,
       trend: 'down',
-      status: 'good',
+      status: getStatus(kpi.infrastructureFailures, 5, 10, true),
       category: 'reliability',
       description: 'Test failures due to infrastructure issues',
-      history: generateHistory(3, 2) // Mock: 30 days around 3 failures. PROD: Daily infrastructure failure count
+      history: generateHistory(getValue(kpi.infrastructureFailures, 3, 3), 2)
     },
     
-    /**
-     * ENVIRONMENT STARTUP TIME
-     * What: Time required to provision and start test environments
-     * Why: Faster startup enables quicker test execution and better developer experience
-     * How: Average time from environment request to ready state
-     * Target: <5 minutes (fast feedback), <10 minutes (acceptable)
-     */
+    // ENVIRONMENT STARTUP TIME - Target: <5 minutes (fast), <10 minutes (ok)
     {
       id: 'env-startup-time',
       name: 'Environment Startup Time',
-      value: Math.floor(5 + Math.random() * 15), // Mock: Random 5-20 min. PROD: Avg time from Docker/K8s provision to ready state
+      value: Math.floor(5 + Math.random() * 15), // No kpiData field for this yet
       unit: 'min',
-      change: 1, // Mock: Fixed +1. PROD: Current week avg vs previous week avg
+      change: 1,
       trend: 'up',
       status: 'warning',
       category: 'reliability',
       description: 'Time to provision test environments',
-      history: generateHistory(10, 3) // Mock: 30 days around 10 min. PROD: Daily environment startup time tracking
+      history: generateHistory(10, 3)
     }
   ];
 };

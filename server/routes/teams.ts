@@ -89,41 +89,61 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     const transformedTeams = teams.map(team => ({
       id: team.id,
       name: team.name,
-      department: team.department,
+      department: team.department || 'Unknown Department',
+      department_id: team.department_id,
       platform: team.platform,
       description: team.description,
       qaScore: team.qaScore || 0,
-      status: team.status || 'unknown',
+      status: (team.status === 'good' || team.status === 'warning' || team.status === 'critical') 
+        ? team.status 
+        : (team.qaScore >= 85 ? 'good' : team.qaScore >= 70 ? 'warning' : 'critical'),
       memberCount: team.member_count || 0,
       teamLead: team.team_lead_name,
+      velocity: Array.from({ length: 5 }, (_, i) => ({
+        sprint: `S${10 + i}`,
+        committed: Math.floor(40 + Math.random() * 20),
+        delivered: Math.floor(35 + Math.random() * 20)
+      })),
       metrics: [
         {
           id: 'test-coverage',
           name: 'Test Coverage',
           value: team.test_coverage || 0,
           unit: '%',
-          trend: 'up'
+          change: 2.5,
+          trend: 'up' as const,
+          status: (team.test_coverage || 0) >= 80 ? 'good' : (team.test_coverage || 0) >= 70 ? 'warning' : 'critical',
+          history: []
         },
         {
           id: 'defect-density',
           name: 'Defect Density',
           value: team.defect_density || 0,
-          unit: '',
-          trend: 'down'
+          unit: '/1k',
+          change: -0.1,
+          trend: 'down' as const,
+          status: (team.defect_density || 0) <= 0.5 ? 'good' : (team.defect_density || 0) <= 1.0 ? 'warning' : 'critical',
+          history: []
         },
         {
           id: 'automation-coverage',
           name: 'Automation',
           value: team.automation_coverage || 0,
           unit: '%',
-          trend: 'up'
+          change: 3,
+          trend: 'up' as const,
+          status: (team.automation_coverage || 0) >= 70 ? 'good' : (team.automation_coverage || 0) >= 50 ? 'warning' : 'critical',
+          history: []
         },
         {
           id: 'deployment-frequency',
           name: 'Deployments/Week',
           value: team.deployment_frequency_per_week || 0,
           unit: '',
-          trend: 'up'
+          change: 1,
+          trend: 'up' as const,
+          status: (team.deployment_frequency_per_week || 0) >= 5 ? 'good' : (team.deployment_frequency_per_week || 0) >= 2 ? 'warning' : 'critical',
+          history: []
         }
       ],
       technicalDebtScore: Math.round((team.code_quality_score || 80) * 0.3 + Math.random() * 20),
@@ -179,6 +199,46 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
 
     if (!team) {
       return res.status(404).json({ error: 'Team not found' });
+    }
+
+    // Get latest KPI snapshot for this team
+    const kpiSnapshot = await queryOne<any>(
+      `SELECT * FROM kpi_snapshots 
+       WHERE team_id = ? 
+       ORDER BY snapshot_date DESC 
+       LIMIT 1`,
+      [req.params.id]
+    );
+
+    // Add KPI data to team response
+    if (kpiSnapshot) {
+      team.qaScore = kpiSnapshot.qa_score;
+      team.status = kpiSnapshot.status;
+      team.kpiData = {
+        snapshotDate: kpiSnapshot.snapshot_date,
+        testCoverage: kpiSnapshot.test_coverage,
+        testFlakinessRate: kpiSnapshot.test_flakiness_rate,
+        defectDensity: kpiSnapshot.defect_density,
+        defectEscapeRate: kpiSnapshot.defect_escape_rate,
+        codeQualityScore: kpiSnapshot.code_quality_score,
+        avgBuildTimeMinutes: kpiSnapshot.avg_build_time_minutes,
+        testExecutionTimeMinutes: kpiSnapshot.test_execution_time_minutes,
+        deploymentFrequencyPerWeek: kpiSnapshot.deployment_frequency_per_week,
+        leadTimeDays: kpiSnapshot.lead_time_days,
+        mttrHours: kpiSnapshot.mttr_hours,
+        parallelTestEfficiency: kpiSnapshot.parallel_test_efficiency,
+        sprintVelocity: kpiSnapshot.sprint_velocity,
+        sprintCommitmentRate: kpiSnapshot.sprint_commitment_rate,
+        sprintCarryover: kpiSnapshot.sprint_carryover,
+        firstTimePassRate: kpiSnapshot.first_time_pass_rate,
+        blockedTimeHours: kpiSnapshot.blocked_time_hours,
+        automationCoverage: kpiSnapshot.automation_coverage,
+        automationRoi: kpiSnapshot.automation_roi,
+        changeFailureRate: kpiSnapshot.change_failure_rate,
+        mtbfHours: kpiSnapshot.mtbf_hours,
+        systemAvailability: kpiSnapshot.system_availability,
+        infrastructureFailures: kpiSnapshot.infrastructure_failures
+      };
     }
 
     // Get team members from team_members table (only active users)

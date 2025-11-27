@@ -22,6 +22,7 @@ import TeamsView from './components/TeamsView';
 import DepartmentsView from './components/DepartmentsView';
 import Layout from './components/Layout';
 import NewDashboard from './components/NewDashboard';
+import ManualMetricsInput from './components/ManualMetricsInput';
 
 function App() {
   const { user } = useAuth();
@@ -243,6 +244,14 @@ function App() {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <AdminPanel />
+      </Layout>
+    );
+  }
+
+  if (currentView === 'manual-metrics') {
+    return (
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
+        <ManualMetricsInput onBack={() => setCurrentView('dashboard')} />
       </Layout>
     );
   }

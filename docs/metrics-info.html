@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IronGate QA Navigator - Complete Metrics Guide</title>
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}:root{--primary:#0ea5e9;--accent:#10b981;--warning:#f59e0b;--bg-dark:#0f172a;--bg-card:#1e293b;--text-light:#f1f5f9;--border:#334155}body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg-dark);color:var(--text-light);line-height:1.6}.nav{position:fixed;top:0;left:0;right:0;background:rgba(15,23,42,.95);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);padding:1rem 2rem;z-index:1000;display:flex;justify-content:space-between;align-items:center}.nav-brand{font-size:1.25rem;font-weight:700;color:var(--primary)}.nav-links{display:flex;gap:1.5rem}.nav-links a{color:var(--text-light);text-decoration:none;font-size:.875rem;opacity:.8;transition:all .2s}.nav-links a:hover{opacity:1;color:var(--primary)}main{max-width:1400px;margin:0 auto;padding:6rem 2rem 4rem}.hero{text-align:center;padding:4rem 2rem;background:linear-gradient(135deg,var(--bg-card),var(--bg-dark));border-radius:1.5rem;margin-bottom:4rem;border:1px solid var(--border)}.hero h1{font-size:2.5rem;font-weight:800;margin-bottom:1rem;background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;color:transparent}.hero p{font-size:1.1rem;color:#94a3b8;max-width:800px;margin:0 auto}.section{margin-bottom:4rem}.section-header{display:flex;align-items:center;gap:1rem;margin-bottom:2rem;padding-bottom:1rem;border-bottom:2px solid var(--border)}.section-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:1.5rem}.section-icon.quality{background:linear-gradient(135deg,#10b981,#059669)}.section-icon.speed{background:linear-gradient(135deg,#0ea5e9,#0284c7)}.section-icon.agile{background:linear-gradient(135deg,#8b5cf6,#7c3aed)}.section-icon.reliability{background:linear-gradient(135deg,#f59e0b,#d97706)}.section-icon.composite{background:linear-gradient(135deg,#ec4899,#db2777)}.section-icon.sources{background:linear-gradient(135deg,#6366f1,#4f46e5)}.section-title{font-size:1.75rem;font-weight:700}.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:1.5rem}.metric-card{background:var(--bg-card);border-radius:1rem;padding:1.5rem;border:1px solid var(--border);transition:all .3s}.metric-card:hover{border-color:var(--primary);transform:translateY(-2px)}.metric-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:1rem}.metric-name{font-size:1.1rem;font-weight:600}.metric-id{font-size:.7rem;color:#64748b;font-family:monospace;background:var(--bg-dark);padding:.25rem .5rem;border-radius:4px}.metric-description{color:#94a3b8;font-size:.85rem;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}.metric-detail{margin-bottom:.75rem}.metric-label{font-size:.7rem;font-weight:600;color:var(--primary);text-transform:uppercase;letter-spacing:.05em;margin-bottom:.25rem}.metric-value{font-size:.85rem;color:#e2e8f0}.metric-formula{background:var(--bg-dark);padding:.75rem 1rem;border-radius:8px;font-family:monospace;font-size:.8rem;color:var(--accent);margin-top:.5rem}.metric-target{display:inline-block;padding:.25rem .75rem;border-radius:20px;font-size:.75rem;font-weight:600;background:rgba(16,185,129,.2);color:#10b981}.source-card{background:var(--bg-card);border-radius:1rem;padding:1.5rem;border:1px solid var(--border);margin-bottom:1.5rem}.source-header{display:flex;align-items:center;gap:1rem;margin-bottom:1rem}.source-logo{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:1.25rem;font-weight:700;color:#fff}.source-logo.jenkins{background:#d33833}.source-logo.jira{background:#0052cc}.source-logo.sonarqube{background:#4e9bd9}.source-logo.github{background:#333}.source-logo.datadog{background:#632ca6}.source-name{font-size:1.1rem;font-weight:600}.source-desc{font-size:.8rem;color:#94a3b8}.api-endpoint{background:var(--bg-dark);padding:.75rem;border-radius:8px;margin-bottom:.75rem;border-left:3px solid var(--primary);font-size:.8rem}.api-method{display:inline-block;padding:.125rem .4rem;border-radius:4px;font-size:.7rem;font-weight:700;background:#10b981;color:#fff;margin-right:.5rem}.api-path{font-family:monospace;color:#e2e8f0}.metrics-provided{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1rem}.metric-tag{padding:.2rem .6rem;background:rgba(14,165,233,.15);border:1px solid var(--primary);border-radius:20px;font-size:.7rem;color:var(--primary)}.composite-card{background:linear-gradient(135deg,var(--bg-card),rgba(14,165,233,.1));border:2px solid var(--primary);border-radius:1.5rem;padding:2rem;margin-bottom:2rem}.composite-title{font-size:1.5rem;font-weight:700;margin-bottom:1rem;display:flex;align-items:center;gap:.75rem}.weight-bar{display:flex;height:24px;border-radius:12px;overflow:hidden;margin:1.5rem 0}.weight-segment{display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:600;color:#fff}.weight-segment.coverage{background:#10b981;width:30%}.weight-segment.defect{background:#f59e0b;width:25%}.weight-segment.build{background:#0ea5e9;width:25%}.weight-segment.quality{background:#8b5cf6;width:20%}.formula-box{background:var(--bg-dark);padding:1.5rem;border-radius:12px;margin:1.5rem 0}.formula-title{font-size:.875rem;color:var(--primary);margin-bottom:.75rem;font-weight:600}.formula-code{font-family:monospace;font-size:.85rem;color:#e2e8f0;line-height:1.8}.formula-code .var{color:var(--accent)}.formula-code .num{color:#f59e0b}.formula-code .op{color:#94a3b8}.toc{background:var(--bg-card);border-radius:1rem;padding:1.5rem;border:1px solid var(--border);margin-bottom:3rem}.toc h2{font-size:1.1rem;margin-bottom:1rem;color:var(--primary)}.toc-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:.75rem}.toc-item{display:flex;align-items:center;gap:.75rem;padding:.6rem .75rem;background:var(--bg-dark);border-radius:8px;text-decoration:none;color:var(--text-light);font-size:.85rem;transition:all .2s}.toc-item:hover{background:rgba(14,165,233,.15);transform:translateX(4px)}.toc-number{width:22px;height:22px;border-radius:6px;background:var(--primary);color:#fff;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700}.flow-diagram{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:1rem;padding:1.5rem 0}.flow-box{padding:.75rem 1.25rem;border-radius:10px;text-align:center;min-width:120px;color:#fff}.flow-box.source{background:linear-gradient(135deg,#6366f1,#4f46e5)}.flow-box.aggregator{background:linear-gradient(135deg,#ec4899,#db2777)}.flow-box.storage{background:linear-gradient(135deg,#10b981,#059669)}.flow-box.display{background:linear-gradient(135deg,#0ea5e9,#0284c7)}.flow-arrow{font-size:1.25rem;color:#64748b}.flow-label{font-size:.65rem;font-weight:700;opacity:.8}.flow-name{font-weight:600;font-size:.85rem}footer{text-align:center;padding:2rem;border-top:1px solid var(--border);margin-top:3rem;color:#64748b;font-size:.85rem}@media(max-width:768px){.hero h1{font-size:1.75rem}.metrics-grid{grid-template-columns:1fr}.nav-links{display:none}.flow-diagram{flex-direction:column}.flow-arrow{transform:rotate(90deg)}}
+  </style>
+</head>
+<body>
+  <nav class="nav">
+    <div class="nav-brand">🛡️ IronGate Metrics Guide</div>
+    <div class="nav-links">
+      <a href="#sources">Data Sources</a>
+      <a href="#quality">Quality</a>
+      <a href="#speed">Speed</a>
+      <a href="#agile">Agile</a>
+      <a href="#reliability">Reliability</a>
+      <a href="#composite">QA Score</a>
+    </div>
+  </nav>
+
+  <main>
+    <section class="hero">
+      <h1>Complete Metrics Reference</h1>
+      <p>Comprehensive documentation of all 22+ metrics used in IronGate QA Navigator, including data sources, calculation methods, and how they combine to form the overall QA Score.</p>
+    </section>
+
+    <div class="toc">
+      <h2>📋 Table of Contents</h2>
+      <div class="toc-grid">
+        <a href="#sources" class="toc-item"><span class="toc-number">1</span>Data Sources (5)</a>
+        <a href="#quality" class="toc-item"><span class="toc-number">2</span>Quality Metrics (5)</a>
+        <a href="#speed" class="toc-item"><span class="toc-number">3</span>Speed Metrics (7)</a>
+        <a href="#agile" class="toc-item"><span class="toc-number">4</span>Agile Metrics (8)</a>
+        <a href="#reliability" class="toc-item"><span class="toc-number">5</span>Reliability Metrics (5)</a>
+        <a href="#composite" class="toc-item"><span class="toc-number">6</span>Composite QA Score</a>
+      </div>
+    </div>
+
+    <!-- Data Flow -->
+    <section class="section">
+      <div class="section-header">
+        <div class="section-icon sources">🏗️</div>
+        <h2 class="section-title">Data Flow Architecture</h2>
+      </div>
+      <div style="background:var(--bg-card);border-radius:1rem;padding:1.5rem;border:1px solid var(--border)">
+        <div class="flow-diagram">
+          <div class="flow-box source"><div class="flow-label">SOURCES</div><div class="flow-name">External APIs</div></div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-box aggregator"><div class="flow-label">AGGREGATOR</div><div class="flow-name">dataAggregator.ts</div></div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-box storage"><div class="flow-label">STORAGE</div><div class="flow-name">kpi_snapshots</div></div>
+          <span class="flow-arrow">→</span>
+          <div class="flow-box display"><div class="flow-label">DISPLAY</div><div class="flow-name">React Dashboard</div></div>
+        </div>
+        <p style="text-align:center;color:#94a3b8;font-size:.8rem;margin-top:1rem">Cron job syncs every 15 minutes: server/jobs/syncMetrics.ts</p>
+      </div>
+    </section>
+
+    <!-- Data Sources -->
+    <section id="sources" class="section">
+      <div class="section-header">
+        <div class="section-icon sources">🔌</div>
+        <h2 class="section-title">Data Sources</h2>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-logo jenkins">J</div>
+          <div><div class="source-name">Jenkins CI/CD</div><div class="source-desc">Build automation and continuous integration</div></div>
+        </div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/job/{name}/lastBuild/api/json</span> - Build duration, result, timestamp</div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/job/{name}/lastBuild/testReport/api/json</span> - Test pass/fail, duration, flaky data</div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/job/{name}/lastBuild/wfapi/describe</span> - Pipeline stages with durations</div>
+        <div class="metrics-provided">
+          <span class="metric-tag">Build Time</span><span class="metric-tag">Test Execution</span><span class="metric-tag">Flakiness Rate</span><span class="metric-tag">Deployment Freq</span><span class="metric-tag">First-Time Pass</span><span class="metric-tag">Change Failure Rate</span>
+        </div>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-logo jira">J</div>
+          <div><div class="source-name">Jira / Atlassian</div><div class="source-desc">Project management and issue tracking</div></div>
+        </div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/rest/api/3/search?jql=issuetype=Bug</span> - Bug tickets for defect metrics</div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/rest/agile/1.0/sprint/{sprintId}/issue</span> - Sprint issues with story points</div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/rest/api/3/issue/{key}/changelog</span> - Status transitions for blocked time</div>
+        <div class="metrics-provided">
+          <span class="metric-tag">Defect Density</span><span class="metric-tag">Escape Rate</span><span class="metric-tag">Sprint Velocity</span><span class="metric-tag">Commitment</span><span class="metric-tag">Carryover</span><span class="metric-tag">Blocked Time</span><span class="metric-tag">MTTR</span>
+        </div>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-logo sonarqube">S</div>
+          <div><div class="source-name">SonarQube</div><div class="source-desc">Static code analysis and quality gate</div></div>
+        </div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/api/measures/component?metricKeys=coverage,sqale_rating,bugs,ncloc</span></div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/api/issues/search?types=CODE_SMELL,BUG,VULNERABILITY</span></div>
+        <div class="metrics-provided">
+          <span class="metric-tag">Test Coverage</span><span class="metric-tag">Code Quality Score</span><span class="metric-tag">Technical Debt</span><span class="metric-tag">Vulnerabilities</span>
+        </div>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-logo github">G</div>
+          <div><div class="source-name">GitHub</div><div class="source-desc">Source control and PR management</div></div>
+        </div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/repos/{owner}/{repo}/pulls?state=all</span> - PR data for merge/review time</div>
+        <div class="metrics-provided">
+          <span class="metric-tag">Lead Time</span><span class="metric-tag">PR Merge Time</span><span class="metric-tag">Review Time</span>
+        </div>
+      </div>
+
+      <div class="source-card">
+        <div class="source-header">
+          <div class="source-logo datadog">D</div>
+          <div><div class="source-name">Datadog / New Relic</div><div class="source-desc">Application performance monitoring</div></div>
+        </div>
+        <div class="api-endpoint"><span class="api-method">GET</span><span class="api-path">/api/v1/monitor</span> - Uptime monitors for availability</div>
+        <div class="metrics-provided">
+          <span class="metric-tag">Availability</span><span class="metric-tag">MTBF</span><span class="metric-tag">Infra Failures</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quality Metrics -->
+    <section id="quality" class="section">
+      <div class="section-header">
+        <div class="section-icon quality">✅</div>
+        <h2 class="section-title">Quality & Reliability Metrics</h2>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Test Coverage</div><div class="metric-id">test-coverage</div></div>
+          <div class="metric-description">Percentage of codebase covered by automated tests. Higher coverage reduces risk of undetected bugs.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">SonarQube → /api/measures/component?metricKeys=coverage</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Lines executed by tests ÷ Total LOC) × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;80% critical, &gt;70% overall</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Test Flakiness Rate</div><div class="metric-id">flakiness-rate</div></div>
+          <div class="metric-description">Tests producing inconsistent results. Flaky tests erode CI/CD trust and waste developer time.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jenkins → track test reruns in testReport</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Flaky runs ÷ Total runs) × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;2% (lower is better)</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Defect Density</div><div class="metric-id">defect-density</div></div>
+          <div class="metric-description">Defects per thousand lines of code. Indicates code quality and predicts maintenance effort.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jira (bugs) + SonarQube (ncloc)</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Total bugs ÷ Lines of code) × 1000</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;0.5 per 1k LOC</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Defect Escape Rate</div><div class="metric-id">defect-escape-rate</div></div>
+          <div class="metric-description">Bugs found in production vs. caught during testing. Measures testing effectiveness.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jira → filter environment=Production</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Production bugs ÷ Total bugs) × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;5%</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Code Quality Score</div><div class="metric-id">code-quality-score</div></div>
+          <div class="metric-description">Composite from static analysis. Identifies tech debt, security issues, maintainability.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">SonarQube → sqale_rating, reliability_rating, security_rating</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Ratings: A=100, B=80, C=60, D=40, E=20<br>Weighted avg of 3 ratings</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;85/100 (A rating)</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Speed Metrics -->
+    <section id="speed" class="section">
+      <div class="section-header">
+        <div class="section-icon speed">⚡</div>
+        <h2 class="section-title">Speed & Efficiency Metrics</h2>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Average Build Time</div><div class="metric-id">build-time</div></div>
+          <div class="metric-description">Mean CI/CD pipeline duration. Faster builds enable quicker feedback loops.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jenkins → /job/{name}/lastBuild/api/json → duration</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Sum(build durations) ÷ Build count (30 days)</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;10 minutes</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Test Execution Time</div><div class="metric-id">test-execution-time</div></div>
+          <div class="metric-description">Total time to run automated test suite. Long times reduce deployment frequency.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jenkins → testReport/api/json → duration</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Sum of test stage durations</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;30 min full, &lt;5 min critical</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Deployment Frequency</div><div class="metric-id">deployment-frequency</div></div>
+          <div class="metric-description">Production deploys per week. High frequency = mature DevOps. <strong>(DORA)</strong></div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jenkins → deployment job builds[timestamp,result]</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Count(successful prod deploys) ÷ Weeks</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;5/week (daily for elite)</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Lead Time for Changes</div><div class="metric-id">lead-time</div></div>
+          <div class="metric-description">Time from commit to production. Shorter = faster delivery. <strong>(DORA)</strong></div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">GitHub (commit time) + Jenkins (deploy time)</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Median(deploy_timestamp - commit_timestamp)</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;1 day elite, &lt;1 week high</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Mean Time to Repair</div><div class="metric-id">mttr</div></div>
+          <div class="metric-description">Time to restore service after incident. Measures fix speed. <strong>(DORA)</strong></div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jira → Bug tickets with resolved dates</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Avg(resolved_date - detected_date)</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;1 hour elite, &lt;1 day high</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Parallel Test Efficiency</div><div class="metric-id">parallel-efficiency</div></div>
+          <div class="metric-description">How effectively tests parallelize. Better = faster total test time.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jenkins → wfapi/describe</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Sequential_time ÷ Parallel_time) ÷ Workers × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;80% (near-linear)</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Environment Startup</div><div class="metric-id">env-startup-time</div></div>
+          <div class="metric-description">Time to provision test environments. Faster = quicker test execution.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Docker/K8s provision logs</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Avg(ready_time - request_time)</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;5 min fast, &lt;10 min ok</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Agile Metrics -->
+    <section id="agile" class="section">
+      <div class="section-header">
+        <div class="section-icon agile">🔄</div>
+        <h2 class="section-title">Agile & Process Metrics</h2>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Sprint Velocity</div><div class="metric-id">sprint-velocity</div></div>
+          <div class="metric-description">Story points completed per sprint. Predicts capacity for planning.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jira → /rest/agile/1.0/sprint/{id}/issue</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Sum(story_points) WHERE status=Done</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">Stable ±10% over 3-4 sprints</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Sprint Commitment Rate</div><div class="metric-id">sprint-commitment</div></div>
+          <div class="metric-description">% of committed work completed. Indicates planning accuracy.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jira → sprint start vs end points</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Completed_points ÷ Committed_points) × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;85%</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Sprint Carryover</div><div class="metric-id">sprint-carryover</div></div>
+          <div class="metric-description">Work moved to next sprint. High = poor estimation or blockers.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jira → incomplete issues at sprint end</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Incomplete_points ÷ Committed_points) × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;10%</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">First-Time Pass Rate</div><div class="metric-id">first-time-pass</div></div>
+          <div class="metric-description">Stories passing QA first attempt. Higher = better dev quality.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jira → workflow transitions</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Stories with 0 rejections ÷ Total) × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;75%</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Blocked Time</div><div class="metric-id">blocked-time</div></div>
+          <div class="metric-description">Hours tickets spend blocked per sprint. Identifies bottlenecks.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jira → /rest/api/3/issue/{key}/changelog</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Sum(unblock_time - block_time)</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;15 hours/sprint</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Automation Coverage</div><div class="metric-id">automation-coverage</div></div>
+          <div class="metric-description">% of test cases automated vs manual. Enables faster regression.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">TestRail → /api/v2/get_cases/{project}</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Automated_tests ÷ Total_tests) × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;70% regression, &gt;50% overall</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Automation ROI</div><div class="metric-id">automation-roi</div></div>
+          <div class="metric-description">Return on automation investment. Justifies automation spending.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jenkins runs + time tracking</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Time_saved × Rate - Cost) ÷ Cost × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;200%</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Reliability Metrics -->
+    <section id="reliability" class="section">
+      <div class="section-header">
+        <div class="section-icon reliability">🛡️</div>
+        <h2 class="section-title">Reliability & Stability Metrics</h2>
+      </div>
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Change Failure Rate</div><div class="metric-id">change-failure-rate</div></div>
+          <div class="metric-description">Deploys causing failures/rollbacks. Measures deploy quality. <strong>(DORA)</strong></div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jenkins + incident tracking</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Failed_deploys ÷ Total_deploys) × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;5% elite, &lt;15% high</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Mean Time Between Failures</div><div class="metric-id">mtbf</div></div>
+          <div class="metric-description">Avg time system operates without failure. Higher = more stable.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Datadog/New Relic monitors</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Total_operational_hours ÷ Failures</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;100 hours</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">System Availability</div><div class="metric-id">availability</div></div>
+          <div class="metric-description">% time system is operational. Critical for SLA compliance.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Monitoring uptime checks</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">(Total_time - Downtime) ÷ Total_time × 100</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&gt;99.9% (three nines)</span></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-header"><div class="metric-name">Infrastructure Failures</div><div class="metric-id">infra-failures</div></div>
+          <div class="metric-description">Test failures from infra issues, not code. Identifies env instability.</div>
+          <div class="metric-detail"><div class="metric-label">Source</div><div class="metric-value">Jenkins → failures tagged 'infrastructure'</div></div>
+          <div class="metric-detail"><div class="metric-label">Formula</div><div class="metric-formula">Count of infra-caused test failures</div></div>
+          <div class="metric-detail"><div class="metric-label">Target</div><span class="metric-target">&lt;5 per sprint</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Composite QA Score -->
+    <section id="composite" class="section">
+      <div class="section-header">
+        <div class="section-icon composite">🎯</div>
+        <h2 class="section-title">Composite QA Score</h2>
+      </div>
+
+      <div class="composite-card">
+        <div class="composite-title"><span>📊</span>Overall QA Score Calculation</div>
+        <p style="color:#94a3b8;margin-bottom:1.5rem">The QA Score is a weighted composite (0-100) representing overall quality health, combining four key indicators.</p>
+
+        <h4 style="margin-bottom:.75rem;color:#e2e8f0">Component Weights</h4>
+        <div class="weight-bar">
+          <div class="weight-segment coverage">30%</div>
+          <div class="weight-segment defect">25%</div>
+          <div class="weight-segment build">25%</div>
+          <div class="weight-segment quality">20%</div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:1rem;justify-content:center;margin-bottom:1.5rem;font-size:.8rem">
+          <span><span style="color:#10b981">●</span> Test Coverage (30%)</span>
+          <span><span style="color:#f59e0b">●</span> Defect Escape Rate (25%)</span>
+          <span><span style="color:#0ea5e9">●</span> Build Success Rate (25%)</span>
+          <span><span style="color:#8b5cf6">●</span> Code Quality Score (20%)</span>
+        </div>
+
+        <div class="formula-box">
+          <div class="formula-title">Master Formula (from dataAggregator.ts)</div>
+          <div class="formula-code">
+            <span class="var">QA_Score</span> <span class="op">=</span> <span class="var">Test_Coverage</span> <span class="op">×</span> <span class="num">0.30</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="op">(</span><span class="num">100</span> <span class="op">-</span> <span class="var">Defect_Escape_Rate</span><span class="op">)</span> <span class="op">×</span> <span class="num">0.25</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="var">Build_Success_Rate</span> <span class="op">×</span> <span class="num">0.25</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="var">Code_Quality_Score</span> <span class="op">×</span> <span class="num">0.20</span>
+          </div>
+        </div>
+
+        <div class="formula-box">
+          <div class="formula-title">Example Calculation</div>
+          <div class="formula-code">
+            <span class="op">Given:</span> Coverage=<span class="num">85</span>, Escape=<span class="num">4</span>, Build=<span class="num">92</span>, Quality=<span class="num">88</span><br><br>
+            <span class="var">QA_Score</span> <span class="op">=</span> <span class="num">85</span> <span class="op">×</span> <span class="num">0.30</span> <span class="op">=</span> <span class="num">25.5</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> (<span class="num">100</span> <span class="op">-</span> <span class="num">4</span>) <span class="op">×</span> <span class="num">0.25</span> <span class="op">=</span> <span class="num">24.0</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="num">92</span> <span class="op">×</span> <span class="num">0.25</span> <span class="op">=</span> <span class="num">23.0</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">+</span> <span class="num">88</span> <span class="op">×</span> <span class="num">0.20</span> <span class="op">=</span> <span class="num">17.6</span><br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="op">=</span> <span class="var" style="font-size:1.1rem;font-weight:700">90.1</span>
+          </div>
+        </div>
+
+        <div style="margin-top:1.5rem">
+          <h4 style="margin-bottom:.75rem;color:#e2e8f0">Status Thresholds</h4>
+          <div style="display:flex;gap:1rem;flex-wrap:wrap">
+            <span style="padding:.5rem 1rem;background:rgba(16,185,129,.2);color:#10b981;border-radius:8px;font-size:.85rem"><strong>≥85</strong> → Good ✅</span>
+            <span style="padding:.5rem 1rem;background:rgba(245,158,11,.2);color:#f59e0b;border-radius:8px;font-size:.85rem"><strong>70-84</strong> → Warning ⚠️</span>
+            <span style="padding:.5rem 1rem;background:rgba(239,68,68,.2);color:#ef4444;border-radius:8px;font-size:.85rem"><strong>&lt;70</strong> → Critical 🚨</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:var(--bg-card);border-radius:1rem;padding:1.5rem;border:1px solid var(--border)">
+        <h3 style="margin-bottom:1rem;color:var(--primary)">📁 Key Files Reference</h3>
+        <div style="font-family:monospace;font-size:.85rem;color:#e2e8f0;line-height:2">
+          <div><strong style="color:#10b981">src/data/detailedKPIs.ts</strong> - All 22 metric definitions with mock data generators</div>
+          <div><strong style="color:#10b981">src/services/dataAggregator.ts</strong> - API aggregation classes & QA Score calculation</div>
+          <div><strong style="color:#10b981">server/jobs/syncMetrics.ts</strong> - Cron job that syncs metrics every 15 min</div>
+          <div><strong style="color:#10b981">database/schema.sql</strong> - kpi_snapshots table with all metric columns</div>
+          <div><strong style="color:#10b981">docs/technical/METRICS_DATA_SOURCES_PART1.md</strong> - Detailed API documentation</div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>IronGate QA Navigator © 2024 • Complete Metrics Documentation</p>
+    <p style="margin-top:.5rem;font-size:.75rem">Generated from codebase analysis • All metrics are configurable</p>
+  </footer>
+</body>
+</html>

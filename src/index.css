@@ -15,162 +15,406 @@ html {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-html * {
-  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
-}
-
 /* ============================================
-   OCEAN THEME - Clean, Professional, Minimal
+   OCEAN THEME - Gradient Border, Deep & Premium
    ============================================ */
 
 /* Ocean Light Mode */
 .theme-ocean {
-  --gradient-hero: linear-gradient(135deg, #eff6ff 0%, #ecfeff 50%, #f0fdfa 100%);
-  --glow-color: rgba(6, 182, 212, 0.3);
+  --gradient-hero: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0fdfa 100%);
+  --glow-color: rgba(6, 182, 212, 0.4);
   --sidebar-bg: #ffffff;
   --card-bg: #ffffff;
-  --card-border: rgba(0, 0, 0, 0.08);
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --card-border: rgba(6, 182, 212, 0.15);
+  --card-shadow: 0 4px 20px rgba(6, 182, 212, 0.08);
+  --ocean-gradient: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6, #06b6d4);
 }
 
 /* Ocean Dark Mode */
 .theme-ocean.dark {
-  --gradient-hero: linear-gradient(135deg, #0f172a 0%, #164e63 50%, #0f172a 100%);
-  --glow-color: rgba(34, 211, 238, 0.2);
-  --sidebar-bg: #0f172a;
-  --card-bg: #1e293b;
-  --card-border: rgba(255, 255, 255, 0.05);
-  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --gradient-hero: linear-gradient(135deg, #020617 0%, #0c4a6e 30%, #020617 100%);
+  --glow-color: rgba(34, 211, 238, 0.35);
+  --sidebar-bg: #020617;
+  --card-bg: #0f172a;
+  --card-border: rgba(34, 211, 238, 0.2);
+  --card-shadow: 0 4px 30px rgba(6, 182, 212, 0.15);
+  --ocean-gradient: linear-gradient(135deg, #22d3ee, #3b82f6, #a78bfa, #22d3ee);
 }
 
-/* ============================================
-   AURORA THEME - Emerald / Teal, Glassmorphic
-   ============================================ */
-
-/* Aurora Light Mode - Fresh green gradients */
-.theme-aurora {
-  --gradient-hero: linear-gradient(135deg, #ecfdf5 0%, #e0f2fe 30%, #d1fae5 60%, #ccfbf1 100%);
-  --glow-color: rgba(16, 185, 129, 0.35); /* emerald-500 */
-  --sidebar-bg: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
-  --card-bg: rgba(255, 255, 255, 0.8);
-  --card-border: rgba(16, 185, 129, 0.25);
-  --card-shadow: 0 8px 32px rgba(16, 185, 129, 0.18);
-}
-
-/* Aurora Dark Mode - Emerald neon aesthetic */
-.theme-aurora.dark {
-  --gradient-hero: linear-gradient(135deg, #022c22 0%, #064e3b 30%, #022c22 60%, #022c22 100%);
-  --glow-color: rgba(52, 211, 153, 0.5); /* emerald-400 */
-  --sidebar-bg: linear-gradient(180deg, #020617 0%, #022c22 100%);
-  --card-bg: rgba(15, 23, 42, 0.9);
-  --card-border: rgba(52, 211, 153, 0.35);
-  --card-shadow: 0 8px 32px rgba(16, 185, 129, 0.25);
-}
-
-/* Aurora-specific styles */
-.theme-aurora .glass,
-.theme-aurora.dark .glass {
+/* Ocean team cards with animated gradient border */
+.theme-ocean .team-card {
+  position: relative;
   background: var(--card-bg);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  overflow: hidden;
 }
 
-/* Aurora sidebar gradient */
-.theme-aurora aside {
-  background: var(--sidebar-bg) !important;
-}
-
-.theme-aurora.dark aside {
-  background: var(--sidebar-bg) !important;
-  border-right-color: rgba(52, 211, 153, 0.25) !important; /* emerald-400 */
-}
-
-/* Aurora cards with glassmorphism */
-.theme-aurora .card-glow {
-  background: var(--card-bg) !important;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid var(--card-border) !important;
-  box-shadow: var(--card-shadow) !important;
-}
-
-.theme-aurora .card-glow:hover {
-  box-shadow: 0 0 40px var(--glow-color), var(--card-shadow) !important;
-  border-color: rgba(192, 132, 252, 0.5) !important;
-}
-
-/* Aurora neon glow on buttons */
-.theme-aurora button[class*="bg-emerald"],
-.theme-aurora button[class*="bg-teal"],
-.theme-aurora button[class*="bg-lime"] {
-  box-shadow: 0 0 20px var(--glow-color);
-}
-
-.theme-aurora button[class*="bg-emerald"]:hover,
-.theme-aurora button[class*="bg-teal"]:hover,
-.theme-aurora button[class*="bg-lime"]:hover {
-  box-shadow: 0 0 30px var(--glow-color), 0 0 60px var(--glow-color);
-}
-
-/* Aurora animated gradient border */
-.theme-aurora .card-glow::before {
+.theme-ocean .team-card::before {
   content: '';
   position: absolute;
-  inset: -1px;
-  background: linear-gradient(45deg, #22c55e, #14b8a6, #84cc16, #22c55e); /* emerald/teal/lime */
-  background-size: 300% 300%;
+  inset: 0;
+  padding: 2px;
   border-radius: inherit;
-  z-index: -1;
-  opacity: 0;
-  transition: opacity 0.3s ease;
-  animation: gradientRotate 3s ease infinite;
-}
-
-.theme-aurora .card-glow:hover::before {
+  background: var(--ocean-gradient);
+  background-size: 300% 300%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
   opacity: 0.5;
+  transition: opacity 0.4s ease, filter 0.4s ease;
+  animation: oceanFlow 6s ease infinite paused;
 }
 
-@keyframes gradientRotate {
+.theme-ocean .team-card:hover::before {
+  opacity: 1;
+  animation-play-state: running;
+  filter: brightness(1.2);
+}
+
+.theme-ocean .team-card::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  background: var(--card-bg);
+  border-radius: calc(16px - 2px);
+  z-index: 0;
+}
+
+.theme-ocean .team-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.theme-ocean .team-card:hover {
+  box-shadow: 
+    0 0 40px rgba(6, 182, 212, 0.25),
+    0 20px 50px rgba(59, 130, 246, 0.15);
+}
+
+.theme-ocean.dark .team-card:hover {
+  box-shadow: 
+    0 0 60px rgba(34, 211, 238, 0.3),
+    0 20px 60px rgba(59, 130, 246, 0.2);
+}
+
+@keyframes oceanFlow {
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
 }
 
-/* Aurora header/top bar */
-.theme-aurora.dark header,
-.theme-aurora.dark [class*="border-b"][class*="bg-slate"] {
-  background: rgba(2, 44, 34, 0.9) !important;
+/* Ocean score bar (horizontal) */
+.theme-ocean .score-bar {
+  height: 8px;
+  background: linear-gradient(90deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15));
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.theme-ocean .score-bar-fill {
+  height: 100%;
+  background: var(--ocean-gradient);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: oceanBarShimmer 3s ease infinite;
+}
+
+@keyframes oceanBarShimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Ocean metric pills */
+.theme-ocean .metric-pill {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(59, 130, 246, 0.08));
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  border-radius: 12px;
+  transition: all 0.3s ease;
+}
+
+.theme-ocean .metric-pill:hover {
+  background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15));
+  border-color: rgba(6, 182, 212, 0.4);
+  transform: translateY(-2px);
+}
+
+.theme-ocean.dark .metric-pill {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.1), rgba(59, 130, 246, 0.1));
+  border: 1px solid rgba(34, 211, 238, 0.25);
+}
+
+.theme-ocean.dark .metric-pill:hover {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(59, 130, 246, 0.2));
+  border-color: rgba(34, 211, 238, 0.5);
+}
+
+/* Ocean buttons */
+.theme-ocean .filter-btn-active {
+  background: linear-gradient(135deg, #06b6d4, #3b82f6) !important;
+  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
+}
+
+/* Ocean scrollbar */
+.theme-ocean::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #06b6d4, #3b82f6);
+  border-radius: 4px;
+}
+
+/* ============================================
+   AURORA THEME - Glassmorphism, Ethereal & Soft
+   ============================================ */
+
+/* Aurora Light Mode */
+.theme-aurora {
+  --gradient-hero: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 30%, #a7f3d0 60%, #6ee7b7 100%);
+  --glow-color: rgba(16, 185, 129, 0.4);
+  --sidebar-bg: rgba(255, 255, 255, 0.7);
+  --card-bg: rgba(255, 255, 255, 0.6);
+  --card-border: rgba(16, 185, 129, 0.2);
+  --card-shadow: 0 8px 32px rgba(16, 185, 129, 0.12);
+  --aurora-accent: #10b981;
+}
+
+/* Aurora Dark Mode */
+.theme-aurora.dark {
+  --gradient-hero: linear-gradient(135deg, #022c22 0%, #064e3b 25%, #065f46 50%, #022c22 100%);
+  --glow-color: rgba(52, 211, 153, 0.5);
+  --sidebar-bg: rgba(2, 44, 34, 0.85);
+  --card-bg: rgba(6, 78, 59, 0.4);
+  --card-border: rgba(52, 211, 153, 0.3);
+  --card-shadow: 0 8px 40px rgba(16, 185, 129, 0.2);
+  --aurora-accent: #34d399;
+}
+
+/* Aurora glassmorphism cards */
+.theme-aurora .team-card {
+  background: var(--card-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--card-border);
+  border-radius: 20px;
+  box-shadow: 
+    var(--card-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.theme-aurora.dark .team-card {
+  box-shadow: 
+    var(--card-shadow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.theme-aurora .team-card:hover {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 
+    0 12px 48px rgba(16, 185, 129, 0.2),
+    0 0 80px rgba(16, 185, 129, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.6);
+  transform: translateY(-4px);
+}
+
+.theme-aurora.dark .team-card:hover {
+  background: rgba(6, 78, 59, 0.6);
+  border-color: rgba(52, 211, 153, 0.5);
+  box-shadow: 
+    0 12px 60px rgba(16, 185, 129, 0.35),
+    0 0 100px rgba(52, 211, 153, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+/* Aurora floating orbs on cards */
+.theme-aurora .team-card::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -30%;
+  width: 200px;
+  height: 200px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+
+.theme-aurora .team-card:hover::before {
+  opacity: 1;
+}
+
+/* Aurora score circle with glow */
+.theme-aurora .score-circle-wrapper {
+  filter: drop-shadow(0 0 12px var(--glow-color));
+}
+
+.theme-aurora.dark .score-circle-wrapper {
+  filter: drop-shadow(0 0 20px var(--glow-color));
+}
+
+/* Aurora glass metric pills */
+.theme-aurora .metric-pill {
+  background: rgba(255, 255, 255, 0.5);
   backdrop-filter: blur(10px);
-  border-bottom-color: rgba(52, 211, 153, 0.3) !important;
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(16, 185, 129, 0.15);
+  border-radius: 16px;
+  transition: all 0.3s ease;
+}
+
+.theme-aurora .metric-pill:hover {
+  background: rgba(255, 255, 255, 0.7);
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
+}
+
+.theme-aurora.dark .metric-pill {
+  background: rgba(6, 78, 59, 0.5);
+  border: 1px solid rgba(52, 211, 153, 0.2);
+}
+
+.theme-aurora.dark .metric-pill:hover {
+  background: rgba(6, 78, 59, 0.7);
+  border-color: rgba(52, 211, 153, 0.4);
+  box-shadow: 0 4px 24px rgba(16, 185, 129, 0.25);
+}
+
+/* Aurora buttons with glow */
+.theme-aurora .filter-btn-active {
+  background: linear-gradient(135deg, #10b981, #14b8a6) !important;
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
+}
+
+/* Aurora sidebar */
+.theme-aurora aside {
+  background: var(--sidebar-bg) !important;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.theme-aurora.dark aside {
+  border-right-color: rgba(52, 211, 153, 0.2) !important;
+}
+
+/* Aurora text glow */
+.theme-aurora.dark h1,
+.theme-aurora.dark h2 {
+  text-shadow: 0 0 40px rgba(52, 211, 153, 0.5);
+}
+
+/* Aurora input focus */
+.theme-aurora input:focus,
+.theme-aurora select:focus,
+.theme-aurora textarea:focus {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25), 0 0 30px rgba(16, 185, 129, 0.15);
+  border-color: var(--aurora-accent) !important;
 }
 
 /* Aurora scrollbar */
 .theme-aurora::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #22c55e, #14b8a6);
+  background: linear-gradient(180deg, #10b981, #14b8a6);
   border-radius: 4px;
 }
 
 .theme-aurora.dark::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #22c55e, #22c55e);
+  background: linear-gradient(180deg, #34d399, #2dd4bf);
 }
 
-/* Aurora text glow effect on headings */
-.theme-aurora.dark h1,
-.theme-aurora.dark h2 {
-  text-shadow: 0 0 30px rgba(16, 185, 129, 0.45);
+/* ============================================
+   MINIMAL THEME - Clean, Flat, No Frills
+   ============================================ */
+
+/* Minimal Light Mode */
+.theme-minimal {
+  --gradient-hero: #f9fafb;
+  --glow-color: transparent;
+  --sidebar-bg: #ffffff;
+  --card-bg: #ffffff;
+  --card-border: rgba(0, 0, 0, 0.06);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
-/* Aurora pulse animation on score circles */
-.theme-aurora .score-circle {
-  filter: drop-shadow(0 0 10px var(--glow-color));
+/* Minimal Dark Mode */
+.theme-minimal.dark {
+  --gradient-hero: #111827;
+  --glow-color: transparent;
+  --sidebar-bg: #111827;
+  --card-bg: #1f2937;
+  --card-border: rgba(255, 255, 255, 0.06);
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
-/* Aurora input focus glow */
-.theme-aurora input:focus,
-.theme-aurora select:focus,
-.theme-aurora textarea:focus {
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35), 0 0 20px rgba(16, 185, 129, 0.25);
-  border-color: #22c55e !important; /* emerald-500 */
+/* Minimal team cards - simple, flat */
+.theme-minimal .team-card {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
+  transition: all 0.2s ease;
+}
+
+.theme-minimal .team-card:hover {
+  border-color: rgba(107, 114, 128, 0.3);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.theme-minimal.dark .team-card:hover {
+  border-color: rgba(156, 163, 175, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* Minimal removes all glows */
+.theme-minimal .card-glow,
+.theme-minimal.dark .card-glow {
+  box-shadow: var(--card-shadow) !important;
+}
+
+.theme-minimal .card-glow:hover,
+.theme-minimal.dark .card-glow:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
+  transform: none !important;
+}
+
+.theme-minimal.dark .card-glow:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Minimal removes text shadows */
+.theme-minimal h1,
+.theme-minimal h2,
+.theme-minimal.dark h1,
+.theme-minimal.dark h2 {
+  text-shadow: none !important;
+}
+
+/* Minimal metric pills */
+.theme-minimal .metric-pill {
+  background: rgba(107, 114, 128, 0.06);
+  border: 1px solid rgba(107, 114, 128, 0.1);
+  border-radius: 8px;
+}
+
+.theme-minimal.dark .metric-pill {
+  background: rgba(156, 163, 175, 0.08);
+  border: 1px solid rgba(156, 163, 175, 0.12);
+}
+
+/* Minimal filter buttons */
+.theme-minimal .filter-btn-active {
+  background: #374151 !important;
+  box-shadow: none;
+}
+
+.theme-minimal.dark .filter-btn-active {
+  background: #4b5563 !important;
+}
+
+/* Minimal input focus */
+.theme-minimal input:focus,
+.theme-minimal select:focus,
+.theme-minimal textarea:focus {
+  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.2);
+  border-color: #9ca3af !important;
 }
 
 /* Primary Button Styles */

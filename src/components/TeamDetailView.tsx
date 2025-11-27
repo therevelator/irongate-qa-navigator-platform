@@ -1,7 +1,35 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { Team } from '../data/mockData';
 import { generateDetailedKPIs } from '../data/detailedKPIs';
 import API_URL from '../config/api';
+
+// Extended Team type with kpiData from API
+interface TeamWithKPI extends Team {
+  kpiData?: {
+    testCoverage?: number;
+    testFlakinessRate?: number;
+    defectDensity?: number;
+    defectEscapeRate?: number;
+    codeQualityScore?: number;
+    avgBuildTimeMinutes?: number;
+    testExecutionTimeMinutes?: number;
+    deploymentFrequencyPerWeek?: number;
+    leadTimeDays?: number;
+    mttrHours?: number;
+    parallelTestEfficiency?: number;
+    sprintVelocity?: number;
+    sprintCommitmentRate?: number;
+    sprintCarryover?: number;
+    firstTimePassRate?: number;
+    blockedTimeHours?: number;
+    automationCoverage?: number;
+    automationRoi?: number;
+    changeFailureRate?: number;
+    mtbfHours?: number;
+    systemAvailability?: number;
+    infrastructureFailures?: number;
+  };
+}
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Bug, Bot, BarChart3, Clock, GitPullRequest, Zap, Users } from 'lucide-react';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -27,12 +55,19 @@ interface DeveloperMetrics {
 }
 
 interface TeamDetailViewProps {
-  team: Team;
+  team: TeamWithKPI;
   onBack: () => void;
 }
 
 const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
-  const detailedKPIs = generateDetailedKPIs(team);
+  // Use useMemo to prevent regenerating KPIs on every render
+  const detailedKPIs = useMemo(() => generateDetailedKPIs(team), [team]);
+  
+  // Get real values from kpiData or use defaults
+  const kpi = team.kpiData || {};
+  const testCoverage = Number(kpi.testCoverage) || 0;
+  const defectDensity = Number(kpi.defectDensity) || 0;
+  const automationCoverage = Number(kpi.automationCoverage) || 0;
   const [developers, setDevelopers] = useState<DeveloperMetrics[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -223,12 +258,12 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               <div className="p-3 bg-green-100 dark:bg-green-900 rounded-lg">
                 <Shield className="text-green-600 dark:text-green-300" size={24} />
               </div>
-              <span className="text-sm text-green-600 flex items-center">
-                <TrendingUp size={16} className="mr-1" />
-                +2.1%
+              <span className={`text-sm flex items-center ${testCoverage >= 80 ? 'text-green-600' : testCoverage >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
+                {testCoverage >= 80 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
+                {testCoverage >= 80 ? 'Good' : testCoverage >= 70 ? 'Warning' : 'Low'}
               </span>
             </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">94.7%</h3>
+            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{testCoverage.toFixed(1)}%</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">Test Coverage</p>
           </div>
 
@@ -238,12 +273,12 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               <div className="p-3 bg-amber-100 dark:bg-amber-900 rounded-lg">
                 <Bug className="text-amber-600 dark:text-amber-300" size={24} />
               </div>
-              <span className="text-sm text-green-600 flex items-center">
-                <TrendingDown size={16} className="mr-1" />
-                -12%
+              <span className={`text-sm flex items-center ${defectDensity <= 0.5 ? 'text-green-600' : defectDensity <= 1.0 ? 'text-amber-600' : 'text-red-600'}`}>
+                {defectDensity <= 0.5 ? <TrendingDown size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1" />}
+                {defectDensity <= 0.5 ? 'Good' : defectDensity <= 1.0 ? 'Warning' : 'High'}
               </span>
             </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">0.23</h3>
+            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{defectDensity.toFixed(2)}</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">Defect Density</p>
           </div>
 
@@ -253,12 +288,12 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-lg">
                 <Bot className="text-purple-600 dark:text-purple-300" size={24} />
               </div>
-              <span className="text-sm text-green-600 flex items-center">
-                <TrendingUp size={16} className="mr-1" />
-                +8.3%
+              <span className={`text-sm flex items-center ${automationCoverage >= 70 ? 'text-green-600' : automationCoverage >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                {automationCoverage >= 70 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
+                {automationCoverage >= 70 ? 'Good' : automationCoverage >= 50 ? 'Warning' : 'Low'}
               </span>
             </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">76.4%</h3>
+            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{automationCoverage.toFixed(1)}%</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">Automation Rate</p>
           </div>
         </div>

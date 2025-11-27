@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Menu, X, Palette } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Menu, X, Palette, Calculator } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme, themes } from '../contexts/ThemeContext';
 import type { ThemeName } from '../contexts/ThemeContext';
@@ -211,6 +211,21 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
               >
                 <Shield size={20} />
                 <span>Admin</span>
+              </button>
+            )}
+
+            {/* Manual Metrics - Super Admin only */}
+            {user?.role === 'super_admin' && (
+              <button
+                onClick={() => handleNavClick('manual-metrics')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  currentView === 'manual-metrics'
+                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                <Calculator size={20} />
+                <span>Manual Metrics</span>
               </button>
             )}
           </div>

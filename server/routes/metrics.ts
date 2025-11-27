@@ -200,4 +200,153 @@ router.post('/sync', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+// Manual metrics input (super_admin only)
+router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.userRole !== 'super_admin') {
+      return res.status(403).json({ error: 'Super Admin access required' });
+    }
+
+    const {
+      teamId,
+      test_coverage,
+      test_flakiness_rate,
+      defect_density,
+      defect_escape_rate,
+      code_quality_score,
+      avg_build_time_minutes,
+      test_execution_time_minutes,
+      deployment_frequency_per_week,
+      lead_time_days,
+      mttr_hours,
+      parallel_test_efficiency,
+      sprint_velocity,
+      sprint_commitment_rate,
+      sprint_carryover,
+      first_time_pass_rate,
+      blocked_time_hours,
+      automation_coverage,
+      automation_roi,
+      change_failure_rate,
+      mtbf_hours,
+      system_availability,
+      infrastructure_failures
+    } = req.body;
+
+    if (!teamId) {
+      return res.status(400).json({ error: 'Team ID is required' });
+    }
+
+    // Calculate QA Score based on the formula from metrics-info.html
+    // QA_Score = Test_Coverage × 0.30 + (100 - Defect_Escape_Rate) × 0.25 + Build_Success_Rate × 0.25 + Code_Quality_Score × 0.20
+    // We'll use (100 - change_failure_rate) as Build_Success_Rate proxy
+    const buildSuccessRate = change_failure_rate !== undefined ? (100 - change_failure_rate) : 85;
+    const qaScore = 
+      (test_coverage || 0) * 0.30 +
+      (100 - (defect_escape_rate || 0)) * 0.25 +
+      buildSuccessRate * 0.25 +
+      (code_quality_score || 0) * 0.20;
+
+    // Determine status based on QA Score
+    let status = 'unknown';
+    if (qaScore >= 85) status = 'good';
+    else if (qaScore >= 70) status = 'warning';
+    else if (qaScore > 0) status = 'critical';
+
+    // Insert or update KPI snapshot for today
+    // Use INSERT ... ON DUPLICATE KEY UPDATE to handle existing entries for the same team/date
+    await query(
+      `INSERT INTO kpi_snapshots (
+        team_id,
+        snapshot_date,
+        qa_score,
+        status,
+        test_coverage,
+        test_flakiness_rate,
+        defect_density,
+        defect_escape_rate,
+        code_quality_score,
+        avg_build_time_minutes,
+        test_execution_time_minutes,
+        deployment_frequency_per_week,
+        lead_time_days,
+        mttr_hours,
+        parallel_test_efficiency,
+        sprint_velocity,
+        sprint_commitment_rate,
+        sprint_carryover,
+        first_time_pass_rate,
+        blocked_time_hours,
+        automation_coverage,
+        automation_roi,
+        change_failure_rate,
+        mtbf_hours,
+        system_availability,
+        infrastructure_failures
+      ) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        qa_score = VALUES(qa_score),
+        status = VALUES(status),
+        test_coverage = COALESCE(VALUES(test_coverage), test_coverage),
+        test_flakiness_rate = COALESCE(VALUES(test_flakiness_rate), test_flakiness_rate),
+        defect_density = COALESCE(VALUES(defect_density), defect_density),
+        defect_escape_rate = COALESCE(VALUES(defect_escape_rate), defect_escape_rate),
+        code_quality_score = COALESCE(VALUES(code_quality_score), code_quality_score),
+        avg_build_time_minutes = COALESCE(VALUES(avg_build_time_minutes), avg_build_time_minutes),
+        test_execution_time_minutes = COALESCE(VALUES(test_execution_time_minutes), test_execution_time_minutes),
+        deployment_frequency_per_week = COALESCE(VALUES(deployment_frequency_per_week), deployment_frequency_per_week),
+        lead_time_days = COALESCE(VALUES(lead_time_days), lead_time_days),
+        mttr_hours = COALESCE(VALUES(mttr_hours), mttr_hours),
+        parallel_test_efficiency = COALESCE(VALUES(parallel_test_efficiency), parallel_test_efficiency),
+        sprint_velocity = COALESCE(VALUES(sprint_velocity), sprint_velocity),
+        sprint_commitment_rate = COALESCE(VALUES(sprint_commitment_rate), sprint_commitment_rate),
+        sprint_carryover = COALESCE(VALUES(sprint_carryover), sprint_carryover),
+        first_time_pass_rate = COALESCE(VALUES(first_time_pass_rate), first_time_pass_rate),
+        blocked_time_hours = COALESCE(VALUES(blocked_time_hours), blocked_time_hours),
+        automation_coverage = COALESCE(VALUES(automation_coverage), automation_coverage),
+        automation_roi = COALESCE(VALUES(automation_roi), automation_roi),
+        change_failure_rate = COALESCE(VALUES(change_failure_rate), change_failure_rate),
+        mtbf_hours = COALESCE(VALUES(mtbf_hours), mtbf_hours),
+        system_availability = COALESCE(VALUES(system_availability), system_availability),
+        infrastructure_failures = COALESCE(VALUES(infrastructure_failures), infrastructure_failures)`,
+      [
+        teamId,
+        qaScore,
+        status,
+        test_coverage || null,
+        test_flakiness_rate || null,
+        defect_density || null,
+        defect_escape_rate || null,
+        code_quality_score || null,
+        avg_build_time_minutes || null,
+        test_execution_time_minutes || null,
+        deployment_frequency_per_week || null,
+        lead_time_days || null,
+        mttr_hours || null,
+        parallel_test_efficiency || null,
+        sprint_velocity || null,
+        sprint_commitment_rate || null,
+        sprint_carryover || null,
+        first_time_pass_rate || null,
+        blocked_time_hours || null,
+        automation_coverage || null,
+        automation_roi || null,
+        change_failure_rate || null,
+        mtbf_hours || null,
+        system_availability || null,
+        infrastructure_failures || null
+      ]
+    );
+
+    res.json({ 
+      message: 'Metrics saved successfully',
+      qaScore: qaScore.toFixed(2),
+      status
+    });
+  } catch (error) {
+    console.error('Manual metrics error:', error);
+    res.status(500).json({ error: 'Failed to save metrics' });
+  }
+});
+
 export default router;

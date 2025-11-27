@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
-// Two beautiful theme options
-export type ThemeName = 'ocean' | 'aurora';
+// Three theme options
+export type ThemeName = 'ocean' | 'aurora' | 'minimal';
 export type ThemeMode = 'light' | 'dark';
 
 interface ThemeContextType {
@@ -54,6 +54,26 @@ export const themes = {
         dark: 'bg-slate-900/60'
       }
     }
+  },
+  minimal: {
+    name: 'Minimal',
+    description: 'Clean and simple - no frills, just clarity',
+    colors: {
+      primary: 'gray',
+      accent: 'gray',
+      gradient: {
+        light: 'from-gray-50 to-gray-50',
+        dark: 'from-gray-900 to-gray-900'
+      },
+      sidebar: {
+        light: 'bg-white',
+        dark: 'bg-gray-900'
+      },
+      card: {
+        light: 'bg-white',
+        dark: 'bg-gray-800'
+      }
+    }
   }
 };
 
@@ -77,7 +97,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const htmlElement = document.documentElement;
     
     // Remove all theme classes first
-    htmlElement.classList.remove('dark', 'light', 'theme-ocean', 'theme-aurora');
+    htmlElement.classList.remove('dark', 'light', 'theme-ocean', 'theme-aurora', 'theme-minimal');
     
     // Apply mode class
     if (isDark) {
@@ -99,12 +119,16 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       root.style.setProperty('--theme-primary', isDark ? '34 211 238' : '6 182 212'); // cyan-400/500
       root.style.setProperty('--theme-accent', isDark ? '96 165 250' : '59 130 246'); // blue-400/500
       root.style.setProperty('--theme-primary-rgb', isDark ? '34, 211, 238' : '6, 182, 212');
-    } else {
+    } else if (themeName === 'aurora') {
       // Aurora/Emerald theme
-      // Use emerald/teal tones instead of violet/purple
       root.style.setProperty('--theme-primary', isDark ? '16 185 129' : '5 150 105'); // emerald-500/600
       root.style.setProperty('--theme-accent', isDark ? '45 212 191' : '20 184 166'); // teal-400/500
       root.style.setProperty('--theme-primary-rgb', isDark ? '16, 185, 129' : '5, 150, 105');
+    } else {
+      // Minimal theme - neutral grays
+      root.style.setProperty('--theme-primary', isDark ? '156 163 175' : '107 114 128'); // gray-400/500
+      root.style.setProperty('--theme-accent', isDark ? '156 163 175' : '107 114 128'); // gray-400/500
+      root.style.setProperty('--theme-primary-rgb', isDark ? '156, 163, 175' : '107, 114, 128');
     }
   }, [isDark, themeName]);
 
