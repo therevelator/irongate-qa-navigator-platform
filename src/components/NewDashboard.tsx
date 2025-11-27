@@ -29,15 +29,15 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
       blob2: isDark ? 'bg-blue-500/20' : 'bg-blue-200',
     },
     aurora: {
-      primary: 'violet',
+      primary: 'emerald',
       gradient: isDark 
-        ? 'from-slate-900 via-purple-900/30 to-slate-800' 
-        : 'from-violet-50 via-fuchsia-50 to-pink-50',
-      accent: isDark ? 'bg-violet-500' : 'bg-violet-600',
-      accentHover: isDark ? 'hover:bg-violet-400' : 'hover:bg-violet-700',
-      glow: isDark ? 'shadow-violet-500/20' : 'shadow-violet-500/30',
-      blob1: isDark ? 'bg-violet-500/20' : 'bg-violet-200',
-      blob2: isDark ? 'bg-fuchsia-500/20' : 'bg-fuchsia-200',
+        ? 'from-slate-950 via-emerald-950/30 to-slate-900' 
+        : 'from-emerald-50 via-teal-50 to-lime-50',
+      accent: isDark ? 'bg-emerald-500' : 'bg-emerald-600',
+      accentHover: isDark ? 'hover:bg-emerald-400' : 'hover:bg-emerald-700',
+      glow: isDark ? 'shadow-emerald-500/20' : 'shadow-emerald-500/30',
+      blob1: isDark ? 'bg-emerald-500/20' : 'bg-emerald-200',
+      blob2: isDark ? 'bg-teal-500/20' : 'bg-teal-200',
     }
   };
   
@@ -57,13 +57,27 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
     return true;
   });
 
+  // Aurora-specific classes
+  const isAurora = themeName === 'aurora';
+  const mainBg = isAurora
+    ? isDark 
+      ? 'bg-gradient-to-b from-slate-950 to-emerald-950'
+      : 'bg-gradient-to-b from-emerald-50 to-teal-100'
+    : 'bg-gray-50 dark:bg-slate-950';
+
   return (
-    <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-950 overflow-auto">
+    <div className={`flex flex-col h-full overflow-auto ${mainBg}`}>
       {/* Hero Section - Theme-aware gradient */}
-      <div className={`bg-gradient-to-br ${colors.gradient} p-4 sm:p-6 relative overflow-hidden`} style={{ minHeight: '150px' }}>
+      <div className={`bg-gradient-to-br ${colors.gradient} p-4 sm:p-6 relative overflow-hidden ${
+        isAurora && isDark ? 'border-b border-emerald-500/25' : ''
+      }`} style={{ minHeight: '150px' }}>
         <div className="relative z-10 max-w-7xl mx-auto">
           <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-3">
-            <div className={`p-2 rounded-xl ${isDark ? 'bg-white/10' : 'bg-white/70'} backdrop-blur-sm`}>
+            <div className={`p-2 rounded-xl backdrop-blur-sm ${
+              isAurora 
+                ? isDark ? 'bg-emerald-500/15 border border-emerald-500/40' : 'bg-white/85 border border-emerald-200'
+                : isDark ? 'bg-white/10' : 'bg-white/70'
+            }`}>
               <img 
                 src="/irongate-logo.png" 
                 alt="IronGate QA Navigator" 
@@ -71,15 +85,23 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 onError={(e) => { e.currentTarget.style.display = 'none'; }}
               />
             </div>
-            <div className={`h-8 sm:h-10 md:h-12 w-px ${isDark ? 'bg-white/20' : 'bg-gray-300'}`}></div>
+            <div className={`h-8 sm:h-10 md:h-12 w-px ${
+              isAurora && isDark ? 'bg-emerald-400/40' : isDark ? 'bg-white/20' : 'bg-gray-300'
+            }`}></div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white truncate">
+                <h1 className={`text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold truncate ${
+                  isAurora && isDark 
+                    ? 'text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.6)]' 
+                    : 'text-gray-900 dark:text-white'
+                }`}>
                   {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
                     ? `${userTeams[0]?.name || 'My Team'} Dashboard`
                     : 'Quality Assurance Dashboard'}
                 </h1>
-                <Sparkles className={`w-5 h-5 ${themeName === 'ocean' ? 'text-cyan-500' : 'text-violet-500'} animate-pulse hidden sm:block`} />
+                <Sparkles className={`w-5 h-5 animate-pulse hidden sm:block ${
+                  isAurora ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'text-cyan-500'
+                }`} />
               </div>
             </div>
           </div>
@@ -89,7 +111,16 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className={`absolute -top-4 -right-4 w-32 h-32 sm:w-48 sm:h-48 ${colors.blob1} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`}></div>
           <div className={`absolute -bottom-4 -left-4 w-32 h-32 sm:w-48 sm:h-48 ${colors.blob2} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`} style={{ animationDelay: '2s' }}></div>
-          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-96 sm:h-96 ${isDark ? 'bg-white/5' : 'bg-white/30'} rounded-full filter blur-3xl`}></div>
+          {isAurora && isDark && (
+            <>
+              <div className="absolute top-1/4 right-1/4 w-2 h-2 bg-emerald-400 rounded-full animate-pulse opacity-70"></div>
+              <div className="absolute bottom-1/3 left-1/3 w-1 h-1 bg-teal-300 rounded-full animate-pulse opacity-80" style={{ animationDelay: '0.5s' }}></div>
+              <div className="absolute top-1/2 right-1/3 w-1.5 h-1.5 bg-lime-300 rounded-full animate-pulse opacity-75" style={{ animationDelay: '1s' }}></div>
+            </>
+          )}
+          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-96 sm:h-96 rounded-full filter blur-3xl ${
+            isAurora && isDark ? 'bg-emerald-500/15' : isDark ? 'bg-white/5' : 'bg-white/30'
+          }`}></div>
         </div>
       </div>
 
@@ -142,15 +173,30 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
             <div
               key={team.id}
               onClick={() => onTeamClick?.(team)}
-              className={`bg-white dark:bg-slate-900 rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-slate-800 hover:shadow-xl hover:scale-[1.01] transition-all duration-300 cursor-pointer relative overflow-hidden group card-glow`}
+              className={`rounded-xl p-3 sm:p-4 hover:scale-[1.01] transition-all duration-300 cursor-pointer relative overflow-hidden group card-glow ${
+                isAurora
+                  ? isDark
+                    ? 'bg-[#1e0a3c]/80 backdrop-blur-md border border-purple-500/20 hover:border-purple-500/50 hover:shadow-[0_0_30px_rgba(192,132,252,0.3)]'
+                    : 'bg-white/70 backdrop-blur-md border border-fuchsia-200 hover:border-fuchsia-400 hover:shadow-[0_0_30px_rgba(192,38,211,0.2)]'
+                  : 'bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 hover:shadow-xl'
+              }`}
               style={{ animationDelay: `${index * 50}ms` }}
             >
               {/* Animated gradient border on hover - Theme-aware */}
               <div className={`absolute inset-0 transition-all duration-500 ${
-                themeName === 'ocean' 
-                  ? 'bg-gradient-to-r from-cyan-500/0 via-blue-500/0 to-teal-500/0 group-hover:from-cyan-500/10 group-hover:via-blue-500/10 group-hover:to-teal-500/10'
-                  : 'bg-gradient-to-r from-violet-500/0 via-fuchsia-500/0 to-pink-500/0 group-hover:from-violet-500/10 group-hover:via-fuchsia-500/10 group-hover:to-pink-500/10'
+                isAurora 
+                  ? 'bg-gradient-to-r from-violet-500/0 via-fuchsia-500/0 to-pink-500/0 group-hover:from-violet-500/15 group-hover:via-fuchsia-500/15 group-hover:to-pink-500/15'
+                  : 'bg-gradient-to-r from-cyan-500/0 via-blue-500/0 to-teal-500/0 group-hover:from-cyan-500/10 group-hover:via-blue-500/10 group-hover:to-teal-500/10'
               }`}></div>
+              {/* Aurora neon border effect */}
+              {isAurora && isDark && (
+                <div className="absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"
+                  style={{
+                    background: 'linear-gradient(45deg, transparent, rgba(192,132,252,0.1), transparent)',
+                    animation: 'gradientRotate 3s ease infinite'
+                  }}
+                />
+              )}
               
               {/* Mobile Layout (< 768px) */}
               <div className="relative md:hidden">

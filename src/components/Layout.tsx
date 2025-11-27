@@ -74,18 +74,33 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
     setIsMobileMenuOpen(false);
   };
 
+  // Theme-specific background classes
+  const mainBgClass = themeName === 'aurora' 
+    ? isDark 
+      ? 'bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900' 
+      : 'bg-gradient-to-br from-emerald-50 via-teal-50 to-lime-50'
+    : 'bg-gray-50 dark:bg-slate-950';
+
+  const sidebarBgClass = themeName === 'aurora'
+    ? isDark
+      ? 'bg-gradient-to-b from-slate-950 to-emerald-950 border-emerald-500/25'
+      : 'bg-gradient-to-b from-white to-emerald-50 border-emerald-200'
+    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800';
+
   return (
-    <div className="flex h-screen bg-gray-50 dark:bg-slate-950">
+    <div className={`flex h-screen ${mainBgClass}`}>
       {/* Mobile Menu Overlay */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className={`fixed inset-0 z-40 lg:hidden ${
+            themeName === 'aurora' ? 'bg-emerald-900/50 backdrop-blur-sm' : 'bg-black bg-opacity-50'
+          }`}
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
       {/* Sidebar Navigation */}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 bg-white dark:bg-slate-900 flex flex-col border-r border-gray-200 dark:border-slate-800 transform transition-transform duration-300 ease-in-out ${
+      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 flex flex-col border-r transform transition-all duration-300 ease-in-out ${sidebarBgClass} ${
         isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
       }`}>
         {/* Logo */}
@@ -216,24 +231,40 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar with Welcome and Theme Toggle */}
-        <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800 px-4 sm:px-6 py-3 flex items-center justify-between">
+        <div className={`px-4 sm:px-6 py-3 flex items-center justify-between border-b transition-all ${
+          themeName === 'aurora'
+            ? isDark
+              ? 'bg-slate-950/90 backdrop-blur-md border-emerald-500/25'
+              : 'bg-white/85 backdrop-blur-md border-emerald-200'
+            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800'
+        }`}>
           <div className="flex items-center space-x-3 sm:space-x-4">
             {/* Mobile Menu Button */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+              className={`lg:hidden p-2 rounded-md transition-colors ${
+                themeName === 'aurora'
+                  ? 'hover:bg-emerald-500/15'
+                  : 'hover:bg-gray-100 dark:hover:bg-slate-800'
+              }`}
             >
-              <Menu size={20} className="text-gray-600 dark:text-gray-400" />
+              <Menu size={20} className={themeName === 'aurora' && isDark ? 'text-emerald-300' : 'text-gray-600 dark:text-gray-400'} />
             </button>
             
-            <h2 className="text-xs sm:text-sm font-medium text-gray-600 dark:text-slate-400 truncate">
+            <h2 className={`text-xs sm:text-sm font-medium truncate ${
+              themeName === 'aurora' && isDark ? 'text-emerald-100' : 'text-gray-600 dark:text-slate-400'
+            }`}>
               Welcome, {user?.firstName}
             </h2>
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Theme Selector - Hidden on mobile */}
-            <div className="hidden md:flex items-center gap-1 p-1 rounded-lg bg-gray-100 dark:bg-slate-800">
+            <div className={`hidden md:flex items-center gap-1 p-1 rounded-lg ${
+              themeName === 'aurora'
+                ? isDark ? 'bg-emerald-950/60' : 'bg-emerald-50'
+                : 'bg-gray-100 dark:bg-slate-800'
+            }`}>
               {(Object.keys(themes) as ThemeName[]).map((theme) => (
                 <button
                   key={theme}
@@ -242,8 +273,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                     themeName === theme
                       ? theme === 'ocean'
                         ? 'bg-cyan-500 text-white shadow-sm'
-                        : 'bg-violet-500 text-white shadow-sm'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/30'
+                      : themeName === 'aurora' && isDark
+                        ? 'text-emerald-200 hover:text-emerald-100'
+                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                   }`}
                   title={themes[theme].description}
                 >

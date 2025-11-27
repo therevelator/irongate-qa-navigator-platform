@@ -19,28 +19,158 @@ html * {
   transition: background-color 0.2s ease, border-color 0.2s ease, color 0.15s ease;
 }
 
-/* Ocean Theme Light Mode */
+/* ============================================
+   OCEAN THEME - Clean, Professional, Minimal
+   ============================================ */
+
+/* Ocean Light Mode */
 .theme-ocean {
   --gradient-hero: linear-gradient(135deg, #eff6ff 0%, #ecfeff 50%, #f0fdfa 100%);
   --glow-color: rgba(6, 182, 212, 0.3);
+  --sidebar-bg: #ffffff;
+  --card-bg: #ffffff;
+  --card-border: rgba(0, 0, 0, 0.08);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
-/* Ocean Theme Dark Mode */
+/* Ocean Dark Mode */
 .theme-ocean.dark {
   --gradient-hero: linear-gradient(135deg, #0f172a 0%, #164e63 50%, #0f172a 100%);
   --glow-color: rgba(34, 211, 238, 0.2);
+  --sidebar-bg: #0f172a;
+  --card-bg: #1e293b;
+  --card-border: rgba(255, 255, 255, 0.05);
+  --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-/* Aurora Theme Light Mode */
+/* ============================================
+   AURORA THEME - Emerald / Teal, Glassmorphic
+   ============================================ */
+
+/* Aurora Light Mode - Fresh green gradients */
 .theme-aurora {
-  --gradient-hero: linear-gradient(135deg, #faf5ff 0%, #fdf4ff 50%, #fdf2f8 100%);
-  --glow-color: rgba(139, 92, 246, 0.3);
+  --gradient-hero: linear-gradient(135deg, #ecfdf5 0%, #e0f2fe 30%, #d1fae5 60%, #ccfbf1 100%);
+  --glow-color: rgba(16, 185, 129, 0.35); /* emerald-500 */
+  --sidebar-bg: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+  --card-bg: rgba(255, 255, 255, 0.8);
+  --card-border: rgba(16, 185, 129, 0.25);
+  --card-shadow: 0 8px 32px rgba(16, 185, 129, 0.18);
 }
 
-/* Aurora Theme Dark Mode */
+/* Aurora Dark Mode - Emerald neon aesthetic */
 .theme-aurora.dark {
-  --gradient-hero: linear-gradient(135deg, #0f172a 0%, #2e1065 50%, #0f172a 100%);
-  --glow-color: rgba(167, 139, 250, 0.2);
+  --gradient-hero: linear-gradient(135deg, #022c22 0%, #064e3b 30%, #022c22 60%, #022c22 100%);
+  --glow-color: rgba(52, 211, 153, 0.5); /* emerald-400 */
+  --sidebar-bg: linear-gradient(180deg, #020617 0%, #022c22 100%);
+  --card-bg: rgba(15, 23, 42, 0.9);
+  --card-border: rgba(52, 211, 153, 0.35);
+  --card-shadow: 0 8px 32px rgba(16, 185, 129, 0.25);
+}
+
+/* Aurora-specific styles */
+.theme-aurora .glass,
+.theme-aurora.dark .glass {
+  background: var(--card-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--card-border);
+}
+
+/* Aurora sidebar gradient */
+.theme-aurora aside {
+  background: var(--sidebar-bg) !important;
+}
+
+.theme-aurora.dark aside {
+  background: var(--sidebar-bg) !important;
+  border-right-color: rgba(52, 211, 153, 0.25) !important; /* emerald-400 */
+}
+
+/* Aurora cards with glassmorphism */
+.theme-aurora .card-glow {
+  background: var(--card-bg) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--card-border) !important;
+  box-shadow: var(--card-shadow) !important;
+}
+
+.theme-aurora .card-glow:hover {
+  box-shadow: 0 0 40px var(--glow-color), var(--card-shadow) !important;
+  border-color: rgba(192, 132, 252, 0.5) !important;
+}
+
+/* Aurora neon glow on buttons */
+.theme-aurora button[class*="bg-emerald"],
+.theme-aurora button[class*="bg-teal"],
+.theme-aurora button[class*="bg-lime"] {
+  box-shadow: 0 0 20px var(--glow-color);
+}
+
+.theme-aurora button[class*="bg-emerald"]:hover,
+.theme-aurora button[class*="bg-teal"]:hover,
+.theme-aurora button[class*="bg-lime"]:hover {
+  box-shadow: 0 0 30px var(--glow-color), 0 0 60px var(--glow-color);
+}
+
+/* Aurora animated gradient border */
+.theme-aurora .card-glow::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  background: linear-gradient(45deg, #22c55e, #14b8a6, #84cc16, #22c55e); /* emerald/teal/lime */
+  background-size: 300% 300%;
+  border-radius: inherit;
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  animation: gradientRotate 3s ease infinite;
+}
+
+.theme-aurora .card-glow:hover::before {
+  opacity: 0.5;
+}
+
+@keyframes gradientRotate {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Aurora header/top bar */
+.theme-aurora.dark header,
+.theme-aurora.dark [class*="border-b"][class*="bg-slate"] {
+  background: rgba(2, 44, 34, 0.9) !important;
+  backdrop-filter: blur(10px);
+  border-bottom-color: rgba(52, 211, 153, 0.3) !important;
+}
+
+/* Aurora scrollbar */
+.theme-aurora::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #22c55e, #14b8a6);
+  border-radius: 4px;
+}
+
+.theme-aurora.dark::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #22c55e, #22c55e);
+}
+
+/* Aurora text glow effect on headings */
+.theme-aurora.dark h1,
+.theme-aurora.dark h2 {
+  text-shadow: 0 0 30px rgba(16, 185, 129, 0.45);
+}
+
+/* Aurora pulse animation on score circles */
+.theme-aurora .score-circle {
+  filter: drop-shadow(0 0 10px var(--glow-color));
+}
+
+/* Aurora input focus glow */
+.theme-aurora input:focus,
+.theme-aurora select:focus,
+.theme-aurora textarea:focus {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.35), 0 0 20px rgba(16, 185, 129, 0.25);
+  border-color: #22c55e !important; /* emerald-500 */
 }
 
 /* Primary Button Styles */

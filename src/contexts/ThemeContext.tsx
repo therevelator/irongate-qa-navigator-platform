@@ -37,21 +37,21 @@ export const themes = {
   },
   aurora: {
     name: 'Aurora',
-    description: 'Vibrant purples and pinks - modern and energetic',
+    description: 'Fresh emerald and teal - energetic and modern',
     colors: {
-      primary: 'violet',
-      accent: 'fuchsia',
+      primary: 'emerald',
+      accent: 'teal',
       gradient: {
-        light: 'from-violet-50 via-fuchsia-50 to-pink-50',
-        dark: 'from-slate-900 via-purple-900/20 to-slate-800'
+        light: 'from-emerald-50 via-teal-50 to-lime-50',
+        dark: 'from-slate-950 via-emerald-950/30 to-slate-900'
       },
       sidebar: {
         light: 'bg-white',
-        dark: 'bg-slate-900'
+        dark: 'bg-slate-950'
       },
       card: {
         light: 'bg-white',
-        dark: 'bg-slate-800/50'
+        dark: 'bg-slate-900/60'
       }
     }
   }
@@ -100,9 +100,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       root.style.setProperty('--theme-accent', isDark ? '96 165 250' : '59 130 246'); // blue-400/500
       root.style.setProperty('--theme-primary-rgb', isDark ? '34, 211, 238' : '6, 182, 212');
     } else {
-      root.style.setProperty('--theme-primary', isDark ? '167 139 250' : '139 92 246'); // violet-400/500
-      root.style.setProperty('--theme-accent', isDark ? '232 121 249' : '217 70 239'); // fuchsia-400/500
-      root.style.setProperty('--theme-primary-rgb', isDark ? '167, 139, 250' : '139, 92, 246');
+      // Aurora/Emerald theme
+      // Use emerald/teal tones instead of violet/purple
+      root.style.setProperty('--theme-primary', isDark ? '16 185 129' : '5 150 105'); // emerald-500/600
+      root.style.setProperty('--theme-accent', isDark ? '45 212 191' : '20 184 166'); // teal-400/500
+      root.style.setProperty('--theme-primary-rgb', isDark ? '16, 185, 129' : '5, 150, 105');
     }
   }, [isDark, themeName]);
 
