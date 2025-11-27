@@ -108,11 +108,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 }`}>
                   {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
                     ? `${userTeams[0]?.name || 'My Team'} Dashboard`
-                    : 'Quality Assurance Dashboard'}
+                    : 'Quality Engineering Dashboard'}
                 </h1>
-                <Sparkles className={`w-5 h-5 animate-pulse hidden sm:block ${
-                  isAurora ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(16,185,129,0.8)]' : 'text-cyan-500'
-                }`} />
               </div>
             </div>
           </div>

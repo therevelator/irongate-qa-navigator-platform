@@ -315,7 +315,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           <footer className="bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 px-4 sm:px-6 py-4 mt-auto">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-gray-500 dark:text-slate-400">
               <div className="flex items-center gap-2">
-                <span>© {new Date().getFullYear()} IronGate QA Navigator</span>
+                <span>© 2025 IronGate QA Navigator</span>
+                <span className="hidden sm:inline">•</span>
+                <span className="hidden sm:inline">Built with passion</span>
                 <span className="hidden sm:inline">•</span>
                 <span className="hidden sm:inline">All rights reserved</span>
               </div>

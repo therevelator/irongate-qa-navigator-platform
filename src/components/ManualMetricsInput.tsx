@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp } from 'lucide-react';
+import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import API_URL from '../config/api';
@@ -83,6 +83,67 @@ interface Team {
   name: string;
   department?: string;
 }
+
+interface TeamMember {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+}
+
+interface DeveloperMetricsInput {
+  prMergeTimeAvg: number;      // PR Time (hours)
+  codeReviewTimeAvg: number;   // Review Time (hours)
+  focusTimeHours: number;      // Focus Time (hours per day)
+  meetingTimeHours: number;    // Meeting Time (hours per day)
+  contextSwitchesPerDay: number; // Context Switches per day
+}
+
+// Calculate Happiness Score (0-100)
+// Formula: Based on focus time ratio, low context switches, and reasonable meeting time
+const calculateHappinessScore = (metrics: DeveloperMetricsInput): number => {
+  const focusRatio = metrics.focusTimeHours / (metrics.focusTimeHours + metrics.meetingTimeHours);
+  const focusScore = Math.min(focusRatio * 100, 100) * 0.4; // 40% weight
+  
+  // Context switches: fewer is better (ideal: 3-5, bad: 10+)
+  const contextScore = Math.max(0, (10 - metrics.contextSwitchesPerDay) / 10 * 100) * 0.3; // 30% weight
+  
+  // Meeting time: 1-2 hours ideal, 4+ hours is bad
+  const meetingScore = Math.max(0, (4 - metrics.meetingTimeHours) / 4 * 100) * 0.15; // 15% weight
+  
+  // PR and Review time: faster is better (ideal: <4 hours, bad: 24+ hours)
+  const prScore = Math.max(0, (24 - metrics.prMergeTimeAvg) / 24 * 100) * 0.075; // 7.5% weight
+  const reviewScore = Math.max(0, (8 - metrics.codeReviewTimeAvg) / 8 * 100) * 0.075; // 7.5% weight
+  
+  return Math.min(100, Math.max(0, focusScore + contextScore + meetingScore + prScore + reviewScore));
+};
+
+// Calculate Burnout Risk (Low, Moderate, High)
+// Based on: high meeting time, low focus time, high context switches, long PR times
+const calculateBurnoutRisk = (metrics: DeveloperMetricsInput, happinessScore: number): 'low' | 'moderate' | 'high' => {
+  let riskScore = 0;
+  
+  // High meeting time increases risk
+  if (metrics.meetingTimeHours > 4) riskScore += 30;
+  else if (metrics.meetingTimeHours > 2.5) riskScore += 15;
+  
+  // Low focus time increases risk
+  if (metrics.focusTimeHours < 3) riskScore += 30;
+  else if (metrics.focusTimeHours < 4) riskScore += 15;
+  
+  // High context switches increase risk
+  if (metrics.contextSwitchesPerDay > 8) riskScore += 25;
+  else if (metrics.contextSwitchesPerDay > 5) riskScore += 10;
+  
+  // Low happiness score increases risk
+  if (happinessScore < 60) riskScore += 25;
+  else if (happinessScore < 75) riskScore += 10;
+  
+  if (riskScore >= 50) return 'high';
+  if (riskScore >= 25) return 'moderate';
+  return 'low';
+};
 
 interface ManualMetricsInputProps {
   onBack: () => void;
@@ -451,6 +512,13 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
+  
+  // Developer metrics state
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [developerMetrics, setDeveloperMetrics] = useState<Record<string, DeveloperMetricsInput>>({});
+  const [developerCalculated, setDeveloperCalculated] = useState<Record<string, { happinessScore: number; burnoutRisk: 'low' | 'moderate' | 'high' }>>({});
+  const [expandedDevelopers, setExpandedDevelopers] = useState<boolean>(true);
+  const [savingDeveloperMetrics, setSavingDeveloperMetrics] = useState(false);
 
   // Check if user is super_admin
   if (user?.role !== 'super_admin') {
@@ -524,6 +592,24 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         } else {
           setExistingMetrics(null);
         }
+        
+        // Also fetch team members
+        if (team?.members) {
+          setTeamMembers(team.members);
+          // Initialize developer metrics for each member
+          const initialMetrics: Record<string, DeveloperMetricsInput> = {};
+          team.members.forEach((member: TeamMember) => {
+            initialMetrics[member.id] = {
+              prMergeTimeAvg: 0,
+              codeReviewTimeAvg: 0,
+              focusTimeHours: 0,
+              meetingTimeHours: 0,
+              contextSwitchesPerDay: 0
+            };
+          });
+          setDeveloperMetrics(initialMetrics);
+          setDeveloperCalculated({});
+        }
       }
     } catch (error) {
       console.error('Error fetching existing metrics:', error);
@@ -567,6 +653,86 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
   const scrollToTop = () => {
     topRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // Handle developer metrics input change
+  const handleDeveloperMetricChange = (developerId: string, field: keyof DeveloperMetricsInput, value: string) => {
+    const numValue = parseFloat(value) || 0;
+    
+    setDeveloperMetrics(prev => {
+      const updated = {
+        ...prev,
+        [developerId]: {
+          ...prev[developerId],
+          [field]: numValue
+        }
+      };
+      
+      // Calculate happiness score and burnout risk
+      const metrics = updated[developerId];
+      if (metrics.focusTimeHours > 0 || metrics.meetingTimeHours > 0) {
+        const happinessScore = calculateHappinessScore(metrics);
+        const burnoutRisk = calculateBurnoutRisk(metrics, happinessScore);
+        
+        setDeveloperCalculated(prevCalc => ({
+          ...prevCalc,
+          [developerId]: { happinessScore, burnoutRisk }
+        }));
+      }
+      
+      return updated;
+    });
+  };
+
+  // Save developer metrics
+  const handleSaveDeveloperMetrics = async () => {
+    if (!selectedTeamId) {
+      toast.error('Please select a team');
+      return;
+    }
+
+    const metricsToSave = Object.entries(developerMetrics).filter(([_, metrics]) => 
+      metrics.focusTimeHours > 0 || metrics.meetingTimeHours > 0 || metrics.prMergeTimeAvg > 0
+    );
+
+    if (metricsToSave.length === 0) {
+      toast.error('Please enter metrics for at least one developer');
+      return;
+    }
+
+    setSavingDeveloperMetrics(true);
+
+    try {
+      const token = localStorage.getItem('irongate_token');
+      
+      for (const [developerId, metrics] of metricsToSave) {
+        const happinessScore = calculateHappinessScore(metrics);
+        
+        await fetch(`${API_URL}/metrics/developer`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            userId: developerId,
+            prMergeTimeAvg: metrics.prMergeTimeAvg,
+            codeReviewTimeAvg: metrics.codeReviewTimeAvg,
+            focusTimeHours: metrics.focusTimeHours,
+            meetingTimeHours: metrics.meetingTimeHours,
+            contextSwitchesPerDay: metrics.contextSwitchesPerDay,
+            happinessScore: happinessScore
+          })
+        });
+      }
+
+      toast.success(`Developer metrics saved for ${metricsToSave.length} developer(s)`);
+    } catch (error) {
+      console.error('Error saving developer metrics:', error);
+      toast.error('Failed to save developer metrics');
+    } finally {
+      setSavingDeveloperMetrics(false);
+    }
   };
 
   const handleInputChange = (metricId: string, inputId: string, value: string) => {
@@ -958,6 +1124,172 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
             </div>
           );
         })}
+
+        {/* Developer Metrics Section */}
+        {selectedTeamId && teamMembers.length > 0 && (
+          <div className="bg-slate-800 rounded-xl overflow-hidden">
+            {/* Section Header */}
+            <button
+              onClick={() => setExpandedDevelopers(!expandedDevelopers)}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
+                  <Users className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <h2 className="text-lg font-semibold text-white">Developer Productivity Metrics</h2>
+                  <p className="text-sm text-slate-400">{teamMembers.length} team members</p>
+                </div>
+              </div>
+              {expandedDevelopers ? (
+                <ChevronDown className="w-5 h-5 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-slate-400" />
+              )}
+            </button>
+
+            {/* Developer Metrics List */}
+            {expandedDevelopers && (
+              <div className="px-6 pb-6 space-y-4">
+                <div className="bg-slate-700/30 rounded-lg p-4 mb-4">
+                  <div className="flex items-start gap-2">
+                    <Info className="w-4 h-4 text-pink-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-slate-300">
+                      Enter productivity metrics for each developer. <strong>Happiness Score</strong> and <strong>Burnout Risk</strong> are calculated automatically based on the input values.
+                    </p>
+                  </div>
+                </div>
+
+                {teamMembers.map(member => {
+                  const metrics = developerMetrics[member.id] || {};
+                  const calculated = developerCalculated[member.id];
+                  
+                  return (
+                    <div key={member.id} className="bg-slate-700/30 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
+                            <UserCircle className="w-6 h-6 text-slate-300" />
+                          </div>
+                          <div>
+                            <h3 className="text-white font-medium">{member.first_name} {member.last_name}</h3>
+                            <p className="text-xs text-slate-400">{member.email}</p>
+                          </div>
+                        </div>
+                        
+                        {/* Calculated Results */}
+                        {calculated && (
+                          <div className="flex items-center gap-4">
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500">Happiness</div>
+                              <div className={`text-xl font-bold ${
+                                calculated.happinessScore >= 80 ? 'text-emerald-400' :
+                                calculated.happinessScore >= 60 ? 'text-amber-400' : 'text-red-400'
+                              }`}>
+                                {calculated.happinessScore.toFixed(0)}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500">Burnout Risk</div>
+                              <div className={`text-sm font-bold px-2 py-1 rounded ${
+                                calculated.burnoutRisk === 'low' ? 'bg-emerald-500/20 text-emerald-400' :
+                                calculated.burnoutRisk === 'moderate' ? 'bg-amber-500/20 text-amber-400' : 
+                                'bg-red-500/20 text-red-400'
+                              }`}>
+                                {calculated.burnoutRisk === 'low' ? '✅ Low' :
+                                 calculated.burnoutRisk === 'moderate' ? '⚠️ Moderate' : '❌ High'}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Input Fields */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">PR Time (hours)</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 8"
+                            min={0}
+                            step={0.5}
+                            value={metrics.prMergeTimeAvg || ''}
+                            onChange={(e) => handleDeveloperMetricChange(member.id, 'prMergeTimeAvg', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Review Time (hours)</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 2"
+                            min={0}
+                            step={0.5}
+                            value={metrics.codeReviewTimeAvg || ''}
+                            onChange={(e) => handleDeveloperMetricChange(member.id, 'codeReviewTimeAvg', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Focus Time (hrs/day)</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 5"
+                            min={0}
+                            max={8}
+                            step={0.5}
+                            value={metrics.focusTimeHours || ''}
+                            onChange={(e) => handleDeveloperMetricChange(member.id, 'focusTimeHours', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Meetings (hrs/day)</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 2"
+                            min={0}
+                            max={8}
+                            step={0.5}
+                            value={metrics.meetingTimeHours || ''}
+                            onChange={(e) => handleDeveloperMetricChange(member.id, 'meetingTimeHours', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Context Switches</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 5"
+                            min={0}
+                            max={20}
+                            step={1}
+                            value={metrics.contextSwitchesPerDay || ''}
+                            onChange={(e) => handleDeveloperMetricChange(member.id, 'contextSwitchesPerDay', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Save Developer Metrics Button */}
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={handleSaveDeveloperMetrics}
+                    disabled={savingDeveloperMetrics}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-lg hover:from-pink-600 hover:to-rose-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" />
+                    {savingDeveloperMetrics ? 'Saving...' : 'Save Developer Metrics'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Floating Action Buttons */}

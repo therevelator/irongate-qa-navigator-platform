@@ -5,8 +5,7 @@ interface TypingAnimationProps {
 }
 
 const messages = [
-  'Monitor, analyze, and optimize your quality assurance processes with real-time insights and comprehensive metrics.',
-  'Deployment deploy = pipeline.run(build);\nassert deploy.status() == Status.STABLE : "Unstable release rejected.";',
+  'Monitor, analyze, and optimize your quality engineering processes with real-time insights and comprehensive metrics.',
   'CI/CD: because manually deploying is how horror stories begin.',
   'Ship with confidence, not with crossed fingers.',
   'Turning chaos into predictable, measurable reliability.',

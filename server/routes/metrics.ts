@@ -349,4 +349,108 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+// Save developer metrics (super_admin only)
+router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.userRole !== 'super_admin') {
+      return res.status(403).json({ error: 'Super Admin access required' });
+    }
+
+    const {
+      userId,
+      prMergeTimeAvg,
+      codeReviewTimeAvg,
+      focusTimeHours,
+      meetingTimeHours,
+      contextSwitchesPerDay,
+      happinessScore
+    } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    // Insert or update developer metrics for today
+    await query(
+      `INSERT INTO developer_metrics (
+        user_id,
+        recorded_date,
+        pr_merge_time_avg,
+        code_review_time_avg,
+        focus_time_hours,
+        meeting_time_hours,
+        context_switches_per_day,
+        happiness_score
+      ) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        pr_merge_time_avg = VALUES(pr_merge_time_avg),
+        code_review_time_avg = VALUES(code_review_time_avg),
+        focus_time_hours = VALUES(focus_time_hours),
+        meeting_time_hours = VALUES(meeting_time_hours),
+        context_switches_per_day = VALUES(context_switches_per_day),
+        happiness_score = VALUES(happiness_score)`,
+      [
+        userId,
+        prMergeTimeAvg || null,
+        codeReviewTimeAvg || null,
+        focusTimeHours || null,
+        meetingTimeHours || null,
+        contextSwitchesPerDay || null,
+        happinessScore || null
+      ]
+    );
+
+    res.json({ 
+      message: 'Developer metrics saved successfully',
+      userId,
+      happinessScore
+    });
+  } catch (error) {
+    console.error('Developer metrics error:', error);
+    res.status(500).json({ error: 'Failed to save developer metrics' });
+  }
+});
+
+// Get developer metrics for a user
+router.get('/developer/:userId', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const metrics = await queryOne<any>(
+      `SELECT * FROM developer_metrics 
+       WHERE user_id = ? 
+       ORDER BY recorded_date DESC 
+       LIMIT 1`,
+      [req.params.userId]
+    );
+
+    if (!metrics) {
+      return res.status(404).json({ error: 'No metrics found for this developer' });
+    }
+
+    res.json({ metrics });
+  } catch (error) {
+    console.error('Get developer metrics error:', error);
+    res.status(500).json({ error: 'Failed to get developer metrics' });
+  }
+});
+
+// Get developer metrics history
+router.get('/developer/:userId/history', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { days = '30' } = req.query;
+    
+    const history = await query<any[]>(
+      `SELECT * FROM developer_metrics 
+       WHERE user_id = ? 
+       AND recorded_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       ORDER BY recorded_date DESC`,
+      [req.params.userId, parseInt(days as string)]
+    );
+
+    res.json({ history });
+  } catch (error) {
+    console.error('Get developer history error:', error);
+    res.status(500).json({ error: 'Failed to get developer history' });
+  }
+});
+
 export default router;

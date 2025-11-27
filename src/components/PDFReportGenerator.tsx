@@ -99,7 +99,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
 
       doc.setFontSize(14);
       doc.setFont('helvetica', 'normal');
-      doc.text('Comprehensive Quality Assurance Report', pageWidth / 2, 45, { align: 'center' });
+      doc.text('Comprehensive Quality Engineering Report', pageWidth / 2, 45, { align: 'center' });
 
       // Report Period
       yPos = 80;
@@ -394,7 +394,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
         {
           title: 'Test Coverage Growth',
           value: data.trends.testGrowth,
-          desc: 'Test suite expansion shows commitment to comprehensive quality assurance.',
+          desc: 'Test suite expansion shows commitment to comprehensive quality engineering.',
           icon: 'T',
           color: [59, 130, 246],
         },
@@ -454,7 +454,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
 
       doc.setFontSize(8);
       doc.setFont('helvetica', 'normal');
-      doc.text('Enterprise Quality Assurance Intelligence Platform', pageWidth / 2, yPos + 12, { align: 'center' });
+      doc.text('Enterprise Quality Engineering Intelligence Platform', pageWidth / 2, yPos + 12, { align: 'center' });
       doc.text('© 2025 IronGate Software LTD. All rights reserved.', pageWidth / 2, yPos + 18, { align: 'center' });
 
       // Save PDF
@@ -488,7 +488,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">PDF Report Generator</h1>
-              <p className="text-gray-500 dark:text-slate-400 mt-1">Generate comprehensive quality assurance reports</p>
+              <p className="text-gray-500 dark:text-slate-400 mt-1">Generate comprehensive quality engineering reports</p>
             </div>
           </div>
         </div>
