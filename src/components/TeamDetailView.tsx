@@ -54,6 +54,51 @@ interface DeveloperMetrics {
   meeting_time_hours: number;
 }
 
+interface TeamAISuggestions {
+  teamId: string;
+  teamName: string;
+  qaScore: number;
+  aiEnabled: boolean;
+  source?: 'groq' | 'rule-based';
+  message?: string;
+  strongpoints: string[];
+  areasOfImprovement: string[];
+  actionPlan: {
+    priority: string;
+    initiative: string;
+    owner: string;
+    timebox: string;
+    kpi: string;
+  }[];
+}
+
+interface DeveloperAISuggestion {
+  name: string;
+  status: 'healthy' | 'at-risk' | 'needs-attention';
+  summary: string;
+  strengths: string[];
+  concerns: string[];
+  suggestion: string;
+}
+
+interface DeveloperAISuggestions {
+  teamId: string;
+  aiEnabled: boolean;
+  source?: 'groq' | 'rule-based';
+  developers: DeveloperAISuggestion[];
+  teamInsight: string;
+  metrics: {
+    name: string;
+    prMergeTimeHours: number;
+    codeReviewTimeHours: number;
+    focusTimeHours: number;
+    meetingTimeHours: number;
+    contextSwitchesPerDay: number;
+    happinessScore: number;
+  }[];
+  message?: string;
+}
+
 interface TeamDetailViewProps {
   team: TeamWithKPI;
   onBack: () => void;
@@ -70,6 +115,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const automationCoverage = Number(kpi.automationCoverage) || 0;
   const [developers, setDevelopers] = useState<DeveloperMetrics[]>([]);
   const [loading, setLoading] = useState(true);
+  const [aiSuggestions, setAISuggestions] = useState<TeamAISuggestions | null>(null);
+  const [aiLoading, setAILoading] = useState(false);
+  const [aiError, setAIError] = useState<string | null>(null);
+  const [devAISuggestions, setDevAISuggestions] = useState<DeveloperAISuggestions | null>(null);
+  const [devAILoading, setDevAILoading] = useState(false);
 
   // Fetch team members from database
   useEffect(() => {
@@ -131,6 +181,75 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
     fetchTeamMembers();
   }, [team.id, team.name]);
+  
+  useEffect(() => {
+    const fetchAISuggestions = async () => {
+      try {
+        setAILoading(true);
+        setAIError(null);
+        const token = localStorage.getItem('irongate_token');
+        if (!token) {
+          setAILoading(false);
+          return;
+        }
+
+        const response = await fetch(`${API_URL}/teams/${team.id}/ai-suggestions`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          setAIError(errorData.error || 'Failed to load AI insights');
+          setAILoading(false);
+          return;
+        }
+
+        const data = await response.json();
+        setAISuggestions(data as TeamAISuggestions);
+      } catch (error) {
+        setAIError('Failed to load AI insights');
+      } finally {
+        setAILoading(false);
+      }
+    };
+
+    fetchAISuggestions();
+  }, [team.id]);
+
+  // Fetch developer AI suggestions
+  useEffect(() => {
+    const fetchDevAISuggestions = async () => {
+      try {
+        setDevAILoading(true);
+        const token = localStorage.getItem('irongate_token');
+        if (!token) {
+          setDevAILoading(false);
+          return;
+        }
+
+        const response = await fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setDevAISuggestions(data as DeveloperAISuggestions);
+        }
+      } catch (error) {
+        console.error('Error fetching developer AI suggestions:', error);
+      } finally {
+        setDevAILoading(false);
+      }
+    };
+
+    fetchDevAISuggestions();
+  }, [team.id]);
   
   const categories = [
     { id: 'quality', name: 'Quality & Testing', color: 'blue' },
@@ -508,6 +627,444 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             </div>
           );
         })}
+      </div>
+      
+      <div className="px-4 sm:px-6 lg:px-8 pb-10">
+        <div className="max-w-6xl mx-auto">
+          {/* Metrics Overview Section */}
+          {team.kpiData && (
+            <div className="mb-8">
+              <div className="mb-4 flex items-center gap-2">
+                <BarChart3 className="text-cyan-500" size={24} />
+                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Metrics Overview</h2>
+              </div>
+              <p className="text-sm text-slate-400 mb-4">
+                These are the key metrics used to generate AI recommendations. Understanding your current state helps validate the suggestions below.
+              </p>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                {/* Test Coverage */}
+                <div className={`rounded-lg border p-3 ${
+                  testCoverage >= 80 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                  testCoverage >= 60 ? 'border-amber-500/40 bg-amber-500/10' :
+                  'border-red-500/40 bg-red-500/10'
+                }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-400 uppercase">Test Coverage</span>
+                    <span className={`text-lg font-bold ${
+                      testCoverage >= 80 ? 'text-emerald-400' : testCoverage >= 60 ? 'text-amber-400' : 'text-red-400'
+                    }`}>{testCoverage.toFixed(1)}%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    {testCoverage >= 80 ? 'Excellent coverage reduces production bugs' :
+                     testCoverage >= 60 ? 'Moderate coverage — aim for 80%+ for stability' :
+                     'Low coverage increases risk of undetected bugs'}
+                  </p>
+                </div>
+
+                {/* Defect Density */}
+                <div className={`rounded-lg border p-3 ${
+                  defectDensity <= 0.5 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                  defectDensity <= 1.0 ? 'border-amber-500/40 bg-amber-500/10' :
+                  'border-red-500/40 bg-red-500/10'
+                }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-400 uppercase">Defect Density</span>
+                    <span className={`text-lg font-bold ${
+                      defectDensity <= 0.5 ? 'text-emerald-400' : defectDensity <= 1.0 ? 'text-amber-400' : 'text-red-400'
+                    }`}>{defectDensity.toFixed(2)}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    {defectDensity <= 0.5 ? 'Low defect rate indicates quality code' :
+                     defectDensity <= 1.0 ? 'Moderate — review testing practices' :
+                     'High defect rate needs immediate attention'}
+                  </p>
+                </div>
+
+                {/* Automation Coverage */}
+                <div className={`rounded-lg border p-3 ${
+                  automationCoverage >= 70 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                  automationCoverage >= 50 ? 'border-amber-500/40 bg-amber-500/10' :
+                  'border-red-500/40 bg-red-500/10'
+                }`}>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium text-slate-400 uppercase">Automation</span>
+                    <span className={`text-lg font-bold ${
+                      automationCoverage >= 70 ? 'text-emerald-400' : automationCoverage >= 50 ? 'text-amber-400' : 'text-red-400'
+                    }`}>{automationCoverage.toFixed(1)}%</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500">
+                    {automationCoverage >= 70 ? 'Strong automation enables fast releases' :
+                     automationCoverage >= 50 ? 'Moderate — automate critical paths first' :
+                     'Low automation slows delivery and increases risk'}
+                  </p>
+                </div>
+
+                {/* Lead Time */}
+                {kpi.leadTimeDays !== undefined && (
+                  <div className={`rounded-lg border p-3 ${
+                    Number(kpi.leadTimeDays) <= 3 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                    Number(kpi.leadTimeDays) <= 7 ? 'border-amber-500/40 bg-amber-500/10' :
+                    'border-red-500/40 bg-red-500/10'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-400 uppercase">Lead Time</span>
+                      <span className={`text-lg font-bold ${
+                        Number(kpi.leadTimeDays) <= 3 ? 'text-emerald-400' : Number(kpi.leadTimeDays) <= 7 ? 'text-amber-400' : 'text-red-400'
+                      }`}>{Number(kpi.leadTimeDays).toFixed(1)}d</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {Number(kpi.leadTimeDays) <= 3 ? 'Fast delivery from commit to production' :
+                       Number(kpi.leadTimeDays) <= 7 ? 'Moderate — look for bottlenecks' :
+                       'Slow pipeline needs optimization'}
+                    </p>
+                  </div>
+                )}
+
+                {/* MTTR */}
+                {kpi.mttrHours !== undefined && (
+                  <div className={`rounded-lg border p-3 ${
+                    Number(kpi.mttrHours) <= 1 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                    Number(kpi.mttrHours) <= 4 ? 'border-amber-500/40 bg-amber-500/10' :
+                    'border-red-500/40 bg-red-500/10'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-400 uppercase">MTTR</span>
+                      <span className={`text-lg font-bold ${
+                        Number(kpi.mttrHours) <= 1 ? 'text-emerald-400' : Number(kpi.mttrHours) <= 4 ? 'text-amber-400' : 'text-red-400'
+                      }`}>{Number(kpi.mttrHours).toFixed(1)}h</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {Number(kpi.mttrHours) <= 1 ? 'Quick recovery minimizes user impact' :
+                       Number(kpi.mttrHours) <= 4 ? 'Acceptable — improve incident response' :
+                       'Slow recovery hurts reliability'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Sprint Commitment */}
+                {kpi.sprintCommitmentRate !== undefined && (
+                  <div className={`rounded-lg border p-3 ${
+                    Number(kpi.sprintCommitmentRate) >= 90 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                    Number(kpi.sprintCommitmentRate) >= 75 ? 'border-amber-500/40 bg-amber-500/10' :
+                    'border-red-500/40 bg-red-500/10'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-400 uppercase">Sprint Commit</span>
+                      <span className={`text-lg font-bold ${
+                        Number(kpi.sprintCommitmentRate) >= 90 ? 'text-emerald-400' : Number(kpi.sprintCommitmentRate) >= 75 ? 'text-amber-400' : 'text-red-400'
+                      }`}>{Number(kpi.sprintCommitmentRate).toFixed(0)}%</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {Number(kpi.sprintCommitmentRate) >= 90 ? 'Team delivers on commitments reliably' :
+                       Number(kpi.sprintCommitmentRate) >= 75 ? 'Moderate — refine estimation practices' :
+                       'Low commitment rate affects planning'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Change Failure Rate */}
+                {kpi.changeFailureRate !== undefined && (
+                  <div className={`rounded-lg border p-3 ${
+                    Number(kpi.changeFailureRate) <= 5 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                    Number(kpi.changeFailureRate) <= 15 ? 'border-amber-500/40 bg-amber-500/10' :
+                    'border-red-500/40 bg-red-500/10'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-400 uppercase">Change Failure</span>
+                      <span className={`text-lg font-bold ${
+                        Number(kpi.changeFailureRate) <= 5 ? 'text-emerald-400' : Number(kpi.changeFailureRate) <= 15 ? 'text-amber-400' : 'text-red-400'
+                      }`}>{Number(kpi.changeFailureRate).toFixed(1)}%</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {Number(kpi.changeFailureRate) <= 5 ? 'Low failure rate shows mature CI/CD' :
+                       Number(kpi.changeFailureRate) <= 15 ? 'Moderate — improve pre-deploy testing' :
+                       'High failure rate needs process review'}
+                    </p>
+                  </div>
+                )}
+
+                {/* Build Time */}
+                {kpi.avgBuildTimeMinutes !== undefined && (
+                  <div className={`rounded-lg border p-3 ${
+                    Number(kpi.avgBuildTimeMinutes) <= 10 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                    Number(kpi.avgBuildTimeMinutes) <= 20 ? 'border-amber-500/40 bg-amber-500/10' :
+                    'border-red-500/40 bg-red-500/10'
+                  }`}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs font-medium text-slate-400 uppercase">Build Time</span>
+                      <span className={`text-lg font-bold ${
+                        Number(kpi.avgBuildTimeMinutes) <= 10 ? 'text-emerald-400' : Number(kpi.avgBuildTimeMinutes) <= 20 ? 'text-amber-400' : 'text-red-400'
+                      }`}>{Number(kpi.avgBuildTimeMinutes).toFixed(0)}m</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500">
+                      {Number(kpi.avgBuildTimeMinutes) <= 10 ? 'Fast builds keep developers productive' :
+                       Number(kpi.avgBuildTimeMinutes) <= 20 ? 'Moderate — consider caching/parallelization' :
+                       'Slow builds hurt developer flow'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* AI Insights Header */}
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Bot className="text-purple-500" size={24} />
+              AI Insights
+            </h2>
+            {aiLoading && (
+              <span className="text-sm text-gray-500 dark:text-slate-400">Generating recommendations...</span>
+            )}
+          </div>
+
+          {aiError && (
+            <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+              {aiError}
+            </div>
+          )}
+
+          {!aiLoading && !aiError && !aiSuggestions && (
+            <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-300">
+              No AI insights available yet for this team. Make sure metrics are recorded.
+            </div>
+          )}
+
+          {/* AI Disabled Message */}
+          {aiSuggestions && !aiSuggestions.aiEnabled && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
+              <span className="font-medium">AI suggestions are disabled for this team.</span>
+              <span className="ml-1 text-amber-400/80">Enable AI in admin settings to get personalized recommendations.</span>
+            </div>
+          )}
+
+          {/* AI Enabled - Show Suggestions */}
+          {aiSuggestions && aiSuggestions.aiEnabled && (
+            <>
+              {/* Source indicator and disclaimer */}
+              {aiSuggestions.source && (
+                <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
+                  <div className="text-xs text-slate-500">
+                    Powered by: <span className="text-purple-400">{aiSuggestions.source === 'groq' ? 'AI' : 'Rule-based analysis'}</span>
+                  </div>
+                  {aiSuggestions.source === 'groq' && (
+                    <div className="text-[10px] text-slate-500 italic">
+                      ⚠️ Generated by AI. May contain inaccuracies — please verify before acting.
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wide">Strongpoints</h3>
+                  <ul className="space-y-2 text-sm text-slate-200">
+                    {aiSuggestions.strongpoints.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="mt-0.5 text-emerald-400">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                    {aiSuggestions.strongpoints.length === 0 && (
+                      <li className="text-slate-500 italic">No strongpoints identified</li>
+                    )}
+                  </ul>
+                </div>
+
+                <div className="space-y-3">
+                  <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wide">Areas of Improvement</h3>
+                  <ul className="space-y-2 text-sm text-slate-200">
+                    {aiSuggestions.areasOfImprovement.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="mt-0.5 text-amber-400">•</span>
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                    {aiSuggestions.areasOfImprovement.length === 0 && (
+                      <li className="text-slate-500 italic">No areas of improvement identified</li>
+                    )}
+                  </ul>
+                </div>
+
+                <div className="md:col-span-2 lg:col-span-1 space-y-3">
+                  <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">Action Plan</h3>
+                  <div className="space-y-3">
+                    {aiSuggestions.actionPlan.map((item, idx) => (
+                      <div key={idx} className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-xs font-semibold uppercase tracking-wide ${
+                            item.priority === 'Urgent' ? 'text-red-400' : 
+                            item.priority === 'Moderate' ? 'text-amber-400' : 'text-slate-300'
+                          }`}>
+                            {item.priority}
+                          </span>
+                          <span className="text-[11px] text-slate-400">{item.timebox}</span>
+                        </div>
+                        <div className="text-sm font-medium text-slate-100 mb-1">{item.initiative}</div>
+                        <div className="text-xs text-slate-400 mb-1">Owner: {item.owner}</div>
+                        <div className="text-xs text-emerald-300">KPI: {item.kpi}</div>
+                      </div>
+                    ))}
+                    {aiSuggestions.actionPlan.length === 0 && (
+                      <div className="text-slate-500 italic text-sm">No action items</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Developer AI Insights Section */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-10">
+        <div className="max-w-6xl mx-auto">
+          <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+              <Users className="text-indigo-500" size={24} />
+              Developer Insights
+            </h2>
+            {devAILoading && (
+              <span className="text-sm text-gray-500 dark:text-slate-400">Analyzing developer metrics...</span>
+            )}
+          </div>
+
+          {/* Team Insight Summary */}
+          {devAISuggestions && devAISuggestions.aiEnabled && devAISuggestions.teamInsight && (
+            <div className="mb-4 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-3">
+              <p className="text-sm text-indigo-300">{devAISuggestions.teamInsight}</p>
+              {devAISuggestions.source && (
+                <div className="mt-2 flex items-center justify-between">
+                  <span className="text-[10px] text-slate-500">
+                    Powered by: <span className="text-purple-400">{devAISuggestions.source === 'groq' ? 'AI' : 'Rule-based analysis'}</span>
+                  </span>
+                  {devAISuggestions.source === 'groq' && (
+                    <span className="text-[10px] text-slate-500 italic">
+                      ⚠️ Generated by AI. May contain inaccuracies.
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* No data message */}
+          {!devAILoading && devAISuggestions && devAISuggestions.developers.length === 0 && (
+            <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-300">
+              {devAISuggestions.message || 'No developer metrics available. Add developer metrics in the Manual Metrics Input section.'}
+            </div>
+          )}
+
+          {/* Developer Cards */}
+          {devAISuggestions && devAISuggestions.aiEnabled && devAISuggestions.developers.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {devAISuggestions.developers.map((dev, idx) => {
+                const metrics = devAISuggestions.metrics?.find(m => m.name === dev.name);
+                return (
+                  <div 
+                    key={idx} 
+                    className={`rounded-lg border p-4 ${
+                      dev.status === 'healthy' ? 'border-emerald-500/40 bg-emerald-500/5' :
+                      dev.status === 'at-risk' ? 'border-amber-500/40 bg-amber-500/5' :
+                      'border-red-500/40 bg-red-500/5'
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold text-slate-100">{dev.name}</h4>
+                      <span className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
+                        dev.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-400' :
+                        dev.status === 'at-risk' ? 'bg-amber-500/20 text-amber-400' :
+                        'bg-red-500/20 text-red-400'
+                      }`}>
+                        {dev.status.replace('-', ' ')}
+                      </span>
+                    </div>
+
+                    {/* Metrics Row */}
+                    {metrics && (
+                      <div className="grid grid-cols-5 gap-1 mb-3 text-center">
+                        <div className="bg-slate-800/50 rounded p-1.5">
+                          <div className="text-[10px] text-slate-500 uppercase">PR</div>
+                          <div className={`text-xs font-bold ${
+                            metrics.prMergeTimeHours <= 8 ? 'text-emerald-400' : 
+                            metrics.prMergeTimeHours <= 24 ? 'text-amber-400' : 'text-red-400'
+                          }`}>{metrics.prMergeTimeHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="bg-slate-800/50 rounded p-1.5">
+                          <div className="text-[10px] text-slate-500 uppercase">Review</div>
+                          <div className={`text-xs font-bold ${
+                            metrics.codeReviewTimeHours <= 2 ? 'text-emerald-400' : 
+                            metrics.codeReviewTimeHours <= 4 ? 'text-amber-400' : 'text-red-400'
+                          }`}>{metrics.codeReviewTimeHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="bg-slate-800/50 rounded p-1.5">
+                          <div className="text-[10px] text-slate-500 uppercase">Focus</div>
+                          <div className={`text-xs font-bold ${
+                            metrics.focusTimeHours >= 5 ? 'text-emerald-400' : 
+                            metrics.focusTimeHours >= 3 ? 'text-amber-400' : 'text-red-400'
+                          }`}>{metrics.focusTimeHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="bg-slate-800/50 rounded p-1.5">
+                          <div className="text-[10px] text-slate-500 uppercase">Mtgs</div>
+                          <div className={`text-xs font-bold ${
+                            metrics.meetingTimeHours <= 2 ? 'text-emerald-400' : 
+                            metrics.meetingTimeHours <= 4 ? 'text-amber-400' : 'text-red-400'
+                          }`}>{metrics.meetingTimeHours.toFixed(1)}h</div>
+                        </div>
+                        <div className="bg-slate-800/50 rounded p-1.5">
+                          <div className="text-[10px] text-slate-500 uppercase">Ctx</div>
+                          <div className={`text-xs font-bold ${
+                            metrics.contextSwitchesPerDay <= 3 ? 'text-emerald-400' : 
+                            metrics.contextSwitchesPerDay <= 6 ? 'text-amber-400' : 'text-red-400'
+                          }`}>{metrics.contextSwitchesPerDay}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Summary */}
+                    <p className="text-xs text-slate-400 mb-2">{dev.summary}</p>
+
+                    {/* Strengths */}
+                    {dev.strengths.length > 0 && (
+                      <div className="mb-2">
+                        <div className="text-[10px] text-emerald-400 uppercase font-medium mb-1">Strengths</div>
+                        <div className="flex flex-wrap gap-1">
+                          {dev.strengths.map((s, i) => (
+                            <span key={i} className="text-[10px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded">
+                              {s}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Concerns */}
+                    {dev.concerns.length > 0 && (
+                      <div className="mb-2">
+                        <div className="text-[10px] text-amber-400 uppercase font-medium mb-1">Concerns</div>
+                        <div className="flex flex-wrap gap-1">
+                          {dev.concerns.map((c, i) => (
+                            <span key={i} className="text-[10px] bg-amber-500/10 text-amber-300 px-1.5 py-0.5 rounded">
+                              {c}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Suggestion */}
+                    <div className="mt-3 pt-2 border-t border-slate-700">
+                      <div className="text-[10px] text-cyan-400 uppercase font-medium mb-1">Recommendation</div>
+                      <p className="text-xs text-slate-300">{dev.suggestion}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -98,7 +98,7 @@ function App() {
     setCurrentView(featureId);
   };
 
-  // If a team is selected, show detail view
+  // If a team is selected, show detail view (sidebar hidden, top bar visible)
   if (selectedTeam) {
     return (
       <Layout 
@@ -109,6 +109,7 @@ function App() {
         }} 
         activeTab={activeTab} 
         onTabChange={setActiveTab}
+        hideSidebar
       >
         <TeamDetailView team={selectedTeam} onBack={() => setSelectedTeam(null)} />
       </Layout>

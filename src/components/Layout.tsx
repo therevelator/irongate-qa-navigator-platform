@@ -18,15 +18,17 @@ interface LayoutProps {
   onViewChange: (view: string) => void;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
+  hideSidebar?: boolean;
 }
 
 import API_URL from '../config/api';
 
-const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange, hideSidebar }) => {
   const { user, logout } = useAuth();
   const { isDark, themeName, setThemeName, toggleTheme } = useTheme();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [sidebarVisible, setSidebarVisible] = useState(true);
 
   useEffect(() => {
     if (user?.id) {
@@ -87,10 +89,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       : 'bg-gradient-to-b from-white to-emerald-50 border-emerald-200'
     : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800';
 
+  const sidebarHidden = hideSidebar || !sidebarVisible;
+
   return (
     <div className={`flex h-screen ${mainBgClass}`}>
       {/* Mobile Menu Overlay */}
-      {isMobileMenuOpen && (
+      {!sidebarHidden && isMobileMenuOpen && (
         <div 
           className={`fixed inset-0 z-40 lg:hidden ${
             themeName === 'aurora' ? 'bg-emerald-900/50 backdrop-blur-sm' : 'bg-black bg-opacity-50'
@@ -100,9 +104,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       )}
 
       {/* Sidebar Navigation */}
-      <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 flex flex-col border-r transform transition-all duration-300 ease-in-out ${sidebarBgClass} ${
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-      }`}>
+      {!sidebarHidden && (
+        <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 flex flex-col border-r transform transition-all duration-300 ease-in-out ${sidebarBgClass} ${
+          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}>
         {/* Logo */}
         <div className="px-6 py-6 sm:py-8 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -242,6 +247,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </button>
         </div>
       </aside>
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -274,6 +280,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
+            {/* Sidebar visibility toggle (desktop only, not on forced-hidden views) */}
+            {!hideSidebar && (
+              <button
+                onClick={() => setSidebarVisible((v) => !v)}
+                className="hidden lg:inline-flex items-center px-2 py-1 text-xs rounded-md border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800"
+                title={sidebarHidden ? 'Show navigation menu' : 'Hide navigation menu'}
+              >
+                {sidebarHidden ? 'Show menu' : 'Hide menu'}
+              </button>
+            )}
             {/* Theme Selector - Hidden on mobile */}
             <div className={`hidden md:flex items-center gap-1 p-1 rounded-lg ${
               themeName === 'aurora'

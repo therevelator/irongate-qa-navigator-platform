@@ -6,7 +6,7 @@ import { authenticateToken } from '../middleware/auth';
 const router = express.Router();
 
 // Role hierarchy and permissions
-const ROLE_HIERARCHY = {
+const ROLE_HIERARCHY: Record<string, string[]> = {
   super_admin: ['manager', 'team_lead', 'qa_engineer', 'viewer'],
   manager: ['team_lead', 'qa_engineer', 'viewer'],
   team_lead: ['qa_engineer', 'viewer'],
@@ -55,7 +55,8 @@ const ROLE_PERMISSIONS = {
 
 // Check if user can create a specific role
 function canCreateRole(userRole: string, targetRole: string): boolean {
-  return ROLE_HIERARCHY[userRole as keyof typeof ROLE_HIERARCHY]?.includes(targetRole) || false;
+  const allowedRoles = ROLE_HIERARCHY[userRole];
+  return allowedRoles ? allowedRoles.includes(targetRole) : false;
 }
 
 // Check if user can manage another user (created by them or themselves)
@@ -81,7 +82,7 @@ router.get('/users', authenticateToken, async (req: any, res) => {
       // Super admin sees all users in their company
       users = await query<any>(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-                u.department_id, u.primary_team_id, u.is_active, u.created_at,
+                u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
                 t.name as team_name, d.name as department_name
          FROM users u
          LEFT JOIN teams t ON u.primary_team_id = t.id
@@ -94,7 +95,7 @@ router.get('/users', authenticateToken, async (req: any, res) => {
       // Manager sees users in their department
       users = await query<any>(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-                u.department_id, u.primary_team_id, u.is_active, u.created_at,
+                u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
                 t.name as team_name, d.name as department_name
          FROM users u
          LEFT JOIN teams t ON u.primary_team_id = t.id
@@ -109,7 +110,7 @@ router.get('/users', authenticateToken, async (req: any, res) => {
       // Team Lead sees users in their department
       users = await query<any>(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-                u.department_id, u.primary_team_id, u.is_active, u.created_at,
+                u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
                 t.name as team_name, d.name as department_name
          FROM users u
          LEFT JOIN teams t ON u.primary_team_id = t.id
@@ -122,7 +123,7 @@ router.get('/users', authenticateToken, async (req: any, res) => {
       // QA Engineer and Viewer see only themselves
       users = await query<any>(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-                u.department_id, u.primary_team_id, u.is_active, u.created_at,
+                u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
                 t.name as team_name, d.name as department_name
          FROM users u
          LEFT JOIN teams t ON u.primary_team_id = t.id
@@ -327,6 +328,46 @@ router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res)
   } catch (error: any) {
     console.error('Error toggling user status:', error);
     res.status(500).json({ error: 'Failed to toggle user status', details: error.message });
+  }
+});
+
+// Toggle developer insights for a user (team lead and above)
+router.patch('/users/:id/developer-insights-toggle', authenticateToken, async (req: any, res) => {
+  try {
+    const { role: userRole, companyId, departmentId: userDeptId } = req.user;
+    const { id: userId } = req.params;
+    const { enabled } = req.body;
+
+    // Only team_lead and above can toggle developer insights
+    if (!['super_admin', 'manager', 'team_lead'].includes(userRole)) {
+      return res.status(403).json({ error: 'Team lead or above required' });
+    }
+
+    // Get user to check permissions
+    const targetUser = await queryOne<any>('SELECT department_id, primary_team_id FROM users WHERE id = ?', [userId]);
+    if (!targetUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Team lead can only toggle for users in their team/department
+    if (userRole === 'team_lead' && targetUser.department_id !== userDeptId) {
+      return res.status(403).json({ error: 'Can only manage users in your department' });
+    }
+
+    // Manager can only toggle for users in their department
+    if (userRole === 'manager' && targetUser.department_id !== userDeptId) {
+      return res.status(403).json({ error: 'Can only manage users in your department' });
+    }
+
+    await query(
+      'UPDATE users SET developer_insights_enabled = ?, updated_at = NOW() WHERE id = ?',
+      [enabled ? 1 : 0, userId]
+    );
+
+    res.json({ success: true, developer_insights_enabled: !!enabled });
+  } catch (error: any) {
+    console.error('Error toggling developer insights:', error);
+    res.status(500).json({ error: 'Failed to toggle developer insights' });
   }
 });
 

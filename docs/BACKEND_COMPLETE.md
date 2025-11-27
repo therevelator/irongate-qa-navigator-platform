@@ -32,7 +32,7 @@
 
 ```
 qa-dashboard/
-├── .env                          # Environment variables
+├── .env                          ### Environment Variables
 ├── schema.sql                    # Database schema
 ├── tsconfig.server.json          # Server TypeScript config
 ├── server/
@@ -81,6 +81,96 @@ GET    /api/metrics/teams/:teamId/velocity  - Get sprint velocity
 POST   /api/metrics/sync                    - Trigger manual sync (admin)
 ```
 
+### AI Insights (Teams & Developers)
+
+#### Team-Level AI Insights
+Implemented as an authenticated extension on the existing teams API:
+
+```
+GET    /api/teams/:id/ai-suggestions
+PATCH  /api/teams/:id/ai-toggle              - Enable/disable AI for a team (admin / manager / team lead)
+```
+
+**Behavior:**
+- Uses latest `kpi_snapshots` for the team to build an aggregated metrics payload
+- Tries Groq Chat Completions API (`llama-3.3-70b-versatile`) when `GROQ_API_KEY` is configured
+- If Groq responds with valid JSON → returns structured suggestions with `source: "groq"`
+- On timeout (10s), API error, or parse error → falls back to deterministic rule-based suggestions with `source: "rule-based"`
+
+**Response (simplified):**
+```json
+{
+  "teamId": "team-...",
+  "teamName": "Quasars",
+  "qaScore": 82,
+  "aiEnabled": true,
+  "source": "groq" | "rule-based",
+  "strongpoints": ["..."],
+  "areasOfImprovement": ["..."],
+  "actionPlan": [
+    {
+      "priority": "Urgent" | "Moderate" | "Low",
+      "initiative": "...",
+      "owner": "QA Lead | DevOps | Scrum Master",
+      "timebox": "1 sprint",
+      "kpi": "Test Coverage"
+    }
+  ]
+}
+```
+
+**Feature flags:**
+- `teams.ai_enabled` (BOOLEAN) controls whether AI suggestions are generated for a given team
+- If `ai_enabled = false`, the endpoint returns a friendly message and `aiEnabled: false` without calling Groq
+
+#### Developer-Level AI Insights
+
+Per-developer productivity insights are available for teams that have both:
+- Team AI enabled (`teams.ai_enabled = TRUE`), and
+- Developer-level insights enabled per user (`users.developer_insights_enabled = TRUE`).
+
+```
+GET    /api/teams/:id/developer-ai-suggestions
+```
+
+**Behavior:**
+- Reads metrics from `developer_metrics` for the requested team
+- Filters to only those developers where `users.developer_insights_enabled = 1`
+- Calls Groq (15s timeout) with a batch of developer metrics and benchmarks; on failure falls back to rule-based heuristics
+
+**Response (simplified):**
+```json
+{
+  "teamId": "team-...",
+  "aiEnabled": true,
+  "source": "groq" | "rule-based",
+  "teamInsight": "Most developers are in a healthy productivity state...",
+  "metrics": [
+    {
+      "name": "Emma Wilson",
+      "prMergeTimeHours": 8.2,
+      "codeReviewTimeHours": 2.1,
+      "focusTimeHours": 5.5,
+      "meetingTimeHours": 2.0,
+      "contextSwitchesPerDay": 2,
+      "happinessScore": 8.5
+    }
+  ],
+  "developers": [
+    {
+      "name": "Emma Wilson",
+      "status": "healthy" | "at-risk" | "needs-attention",
+      "summary": "One sentence summary",
+      "strengths": ["Fast PR turnaround"],
+      "concerns": ["Too many meetings"],
+      "suggestion": "Concrete next step"
+    }
+  ]
+}
+```
+
+The rule-based fallback mirrors the same structure using deterministic thresholds on PR time, review time, focus time, meetings, context switches, and happiness score.
+
 ### Users
 ```
 GET    /api/users            - List all users
@@ -113,6 +203,9 @@ DB_USER=root
 DB_PASSWORD=your_password
 DB_NAME=irongate_qa
 secrettoken=your-secret-key
+
+# Groq AI (optional, enables AI Insights)
+GROQ_API_KEY=your-groq-api-key
 ```
 
 ### Step 3: Start Backend Server

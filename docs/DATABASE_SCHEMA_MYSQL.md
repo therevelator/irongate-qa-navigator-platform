@@ -33,9 +33,40 @@ CREATE TABLE companies (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   is_active BOOLEAN DEFAULT true,
+  ai_enabled BOOLEAN DEFAULT false,
   INDEX idx_companies_domain (domain)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 ```
+
+---
+
+### 5b. Developer Metrics (Per-Developer Productivity)
+
+Used to store per-developer metrics that power Developer Insights.
+
+```sql
+CREATE TABLE developer_metrics (
+  id VARCHAR(50) PRIMARY KEY DEFAULT (CONCAT('dm-', UNIX_TIMESTAMP(), '-', SUBSTRING(UUID(), 1, 8))),
+  team_id VARCHAR(50) NOT NULL,
+  developer_id VARCHAR(50) NOT NULL,
+  pr_merge_time_avg DECIMAL(10,2) DEFAULT 0,
+  code_review_time_avg DECIMAL(10,2) DEFAULT 0,
+  focus_time_hours DECIMAL(10,2) DEFAULT 0,
+  meeting_time_hours DECIMAL(10,2) DEFAULT 0,
+  context_switches_per_day INT DEFAULT 0,
+  happiness_score DECIMAL(3,1) DEFAULT 0,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+  FOREIGN KEY (developer_id) REFERENCES users(id) ON DELETE CASCADE,
+  UNIQUE KEY unique_team_developer (team_id, developer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+```
+
+**Notes:**
+- `teams.ai_enabled` controls whether team-level AI insights are available.
+- `users.developer_insights_enabled` gates whether a given developer appears in Developer Insights for their team.
+- `developer_metrics` is populated by internal jobs or manual input and is read by the `/api/teams/:id/developer-ai-suggestions` endpoint.
 
 ---
 
@@ -84,6 +115,7 @@ CREATE TABLE users (
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   last_login TIMESTAMP NULL,
   is_active BOOLEAN DEFAULT true,
+  developer_insights_enabled BOOLEAN DEFAULT false,
   email_verified BOOLEAN DEFAULT false,
   email_verified_at TIMESTAMP NULL,
   

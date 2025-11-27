@@ -284,6 +284,553 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+// Toggle AI enabled for a team (admin only)
+router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (req.userRole !== 'super_admin' && req.userRole !== 'manager') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { enabled } = req.body;
+    
+    await query(
+      'UPDATE teams SET ai_enabled = ? WHERE id = ? AND company_id = ?',
+      [enabled ? 1 : 0, req.params.id, req.companyId]
+    );
+
+    res.json({ success: true, ai_enabled: !!enabled });
+  } catch (error) {
+    console.error('AI toggle error:', error);
+    res.status(500).json({ error: 'Failed to toggle AI' });
+  }
+});
+
+// Get AI suggestions for a team (uses Groq API if available, otherwise rule-based fallback)
+router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const team = await queryOne<any>(
+      `SELECT t.*, 
+              t.ai_enabled,
+              d.name as department_name,
+              c.name as company_name,
+              CONCAT(u.first_name, ' ', u.last_name) as team_lead_name
+       FROM teams t
+       JOIN departments d ON t.department_id = d.id
+       JOIN companies c ON t.company_id = c.id
+       LEFT JOIN users u ON t.lead_id = u.id
+       WHERE t.id = ? AND t.company_id = ?`,
+      [req.params.id, req.companyId]
+    );
+
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    // Check if AI is enabled for this team
+    if (!team.ai_enabled) {
+      return res.json({
+        teamId: team.id,
+        teamName: team.name,
+        aiEnabled: false,
+        strongpoints: [],
+        areasOfImprovement: [],
+        actionPlan: [],
+        message: 'AI suggestions are disabled for this team. Enable AI in admin settings.'
+      });
+    }
+
+    const kpiSnapshot = await queryOne<any>(
+      `SELECT * FROM kpi_snapshots 
+       WHERE team_id = ? 
+       ORDER BY snapshot_date DESC 
+       LIMIT 1`,
+      [req.params.id]
+    );
+
+    if (!kpiSnapshot) {
+      return res.status(404).json({ error: 'No KPI data found for this team' });
+    }
+
+    // Build team metrics payload for AI - ensure all values are numbers
+    const teamMetrics = {
+      teamName: team.name,
+      department: team.department_name,
+      qaScore: Number(kpiSnapshot.qa_score) || 0,
+      testCoverage: Number(kpiSnapshot.test_coverage) || 0,
+      defectDensity: Number(kpiSnapshot.defect_density) || 0,
+      defectEscapeRate: Number(kpiSnapshot.defect_escape_rate) || 0,
+      codeQualityScore: Number(kpiSnapshot.code_quality_score) || 0,
+      automationCoverage: Number(kpiSnapshot.automation_coverage) || 0,
+      deploymentFrequencyPerWeek: Number(kpiSnapshot.deployment_frequency_per_week) || 0,
+      leadTimeDays: Number(kpiSnapshot.lead_time_days) || 0,
+      mttrHours: Number(kpiSnapshot.mttr_hours) || 0,
+      changeFailureRate: Number(kpiSnapshot.change_failure_rate) || 0,
+      blockedTimeHours: Number(kpiSnapshot.blocked_time_hours) || 0,
+      testFlakinessRate: Number(kpiSnapshot.test_flakiness_rate) || 0,
+      sprintCarryover: Number(kpiSnapshot.sprint_carryover) || 0,
+      sprintVelocity: Number(kpiSnapshot.sprint_velocity) || 0,
+      sprintCommitmentRate: Number(kpiSnapshot.sprint_commitment_rate) || 0,
+      firstTimePassRate: Number(kpiSnapshot.first_time_pass_rate) || 0,
+      mtbfHours: Number(kpiSnapshot.mtbf_hours) || 0,
+      systemAvailability: Number(kpiSnapshot.system_availability) || 0,
+      parallelTestEfficiency: Number(kpiSnapshot.parallel_test_efficiency) || 0,
+      infrastructureFailures: Number(kpiSnapshot.infrastructure_failures) || 0,
+      avgBuildTimeMinutes: Number(kpiSnapshot.avg_build_time_minutes) || 0,
+      technicalDebtScore: Math.round((Number(kpiSnapshot.code_quality_score) || 80) * 0.3 + 15)
+    };
+
+    // Try Groq API if key is configured (with 10 second timeout)
+    const groqApiKey = process.env.GROQ_API_KEY;
+    
+    if (groqApiKey && groqApiKey.length > 10) {
+      try {
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+        
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              {
+                role: 'system',
+                content: `You are a QA/Engineering advisor. Analyze team metrics and provide actionable insights.
+                
+Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
+{
+  "strongpoints": ["string array of 3-7 team strengths based on metrics"],
+  "areasOfImprovement": ["string array of 3-10 areas needing improvement"],
+  "actionPlan": [
+    {
+      "priority": "Urgent" or "Moderate" or "Low",
+      "initiative": "specific action to take",
+      "owner": "role responsible (e.g., QA Lead, DevOps, Scrum Master)",
+      "timebox": "timeframe (e.g., 1 week, 2 weeks, 1 sprint)",
+      "kpi": "which metric should improve"
+    }
+  ]
+}
+
+Focus on:
+- Test coverage, defect rates, automation
+- Sprint velocity and commitment
+- Build times, deployment frequency
+- MTTR, system availability
+- Technical debt and code quality`
+              },
+              {
+                role: 'user',
+                content: `Analyze this team's metrics and provide suggestions:\n\n${JSON.stringify(teamMetrics, null, 2)}`
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 2000
+          })
+        });
+
+        clearTimeout(timeoutId); // Clear timeout on response
+        
+        if (groqResponse.ok) {
+          const groqData = await groqResponse.json();
+          const content = groqData.choices?.[0]?.message?.content;
+          
+          if (content) {
+            try {
+              // Clean up the response - remove markdown code blocks if present
+              let cleanContent = content.trim();
+              if (cleanContent.startsWith('```json')) {
+                cleanContent = cleanContent.slice(7);
+              }
+              if (cleanContent.startsWith('```')) {
+                cleanContent = cleanContent.slice(3);
+              }
+              if (cleanContent.endsWith('```')) {
+                cleanContent = cleanContent.slice(0, -3);
+              }
+              cleanContent = cleanContent.trim();
+              
+              const aiResult = JSON.parse(cleanContent);
+              
+              return res.json({
+                teamId: team.id,
+                teamName: team.name,
+                qaScore: teamMetrics.qaScore,
+                aiEnabled: true,
+                source: 'groq',
+                strongpoints: aiResult.strongpoints || [],
+                areasOfImprovement: aiResult.areasOfImprovement || [],
+                actionPlan: aiResult.actionPlan || []
+              });
+            } catch (parseError) {
+              console.error('Failed to parse Groq response:', parseError, content);
+              // Fall through to rule-based fallback
+            }
+          }
+        } else {
+          console.error('Groq API error:', groqResponse.status, await groqResponse.text());
+        }
+      } catch (groqError: any) {
+        if (groqError.name === 'AbortError') {
+          console.log('Groq API timed out after 10s, falling back to rule-based');
+        } else {
+          console.error('Groq API call failed:', groqError);
+        }
+        // Fall through to rule-based fallback
+      }
+    }
+
+    // Rule-based fallback if Groq is not available or fails
+    const strongpoints: string[] = [];
+    const areasOfImprovement: string[] = [];
+
+    if (teamMetrics.testCoverage >= 80) {
+      strongpoints.push(`High Test Coverage (${teamMetrics.testCoverage.toFixed(1)}%)`);
+    } else if (teamMetrics.testCoverage > 0) {
+      areasOfImprovement.push(`Test coverage is at ${teamMetrics.testCoverage.toFixed(1)}%`);
+    }
+
+    if (teamMetrics.defectDensity <= 0.5 && teamMetrics.defectDensity > 0) {
+      strongpoints.push(`Low Defect Density (${teamMetrics.defectDensity.toFixed(2)})`);
+    } else if (teamMetrics.defectDensity > 0.5) {
+      areasOfImprovement.push(`Defect density is ${teamMetrics.defectDensity.toFixed(2)}`);
+    }
+
+    if (teamMetrics.automationCoverage >= 70 && teamMetrics.deploymentFrequencyPerWeek >= 5) {
+      strongpoints.push(`Robust Automation (${teamMetrics.automationCoverage.toFixed(1)}%) with ${teamMetrics.deploymentFrequencyPerWeek} deployments/week`);
+    } else {
+      if (teamMetrics.automationCoverage > 0 && teamMetrics.automationCoverage < 70) {
+        areasOfImprovement.push(`Automation coverage is ${teamMetrics.automationCoverage.toFixed(1)}%`);
+      }
+    }
+
+    if (teamMetrics.sprintCommitmentRate >= 90 && teamMetrics.sprintVelocity > 0) {
+      strongpoints.push(`Excellent Sprint Commitment (${teamMetrics.sprintCommitmentRate.toFixed(1)}%)`);
+    }
+
+    if (teamMetrics.firstTimePassRate >= 85) {
+      strongpoints.push(`First-Time Pass Rate ${teamMetrics.firstTimePassRate.toFixed(1)}%`);
+    }
+
+    if (teamMetrics.leadTimeDays > 0 && teamMetrics.leadTimeDays <= 3.5) {
+      strongpoints.push(`Fast Lead Time (${teamMetrics.leadTimeDays.toFixed(1)} days)`);
+    } else if (teamMetrics.leadTimeDays > 3.5) {
+      areasOfImprovement.push(`Lead time is ${teamMetrics.leadTimeDays.toFixed(1)} days`);
+    }
+
+    if (teamMetrics.defectEscapeRate > 0) {
+      areasOfImprovement.push(`Defect-escape rate (${teamMetrics.defectEscapeRate.toFixed(1)}%)`);
+    }
+
+    if (teamMetrics.changeFailureRate > 0) {
+      areasOfImprovement.push(`Change-failure rate (${teamMetrics.changeFailureRate.toFixed(1)}%)`);
+    }
+
+    if (teamMetrics.blockedTimeHours > 0) {
+      areasOfImprovement.push(`Blocked time (${teamMetrics.blockedTimeHours.toFixed(1)} hrs)`);
+    }
+
+    if (teamMetrics.testFlakinessRate > 0) {
+      areasOfImprovement.push(`Test flakiness (${teamMetrics.testFlakinessRate.toFixed(1)}%)`);
+    }
+
+    if (teamMetrics.avgBuildTimeMinutes > 15) {
+      areasOfImprovement.push(`Build time (${teamMetrics.avgBuildTimeMinutes.toFixed(1)} min)`);
+    }
+
+    if (teamMetrics.mttrHours > 0) {
+      areasOfImprovement.push(`Mean Time to Recovery (${teamMetrics.mttrHours.toFixed(1)} hrs)`);
+    }
+
+    const actionPlan = [
+      {
+        priority: 'Urgent',
+        initiative: 'Post-mortem board for defect & change escapes',
+        owner: 'Release Lead',
+        timebox: '2 weeks',
+        kpi: 'Defect-escape rate should go down'
+      },
+      {
+        priority: 'Urgent',
+        initiative: 'Urgent ticket to surface & resolve blockers in < 1 day',
+        owner: 'Scrum Master',
+        timebox: '1 week',
+        kpi: 'Blocked time should go down'
+      },
+      {
+        priority: 'Moderate',
+        initiative: 'Automate flaky-test isolation & monitoring',
+        owner: 'QA Lead',
+        timebox: '3 weeks',
+        kpi: 'Test flakiness should go down'
+      },
+      {
+        priority: 'Moderate',
+        initiative: 'Parallel test & build pipeline tuning',
+        owner: 'DevOps',
+        timebox: '4 weeks',
+        kpi: 'Build time should go down'
+      }
+    ];
+
+    res.json({
+      teamId: team.id,
+      teamName: team.name,
+      qaScore: teamMetrics.qaScore,
+      aiEnabled: true,
+      source: 'rule-based',
+      strongpoints,
+      areasOfImprovement,
+      actionPlan
+    });
+  } catch (error) {
+    console.error('AI suggestions error:', error);
+    res.status(500).json({ error: 'Failed to generate AI suggestions' });
+  }
+});
+
+// Get AI suggestions for developers in a team
+router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const team = await queryOne<any>(
+      `SELECT t.*, t.ai_enabled FROM teams t WHERE t.id = ? AND t.company_id = ?`,
+      [req.params.id, req.companyId]
+    );
+
+    if (!team) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    if (!team.ai_enabled) {
+      return res.json({
+        teamId: team.id,
+        aiEnabled: false,
+        developers: [],
+        message: 'AI suggestions are disabled for this team.'
+      });
+    }
+
+    // Get developer metrics for this team (only for users with developer_insights_enabled)
+    const developerMetrics = await query<any>(
+      `SELECT dm.*, 
+              CONCAT(u.first_name, ' ', u.last_name) as name,
+              u.email,
+              u.developer_insights_enabled
+       FROM developer_metrics dm
+       JOIN users u ON dm.developer_id = u.id
+       WHERE dm.team_id = ? AND u.developer_insights_enabled = 1
+       ORDER BY u.first_name`,
+      [req.params.id]
+    );
+
+    if (!developerMetrics || developerMetrics.length === 0) {
+      return res.json({
+        teamId: team.id,
+        aiEnabled: true,
+        developers: [],
+        message: 'No developer metrics found for this team.'
+      });
+    }
+
+    // Build developer metrics payload for AI
+    const devMetricsPayload = developerMetrics.map((dev: any) => ({
+      name: dev.name,
+      prMergeTimeHours: Number(dev.pr_merge_time_avg) || 0,
+      codeReviewTimeHours: Number(dev.code_review_time_avg) || 0,
+      focusTimeHours: Number(dev.focus_time_hours) || 0,
+      meetingTimeHours: Number(dev.meeting_time_hours) || 0,
+      contextSwitchesPerDay: Number(dev.context_switches_per_day) || 0,
+      happinessScore: Number(dev.happiness_score) || 0
+    }));
+
+    // Try Groq API with timeout
+    const groqApiKey = process.env.GROQ_API_KEY;
+    
+    if (groqApiKey && groqApiKey.length > 10) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for multiple devs
+        
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          signal: controller.signal,
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              {
+                role: 'system',
+                content: `You are a developer productivity advisor. Analyze individual developer metrics and provide personalized suggestions.
+
+For each developer, analyze their metrics and provide insights. Return ONLY valid JSON (no markdown) with this structure:
+{
+  "developers": [
+    {
+      "name": "Developer Name",
+      "status": "healthy" or "at-risk" or "needs-attention",
+      "summary": "One sentence summary of their productivity state",
+      "strengths": ["1-3 strengths based on metrics"],
+      "concerns": ["1-3 concerns if any"],
+      "suggestion": "One actionable recommendation"
+    }
+  ],
+  "teamInsight": "One sentence about overall team developer health"
+}
+
+Metric benchmarks:
+- PR Merge Time: <4h excellent, 4-8h good, 8-24h moderate, >24h slow
+- Code Review Time: <2h excellent, 2-4h good, >4h slow
+- Focus Time: >5h excellent, 3-5h good, <3h concerning
+- Meeting Time: <2h ideal, 2-4h acceptable, >4h too high
+- Context Switches: <3 excellent, 3-6 acceptable, >6 disruptive
+- Happiness Score: >7 great, 5-7 okay, <5 concerning`
+              },
+              {
+                role: 'user',
+                content: `Analyze these developer metrics and provide suggestions:\n\n${JSON.stringify(devMetricsPayload, null, 2)}`
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 2000
+          })
+        });
+
+        clearTimeout(timeoutId);
+        
+        if (groqResponse.ok) {
+          const groqData = await groqResponse.json();
+          const content = groqData.choices?.[0]?.message?.content;
+          
+          if (content) {
+            try {
+              let cleanContent = content.trim();
+              if (cleanContent.startsWith('```json')) cleanContent = cleanContent.slice(7);
+              if (cleanContent.startsWith('```')) cleanContent = cleanContent.slice(3);
+              if (cleanContent.endsWith('```')) cleanContent = cleanContent.slice(0, -3);
+              cleanContent = cleanContent.trim();
+              
+              const aiResult = JSON.parse(cleanContent);
+              
+              return res.json({
+                teamId: team.id,
+                aiEnabled: true,
+                source: 'groq',
+                developers: aiResult.developers || [],
+                teamInsight: aiResult.teamInsight || '',
+                metrics: devMetricsPayload
+              });
+            } catch (parseError) {
+              console.error('Failed to parse Groq developer response:', parseError);
+            }
+          }
+        } else {
+          console.error('Groq API error (developers):', groqResponse.status);
+        }
+      } catch (groqError: any) {
+        if (groqError.name === 'AbortError') {
+          console.log('Groq API timed out for developer suggestions');
+        } else {
+          console.error('Groq API call failed (developers):', groqError);
+        }
+      }
+    }
+
+    // Rule-based fallback for developers
+    const developerSuggestions = devMetricsPayload.map((dev: any) => {
+      const strengths: string[] = [];
+      const concerns: string[] = [];
+      let status = 'healthy';
+
+      // PR Merge Time
+      if (dev.prMergeTimeHours <= 4) {
+        strengths.push('Fast PR turnaround');
+      } else if (dev.prMergeTimeHours > 24) {
+        concerns.push('PRs taking too long to merge');
+        status = 'needs-attention';
+      }
+
+      // Code Review Time
+      if (dev.codeReviewTimeHours <= 2) {
+        strengths.push('Quick code reviews');
+      } else if (dev.codeReviewTimeHours > 4) {
+        concerns.push('Code reviews are slow');
+      }
+
+      // Focus Time
+      if (dev.focusTimeHours >= 5) {
+        strengths.push('Good focus time');
+      } else if (dev.focusTimeHours < 3) {
+        concerns.push('Low focus time');
+        status = status === 'healthy' ? 'at-risk' : status;
+      }
+
+      // Meeting Time
+      if (dev.meetingTimeHours > 4) {
+        concerns.push('Too many meetings');
+        status = status === 'healthy' ? 'at-risk' : status;
+      }
+
+      // Context Switches
+      if (dev.contextSwitchesPerDay <= 3) {
+        strengths.push('Minimal context switching');
+      } else if (dev.contextSwitchesPerDay > 6) {
+        concerns.push('High context switching');
+        status = status === 'healthy' ? 'at-risk' : status;
+      }
+
+      // Happiness
+      if (dev.happinessScore >= 7) {
+        strengths.push('High satisfaction');
+      } else if (dev.happinessScore < 5) {
+        concerns.push('Low happiness score');
+        status = 'needs-attention';
+      }
+
+      let suggestion = 'Keep up the good work!';
+      if (concerns.length > 0) {
+        if (concerns.includes('Too many meetings')) {
+          suggestion = 'Consider reducing meeting load to increase focus time';
+        } else if (concerns.includes('High context switching')) {
+          suggestion = 'Try time-blocking to reduce interruptions';
+        } else if (concerns.includes('PRs taking too long to merge')) {
+          suggestion = 'Review PR workflow for bottlenecks';
+        } else if (concerns.includes('Low happiness score')) {
+          suggestion = 'Schedule a 1:1 to discuss workload and satisfaction';
+        }
+      }
+
+      return {
+        name: dev.name,
+        status,
+        summary: concerns.length === 0 ? 'Performing well across all metrics' : `${concerns.length} area(s) need attention`,
+        strengths: strengths.length > 0 ? strengths : ['Metrics within acceptable range'],
+        concerns,
+        suggestion
+      };
+    });
+
+    res.json({
+      teamId: team.id,
+      aiEnabled: true,
+      source: 'rule-based',
+      developers: developerSuggestions,
+      teamInsight: `${developerSuggestions.filter((d: any) => d.status === 'healthy').length} of ${developerSuggestions.length} developers are in healthy state`,
+      metrics: devMetricsPayload
+    });
+  } catch (error) {
+    console.error('Developer AI suggestions error:', error);
+    res.status(500).json({ error: 'Failed to generate developer AI suggestions' });
+  }
+});
+
 // Create team
 router.post('/', authenticateToken, async (req: AuthRequest, res) => {
   try {

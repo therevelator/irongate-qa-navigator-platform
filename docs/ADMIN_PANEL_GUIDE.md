@@ -101,6 +101,7 @@ POST   /api/admin/users                    - Create new user (role-based)
 POST   /api/admin/users/:id/reset-password - Reset user password
 GET    /api/admin/available-roles          - Get roles current user can create
 POST   /api/admin/teams                    - Create new team (QA Manager+)
+PATCH  /api/admin/users/:id/developer-insights-toggle - Enable/disable Developer Insights for a user (Team Lead+)
 ```
 
 ---
@@ -194,7 +195,7 @@ Displays:
 - Team
 - Department
 - Status (Active/Inactive)
-- Actions (Reset Password button)
+- Actions (Reset Password, Developer Insights toggle, Activate/Deactivate, Delete)
 
 **Role Badge Colors:**
 - Super Admin: Purple
@@ -234,6 +235,40 @@ Displays:
 
 **Displays:**
 - User being reset (name and email)
+
+---
+
+### Developer Insights Toggle (Per-User)
+
+**Purpose:**
+- Allow Team Leads and above to selectively enable **Developer Insights** for individual developers.
+- Intended for cases where a manager suspects a developer may be struggling or wants extra support.
+
+**UI Behavior:**
+- Appears as an **Eye icon** in the user actions column inside the team expansion row.
+- Visible only for roles: `super_admin`, `manager`, `team_lead`.
+- States:
+  - Gray Eye → Developer Insights **disabled** for that user.
+  - Indigo Eye → Developer Insights **enabled**.
+
+**Backend:**
+- Tied to `users.developer_insights_enabled` (BOOLEAN).
+- Toggled via:
+  ```http
+  PATCH /api/admin/users/:id/developer-insights-toggle
+  Authorization: Bearer <token>
+  Content-Type: application/json
+
+  { "enabled": true }
+  ```
+
+**Permissions:**
+- `super_admin`: Can toggle for any user in the company.
+- `manager`: Can toggle for users in their department.
+- `team_lead`: Can toggle for users in their department/team.
+
+**Effect in UI:**
+- When enabled, the developer becomes eligible to appear in **Developer Insights** on the Team Detail page, provided the team-wide AI toggle is also enabled.
 
 ---
 

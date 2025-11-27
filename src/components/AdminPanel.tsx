@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserPlus, Shield, X, ArrowLeft, Building2, Edit2, Trash2, ChevronDown, ChevronRight, Key, UserCheck, UserX } from 'lucide-react';
+import { Users, UserPlus, Shield, X, ArrowLeft, Building2, Edit2, Trash2, ChevronDown, ChevronRight, Key, UserCheck, UserX, Bot, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast, { Toaster } from 'react-hot-toast';
 import { confirmDelete, showCannotDeleteWarning, confirmDeactivate, showSuccess } from '../utils/alerts';
@@ -15,6 +15,7 @@ interface User {
   primary_team_id: string;
   is_active: boolean;
   created_at: string;
+  developer_insights_enabled?: boolean;
 }
 
 interface Team {
@@ -25,6 +26,7 @@ interface Team {
   is_active?: boolean;
   created_at?: string;
   department_id?: string;
+  ai_enabled?: boolean;
 }
 
 interface Department {
@@ -767,6 +769,40 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                 
                                 {/* Team Action Buttons */}
                                 <div className="flex items-center gap-1 ml-3" onClick={(e) => e.stopPropagation()}>
+                                  {/* AI Toggle */}
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        const response = await fetch(`${API_URL}/teams/${team.id}/ai-toggle`, {
+                                          method: 'PATCH',
+                                          headers: {
+                                            'Authorization': `Bearer ${token}`,
+                                            'Content-Type': 'application/json'
+                                          },
+                                          body: JSON.stringify({ enabled: !team.ai_enabled })
+                                        });
+                                        
+                                        if (response.ok) {
+                                          toast.success(`AI ${team.ai_enabled ? 'disabled' : 'enabled'} for ${team.name}`);
+                                          fetchData();
+                                        } else {
+                                          toast.error('Failed to toggle AI');
+                                        }
+                                      } catch (error) {
+                                        console.error('Error toggling AI:', error);
+                                        toast.error('Error toggling AI');
+                                      }
+                                    }}
+                                    className={`p-1.5 transition-colors rounded hover:bg-gray-100 dark:hover:bg-slate-700 ${
+                                      team.ai_enabled
+                                        ? 'text-purple-500 dark:text-purple-400 hover:text-purple-600 dark:hover:text-purple-300'
+                                        : 'text-gray-400 dark:text-slate-400 hover:text-purple-500 dark:hover:text-purple-400'
+                                    }`}
+                                    title={team.ai_enabled ? 'Disable AI Suggestions' : 'Enable AI Suggestions'}
+                                  >
+                                    <Bot className="w-4 h-4" />
+                                  </button>
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
@@ -925,6 +961,42 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                   >
                                                     <Key className="w-4 h-4" />
                                                   </button>
+                                                  {/* Developer Insights Toggle - Team Lead and above */}
+                                                  {['super_admin', 'manager', 'team_lead'].includes(user?.role || '') && (
+                                                    <button
+                                                      onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        try {
+                                                          const response = await fetch(`${API_URL}/admin/users/${u.id}/developer-insights-toggle`, {
+                                                            method: 'PATCH',
+                                                            headers: {
+                                                              'Authorization': `Bearer ${token}`,
+                                                              'Content-Type': 'application/json'
+                                                            },
+                                                            body: JSON.stringify({ enabled: !u.developer_insights_enabled })
+                                                          });
+                                                          
+                                                          if (response.ok) {
+                                                            toast.success(`Developer insights ${u.developer_insights_enabled ? 'disabled' : 'enabled'} for ${u.first_name}`);
+                                                            fetchData();
+                                                          } else {
+                                                            toast.error('Failed to toggle developer insights');
+                                                          }
+                                                        } catch (error) {
+                                                          console.error('Error toggling developer insights:', error);
+                                                          toast.error('Error toggling developer insights');
+                                                        }
+                                                      }}
+                                                      className={`p-1.5 transition-colors rounded hover:bg-gray-100 dark:hover:bg-slate-700 ${
+                                                        u.developer_insights_enabled
+                                                          ? 'text-indigo-500 dark:text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-300'
+                                                          : 'text-gray-400 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400'
+                                                      }`}
+                                                      title={u.developer_insights_enabled ? 'Disable Developer Insights' : 'Enable Developer Insights'}
+                                                    >
+                                                      <Eye className="w-4 h-4" />
+                                                    </button>
+                                                  )}
                                                   {u.id !== user?.id && (
                                                     <>
                                                       <button

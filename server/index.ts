@@ -10,7 +10,7 @@ import metricsRoutes from './routes/metrics';
 import usersRoutes from './routes/users';
 import departmentsRoutes from './routes/departments';
 import adminRoutes from './routes/admin';
-import './jobs/syncMetrics'; // Start cron jobs
+// import './jobs/syncMetrics'; // Start cron jobs (disabled temporarily)
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -47,7 +47,7 @@ app.use(cors({
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
