@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Sparkles } from 'lucide-react';
 import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
 import TypingAnimation from './TypingAnimation';
 
 interface NewDashboardProps {
@@ -11,7 +12,36 @@ interface NewDashboardProps {
 
 const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
   const { user } = useAuth();
+  const { themeName, isDark } = useTheme();
   const [filter, setFilter] = useState<'all' | 'high' | 'needs-attention'>('all');
+  
+  // Theme-aware colors
+  const themeColors = {
+    ocean: {
+      primary: 'cyan',
+      gradient: isDark 
+        ? 'from-slate-900 via-cyan-900/30 to-slate-800' 
+        : 'from-blue-50 via-cyan-50 to-teal-50',
+      accent: isDark ? 'bg-cyan-500' : 'bg-cyan-600',
+      accentHover: isDark ? 'hover:bg-cyan-400' : 'hover:bg-cyan-700',
+      glow: isDark ? 'shadow-cyan-500/20' : 'shadow-cyan-500/30',
+      blob1: isDark ? 'bg-cyan-500/20' : 'bg-cyan-200',
+      blob2: isDark ? 'bg-blue-500/20' : 'bg-blue-200',
+    },
+    aurora: {
+      primary: 'violet',
+      gradient: isDark 
+        ? 'from-slate-900 via-purple-900/30 to-slate-800' 
+        : 'from-violet-50 via-fuchsia-50 to-pink-50',
+      accent: isDark ? 'bg-violet-500' : 'bg-violet-600',
+      accentHover: isDark ? 'hover:bg-violet-400' : 'hover:bg-violet-700',
+      glow: isDark ? 'shadow-violet-500/20' : 'shadow-violet-500/30',
+      blob1: isDark ? 'bg-violet-500/20' : 'bg-violet-200',
+      blob2: isDark ? 'bg-fuchsia-500/20' : 'bg-fuchsia-200',
+    }
+  };
+  
+  const colors = themeColors[themeName];
 
   // Filter teams based on user role
   // QA Engineers and Viewers only see their own team
@@ -29,31 +59,37 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
 
   return (
     <div className="flex flex-col h-full bg-gray-50 dark:bg-slate-950 overflow-auto">
-      {/* Hero Section - Fixed 150px height */}
-      <div className="bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-slate-800 dark:to-slate-700 p-4 sm:p-6 relative overflow-hidden" style={{ minHeight: '150px' }}>
+      {/* Hero Section - Theme-aware gradient */}
+      <div className={`bg-gradient-to-br ${colors.gradient} p-4 sm:p-6 relative overflow-hidden`} style={{ minHeight: '150px' }}>
         <div className="relative z-10 max-w-7xl mx-auto">
           <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-3">
-            <img 
-              src="/irongate-logo.png" 
-              alt="IronGate QA Navigator" 
-              className="h-8 sm:h-10 md:h-12 w-auto object-contain"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-            <div className="h-8 sm:h-10 md:h-12 w-px bg-gray-300 dark:bg-gray-600"></div>
+            <div className={`p-2 rounded-xl ${isDark ? 'bg-white/10' : 'bg-white/70'} backdrop-blur-sm`}>
+              <img 
+                src="/irongate-logo.png" 
+                alt="IronGate QA Navigator" 
+                className="h-8 sm:h-10 md:h-12 w-auto object-contain"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            </div>
+            <div className={`h-8 sm:h-10 md:h-12 w-px ${isDark ? 'bg-white/20' : 'bg-gray-300'}`}></div>
             <div className="flex-1 min-w-0">
-              <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white truncate">
-                {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
-                  ? `${userTeams[0]?.name || 'My Team'} Dashboard`
-                  : 'Quality Assurance Dashboard'}
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white truncate">
+                  {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
+                    ? `${userTeams[0]?.name || 'My Team'} Dashboard`
+                    : 'Quality Assurance Dashboard'}
+                </h1>
+                <Sparkles className={`w-5 h-5 ${themeName === 'ocean' ? 'text-cyan-500' : 'text-violet-500'} animate-pulse hidden sm:block`} />
+              </div>
             </div>
           </div>
           <TypingAnimation className="max-w-4xl" />
         </div>
-        {/* Animated background elements */}
+        {/* Animated background elements - Theme-aware */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute -top-4 -right-4 w-32 h-32 sm:w-48 sm:h-48 bg-blue-200 dark:bg-blue-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-30 animate-pulse"></div>
-          <div className="absolute -bottom-4 -left-4 w-32 h-32 sm:w-48 sm:h-48 bg-cyan-200 dark:bg-cyan-900 rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-30 animate-pulse" style={{ animationDelay: '1s' }}></div>
+          <div className={`absolute -top-4 -right-4 w-32 h-32 sm:w-48 sm:h-48 ${colors.blob1} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`}></div>
+          <div className={`absolute -bottom-4 -left-4 w-32 h-32 sm:w-48 sm:h-48 ${colors.blob2} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`} style={{ animationDelay: '2s' }}></div>
+          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-96 sm:h-96 ${isDark ? 'bg-white/5' : 'bg-white/30'} rounded-full filter blur-3xl`}></div>
         </div>
       </div>
 
@@ -69,30 +105,30 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setFilter('all')}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
                 filter === 'all'
-                  ? 'bg-cyan-600 text-white shadow-lg scale-105'
-                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+                  ? `${colors.accent} text-white shadow-lg ${colors.glow} scale-105`
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 hover:scale-102'
               }`}
             >
               All Teams
             </button>
             <button
               onClick={() => setFilter('high')}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
                 filter === 'high'
-                  ? 'bg-cyan-600 text-white shadow-lg scale-105'
-                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+                  ? `${colors.accent} text-white shadow-lg ${colors.glow} scale-105`
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 hover:scale-102'
               }`}
             >
               High Performing
             </button>
             <button
               onClick={() => setFilter('needs-attention')}
-              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${
+              className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
                 filter === 'needs-attention'
-                  ? 'bg-cyan-600 text-white shadow-lg scale-105'
-                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
+                  ? `${colors.accent} text-white shadow-lg ${colors.glow} scale-105`
+                  : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700 hover:scale-102'
               }`}
             >
               Needs Attention
@@ -100,24 +136,32 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           </div>
         </div>
 
-        {/* Teams as Rows - Responsive */}
+        {/* Teams as Rows - Responsive with Card Glow Effect */}
         <div className="space-y-3">
           {filteredTeams.map((team, index) => (
             <div
               key={team.id}
               onClick={() => onTeamClick?.(team)}
-              className="bg-white dark:bg-slate-900 rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-slate-800 hover:shadow-xl hover:scale-[1.01] transition-all duration-300 cursor-pointer relative overflow-hidden group"
+              className={`bg-white dark:bg-slate-900 rounded-xl p-3 sm:p-4 border border-gray-200 dark:border-slate-800 hover:shadow-xl hover:scale-[1.01] transition-all duration-300 cursor-pointer relative overflow-hidden group card-glow`}
               style={{ animationDelay: `${index * 50}ms` }}
             >
-              {/* Animated gradient border on hover */}
-              <div className="absolute inset-0 bg-gradient-to-r from-cyan-500/0 via-blue-500/0 to-purple-500/0 group-hover:from-cyan-500/10 group-hover:via-blue-500/10 group-hover:to-purple-500/10 transition-all duration-500"></div>
+              {/* Animated gradient border on hover - Theme-aware */}
+              <div className={`absolute inset-0 transition-all duration-500 ${
+                themeName === 'ocean' 
+                  ? 'bg-gradient-to-r from-cyan-500/0 via-blue-500/0 to-teal-500/0 group-hover:from-cyan-500/10 group-hover:via-blue-500/10 group-hover:to-teal-500/10'
+                  : 'bg-gradient-to-r from-violet-500/0 via-fuchsia-500/0 to-pink-500/0 group-hover:from-violet-500/10 group-hover:via-fuchsia-500/10 group-hover:to-pink-500/10'
+              }`}></div>
               
               {/* Mobile Layout (< 768px) */}
               <div className="relative md:hidden">
                 <div className="flex items-start justify-between mb-3">
                   {/* Team Info */}
                   <div className="flex-1 min-w-0 pr-3">
-                    <h3 className="text-base font-bold text-gray-900 dark:text-white mb-1 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors truncate">
+                    <h3 className={`text-base font-bold text-gray-900 dark:text-white mb-1 transition-colors truncate ${
+                      themeName === 'ocean' 
+                        ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
+                        : 'group-hover:text-violet-600 dark:group-hover:text-violet-400'
+                    }`}>
                       {team.name}
                     </h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
@@ -184,7 +228,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
               <div className="relative hidden md:flex items-center gap-4 lg:gap-6">
                 {/* Team Info */}
                 <div className="flex-shrink-0 w-32 lg:w-48">
-                  <h3 className="text-base lg:text-lg font-bold text-gray-900 dark:text-white mb-1 group-hover:text-cyan-600 dark:group-hover:text-cyan-400 transition-colors truncate">
+                  <h3 className={`text-base lg:text-lg font-bold text-gray-900 dark:text-white mb-1 transition-colors truncate ${
+                    themeName === 'ocean' 
+                      ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
+                      : 'group-hover:text-violet-600 dark:group-hover:text-violet-400'
+                  }`}>
                     {team.name}
                   </h3>
                   <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
@@ -243,8 +291,12 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                   )}
                 </div>
 
-                {/* Arrow indicator - Hidden on tablet, shown on desktop */}
-                <div className="hidden lg:block flex-shrink-0 text-gray-400 group-hover:text-cyan-600 group-hover:translate-x-1 transition-all">
+                {/* Arrow indicator - Hidden on tablet, shown on desktop - Theme-aware */}
+                <div className={`hidden lg:block flex-shrink-0 text-gray-400 group-hover:translate-x-1 transition-all ${
+                  themeName === 'ocean' 
+                    ? 'group-hover:text-cyan-600' 
+                    : 'group-hover:text-violet-600'
+                }`}>
                   <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>

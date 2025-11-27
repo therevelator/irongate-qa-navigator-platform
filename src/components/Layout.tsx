@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, Settings, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Sun, Moon, Menu, X } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Menu, X, Palette } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
+import { useTheme, themes } from '../contexts/ThemeContext';
+import type { ThemeName } from '../contexts/ThemeContext';
 import { getRoleBadgeColor } from '../types/auth';
+import ThemeToggle from './ThemeToggle';
 
 interface Department {
   id: string;
@@ -22,7 +24,7 @@ import API_URL from '../config/api';
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange }) => {
   const { user, logout } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
+  const { isDark, themeName, setThemeName, toggleTheme } = useTheme();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -229,17 +231,30 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             </h2>
           </div>
           
-          <button
-            onClick={toggleTheme}
-            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors flex-shrink-0"
-            title={isDark ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-          >
-            {isDark ? (
-              <Sun size={18} className="text-gray-600 dark:text-slate-400" />
-            ) : (
-              <Moon size={18} className="text-gray-600" />
-            )}
-          </button>
+          <div className="flex items-center gap-2 sm:gap-4">
+            {/* Theme Selector - Hidden on mobile */}
+            <div className="hidden md:flex items-center gap-1 p-1 rounded-lg bg-gray-100 dark:bg-slate-800">
+              {(Object.keys(themes) as ThemeName[]).map((theme) => (
+                <button
+                  key={theme}
+                  onClick={() => setThemeName(theme)}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-all ${
+                    themeName === theme
+                      ? theme === 'ocean'
+                        ? 'bg-cyan-500 text-white shadow-sm'
+                        : 'bg-violet-500 text-white shadow-sm'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                  title={themes[theme].description}
+                >
+                  {themes[theme].name}
+                </button>
+              ))}
+            </div>
+            
+            {/* Dark/Light Mode Toggle */}
+            <ThemeToggle compact />
+          </div>
         </div>
 
         {/* Page Content */}
