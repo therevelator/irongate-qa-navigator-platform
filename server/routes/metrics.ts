@@ -200,11 +200,12 @@ router.post('/sync', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Manual metrics input (super_admin only)
+// Manual metrics input (super_admin, manager, team_lead)
 router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    if (req.userRole !== 'super_admin') {
-      return res.status(403).json({ error: 'Super Admin access required' });
+    const allowedRoles = ['super_admin', 'manager', 'team_lead'];
+    if (!allowedRoles.includes(req.userRole || '')) {
+      return res.status(403).json({ error: 'Access denied. Requires Super Admin, Manager, or Team Lead role.' });
     }
 
     const {
@@ -349,11 +350,12 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Save developer metrics (super_admin only)
+// Save developer metrics (super_admin, manager, team_lead)
 router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    if (req.userRole !== 'super_admin') {
-      return res.status(403).json({ error: 'Super Admin access required' });
+    const allowedRoles = ['super_admin', 'manager', 'team_lead'];
+    if (!allowedRoles.includes(req.userRole || '')) {
+      return res.status(403).json({ error: 'Access denied. Requires Super Admin, Manager, or Team Lead role.' });
     }
 
     const {

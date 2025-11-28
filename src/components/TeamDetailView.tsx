@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { Team } from '../data/mockData';
 import { generateDetailedKPIs } from '../data/detailedKPIs';
 import API_URL from '../config/api';
+import { getMetricTextColor, getMetricStatus, METRICS_CONFIG } from '../config/metricsConfig';
 
 // Extended Team type with kpiData from API
 interface TeamWithKPI extends Team {
@@ -329,14 +330,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 <div className="text-right">
                   <p className="text-sm text-gray-500 dark:text-slate-400">Technical Debt</p>
                   <div className="flex items-baseline space-x-1">
-                    <div className={`text-3xl font-bold ${
-                      team.technicalDebtScore < 30 ? 'text-green-600 dark:text-green-400' :
-                      team.technicalDebtScore < 60 ? 'text-yellow-600 dark:text-yellow-400' :
-                      'text-red-600 dark:text-red-400'
-                    }`}>
+                    <div className={`text-3xl font-bold ${getMetricTextColor(team.technicalDebtScore, 'technicalDebtScore')}`}>
                       {team.technicalDebtScore}
                     </div>
-                    <span className="text-sm text-gray-500 dark:text-slate-400">/100</span>
+                    <span className="text-sm text-gray-500 dark:text-slate-400">{METRICS_CONFIG.technicalDebtScore.unit}</span>
                   </div>
                   <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">Lower is better</p>
                 </div>
@@ -1067,38 +1064,33 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                       <div className="grid grid-cols-5 gap-1 mb-3 text-center">
                         <div className="bg-slate-800/50 rounded p-1.5">
                           <div className="text-[10px] text-slate-500 uppercase">PR</div>
-                          <div className={`text-xs font-bold ${
-                            metrics.prMergeTimeHours <= 8 ? 'text-emerald-400' : 
-                            metrics.prMergeTimeHours <= 24 ? 'text-amber-400' : 'text-red-400'
-                          }`}>{metrics.prMergeTimeHours.toFixed(1)}h</div>
+                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.prMergeTimeHours, 'prMergeTimeHours')}`}>
+                            {metrics.prMergeTimeHours.toFixed(1)}h
+                          </div>
                         </div>
                         <div className="bg-slate-800/50 rounded p-1.5">
                           <div className="text-[10px] text-slate-500 uppercase">Review</div>
-                          <div className={`text-xs font-bold ${
-                            metrics.codeReviewTimeHours <= 2 ? 'text-emerald-400' : 
-                            metrics.codeReviewTimeHours <= 4 ? 'text-amber-400' : 'text-red-400'
-                          }`}>{metrics.codeReviewTimeHours.toFixed(1)}h</div>
+                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.codeReviewTimeHours, 'codeReviewTimeHours')}`}>
+                            {metrics.codeReviewTimeHours.toFixed(1)}h
+                          </div>
                         </div>
                         <div className="bg-slate-800/50 rounded p-1.5">
                           <div className="text-[10px] text-slate-500 uppercase">Focus</div>
-                          <div className={`text-xs font-bold ${
-                            metrics.focusTimeHours >= 5 ? 'text-emerald-400' : 
-                            metrics.focusTimeHours >= 3 ? 'text-amber-400' : 'text-red-400'
-                          }`}>{metrics.focusTimeHours.toFixed(1)}h</div>
+                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.focusTimeHours, 'focusTimeHours')}`}>
+                            {metrics.focusTimeHours.toFixed(1)}h
+                          </div>
                         </div>
                         <div className="bg-slate-800/50 rounded p-1.5">
                           <div className="text-[10px] text-slate-500 uppercase">Mtgs</div>
-                          <div className={`text-xs font-bold ${
-                            metrics.meetingTimeHours <= 2 ? 'text-emerald-400' : 
-                            metrics.meetingTimeHours <= 4 ? 'text-amber-400' : 'text-red-400'
-                          }`}>{metrics.meetingTimeHours.toFixed(1)}h</div>
+                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.meetingTimeHours, 'meetingTimeHours')}`}>
+                            {metrics.meetingTimeHours.toFixed(1)}h
+                          </div>
                         </div>
                         <div className="bg-slate-800/50 rounded p-1.5">
                           <div className="text-[10px] text-slate-500 uppercase">Ctx</div>
-                          <div className={`text-xs font-bold ${
-                            metrics.contextSwitchesPerDay <= 3 ? 'text-emerald-400' : 
-                            metrics.contextSwitchesPerDay <= 6 ? 'text-amber-400' : 'text-red-400'
-                          }`}>{metrics.contextSwitchesPerDay}</div>
+                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.contextSwitchesPerDay, 'contextSwitchesPerDay')}`}>
+                            {metrics.contextSwitchesPerDay}
+                          </div>
                         </div>
                       </div>
                     )}

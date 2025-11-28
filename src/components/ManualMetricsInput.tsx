@@ -82,6 +82,7 @@ interface Team {
   id: string;
   name: string;
   department?: string;
+  department_id?: string;
 }
 
 interface TeamMember {
@@ -520,14 +521,15 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const [expandedDevelopers, setExpandedDevelopers] = useState<boolean>(true);
   const [savingDeveloperMetrics, setSavingDeveloperMetrics] = useState(false);
 
-  // Check if user is super_admin
-  if (user?.role !== 'super_admin') {
+  // Check if user has access (super_admin, manager, or team_lead)
+  const allowedRoles = ['super_admin', 'manager', 'team_lead'];
+  if (!user || !allowedRoles.includes(user.role)) {
     return (
       <div className="min-h-screen bg-slate-900 p-8 flex items-center justify-center">
         <div className="bg-slate-800 rounded-xl p-8 text-center max-w-md">
           <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
           <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
-          <p className="text-slate-400">This page is only accessible to Super Admins.</p>
+          <p className="text-slate-400">This page is only accessible to Super Admins, Managers, and Team Leads.</p>
           <button
             onClick={onBack}
             className="mt-6 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
@@ -559,9 +561,26 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       
       if (response.ok) {
         const data = await response.json();
-        setTeams(data.teams || []);
-        if (data.teams?.length > 0) {
-          setSelectedTeamId(data.teams[0].id);
+        let filteredTeams = data.teams || [];
+        
+        // Filter teams based on user role
+        if (user?.role === 'manager') {
+          // Manager: only teams in their department
+          filteredTeams = filteredTeams.filter((t: Team) => 
+            t.department_id === user.departmentId
+          );
+        } else if (user?.role === 'team_lead') {
+          // Team Lead: only their own team
+          filteredTeams = filteredTeams.filter((t: Team) => 
+            t.id === user.primaryTeamId ||
+            user.assignedTeams?.includes(t.id)
+          );
+        }
+        // super_admin sees all teams (no filter)
+        
+        setTeams(filteredTeams);
+        if (filteredTeams.length > 0) {
+          setSelectedTeamId(filteredTeams[0].id);
         }
       }
     } catch (error) {
@@ -821,7 +840,18 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       });
 
       if (response.ok) {
-        toast.success('Metrics saved successfully!');
+        const result = await response.json();
+        const selectedTeam = teams.find(t => t.id === selectedTeamId);
+        toast.success(`✅ ${selectedTeam?.name || 'Team'} metrics saved! QA Score: ${result.qaScore} (${result.status})`, {
+          duration: 4000
+        });
+        // Show info about dashboard refresh
+        setTimeout(() => {
+          toast('💡 Go back to dashboard to see updated metrics', {
+            icon: 'ℹ️',
+            duration: 3000
+          });
+        }, 500);
         // Reset inputs after save and refresh existing metrics
         setMetricInputs({});
         setCalculatedValues({});
@@ -829,11 +859,15 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         fetchExistingMetrics(selectedTeamId);
       } else {
         const error = await response.json();
-        toast.error(`Failed to save: ${error.error || 'Unknown error'}`);
+        toast.error(`❌ Failed to save: ${error.error || 'Unknown error'}`, {
+          duration: 5000
+        });
       }
     } catch (error) {
       console.error('Error saving metrics:', error);
-      toast.error('Failed to save metrics');
+      toast.error('❌ Failed to save metrics. Check console for details.', {
+        duration: 5000
+      });
     } finally {
       setSaving(false);
     }
