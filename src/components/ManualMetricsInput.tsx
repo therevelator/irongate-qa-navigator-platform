@@ -708,28 +708,34 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       for (const [developerId, metrics] of metricsToSave) {
         const happinessScore = calculateHappinessScore(metrics);
         
-        await fetch(`${API_URL}/metrics/developer`, {
+        const response = await fetch(`${API_URL}/metrics/developer`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
           body: JSON.stringify({
-            userId: developerId,
+            teamId: selectedTeamId,
+            developerId,
             prMergeTimeAvg: metrics.prMergeTimeAvg,
             codeReviewTimeAvg: metrics.codeReviewTimeAvg,
             focusTimeHours: metrics.focusTimeHours,
             meetingTimeHours: metrics.meetingTimeHours,
             contextSwitchesPerDay: metrics.contextSwitchesPerDay,
-            happinessScore: happinessScore
+            happinessScore
           })
         });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.error || 'Failed to save developer metrics');
+        }
       }
 
       toast.success(`Developer metrics saved for ${metricsToSave.length} developer(s)`);
     } catch (error) {
       console.error('Error saving developer metrics:', error);
-      toast.error('Failed to save developer metrics');
+      toast.error(error instanceof Error ? error.message : 'Failed to save developer metrics');
     } finally {
       setSavingDeveloperMetrics(false);
     }

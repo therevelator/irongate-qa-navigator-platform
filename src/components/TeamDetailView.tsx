@@ -153,21 +153,61 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             console.warn(`⚠️ No members found for team ${team.id} (${team.name}). Check team_members table.`);
           }
 
-          // Generate fake metrics for each team member
-          const metricsData = members.map((member: TeamMember) => ({
-            developer_id: member.id,
-            name: `${member.first_name} ${member.last_name}`,
-            email: member.email,
-            code_review_time_avg: Number((Math.random() * 4 + 1).toFixed(1)),
-            pr_merge_time_avg: Number((Math.random() * 24 + 2).toFixed(1)),
-            happiness_score: Math.floor(Math.random() * 30) + 70,
-            context_switches_per_day: Math.floor(Math.random() * 10) + 3,
-            focus_time_hours: Number((Math.random() * 4 + 2).toFixed(1)),
-            meeting_time_hours: Number((Math.random() * 3 + 1).toFixed(1))
-          }));
+          // Fetch real developer metrics from database
+          const metricsResponse = await fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          });
 
-          console.log('Generated metrics for members:', metricsData);
-          setDevelopers(metricsData);
+          let dbMetrics: Record<string, any> = {};
+          if (metricsResponse.ok) {
+            const metricsData = await metricsResponse.json();
+            // Build lookup by developer name
+            if (metricsData.metrics && Array.isArray(metricsData.metrics)) {
+              metricsData.metrics.forEach((m: any) => {
+                dbMetrics[m.name] = m;
+              });
+            }
+          }
+
+          // Map members to metrics (use DB values if available, otherwise generate defaults)
+          const metricsDataFinal = members.map((member: TeamMember) => {
+            const fullName = `${member.first_name} ${member.last_name}`;
+            const dbData = dbMetrics[fullName];
+            
+            // If we have DB data, use it; otherwise generate placeholder values
+            if (dbData) {
+              return {
+                developer_id: member.id,
+                name: fullName,
+                email: member.email,
+                code_review_time_avg: dbData.codeReviewTimeHours,
+                pr_merge_time_avg: dbData.prMergeTimeHours,
+                happiness_score: dbData.happinessScore,
+                context_switches_per_day: dbData.contextSwitchesPerDay,
+                focus_time_hours: dbData.focusTimeHours,
+                meeting_time_hours: dbData.meetingTimeHours
+              };
+            }
+            
+            // No DB data - generate placeholder metrics
+            return {
+              developer_id: member.id,
+              name: fullName,
+              email: member.email,
+              code_review_time_avg: Number((Math.random() * 4 + 1).toFixed(1)),
+              pr_merge_time_avg: Number((Math.random() * 24 + 2).toFixed(1)),
+              happiness_score: Math.floor(Math.random() * 30) + 70,
+              context_switches_per_day: Math.floor(Math.random() * 10) + 3,
+              focus_time_hours: Number((Math.random() * 4 + 2).toFixed(1)),
+              meeting_time_hours: Number((Math.random() * 3 + 1).toFixed(1))
+            };
+          });
+
+          console.log('Developer metrics from DB:', metricsDataFinal);
+          setDevelopers(metricsDataFinal);
         } else {
           const errorData = await response.json();
           console.error('Failed to fetch team:', response.status, errorData);
@@ -946,6 +986,46 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Raw Developer Metrics Table */}
+          {devAISuggestions?.metrics && devAISuggestions.metrics.length > 0 && (
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wide">Saved Developer Metrics</h3>
+                <span className="text-xs text-slate-500">
+                  Showing {devAISuggestions.metrics.length} developer{devAISuggestions.metrics.length > 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+                <table className="min-w-full text-xs sm:text-sm text-left">
+                  <thead className="bg-slate-900/60 text-slate-400 uppercase tracking-wide">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Developer</th>
+                      <th className="px-4 py-3 font-medium">PR Time (h)</th>
+                      <th className="px-4 py-3 font-medium">Review (h)</th>
+                      <th className="px-4 py-3 font-medium">Focus (h/day)</th>
+                      <th className="px-4 py-3 font-medium">Meetings (h/day)</th>
+                      <th className="px-4 py-3 font-medium">Context Switches</th>
+                      <th className="px-4 py-3 font-medium">Happiness</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {devAISuggestions.metrics.map((metric) => (
+                      <tr key={metric.name} className="border-t border-slate-800/70">
+                        <td className="px-4 py-3 text-slate-200 font-medium">{metric.name}</td>
+                        <td className="px-4 py-3 text-slate-300">{metric.prMergeTimeHours.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-slate-300">{metric.codeReviewTimeHours.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-slate-300">{metric.focusTimeHours.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-slate-300">{metric.meetingTimeHours.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-slate-300">{metric.contextSwitchesPerDay}</td>
+                        <td className="px-4 py-3 text-slate-300">{metric.happinessScore.toFixed(0)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 

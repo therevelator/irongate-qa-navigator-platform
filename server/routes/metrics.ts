@@ -357,7 +357,8 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
     }
 
     const {
-      userId,
+      teamId,
+      developerId,
       prMergeTimeAvg,
       codeReviewTimeAvg,
       focusTimeHours,
@@ -366,44 +367,44 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
       happinessScore
     } = req.body;
 
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+    if (!teamId || !developerId) {
+      return res.status(400).json({ error: 'Team ID and developer ID are required' });
     }
 
-    // Insert or update developer metrics for today
     await query(
       `INSERT INTO developer_metrics (
-        user_id,
-        recorded_date,
+        team_id,
+        developer_id,
         pr_merge_time_avg,
         code_review_time_avg,
         focus_time_hours,
         meeting_time_hours,
         context_switches_per_day,
         happiness_score
-      ) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         pr_merge_time_avg = VALUES(pr_merge_time_avg),
         code_review_time_avg = VALUES(code_review_time_avg),
         focus_time_hours = VALUES(focus_time_hours),
         meeting_time_hours = VALUES(meeting_time_hours),
         context_switches_per_day = VALUES(context_switches_per_day),
-        happiness_score = VALUES(happiness_score)`,
+        happiness_score = VALUES(happiness_score)` ,
       [
-        userId,
-        prMergeTimeAvg || null,
-        codeReviewTimeAvg || null,
-        focusTimeHours || null,
-        meetingTimeHours || null,
-        contextSwitchesPerDay || null,
-        happinessScore || null
+        teamId,
+        developerId,
+        prMergeTimeAvg ?? null,
+        codeReviewTimeAvg ?? null,
+        focusTimeHours ?? null,
+        meetingTimeHours ?? null,
+        contextSwitchesPerDay ?? null,
+        happinessScore ?? null
       ]
     );
 
     res.json({ 
       message: 'Developer metrics saved successfully',
-      userId,
-      happinessScore
+      teamId,
+      developerId
     });
   } catch (error) {
     console.error('Developer metrics error:', error);
