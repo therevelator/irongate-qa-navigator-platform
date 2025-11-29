@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle } from 'lucide-react';
+import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
+import Swal from 'sweetalert2';
 import API_URL from '../config/api';
 
 // Mapping from metric ID to database field name
@@ -500,6 +501,288 @@ const CATEGORY_INFO = {
   reliability: { name: 'Reliability & Stability', icon: '🛡️', color: 'from-amber-500 to-orange-600' }
 };
 
+// Quality level definitions for random data generation
+type QualityLevel = 'excellent' | 'good' | 'average' | 'bad' | 'horrible';
+
+const generateRandomMetrics = (level: QualityLevel): Record<string, Record<string, number>> => {
+  const ranges: Record<QualityLevel, Record<string, [number, number]>> = {
+    excellent: {
+      'test-coverage': [99, 100],
+      'flakiness-rate': [0, 0.1],
+      'defect-density': [0, 0.05],
+      'defect-escape-rate': [0, 0.5],
+      'code-quality-score': [98, 100],
+      'build-time': [3, 5],
+      'test-execution-time': [10, 15],
+      'deployment-frequency': [20, 30],
+      'lead-time': [0.1, 0.5],
+      'mttr': [0.1, 0.5],
+      'parallel-efficiency': [95, 100],
+      'sprint-velocity': [70, 100],
+      'sprint-commitment': [95, 100],
+      'sprint-carryover': [0, 2],
+      'first-time-pass': [95, 100],
+      'blocked-time': [0, 1],
+      'automation-coverage': [95, 100],
+      'automation-roi': [500, 1000],
+      'change-failure-rate': [0, 1],
+      'mtbf': [1000, 5000],
+      'availability': [99.99, 99.999],
+      'infra-failures': [0, 0]
+    },
+    good: {
+      'test-coverage': [75, 89],
+      'flakiness-rate': [1, 2],
+      'defect-density': [0.2, 0.5],
+      'defect-escape-rate': [2, 5],
+      'code-quality-score': [80, 89],
+      'build-time': [8, 12],
+      'test-execution-time': [25, 35],
+      'deployment-frequency': [5, 10],
+      'lead-time': [1, 3],
+      'mttr': [1, 4],
+      'parallel-efficiency': [75, 85],
+      'sprint-velocity': [35, 50],
+      'sprint-commitment': [80, 90],
+      'sprint-carryover': [5, 10],
+      'first-time-pass': [75, 85],
+      'blocked-time': [5, 15],
+      'automation-coverage': [60, 80],
+      'automation-roi': [150, 300],
+      'change-failure-rate': [3, 8],
+      'mtbf': [200, 500],
+      'availability': [99.5, 99.9],
+      'infra-failures': [2, 5]
+    },
+    average: {
+      'test-coverage': [60, 74],
+      'flakiness-rate': [2, 4],
+      'defect-density': [0.5, 1],
+      'defect-escape-rate': [5, 10],
+      'code-quality-score': [70, 79],
+      'build-time': [12, 18],
+      'test-execution-time': [35, 50],
+      'deployment-frequency': [2, 5],
+      'lead-time': [3, 7],
+      'mttr': [4, 12],
+      'parallel-efficiency': [60, 75],
+      'sprint-velocity': [20, 35],
+      'sprint-commitment': [70, 80],
+      'sprint-carryover': [10, 20],
+      'first-time-pass': [60, 75],
+      'blocked-time': [15, 30],
+      'automation-coverage': [40, 60],
+      'automation-roi': [50, 150],
+      'change-failure-rate': [8, 15],
+      'mtbf': [50, 200],
+      'availability': [99, 99.5],
+      'infra-failures': [5, 10]
+    },
+    bad: {
+      'test-coverage': [40, 59],
+      'flakiness-rate': [4, 8],
+      'defect-density': [1, 2],
+      'defect-escape-rate': [10, 20],
+      'code-quality-score': [50, 69],
+      'build-time': [18, 30],
+      'test-execution-time': [50, 90],
+      'deployment-frequency': [0.5, 2],
+      'lead-time': [7, 14],
+      'mttr': [12, 24],
+      'parallel-efficiency': [40, 60],
+      'sprint-velocity': [10, 20],
+      'sprint-commitment': [50, 70],
+      'sprint-carryover': [20, 40],
+      'first-time-pass': [40, 60],
+      'blocked-time': [30, 60],
+      'automation-coverage': [20, 40],
+      'automation-roi': [0, 50],
+      'change-failure-rate': [15, 30],
+      'mtbf': [10, 50],
+      'availability': [98, 99],
+      'infra-failures': [10, 20]
+    },
+    horrible: {
+      'test-coverage': [0, 39],
+      'flakiness-rate': [8, 20],
+      'defect-density': [2, 5],
+      'defect-escape-rate': [20, 50],
+      'code-quality-score': [0, 49],
+      'build-time': [30, 60],
+      'test-execution-time': [90, 180],
+      'deployment-frequency': [0, 0.5],
+      'lead-time': [14, 30],
+      'mttr': [24, 72],
+      'parallel-efficiency': [20, 40],
+      'sprint-velocity': [0, 10],
+      'sprint-commitment': [0, 50],
+      'sprint-carryover': [40, 80],
+      'first-time-pass': [0, 40],
+      'blocked-time': [60, 120],
+      'automation-coverage': [0, 20],
+      'automation-roi': [-100, 0],
+      'change-failure-rate': [30, 50],
+      'mtbf': [0, 10],
+      'availability': [95, 98],
+      'infra-failures': [20, 50]
+    }
+  };
+
+  const result: Record<string, Record<string, number>> = {};
+  const metricRanges = ranges[level];
+
+  METRICS.forEach(metric => {
+    const [min, max] = metricRanges[metric.id] || [0, 100];
+    const targetValue = Math.random() * (max - min) + min;
+    
+    // Generate inputs based on the metric's formula to achieve the target value
+    const inputs: Record<string, number> = {};
+    
+    // Handle specific metrics with known formulas
+    if (metric.id === 'test-coverage') {
+      // (Lines executed ÷ Total LOC) × 100 = targetValue
+      inputs['totalLOC'] = 10000;
+      inputs['linesExecuted'] = (targetValue / 100) * 10000;
+    } else if (metric.id === 'flakiness-rate') {
+      // (Flaky runs ÷ Total runs) × 100 = targetValue
+      inputs['totalRuns'] = 500;
+      inputs['flakyRuns'] = (targetValue / 100) * 500;
+    } else if (metric.id === 'defect-density') {
+      // (Total bugs ÷ Lines of code) × 1000 = targetValue
+      inputs['linesOfCode'] = 50;
+      inputs['totalBugs'] = (targetValue * 50) / 1000;
+    } else if (metric.id === 'defect-escape-rate') {
+      // (Production bugs ÷ Total bugs) × 100 = targetValue
+      inputs['totalBugs'] = 50;
+      inputs['productionBugs'] = (targetValue / 100) * 50;
+    } else if (metric.id === 'code-quality-score') {
+      // Weighted avg = targetValue
+      inputs['maintainability'] = targetValue;
+      inputs['reliability'] = targetValue;
+      inputs['security'] = targetValue;
+    } else if (metric.id === 'build-time') {
+      // Average = targetValue
+      inputs['buildCount'] = 30;
+      inputs['totalBuildTime'] = targetValue * 30;
+    } else if (metric.id === 'test-execution-time') {
+      inputs['executionTime'] = targetValue;
+    } else if (metric.id === 'deployment-frequency') {
+      // Deploys ÷ Weeks = targetValue
+      inputs['weeks'] = 2;
+      inputs['successfulDeploys'] = targetValue * 2;
+    } else if (metric.id === 'lead-time') {
+      inputs['leadTimeDays'] = targetValue;
+    } else if (metric.id === 'mttr') {
+      // Total repair time ÷ Incident count = targetValue
+      inputs['incidentCount'] = 5;
+      inputs['totalRepairTime'] = targetValue * 5;
+    } else if (metric.id === 'parallel-efficiency') {
+      // (Sequential ÷ Parallel) ÷ Workers × 100 = targetValue
+      inputs['workers'] = 4;
+      inputs['parallelTime'] = 35;
+      inputs['sequentialTime'] = (targetValue / 100) * 35 * 4;
+    } else if (metric.id === 'sprint-velocity') {
+      inputs['completedPoints'] = targetValue;
+    } else if (metric.id === 'sprint-commitment') {
+      // Completed ÷ Committed × 100 = targetValue
+      inputs['committedPoints'] = 45;
+      inputs['completedPoints'] = (targetValue / 100) * 45;
+    } else if (metric.id === 'sprint-carryover') {
+      // Incomplete ÷ Committed × 100 = targetValue
+      inputs['committedPoints'] = 45;
+      inputs['incompletePoints'] = (targetValue / 100) * 45;
+    } else if (metric.id === 'first-time-pass') {
+      // Passed first time ÷ Total stories × 100 = targetValue
+      inputs['totalStories'] = 24;
+      inputs['passedFirstTime'] = (targetValue / 100) * 24;
+    } else if (metric.id === 'blocked-time') {
+      inputs['blockedHours'] = targetValue;
+    } else if (metric.id === 'automation-coverage') {
+      // Automated ÷ Total × 100 = targetValue
+      inputs['totalTests'] = 500;
+      inputs['automatedTests'] = (targetValue / 100) * 500;
+    } else if (metric.id === 'automation-roi') {
+      // (Saved - Invested) ÷ Invested × 100 = targetValue
+      inputs['timeInvested'] = 50;
+      inputs['timeSaved'] = ((targetValue / 100) * 50) + 50;
+    } else if (metric.id === 'change-failure-rate') {
+      // Failed ÷ Total × 100 = targetValue
+      inputs['totalDeploys'] = 25;
+      inputs['failedDeploys'] = (targetValue / 100) * 25;
+    } else if (metric.id === 'mtbf') {
+      // Operational hours ÷ Failures = targetValue
+      inputs['failures'] = 3;
+      inputs['operationalHours'] = targetValue * 3;
+    } else if (metric.id === 'availability') {
+      // (Total - Downtime) ÷ Total × 100 = targetValue
+      inputs['totalTime'] = 720;
+      inputs['downtime'] = 720 - ((targetValue / 100) * 720);
+    } else if (metric.id === 'infra-failures') {
+      inputs['infraFailures'] = Math.round(targetValue);
+    } else {
+      // Fallback for unknown metrics
+      metric.inputs.forEach((input) => {
+        inputs[input.id] = targetValue;
+      });
+    }
+    
+    result[metric.id] = inputs;
+  });
+
+  return result;
+};
+
+const generateRandomDeveloperMetrics = (level: QualityLevel): DeveloperMetricsInput => {
+  const ranges: Record<QualityLevel, Record<string, [number, number]>> = {
+    excellent: {
+      prMergeTimeAvg: [2, 4],
+      codeReviewTimeAvg: [0.5, 1.5],
+      focusTimeHours: [6, 8],
+      meetingTimeHours: [0.5, 1.5],
+      contextSwitchesPerDay: [1, 3]
+    },
+    good: {
+      prMergeTimeAvg: [4, 8],
+      codeReviewTimeAvg: [1.5, 3],
+      focusTimeHours: [5, 6],
+      meetingTimeHours: [1.5, 2.5],
+      contextSwitchesPerDay: [3, 5]
+    },
+    average: {
+      prMergeTimeAvg: [8, 16],
+      codeReviewTimeAvg: [3, 6],
+      focusTimeHours: [4, 5],
+      meetingTimeHours: [2.5, 4],
+      contextSwitchesPerDay: [5, 8]
+    },
+    bad: {
+      prMergeTimeAvg: [16, 24],
+      codeReviewTimeAvg: [6, 12],
+      focusTimeHours: [2, 4],
+      meetingTimeHours: [4, 6],
+      contextSwitchesPerDay: [8, 12]
+    },
+    horrible: {
+      prMergeTimeAvg: [24, 48],
+      codeReviewTimeAvg: [12, 24],
+      focusTimeHours: [0, 2],
+      meetingTimeHours: [6, 8],
+      contextSwitchesPerDay: [12, 20]
+    }
+  };
+
+  const ranges_data = ranges[level];
+  const result: DeveloperMetricsInput = {
+    prMergeTimeAvg: Math.random() * (ranges_data.prMergeTimeAvg[1] - ranges_data.prMergeTimeAvg[0]) + ranges_data.prMergeTimeAvg[0],
+    codeReviewTimeAvg: Math.random() * (ranges_data.codeReviewTimeAvg[1] - ranges_data.codeReviewTimeAvg[0]) + ranges_data.codeReviewTimeAvg[0],
+    focusTimeHours: Math.random() * (ranges_data.focusTimeHours[1] - ranges_data.focusTimeHours[0]) + ranges_data.focusTimeHours[0],
+    meetingTimeHours: Math.random() * (ranges_data.meetingTimeHours[1] - ranges_data.meetingTimeHours[0]) + ranges_data.meetingTimeHours[0],
+    contextSwitchesPerDay: Math.floor(Math.random() * (ranges_data.contextSwitchesPerDay[1] - ranges_data.contextSwitchesPerDay[0]) + ranges_data.contextSwitchesPerDay[0])
+  };
+
+  return result;
+};
+
 const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
@@ -676,7 +959,9 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
   // Handle developer metrics input change
   const handleDeveloperMetricChange = (developerId: string, field: keyof DeveloperMetricsInput, value: string) => {
-    const numValue = parseFloat(value) || 0;
+    // Allow 0 as valid input
+    const numValue = value === '' ? 0 : parseFloat(value);
+    if (isNaN(numValue)) return;
     
     setDeveloperMetrics(prev => {
       const updated = {
@@ -706,7 +991,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   // Save developer metrics
   const handleSaveDeveloperMetrics = async () => {
     if (!selectedTeamId) {
-      toast.error('Please select a team');
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Team Selected',
+        text: 'Please select a team first',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
@@ -715,7 +1005,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     );
 
     if (metricsToSave.length === 0) {
-      toast.error('Please enter metrics for at least one developer');
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Developer Metrics',
+        text: 'Please enter metrics for at least one developer',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
@@ -751,17 +1046,29 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         }
       }
 
-      toast.success(`Developer metrics saved for ${metricsToSave.length} developer(s)`);
+      Swal.fire({
+        icon: 'success',
+        title: 'Developer Metrics Saved',
+        text: `Metrics saved for ${metricsToSave.length} developer(s)`,
+        confirmButtonColor: '#3b82f6',
+      });
     } catch (error) {
       console.error('Error saving developer metrics:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to save developer metrics');
+      Swal.fire({
+        icon: 'error',
+        title: 'Failed to Save Developer Metrics',
+        text: error instanceof Error ? error.message : 'Failed to save developer metrics',
+        confirmButtonColor: '#3b82f6',
+      });
     } finally {
       setSavingDeveloperMetrics(false);
     }
   };
 
   const handleInputChange = (metricId: string, inputId: string, value: string) => {
-    const numValue = parseFloat(value) || 0;
+    // Allow 0 as valid input - only use 0 for empty/invalid strings
+    const numValue = value === '' ? 0 : parseFloat(value);
+    if (isNaN(numValue)) return;
     
     setMetricInputs(prev => ({
       ...prev,
@@ -786,15 +1093,59 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     }
   };
 
+  // Generate random team metrics
+  const handleGenerateTeamMetrics = (level: QualityLevel) => {
+    const randomMetrics = generateRandomMetrics(level);
+    setMetricInputs(randomMetrics);
+    
+    // Calculate all values
+    const calculated: Record<string, number> = {};
+    METRICS.forEach(metric => {
+      const inputs = randomMetrics[metric.id] || {};
+      calculated[metric.id] = metric.calculate(inputs);
+    });
+    setCalculatedValues(calculated);
+    
+    toast.success(`Generated ${level} team metrics!`);
+  };
+
+  // Generate random developer metrics
+  const handleGenerateDeveloperMetrics = (level: QualityLevel) => {
+    const updated: Record<string, DeveloperMetricsInput> = {};
+    const calculated: Record<string, { happinessScore: number; burnoutRisk: 'low' | 'moderate' | 'high' }> = {};
+    
+    teamMembers.forEach(member => {
+      const metrics = generateRandomDeveloperMetrics(level);
+      updated[member.id] = metrics;
+      const happinessScore = calculateHappinessScore(metrics);
+      const burnoutRisk = calculateBurnoutRisk(metrics, happinessScore);
+      calculated[member.id] = { happinessScore, burnoutRisk };
+    });
+    
+    setDeveloperMetrics(updated);
+    setDeveloperCalculated(calculated);
+    toast.success(`Generated ${level} developer metrics for all team members!`);
+  };
+
   const handleSaveMetrics = async () => {
     if (!selectedTeamId) {
-      toast.error('Please select a team');
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Team Selected',
+        text: 'Please select a team first',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
     // Check if any metrics have been calculated
     if (Object.keys(calculatedValues).length === 0) {
-      toast.error('Please enter at least one metric');
+      Swal.fire({
+        icon: 'warning',
+        title: 'No Metrics',
+        text: 'Please enter at least one metric',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
@@ -842,16 +1193,14 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       if (response.ok) {
         const result = await response.json();
         const selectedTeam = teams.find(t => t.id === selectedTeamId);
-        toast.success(`✅ ${selectedTeam?.name || 'Team'} metrics saved! QA Score: ${result.qaScore} (${result.status})`, {
-          duration: 4000
+        
+        Swal.fire({
+          icon: 'success',
+          title: 'Team Metrics Saved',
+          html: `<p><strong>${selectedTeam?.name || 'Team'}</strong> metrics saved successfully!</p><p>QA Score: <strong>${result.qaScore}/100</strong> (${result.status})</p>`,
+          confirmButtonColor: '#3b82f6',
         });
-        // Show info about dashboard refresh
-        setTimeout(() => {
-          toast('💡 Go back to dashboard to see updated metrics', {
-            icon: 'ℹ️',
-            duration: 3000
-          });
-        }, 500);
+        
         // Reset inputs after save and refresh existing metrics
         setMetricInputs({});
         setCalculatedValues({});
@@ -859,14 +1208,20 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         fetchExistingMetrics(selectedTeamId);
       } else {
         const error = await response.json();
-        toast.error(`❌ Failed to save: ${error.error || 'Unknown error'}`, {
-          duration: 5000
+        Swal.fire({
+          icon: 'error',
+          title: 'Failed to Save Team Metrics',
+          text: error.error || 'Unknown error occurred',
+          confirmButtonColor: '#3b82f6',
         });
       }
     } catch (error) {
       console.error('Error saving metrics:', error);
-      toast.error('❌ Failed to save metrics. Check console for details.', {
-        duration: 5000
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: 'Failed to save team metrics. Check console for details.',
+        confirmButtonColor: '#3b82f6',
       });
     } finally {
       setSaving(false);
@@ -975,6 +1330,48 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
           </select>
         </div>
 
+        {/* Generate Team Metrics Buttons */}
+        {selectedTeamId && (
+          <div className="bg-slate-800 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <Zap className="w-5 h-5 text-amber-400" />
+              Generate Team Metrics
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+              <button
+                onClick={() => handleGenerateTeamMetrics('excellent')}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Excellent
+              </button>
+              <button
+                onClick={() => handleGenerateTeamMetrics('good')}
+                className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Good
+              </button>
+              <button
+                onClick={() => handleGenerateTeamMetrics('average')}
+                className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Average
+              </button>
+              <button
+                onClick={() => handleGenerateTeamMetrics('bad')}
+                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Bad
+              </button>
+              <button
+                onClick={() => handleGenerateTeamMetrics('horrible')}
+                className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
+              >
+                Horrible
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Existing Metrics History */}
         {selectedTeamId && (
           <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 border border-slate-700">
@@ -999,14 +1396,19 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
               <>
                 {/* QA Score Header */}
                 {existingMetrics.qaScore !== undefined && (
-                  <div className="mb-4 p-4 bg-slate-700/50 rounded-lg flex items-center justify-between">
-                    <span className="text-slate-300 font-medium">Overall QA Score</span>
-                    <span className={`text-2xl font-bold ${
-                      existingMetrics.qaScore >= 85 ? 'text-emerald-400' :
-                      existingMetrics.qaScore >= 70 ? 'text-amber-400' : 'text-red-400'
-                    }`}>
-                      {existingMetrics.qaScore}/100
-                    </span>
+                  <div className="mb-4 p-4 bg-slate-700/50 rounded-lg">
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-slate-300 font-medium">Overall QA Score</span>
+                      <span className={`text-2xl font-bold ${
+                        existingMetrics.qaScore >= 85 ? 'text-emerald-400' :
+                        existingMetrics.qaScore >= 70 ? 'text-amber-400' : 'text-red-400'
+                      }`}>
+                        {existingMetrics.qaScore}/100
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400 bg-slate-800/50 rounded px-3 py-2 font-mono">
+                      <span className="text-cyan-400">Formula:</span> Test Coverage × 0.30 + (100 - Defect Escape Rate) × 0.25 + (100 - Change Failure Rate) × 0.25 + Code Quality × 0.20
+                    </div>
                   </div>
                 )}
                 
@@ -1145,7 +1547,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                               min={input.min}
                               max={input.max}
                               step={input.step || 1}
-                              value={metricInputs[metric.id]?.[input.id] || ''}
+                              value={metricInputs[metric.id]?.[input.id] ?? ''}
                               onChange={(e) => handleInputChange(metric.id, input.id, e.target.value)}
                               className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                             />
@@ -1198,6 +1600,46 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     <p className="text-sm text-slate-300">
                       Enter productivity metrics for each developer. <strong>Happiness Score</strong> and <strong>Burnout Risk</strong> are calculated automatically based on the input values.
                     </p>
+                  </div>
+                </div>
+
+                {/* Generate Developer Metrics Buttons */}
+                <div className="bg-slate-700/30 rounded-lg p-4 mb-4">
+                  <h4 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    Generate Developer Metrics
+                  </h4>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    <button
+                      onClick={() => handleGenerateDeveloperMetrics('excellent')}
+                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm rounded-lg font-medium transition-colors"
+                    >
+                      Excellent
+                    </button>
+                    <button
+                      onClick={() => handleGenerateDeveloperMetrics('good')}
+                      className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-700 text-white text-sm rounded-lg font-medium transition-colors"
+                    >
+                      Good
+                    </button>
+                    <button
+                      onClick={() => handleGenerateDeveloperMetrics('average')}
+                      className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-sm rounded-lg font-medium transition-colors"
+                    >
+                      Average
+                    </button>
+                    <button
+                      onClick={() => handleGenerateDeveloperMetrics('bad')}
+                      className="px-3 py-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg font-medium transition-colors"
+                    >
+                      Bad
+                    </button>
+                    <button
+                      onClick={() => handleGenerateDeveloperMetrics('horrible')}
+                      className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-sm rounded-lg font-medium transition-colors"
+                    >
+                      Horrible
+                    </button>
                   </div>
                 </div>
 
@@ -1254,7 +1696,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             placeholder="e.g., 8"
                             min={0}
                             step={0.5}
-                            value={metrics.prMergeTimeAvg || ''}
+                            value={metrics.prMergeTimeAvg ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'prMergeTimeAvg', e.target.value)}
                             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                           />
@@ -1266,7 +1708,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             placeholder="e.g., 2"
                             min={0}
                             step={0.5}
-                            value={metrics.codeReviewTimeAvg || ''}
+                            value={metrics.codeReviewTimeAvg ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'codeReviewTimeAvg', e.target.value)}
                             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                           />
@@ -1279,7 +1721,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             min={0}
                             max={8}
                             step={0.5}
-                            value={metrics.focusTimeHours || ''}
+                            value={metrics.focusTimeHours ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'focusTimeHours', e.target.value)}
                             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                           />
@@ -1292,7 +1734,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             min={0}
                             max={8}
                             step={0.5}
-                            value={metrics.meetingTimeHours || ''}
+                            value={metrics.meetingTimeHours ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'meetingTimeHours', e.target.value)}
                             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                           />
@@ -1305,7 +1747,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             min={0}
                             max={20}
                             step={1}
-                            value={metrics.contextSwitchesPerDay || ''}
+                            value={metrics.contextSwitchesPerDay ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'contextSwitchesPerDay', e.target.value)}
                             className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
                           />

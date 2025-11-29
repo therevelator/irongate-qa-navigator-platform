@@ -23,6 +23,7 @@ import DepartmentsView from './components/DepartmentsView';
 import Layout from './components/Layout';
 import NewDashboard from './components/NewDashboard';
 import ManualMetricsInput from './components/ManualMetricsInput';
+import MetricIntervalsConfig from './components/MetricIntervalsConfig';
 
 function App() {
   const { user } = useAuth();
@@ -256,6 +257,14 @@ function App() {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <ManualMetricsInput onBack={() => setCurrentView('dashboard')} />
+      </Layout>
+    );
+  }
+
+  if (currentView === 'metric-intervals') {
+    return (
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
+        <MetricIntervalsConfig onBack={() => setCurrentView('dashboard')} />
       </Layout>
     );
   }

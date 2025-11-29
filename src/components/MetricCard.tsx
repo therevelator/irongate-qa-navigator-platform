@@ -33,29 +33,37 @@ const MetricCard: React.FC<MetricCardProps> = ({ metric }) => {
       </div>
 
       <div className="flex-1 w-full min-h-0">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={metric.history}>
-            <defs>
-              <linearGradient id={`color-${metric.id}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor={color} stopOpacity={0.1}/>
-                <stop offset="95%" stopColor={color} stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <Tooltip 
-              contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-              itemStyle={{ color: '#374151', fontSize: '12px' }}
-              labelStyle={{ display: 'none' }}
-              formatter={(value: number) => [value, '']}
-            />
-            <Area 
-              type="monotone" 
-              dataKey="value" 
-              stroke={color} 
-              fill={`url(#color-${metric.id})`} 
-              strokeWidth={2}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        {metric.history && metric.history.length >= 2 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={metric.history}>
+              <defs>
+                <linearGradient id={`color-${metric.id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={color} stopOpacity={0.1}/>
+                  <stop offset="95%" stopColor={color} stopOpacity={0}/>
+                </linearGradient>
+              </defs>
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#fff', borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                itemStyle={{ color: '#374151', fontSize: '12px' }}
+                labelStyle={{ display: 'none' }}
+                formatter={(value: number) => [value, '']}
+              />
+              <Area 
+                type="monotone" 
+                dataKey="value" 
+                stroke={color} 
+                fill={`url(#color-${metric.id})`} 
+                strokeWidth={2}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-full bg-gray-50 dark:bg-slate-800/50 rounded-lg">
+            <p className="text-xs text-gray-500 dark:text-slate-400 text-center">
+              Trend data available from day 2
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );

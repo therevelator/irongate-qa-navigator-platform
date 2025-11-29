@@ -506,38 +506,56 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
       targetDepartmentId = userDepartmentId;
     }
 
-    // Generate UUID for team
-    const teamId = `team-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    // Insert team
-    await query<any>(
-      `INSERT INTO teams (id, company_id, department_id, name, description, is_active)
-       VALUES (?, ?, ?, ?, ?, true)`,
-      [teamId, companyId, targetDepartmentId, name, description || '']
+    // Check if team with same name exists in this department for this company (including inactive)
+    const existingTeam = await queryOne<any>(
+      'SELECT id, is_active FROM teams WHERE company_id = ? AND department_id = ? AND name = ?',
+      [companyId, targetDepartmentId, name]
     );
 
-    // Create initial KPI snapshot with default values
-    const snapshotId = `kpi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    await query<any>(
-      `INSERT INTO kpi_snapshots (
-        id, team_id, snapshot_date, qa_score, status,
-        test_coverage, test_flakiness_rate, defect_density, defect_escape_rate,
-        code_quality_score, avg_build_time_minutes, test_execution_time_minutes,
-        deployment_frequency_per_week, lead_time_days, mttr_hours,
-        parallel_test_efficiency, sprint_velocity, sprint_commitment_rate,
-        sprint_carryover, first_time_pass_rate, blocked_time_hours,
-        automation_coverage, automation_roi, change_failure_rate,
-        mtbf_hours, system_availability, infrastructure_failures
-      ) VALUES (?, ?, CURDATE(), 0, 'needs_attention',
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 100, 0)`,
-      [snapshotId, teamId]
-    );
+    let teamId: string;
+    let newTeam: any;
 
-    // Fetch created team
-    const newTeam = await queryOne<any>(
-      'SELECT * FROM teams WHERE id = ?',
-      [teamId]
-    );
+    if (existingTeam) {
+      if (existingTeam.is_active) {
+        return res.status(409).json({ error: 'A team with this name already exists in this department' });
+      }
+      // Reactivate the inactive team
+      teamId = existingTeam.id;
+      await query<any>(
+        'UPDATE teams SET is_active = true, description = ? WHERE id = ?',
+        [description || '', teamId]
+      );
+      newTeam = await queryOne<any>('SELECT * FROM teams WHERE id = ?', [teamId]);
+    } else {
+      // Generate UUID for new team
+      teamId = `team-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+      // Insert team
+      await query<any>(
+        `INSERT INTO teams (id, company_id, department_id, name, description, is_active)
+         VALUES (?, ?, ?, ?, ?, true)`,
+        [teamId, companyId, targetDepartmentId, name, description || '']
+      );
+
+      // Create initial KPI snapshot with default values
+      const snapshotId = `kpi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      await query<any>(
+        `INSERT INTO kpi_snapshots (
+          id, team_id, snapshot_date, qa_score, status,
+          test_coverage, test_flakiness_rate, defect_density, defect_escape_rate,
+          code_quality_score, avg_build_time_minutes, test_execution_time_minutes,
+          deployment_frequency_per_week, lead_time_days, mttr_hours,
+          parallel_test_efficiency, sprint_velocity, sprint_commitment_rate,
+          sprint_carryover, first_time_pass_rate, blocked_time_hours,
+          automation_coverage, automation_roi, change_failure_rate,
+          mtbf_hours, system_availability, infrastructure_failures
+        ) VALUES (?, ?, CURDATE(), 0, 'warning',
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99.9, 0)`,
+        [snapshotId, teamId]
+      );
+
+      newTeam = await queryOne<any>('SELECT * FROM teams WHERE id = ?', [teamId]);
+    }
 
     res.status(201).json(newTeam);
   } catch (error) {

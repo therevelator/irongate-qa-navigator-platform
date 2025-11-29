@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Wrench, AlertCircle, Clock, DollarSign, TrendingUp, Filter } from 'lucide-react';
-import { generateTechnicalDebt } from '../data/advancedFeatures';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Wrench, AlertCircle, Clock, DollarSign, TrendingUp, Filter, Loader2 } from 'lucide-react';
 import type { TechnicalDebt } from '../data/advancedFeatures';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, ZAxis } from 'recharts';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface TechnicalDebtTrackerProps {
   onBack: () => void;
@@ -12,8 +13,28 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSeverity, setSelectedSeverity] = useState<string>('all');
   const [sortBy, setSortBy] = useState<'priority' | 'effort' | 'cost'>('priority');
-  
-  const debtItems = generateTechnicalDebt();
+  const [debtItems, setDebtItems] = useState<TechnicalDebt[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDebt = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        const response = await fetch(`${API_URL}/analytics/technical-debt`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setDebtItems(data.debts || []);
+        }
+      } catch (error) {
+        console.error('Error fetching technical debt:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDebt();
+  }, []);
 
   const filteredDebt = debtItems.filter(item => {
     const categoryMatch = selectedCategory === 'all' || item.category === selectedCategory;
@@ -35,10 +56,11 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
   const categories = [
     { id: 'all', name: 'All Categories', icon: '📋', color: 'gray' },
     { id: 'code_quality', name: 'Code Quality', icon: '🔧', color: 'blue' },
-    { id: 'architecture', name: 'Architecture', icon: '🏗️', color: 'purple' },
     { id: 'testing', name: 'Testing', icon: '🧪', color: 'green' },
     { id: 'documentation', name: 'Documentation', icon: '📚', color: 'yellow' },
-    { id: 'security', name: 'Security', icon: '🔒', color: 'red' }
+    { id: 'infrastructure', name: 'Infrastructure', icon: '🏗️', color: 'purple' },
+    { id: 'security', name: 'Security', icon: '🔒', color: 'red' },
+    { id: 'performance', name: 'Performance', icon: '⚡', color: 'orange' }
   ];
 
   const severities = [

@@ -10,7 +10,11 @@ import metricsRoutes from './routes/metrics';
 import usersRoutes from './routes/users';
 import departmentsRoutes from './routes/departments';
 import adminRoutes from './routes/admin';
+import settingsRoutes from './routes/settings';
+import analyticsRoutes from './routes/analytics';
 // import './jobs/syncMetrics'; // Start cron jobs (disabled temporarily)
+import './jobs/intervalSync'; // Interval-based metric sync
+import './jobs/analyticsSync'; // Analytics data sync
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -66,6 +70,8 @@ app.use('/api/metrics', metricsRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/departments', departmentsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/settings', settingsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

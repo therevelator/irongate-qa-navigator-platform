@@ -58,10 +58,16 @@ const getStatus = (value: number | null | undefined, goodThreshold: number, warn
 export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
   const kpi = team.kpiData || {};
   
+  // Check if we have real KPI data (any real metric value)
+  const hasRealData = Object.values(kpi).some(val => val !== null && val !== undefined);
+  
   const generateHistory = (base: number, variance: number) => {
-    const dates = Array.from({ length: 30 }, (_, i) => {
+    // If we have real data, only generate today's data point (day 1)
+    // If no real data (mock mode), generate 30 days of history
+    const days = hasRealData ? 1 : 30;
+    const dates = Array.from({ length: days }, (_, i) => {
       const d = new Date();
-      d.setDate(d.getDate() - (29 - i));
+      d.setDate(d.getDate() - (days - 1 - i));
       return d.toISOString().split('T')[0];
     });
     return dates.map(date => ({
@@ -78,6 +84,16 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
     return Number((mockMin + Math.random() * (mockMax - mockMin)).toFixed(2));
   };
 
+  // Generate change value - 0 for day 1 (real data), random for mock data
+  const getChange = (mockChange: number): number => {
+    return hasRealData ? 0 : mockChange;
+  };
+
+  // Generate trend - neutral for day 1 (real data), random for mock data
+  const getTrend = (mockTrend: 'up' | 'down' | 'neutral'): 'up' | 'down' | 'neutral' => {
+    return hasRealData ? 'neutral' : mockTrend;
+  };
+
   return [
     // Quality & Reliability
     
@@ -87,8 +103,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Test Coverage',
       value: getValue(kpi.testCoverage, 60, 95),
       unit: '%',
-      change: Number((Math.random() * 5 - 2).toFixed(1)),
-      trend: 'up',
+      change: getChange(Number((Math.random() * 5 - 2).toFixed(1))),
+      trend: getTrend('up'),
       status: getStatus(kpi.testCoverage, 80, 70),
       category: 'quality',
       description: 'Percentage of code covered by automated tests',
@@ -101,8 +117,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Test Flakiness Rate',
       value: getValue(kpi.testFlakinessRate, 0, 5),
       unit: '%',
-      change: Number((Math.random() * 2 - 1).toFixed(1)),
-      trend: 'down',
+      change: getChange(Number((Math.random() * 2 - 1).toFixed(1))),
+      trend: getTrend('down'),
       status: getStatus(kpi.testFlakinessRate, 2, 5, true),
       category: 'quality',
       description: 'Tests that fail intermittently without code changes',
@@ -115,8 +131,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Defect Density',
       value: getValue(kpi.defectDensity, 0, 1.5),
       unit: '/1k LOC',
-      change: -0.1,
-      trend: 'down',
+      change: getChange(-0.1),
+      trend: getTrend('down'),
       status: getStatus(kpi.defectDensity, 0.5, 1.0, true),
       category: 'quality',
       description: 'Number of defects per thousand lines of code',
@@ -129,8 +145,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Defect Escape Rate',
       value: getValue(kpi.defectEscapeRate, 0, 8),
       unit: '%',
-      change: -0.5,
-      trend: 'down',
+      change: getChange(-0.5),
+      trend: getTrend('down'),
       status: getStatus(kpi.defectEscapeRate, 5, 10, true),
       category: 'quality',
       description: 'Bugs found in production vs. caught in testing',
@@ -143,8 +159,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Code Quality Score',
       value: getValue(kpi.codeQualityScore, 70, 95),
       unit: '/100',
-      change: 2,
-      trend: 'up',
+      change: getChange(2),
+      trend: getTrend('up'),
       status: getStatus(kpi.codeQualityScore, 85, 70),
       category: 'quality',
       description: 'SonarQube or similar static analysis score',
@@ -159,8 +175,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Avg Build Time',
       value: getValue(kpi.avgBuildTimeMinutes, 5, 20),
       unit: 'min',
-      change: -1.5,
-      trend: 'down',
+      change: getChange(-1.5),
+      trend: getTrend('down'),
       status: getStatus(kpi.avgBuildTimeMinutes, 10, 15, true),
       category: 'speed',
       description: 'Average time to complete CI/CD build',
@@ -173,8 +189,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Test Execution Time',
       value: getValue(kpi.testExecutionTimeMinutes, 20, 60),
       unit: 'min',
-      change: -2,
-      trend: 'down',
+      change: getChange(-2),
+      trend: getTrend('down'),
       status: getStatus(kpi.testExecutionTimeMinutes, 30, 45, true),
       category: 'speed',
       description: 'Total time to run all automated tests',
@@ -187,8 +203,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Deployment Frequency',
       value: getValue(kpi.deploymentFrequencyPerWeek, 5, 20),
       unit: '/week',
-      change: 3,
-      trend: 'up',
+      change: getChange(3),
+      trend: getTrend('up'),
       status: getStatus(kpi.deploymentFrequencyPerWeek, 5, 2),
       category: 'speed',
       description: 'Number of deployments to production per week',
@@ -201,8 +217,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Lead Time for Changes',
       value: getValue(kpi.leadTimeDays, 1, 5),
       unit: 'days',
-      change: -0.3,
-      trend: 'down',
+      change: getChange(-0.3),
+      trend: getTrend('down'),
       status: getStatus(kpi.leadTimeDays, 1, 7, true),
       category: 'speed',
       description: 'Time from commit to production deployment',
@@ -215,8 +231,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Mean Time to Repair',
       value: getValue(kpi.mttrHours, 2, 10),
       unit: 'hours',
-      change: -1,
-      trend: 'down',
+      change: getChange(-1),
+      trend: getTrend('down'),
       status: getStatus(kpi.mttrHours, 1, 24, true),
       category: 'speed',
       description: 'Average time to diagnose and fix failures',
@@ -229,8 +245,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Parallel Test Efficiency',
       value: getValue(kpi.parallelTestEfficiency, 70, 95),
       unit: '%',
-      change: 2,
-      trend: 'up',
+      change: getChange(2),
+      trend: getTrend('up'),
       status: getStatus(kpi.parallelTestEfficiency, 80, 60),
       category: 'speed',
       description: 'Efficiency of parallel test execution',
@@ -245,8 +261,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Sprint Velocity',
       value: getValue(kpi.sprintVelocity, 30, 60),
       unit: 'pts',
-      change: 5,
-      trend: 'up',
+      change: getChange(5),
+      trend: getTrend('up'),
       status: 'good', // Velocity doesn't have good/bad, just consistency
       category: 'agile',
       description: 'Story points completed per sprint',
@@ -259,8 +275,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Sprint Commitment Rate',
       value: getValue(kpi.sprintCommitmentRate, 75, 95),
       unit: '%',
-      change: -2,
-      trend: 'down',
+      change: getChange(-2),
+      trend: getTrend('down'),
       status: getStatus(kpi.sprintCommitmentRate, 85, 70),
       category: 'agile',
       description: 'Percentage of committed work completed',
@@ -273,8 +289,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Sprint Carryover',
       value: getValue(kpi.sprintCarryover, 5, 25),
       unit: '%',
-      change: 3,
-      trend: 'up',
+      change: getChange(3),
+      trend: getTrend('up'),
       status: getStatus(kpi.sprintCarryover, 10, 20, true),
       category: 'agile',
       description: 'Work not completed and moved to next sprint',
@@ -287,8 +303,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'First-Time Pass Rate',
       value: getValue(kpi.firstTimePassRate, 60, 90),
       unit: '%',
-      change: 2,
-      trend: 'up',
+      change: getChange(2),
+      trend: getTrend('up'),
       status: getStatus(kpi.firstTimePassRate, 75, 60),
       category: 'agile',
       description: 'Stories passing QA on first attempt',
@@ -301,8 +317,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Blocked Time',
       value: getValue(kpi.blockedTimeHours, 10, 30),
       unit: 'hrs',
-      change: -4,
-      trend: 'down',
+      change: getChange(-4),
+      trend: getTrend('down'),
       status: getStatus(kpi.blockedTimeHours, 15, 25, true),
       category: 'agile',
       description: 'Total hours tickets spent blocked per sprint',
@@ -315,8 +331,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Test Automation Coverage',
       value: getValue(kpi.automationCoverage, 60, 95),
       unit: '%',
-      change: 3,
-      trend: 'up',
+      change: getChange(3),
+      trend: getTrend('up'),
       status: getStatus(kpi.automationCoverage, 70, 50),
       category: 'agile',
       description: 'Percentage of test cases automated',
@@ -329,8 +345,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Automation ROI',
       value: getValue(kpi.automationRoi, 200, 400),
       unit: '%',
-      change: 15,
-      trend: 'up',
+      change: getChange(15),
+      trend: getTrend('up'),
       status: getStatus(kpi.automationRoi, 200, 100),
       category: 'agile',
       description: 'Return on investment for test automation',
@@ -345,8 +361,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Change Failure Rate',
       value: getValue(kpi.changeFailureRate, 0, 10),
       unit: '%',
-      change: 0.5,
-      trend: 'up',
+      change: getChange(0.5),
+      trend: getTrend('up'),
       status: getStatus(kpi.changeFailureRate, 5, 15, true),
       category: 'reliability',
       description: 'Deployments causing failures or rollbacks',
@@ -359,8 +375,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Mean Time Between Failures',
       value: getValue(kpi.mtbfHours, 80, 160),
       unit: 'hours',
-      change: 10,
-      trend: 'up',
+      change: getChange(10),
+      trend: getTrend('up'),
       status: getStatus(kpi.mtbfHours, 100, 50),
       category: 'reliability',
       description: 'Average time between system failures',
@@ -373,8 +389,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'System Availability',
       value: getValue(kpi.systemAvailability, 99, 100),
       unit: '%',
-      change: 0.1,
-      trend: 'up',
+      change: getChange(0.1),
+      trend: getTrend('up'),
       status: getStatus(kpi.systemAvailability, 99.9, 99),
       category: 'reliability',
       description: 'Uptime percentage',
@@ -387,8 +403,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Infrastructure Failures',
       value: getValue(kpi.infrastructureFailures, 0, 8),
       unit: 'count',
-      change: -1,
-      trend: 'down',
+      change: getChange(-1),
+      trend: getTrend('down'),
       status: getStatus(kpi.infrastructureFailures, 5, 10, true),
       category: 'reliability',
       description: 'Test failures due to infrastructure issues',
@@ -401,8 +417,8 @@ export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
       name: 'Environment Startup Time',
       value: Math.floor(5 + Math.random() * 15), // No kpiData field for this yet
       unit: 'min',
-      change: 1,
-      trend: 'up',
+      change: getChange(1),
+      trend: getTrend('up'),
       status: 'warning',
       category: 'reliability',
       description: 'Time to provision test environments',

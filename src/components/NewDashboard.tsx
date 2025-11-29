@@ -25,6 +25,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   const [filter, setFilter] = useState<'all' | 'high' | 'needs-attention'>('all');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
+  const [teamsWithMetrics, setTeamsWithMetrics] = useState<Team[]>(teams);
 
   // Fetch departments for admin users
   useEffect(() => {
@@ -32,6 +33,92 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       fetchDepartments();
     }
   }, [user?.role]);
+
+  // Fetch real metrics for all teams
+  useEffect(() => {
+    fetchTeamsWithMetrics();
+  }, [teams]);
+
+  const fetchTeamsWithMetrics = async () => {
+    try {
+      const token = localStorage.getItem('irongate_token');
+      if (!token) return;
+
+      // Fetch metrics for each team
+      const teamsWithData = await Promise.all(
+        teams.map(async (team) => {
+          try {
+            const response = await fetch(`${API_URL}/teams/${team.id}`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+              const data = await response.json();
+              const teamData = data.team || {};
+              
+              // Map KPI data to metrics for display
+              const metrics = [
+                {
+                  id: 'coverage',
+                  name: 'Test Coverage',
+                  value: teamData.kpiData?.testCoverage ? Math.round(teamData.kpiData.testCoverage) : 0,
+                  unit: '%',
+                  change: 0,
+                  trend: 'up' as const,
+                  status: ((teamData.kpiData?.testCoverage || 0) >= 80 ? 'good' : 'warning') as 'good' | 'warning' | 'critical',
+                  history: []
+                },
+                {
+                  id: 'flakiness',
+                  name: 'Flakiness',
+                  value: teamData.kpiData?.testFlakinessRate != null ? Number(teamData.kpiData.testFlakinessRate).toFixed(1) : '0',
+                  unit: '%',
+                  change: 0,
+                  trend: 'down' as const,
+                  status: (Number(teamData.kpiData?.testFlakinessRate || 0) <= 2 ? 'good' : 'warning') as 'good' | 'warning' | 'critical',
+                  history: []
+                },
+                {
+                  id: 'defect-density',
+                  name: 'Defect Density',
+                  value: teamData.kpiData?.defectDensity != null ? Number(teamData.kpiData.defectDensity).toFixed(2) : '0',
+                  unit: '/1k',
+                  change: 0,
+                  trend: 'down' as const,
+                  status: (Number(teamData.kpiData?.defectDensity || 0) <= 0.5 ? 'good' : 'warning') as 'good' | 'warning' | 'critical',
+                  history: []
+                },
+                {
+                  id: 'automation',
+                  name: 'Automation',
+                  value: teamData.kpiData?.automationCoverage ? Math.round(teamData.kpiData.automationCoverage) : 0,
+                  unit: '%',
+                  change: 0,
+                  trend: 'up' as const,
+                  status: ((teamData.kpiData?.automationCoverage || 0) >= 70 ? 'good' : 'warning') as 'good' | 'warning' | 'critical',
+                  history: []
+                }
+              ];
+
+              return {
+                ...team,
+                qaScore: teamData.qaScore || team.qaScore,
+                metrics: metrics.filter(m => m.value !== 0 || teamData.kpiData)
+              };
+            }
+          } catch (error) {
+            console.error(`Error fetching metrics for team ${team.id}:`, error);
+          }
+          return team;
+        })
+      );
+
+      setTeamsWithMetrics(teamsWithData);
+    } catch (error) {
+      console.error('Error fetching teams with metrics:', error);
+      setTeamsWithMetrics(teams);
+    }
+  };
 
   const fetchDepartments = async () => {
     try {
@@ -87,8 +174,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   // Filter teams based on user role
   // QA Engineers and Viewers only see their own team
   const userTeams = (user?.role === 'qa_engineer' || user?.role === 'viewer')
-    ? teams.filter(team => team.id === user?.primaryTeamId)
-    : teams;
+    ? teamsWithMetrics.filter(team => team.id === user?.primaryTeamId)
+    : teamsWithMetrics;
 
   // Filter teams by department (for admins) and performance filter
   const filteredTeams = userTeams.filter(team => {

@@ -4,6 +4,50 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
+const TECH_DEBT_SEVERITY_WEIGHTS: Record<string, number> = {
+  critical: 30,
+  high: 20,
+  medium: 10,
+  low: 5
+};
+
+async function getTechnicalDebtScore(teamId: string): Promise<number> {
+  const summary = await queryOne<any>(
+    `SELECT 
+        SUM(CASE 
+              WHEN status NOT IN ('resolved','wont_fix') THEN
+                CASE severity
+                  WHEN 'critical' THEN ?
+                  WHEN 'high' THEN ?
+                  WHEN 'medium' THEN ?
+                  WHEN 'low' THEN ?
+                  ELSE 0
+                END
+              ELSE 0
+            END) AS open_weight,
+        SUM(CASE WHEN status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items
+      FROM technical_debt
+      WHERE team_id = ?`,
+    [
+      TECH_DEBT_SEVERITY_WEIGHTS.critical,
+      TECH_DEBT_SEVERITY_WEIGHTS.high,
+      TECH_DEBT_SEVERITY_WEIGHTS.medium,
+      TECH_DEBT_SEVERITY_WEIGHTS.low,
+      teamId
+    ]
+  );
+
+  const openWeight = Number(summary?.open_weight ?? 0);
+  const openItems = Number(summary?.open_items ?? 0);
+
+  if (!openItems || openWeight <= 0) {
+    return 0;
+  }
+
+  // Cap to 100 to keep the score within expected bounds
+  return Math.min(100, Math.round(openWeight));
+}
+
 // Get all teams (with filters and latest metrics)
 router.get('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -86,92 +130,96 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     const teams = await query<any[]>(sql, params);
     
     // Transform teams to match frontend format
-    const transformedTeams = teams.map(team => ({
-      id: team.id,
-      name: team.name,
-      department: team.department || 'Unknown Department',
-      department_id: team.department_id,
-      platform: team.platform,
-      description: team.description,
-      qaScore: team.qaScore || 0,
-      status: (team.status === 'good' || team.status === 'warning' || team.status === 'critical') 
-        ? team.status 
-        : (team.qaScore >= 85 ? 'good' : team.qaScore >= 70 ? 'warning' : 'critical'),
-      memberCount: team.member_count || 0,
-      teamLead: team.team_lead_name,
-      velocity: Array.from({ length: 5 }, (_, i) => ({
-        sprint: `S${10 + i}`,
-        committed: Math.floor(40 + Math.random() * 20),
-        delivered: Math.floor(35 + Math.random() * 20)
-      })),
-      metrics: [
-        {
-          id: 'test-coverage',
-          name: 'Test Coverage',
-          value: team.test_coverage || 0,
-          unit: '%',
-          change: 2.5,
-          trend: 'up' as const,
-          status: (team.test_coverage || 0) >= 80 ? 'good' : (team.test_coverage || 0) >= 70 ? 'warning' : 'critical',
-          history: []
-        },
-        {
-          id: 'defect-density',
-          name: 'Defect Density',
-          value: team.defect_density || 0,
-          unit: '/1k',
-          change: -0.1,
-          trend: 'down' as const,
-          status: (team.defect_density || 0) <= 0.5 ? 'good' : (team.defect_density || 0) <= 1.0 ? 'warning' : 'critical',
-          history: []
-        },
-        {
-          id: 'automation-coverage',
-          name: 'Automation',
-          value: team.automation_coverage || 0,
-          unit: '%',
-          change: 3,
-          trend: 'up' as const,
-          status: (team.automation_coverage || 0) >= 70 ? 'good' : (team.automation_coverage || 0) >= 50 ? 'warning' : 'critical',
-          history: []
-        },
-        {
-          id: 'deployment-frequency',
-          name: 'Deployments/Week',
-          value: team.deployment_frequency_per_week || 0,
-          unit: '',
-          change: 1,
-          trend: 'up' as const,
-          status: (team.deployment_frequency_per_week || 0) >= 5 ? 'good' : (team.deployment_frequency_per_week || 0) >= 2 ? 'warning' : 'critical',
-          history: []
+    const transformedTeams = await Promise.all(teams.map(async team => {
+      const technicalDebtScore = await getTechnicalDebtScore(team.id);
+
+      return {
+        id: team.id,
+        name: team.name,
+        department: team.department || 'Unknown Department',
+        department_id: team.department_id,
+        platform: team.platform,
+        description: team.description,
+        qaScore: team.qaScore || 0,
+        status: (team.status === 'good' || team.status === 'warning' || team.status === 'critical') 
+          ? team.status 
+          : (team.qaScore >= 85 ? 'good' : team.qaScore >= 70 ? 'warning' : 'critical'),
+        memberCount: team.member_count || 0,
+        teamLead: team.team_lead_name,
+        velocity: Array.from({ length: 5 }, (_, i) => ({
+          sprint: `S${10 + i}`,
+          committed: Math.floor(40 + Math.random() * 20),
+          delivered: Math.floor(35 + Math.random() * 20)
+        })),
+        metrics: [
+          {
+            id: 'test-coverage',
+            name: 'Test Coverage',
+            value: team.test_coverage || 0,
+            unit: '%',
+            change: 2.5,
+            trend: 'up' as const,
+            status: (team.test_coverage || 0) >= 80 ? 'good' : (team.test_coverage || 0) >= 70 ? 'warning' : 'critical',
+            history: []
+          },
+          {
+            id: 'defect-density',
+            name: 'Defect Density',
+            value: team.defect_density || 0,
+            unit: '/1k',
+            change: -0.1,
+            trend: 'down' as const,
+            status: (team.defect_density || 0) <= 0.5 ? 'good' : (team.defect_density || 0) <= 1.0 ? 'warning' : 'critical',
+            history: []
+          },
+          {
+            id: 'automation-coverage',
+            name: 'Automation',
+            value: team.automation_coverage || 0,
+            unit: '%',
+            change: 3,
+            trend: 'up' as const,
+            status: (team.automation_coverage || 0) >= 70 ? 'good' : (team.automation_coverage || 0) >= 50 ? 'warning' : 'critical',
+            history: []
+          },
+          {
+            id: 'deployment-frequency',
+            name: 'Deployments/Week',
+            value: team.deployment_frequency_per_week || 0,
+            unit: '',
+            change: 1,
+            trend: 'up' as const,
+            status: (team.deployment_frequency_per_week || 0) >= 5 ? 'good' : (team.deployment_frequency_per_week || 0) >= 2 ? 'warning' : 'critical',
+            history: []
+          }
+        ],
+        technicalDebtScore,
+        taskSizingAccuracy: 0.85 + Math.random() * 0.3,
+        kpiData: {
+          testCoverage: team.test_coverage,
+          testFlakinessRate: team.test_flakiness_rate,
+          defectDensity: team.defect_density,
+          defectEscapeRate: team.defect_escape_rate,
+          codeQualityScore: team.code_quality_score,
+          avgBuildTimeMinutes: team.avg_build_time_minutes,
+          testExecutionTimeMinutes: team.test_execution_time_minutes,
+          deploymentFrequencyPerWeek: team.deployment_frequency_per_week,
+          leadTimeDays: team.lead_time_days,
+          mttrHours: team.mttr_hours,
+          parallelTestEfficiency: team.parallel_test_efficiency,
+          sprintVelocity: team.sprint_velocity,
+          sprintCommitmentRate: team.sprint_commitment_rate,
+          sprintCarryover: team.sprint_carryover,
+          firstTimePassRate: team.first_time_pass_rate,
+          blockedTimeHours: team.blocked_time_hours,
+          automationCoverage: team.automation_coverage,
+          automationRoi: team.automation_roi,
+          changeFailureRate: team.change_failure_rate,
+          mtbfHours: team.mtbf_hours,
+          systemAvailability: team.system_availability,
+          infrastructureFailures: team.infrastructure_failures
         }
-      ],
-      technicalDebtScore: Math.round((team.code_quality_score || 80) * 0.3 + Math.random() * 20),
-      taskSizingAccuracy: 0.85 + Math.random() * 0.3,
-      kpiData: {
-        testCoverage: team.test_coverage,
-        testFlakinessRate: team.test_flakiness_rate,
-        defectDensity: team.defect_density,
-        defectEscapeRate: team.defect_escape_rate,
-        codeQualityScore: team.code_quality_score,
-        avgBuildTimeMinutes: team.avg_build_time_minutes,
-        testExecutionTimeMinutes: team.test_execution_time_minutes,
-        deploymentFrequencyPerWeek: team.deployment_frequency_per_week,
-        leadTimeDays: team.lead_time_days,
-        mttrHours: team.mttr_hours,
-        parallelTestEfficiency: team.parallel_test_efficiency,
-        sprintVelocity: team.sprint_velocity,
-        sprintCommitmentRate: team.sprint_commitment_rate,
-        sprintCarryover: team.sprint_carryover,
-        firstTimePassRate: team.first_time_pass_rate,
-        blockedTimeHours: team.blocked_time_hours,
-        automationCoverage: team.automation_coverage,
-        automationRoi: team.automation_roi,
-        changeFailureRate: team.change_failure_rate,
-        mtbfHours: team.mtbf_hours,
-        systemAvailability: team.system_availability,
-        infrastructureFailures: team.infrastructure_failures
-      }
+      };
     }));
     
     res.json({ teams: transformedTeams });
@@ -200,6 +248,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
     if (!team) {
       return res.status(404).json({ error: 'Team not found' });
     }
+
+    const technicalDebtScore = await getTechnicalDebtScore(team.id);
 
     // Get latest KPI snapshot for this team
     const kpiSnapshot = await queryOne<any>(
@@ -240,6 +290,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
         infrastructureFailures: kpiSnapshot.infrastructure_failures
       };
     }
+
+    team.technicalDebtScore = technicalDebtScore;
 
     // Get team members from team_members table (only active users)
     const teamMembers = await query<any[]>(
@@ -305,6 +357,76 @@ router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) 
   }
 });
 
+// Get KPI history for a team (for graphs)
+router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { days = '30' } = req.query;
+    const numDays = Math.min(parseInt(days as string) || 30, 90);
+
+    const history = await query<any>(
+      `SELECT 
+        snapshot_date,
+        test_coverage,
+        test_flakiness_rate,
+        defect_density,
+        defect_escape_rate,
+        code_quality_score,
+        avg_build_time_minutes,
+        test_execution_time_minutes,
+        deployment_frequency_per_week,
+        lead_time_days,
+        mttr_hours,
+        parallel_test_efficiency,
+        sprint_velocity,
+        sprint_commitment_rate,
+        sprint_carryover,
+        first_time_pass_rate,
+        blocked_time_hours,
+        automation_coverage,
+        automation_roi,
+        change_failure_rate,
+        mtbf_hours,
+        system_availability,
+        infrastructure_failures,
+        qa_score
+       FROM kpi_snapshots
+       WHERE team_id = ? AND snapshot_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       ORDER BY snapshot_date ASC`,
+      [req.params.id, numDays]
+    );
+
+    // Transform to metric-keyed format for easy frontend consumption
+    const metricHistory: Record<string, { date: string; value: number }[]> = {};
+    const metricKeys = [
+      'test_coverage', 'test_flakiness_rate', 'defect_density', 'defect_escape_rate',
+      'code_quality_score', 'avg_build_time_minutes', 'test_execution_time_minutes',
+      'deployment_frequency_per_week', 'lead_time_days', 'mttr_hours',
+      'parallel_test_efficiency', 'sprint_velocity', 'sprint_commitment_rate',
+      'sprint_carryover', 'first_time_pass_rate', 'blocked_time_hours',
+      'automation_coverage', 'automation_roi', 'change_failure_rate',
+      'mtbf_hours', 'system_availability', 'infrastructure_failures', 'qa_score'
+    ];
+
+    for (const key of metricKeys) {
+      metricHistory[key] = [];
+    }
+
+    for (const row of history) {
+      const date = new Date(row.snapshot_date).toISOString().split('T')[0];
+      for (const key of metricKeys) {
+        if (row[key] !== null && row[key] !== undefined) {
+          metricHistory[key].push({ date, value: Number(row[key]) });
+        }
+      }
+    }
+
+    res.json({ history: metricHistory, days: numDays, count: history.length });
+  } catch (error) {
+    console.error('Error fetching KPI history:', error);
+    res.status(500).json({ error: 'Failed to fetch KPI history' });
+  }
+});
+
 // Get AI suggestions for a team (uses Groq API if available, otherwise rule-based fallback)
 router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -351,6 +473,8 @@ router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, re
       return res.status(404).json({ error: 'No KPI data found for this team' });
     }
 
+    const technicalDebtScore = await getTechnicalDebtScore(team.id);
+
     // Build team metrics payload for AI - ensure all values are numbers
     const teamMetrics = {
       teamName: team.name,
@@ -376,8 +500,14 @@ router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, re
       parallelTestEfficiency: Number(kpiSnapshot.parallel_test_efficiency) || 0,
       infrastructureFailures: Number(kpiSnapshot.infrastructure_failures) || 0,
       avgBuildTimeMinutes: Number(kpiSnapshot.avg_build_time_minutes) || 0,
-      technicalDebtScore: Math.round((Number(kpiSnapshot.code_quality_score) || 80) * 0.3 + 15)
+      technicalDebtScore
     };
+
+    console.log('[AI][Team]', {
+      teamId: team.id,
+      teamName: team.name,
+      metrics: teamMetrics
+    });
 
     // Try Groq API if key is configured (with 10 second timeout)
     const groqApiKey = process.env.GROQ_API_KEY;
@@ -388,7 +518,7 @@ router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, re
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
         
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${groqApiKey}`,
@@ -396,7 +526,7 @@ router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, re
           },
           signal: controller.signal,
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: 'openai/gpt-oss-20b',
             messages: [
               {
                 role: 'system',
@@ -436,8 +566,8 @@ Focus on:
 
         clearTimeout(timeoutId); // Clear timeout on response
         
-        if (groqResponse.ok) {
-          const groqData = await groqResponse.json();
+        if (aiResponse.ok) {
+          const groqData = await aiResponse.json();
           const content = groqData.choices?.[0]?.message?.content;
           
           if (content) {
@@ -473,7 +603,7 @@ Focus on:
             }
           }
         } else {
-          console.error('Groq API error:', groqResponse.status, await groqResponse.text());
+          console.error('Groq API error:', aiResponse.status, await aiResponse.text());
         }
       } catch (groqError: any) {
         if (groqError.name === 'AbortError') {
@@ -648,6 +778,11 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
       happinessScore: Number(dev.happiness_score) || 0
     }));
 
+    console.log('[AI][Developers]', {
+      teamId: team.id,
+      metrics: devMetricsPayload
+    });
+
     // Try Groq API with timeout
     const groqApiKey = process.env.GROQ_API_KEY;
     
@@ -656,7 +791,7 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for multiple devs
         
-        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${groqApiKey}`,
@@ -664,7 +799,7 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
           },
           signal: controller.signal,
           body: JSON.stringify({
-            model: 'llama-3.3-70b-versatile',
+            model: 'openai/gpt-oss-20b',
             messages: [
               {
                 role: 'system',
@@ -705,8 +840,8 @@ Metric benchmarks:
 
         clearTimeout(timeoutId);
         
-        if (groqResponse.ok) {
-          const groqData = await groqResponse.json();
+        if (aiResponse.ok) {
+          const groqData = await aiResponse.json();
           const content = groqData.choices?.[0]?.message?.content;
           
           if (content) {
@@ -732,7 +867,7 @@ Metric benchmarks:
             }
           }
         } else {
-          console.error('Groq API error (developers):', groqResponse.status);
+          console.error('Groq API error (developers):', aiResponse.status);
         }
       } catch (groqError: any) {
         if (groqError.name === 'AbortError') {

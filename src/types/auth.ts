@@ -45,10 +45,10 @@ export interface RegisterData {
   lastName: string;
   role?: UserRole; // Only admins can set role during registration
   
-  // Organizational assignment
-  companyId: string;
-  departmentId: string;
-  teamId: string;
+  // Organizational assignment - all created dynamically during registration
+  companyName: string; // Company name - will create/find company with unique ID
+  departmentName: string; // Department name - will be created and tied to company
+  teamName: string; // Team name - will be created and tied to department
 }
 
 export interface Permission {

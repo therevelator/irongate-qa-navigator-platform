@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Code, Clock, GitPullRequest, Smile, Zap, Coffee, Calendar, TrendingUp, AlertCircle } from 'lucide-react';
-import { generateDeveloperMetrics } from '../data/advancedFeatures';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Code, Clock, GitPullRequest, Smile, Zap, Coffee, Calendar, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
 import type { DeveloperMetric } from '../data/advancedFeatures';
 import { BarChart, Bar, LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell } from 'recharts';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface DeveloperProductivityProps {
   onBack: () => void;
@@ -11,8 +12,28 @@ interface DeveloperProductivityProps {
 const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack }) => {
   const [selectedDeveloper, setSelectedDeveloper] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'happiness' | 'pr_time' | 'review_time'>('happiness');
-  
-  const developers = generateDeveloperMetrics();
+  const [developers, setDevelopers] = useState<DeveloperMetric[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchDevelopers = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        const response = await fetch(`${API_URL}/analytics/developer-metrics?days=30`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setDevelopers(data.developers || []);
+        }
+      } catch (error) {
+        console.error('Error fetching developer metrics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchDevelopers();
+  }, []);
 
   // Calculate team averages
   const avgReviewTime = (developers.reduce((acc, d) => acc + d.code_review_time_avg, 0) / developers.length).toFixed(1);

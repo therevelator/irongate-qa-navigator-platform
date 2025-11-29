@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { Shield, Mail, Lock, Eye, EyeOff, User, AlertCircle, CheckCircle, Building2, Users } from 'lucide-react';
+import React, { useState } from 'react';
+import { Shield, Mail, Lock, Eye, EyeOff, User, CheckCircle, Building2, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { UserRole } from '../types/auth';
-import { ROLE_PERMISSIONS, getRoleIcon } from '../types/auth';
-import { mockCompany, mockDepartments, getTeamsByDepartment } from '../data/organizationData';
+import Swal from 'sweetalert2';
+// Department and team will be created during registration
 
 interface RegisterProps {
   onSwitchToLogin: () => void;
@@ -17,17 +17,11 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
     email: '',
     password: '',
     confirmPassword: '',
-    role: 'qa_engineer' as UserRole,
-    companyId: mockCompany.id,
-    departmentId: '',
-    teamId: '',
+    role: 'super_admin' as UserRole,
+    companyName: '',
+    departmentName: '',
+    teamName: '',
   });
-
-  // Get teams for selected department
-  const availableTeams = useMemo(() => {
-    if (!formData.departmentId) return [];
-    return getTeamsByDepartment(formData.departmentId);
-  }, [formData.departmentId]);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [passwordStrength, setPasswordStrength] = useState(0);
@@ -42,6 +36,19 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
     return strength;
   };
 
+  // Validate name: letters (including accented), spaces, hyphens, apostrophes only - no numbers or special chars
+  const validateName = (name: string): boolean => {
+    // Allow Unicode letters, spaces, hyphens, and apostrophes
+    const nameRegex = /^[\p{L}\s'-]+$/u;
+    return nameRegex.test(name) && !/\d/.test(name);
+  };
+
+  // Validate company name: letters, numbers, spaces, hyphens, apostrophes, ampersand, periods
+  const validateCompanyName = (name: string): boolean => {
+    const companyRegex = /^[\p{L}\d\s'&.-]+$/u;
+    return companyRegex.test(name);
+  };
+
   const handlePasswordChange = (password: string) => {
     setFormData({ ...formData, password });
     setPasswordStrength(validatePassword(password));
@@ -51,24 +58,77 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
     e.preventDefault();
     setError('');
 
-    // Validation
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password) {
-      setError('Please fill in all required fields');
+    // Validation - Required fields
+    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.companyName) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Missing Information',
+        text: 'Please fill in all required fields',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
-    if (!formData.departmentId || !formData.teamId) {
-      setError('Please select your department and team');
+    // Validate first name
+    if (!validateName(formData.firstName)) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Invalid First Name',
+        text: 'First name can only contain letters, spaces, hyphens, and apostrophes. No numbers or special characters allowed.',
+        confirmButtonColor: '#3b82f6',
+      });
+      return;
+    }
+
+    // Validate last name
+    if (!validateName(formData.lastName)) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Invalid Last Name',
+        text: 'Last name can only contain letters, spaces, hyphens, and apostrophes. No numbers or special characters allowed.',
+        confirmButtonColor: '#3b82f6',
+      });
+      return;
+    }
+
+    // Validate company name
+    if (!validateCompanyName(formData.companyName)) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Invalid Company Name',
+        text: 'Company name can only contain letters, numbers, spaces, hyphens, apostrophes, ampersands, and periods.',
+        confirmButtonColor: '#3b82f6',
+      });
+      return;
+    }
+
+    if (!formData.departmentName || !formData.teamName) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Missing Information',
+        text: 'Please enter your department and team names',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
     if (formData.password !== formData.confirmPassword) {
-      setError('Passwords do not match');
+      Swal.fire({
+        icon: 'error',
+        title: 'Password Mismatch',
+        text: 'Passwords do not match',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
     if (passwordStrength < 3) {
-      setError('Password is too weak. Please use a stronger password.');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Weak Password',
+        text: 'Password is too weak. Please use a stronger password with uppercase, numbers, and special characters.',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
@@ -79,12 +139,19 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
         email: formData.email,
         password: formData.password,
         role: formData.role,
-        companyId: formData.companyId,
-        departmentId: formData.departmentId,
-        teamId: formData.teamId,
+        companyName: formData.companyName,
+        departmentName: formData.departmentName,
+        teamName: formData.teamName,
       });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Registration failed');
+      const errorMessage = err instanceof Error ? err.message : 'Registration failed';
+      Swal.fire({
+        icon: 'error',
+        title: 'Registration Failed',
+        text: errorMessage,
+        confirmButtonColor: '#3b82f6',
+      });
+      setError(errorMessage);
     }
   };
 
@@ -103,7 +170,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-2xl">
         {/* Logo & Header */}
         <div className="text-center mb-8">
@@ -121,32 +188,21 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
               <Shield className="text-white" size={40} />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">IronGate</h1>
-          <p className="text-blue-200">QA Navigator Platform</p>
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">IronGate</h1>
+          <p className="text-gray-600 dark:text-gray-400">QA Navigator Platform</p>
         </div>
 
         {/* Register Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Create Account</h2>
-          <p className="text-gray-600 dark:text-slate-400 mb-6">Join IronGate QA Navigator today</p>
-
-          {/* Error Message */}
-          {(error || authError) && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start">
-              <AlertCircle className="text-red-600 mr-3 flex-shrink-0 mt-0.5" size={20} />
-              <div>
-                <p className="text-sm font-semibold text-red-900">Registration Failed</p>
-                <p className="text-sm text-red-700">{error || authError}</p>
-              </div>
-            </div>
-          )}
+        <div className="bg-gray-100 dark:bg-slate-800 rounded-2xl shadow-2xl p-8">
+          <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-300 mb-2">Create Account</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">Join IronGate QA Navigator today</p>
 
           {/* Register Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Name Fields */}
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   First Name *
                 </label>
                 <div className="relative">
@@ -156,7 +212,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                     type="text"
                     value={formData.firstName}
                     onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
                     placeholder="John"
                     disabled={isLoading}
                   />
@@ -164,7 +220,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
               </div>
 
               <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Last Name *
                 </label>
                 <input
@@ -172,7 +228,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   type="text"
                   value={formData.lastName}
                   onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
                   placeholder="Doe"
                   disabled={isLoading}
                 />
@@ -181,7 +237,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
 
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email Address *
               </label>
               <div className="relative">
@@ -191,112 +247,97 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
                   placeholder="you@company.com"
                   disabled={isLoading}
                 />
               </div>
             </div>
 
-            {/* Company (Read-only) */}
+            {/* Company */}
             <div>
-              <label htmlFor="company" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-                Company
+              <label htmlFor="company" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Company Name *
               </label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                 <input
                   id="company"
                   type="text"
-                  value={mockCompany.name}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 dark:text-slate-400"
-                  disabled
+                  value={formData.companyName}
+                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
+                  placeholder="Your company name"
+                  disabled={isLoading}
                 />
               </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Enter your company name. A unique company ID will be created for data isolation.
+              </p>
             </div>
 
-            {/* Department Selection */}
+            {/* Department Name */}
             <div>
-              <label htmlFor="department" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-                Department / Program *
+              <label htmlFor="department" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Department / Program Name *
               </label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <select
+                <input
                   id="department"
-                  value={formData.departmentId}
-                  onChange={(e) => setFormData({ ...formData, departmentId: e.target.value, teamId: '' })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  type="text"
+                  value={formData.departmentName}
+                  onChange={(e) => setFormData({ ...formData, departmentName: e.target.value })}
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
+                  placeholder="e.g., Engineering, QA, Product"
                   disabled={isLoading}
-                >
-                  <option value="">Select your department...</option>
-                  {mockDepartments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>
-                      {dept.name}
-                    </option>
-                  ))}
-                </select>
+                />
               </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                e.g., Decision Management, Payments Processing, etc.
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Your first department. More can be added from the Admin Panel after registration.
               </p>
             </div>
 
-            {/* Team Selection */}
+            {/* Team Name */}
             <div>
-              <label htmlFor="team" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-                Team *
+              <label htmlFor="team" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Team Name *
               </label>
               <div className="relative">
                 <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <select
+                <input
                   id="team"
-                  value={formData.teamId}
-                  onChange={(e) => setFormData({ ...formData, teamId: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
-                  disabled={isLoading || !formData.departmentId}
-                >
-                  <option value="">
-                    {formData.departmentId ? 'Select your team...' : 'Select department first...'}
-                  </option>
-                  {availableTeams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name} ({team.platform})
-                    </option>
-                  ))}
-                </select>
+                  type="text"
+                  value={formData.teamName}
+                  onChange={(e) => setFormData({ ...formData, teamName: e.target.value })}
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
+                  placeholder="e.g., Alpha Team, Platform Squad"
+                  disabled={isLoading}
+                />
               </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                e.g., Quasars, Pulsars, Watchmen, etc.
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                Your first team. More teams can be added from the Admin Panel after registration.
               </p>
             </div>
 
-            {/* Role Selection */}
+            {/* Role Display (Locked to Super Admin) */}
             <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
-                Role
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Account Role
               </label>
-              <select
-                id="role"
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                disabled={isLoading}
-              >
-                {Object.entries(ROLE_PERMISSIONS).map(([key, value]) => (
-                  <option key={key} value={key}>
-                    {getRoleIcon(key as UserRole)} {value.name} - {value.description}
-                  </option>
-                ))}
-              </select>
-              <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-                Note: Role can be changed by administrators after registration
+              <div className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700 text-gray-700 dark:text-gray-300 flex items-center">
+                <span className="mr-2">👑</span>
+                <span className="font-medium">Super Admin</span>
+                <span className="ml-2 text-gray-500 dark:text-gray-400">- Full system control</span>
+              </div>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                As the first user, you will be the Super Admin. Additional users with different roles can be created from the Admin Panel after registration.
               </p>
             </div>
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Password *
               </label>
               <div className="relative">
@@ -306,14 +347,14 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
                   onChange={(e) => handlePasswordChange(e.target.value)}
-                  className="w-full pl-11 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-11 pr-12 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
                   placeholder="••••••••"
                   disabled={isLoading}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-slate-400"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-400"
                 >
                   {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                 </button>
@@ -323,7 +364,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
               {formData.password && (
                 <div className="mt-2">
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-600 dark:text-slate-400">Password Strength:</span>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">Password Strength:</span>
                     <span className={`text-xs font-semibold ${
                       passwordStrength <= 2 ? 'text-red-600' :
                       passwordStrength === 3 ? 'text-yellow-600' :
@@ -350,7 +391,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
 
             {/* Confirm Password Field */}
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Confirm Password *
               </label>
               <div className="relative">
@@ -360,7 +401,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   type="password"
                   value={formData.confirmPassword}
                   onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
                   placeholder="••••••••"
                   disabled={isLoading}
                 />
@@ -374,7 +415,8 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full text-white py-3 rounded-lg font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: '#bf0000' }}
             >
               {isLoading ? (
                 <span className="flex items-center justify-center">
@@ -392,7 +434,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
 
           {/* Login Link */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600 dark:text-slate-400">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               Already have an account?{' '}
               <button
                 onClick={onSwitchToLogin}
@@ -421,7 +463,7 @@ const PasswordRequirement: React.FC<{ met: boolean; text: string }> = ({ met, te
     ) : (
       <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 mr-2" />
     )}
-    <span className={met ? 'text-green-600' : 'text-gray-500 dark:text-slate-400'}>{text}</span>
+    <span className={met ? 'text-green-600' : 'text-gray-500 dark:text-gray-400'}>{text}</span>
   </div>
 );
 

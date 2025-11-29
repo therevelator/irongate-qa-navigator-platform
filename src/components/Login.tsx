@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Shield, Mail, Lock, Eye, EyeOff, AlertCircle } from 'lucide-react';
+import { Shield, Mail, Lock, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import Swal from 'sweetalert2';
 
 interface LoginProps {
   onSwitchToRegister: () => void;
@@ -19,19 +20,31 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
     setError('');
 
     if (!email || !password) {
-      setError('Please enter both email and password');
+      Swal.fire({
+        icon: 'warning',
+        title: 'Missing Information',
+        text: 'Please enter both email and password',
+        confirmButtonColor: '#3b82f6',
+      });
       return;
     }
 
     try {
       await login({ email, password, rememberMe });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const errorMessage = err instanceof Error ? err.message : 'Login failed';
+      Swal.fire({
+        icon: 'error',
+        title: 'Login Failed',
+        text: errorMessage,
+        confirmButtonColor: '#3b82f6',
+      });
+      setError(errorMessage);
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         {/* Logo & Header */}
         <div className="text-center mb-8">
@@ -49,12 +62,12 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
               <Shield className="text-white" size={40} />
             </div>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">IronGate</h1>
-          <p className="text-blue-200">QA Navigator Platform</p>
+          <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">IronGate</h1>
+          <p className="text-gray-600 dark:text-gray-400">QA Navigator Platform</p>
         </div>
 
         {/* Login Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8">
+        <div className="bg-gray-100 dark:bg-slate-800 rounded-2xl shadow-2xl p-8">
           <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-300 mb-2">Welcome Back</h2>
           <p className="text-gray-600 dark:text-gray-400 mb-6">Sign in to your account to continue</p>
 
@@ -70,17 +83,6 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
               <p className="mt-2"><strong>Password:</strong> demo123</p>
             </div>
           </div>
-
-          {/* Error Message */}
-          {(error || authError) && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-start">
-              <AlertCircle className="text-red-600 mr-3 flex-shrink-0 mt-0.5" size={20} />
-              <div>
-                <p className="text-sm font-semibold text-red-900">Login Failed</p>
-                <p className="text-sm text-red-700">{error || authError}</p>
-              </div>
-            </div>
-          )}
 
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -153,7 +155,8 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full text-white py-3 rounded-lg font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: '#bf0000' }}
             >
               {isLoading ? (
                 <span className="flex items-center justify-center">

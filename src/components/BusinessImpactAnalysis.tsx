@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowLeft, DollarSign, TrendingUp, Users, Target, AlertCircle, BarChart3 } from 'lucide-react';
-import { generateBusinessImpact } from '../data/advancedFeatures';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, DollarSign, TrendingUp, Users, Target, AlertCircle, BarChart3, Loader2 } from 'lucide-react';
 import type { BusinessImpact } from '../data/advancedFeatures';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ScatterChart, Scatter, ZAxis, Cell } from 'recharts';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface BusinessImpactAnalysisProps {
   onBack: () => void;
@@ -10,13 +11,34 @@ interface BusinessImpactAnalysisProps {
 
 const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack }) => {
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
-  const impactData = generateBusinessImpact();
+  const [impactData, setImpactData] = useState<BusinessImpact[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchImpact = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        const response = await fetch(`${API_URL}/analytics/business-impact?days=30`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setImpactData(data.metrics || []);
+        }
+      } catch (error) {
+        console.error('Error fetching business impact:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchImpact();
+  }, []);
 
   // Calculate overall statistics
-  const avgCorrelation = (impactData.reduce((acc, d) => acc + d.correlation_strength, 0) / impactData.length).toFixed(2);
+  const avgCorrelation = impactData.length > 0 ? (impactData.reduce((acc, d) => acc + d.correlation_strength, 0) / impactData.length).toFixed(2) : '0';
   const totalRevenue = impactData.reduce((acc, d) => acc + d.revenue_impact, 0);
-  const avgSatisfaction = (impactData.reduce((acc, d) => acc + d.customer_satisfaction, 0) / impactData.length).toFixed(1);
-  const avgAdoption = (impactData.reduce((acc, d) => acc + d.feature_adoption_rate, 0) / impactData.length).toFixed(1);
+  const avgSatisfaction = impactData.length > 0 ? (impactData.reduce((acc, d) => acc + d.customer_satisfaction, 0) / impactData.length).toFixed(1) : '0';
+  const avgAdoption = impactData.length > 0 ? (impactData.reduce((acc, d) => acc + d.feature_adoption_rate, 0) / impactData.length).toFixed(1) : '0';
 
   // Prepare correlation data for visualization
   const correlationData = impactData.map(item => ({
@@ -28,7 +50,7 @@ const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack 
     correlation: item.correlation_strength
   }));
 
-  // Historical trend simulation (mock data)
+  // Historical trend simulation (will be replaced with actual historical data)
   const historicalData = Array.from({ length: 12 }, (_, i) => ({
     month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
     quality: 70 + Math.random() * 20,

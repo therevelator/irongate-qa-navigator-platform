@@ -4,6 +4,94 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 const router = express.Router();
 
+// Get aggregated metrics history for analytics (across all teams in company)
+router.get('/analytics/history', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId } = req.user;
+    const { days = '30', metric } = req.query;
+    const numDays = Math.min(parseInt(days as string) || 30, 90);
+
+    let sql = `
+      SELECT 
+        k.snapshot_date,
+        AVG(k.test_coverage) as avg_test_coverage,
+        AVG(k.defect_density) as avg_defect_density,
+        AVG(k.automation_coverage) as avg_automation_coverage,
+        AVG(k.code_quality_score) as avg_code_quality_score,
+        AVG(k.qa_score) as avg_qa_score,
+        AVG(k.deployment_frequency_per_week) as avg_deployment_frequency,
+        AVG(k.mttr_hours) as avg_mttr,
+        AVG(k.lead_time_days) as avg_lead_time,
+        AVG(k.change_failure_rate) as avg_change_failure_rate,
+        AVG(k.sprint_velocity) as avg_sprint_velocity,
+        AVG(k.first_time_pass_rate) as avg_first_time_pass_rate,
+        COUNT(DISTINCT k.team_id) as team_count
+      FROM kpi_snapshots k
+      JOIN teams t ON k.team_id = t.id
+      WHERE t.company_id = ? 
+        AND t.is_active = true
+        AND k.snapshot_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+      GROUP BY k.snapshot_date
+      ORDER BY k.snapshot_date ASC
+    `;
+
+    const history = await query<any>(sql, [companyId, numDays]);
+
+    // Transform to chart-friendly format
+    const chartData = history.map((row: any) => ({
+      date: new Date(row.snapshot_date).toISOString().split('T')[0],
+      testCoverage: Number(row.avg_test_coverage?.toFixed(2)) || 0,
+      defectDensity: Number(row.avg_defect_density?.toFixed(3)) || 0,
+      automationCoverage: Number(row.avg_automation_coverage?.toFixed(2)) || 0,
+      codeQuality: Number(row.avg_code_quality_score?.toFixed(2)) || 0,
+      qaScore: Number(row.avg_qa_score?.toFixed(2)) || 0,
+      deploymentFrequency: Number(row.avg_deployment_frequency?.toFixed(2)) || 0,
+      mttr: Number(row.avg_mttr?.toFixed(2)) || 0,
+      leadTime: Number(row.avg_lead_time?.toFixed(2)) || 0,
+      changeFailureRate: Number(row.avg_change_failure_rate?.toFixed(2)) || 0,
+      sprintVelocity: Number(row.avg_sprint_velocity?.toFixed(2)) || 0,
+      firstTimePassRate: Number(row.avg_first_time_pass_rate?.toFixed(2)) || 0,
+      teamCount: row.team_count
+    }));
+
+    res.json({ history: chartData, days: numDays });
+  } catch (error) {
+    console.error('Error fetching analytics history:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics history' });
+  }
+});
+
+// Get per-team metrics comparison for analytics
+router.get('/analytics/teams', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId } = req.user;
+
+    const teams = await query<any>(`
+      SELECT 
+        t.id,
+        t.name,
+        k.qa_score,
+        k.test_coverage,
+        k.defect_density,
+        k.automation_coverage,
+        k.deployment_frequency_per_week,
+        k.mttr_hours,
+        k.change_failure_rate,
+        k.sprint_velocity
+      FROM teams t
+      LEFT JOIN kpi_snapshots k ON t.id = k.team_id 
+        AND k.snapshot_date = (SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE team_id = t.id)
+      WHERE t.company_id = ? AND t.is_active = true
+      ORDER BY k.qa_score DESC
+    `, [companyId]);
+
+    res.json({ teams });
+  } catch (error) {
+    console.error('Error fetching team analytics:', error);
+    res.status(500).json({ error: 'Failed to fetch team analytics' });
+  }
+});
+
 // Get team KPIs (latest snapshot)
 router.get('/teams/:teamId', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -315,28 +403,28 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
         teamId,
         qaScore,
         status,
-        test_coverage || null,
-        test_flakiness_rate || null,
-        defect_density || null,
-        defect_escape_rate || null,
-        code_quality_score || null,
-        avg_build_time_minutes || null,
-        test_execution_time_minutes || null,
-        deployment_frequency_per_week || null,
-        lead_time_days || null,
-        mttr_hours || null,
-        parallel_test_efficiency || null,
-        sprint_velocity || null,
-        sprint_commitment_rate || null,
-        sprint_carryover || null,
-        first_time_pass_rate || null,
-        blocked_time_hours || null,
-        automation_coverage || null,
-        automation_roi || null,
-        change_failure_rate || null,
-        mtbf_hours || null,
-        system_availability || null,
-        infrastructure_failures || null
+        test_coverage ?? null,
+        test_flakiness_rate ?? null,
+        defect_density ?? null,
+        defect_escape_rate ?? null,
+        code_quality_score ?? null,
+        avg_build_time_minutes ?? null,
+        test_execution_time_minutes ?? null,
+        deployment_frequency_per_week ?? null,
+        lead_time_days ?? null,
+        mttr_hours ?? null,
+        parallel_test_efficiency ?? null,
+        sprint_velocity ?? null,
+        sprint_commitment_rate ?? null,
+        sprint_carryover ?? null,
+        first_time_pass_rate ?? null,
+        blocked_time_hours ?? null,
+        automation_coverage ?? null,
+        automation_roi ?? null,
+        change_failure_rate ?? null,
+        mtbf_hours ?? null,
+        system_availability ?? null,
+        infrastructure_failures ?? null
       ]
     );
 

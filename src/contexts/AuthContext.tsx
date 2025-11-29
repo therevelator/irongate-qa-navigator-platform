@@ -263,38 +263,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
     try {
-      // DEMO MODE: Mock registration
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const newUser: User = {
-        id: `user-${Date.now()}`,
-        email: data.email,
-        firstName: data.firstName,
-        lastName: data.lastName,
-        role: data.role || 'qa_engineer', // Default role
-        companyId: data.companyId,
-        departmentId: data.departmentId,
-        primaryTeamId: data.teamId,
-        assignedTeams: [data.teamId],
-        createdAt: new Date().toISOString(),
-        isActive: true,
-        emailVerified: false,
-      };
-
-      // In demo mode, auto-login after registration
-      const token = btoa(`${newUser.id}:${Date.now()}`);
-      localStorage.setItem('irongate_user', JSON.stringify(newUser));
-      localStorage.setItem('irongate_token', token);
-
-      setAuthState({
-        user: newUser,
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-      });
-
-      /* PRODUCTION MODE:
-      const response = await fetch('/api/auth/register', {
+      // Call real API for registration
+      const response = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
@@ -302,10 +272,26 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       if (!response.ok) {
         const error = await response.json();
-        throw new Error(error.message || 'Registration failed');
+        throw new Error(error.error || 'Registration failed');
       }
 
-      const { user, token } = await response.json();
+      const { user: apiUser, token } = await response.json();
+      
+      // Map API response to User type
+      const user: User = {
+        id: apiUser.id,
+        email: apiUser.email,
+        firstName: apiUser.first_name,
+        lastName: apiUser.last_name,
+        role: apiUser.role,
+        companyId: apiUser.company_id,
+        departmentId: apiUser.department_id,
+        primaryTeamId: apiUser.primary_team_id,
+        assignedTeams: apiUser.assignedTeams || [apiUser.primary_team_id],
+        createdAt: apiUser.created_at || new Date().toISOString(),
+        isActive: apiUser.is_active ?? true,
+        emailVerified: apiUser.email_verified ?? false,
+      };
       
       localStorage.setItem('irongate_user', JSON.stringify(user));
       localStorage.setItem('irongate_token', token);
@@ -316,7 +302,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading: false,
         error: null,
       });
-      */
     } catch (error) {
       setAuthState({
         user: null,

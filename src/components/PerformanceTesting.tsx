@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowLeft, TrendingUp, Activity, AlertTriangle, Zap, Clock, Users, Server } from 'lucide-react';
-import { generatePerformanceMetrics } from '../data/advancedFeatures';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, TrendingUp, Activity, AlertTriangle, Zap, Clock, Users, Server, Loader2 } from 'lucide-react';
 import type { PerformanceMetric } from '../data/advancedFeatures';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface PerformanceTestingProps {
   onBack: () => void;
@@ -31,8 +32,29 @@ const calculatePerformanceScore = (metric: PerformanceMetric): number => {
 const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
-  
-  const metrics = generatePerformanceMetrics();
+  const [metrics, setMetrics] = useState<PerformanceMetric[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchMetrics = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : 30;
+        const response = await fetch(`${API_URL}/analytics/performance-metrics?days=${days}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setMetrics(data.metrics || []);
+        }
+      } catch (error) {
+        console.error('Error fetching performance metrics:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchMetrics();
+  }, [timeRange]);
 
   // Calculate overall statistics
   const avgP95 = (metrics.reduce((acc, m) => acc + m.response_time_p95, 0) / metrics.length).toFixed(0);

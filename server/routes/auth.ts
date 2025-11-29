@@ -12,13 +12,37 @@ const wss = null; // Not available in serverless
 const router = express.Router();
 const secrettoken = process.env.secrettoken || 'your-secret-key-change-in-production';
 
+// Helper to generate human-readable 12-character company ID
+// Format: 8 alphanumeric chars + 4 digit checksum
+const generateCompanyId = (): string => {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let id = '';
+  for (let i = 0; i < 8; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  // Add 4-digit timestamp-based suffix for uniqueness
+  const suffix = Math.floor(Math.random() * 10000).toString().padStart(4, '0');
+  return `${id}${suffix}`;
+};
+
+// Helper to generate UUID for other entities (departments, teams, users)
+const generateUUID = (): string => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 // Register
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, firstName, lastName, role, companyId, departmentId, teamId } = req.body;
+    const { email, password, firstName, lastName, companyName, departmentName, teamName } = req.body;
+    // First registered user is always super_admin - additional users created via Admin Panel
+    const role = 'super_admin';
 
     // Validate required fields
-    if (!email || !password || !firstName || !lastName || !companyId || !departmentId || !teamId) {
+    if (!email || !password || !firstName || !lastName || !companyName || !departmentName || !teamName) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
@@ -32,19 +56,80 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
+    // Extract domain from email for company
+    const emailDomain = email.split('@')[1] || 'unknown.com';
+
+    // Check if company exists by name (case-insensitive)
+    let company = await queryOne<any>(
+      'SELECT id FROM companies WHERE LOWER(name) = LOWER(?)',
+      [companyName]
+    );
+
+    let companyId: string;
+
+    if (!company) {
+      // Create new company with human-readable ID
+      companyId = generateCompanyId();
+      await query(
+        `INSERT INTO companies (id, name, domain, is_active) VALUES (?, ?, ?, 1)`,
+        [companyId, companyName, emailDomain]
+      );
+    } else {
+      companyId = company.id;
+    }
+
+    // Check if department exists for this company (case-insensitive)
+    let department = await queryOne<any>(
+      'SELECT id FROM departments WHERE company_id = ? AND LOWER(name) = LOWER(?)',
+      [companyId, departmentName]
+    );
+
+    let departmentId: string;
+
+    if (!department) {
+      // Create new department tied to company
+      departmentId = generateUUID();
+      await query(
+        `INSERT INTO departments (id, company_id, name, is_active) VALUES (?, ?, ?, 1)`,
+        [departmentId, companyId, departmentName]
+      );
+    } else {
+      departmentId = department.id;
+    }
+
+    // Check if team exists for this department (case-insensitive)
+    let team = await queryOne<any>(
+      'SELECT id FROM teams WHERE department_id = ? AND LOWER(name) = LOWER(?)',
+      [departmentId, teamName]
+    );
+
+    let teamId: string;
+
+    if (!team) {
+      // Create new team tied to company and department
+      teamId = generateUUID();
+      await query(
+        `INSERT INTO teams (id, company_id, department_id, name, is_active) VALUES (?, ?, ?, ?, 1)`,
+        [teamId, companyId, departmentId, teamName]
+      );
+    } else {
+      teamId = team.id;
+    }
+
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
 
-    // Insert user
-    const [result] = await query<any>(
-      `INSERT INTO users (
-        email, password_hash, first_name, last_name, role,
-        company_id, department_id, primary_team_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [email, passwordHash, firstName, lastName, role || 'qa_engineer', companyId, departmentId, teamId]
-    );
+    // Generate user ID
+    const userId = generateUUID();
 
-    const userId = result.insertId;
+    // Insert user
+    await query(
+      `INSERT INTO users (
+        id, email, password_hash, first_name, last_name, role,
+        company_id, department_id, primary_team_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [userId, email, passwordHash, firstName, lastName, role, companyId, departmentId, teamId]
+    );
 
     // Add to team_members
     await query(

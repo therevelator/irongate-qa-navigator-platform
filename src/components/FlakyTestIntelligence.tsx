@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowLeft, AlertTriangle, TrendingDown, Clock, Zap } from 'lucide-react';
-import { generateFlakyTests } from '../data/advancedFeatures';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, AlertTriangle, TrendingDown, Clock, Zap, Loader2 } from 'lucide-react';
 import type { FlakyTest } from '../data/advancedFeatures';
 import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface FlakyTestIntelligenceProps {
   onBack: () => void;
@@ -10,7 +11,28 @@ interface FlakyTestIntelligenceProps {
 
 const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack }) => {
   const [selectedPattern, setSelectedPattern] = useState<string>('all');
-  const flakyTests = generateFlakyTests();
+  const [flakyTests, setFlakyTests] = useState<FlakyTest[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchFlakyTests = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        const response = await fetch(`${API_URL}/analytics/flaky-tests`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setFlakyTests(data.flakyTests || []);
+        }
+      } catch (error) {
+        console.error('Error fetching flaky tests:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchFlakyTests();
+  }, []);
 
   const filteredTests = selectedPattern === 'all' 
     ? flakyTests 

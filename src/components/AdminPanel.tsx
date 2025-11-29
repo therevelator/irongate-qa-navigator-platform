@@ -1143,31 +1143,38 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">
-                  Team {teams.length > 0 && <span className="text-gray-500 font-normal">({teams.length} available)</span>}
-                </label>
-                <select
-                  required
-                  data-testid="create-user-team"
-                  value={newUser.teamId}
-                  onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                  disabled={teams.length === 0}
-                >
-                  <option value="">
-                    {teams.length === 0 ? 'No teams available - create a team first' : 'Select team...'}
-                  </option>
-                  {teams.map((team) => (
-                    <option key={team.id} value={team.id}>
-                      {team.name} ({team.platform})
-                    </option>
-                  ))}
-                </select>
-                {teams.length === 0 && (
-                  <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
-                    Please create a team first before adding users.
-                  </p>
-                )}
+                {(() => {
+                  const activeTeams = teams.filter(t => t.is_active);
+                  return (
+                    <>
+                      <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">
+                        Team {activeTeams.length > 0 && <span className="text-gray-500 font-normal">({activeTeams.length} available)</span>}
+                      </label>
+                      <select
+                        required
+                        data-testid="create-user-team"
+                        value={newUser.teamId}
+                        onChange={(e) => setNewUser({ ...newUser, teamId: e.target.value })}
+                        className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        disabled={activeTeams.length === 0}
+                      >
+                        <option value="">
+                          {activeTeams.length === 0 ? 'No active teams available - create a team first' : 'Select team...'}
+                        </option>
+                        {activeTeams.map((team) => (
+                          <option key={team.id} value={team.id}>
+                            {team.name} ({team.platform})
+                          </option>
+                        ))}
+                      </select>
+                      {activeTeams.length === 0 && (
+                        <p className="mt-1 text-sm text-gray-600 dark:text-slate-400">
+                          Please create a team first before adding users.
+                        </p>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
               <div className="flex gap-3 pt-4">
                 <button

@@ -32,7 +32,7 @@ interface TeamWithKPI extends Team {
     infrastructureFailures?: number;
   };
 }
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Bug, Bot, BarChart3, Clock, GitPullRequest, Zap, Users } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Bug, Bot, BarChart3, Clock, GitPullRequest, Zap, Users, Activity, RefreshCcw, Timer } from 'lucide-react';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface TeamMember {
@@ -116,6 +116,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const testCoverage = Number(kpi.testCoverage) || 0;
   const defectDensity = Number(kpi.defectDensity) || 0;
   const automationCoverage = Number(kpi.automationCoverage) || 0;
+  const avgBuildTimeMinutes = kpi.avgBuildTimeMinutes === undefined || kpi.avgBuildTimeMinutes === null
+    ? 0
+    : Number(kpi.avgBuildTimeMinutes);
+  const mttrHours = kpi.mttrHours === undefined || kpi.mttrHours === null ? 0 : Number(kpi.mttrHours);
+  const mtbfHours = kpi.mtbfHours === undefined || kpi.mtbfHours === null ? 0 : Number(kpi.mtbfHours);
   const [developers, setDevelopers] = useState<DeveloperMetrics[]>([]);
   const [loading, setLoading] = useState(true);
   const [aiSuggestions, setAISuggestions] = useState<TeamAISuggestions | null>(null);
@@ -123,6 +128,120 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const [aiError, setAIError] = useState<string | null>(null);
   const [devAISuggestions, setDevAISuggestions] = useState<DeveloperAISuggestions | null>(null);
   const [devAILoading, setDevAILoading] = useState(false);
+  const [metricIntervals, setMetricIntervals] = useState<Record<string, { interval_value: number; interval_unit: string }>>({});
+  const [kpiHistory, setKpiHistory] = useState<Record<string, { date: string; value: number }[]>>({});
+
+  // Map KPI IDs to metric keys for interval lookup
+  const kpiToMetricKey: Record<string, string> = {
+    'test-coverage': 'test_coverage',
+    'test-flakiness': 'test_flakiness_rate',
+    'defect-density': 'defect_density',
+    'defect-escape-rate': 'defect_escape_rate',
+    'code-quality': 'code_quality_score',
+    'build-time': 'avg_build_time_minutes',
+    'test-execution-time': 'test_execution_time_minutes',
+    'deployment-frequency': 'deployment_frequency_per_week',
+    'lead-time': 'lead_time_days',
+    'mttr': 'mttr_hours',
+    'parallel-efficiency': 'parallel_test_efficiency',
+    'sprint-velocity': 'sprint_velocity',
+    'sprint-commitment': 'sprint_commitment_rate',
+    'sprint-carryover': 'sprint_carryover',
+    'first-pass-rate': 'first_time_pass_rate',
+    'blocked-time': 'blocked_time_hours',
+    'automation-coverage': 'automation_coverage',
+    'automation-roi': 'automation_roi',
+    'change-failure-rate': 'change_failure_rate',
+    'mtbf': 'mtbf_hours',
+    'availability': 'system_availability',
+    'infra-failures': 'infrastructure_failures',
+  };
+
+  // Helper to format interval text
+  const getIntervalText = (kpiId: string): string => {
+    const metricKey = kpiToMetricKey[kpiId];
+    if (!metricKey) return 'Trend data available after first update';
+    
+    const interval = metricIntervals[metricKey];
+    if (!interval) return 'Trend data available after first update';
+    
+    const { interval_value, interval_unit } = interval;
+    const unitLabel = interval_value === 1 ? interval_unit.slice(0, -1) : interval_unit;
+    return `Updates every ${interval_value} ${unitLabel}`;
+  };
+
+  // Helper to get KPI history from fetched data
+  const getKpiHistoryData = (kpiId: string): { date: string; value: number }[] => {
+    const metricKey = kpiToMetricKey[kpiId];
+    if (!metricKey) return [];
+    return kpiHistory[metricKey] || [];
+  };
+
+  // Calculate change percentage from history
+  const calculateChange = (history: { date: string; value: number }[]): { change: number; trend: 'up' | 'down' | 'neutral' } => {
+    if (history.length < 2) return { change: 0, trend: 'neutral' };
+    
+    const latest = history[history.length - 1].value;
+    const previous = history[history.length - 2].value;
+    
+    if (previous === 0) return { change: 0, trend: 'neutral' };
+    
+    const changePercent = ((latest - previous) / previous) * 100;
+    return {
+      change: Math.round(changePercent * 10) / 10,
+      trend: changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'neutral'
+    };
+  };
+
+  // Fetch metric intervals
+  useEffect(() => {
+    const fetchMetricIntervals = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/settings/metric-intervals`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const intervalMap: Record<string, { interval_value: number; interval_unit: string }> = {};
+          data.intervals?.forEach((i: any) => {
+            intervalMap[i.metric_key] = { interval_value: i.interval_value, interval_unit: i.interval_unit };
+          });
+          setMetricIntervals(intervalMap);
+        }
+      } catch (error) {
+        console.error('Error fetching metric intervals:', error);
+      }
+    };
+
+    fetchMetricIntervals();
+  }, []);
+
+  // Fetch KPI history for graphs
+  useEffect(() => {
+    const fetchKpiHistory = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        if (!token) return;
+
+        const response = await fetch(`${API_URL}/teams/${team.id}/kpi-history?days=30`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setKpiHistory(data.history || {});
+        }
+      } catch (error) {
+        console.error('Error fetching KPI history:', error);
+      }
+    };
+
+    fetchKpiHistory();
+  }, [team.id]);
 
   // Fetch team members from database
   useEffect(() => {
@@ -556,6 +675,51 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{automationCoverage.toFixed(1)}%</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">Automation Rate</p>
           </div>
+
+          {/* Avg Build Time */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '400ms' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-lg">
+                <Timer className="text-orange-600 dark:text-orange-300" size={24} />
+              </div>
+              <span className={`text-sm flex items-center ${avgBuildTimeMinutes <= 12 ? 'text-green-600' : avgBuildTimeMinutes <= 20 ? 'text-amber-600' : 'text-red-600'}`}>
+                {avgBuildTimeMinutes <= 12 ? <TrendingDown size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1" />}
+                {avgBuildTimeMinutes <= 12 ? 'Fast' : avgBuildTimeMinutes <= 20 ? 'Moderate' : 'Slow'}
+              </span>
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{avgBuildTimeMinutes ? avgBuildTimeMinutes.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">min</span></h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Avg Build Time</p>
+          </div>
+
+          {/* Mean Time To Recovery */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '500ms' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-emerald-100 dark:bg-emerald-900 rounded-lg">
+                <RefreshCcw className="text-emerald-600 dark:text-emerald-300" size={24} />
+              </div>
+              <span className={`text-sm flex items-center ${mttrHours <= 1 ? 'text-green-600' : mttrHours <= 4 ? 'text-amber-600' : 'text-red-600'}`}>
+                {mttrHours <= 1 ? <TrendingDown size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1" />}
+                {mttrHours <= 1 ? 'Excellent' : mttrHours <= 4 ? 'Acceptable' : 'High'}
+              </span>
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{mttrHours ? mttrHours.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">h</span></h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Mean Time to Recovery</p>
+          </div>
+
+          {/* Mean Time Between Failures */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '600ms' }}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="p-3 bg-sky-100 dark:bg-sky-900 rounded-lg">
+                <Activity className="text-sky-600 dark:text-sky-300" size={24} />
+              </div>
+              <span className={`text-sm flex items-center ${mtbfHours >= 120 ? 'text-green-600' : mtbfHours >= 72 ? 'text-amber-600' : 'text-red-600'}`}>
+                <TrendingUp size={16} className="mr-1" />
+                {mtbfHours >= 120 ? 'Strong' : mtbfHours >= 72 ? 'Stable' : 'Volatile'}
+              </span>
+            </div>
+            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{mtbfHours ? mtbfHours.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">h</span></h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">Mean Time Between Failures</p>
+          </div>
         </div>
       </div>
 
@@ -718,50 +882,74 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                       </span>
                     </div>
 
-                    <div className="mb-4">
-                      <div className="text-3xl font-bold text-gray-900 dark:text-white">
-                        {kpi.value}
-                        <span className="text-lg font-normal text-gray-400 dark:text-slate-500 ml-1">{kpi.unit}</span>
-                      </div>
-                      <div className={`flex items-center text-sm font-medium mt-1 ${
-                        kpi.change > 0 ? 'text-green-600 dark:text-green-400' : kpi.change < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'
-                      }`}>
-                        {kpi.change > 0 ? <TrendingUp size={16} className="mr-1"/> : 
-                         kpi.change < 0 ? <TrendingDown size={16} className="mr-1"/> : 
-                         <Minus size={16} className="mr-1"/>}
-                        {Math.abs(kpi.change)}% vs last period
-                      </div>
-                    </div>
+                    {(() => {
+                      const historyData = getKpiHistoryData(kpi.id);
+                      const { change, trend } = calculateChange(historyData);
+                      const hasHistory = historyData.length >= 2;
+                      
+                      return (
+                        <>
+                          <div className="mb-4">
+                            <div className="text-3xl font-bold text-gray-900 dark:text-white">
+                              {kpi.value}
+                              <span className="text-lg font-normal text-gray-400 dark:text-slate-500 ml-1">{kpi.unit}</span>
+                            </div>
+                            {hasHistory ? (
+                              <div className={`flex items-center text-sm font-medium mt-1 ${
+                                trend === 'up' ? 'text-green-600 dark:text-green-400' : trend === 'down' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'
+                              }`}>
+                                {trend === 'up' ? <TrendingUp size={16} className="mr-1"/> : 
+                                 trend === 'down' ? <TrendingDown size={16} className="mr-1"/> : 
+                                 <Minus size={16} className="mr-1"/>}
+                                {Math.abs(change)}% vs last period
+                              </div>
+                            ) : (
+                              <div className="text-sm text-gray-400 dark:text-slate-500 mt-1">
+                                {getIntervalText(kpi.id)}
+                              </div>
+                            )}
+                          </div>
 
-                    <div className="h-24">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={kpi.history}>
-                          <defs>
-                            <linearGradient id={`gradient-${kpi.id}`} x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor={scoreColor} stopOpacity={0.2}/>
-                              <stop offset="95%" stopColor={scoreColor} stopOpacity={0}/>
-                            </linearGradient>
-                          </defs>
-                          <Tooltip 
-                            contentStyle={{ 
-                              backgroundColor: '#1f2937', 
-                              color: '#fff', 
-                              borderRadius: '8px', 
-                              border: 'none',
-                              fontSize: '12px'
-                            }}
-                            labelStyle={{ color: '#9ca3af' }}
-                          />
-                          <Area 
-                            type="monotone" 
-                            dataKey="value" 
-                            stroke={scoreColor} 
-                            fill={`url(#gradient-${kpi.id})`}
-                            strokeWidth={2}
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
+                          {hasHistory ? (
+                            <div className="h-24">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={historyData}>
+                                  <defs>
+                                    <linearGradient id={`gradient-${kpi.id}`} x1="0" y1="0" x2="0" y2="1">
+                                      <stop offset="5%" stopColor={scoreColor} stopOpacity={0.2}/>
+                                      <stop offset="95%" stopColor={scoreColor} stopOpacity={0}/>
+                                    </linearGradient>
+                                  </defs>
+                                  <Tooltip 
+                                    contentStyle={{ 
+                                      backgroundColor: '#1f2937', 
+                                      color: '#fff', 
+                                      borderRadius: '8px', 
+                                      border: 'none',
+                                      fontSize: '12px'
+                                    }}
+                                    labelStyle={{ color: '#9ca3af' }}
+                                  />
+                                  <Area 
+                                    type="monotone" 
+                                    dataKey="value" 
+                                    stroke={scoreColor} 
+                                    fill={`url(#gradient-${kpi.id})`}
+                                    strokeWidth={2}
+                                  />
+                                </AreaChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ) : (
+                            <div className="h-24 flex items-center justify-center bg-gray-50 dark:bg-slate-800/50 rounded-lg">
+                              <p className="text-sm text-gray-500 dark:text-slate-400 text-center">
+                                {getIntervalText(kpi.id)}
+                              </p>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>
@@ -950,8 +1138,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
           {/* AI Insights Header */}
           <div className="mb-6 flex flex-col gap-3">
-            <div className="flex items-center gap-3 text-lg font-semibold text-gray-900 dark:text-grey">
-              <span className="p-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full text-grey">
+            <div className="flex items-center gap-3 text-lg font-semibold text-gray-700 dark:text-slate-300">
+              <span className="p-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full text-white">
                 <Bot size={20} />
               </span>
               <div>
@@ -1100,7 +1288,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           {devAISuggestions?.metrics && devAISuggestions.metrics.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Saved Developer Metrics</h3>
+                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Saved Developer Metrics</h3>
                 <span className="text-xs text-gray-600">
                   Showing {devAISuggestions.metrics.length} developer{devAISuggestions.metrics.length > 1 ? 's' : ''}
                 </span>

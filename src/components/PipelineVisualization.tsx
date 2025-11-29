@@ -1,15 +1,37 @@
-import React, { useState } from 'react';
-import { ArrowLeft, GitBranch, Clock, CheckCircle, XCircle, AlertTriangle, Cpu, DollarSign } from 'lucide-react';
-import { generatePipelineStages } from '../data/advancedFeatures';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, GitBranch, Clock, CheckCircle, XCircle, AlertTriangle, Cpu, DollarSign, Loader2 } from 'lucide-react';
 import type { PipelineStage } from '../data/advancedFeatures';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface PipelineVisualizationProps {
   onBack: () => void;
 }
 
 const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack }) => {
-  const stages = generatePipelineStages();
+  const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStages = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        const response = await fetch(`${API_URL}/analytics/pipeline-stages`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setStages(data.stages || []);
+        }
+      } catch (error) {
+        console.error('Error fetching pipeline stages:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchStages();
+  }, []);
   
   const totalDuration = stages.reduce((acc, s) => acc + s.duration, 0);
   const avgSuccessRate = (stages.reduce((acc, s) => acc + s.success_rate, 0) / stages.length).toFixed(1);

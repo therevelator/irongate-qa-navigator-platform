@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
-import { ArrowLeft, TestTube, Link, CheckCircle, XCircle, AlertTriangle, TrendingUp, Filter, Search } from 'lucide-react';
-import { generateTestCases } from '../data/advancedFeatures';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, TestTube, Link, CheckCircle, XCircle, AlertTriangle, TrendingUp, Filter, Search, Loader2 } from 'lucide-react';
 import type { TestCase } from '../data/advancedFeatures';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ScatterChart, Scatter, ZAxis } from 'recharts';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 interface TestCaseManagementProps {
   onBack: () => void;
@@ -12,8 +13,28 @@ const TestCaseManagement: React.FC<TestCaseManagementProps> = ({ onBack }) => {
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTestCase, setSelectedTestCase] = useState<string | null>(null);
-  
-  const testCases = generateTestCases();
+  const [testCases, setTestCases] = useState<TestCase[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchTestCases = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        const response = await fetch(`${API_URL}/analytics/test-cases`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setTestCases(data.testCases || []);
+        }
+      } catch (error) {
+        console.error('Error fetching test cases:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchTestCases();
+  }, []);
 
   // Calculate statistics
   const activeTests = testCases.filter(t => t.status === 'active').length;
