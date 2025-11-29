@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Wrench, AlertCircle, Clock, DollarSign, TrendingUp, Filter, Loader2 } from 'lucide-react';
 import type { TechnicalDebt } from '../data/advancedFeatures';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, ZAxis } from 'recharts';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { API_URL } from '../config/api';
 
 interface TechnicalDebtTrackerProps {
   onBack: () => void;

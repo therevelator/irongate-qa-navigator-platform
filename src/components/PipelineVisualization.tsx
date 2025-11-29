@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, GitBranch, Clock, CheckCircle, XCircle, AlertTriangle, Cpu, DollarSign, Loader2 } from 'lucide-react';
 import type { PipelineStage } from '../data/advancedFeatures';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { API_URL } from '../config/api';
 
 interface PipelineVisualizationProps {
   onBack: () => void;

@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, TestTube, Link, CheckCircle, XCircle, AlertTriangle, TrendingUp, Filter, Search, Loader2 } from 'lucide-react';
 import type { TestCase } from '../data/advancedFeatures';
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ScatterChart, Scatter, ZAxis } from 'recharts';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { API_URL } from '../config/api';
 
 interface TestCaseManagementProps {
   onBack: () => void;

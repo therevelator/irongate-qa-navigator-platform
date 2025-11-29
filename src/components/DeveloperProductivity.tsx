@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Code, Clock, GitPullRequest, Smile, Zap, Coffee, Calendar, TrendingUp, AlertCircle, Loader2 } from 'lucide-react';
 import type { DeveloperMetric } from '../data/advancedFeatures';
 import { BarChart, Bar, LineChart, Line, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Cell } from 'recharts';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { API_URL } from '../config/api';
 
 interface DeveloperProductivityProps {
   onBack: () => void;

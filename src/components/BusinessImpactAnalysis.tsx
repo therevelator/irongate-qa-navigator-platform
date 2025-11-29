@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, DollarSign, TrendingUp, Users, Target, AlertCircle, BarChart3, Loader2 } from 'lucide-react';
 import type { BusinessImpact } from '../data/advancedFeatures';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ScatterChart, Scatter, ZAxis, Cell } from 'recharts';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { API_URL } from '../config/api';
 
 interface BusinessImpactAnalysisProps {
   onBack: () => void;

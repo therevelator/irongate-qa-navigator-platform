@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ArrowLeft, TrendingUp, Activity, AlertTriangle, Zap, Clock, Users, Server, Loader2 } from 'lucide-react';
 import type { PerformanceMetric } from '../data/advancedFeatures';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { API_URL } from '../config/api';
 
 interface PerformanceTestingProps {
   onBack: () => void;
