@@ -711,7 +711,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     }
 
     const metricsToSave = Object.entries(developerMetrics).filter(([_, metrics]) => 
-      metrics.focusTimeHours > 0 || metrics.meetingTimeHours > 0 || metrics.prMergeTimeAvg > 0
+      metrics.focusTimeHours > 0 || metrics.meetingTimeHours > 0 || metrics.prMergeTimeAvg > 0 || metrics.contextSwitchesPerDay > 0
     );
 
     if (metricsToSave.length === 0) {

@@ -2,7 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { Team } from '../data/mockData';
 import { generateDetailedKPIs } from '../data/detailedKPIs';
 import API_URL from '../config/api';
-import { getMetricTextColor, getMetricStatus, METRICS_CONFIG } from '../config/metricsConfig';
+import { useTheme } from '../contexts/ThemeContext';
+import { getMetricTextColor, getMetricStatus, getMetricBgColor, METRICS_CONFIG } from '../config/metricsConfig';
 
 // Extended Team type with kpiData from API
 interface TeamWithKPI extends Team {
@@ -108,6 +109,7 @@ interface TeamDetailViewProps {
 const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   // Use useMemo to prevent regenerating KPIs on every render
   const detailedKPIs = useMemo(() => generateDetailedKPIs(team), [team]);
+  const { isDark } = useTheme();
   
   // Get real values from kpiData or use defaults
   const kpi = team.kpiData || {};
@@ -361,7 +363,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             {team.technicalDebtScore !== undefined && (
               <div className="hidden sm:block text-right">
                 <p className="text-[10px] text-gray-400 dark:text-slate-500">Technical Debt</p>
-                <div className={`text-lg font-bold ${getMetricTextColor(team.technicalDebtScore, 'technicalDebtScore')}`}>
+                <div className={`text-lg font-bold ${getMetricTextColor(team.technicalDebtScore, 'technicalDebtScore', isDark)}`}>
                   {team.technicalDebtScore}<span className="text-xs text-gray-400">/100</span>
                 </div>
               </div>
@@ -432,7 +434,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 <div className="text-right">
                   <p className="text-sm text-gray-500 dark:text-slate-400">Technical Debt</p>
                   <div className="flex items-baseline space-x-1">
-                    <div className={`text-3xl font-bold ${getMetricTextColor(team.technicalDebtScore, 'technicalDebtScore')}`}>
+                    <div className={`text-3xl font-bold ${getMetricTextColor(team.technicalDebtScore, 'technicalDebtScore', isDark)}`}>
                       {team.technicalDebtScore}
                     </div>
                     <span className="text-sm text-gray-500 dark:text-slate-400">{METRICS_CONFIG.technicalDebtScore.unit}</span>
@@ -948,8 +950,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
           {/* AI Insights Header */}
           <div className="mb-6 flex flex-col gap-3">
-            <div className="flex items-center gap-3 text-lg font-semibold text-gray-900 dark:text-white">
-              <span className="p-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full text-white">
+            <div className="flex items-center gap-3 text-lg font-semibold text-gray-900 dark:text-grey">
+              <span className="p-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full text-grey">
                 <Bot size={20} />
               </span>
               <div>
@@ -1149,15 +1151,18 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 return (
                   <div 
                     key={idx} 
-                    className={`rounded-lg border p-4 ${
-                      dev.status === 'healthy' ? 'border-emerald-500/40 bg-emerald-500/5' :
-                      dev.status === 'at-risk' ? 'border-amber-500/40 bg-amber-500/5' :
-                      'border-red-500/40 bg-red-500/5'
-                    }`}
+                    className={`rounded-lg border p-4 text-slate-800 transition-shadow hover:shadow-xl dark:text-slate-100 ${
+                      dev.status === 'healthy'
+                        ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-400 dark:bg-slate-900/70'
+                        : dev.status === 'at-risk'
+                          ? 'border-amber-300 bg-amber-50/60 dark:border-amber-400 dark:bg-slate-900/70'
+                          : 'border-rose-300 bg-rose-50/60 dark:border-rose-400 dark:bg-slate-900/70'
+                    }`
+                  }
                   >
                     {/* Header */}
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="font-semibold text-slate-100">{dev.name}</h4>
+                      <h4 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{dev.name}</h4>
                       <span className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
                         dev.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-400' :
                         dev.status === 'at-risk' ? 'bg-amber-500/20 text-amber-400' :
@@ -1170,49 +1175,35 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                     {/* Metrics Row */}
                     {metrics && (
                       <div className="grid grid-cols-5 gap-1 mb-3 text-center">
-                        <div className="bg-slate-800/50 rounded p-1.5">
-                          <div className="text-[10px] text-slate-500 uppercase">PR</div>
-                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.prMergeTimeHours, 'prMergeTimeHours')}`}>
-                            {metrics.prMergeTimeHours.toFixed(1)}h
+                        {(
+                          [
+                            { label: 'PR', value: `${metrics.prMergeTimeHours.toFixed(1)}h`, key: 'prMergeTimeHours' },
+                            { label: 'Review', value: `${metrics.codeReviewTimeHours.toFixed(1)}h`, key: 'codeReviewTimeHours' },
+                            { label: 'Focus', value: `${metrics.focusTimeHours.toFixed(1)}h`, key: 'focusTimeHours' },
+                            { label: 'Mtgs', value: `${metrics.meetingTimeHours.toFixed(1)}h`, key: 'meetingTimeHours' },
+                            { label: 'Ctx', value: `${metrics.contextSwitchesPerDay}`, key: 'contextSwitchesPerDay' }
+                          ] as const
+                        ).map((item) => (
+                          <div key={item.label} className="bg-slate-100/60 dark:bg-slate-800/50 rounded p-1.5">
+                            <div className="text-[10px] text-slate-400 uppercase">{item.label}</div>
+                            <div className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}` }>
+                              {item.value}
+                            </div>
                           </div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded p-1.5">
-                          <div className="text-[10px] text-slate-500 uppercase">Review</div>
-                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.codeReviewTimeHours, 'codeReviewTimeHours')}`}>
-                            {metrics.codeReviewTimeHours.toFixed(1)}h
-                          </div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded p-1.5">
-                          <div className="text-[10px] text-slate-500 uppercase">Focus</div>
-                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.focusTimeHours, 'focusTimeHours')}`}>
-                            {metrics.focusTimeHours.toFixed(1)}h
-                          </div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded p-1.5">
-                          <div className="text-[10px] text-slate-500 uppercase">Mtgs</div>
-                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.meetingTimeHours, 'meetingTimeHours')}`}>
-                            {metrics.meetingTimeHours.toFixed(1)}h
-                          </div>
-                        </div>
-                        <div className="bg-slate-800/50 rounded p-1.5">
-                          <div className="text-[10px] text-slate-500 uppercase">Ctx</div>
-                          <div className={`text-xs font-bold ${getMetricTextColor(metrics.contextSwitchesPerDay, 'contextSwitchesPerDay')}`}>
-                            {metrics.contextSwitchesPerDay}
-                          </div>
-                        </div>
+                        ))}
                       </div>
                     )}
 
                     {/* Summary */}
-                    <p className="text-xs text-slate-400 mb-2">{dev.summary}</p>
+                    <p className="text-sm text-slate-600 mb-2 leading-relaxed">{dev.summary}</p>
 
                     {/* Strengths */}
                     {dev.strengths.length > 0 && (
                       <div className="mb-2">
-                        <div className="text-[10px] text-emerald-400 uppercase font-medium mb-1">Strengths</div>
+                        <div className="text-[10px] text-emerald-500 uppercase font-medium mb-1">Strengths</div>
                         <div className="flex flex-wrap gap-1">
                           {dev.strengths.map((s, i) => (
-                            <span key={i} className="text-[10px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded">
+                            <span key={i} className="text-[10px] bg-emerald-500/10 text-emerald-700 px-1.5 py-0.5 rounded">
                               {s}
                             </span>
                           ))}
@@ -1223,10 +1214,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                     {/* Concerns */}
                     {dev.concerns.length > 0 && (
                       <div className="mb-2">
-                        <div className="text-[10px] text-amber-400 uppercase font-medium mb-1">Concerns</div>
+                        <div className="text-[10px] text-amber-500 uppercase font-medium mb-1">Concerns</div>
                         <div className="flex flex-wrap gap-1">
                           {dev.concerns.map((c, i) => (
-                            <span key={i} className="text-[10px] bg-amber-500/10 text-amber-300 px-1.5 py-0.5 rounded">
+                            <span key={i} className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded">
                               {c}
                             </span>
                           ))}
@@ -1237,7 +1228,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                     {/* Suggestion */}
                     <div className="mt-3 pt-2 border-t border-slate-700">
                       <div className="text-[10px] text-cyan-400 uppercase font-medium mb-1">Recommendation</div>
-                      <p className="text-xs text-slate-300">{dev.suggestion}</p>
+                      <p className="text-sm text-slate-600 leading-relaxed">{dev.suggestion}</p>
                     </div>
                   </div>
                 );

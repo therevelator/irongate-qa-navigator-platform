@@ -623,7 +623,7 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
               u.developer_insights_enabled
        FROM developer_metrics dm
        JOIN users u ON dm.developer_id = u.id
-       WHERE dm.team_id = ? AND u.developer_insights_enabled = 1
+       WHERE dm.team_id = ?
        ORDER BY u.first_name`,
       [req.params.id]
     );
