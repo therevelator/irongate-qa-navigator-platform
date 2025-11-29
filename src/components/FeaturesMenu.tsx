@@ -1,17 +1,89 @@
-import React, { useState } from 'react';
-import { ArrowLeft, BarChart3, TestTube, Zap, TrendingUp, Code, Wrench, GitBranch, DollarSign, Trophy, FileText, Grid3x3, LayoutGrid } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, BarChart3, TestTube, Zap, TrendingUp, Code, Wrench, GitBranch, DollarSign, Trophy, FileText, Grid3x3, LayoutGrid, Building2, Users } from 'lucide-react';
 import { advancedFeatures } from '../data/features';
 import type { FeatureModule } from '../data/features';
+import API_URL from '../config/api';
+
+interface Department {
+  id: string;
+  name: string;
+}
+
+interface Team {
+  id: string;
+  name: string;
+  department_id?: string;
+  department?: string;
+}
 
 interface FeaturesMenuProps {
   onBack: () => void;
-  onSelectFeature: (featureId: string) => void;
+  onSelectFeature: (featureId: string, teamId?: string) => void;
 }
 
 type GridColumns = 1 | 2 | 3 | 4 | 5;
 
 const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) => {
   const [gridColumns, setGridColumns] = useState<GridColumns>(3);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [filteredTeams, setFilteredTeams] = useState<Team[]>([]);
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
+  const [selectedTeam, setSelectedTeam] = useState<string>('all');
+
+  // Fetch departments and teams
+  useEffect(() => {
+    fetchDepartments();
+    fetchTeams();
+  }, []);
+
+  // Filter teams when department changes
+  useEffect(() => {
+    if (selectedDepartment === 'all') {
+      setFilteredTeams(teams);
+    } else {
+      // Match by department_id (comparing as strings to handle type mismatches)
+      const filtered = teams.filter(t => String(t.department_id) === String(selectedDepartment));
+      setFilteredTeams(filtered);
+    }
+    setSelectedTeam('all'); // Reset team selection when department changes
+  }, [selectedDepartment, teams]);
+
+  const fetchDepartments = async () => {
+    try {
+      const token = localStorage.getItem('irongate_token');
+      const response = await fetch(`${API_URL}/admin/departments`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // API might return { departments: [...] } or just [...]
+        const depts = Array.isArray(data) ? data : (data.departments || []);
+        setDepartments(depts);
+      }
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+    }
+  };
+
+  const fetchTeams = async () => {
+    try {
+      const token = localStorage.getItem('irongate_token');
+      const response = await fetch(`${API_URL}/teams`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        // API returns { teams: [...] }
+        const teamsArray = data.teams || [];
+        setTeams(teamsArray);
+        setFilteredTeams(teamsArray);
+      }
+    } catch (error) {
+      console.error('Error fetching teams:', error);
+    }
+  };
+
   const getIcon = (iconName: string) => {
     const icons: Record<string, React.ReactNode> = {
       BarChart3: <BarChart3 size={24} />,
@@ -55,54 +127,131 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800">
         <div className="px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics Dashboard</h1>
-              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Explore powerful analytics and intelligence tools</p>
+          <div className="flex flex-col gap-4">
+            {/* Title Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Analytics Dashboard</h1>
+                <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
+                  {selectedTeam !== 'all' 
+                    ? `Team-specific analytics for ${filteredTeams.find(t => t.id === selectedTeam)?.name || 'selected team'}`
+                    : 'Select a team to view analytics'
+                  }
+                </p>
+              </div>
+              
+              {/* Grid Size Selector */}
+              <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
+                <span className="text-xs font-medium text-gray-600 dark:text-slate-400 px-2">Grid:</span>
+                {([1, 2, 3, 4, 5] as GridColumns[]).map((cols) => (
+                  <button
+                    key={cols}
+                    onClick={() => setGridColumns(cols)}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
+                      gridColumns === cols
+                        ? 'bg-cyan-600 text-white shadow-sm'
+                        : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+                    }`}
+                    title={`${cols} column${cols > 1 ? 's' : ''}`}
+                  >
+                    {cols}
+                  </button>
+                ))}
+              </div>
             </div>
-            
-            {/* Grid Size Selector */}
-            <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 p-1 rounded-lg">
-              <span className="text-xs font-medium text-gray-600 dark:text-slate-400 px-2">Grid:</span>
-              {([1, 2, 3, 4, 5] as GridColumns[]).map((cols) => (
-                <button
-                  key={cols}
-                  onClick={() => setGridColumns(cols)}
-                  className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all ${
-                    gridColumns === cols
-                      ? 'bg-cyan-600 text-white shadow-sm'
-                      : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                  }`}
-                  title={`${cols} column${cols > 1 ? 's' : ''}`}
+
+            {/* Filters Row */}
+            <div className="flex flex-wrap items-center gap-4">
+              {/* Department Selector */}
+              <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-2">
+                <Building2 size={16} className="text-gray-500 dark:text-slate-400" />
+                <select
+                  value={selectedDepartment}
+                  onChange={(e) => setSelectedDepartment(e.target.value)}
+                  className="text-sm font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6 min-w-[140px]"
                 >
-                  {cols}
-                </button>
-              ))}
+                  <option value="all">All Departments</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>{dept.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Team Selector */}
+              <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-2">
+                <Users size={16} className="text-gray-500 dark:text-slate-400" />
+                <select
+                  value={selectedTeam}
+                  onChange={(e) => setSelectedTeam(e.target.value)}
+                  className="text-sm font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6 min-w-[140px]"
+                >
+                  <option value="all">All Teams</option>
+                  {filteredTeams.map((team) => (
+                    <option key={team.id} value={team.id}>{team.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Selected Team Indicator */}
+              {selectedTeam !== 'all' && (
+                <div className="flex items-center gap-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg px-3 py-2 text-sm font-medium">
+                  <span>Viewing: {filteredTeams.find(t => t.id === selectedTeam)?.name}</span>
+                  <button 
+                    onClick={() => setSelectedTeam('all')}
+                    className="hover:text-cyan-900 dark:hover:text-cyan-200"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Features Grid */}
+      {/* Features Grid - Only show when team is selected */}
       <div className="px-4 sm:px-6 lg:px-8 py-8">
-        <div className={`grid ${getGridClass(gridColumns)} gap-6`}>
-          {advancedFeatures
-            .filter(f => f.enabled)
-            .map(feature => (
-              <FeatureCard 
-                key={feature.id} 
-                feature={feature} 
-                getIcon={getIcon}
-                getCategoryColor={getCategoryColor}
-                getCategoryName={(categoryId: string) => {
-                  const cat = categories.find(c => c.id === categoryId);
-                  return cat ? `${cat.emoji} ${cat.name}` : '';
-                }}
-                onSelect={() => onSelectFeature(feature.id)}
-                gridSize={gridColumns}
-              />
-            ))}
-        </div>
+        {selectedTeam === 'all' ? (
+          /* No team selected - show prompt */
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div className="w-20 h-20 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center mb-6">
+              <Users size={40} className="text-gray-400 dark:text-slate-500" />
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
+              Select a Team to View Analytics
+            </h3>
+            <p className="text-gray-500 dark:text-slate-400 max-w-md mb-6">
+              Analytics are team-specific. Please select a department and team from the dropdowns above to explore detailed metrics and insights.
+            </p>
+            <div className="flex items-center gap-2 text-sm text-cyan-600 dark:text-cyan-400">
+              <Building2 size={16} />
+              <span>{departments.length} departments</span>
+              <span className="text-gray-300 dark:text-slate-600">•</span>
+              <Users size={16} />
+              <span>{teams.length} teams available</span>
+            </div>
+          </div>
+        ) : (
+          /* Team selected - show features */
+          <div className={`grid ${getGridClass(gridColumns)} gap-6`}>
+            {advancedFeatures
+              .filter(f => f.enabled)
+              .map(feature => (
+                <FeatureCard 
+                  key={feature.id} 
+                  feature={feature} 
+                  getIcon={getIcon}
+                  getCategoryColor={getCategoryColor}
+                  getCategoryName={(categoryId: string) => {
+                    const cat = categories.find(c => c.id === categoryId);
+                    return cat ? `${cat.emoji} ${cat.name}` : '';
+                  }}
+                  onSelect={() => onSelectFeature(feature.id, selectedTeam)}
+                  gridSize={gridColumns}
+                />
+              ))}
+          </div>
+        )}
       </div>
     </div>
   );

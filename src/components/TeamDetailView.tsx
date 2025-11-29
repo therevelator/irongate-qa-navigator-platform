@@ -305,10 +305,112 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
   const scoreColor = team.status === 'good' ? '#10b981' : team.status === 'warning' ? '#f59e0b' : '#ef4444';
 
+  // Track scroll for minimal header
+  const [showMinimalHeader, setShowMinimalHeader] = useState(false);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  
+  useEffect(() => {
+    const handleScroll = () => {
+      // Check both window scroll and parent container scroll
+      const scrollContainer = containerRef.current?.closest('.overflow-auto');
+      const scrollTop = scrollContainer ? scrollContainer.scrollTop : window.scrollY;
+      setShowMinimalHeader(scrollTop > 120);
+    };
+    
+    // Listen to window scroll
+    window.addEventListener('scroll', handleScroll);
+    
+    // Also listen to the parent overflow container
+    const scrollContainer = containerRef.current?.closest('.overflow-auto');
+    if (scrollContainer) {
+      scrollContainer.addEventListener('scroll', handleScroll);
+    }
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollContainer) {
+        scrollContainer.removeEventListener('scroll', handleScroll);
+      }
+    };
+  }, []);
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-10">
+    <div ref={containerRef} className="min-h-screen bg-gray-50 dark:bg-slate-950">
+      {/* Minimal Sticky Header - appears on scroll */}
+      <div className={`sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-200 dark:border-slate-800 transition-all duration-300 ${
+        showMinimalHeader ? 'opacity-100 h-auto' : 'opacity-0 h-0 overflow-hidden'
+      }`}>
+        <div className="px-4 sm:px-6 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={onBack}
+              className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm"
+            >
+              <ArrowLeft size={16} />
+              <span className="hidden sm:inline">Back to Teams</span>
+            </button>
+            <div className="h-4 w-px bg-gray-300 dark:bg-slate-700"></div>
+            <div>
+              <h2 className="text-sm font-bold text-gray-900 dark:text-white">{team.name}</h2>
+              <p className="text-[10px] text-gray-500 dark:text-slate-500">{team.department}</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-4 sm:gap-6">
+            {/* Technical Debt - Compact */}
+            {team.technicalDebtScore !== undefined && (
+              <div className="hidden sm:block text-right">
+                <p className="text-[10px] text-gray-400 dark:text-slate-500">Technical Debt</p>
+                <div className={`text-lg font-bold ${getMetricTextColor(team.technicalDebtScore, 'technicalDebtScore')}`}>
+                  {team.technicalDebtScore}<span className="text-xs text-gray-400">/100</span>
+                </div>
+              </div>
+            )}
+            
+            {/* Sizing Accuracy - Compact */}
+            {team.taskSizingAccuracy !== undefined && (
+              <div className="hidden md:block text-right">
+                <p className="text-[10px] text-gray-400 dark:text-slate-500">Sizing Accuracy</p>
+                <div className={`text-lg font-bold ${
+                  Math.abs(team.taskSizingAccuracy - 1.0) < 0.15 ? 'text-green-600 dark:text-green-400' :
+                  Math.abs(team.taskSizingAccuracy - 1.0) < 0.3 ? 'text-yellow-600 dark:text-yellow-400' :
+                  'text-red-600 dark:text-red-400'
+                }`}>
+                  {team.taskSizingAccuracy.toFixed(2)}<span className="text-xs text-gray-400">x</span>
+                </div>
+              </div>
+            )}
+            
+            {/* QA Score - Compact with ring */}
+            <div className="flex items-center gap-2">
+              <div className="text-right">
+                <p className="text-[10px] text-gray-400 dark:text-slate-500">Team QA Score</p>
+                <div className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}/100</div>
+              </div>
+              <div className="relative w-10 h-10">
+                <svg className="w-full h-full transform -rotate-90">
+                  <circle cx="20" cy="20" r="16" stroke="#e5e7eb" strokeWidth="3" fill="transparent" className="dark:stroke-slate-700" />
+                  <circle 
+                    cx="20" cy="20" r="16" 
+                    stroke={scoreColor} 
+                    strokeWidth="3" 
+                    fill="transparent"
+                    strokeDasharray={2 * Math.PI * 16}
+                    strokeDashoffset={2 * Math.PI * 16 - (team.qaScore / 100) * 2 * Math.PI * 16}
+                    strokeLinecap="round"
+                  />
+                </svg>
+                <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-900 dark:text-white">
+                  {team.qaScore}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Header */}
+      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800">
         <div className="px-8 py-6">
           <button 
             onClick={onBack}
@@ -484,7 +586,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             const happinessEmoji = developer.happiness_score >= 85 ? '😊' : developer.happiness_score >= 70 ? '🙂' : '😐';
             
             return (
-              <div key={developer.developer_id} className="bg-gradient-to-br from-slate-800 to-slate-900 dark:from-slate-900 dark:to-black rounded-xl border border-slate-700 dark:border-slate-800 p-5 hover:shadow-xl transition-all">
+              <div key={developer.developer_id} className="bg-white dark:bg-gradient-to-br dark:from-slate-800 dark:to-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-5 hover:shadow-xl transition-all">
                 {/* Developer Header */}
                 <div className="flex items-center justify-between mb-5">
                   <div className="flex items-center gap-4">
@@ -492,64 +594,64 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                       {developer.name.split(' ').map(n => n[0]).join('')}
                     </div>
                     <div>
-                      <h3 className="font-bold text-white text-lg">{developer.name}</h3>
-                      <p className="text-xs text-gray-400">Developer ID: {developer.developer_id}</p>
+                      <h3 className="font-bold text-gray-900 dark:text-white text-lg">{developer.name}</h3>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">Developer ID: {developer.developer_id}</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="flex items-center gap-2">
                       <span className="text-3xl">{happinessEmoji}</span>
-                      <span className="text-4xl font-bold text-green-400">{developer.happiness_score}</span>
+                      <span className="text-4xl font-bold text-green-600 dark:text-green-400">{developer.happiness_score}</span>
                     </div>
-                    <p className="text-xs text-gray-400">Happiness Score</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Happiness Score</p>
                   </div>
                 </div>
 
                 {/* Metrics Grid */}
                 <div className="grid grid-cols-5 gap-3 mb-5">
                   {/* PR Time */}
-                  <div className="bg-slate-700/50 dark:bg-slate-950/50 rounded-lg p-3 text-center border border-slate-600/30">
+                  <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
                     <GitPullRequest className="mx-auto mb-2 text-blue-400" size={16} />
-                    <p className="text-xs text-gray-400 mb-1">PR Time</p>
-                    <p className="text-xl font-bold text-white">{developer.pr_merge_time_avg.toFixed(1)}h</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">PR Time</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.pr_merge_time_avg.toFixed(1)}h</p>
                   </div>
 
                   {/* Review Time */}
-                  <div className="bg-slate-700/50 dark:bg-slate-950/50 rounded-lg p-3 text-center border border-slate-600/30">
+                  <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
                     <Clock className="mx-auto mb-2 text-green-400" size={16} />
-                    <p className="text-xs text-gray-400 mb-1">Review Time</p>
-                    <p className="text-xl font-bold text-white">{developer.code_review_time_avg.toFixed(1)}h</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Review Time</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.code_review_time_avg.toFixed(1)}h</p>
                   </div>
 
                   {/* Focus Time */}
-                  <div className="bg-slate-700/50 dark:bg-slate-950/50 rounded-lg p-3 text-center border border-slate-600/30">
+                  <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
                     <Zap className="mx-auto mb-2 text-orange-400" size={16} />
-                    <p className="text-xs text-gray-400 mb-1">Focus Time</p>
-                    <p className="text-xl font-bold text-white">{developer.focus_time_hours.toFixed(1)}h</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Focus Time</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.focus_time_hours.toFixed(1)}h</p>
                   </div>
 
                   {/* Meetings */}
-                  <div className="bg-slate-700/50 dark:bg-slate-950/50 rounded-lg p-3 text-center border border-slate-600/30">
+                  <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
                     <Users className="mx-auto mb-2 text-purple-400" size={16} />
-                    <p className="text-xs text-gray-400 mb-1">Meetings</p>
-                    <p className="text-xl font-bold text-white">{developer.meeting_time_hours.toFixed(1)}h</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Meetings</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.meeting_time_hours.toFixed(1)}h</p>
                   </div>
 
                   {/* Context Sw. */}
-                  <div className="bg-slate-700/50 dark:bg-slate-950/50 rounded-lg p-3 text-center border border-slate-600/30">
+                  <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
                     <TrendingUp className="mx-auto mb-2 text-red-400" size={16} />
-                    <p className="text-xs text-gray-400 mb-1">Context Sw.</p>
-                    <p className="text-xl font-bold text-white">{developer.context_switches_per_day}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Context Sw.</p>
+                    <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.context_switches_per_day}</p>
                   </div>
                 </div>
 
                 {/* Work-Life Balance Bar */}
                 <div className="mb-3">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-300">Work-Life Balance</span>
-                    <span className="text-sm font-bold text-white">{workLifeBalance}% Focus Time</span>
+                    <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Work-Life Balance</span>
+                    <span className="text-sm font-bold text-gray-900 dark:text-white">{workLifeBalance}% Focus Time</span>
                   </div>
-                  <div className="w-full bg-slate-700 rounded-full h-3">
+                  <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3">
                     <div 
                       className={`h-3 rounded-full transition-all ${
                         parseInt(workLifeBalance) > 70 ? 'bg-green-500' : 
@@ -559,15 +661,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                       style={{ width: `${workLifeBalance}%` }}
                     ></div>
                   </div>
-                  <div className="flex justify-between text-xs text-gray-400 mt-2">
+                  <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
                     <span>Focus: {developer.focus_time_hours.toFixed(1)}h</span>
                     <span>Meetings: {developer.meeting_time_hours.toFixed(1)}h</span>
                   </div>
                 </div>
 
                 {/* Burnout Risk Indicator */}
-                <div className="flex items-center justify-between pt-3 border-t border-slate-700">
-                  <span className="text-sm font-medium text-gray-300">Burnout Risk:</span>
+                <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-slate-700">
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Burnout Risk:</span>
                   <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${
                     developer.happiness_score > 80 && developer.focus_time_hours > 4 
                       ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
@@ -665,9 +767,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           );
         })}
       </div>
-      
-      <div className="px-4 sm:px-6 lg:px-8 pb-10">
-        <div className="max-w-6xl mx-auto">
+            <div className="px-4 sm:px-6 lg:px-8 pb-10">
+        <div className="w-full">
           {/* Metrics Overview Section */}
           {team.kpiData && (
             <div className="mb-8">
@@ -679,7 +780,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 These are the key metrics used to generate AI recommendations. Understanding your current state helps validate the suggestions below.
               </p>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
                 {/* Test Coverage */}
                 <div className={`rounded-lg border p-3 ${
                   testCoverage >= 80 ? 'border-emerald-500/40 bg-emerald-500/10' :
@@ -846,11 +947,16 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           )}
 
           {/* AI Insights Header */}
-          <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Bot className="text-purple-500" size={24} />
-              AI Insights
-            </h2>
+          <div className="mb-6 flex flex-col gap-3">
+            <div className="flex items-center gap-3 text-lg font-semibold text-gray-900 dark:text-white">
+              <span className="p-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full text-white">
+                <Bot size={20} />
+              </span>
+              <div>
+                <div>AI Insights</div>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Actionable guidance based on your team metrics</p>
+              </div>
+            </div>
             {aiLoading && (
               <span className="text-sm text-gray-500 dark:text-slate-400">Generating recommendations...</span>
             )}
@@ -863,7 +969,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           )}
 
           {!aiLoading && !aiError && !aiSuggestions && (
-            <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-300">
+            <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
               No AI insights available yet for this team. Make sure metrics are recorded.
             </div>
           )}
@@ -882,68 +988,70 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               {/* Source indicator and disclaimer */}
               {aiSuggestions.source && (
                 <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                  <div className="text-xs text-slate-500">
+                  <div className="text-xs text-slate-500 dark:text-slate-400">
                     Powered by: <span className="text-purple-400">{aiSuggestions.source === 'groq' ? 'AI' : 'Rule-based analysis'}</span>
                   </div>
                   {aiSuggestions.source === 'groq' && (
-                    <div className="text-[10px] text-slate-500 italic">
+                    <div className="text-[10px] text-slate-500 dark:text-slate-400 italic">
                       ⚠️ Generated by AI. May contain inaccuracies — please verify before acting.
                     </div>
                   )}
                 </div>
               )}
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-emerald-400 uppercase tracking-wide">Strongpoints</h3>
-                  <ul className="space-y-2 text-sm text-slate-200">
-                    {aiSuggestions.strongpoints.map((item, idx) => (
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+                <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm dark:from-slate-900 dark:to-slate-800 dark:border-slate-700">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Strongpoints</span>
+                    <span className="text-[10px] text-slate-400">{aiSuggestions.strongpoints.length} items</span>
+                  </div>
+                  <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-200">
+                    {aiSuggestions.strongpoints.length ? aiSuggestions.strongpoints.map((point, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="mt-0.5 text-emerald-400">•</span>
-                        <span>{item}</span>
+                        <span className="mt-0.5 text-emerald-500">•</span>
+                        <span>{point}</span>
                       </li>
-                    ))}
-                    {aiSuggestions.strongpoints.length === 0 && (
+                    )) : (
                       <li className="text-slate-500 italic">No strongpoints identified</li>
                     )}
                   </ul>
                 </div>
-
-                <div className="space-y-3">
-                  <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wide">Areas of Improvement</h3>
-                  <ul className="space-y-2 text-sm text-slate-200">
-                    {aiSuggestions.areasOfImprovement.map((item, idx) => (
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-500">Areas of Improvement</span>
+                    <span className="text-[10px] text-slate-400">{aiSuggestions.areasOfImprovement.length} items</span>
+                  </div>
+                  <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-200">
+                    {aiSuggestions.areasOfImprovement.length ? aiSuggestions.areasOfImprovement.map((area, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="mt-0.5 text-amber-400">•</span>
-                        <span>{item}</span>
+                        <span className="mt-0.5 text-amber-500">•</span>
+                        <span>{area}</span>
                       </li>
-                    ))}
-                    {aiSuggestions.areasOfImprovement.length === 0 && (
+                    )) : (
                       <li className="text-slate-500 italic">No areas of improvement identified</li>
                     )}
                   </ul>
                 </div>
-
-                <div className="md:col-span-2 lg:col-span-1 space-y-3">
-                  <h3 className="text-sm font-semibold text-cyan-400 uppercase tracking-wide">Action Plan</h3>
+                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-cyan-500">Action Plan</span>
+                    <span className="text-[10px] text-slate-400">{aiSuggestions.actionPlan.length} items</span>
+                  </div>
                   <div className="space-y-3">
-                    {aiSuggestions.actionPlan.map((item, idx) => (
-                      <div key={idx} className="rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+                    {aiSuggestions.actionPlan.length ? aiSuggestions.actionPlan.map((item, idx) => (
+                      <div key={idx} className="rounded-xl border border-gray-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
                         <div className="flex items-center justify-between mb-1">
-                          <span className={`text-xs font-semibold uppercase tracking-wide ${
-                            item.priority === 'Urgent' ? 'text-red-400' : 
-                            item.priority === 'Moderate' ? 'text-amber-400' : 'text-slate-300'
+                          <span className={`text-[10px] font-semibold uppercase tracking-wide ${
+                            item.priority === 'Urgent' ? 'text-red-500' : item.priority === 'Moderate' ? 'text-amber-500' : 'text-slate-500'
                           }`}>
                             {item.priority}
                           </span>
-                          <span className="text-[11px] text-slate-400">{item.timebox}</span>
+                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{item.timebox}</span>
                         </div>
-                        <div className="text-sm font-medium text-slate-100 mb-1">{item.initiative}</div>
-                        <div className="text-xs text-slate-400 mb-1">Owner: {item.owner}</div>
-                        <div className="text-xs text-emerald-300">KPI: {item.kpi}</div>
+                        <div className="text-sm font-medium text-gray-900 dark:text-slate-100 mb-1">{item.initiative}</div>
+                        <div className="text-xs text-gray-600 dark:text-slate-400 mb-1">Owner: {item.owner}</div>
+                        <div className="text-xs text-emerald-500">KPI: {item.kpi}</div>
                       </div>
-                    ))}
-                    {aiSuggestions.actionPlan.length === 0 && (
+                    )) : (
                       <div className="text-slate-500 italic text-sm">No action items</div>
                     )}
                   </div>
@@ -956,7 +1064,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
       {/* Developer AI Insights Section */}
       <div className="px-4 sm:px-6 lg:px-8 pb-10">
-        <div className="max-w-6xl mx-auto">
+        <div className="w-full">
           <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <Users className="text-indigo-500" size={24} />
@@ -990,14 +1098,14 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           {devAISuggestions?.metrics && devAISuggestions.metrics.length > 0 && (
             <div className="mb-6">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-slate-200 uppercase tracking-wide">Saved Developer Metrics</h3>
-                <span className="text-xs text-slate-500">
+                <h3 className="text-sm font-semibold text-slate-900 uppercase tracking-wide">Saved Developer Metrics</h3>
+                <span className="text-xs text-gray-600">
                   Showing {devAISuggestions.metrics.length} developer{devAISuggestions.metrics.length > 1 ? 's' : ''}
                 </span>
               </div>
-              <div className="overflow-x-auto rounded-lg border border-slate-800 bg-slate-900/40">
+              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
                 <table className="min-w-full text-xs sm:text-sm text-left">
-                  <thead className="bg-slate-900/60 text-slate-400 uppercase tracking-wide">
+                  <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
                     <tr>
                       <th className="px-4 py-3 font-medium">Developer</th>
                       <th className="px-4 py-3 font-medium">PR Time (h)</th>
@@ -1010,14 +1118,14 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                   </thead>
                   <tbody>
                     {devAISuggestions.metrics.map((metric) => (
-                      <tr key={metric.name} className="border-t border-slate-800/70">
-                        <td className="px-4 py-3 text-slate-200 font-medium">{metric.name}</td>
-                        <td className="px-4 py-3 text-slate-300">{metric.prMergeTimeHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-slate-300">{metric.codeReviewTimeHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-slate-300">{metric.focusTimeHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-slate-300">{metric.meetingTimeHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-slate-300">{metric.contextSwitchesPerDay}</td>
-                        <td className="px-4 py-3 text-slate-300">{metric.happinessScore.toFixed(0)}</td>
+                      <tr key={metric.name} className="border-t border-gray-100 dark:border-slate-800/70">
+                        <td className="px-4 py-3 text-gray-900 font-medium dark:text-slate-100">{metric.name}</td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.prMergeTimeHours.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.codeReviewTimeHours.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.focusTimeHours.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.meetingTimeHours.toFixed(1)}</td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.contextSwitchesPerDay}</td>
+                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.happinessScore.toFixed(0)}</td>
                       </tr>
                     ))}
                   </tbody>

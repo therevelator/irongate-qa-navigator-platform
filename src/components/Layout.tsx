@@ -19,16 +19,18 @@ interface LayoutProps {
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   hideSidebar?: boolean;
+  gridColumns?: 1 | 2 | 3;
+  onGridChange?: (cols: 1 | 2 | 3) => void;
 }
 
 import API_URL from '../config/api';
 
-const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange, hideSidebar }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange, hideSidebar, gridColumns = 3, onGridChange }) => {
   const { user, logout } = useAuth();
   const { isDark, themeName, setThemeName, toggleTheme } = useTheme();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [sidebarVisible, setSidebarVisible] = useState(true);
+  const [sidebarVisible, setSidebarVisible] = useState(false);
 
   useEffect(() => {
     if (user?.id) {
@@ -79,35 +81,34 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
   // Theme-specific background classes
   const mainBgClass = themeName === 'aurora' 
     ? isDark 
-      ? 'bg-gradient-to-br from-slate-950 via-emerald-950 to-slate-900' 
-      : 'bg-gradient-to-br from-emerald-50 via-teal-50 to-lime-50'
+      ? 'bg-neutral-950' 
+      : 'bg-white'
     : 'bg-gray-50 dark:bg-slate-950';
 
   const sidebarBgClass = themeName === 'aurora'
     ? isDark
-      ? 'bg-gradient-to-b from-slate-950 to-emerald-950 border-emerald-500/25'
-      : 'bg-gradient-to-b from-white to-emerald-50 border-emerald-200'
+      ? 'bg-neutral-950 border-neutral-800'
+      : 'bg-white border-neutral-200'
     : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800';
 
   const sidebarHidden = hideSidebar || !sidebarVisible;
 
   return (
     <div className={`flex h-screen ${mainBgClass}`}>
-      {/* Mobile Menu Overlay */}
-      {!sidebarHidden && isMobileMenuOpen && (
+      {/* Menu Overlay */}
+      {isMobileMenuOpen && (
         <div 
-          className={`fixed inset-0 z-40 lg:hidden ${
-            themeName === 'aurora' ? 'bg-emerald-900/50 backdrop-blur-sm' : 'bg-black bg-opacity-50'
+          className={`fixed inset-0 z-40 ${
+            themeName === 'aurora' ? 'bg-neutral-900/50 backdrop-blur-sm' : 'bg-black bg-opacity-50'
           }`}
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar Navigation */}
-      {!sidebarHidden && (
-        <aside className={`fixed lg:static inset-y-0 left-0 z-50 w-64 flex flex-col border-r transform transition-all duration-300 ease-in-out ${sidebarBgClass} ${
-          isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
-        }`}>
+      {/* Sidebar Navigation - Always slide-in menu */}
+      <aside className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col border-r transform transition-all duration-300 ease-in-out ${sidebarBgClass} ${
+        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+      }`}>
         {/* Logo */}
         <div className="px-6 py-6 sm:py-8 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -236,6 +237,37 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </div>
         </nav>
 
+        {/* Theme Selector */}
+        <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-800">
+          <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-2 px-3">Theme</p>
+          <div className={`flex flex-wrap gap-1 p-1 rounded-lg ${
+            themeName === 'aurora'
+              ? isDark ? 'bg-neutral-900' : 'bg-neutral-100'
+              : 'bg-gray-100 dark:bg-slate-800'
+          }`}>
+            {(Object.keys(themes) as ThemeName[]).map((theme) => (
+              <button
+                key={theme}
+                onClick={() => setThemeName(theme)}
+                className={`flex-1 px-3 py-2 rounded text-xs font-medium transition-all ${
+                  themeName === theme
+                    ? theme === 'ocean'
+                      ? 'bg-cyan-500 text-white shadow-sm'
+                      : theme === 'aurora'
+                        ? 'bg-neutral-800 text-white shadow-sm'
+                        : 'bg-gray-800 text-white shadow-sm'
+                    : themeName === 'aurora' && isDark
+                      ? 'text-neutral-400 hover:text-neutral-200'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                }`}
+                title={themes[theme].description}
+              >
+                {themes[theme].name}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Sign Out */}
         <div className="p-4 border-t border-gray-200 dark:border-slate-800">
           <button
@@ -247,7 +279,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </button>
         </div>
       </aside>
-      )}
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -255,67 +286,51 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
         <div className={`px-4 sm:px-6 py-3 flex items-center justify-between border-b transition-all ${
           themeName === 'aurora'
             ? isDark
-              ? 'bg-slate-950/90 backdrop-blur-md border-emerald-500/25'
-              : 'bg-white/85 backdrop-blur-md border-emerald-200'
+              ? 'bg-neutral-950/95 backdrop-blur-md border-neutral-800'
+              : 'bg-white/95 backdrop-blur-md border-neutral-200'
             : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800'
         }`}>
           <div className="flex items-center space-x-3 sm:space-x-4">
-            {/* Mobile Menu Button */}
+            {/* Menu Button - Always visible */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className={`lg:hidden p-2 rounded-md transition-colors ${
+              className={`p-2 rounded-md transition-colors ${
                 themeName === 'aurora'
-                  ? 'hover:bg-emerald-500/15'
+                  ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800'
                   : 'hover:bg-gray-100 dark:hover:bg-slate-800'
               }`}
             >
-              <Menu size={20} className={themeName === 'aurora' && isDark ? 'text-emerald-300' : 'text-gray-600 dark:text-gray-400'} />
+              <Menu size={20} className={themeName === 'aurora' && isDark ? 'text-neutral-300' : 'text-gray-600 dark:text-gray-400'} />
             </button>
             
             <h2 className={`text-xs sm:text-sm font-medium truncate ${
-              themeName === 'aurora' && isDark ? 'text-emerald-100' : 'text-gray-600 dark:text-slate-400'
+              themeName === 'aurora' && isDark ? 'text-neutral-200' : 'text-gray-600 dark:text-slate-400'
             }`}>
               Welcome, {user?.firstName}
             </h2>
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Sidebar visibility toggle (desktop only, not on forced-hidden views) */}
-            {!hideSidebar && (
-              <button
-                onClick={() => setSidebarVisible((v) => !v)}
-                className="hidden lg:inline-flex items-center px-2 py-1 text-xs rounded-md border border-gray-200 dark:border-slate-700 text-gray-600 dark:text-slate-300 hover:bg-gray-100 dark:hover:bg-slate-800"
-                title={sidebarHidden ? 'Show navigation menu' : 'Hide navigation menu'}
-              >
-                {sidebarHidden ? 'Show menu' : 'Hide menu'}
-              </button>
+            {/* Grid Selector */}
+            {currentView === 'dashboard' && onGridChange && (
+              <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
+                <span className="text-[10px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide px-1.5">Grid</span>
+                {([1, 2, 3] as const).map((cols) => (
+                  <button
+                    key={cols}
+                    onClick={() => onGridChange(cols)}
+                    className={`w-7 h-7 text-xs font-semibold rounded-md transition-all ${
+                      gridColumns === cols
+                        ? 'bg-cyan-600 text-white shadow'
+                        : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+                    }`}
+                    title={`${cols} column${cols > 1 ? 's' : ''}`}
+                  >
+                    {cols}
+                  </button>
+                ))}
+              </div>
             )}
-            {/* Theme Selector - Hidden on mobile */}
-            <div className={`hidden md:flex items-center gap-1 p-1 rounded-lg ${
-              themeName === 'aurora'
-                ? isDark ? 'bg-emerald-950/60' : 'bg-emerald-50'
-                : 'bg-gray-100 dark:bg-slate-800'
-            }`}>
-              {(Object.keys(themes) as ThemeName[]).map((theme) => (
-                <button
-                  key={theme}
-                  onClick={() => setThemeName(theme)}
-                  className={`px-2 py-1 rounded text-xs font-medium transition-all ${
-                    themeName === theme
-                      ? theme === 'ocean'
-                        ? 'bg-cyan-500 text-white shadow-sm'
-                        : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg shadow-emerald-500/30'
-                      : themeName === 'aurora' && isDark
-                        ? 'text-emerald-200 hover:text-emerald-100'
-                        : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
-                  title={themes[theme].description}
-                >
-                  {themes[theme].name}
-                </button>
-              ))}
-            </div>
-            
             {/* Dark/Light Mode Toggle */}
             <ThemeToggle compact />
           </div>

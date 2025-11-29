@@ -30,7 +30,9 @@ function App() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | 'admin-panel' | string>('dashboard');
   const [teams, setTeams] = useState<Team[]>([]);
+  const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(3);
   const [userTeams, setUserTeams] = useState<any[]>([]);
+  const [analyticsTeamId, setAnalyticsTeamId] = useState<string | undefined>(undefined);
 
   // Fetch departments and teams based on user role
   useEffect(() => {
@@ -93,8 +95,9 @@ function App() {
     }
   }
   
-  // Handle feature navigation
-  const handleFeatureSelect = (featureId: string) => {
+  // Handle feature navigation with optional team context
+  const handleFeatureSelect = (featureId: string, teamId?: string) => {
+    setAnalyticsTeamId(teamId);
     setCurrentView(featureId);
   };
 
@@ -281,8 +284,8 @@ function App() {
           },
         }}
       />
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} />
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab} gridColumns={gridColumns} onGridChange={setGridColumns}>
+        <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} gridColumns={gridColumns} />
       </Layout>
     </>
   );
