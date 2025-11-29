@@ -55,13 +55,13 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
 
         {/* Login Card */}
         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-8">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Welcome Back</h2>
-          <p className="text-gray-600 dark:text-slate-400 mb-6">Sign in to your account to continue</p>
+          <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-300 mb-2">Welcome Back</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">Sign in to your account to continue</p>
 
           {/* Demo Credentials Info */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-            <p className="text-sm font-semibold text-blue-900 mb-2">🎯 Demo Credentials:</p>
-            <div className="text-xs text-blue-800 space-y-1">
+          <div className="bg-blue-50 dark:bg-slate-800 border border-blue-200 dark:border-slate-600 rounded-lg p-4 mb-6">
+            <p className="text-sm font-semibold text-blue-900 dark:text-gray-300 mb-2">🎯 Demo Credentials:</p>
+            <div className="text-xs text-blue-800 dark:text-gray-400 space-y-1">
               <p>• <strong>Super Admin:</strong> admin@irongate.com</p>
               <p>• <strong>QA Manager:</strong> manager@irongate.com</p>
               <p>• <strong>Team Lead:</strong> lead@irongate.com</p>
@@ -86,7 +86,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Email Address
               </label>
               <div className="relative">
@@ -96,7 +96,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
                   placeholder="you@company.com"
                   disabled={isLoading}
                 />
@@ -105,7 +105,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
 
             {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 Password
               </label>
               <div className="relative">
@@ -115,7 +115,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-11 pr-12 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
                   placeholder="••••••••"
                   disabled={isLoading}
                 />
@@ -139,7 +139,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                   disabled={isLoading}
                 />
-                <span className="ml-2 text-sm text-gray-700 dark:text-slate-300">Remember me</span>
+                <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Remember me</span>
               </label>
               <button
                 type="button"
@@ -171,7 +171,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
 
           {/* Register Link */}
           <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600 dark:text-slate-400">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               Don't have an account?{' '}
               <button
                 onClick={onSwitchToRegister}

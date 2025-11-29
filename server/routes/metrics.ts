@@ -256,6 +256,7 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
 
     // Insert or update KPI snapshot for today
     // Use INSERT ... ON DUPLICATE KEY UPDATE to handle existing entries for the same team/date
+    //this will be the part that inserts into the DB from the aggregator
     await query(
       `INSERT INTO kpi_snapshots (
         team_id,
