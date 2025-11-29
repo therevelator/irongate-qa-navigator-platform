@@ -10,6 +10,8 @@ import metricsRoutes from '../../server/routes/metrics';
 import usersRoutes from '../../server/routes/users';
 import departmentsRoutes from '../../server/routes/departments';
 import adminRoutes from '../../server/routes/admin';
+import analyticsRoutes from '../../server/routes/analytics';
+import settingsRoutes from '../../server/routes/settings';
 
 const app = express();
 
@@ -37,6 +39,8 @@ router.use('/metrics', metricsRoutes);
 router.use('/users', usersRoutes);
 router.use('/departments', departmentsRoutes);
 router.use('/admin', adminRoutes);
+router.use('/analytics', analyticsRoutes);
+router.use('/settings', settingsRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix
