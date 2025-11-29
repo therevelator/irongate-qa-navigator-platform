@@ -1,7 +1,10 @@
 import cron from 'node-cron';
 import { query } from '../../src/lib/db';
 
-console.log('📊 Analytics sync job initializing...');
+// Only log in non-serverless environments
+if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  console.log('📊 Analytics sync job initializing...');
+}
 
 // ============================================================================
 // DATA GENERATORS
@@ -565,14 +568,16 @@ export async function seedAllAnalyticsData(): Promise<void> {
 }
 
 // ============================================================================
-// CRON SCHEDULE
+// CRON SCHEDULE (only in non-serverless environments)
 // ============================================================================
 
-// Daily at 00:30 - Update analytics data
-cron.schedule('30 0 * * *', updateDailyAnalytics);
-console.log('  📊 Daily analytics job scheduled: 30 0 * * * (daily at 00:30)');
-
-console.log('✅ Analytics sync job initialized!');
+// Only initialize cron jobs when not running in serverless (Netlify Functions)
+if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  // Daily at 00:30 - Update analytics data
+  cron.schedule('30 0 * * *', updateDailyAnalytics);
+  console.log('  📊 Daily analytics job scheduled: 30 0 * * * (daily at 00:30)');
+  console.log('✅ Analytics sync job initialized!');
+}
 
 // ============================================================================
 // EXPORTS

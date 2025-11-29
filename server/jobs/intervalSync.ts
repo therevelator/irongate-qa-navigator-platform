@@ -1,7 +1,10 @@
 import cron from 'node-cron';
 import { query, queryOne } from '../../src/lib/db';
 
-console.log('📅 Metrics sync jobs initializing...');
+// Only log in non-serverless environments
+if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  console.log('📅 Metrics sync jobs initializing...');
+}
 
 // ============================================================================
 // METRICS GROUPED BY UPDATE FREQUENCY
@@ -261,26 +264,29 @@ async function runIntervalSync(): Promise<void> {
 }
 
 // ============================================================================
-// CRON SCHEDULES
+// CRON SCHEDULES (only in non-serverless environments)
 // ============================================================================
 
-// Hourly: At minute 0 of every hour
-cron.schedule('0 * * * *', runHourlySync);
-console.log('  ⏰ Hourly job scheduled: 0 * * * * (every hour at :00)');
+// Only initialize cron jobs when not running in serverless (Netlify Functions)
+if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  // Hourly: At minute 0 of every hour
+  cron.schedule('0 * * * *', runHourlySync);
+  console.log('  ⏰ Hourly job scheduled: 0 * * * * (every hour at :00)');
 
-// Daily: At 00:05 every day
-cron.schedule('5 0 * * *', runDailySync);
-console.log('  📅 Daily job scheduled: 5 0 * * * (daily at 00:05)');
+  // Daily: At 00:05 every day
+  cron.schedule('5 0 * * *', runDailySync);
+  console.log('  📅 Daily job scheduled: 5 0 * * * (daily at 00:05)');
 
-// Weekly: At 00:10 every Monday
-cron.schedule('10 0 * * 1', runWeeklySync);
-console.log('  📆 Weekly job scheduled: 10 0 * * 1 (Mondays at 00:10)');
+  // Weekly: At 00:10 every Monday
+  cron.schedule('10 0 * * 1', runWeeklySync);
+  console.log('  📆 Weekly job scheduled: 10 0 * * 1 (Mondays at 00:10)');
 
-// Monthly: At 00:15 on the 1st of every month
-cron.schedule('15 0 1 * *', runMonthlySync);
-console.log('  🗓️ Monthly job scheduled: 15 0 1 * * (1st of month at 00:15)');
+  // Monthly: At 00:15 on the 1st of every month
+  cron.schedule('15 0 1 * *', runMonthlySync);
+  console.log('  🗓️ Monthly job scheduled: 15 0 1 * * (1st of month at 00:15)');
 
-console.log('✅ All metrics sync jobs scheduled!');
+  console.log('✅ All metrics sync jobs scheduled!');
+}
 
 // ============================================================================
 // EXPORTS
