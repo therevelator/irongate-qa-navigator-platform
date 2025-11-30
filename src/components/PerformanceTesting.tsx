@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, TrendingUp, Activity, AlertTriangle, Zap, Clock, Users, Server, Loader2 } from 'lucide-react';
 import type { PerformanceMetric } from '../data/advancedFeatures';
-import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, Label } from 'recharts';
 import { API_URL } from '../config/api';
+import { loadSLAConfig, fetchSLAConfig, invalidateSLACache, type SLAConfig } from '../utils/slaConfig';
 
 interface PerformanceTestingProps {
   onBack: () => void;
@@ -28,11 +29,15 @@ const calculatePerformanceScore = (metric: PerformanceMetric): number => {
   return (p95Score * 0.4 + errorScore * 0.4 + throughputScore * 0.2);
 };
 
+const formatMilliseconds = (value: number) => `${Number(value).toFixed(3)} ms`;
+
 const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
+  const [selectedTrendEndpoint, setSelectedTrendEndpoint] = useState<string>('');
   const [timeRange, setTimeRange] = useState<'24h' | '7d' | '30d'>('7d');
   const [metrics, setMetrics] = useState<PerformanceMetric[]>([]);
   const [loading, setLoading] = useState(true);
+  const [slaConfig, setSlaConfig] = useState<SLAConfig>(loadSLAConfig());
 
   useEffect(() => {
     const fetchMetrics = async () => {
@@ -55,6 +60,20 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
     fetchMetrics();
   }, [timeRange]);
 
+  useEffect(() => {
+    // Initial fetch of SLA config
+    fetchSLAConfig().then(setSlaConfig);
+  }, []);
+
+  useEffect(() => {
+    const handler = () => {
+      invalidateSLACache();
+      fetchSLAConfig().then(setSlaConfig);
+    };
+    window.addEventListener('slaConfigUpdated', handler as EventListener);
+    return () => window.removeEventListener('slaConfigUpdated', handler as EventListener);
+  }, []);
+
   // Calculate overall statistics
   const avgP95 = (metrics.reduce((acc, m) => acc + m.response_time_p95, 0) / metrics.length).toFixed(0);
   const avgThroughput = (metrics.reduce((acc, m) => acc + m.throughput, 0) / metrics.length).toFixed(0);
@@ -73,19 +92,56 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
   }));
   const degradedEndpoints = metricsWithScore.filter(m => m.performance_score < 70).length;
 
-  // Prepare data for response time trends
-  const trendData = Array.from({ length: 24 }, (_, i) => ({
-    hour: `${i}:00`,
-    p50: 80 + Math.random() * 40,
-    p95: 150 + Math.random() * 100,
-    p99: 250 + Math.random() * 150
-  }));
+  // Ensure a selected endpoint exists for trend filtering
+  useEffect(() => {
+    if (!metricsWithScore.length) {
+      setSelectedTrendEndpoint('');
+      return;
+    }
+
+    const current = metricsWithScore.find(m => m.endpoint === selectedTrendEndpoint);
+    if (!current) {
+      setSelectedTrendEndpoint(metricsWithScore[0].endpoint);
+    }
+  }, [metricsWithScore, selectedTrendEndpoint]);
+
+  const trendData = useMemo(() => {
+    if (!selectedTrendEndpoint) return [];
+    const baseMetric = metricsWithScore.find(m => m.endpoint === selectedTrendEndpoint);
+    const baseline = {
+      p50: baseMetric?.response_times.p50 ?? 100,
+      p95: baseMetric?.response_times.p95 ?? 180,
+      p99: baseMetric?.response_times.p99 ?? 250
+    };
+
+    const points = timeRange === '24h' ? 24 : timeRange === '7d' ? 7 : 30;
+    const intervalMs = timeRange === '24h' ? 60 * 60 * 1000 : 24 * 60 * 60 * 1000;
+
+    return Array.from({ length: points }, (_, idx) => {
+      const timestamp = new Date(Date.now() - (points - 1 - idx) * intervalMs);
+      const label = timeRange === '24h'
+        ? timestamp.toLocaleTimeString([], { hour: 'numeric' })
+        : timestamp.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const noise = Math.sin(idx / 3) * 10;
+      const variance = (Math.random() - 0.5) * 15;
+
+      return {
+        label,
+        p50: parseFloat(Math.max(20, baseline.p50 + noise + variance).toFixed(3)),
+        p95: parseFloat(Math.max(50, baseline.p95 + noise * 1.5 + variance * 1.2).toFixed(3)),
+        p99: parseFloat(Math.max(80, baseline.p99 + noise * 2 + variance * 1.5).toFixed(3))
+      };
+    });
+  }, [metricsWithScore, selectedTrendEndpoint, timeRange]);
+
+  const trendRangeLabel = timeRange === '24h' ? 'Last 24 Hours' : timeRange === '7d' ? 'Last 7 Days' : 'Last 30 Days';
+  const latestTrendPoint = trendData[trendData.length - 1];
 
   // Prepare data for load test results
   const loadTestData = Array.from({ length: 10 }, (_, i) => ({
     users: (i + 1) * 100,
-    responseTime: 100 + (i * 15) + Math.random() * 20,
-    throughput: 1000 - (i * 50) + Math.random() * 100,
+    responseTime: parseFloat((100 + (i * 15) + Math.random() * 20).toFixed(3)),
+    throughput: parseFloat((1000 - (i * 50) + Math.random() * 100).toFixed(3)),
     errorRate: i > 7 ? (i - 7) * 2 : 0
   }));
 
@@ -135,29 +191,48 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
 
       {/* Time Range Selector */}
       <div className="px-8 py-4 bg-white dark:bg-slate-900 border-b dark:border-slate-800">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300 dark:text-slate-300">Time Range:</span>
-            {(['24h', '7d', '30d'] as const).map(range => (
-              <button
-                key={range}
-                onClick={() => setTimeRange(range)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  timeRange === range
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {range === '24h' ? 'Last 24 Hours' : range === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
-              </button>
-            ))}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Time Range:</span>
+            <div className="flex flex-wrap gap-2">
+              {(['24h', '7d', '30d'] as const).map(range => (
+                <button
+                  key={range}
+                  onClick={() => setTimeRange(range)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    timeRange === range
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {range === '24h' ? 'Last 24 Hours' : range === '7d' ? 'Last 7 Days' : 'Last 30 Days'}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="flex items-center space-x-3">
-            <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 rounded-lg">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              <span className="text-sm font-medium text-green-700">Live Monitoring</span>
-            </div>
+          <div className="flex flex-col md:flex-row md:items-center gap-3">
+            <label className="text-sm font-semibold text-gray-700 dark:text-slate-300" htmlFor="endpoint-filter">
+              Endpoint:
+            </label>
+            <select
+              id="endpoint-filter"
+              value={selectedTrendEndpoint}
+              onChange={(e) => setSelectedTrendEndpoint(e.target.value)}
+              className="px-3 py-2 rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-gray-700 dark:text-slate-200"
+              disabled={!metricsWithScore.length}
+            >
+              {metricsWithScore.map((metric, idx) => (
+                <option key={`${metric.endpoint}-${idx}`} value={metric.endpoint}>
+                  {metric.endpoint}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-center space-x-2 px-4 py-2 bg-green-50 rounded-lg">
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            <span className="text-sm font-medium text-green-700">Live Monitoring</span>
           </div>
         </div>
       </div>
@@ -184,7 +259,14 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
       <div className="px-8 py-8">
         {/* Response Time Trends */}
         <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6 mb-8">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Response Time Trends (24 Hours)</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Response Time Trends ({trendRangeLabel})</h2>
+            {selectedTrendEndpoint && (
+              <p className="text-sm text-gray-500 dark:text-slate-400">
+                Showing data for <span className="font-semibold text-gray-900 dark:text-white">{selectedTrendEndpoint}</span>
+              </p>
+            )}
+          </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={trendData}>
@@ -203,10 +285,13 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="hour" />
-                <YAxis label={{ value: 'Response Time (ms)', angle: -90, position: 'insideLeft' }} />
+                <XAxis dataKey="label" />
+                <YAxis>
+                  <Label value="Response Time (ms)" angle={-90} position="insideLeft" offset={8} dy={18} />
+                </YAxis>
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: '8px' }}
+                  formatter={(value) => formatMilliseconds(value as number)}
                 />
                 <Legend />
                 <Area type="monotone" dataKey="p50" stroke="#10b981" fill="url(#colorP50)" strokeWidth={2} name="P50 (Median)" />
@@ -215,25 +300,25 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-          <div className="mt-4 grid grid-cols-3 gap-4">
-            <div className="text-center p-3 bg-green-50 rounded-lg">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-lg">
               <p className="text-sm text-green-700 font-medium">P50 (Median)</p>
               <p className="text-2xl font-bold text-green-900 dark:text-green-200">
-                {trendData[trendData.length - 1].p50.toFixed(0)}ms
+                {latestTrendPoint ? latestTrendPoint.p50.toFixed(3) : '--'}ms
               </p>
               <p className="text-xs text-green-600 dark:text-green-400">50% of requests</p>
             </div>
-            <div className="text-center p-3 bg-blue-50 rounded-lg">
+            <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
               <p className="text-sm text-blue-700 font-medium">P95</p>
               <p className="text-2xl font-bold text-blue-900 dark:text-blue-200">
-                {trendData[trendData.length - 1].p95.toFixed(0)}ms
+                {latestTrendPoint ? latestTrendPoint.p95.toFixed(3) : '--'}ms
               </p>
               <p className="text-xs text-blue-600 dark:text-blue-400">95% of requests</p>
             </div>
-            <div className="text-center p-3 bg-red-50 rounded-lg">
+            <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg">
               <p className="text-sm text-red-700 font-medium">P99</p>
               <p className="text-2xl font-bold text-red-900 dark:text-red-200">
-                {trendData[trendData.length - 1].p99.toFixed(0)}ms
+                {latestTrendPoint ? latestTrendPoint.p99.toFixed(3) : '--'}ms
               </p>
               <p className="text-xs text-red-600 dark:text-red-400">99% of requests</p>
             </div>
@@ -253,7 +338,7 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
                 />
                 <YAxis 
                   yAxisId="left"
-                  label={{ value: 'Response Time (ms)', angle: -90, position: 'insideLeft' }}
+                  label={{ value: 'Response Time (ms)', angle: -90, position: 'insideLeft', offset: 8, dy: 18 }}
                 />
                 <YAxis 
                   yAxisId="right" 
@@ -262,6 +347,15 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
                 />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#1f2937', color: '#fff', borderRadius: '8px' }}
+                  formatter={(value, name) => {
+                    if (name === 'Response Time (ms)') {
+                      return formatMilliseconds(value as number);
+                    }
+                    if (name === 'Throughput (req/s)') {
+                      return `${Number(value).toFixed(3)} req/s`;
+                    }
+                    return value;
+                  }}
                 />
                 <Legend />
                 <Line 
@@ -299,12 +393,13 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
         {/* Endpoint Performance Details */}
         <div className="space-y-4">
           <h2 className="text-xl font-bold text-gray-900 dark:text-white dark:text-white">Endpoint Performance Analysis</h2>
-          {metricsWithScore.map(metric => (
+          {metricsWithScore.map((metric, idx) => (
             <EndpointCard 
-              key={metric.id || `${metric.endpoint}-${metric.method}`}
+              key={metric.id || `${metric.endpoint}-${metric.method}-${idx}`}
               metric={metric}
               isSelected={selectedEndpoint === metric.endpoint}
               onSelect={() => setSelectedEndpoint(selectedEndpoint === metric.endpoint ? null : metric.endpoint)}
+              slaConfig={slaConfig}
             />
           ))}
         </div>
@@ -317,9 +412,10 @@ interface EndpointCardProps {
   metric: ExtendedPerformanceMetric;
   isSelected: boolean;
   onSelect: () => void;
+  slaConfig: SLAConfig;
 }
 
-const EndpointCard: React.FC<EndpointCardProps> = ({ metric, isSelected, onSelect }) => {
+const EndpointCard: React.FC<EndpointCardProps> = ({ metric, isSelected, onSelect, slaConfig }) => {
   const getPerformanceColor = (score: number) => {
     if (score >= 90) return 'text-green-600';
     if (score >= 70) return 'text-yellow-600';
@@ -454,12 +550,12 @@ const EndpointCard: React.FC<EndpointCardProps> = ({ metric, isSelected, onSelec
         {isSelected && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-700 space-y-4">
             {/* Performance Analysis */}
-            <div className="bg-blue-50 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-blue-900 mb-3 flex items-center">
+            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-3 flex items-center">
                 <Server size={16} className="mr-2" />
                 Performance Analysis
               </h4>
-              <div className="grid grid-cols-2 gap-4 text-sm text-blue-800">
+              <div className="grid grid-cols-2 gap-4 text-sm text-blue-800 dark:text-blue-100">
                 <div>
                   <p className="font-medium mb-1">Response Time Assessment:</p>
                   <p>
@@ -479,7 +575,7 @@ const EndpointCard: React.FC<EndpointCardProps> = ({ metric, isSelected, onSelec
                 <div>
                   <p className="font-medium mb-1">Error Rate Status:</p>
                   <p>
-                    {metric.error_rate < 1 ? '✅ Healthy - Error rate within SLA' :
+                    {metric.error_rate < slaConfig.errorRatePercent ? `✅ Healthy - Error rate within SLA (<${slaConfig.errorRatePercent}%)` :
                      metric.error_rate < 5 ? '⚠️ Elevated - Investigate root causes' :
                      '❌ Critical - Immediate action required'}
                   </p>
@@ -496,9 +592,9 @@ const EndpointCard: React.FC<EndpointCardProps> = ({ metric, isSelected, onSelec
             </div>
 
             {/* Optimization Recommendations */}
-            <div className="bg-green-50 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-green-900 mb-3">💡 Optimization Recommendations</h4>
-              <ul className="text-sm text-green-800 space-y-2">
+            <div className="bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-green-900 dark:text-green-100 mb-3">💡 Optimization Recommendations</h4>
+              <ul className="text-sm text-green-800 dark:text-green-100 space-y-2">
                 {metric.response_times.p95 > 200 && (
                   <li className="flex items-start">
                     <span className="mr-2">•</span>
@@ -529,26 +625,26 @@ const EndpointCard: React.FC<EndpointCardProps> = ({ metric, isSelected, onSelec
             </div>
 
             {/* SLA Compliance */}
-            <div className="bg-purple-50 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-purple-900 mb-3">📊 SLA Compliance</h4>
+            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-800 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-purple-900 dark:text-purple-100 mb-3">📊 SLA Compliance</h4>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <p className="text-xs text-purple-700 mb-1">Target P95:</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">&lt; 500ms</p>
+                  <p className="text-xs text-purple-700 dark:text-purple-200 mb-1">Target P95:</p>
+                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">&lt; {slaConfig.responseTimeMs}ms (SLA)</p>
                   <p className="text-xs text-purple-600 dark:text-purple-400">
-                    {metric.response_times.p95 < 500 ? '✅ Meeting SLA' : '❌ Violating SLA'}
+                    {metric.response_times.p95 < slaConfig.responseTimeMs ? '✅ Meeting SLA' : '❌ Violating SLA'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-purple-700 mb-1">Target Error Rate:</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">&lt; 1%</p>
+                  <p className="text-xs text-purple-700 dark:text-purple-200 mb-1">Target Error Rate:</p>
+                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">&lt; {slaConfig.errorRatePercent}% (SLA)</p>
                   <p className="text-xs text-purple-600 dark:text-purple-400">
-                    {metric.error_rate < 1 ? '✅ Meeting SLA' : '❌ Violating SLA'}
+                    {metric.error_rate < slaConfig.errorRatePercent ? '✅ Meeting SLA' : '❌ Violating SLA'}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-purple-700 mb-1">Uptime Target:</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">99.9%</p>
+                  <p className="text-xs text-purple-700 dark:text-purple-200 mb-1">Uptime Target:</p>
+                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">{slaConfig.uptimePercent}% (SLA)</p>
                   <p className="text-xs text-purple-600 dark:text-purple-400">✅ Meeting SLA</p>
                 </div>
               </div>

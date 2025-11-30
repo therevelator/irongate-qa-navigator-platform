@@ -947,4 +947,149 @@ router.get('/permissions', authenticateToken, async (req: any, res) => {
   }
 });
 
+// ============================================
+// CONFIGS - hierarchical settings per company/department/team
+// ============================================
+
+// Get configs (with inheritance: team → department → company)
+router.get('/configs', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId } = req.user;
+    const { departmentId, teamId } = req.query;
+
+    // Build query based on scope
+    let sql = `SELECT * FROM configs WHERE company_id = ?`;
+    const params: any[] = [companyId];
+
+    if (teamId) {
+      sql += ` AND (team_id = ? OR (team_id IS NULL AND department_id = ?) OR (team_id IS NULL AND department_id IS NULL))`;
+      params.push(teamId, departmentId || null);
+    } else if (departmentId) {
+      sql += ` AND (department_id = ? OR department_id IS NULL) AND team_id IS NULL`;
+      params.push(departmentId);
+    } else {
+      sql += ` AND department_id IS NULL AND team_id IS NULL`;
+    }
+
+    const configs = await query<any>(sql, params);
+
+    // Merge configs with inheritance (company < department < team)
+    const merged: Record<string, any> = {};
+    
+    // Sort by specificity: company-wide first, then department, then team
+    const sorted = configs.sort((a: any, b: any) => {
+      const aScore = (a.department_id ? 1 : 0) + (a.team_id ? 2 : 0);
+      const bScore = (b.department_id ? 1 : 0) + (b.team_id ? 2 : 0);
+      return aScore - bScore;
+    });
+
+    for (const cfg of sorted) {
+      merged[cfg.config_key] = {
+        value: cfg.config_value,
+        scope: cfg.team_id ? 'team' : cfg.department_id ? 'department' : 'company',
+        updatedAt: cfg.updated_at
+      };
+    }
+
+    res.json({ configs: merged });
+  } catch (error) {
+    console.error('Error fetching configs:', error);
+    res.status(500).json({ error: 'Failed to fetch configs' });
+  }
+});
+
+// Get raw configs for editing (exact scope match)
+router.get('/configs/raw', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId } = req.user;
+    const { departmentId, teamId } = req.query;
+
+    let sql = `SELECT * FROM configs WHERE company_id = ?`;
+    const params: any[] = [companyId];
+
+    if (teamId && teamId !== 'all') {
+      sql += ` AND team_id = ?`;
+      params.push(teamId);
+    } else if (departmentId && departmentId !== 'all') {
+      sql += ` AND department_id = ? AND team_id IS NULL`;
+      params.push(departmentId);
+    } else {
+      sql += ` AND department_id IS NULL AND team_id IS NULL`;
+    }
+
+    const configs = await query<any>(sql, params);
+    
+    // Convert to key-value object
+    const configMap: Record<string, string> = {};
+    for (const cfg of configs) {
+      configMap[cfg.config_key] = cfg.config_value;
+    }
+
+    res.json({ configs: configMap });
+  } catch (error) {
+    console.error('Error fetching raw configs:', error);
+    res.status(500).json({ error: 'Failed to fetch configs' });
+  }
+});
+
+// Save configs (upsert)
+router.post('/configs', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId, role } = req.user;
+    
+    // Only super_admin and manager can modify configs
+    if (role !== 'super_admin' && role !== 'manager') {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+
+    const { departmentId, teamId, configs } = req.body;
+
+    if (!configs || typeof configs !== 'object') {
+      return res.status(400).json({ error: 'Invalid configs format' });
+    }
+
+    const deptId = departmentId === 'all' ? null : departmentId || null;
+    const tmId = teamId === 'all' ? null : teamId || null;
+
+    // Upsert each config key
+    for (const [key, value] of Object.entries(configs)) {
+      if (value === null || value === undefined || value === '') {
+        // Delete if empty
+        await query(
+          `DELETE FROM configs WHERE company_id = ? AND config_key = ? 
+           AND (department_id = ? OR (department_id IS NULL AND ? IS NULL))
+           AND (team_id = ? OR (team_id IS NULL AND ? IS NULL))`,
+          [companyId, key, deptId, deptId, tmId, tmId]
+        );
+      } else {
+        // Check if exists
+        const existing = await queryOne<any>(
+          `SELECT id FROM configs WHERE company_id = ? AND config_key = ?
+           AND (department_id = ? OR (department_id IS NULL AND ? IS NULL))
+           AND (team_id = ? OR (team_id IS NULL AND ? IS NULL))`,
+          [companyId, key, deptId, deptId, tmId, tmId]
+        );
+
+        if (existing) {
+          await query(
+            `UPDATE configs SET config_value = ?, updated_at = NOW() WHERE id = ?`,
+            [String(value), existing.id]
+          );
+        } else {
+          await query(
+            `INSERT INTO configs (id, company_id, department_id, team_id, config_key, config_value)
+             VALUES (UUID(), ?, ?, ?, ?, ?)`,
+            [companyId, deptId, tmId, key, String(value)]
+          );
+        }
+      }
+    }
+
+    res.json({ message: 'Configs saved successfully' });
+  } catch (error) {
+    console.error('Error saving configs:', error);
+    res.status(500).json({ error: 'Failed to save configs' });
+  }
+});
+
 export default router;

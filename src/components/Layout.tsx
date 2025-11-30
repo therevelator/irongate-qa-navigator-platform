@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Menu, X, Palette, Calculator, Clock } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Menu, X, Palette, Calculator, Clock, SlidersHorizontal } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getRoleBadgeColor } from '../types/auth';
@@ -235,6 +235,21 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
               >
                 <Clock size={20} />
                 <span>Metric Intervals</span>
+              </button>
+            )}
+
+            {/* Parameters Configuration */}
+            {(user?.role === 'super_admin' || user?.role === 'manager') && (
+              <button
+                onClick={() => handleNavClick('parameters-config')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
+                  currentView === 'parameters-config'
+                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                }`}
+              >
+                <SlidersHorizontal size={20} />
+                <span>Parameters Config</span>
               </button>
             )}
           </div>
