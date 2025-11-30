@@ -7,16 +7,16 @@ import type { Company, Department, Team } from '../types/organization';
 
 // Mock Company
 export const mockCompany: Company = {
-  id: 'company-mastercard',
-  name: 'Mastercard',
-  domain: 'mastercard.com',
-  logo: '/mastercard-logo.png',
+  id: 'novatech',
+  name: 'NovaTech',
+  domain: 'novatech.io',
+  logo: '/novatech-logo.png',
   createdAt: '2024-01-01T00:00:00Z',
   isActive: true,
   settings: {
     allowSelfRegistration: true,
     requireEmailVerification: true,
-    allowedDomains: ['mastercard.com', 'mastercard.net'],
+    allowedDomains: ['novatech.io', 'novatech.com'],
   },
 };
 
@@ -24,7 +24,7 @@ export const mockCompany: Company = {
 export const mockDepartments: Department[] = [
   {
     id: 'dept-decision-mgmt',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Decision Management',
     description: 'AI-powered decision management and fraud detection',
     managerId: 'user-dept-manager-1',
@@ -33,7 +33,7 @@ export const mockDepartments: Department[] = [
   },
   {
     id: 'dept-payments',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Payments Processing',
     description: 'Core payment processing and transaction management',
     managerId: 'user-dept-manager-2',
@@ -42,7 +42,7 @@ export const mockDepartments: Department[] = [
   },
   {
     id: 'dept-security',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Security & Compliance',
     description: 'Security, fraud prevention, and regulatory compliance',
     managerId: 'user-dept-manager-3',
@@ -51,7 +51,7 @@ export const mockDepartments: Department[] = [
   },
   {
     id: 'dept-digital',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Digital Products',
     description: 'Mobile apps, web portals, and digital experiences',
     managerId: 'user-dept-manager-4',
@@ -65,7 +65,7 @@ export const mockTeamsDecisionMgmt: Team[] = [
   {
     id: 'team-quasars',
     departmentId: 'dept-decision-mgmt',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Quasars',
     description: 'AI/ML decision engine development',
     platform: 'Backend',
@@ -77,7 +77,7 @@ export const mockTeamsDecisionMgmt: Team[] = [
   {
     id: 'team-pulsars',
     departmentId: 'dept-decision-mgmt',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Pulsars',
     description: 'Real-time decision processing',
     platform: 'API',
@@ -89,7 +89,7 @@ export const mockTeamsDecisionMgmt: Team[] = [
   {
     id: 'team-watchmen',
     departmentId: 'dept-decision-mgmt',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Watchmen',
     description: 'Monitoring and alerting systems',
     platform: 'DevOps',
@@ -101,7 +101,7 @@ export const mockTeamsDecisionMgmt: Team[] = [
   {
     id: 'team-astronauts',
     departmentId: 'dept-decision-mgmt',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Astronauts',
     description: 'Exploration and innovation team',
     platform: 'Web',
@@ -113,7 +113,7 @@ export const mockTeamsDecisionMgmt: Team[] = [
   {
     id: 'team-black-comb',
     departmentId: 'dept-decision-mgmt',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Black Comb',
     description: 'Data analytics and insights',
     platform: 'Backend',
@@ -125,7 +125,7 @@ export const mockTeamsDecisionMgmt: Team[] = [
   {
     id: 'team-grid',
     departmentId: 'dept-decision-mgmt',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Grid Team',
     description: 'Infrastructure and platform services',
     platform: 'DevOps',
@@ -141,7 +141,7 @@ export const mockTeamsPayments: Team[] = [
   {
     id: 'team-payment-core',
     departmentId: 'dept-payments',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Payment Core',
     description: 'Core payment processing engine',
     platform: 'Backend',
@@ -153,7 +153,7 @@ export const mockTeamsPayments: Team[] = [
   {
     id: 'team-settlement',
     departmentId: 'dept-payments',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Settlement',
     description: 'Transaction settlement and reconciliation',
     platform: 'Backend',
@@ -165,7 +165,7 @@ export const mockTeamsPayments: Team[] = [
   {
     id: 'team-gateway',
     departmentId: 'dept-payments',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Gateway',
     description: 'Payment gateway and API services',
     platform: 'API',
@@ -181,7 +181,7 @@ export const mockTeamsSecurity: Team[] = [
   {
     id: 'team-fraud-detection',
     departmentId: 'dept-security',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Fraud Detection',
     description: 'Real-time fraud detection and prevention',
     platform: 'Backend',
@@ -193,7 +193,7 @@ export const mockTeamsSecurity: Team[] = [
   {
     id: 'team-compliance',
     departmentId: 'dept-security',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Compliance',
     description: 'Regulatory compliance and auditing',
     platform: 'Security',
@@ -209,7 +209,7 @@ export const mockTeamsDigital: Team[] = [
   {
     id: 'team-mobile-ios',
     departmentId: 'dept-digital',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Mobile iOS',
     description: 'iOS mobile application development',
     platform: 'Mobile',
@@ -221,7 +221,7 @@ export const mockTeamsDigital: Team[] = [
   {
     id: 'team-mobile-android',
     departmentId: 'dept-digital',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Mobile Android',
     description: 'Android mobile application development',
     platform: 'Mobile',
@@ -233,7 +233,7 @@ export const mockTeamsDigital: Team[] = [
   {
     id: 'team-web-portal',
     departmentId: 'dept-digital',
-    companyId: 'company-mastercard',
+    companyId: 'novatech',
     name: 'Web Portal',
     description: 'Customer-facing web portal',
     platform: 'Web',

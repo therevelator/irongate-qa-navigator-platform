@@ -193,7 +193,7 @@ curl -X POST http://localhost:3000/api/auth/register \
     "firstName": "John",
     "lastName": "Doe",
     "role": "qa_engineer",
-    "companyId": "company-mastercard",
+    "companyId": "novatech",
     "departmentId": "dept-decision-mgmt",
     "teamId": "team-quasars"
   }'

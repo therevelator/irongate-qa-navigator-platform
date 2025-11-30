@@ -6,7 +6,7 @@
 export interface Company {
   id: string;
   name: string;
-  domain: string; // e.g., "mastercard.com"
+  domain: string; // e.g., "novatech.io"
   logo?: string;
   createdAt: string;
   isActive: boolean;

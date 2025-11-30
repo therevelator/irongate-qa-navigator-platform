@@ -114,7 +114,7 @@ SELECT * FROM teams WHERE name = 'Phoenix Team';
 
 ### Database Validation
 ```sql
-SELECT COUNT(*) FROM teams WHERE company_id = 'company-mastercard' AND is_active = true;
+SELECT COUNT(*) FROM teams WHERE company_id = 'novatech' AND is_active = true;
 -- Count matches UI
 ```
 
@@ -318,7 +318,7 @@ SELECT * FROM team_members WHERE user_id = 'test-user-id';
 
 ### Database Validation
 ```sql
-SELECT name, is_active FROM teams WHERE company_id = 'company-mastercard';
+SELECT name, is_active FROM teams WHERE company_id = 'novatech';
 -- Verify UI matches database
 ```
 

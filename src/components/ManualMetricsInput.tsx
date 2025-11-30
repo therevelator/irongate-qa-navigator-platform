@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap, Wrench, DollarSign, TrendingUp, Headphones } from 'lucide-react';
+import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap, Wrench, DollarSign, TrendingUp, Headphones, GitBranch, Code, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -118,6 +118,18 @@ interface TechnicalDebtItem {
   annual_savings?: number;
   roi_percentage?: number;
   payback_months?: number;
+}
+
+interface PipelineStageItem {
+  id: string;
+  name: string;
+  stage_order: number;
+  duration: number; // seconds
+  success_rate: number;
+  cpu_usage: number;
+  memory_usage: number;
+  cost_per_run: number;
+  bottleneck_score?: number;
 }
 
 // Calculate Happiness Score (0-100)
@@ -450,6 +462,20 @@ const METRICS: MetricDefinition[] = [
     calculate: (inputs) => inputs.timeInvested > 0 ? ((inputs.timeSaved - inputs.timeInvested) / inputs.timeInvested) * 100 : 0,
     unit: '%',
     target: '>200%'
+  },
+  {
+    id: 'sizing-accuracy',
+    name: 'Sizing Accuracy',
+    category: 'agile',
+    description: 'How accurately the team estimates story points',
+    formula: 'Actual_points ÷ Estimated_points (1.0 = perfect)',
+    inputs: [
+      { id: 'actualPoints', label: 'Actual Story Points Completed', type: 'number', placeholder: 'e.g., 42', min: 0 },
+      { id: 'estimatedPoints', label: 'Estimated Story Points', type: 'number', placeholder: 'e.g., 45', min: 1 }
+    ],
+    calculate: (inputs) => inputs.estimatedPoints > 0 ? inputs.actualPoints / inputs.estimatedPoints : 0,
+    unit: 'x',
+    target: '0.9-1.1x (±10%)'
   },
 
   // Reliability Metrics
@@ -834,6 +860,22 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     sla_breach_penalty: 1000
   });
 
+  // Pipeline stages state
+  const [pipelineStages, setPipelineStages] = useState<PipelineStageItem[]>([]);
+  const [expandedPipeline, setExpandedPipeline] = useState<boolean>(true);
+  const [savingPipeline, setSavingPipeline] = useState(false);
+  const [pipelineConfig, setPipelineConfig] = useState({
+    time_savings_percent: 30,
+    cost_savings_percent: 25,
+    cost_per_minute: 0.50
+  });
+  const [savingPipelineConfig, setSavingPipelineConfig] = useState(false);
+
+  // All metrics viewer state
+  const [showMetricsViewer, setShowMetricsViewer] = useState(false);
+  const [allMetricsData, setAllMetricsData] = useState<any>(null);
+  const [loadingAllMetrics, setLoadingAllMetrics] = useState(false);
+
   // Check if user has access (super_admin, manager, or team_lead)
   const allowedRoles = ['super_admin', 'manager', 'team_lead'];
   if (!user || !allowedRoles.includes(user.role)) {
@@ -864,6 +906,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       fetchExistingMetrics(selectedTeamId);
       fetchTechnicalDebt(selectedTeamId);
     }
+    // Fetch pipeline stages for team
+    fetchPipelineStages(selectedTeamId);
   }, [selectedTeamId]);
 
   const fetchTeams = async () => {
@@ -969,6 +1013,155 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       }
     } catch (error) {
       console.error('Error fetching technical debt:', error);
+    }
+  };
+
+  // Fetch pipeline stages for team
+  const fetchPipelineStages = async (teamId?: string) => {
+    try {
+      const token = localStorage.getItem('irongate_token');
+      const url = teamId 
+        ? `${API_URL}/analytics/pipeline-stages?teamId=${teamId}`
+        : `${API_URL}/analytics/pipeline-stages`;
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const stages = (data.stages || []).map((s: any) => ({
+          id: s.id,
+          name: s.name,
+          stage_order: s.stage_order || 0,
+          duration: s.duration || 0,
+          success_rate: s.success_rate || 100,
+          cpu_usage: s.resource_usage?.cpu || 0,
+          memory_usage: s.resource_usage?.memory || 0,
+          cost_per_run: s.resource_usage?.cost || 0,
+          bottleneck_score: s.bottleneck_score || 0
+        }));
+        setPipelineStages(stages);
+        
+        // Also get config from response
+        if (data.config) {
+          setPipelineConfig({
+            time_savings_percent: data.config.time_savings_percent || 30,
+            cost_savings_percent: data.config.cost_savings_percent || 25,
+            cost_per_minute: data.config.cost_per_minute || 0.50
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching pipeline stages:', error);
+    }
+  };
+
+  // Save pipeline config
+  const handleSavePipelineConfig = async () => {
+    setSavingPipelineConfig(true);
+    try {
+      const token = localStorage.getItem('irongate_token');
+      const response = await fetch(`${API_URL}/analytics/pipeline-config`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(pipelineConfig)
+      });
+
+      if (response.ok) {
+        toast.success('Pipeline configuration saved!');
+      } else {
+        toast.error('Failed to save pipeline configuration');
+      }
+    } catch (error) {
+      console.error('Error saving pipeline config:', error);
+      toast.error('Failed to save pipeline configuration');
+    } finally {
+      setSavingPipelineConfig(false);
+    }
+  };
+
+  // Handle pipeline stage change
+  const handlePipelineChange = (stageId: string, field: string, value: string) => {
+    const numValue = value === '' ? 0 : parseFloat(value);
+    if (isNaN(numValue)) return;
+    
+    setPipelineStages(prev => prev.map(stage => {
+      if (stage.id !== stageId) return stage;
+      return { ...stage, [field]: numValue };
+    }));
+  };
+
+  // Save pipeline stage metrics
+  const handleSavePipeline = async () => {
+    if (pipelineStages.length === 0) {
+      toast.error('No pipeline stages to save');
+      return;
+    }
+
+    setSavingPipeline(true);
+    try {
+      const token = localStorage.getItem('irongate_token');
+      
+      const promises = pipelineStages.map(stage => 
+        fetch(`${API_URL}/analytics/pipeline-stages/${stage.id}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            team_id: selectedTeamId || null,
+            duration: stage.duration,
+            success_rate: stage.success_rate,
+            cpu_usage: stage.cpu_usage,
+            memory_usage: stage.memory_usage,
+            cost_per_run: stage.cost_per_run
+          })
+        })
+      );
+
+      await Promise.all(promises);
+      toast.success('Pipeline stages saved successfully!');
+      
+      // Refresh to get recalculated bottleneck scores
+      fetchPipelineStages(selectedTeamId);
+    } catch (error) {
+      console.error('Error saving pipeline stages:', error);
+      toast.error('Failed to save pipeline stages');
+    } finally {
+      setSavingPipeline(false);
+    }
+  };
+
+  // Fetch all metrics for the team (primary + composite)
+  const fetchAllMetrics = async () => {
+    if (!selectedTeamId) {
+      toast.error('Please select a team first');
+      return;
+    }
+
+    setLoadingAllMetrics(true);
+    try {
+      const token = localStorage.getItem('irongate_token');
+      const response = await fetch(`${API_URL}/metrics/team/${selectedTeamId}/all`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setAllMetricsData(data);
+        setShowMetricsViewer(true);
+      } else {
+        toast.error('Failed to fetch metrics');
+      }
+    } catch (error) {
+      console.error('Error fetching all metrics:', error);
+      toast.error('Failed to fetch metrics');
+    } finally {
+      setLoadingAllMetrics(false);
     }
   };
 
@@ -1327,7 +1520,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         change_failure_rate: calculatedValues['change-failure-rate'],
         mtbf_hours: calculatedValues['mtbf'],
         system_availability: calculatedValues['availability'],
-        infrastructure_failures: calculatedValues['infra-failures']
+        infrastructure_failures: calculatedValues['infra-failures'],
+        sizing_accuracy: calculatedValues['sizing-accuracy']
       };
 
       const response = await fetch(`${API_URL}/metrics/manual`, {
@@ -2117,6 +2311,315 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* ============================================ */}
+        {/* PIPELINE STAGES SECTION */}
+        {/* ============================================ */}
+        {pipelineStages.length > 0 && (
+          <div className="bg-slate-800/50 rounded-2xl overflow-hidden border border-slate-700/50 backdrop-blur-sm">
+            <button 
+              onClick={() => setExpandedPipeline(!expandedPipeline)}
+              className="w-full flex items-center justify-between p-6 hover:bg-slate-700/30 transition-colors"
+            >
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
+                  <GitBranch className="w-6 h-6 text-white" />
+                </div>
+                <div className="text-left">
+                  <h2 className="text-xl font-bold text-white">CI/CD Pipeline Stages</h2>
+                  <p className="text-slate-400 text-sm">{pipelineStages.length} stages • Bottleneck score calculated from duration & success rate</p>
+                </div>
+              </div>
+              <ChevronDown className={`w-6 h-6 text-slate-400 transition-transform ${expandedPipeline ? 'rotate-180' : ''}`} />
+            </button>
+
+            {expandedPipeline && (
+              <div className="px-6 pb-6 space-y-4">
+                <div className="bg-slate-700/30 rounded-lg p-4 mb-4">
+                  <div className="flex items-start gap-2">
+                    <Info className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-slate-300">
+                      Configure pipeline stage metrics. <strong>Bottleneck Score</strong> is calculated automatically: 
+                      <code className="text-xs bg-slate-800 px-1 rounded ml-1">(duration / avg) × 50 + (100 - success_rate) × 3</code>
+                    </p>
+                  </div>
+                </div>
+
+                {/* Pipeline Configuration */}
+                <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 rounded-xl p-5 mb-4 border border-purple-500/30">
+                  <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-purple-400" />
+                    Pipeline Metrics Configuration
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Time Savings % (optimization potential)</label>
+                      <input
+                        type="number"
+                        placeholder="30"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={pipelineConfig.time_savings_percent || ''}
+                        onChange={(e) => setPipelineConfig(prev => ({ ...prev, time_savings_percent: parseFloat(e.target.value) || 0 }))}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Expected time reduction with optimizations</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Cost Savings % (optimization potential)</label>
+                      <input
+                        type="number"
+                        placeholder="25"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={pipelineConfig.cost_savings_percent || ''}
+                        onChange={(e) => setPipelineConfig(prev => ({ ...prev, cost_savings_percent: parseFloat(e.target.value) || 0 }))}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Expected cost reduction with optimizations</p>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-slate-400 mb-1">Cost per Minute ($)</label>
+                      <input
+                        type="number"
+                        placeholder="0.50"
+                        min={0}
+                        step={0.01}
+                        value={pipelineConfig.cost_per_minute || ''}
+                        onChange={(e) => setPipelineConfig(prev => ({ ...prev, cost_per_minute: parseFloat(e.target.value) || 0 }))}
+                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                      />
+                      <p className="text-xs text-slate-500 mt-1">Pipeline execution cost per minute</p>
+                    </div>
+                  </div>
+                  <div className="flex justify-end mt-4">
+                    <button
+                      onClick={handleSavePipelineConfig}
+                      disabled={savingPipelineConfig}
+                      className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Save className="w-3 h-3" />
+                      {savingPipelineConfig ? 'Saving...' : 'Save Config'}
+                    </button>
+                  </div>
+                </div>
+
+                {pipelineStages.map(stage => (
+                  <div key={stage.id} className="bg-slate-700/30 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center">
+                          <span className="text-white font-bold text-sm">{stage.stage_order}</span>
+                        </div>
+                        <div>
+                          <h3 className="text-white font-medium">{stage.name}</h3>
+                          <span className="text-xs text-slate-400">Stage {stage.stage_order}</span>
+                        </div>
+                      </div>
+                      
+                      {/* Calculated Bottleneck Score */}
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <div className="text-xs text-slate-500">Bottleneck Score</div>
+                          <div className={`text-lg font-bold ${
+                            (stage.bottleneck_score || 0) > 70 ? 'text-red-400' :
+                            (stage.bottleneck_score || 0) > 40 ? 'text-amber-400' : 'text-green-400'
+                          }`}>
+                            {(stage.bottleneck_score || 0).toFixed(1)}
+                          </div>
+                        </div>
+                        <div className="w-20 h-2 bg-slate-600 rounded-full overflow-hidden">
+                          <div 
+                            className={`h-full ${
+                              (stage.bottleneck_score || 0) > 70 ? 'bg-red-500' :
+                              (stage.bottleneck_score || 0) > 40 ? 'bg-amber-500' : 'bg-green-500'
+                            }`}
+                            style={{ width: `${Math.min(100, stage.bottleneck_score || 0)}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Input Fields Grid */}
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Duration (sec)</label>
+                        <input
+                          type="number"
+                          placeholder="e.g., 120"
+                          min={0}
+                          step={1}
+                          value={stage.duration || ''}
+                          onChange={(e) => handlePipelineChange(stage.id, 'duration', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Success Rate %</label>
+                        <input
+                          type="number"
+                          placeholder="e.g., 95"
+                          min={0}
+                          max={100}
+                          step={0.1}
+                          value={stage.success_rate || ''}
+                          onChange={(e) => handlePipelineChange(stage.id, 'success_rate', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">CPU Usage %</label>
+                        <input
+                          type="number"
+                          placeholder="e.g., 60"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={stage.cpu_usage || ''}
+                          onChange={(e) => handlePipelineChange(stage.id, 'cpu_usage', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Memory %</label>
+                        <input
+                          type="number"
+                          placeholder="e.g., 50"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={stage.memory_usage || ''}
+                          onChange={(e) => handlePipelineChange(stage.id, 'memory_usage', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-slate-400 mb-1">Cost/Run $</label>
+                        <input
+                          type="number"
+                          placeholder="e.g., 0.15"
+                          min={0}
+                          step={0.01}
+                          value={stage.cost_per_run || ''}
+                          onChange={(e) => handlePipelineChange(stage.id, 'cost_per_run', e.target.value)}
+                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Save Pipeline Button */}
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={handleSavePipeline}
+                    disabled={savingPipeline}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" />
+                    {savingPipeline ? 'Saving...' : 'Save Pipeline Stages'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* All Metrics Viewer Section */}
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-700">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-500/20 rounded-lg">
+              <Code className="w-5 h-5 text-purple-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">All Team Metrics (JSON)</h2>
+              <p className="text-sm text-slate-400">View all primary and composite metrics with formulas</p>
+            </div>
+          </div>
+          <button
+            onClick={fetchAllMetrics}
+            disabled={loadingAllMetrics || !selectedTeamId}
+            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {loadingAllMetrics ? (
+              <>
+                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                Loading...
+              </>
+            ) : (
+              <>
+                <Code className="w-4 h-4" />
+                Fetch Metrics JSON
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Metrics JSON Display Modal */}
+        {showMetricsViewer && allMetricsData && (
+          <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-slate-700">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Team Metrics - {selectedTeamId}</h3>
+                  <p className="text-sm text-slate-400">Snapshot: {allMetricsData.snapshotDate} | Status: {allMetricsData.status}</p>
+                </div>
+                <button
+                  onClick={() => setShowMetricsViewer(false)}
+                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400" />
+                </button>
+              </div>
+              
+              <div className="overflow-auto flex-1 p-4">
+                {/* Primary Metrics */}
+                <div className="mb-6">
+                  <h4 className="text-md font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <span className="w-3 h-3 bg-emerald-400 rounded-full"></span>
+                    Primary Metrics ({allMetricsData.primaryMetrics?.length || 0})
+                  </h4>
+                  <pre className="bg-slate-900 rounded-lg p-4 text-sm text-slate-300 overflow-x-auto">
+                    {JSON.stringify(allMetricsData.primaryMetrics, null, 2)}
+                  </pre>
+                </div>
+
+                {/* Composite Metrics */}
+                <div>
+                  <h4 className="text-md font-semibold text-amber-400 mb-3 flex items-center gap-2">
+                    <span className="w-3 h-3 bg-amber-400 rounded-full"></span>
+                    Composite Metrics ({allMetricsData.compositeMetrics?.length || 0}) - Calculated with Formulas
+                  </h4>
+                  <pre className="bg-slate-900 rounded-lg p-4 text-sm text-slate-300 overflow-x-auto">
+                    {JSON.stringify(allMetricsData.compositeMetrics, null, 2)}
+                  </pre>
+                </div>
+              </div>
+
+              <div className="p-4 border-t border-slate-700 flex justify-end gap-3">
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(JSON.stringify(allMetricsData, null, 2));
+                    toast.success('Copied to clipboard!');
+                  }}
+                  className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                >
+                  Copy JSON
+                </button>
+                <button
+                  onClick={() => setShowMetricsViewer(false)}
+                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

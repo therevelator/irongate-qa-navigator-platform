@@ -176,7 +176,7 @@ function App() {
   if (currentView === 'pipeline-visualization') {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <PipelineVisualization onBack={() => setCurrentView('features')} />
+        <PipelineVisualization onBack={() => setCurrentView('features')} teamId={analyticsTeamId} />
       </Layout>
     );
   }

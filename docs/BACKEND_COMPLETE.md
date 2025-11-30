@@ -241,7 +241,7 @@ curl -X POST http://localhost:3000/api/auth/register \
     "firstName": "John",
     "lastName": "Doe",
     "role": "qa_engineer",
-    "companyId": "company-mastercard",
+    "companyId": "novatech",
     "departmentId": "dept-decision-mgmt",
     "teamId": "team-quasars"
   }'
@@ -379,15 +379,15 @@ Create a company, departments, and teams:
 ```sql
 -- Insert company
 INSERT INTO companies (id, name, domain) 
-VALUES ('company-mastercard', 'Mastercard', 'mastercard.com');
+VALUES ('novatech', 'Mastercard', 'mastercard.com');
 
 -- Insert department
 INSERT INTO departments (id, company_id, name, description)
-VALUES ('dept-decision-mgmt', 'company-mastercard', 'Decision Management', 'AI-powered decision management');
+VALUES ('dept-decision-mgmt', 'novatech', 'Decision Management', 'AI-powered decision management');
 
 -- Insert team
 INSERT INTO teams (id, company_id, department_id, name, platform)
-VALUES ('team-quasars', 'company-mastercard', 'dept-decision-mgmt', 'Quasars', 'Backend');
+VALUES ('team-quasars', 'novatech', 'dept-decision-mgmt', 'Quasars', 'Backend');
 ```
 
 ### 2. Connect Frontend to API

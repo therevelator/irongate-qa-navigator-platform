@@ -102,7 +102,7 @@ curl -X POST http://localhost:3000/api/auth/register \
     "firstName": "Test",
     "lastName": "User",
     "role": "qa_engineer",
-    "companyId": "company-mastercard",
+    "companyId": "novatech",
     "departmentId": "dept-decision-mgmt",
     "teamId": "team-quasars"
   }'
@@ -161,7 +161,7 @@ lsof -ti:5173 | xargs kill -9
 ## 📊 Seeded Data
 
 ### Company
-- **Mastercard** (`company-mastercard`)
+- **Mastercard** (`novatech`)
 
 ### Departments (4)
 - Decision Management
@@ -321,7 +321,7 @@ setInterval(() => {
 ### Add a new team
 ```sql
 INSERT INTO teams (id, company_id, department_id, name, platform)
-VALUES ('team-new', 'company-mastercard', 'dept-decision-mgmt', 'New Team', 'Web');
+VALUES ('team-new', 'novatech', 'dept-decision-mgmt', 'New Team', 'Web');
 ```
 
 ### Create a new user

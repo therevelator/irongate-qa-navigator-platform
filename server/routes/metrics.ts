@@ -319,22 +319,26 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
       change_failure_rate,
       mtbf_hours,
       system_availability,
-      infrastructure_failures
+      infrastructure_failures,
+      sizing_accuracy
     } = req.body;
 
     if (!teamId) {
       return res.status(400).json({ error: 'Team ID is required' });
     }
 
-    // Calculate QA Score based on the formula from metrics-info.html
-    // QA_Score = Test_Coverage × 0.30 + (100 - Defect_Escape_Rate) × 0.25 + Build_Success_Rate × 0.25 + Code_Quality_Score × 0.20
-    // We'll use (100 - change_failure_rate) as Build_Success_Rate proxy
-    const buildSuccessRate = change_failure_rate !== undefined ? (100 - change_failure_rate) : 85;
+    // Calculate QA Score based on the formula:
+    // QA_Score = Test_Coverage × 0.30 + (100 - Defect_Escape_Rate) × 0.25 + (100 - Change_Failure_Rate) × 0.25 + Code_Quality_Score × 0.20
+    const testCov = Number(test_coverage) || 0;
+    const defectEscape = Number(defect_escape_rate) || 0;
+    const changeFailure = Number(change_failure_rate) || 0;
+    const codeQuality = Number(code_quality_score) || 0;
+    
     const qaScore = 
-      (test_coverage || 0) * 0.30 +
-      (100 - (defect_escape_rate || 0)) * 0.25 +
-      buildSuccessRate * 0.25 +
-      (code_quality_score || 0) * 0.20;
+      testCov * 0.30 +
+      (100 - defectEscape) * 0.25 +
+      (100 - changeFailure) * 0.25 +
+      codeQuality * 0.20;
 
     // Determine status based on QA Score
     let status = 'unknown';
@@ -372,8 +376,10 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
         change_failure_rate,
         mtbf_hours,
         system_availability,
-        infrastructure_failures
-      ) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        infrastructure_failures,
+        sizing_accuracy,
+        manually_edited
+      ) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
       ON DUPLICATE KEY UPDATE
         qa_score = VALUES(qa_score),
         status = VALUES(status),
@@ -398,7 +404,9 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
         change_failure_rate = COALESCE(VALUES(change_failure_rate), change_failure_rate),
         mtbf_hours = COALESCE(VALUES(mtbf_hours), mtbf_hours),
         system_availability = COALESCE(VALUES(system_availability), system_availability),
-        infrastructure_failures = COALESCE(VALUES(infrastructure_failures), infrastructure_failures)`,
+        infrastructure_failures = COALESCE(VALUES(infrastructure_failures), infrastructure_failures),
+        sizing_accuracy = COALESCE(VALUES(sizing_accuracy), sizing_accuracy),
+        manually_edited = TRUE`,
       [
         teamId,
         qaScore,
@@ -424,7 +432,8 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
         change_failure_rate ?? null,
         mtbf_hours ?? null,
         system_availability ?? null,
-        infrastructure_failures ?? null
+        infrastructure_failures ?? null,
+        sizing_accuracy ?? null
       ]
     );
 
@@ -544,5 +553,271 @@ router.get('/developer/:userId/history', authenticateToken, async (req: AuthRequ
     res.status(500).json({ error: 'Failed to get developer history' });
   }
 });
+
+// Get all metrics for a team (primary + composite with formulas)
+router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { teamId } = req.params;
+
+    // Get latest KPI snapshot
+    const kpi = await queryOne<any>(
+      `SELECT * FROM kpi_snapshots 
+       WHERE team_id = ? 
+       ORDER BY snapshot_date DESC LIMIT 1`,
+      [teamId]
+    );
+
+    // Get technical debt summary
+    const SEVERITY_WEIGHTS = { critical: 20, high: 10, medium: 5, low: 2 };
+    const debtSummary = await queryOne<any>(
+      `SELECT 
+        SUM(CASE 
+          WHEN status NOT IN ('resolved','wont_fix') THEN
+            CASE severity
+              WHEN 'critical' THEN 20
+              WHEN 'high' THEN 10
+              WHEN 'medium' THEN 5
+              WHEN 'low' THEN 2
+              ELSE 0
+            END
+          ELSE 0
+        END) AS open_weight,
+        SUM(CASE WHEN status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items,
+        COUNT(*) as total_items
+      FROM technical_debt WHERE team_id = ?`,
+      [teamId]
+    );
+
+    // Get developer metrics averages
+    const devMetrics = await queryOne<any>(
+      `SELECT 
+        AVG(pr_merge_time_avg) as avg_pr_merge_time,
+        AVG(code_review_time_avg) as avg_code_review_time,
+        AVG(focus_time_hours) as avg_focus_time,
+        AVG(meeting_time_hours) as avg_meeting_time,
+        AVG(context_switches_per_day) as avg_context_switches,
+        AVG(happiness_score) as avg_happiness_score,
+        COUNT(DISTINCT developer_id) as developer_count
+      FROM developer_metrics
+      WHERE team_id = ?`,
+      [teamId]
+    );
+
+    // Get pipeline stages summary
+    const pipelineMetrics = await queryOne<any>(
+      `SELECT 
+        COUNT(*) as total_stages,
+        AVG(avg_duration_seconds / 60) as avg_duration,
+        AVG(success_rate) as avg_success_rate,
+        AVG(bottleneck_score) as avg_bottleneck_score,
+        SUM(CASE WHEN bottleneck_score >= 70 THEN 1 ELSE 0 END) as bottleneck_count
+      FROM pipeline_stages WHERE team_id = ?`,
+      [teamId]
+    );
+
+    // Get team info
+    const team = await queryOne<any>(
+      `SELECT t.name, d.name as department_name,
+        (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
+      FROM teams t 
+      LEFT JOIN departments d ON t.department_id = d.id
+      WHERE t.id = ?`,
+      [teamId]
+    );
+
+    const technicalDebtScore = Math.min(100, Math.round(Number(debtSummary?.open_weight ?? 0)));
+
+    // Primary metrics (directly stored/input) - show ALL even if null
+    const primaryMetrics = [
+      // Quality Metrics
+      { id: 'test_coverage', name: 'Test Coverage', value: kpi?.test_coverage, unit: '%', category: 'quality', source: 'kpi_snapshots' },
+      { id: 'test_flakiness_rate', name: 'Test Flakiness Rate', value: kpi?.test_flakiness_rate, unit: '%', category: 'quality', source: 'kpi_snapshots' },
+      { id: 'defect_density', name: 'Defect Density', value: kpi?.defect_density, unit: '/1k LOC', category: 'quality', source: 'kpi_snapshots' },
+      { id: 'defect_escape_rate', name: 'Defect Escape Rate', value: kpi?.defect_escape_rate, unit: '%', category: 'quality', source: 'kpi_snapshots' },
+      { id: 'code_quality_score', name: 'Code Quality Score', value: kpi?.code_quality_score, unit: '/100', category: 'quality', source: 'kpi_snapshots' },
+      { id: 'first_time_pass_rate', name: 'First-Time Pass Rate', value: kpi?.first_time_pass_rate, unit: '%', category: 'quality', source: 'kpi_snapshots' },
+      
+      // Speed & Efficiency Metrics
+      { id: 'avg_build_time_minutes', name: 'Average Build Time', value: kpi?.avg_build_time_minutes, unit: 'min', category: 'speed', source: 'kpi_snapshots' },
+      { id: 'test_execution_time_minutes', name: 'Test Execution Time', value: kpi?.test_execution_time_minutes, unit: 'min', category: 'speed', source: 'kpi_snapshots' },
+      { id: 'deployment_frequency_per_week', name: 'Deployment Frequency', value: kpi?.deployment_frequency_per_week, unit: '/week', category: 'speed', source: 'kpi_snapshots' },
+      { id: 'lead_time_days', name: 'Lead Time for Changes', value: kpi?.lead_time_days, unit: 'days', category: 'speed', source: 'kpi_snapshots' },
+      { id: 'mttr_hours', name: 'Mean Time to Recovery', value: kpi?.mttr_hours, unit: 'hours', category: 'speed', source: 'kpi_snapshots' },
+      { id: 'parallel_test_efficiency', name: 'Parallel Test Efficiency', value: kpi?.parallel_test_efficiency, unit: '%', category: 'speed', source: 'kpi_snapshots' },
+      
+      // Agile Metrics
+      { id: 'sprint_velocity', name: 'Sprint Velocity', value: kpi?.sprint_velocity, unit: 'pts', category: 'agile', source: 'kpi_snapshots' },
+      { id: 'sprint_commitment_rate', name: 'Sprint Commitment Rate', value: kpi?.sprint_commitment_rate, unit: '%', category: 'agile', source: 'kpi_snapshots' },
+      { id: 'sprint_carryover', name: 'Sprint Carryover', value: kpi?.sprint_carryover, unit: '%', category: 'agile', source: 'kpi_snapshots' },
+      { id: 'blocked_time_hours', name: 'Blocked Time', value: kpi?.blocked_time_hours, unit: 'hours', category: 'agile', source: 'kpi_snapshots' },
+      { id: 'automation_coverage', name: 'Automation Coverage', value: kpi?.automation_coverage, unit: '%', category: 'agile', source: 'kpi_snapshots' },
+      { id: 'automation_roi', name: 'Automation ROI', value: kpi?.automation_roi, unit: '%', category: 'agile', source: 'kpi_snapshots' },
+      { id: 'sizing_accuracy', name: 'Sizing Accuracy', value: kpi?.sizing_accuracy, unit: 'x', category: 'agile', source: 'kpi_snapshots' },
+      
+      // Reliability Metrics
+      { id: 'change_failure_rate', name: 'Change Failure Rate', value: kpi?.change_failure_rate, unit: '%', category: 'reliability', source: 'kpi_snapshots' },
+      { id: 'mtbf_hours', name: 'Mean Time Between Failures', value: kpi?.mtbf_hours, unit: 'hours', category: 'reliability', source: 'kpi_snapshots' },
+      { id: 'system_availability', name: 'System Availability', value: kpi?.system_availability, unit: '%', category: 'reliability', source: 'kpi_snapshots' },
+      { id: 'infrastructure_failures', name: 'Infrastructure Failures', value: kpi?.infrastructure_failures, unit: 'count', category: 'reliability', source: 'kpi_snapshots' },
+      
+      // Developer Metrics (team averages)
+      { id: 'avg_pr_merge_time', name: 'Avg PR Merge Time', value: devMetrics?.avg_pr_merge_time ? Number(devMetrics.avg_pr_merge_time).toFixed(2) : null, unit: 'hours', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_code_review_time', name: 'Avg Code Review Time', value: devMetrics?.avg_code_review_time ? Number(devMetrics.avg_code_review_time).toFixed(2) : null, unit: 'hours', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_focus_time', name: 'Avg Focus Time', value: devMetrics?.avg_focus_time ? Number(devMetrics.avg_focus_time).toFixed(2) : null, unit: 'hours/day', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_meeting_time', name: 'Avg Meeting Time', value: devMetrics?.avg_meeting_time ? Number(devMetrics.avg_meeting_time).toFixed(2) : null, unit: 'hours/day', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_context_switches', name: 'Avg Context Switches', value: devMetrics?.avg_context_switches ? Number(devMetrics.avg_context_switches).toFixed(1) : null, unit: '/day', category: 'developer', source: 'developer_metrics' },
+      
+      // Pipeline Metrics
+      { id: 'pipeline_stages_count', name: 'Pipeline Stages', value: pipelineMetrics?.total_stages, unit: 'count', category: 'pipeline', source: 'pipeline_stages' },
+      { id: 'avg_stage_duration', name: 'Avg Stage Duration', value: pipelineMetrics?.avg_duration ? Number(pipelineMetrics.avg_duration).toFixed(2) : null, unit: 'min', category: 'pipeline', source: 'pipeline_stages' },
+      { id: 'avg_stage_success_rate', name: 'Avg Stage Success Rate', value: pipelineMetrics?.avg_success_rate ? Number(pipelineMetrics.avg_success_rate).toFixed(2) : null, unit: '%', category: 'pipeline', source: 'pipeline_stages' },
+      { id: 'pipeline_bottlenecks', name: 'Pipeline Bottlenecks', value: pipelineMetrics?.bottleneck_count, unit: 'count', category: 'pipeline', source: 'pipeline_stages' },
+      
+      // Technical Debt Items
+      { id: 'tech_debt_open_items', name: 'Open Tech Debt Items', value: debtSummary?.open_items, unit: 'count', category: 'tech_debt', source: 'technical_debt' },
+      { id: 'tech_debt_total_items', name: 'Total Tech Debt Items', value: debtSummary?.total_items, unit: 'count', category: 'tech_debt', source: 'technical_debt' },
+      
+      // Team Info
+      { id: 'team_member_count', name: 'Team Members', value: team?.member_count, unit: 'count', category: 'team', source: 'team_members' },
+      { id: 'developer_count', name: 'Active Developers (30d)', value: devMetrics?.developer_count, unit: 'count', category: 'team', source: 'developer_metrics' }
+    ];
+
+    // Composite metrics (calculated from primary metrics)
+    const testCov = Number(kpi?.test_coverage) || 0;
+    const defectEscape = Number(kpi?.defect_escape_rate) || 0;
+    const changeFailure = Number(kpi?.change_failure_rate) || 0;
+    const codeQuality = Number(kpi?.code_quality_score) || 0;
+    
+    const calculatedQaScore = 
+      testCov * 0.30 +
+      (100 - defectEscape) * 0.25 +
+      (100 - changeFailure) * 0.25 +
+      codeQuality * 0.20;
+
+    // Developer happiness average
+    const avgHappiness = devMetrics?.avg_happiness_score ? Number(devMetrics.avg_happiness_score) : null;
+    
+    // Burnout risk calculation
+    const focusTime = Number(devMetrics?.avg_focus_time) || 0;
+    const meetingTime = Number(devMetrics?.avg_meeting_time) || 0;
+    const contextSwitches = Number(devMetrics?.avg_context_switches) || 0;
+    let burnoutRisk = 'Unknown';
+    if (devMetrics?.avg_focus_time) {
+      if (focusTime < 3 || meetingTime > 5 || contextSwitches > 10) burnoutRisk = 'High';
+      else if (focusTime < 4 || meetingTime > 4 || contextSwitches > 7) burnoutRisk = 'Moderate';
+      else burnoutRisk = 'Low';
+    }
+
+    const compositeMetrics = [
+      {
+        id: 'qa_score',
+        name: 'Overall QA Score',
+        value: kpi?.qa_score ?? Math.round(calculatedQaScore),
+        unit: '/100',
+        category: 'composite',
+        formula: 'Test_Coverage × 0.30 + (100 - Defect_Escape_Rate) × 0.25 + (100 - Change_Failure_Rate) × 0.25 + Code_Quality_Score × 0.20',
+        components: { test_coverage: testCov, defect_escape_rate: defectEscape, change_failure_rate: changeFailure, code_quality_score: codeQuality },
+        source: 'calculated from kpi_snapshots'
+      },
+      {
+        id: 'technical_debt_score',
+        name: 'Technical Debt Score',
+        value: technicalDebtScore,
+        unit: '/100',
+        category: 'composite',
+        formula: 'MIN(100, SUM(open_items × severity_weight)) where critical=20, high=10, medium=5, low=2',
+        components: { open_items: Number(debtSummary?.open_items ?? 0), weighted_sum: Number(debtSummary?.open_weight ?? 0), severity_weights: SEVERITY_WEIGHTS },
+        source: 'calculated from technical_debt'
+      },
+      {
+        id: 'dora_performance',
+        name: 'DORA Performance Level',
+        value: getDORALevel(kpi),
+        unit: 'level',
+        category: 'composite',
+        formula: 'Elite: deploy ≥7/wk + lead<1d + CFR<5% + MTTR<1h | High: deploy ≥1/wk + lead<7d + CFR<10% + MTTR<24h | Medium: deploy ≥0.25/wk + lead<30d + CFR<15% + MTTR<168h | Low: otherwise',
+        components: { deployment_frequency: kpi?.deployment_frequency_per_week, lead_time_days: kpi?.lead_time_days, change_failure_rate: kpi?.change_failure_rate, mttr_hours: kpi?.mttr_hours },
+        source: 'calculated from kpi_snapshots'
+      },
+      {
+        id: 'avg_developer_happiness',
+        name: 'Avg Developer Happiness',
+        value: avgHappiness ? avgHappiness.toFixed(1) : null,
+        unit: '/100',
+        category: 'composite',
+        formula: '100 - (meeting_burden × 5) - (context_switch_penalty × 3) + (focus_time_bonus × 5) where meeting_burden = max(0, meeting_hours - 2), context_switch_penalty = max(0, switches - 5), focus_bonus = max(0, focus_hours - 4)',
+        components: { avg_focus_time: focusTime, avg_meeting_time: meetingTime, avg_context_switches: contextSwitches },
+        source: 'calculated from developer_metrics'
+      },
+      {
+        id: 'team_burnout_risk',
+        name: 'Team Burnout Risk',
+        value: burnoutRisk,
+        unit: 'level',
+        category: 'composite',
+        formula: 'High: focus<3h OR meetings>5h OR switches>10 | Moderate: focus<4h OR meetings>4h OR switches>7 | Low: otherwise',
+        components: { avg_focus_time: focusTime, avg_meeting_time: meetingTime, avg_context_switches: contextSwitches },
+        source: 'calculated from developer_metrics'
+      },
+      {
+        id: 'pipeline_health',
+        name: 'Pipeline Health Score',
+        value: pipelineMetrics?.avg_success_rate ? Math.round(Number(pipelineMetrics.avg_success_rate)) : null,
+        unit: '/100',
+        category: 'composite',
+        formula: 'AVG(success_rate) across all pipeline stages',
+        components: { total_stages: pipelineMetrics?.total_stages, avg_success_rate: pipelineMetrics?.avg_success_rate, bottleneck_count: pipelineMetrics?.bottleneck_count },
+        source: 'calculated from pipeline_stages'
+      },
+      {
+        id: 'tech_debt_ratio',
+        name: 'Tech Debt Resolution Rate',
+        value: debtSummary?.total_items > 0 ? Math.round(((Number(debtSummary.total_items) - Number(debtSummary.open_items)) / Number(debtSummary.total_items)) * 100) : null,
+        unit: '%',
+        category: 'composite',
+        formula: '(total_items - open_items) / total_items × 100',
+        components: { total_items: debtSummary?.total_items, open_items: debtSummary?.open_items, resolved_items: Number(debtSummary?.total_items ?? 0) - Number(debtSummary?.open_items ?? 0) },
+        source: 'calculated from technical_debt'
+      }
+    ];
+
+    res.json({
+      teamId,
+      teamName: team?.name,
+      department: team?.department_name,
+      snapshotDate: kpi?.snapshot_date,
+      status: kpi?.status,
+      primaryMetrics, // Show ALL metrics, even null ones
+      compositeMetrics,
+      summary: {
+        totalPrimaryMetrics: primaryMetrics.length,
+        metricsWithData: primaryMetrics.filter(m => m.value !== null && m.value !== undefined).length,
+        totalCompositeMetrics: compositeMetrics.length
+      }
+    });
+  } catch (error) {
+    console.error('Get all metrics error:', error);
+    res.status(500).json({ error: 'Failed to get metrics' });
+  }
+});
+
+// Helper function to determine DORA performance level
+function getDORALevel(kpi: any): string {
+  if (!kpi) return 'Unknown';
+  
+  const deployFreq = Number(kpi.deployment_frequency_per_week) || 0;
+  const leadTime = Number(kpi.lead_time_days) || 999;
+  const changeFailure = Number(kpi.change_failure_rate) || 100;
+  const mttr = Number(kpi.mttr_hours) || 999;
+  
+  // Elite: Deploy multiple times/day, lead time <1 day, CFR <5%, MTTR <1hr
+  if (deployFreq >= 7 && leadTime < 1 && changeFailure < 5 && mttr < 1) return 'Elite';
+  // High: Deploy weekly-daily, lead time <1 week, CFR <10%, MTTR <1 day
+  if (deployFreq >= 1 && leadTime < 7 && changeFailure < 10 && mttr < 24) return 'High';
+  // Medium: Deploy weekly-monthly, lead time <1 month, CFR <15%, MTTR <1 week
+  if (deployFreq >= 0.25 && leadTime < 30 && changeFailure < 15 && mttr < 168) return 'Medium';
+  // Low: Everything else
+  return 'Low';
+}
 
 export default router;

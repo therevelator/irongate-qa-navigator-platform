@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { query, queryOne } from '../../src/lib/db';
+import { runPipelineSeederForAllCompanies } from '../seeders/pipelineSeeder';
 
 // Only log in non-serverless environments
 if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -269,6 +270,17 @@ async function runIntervalSync(): Promise<void> {
 
 // Only initialize cron jobs when not running in serverless (Netlify Functions)
 if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  // Every 5 minutes: Pipeline stages seeder
+  cron.schedule('*/5 * * * *', async () => {
+    console.log('🔄 [PIPELINE] Running pipeline seeder...');
+    try {
+      await runPipelineSeederForAllCompanies();
+    } catch (error) {
+      console.error('🔄 [PIPELINE] Seeder failed:', error);
+    }
+  });
+  console.log('  🔄 Pipeline job scheduled: */5 * * * * (every 5 minutes)');
+
   // Hourly: At minute 0 of every hour
   cron.schedule('0 * * * *', runHourlySync);
   console.log('  ⏰ Hourly job scheduled: 0 * * * * (every hour at :00)');
@@ -298,6 +310,7 @@ export {
   runDailySync,
   runWeeklySync,
   runMonthlySync,
+  runPipelineSeederForAllCompanies,
   HOURLY_METRICS,
   DAILY_METRICS,
   WEEKLY_METRICS,

@@ -166,7 +166,7 @@ SELECT * FROM team_members WHERE user_id = (SELECT id FROM users WHERE email = '
 
 ### Database Validation
 ```sql
-SELECT COUNT(*) FROM users WHERE company_id = 'company-mastercard';
+SELECT COUNT(*) FROM users WHERE company_id = 'novatech';
 -- Count matches UI display
 ```
 

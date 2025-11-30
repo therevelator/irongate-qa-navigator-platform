@@ -38,7 +38,7 @@ Content-Type: application/json
   "first_name": "John",
   "last_name": "Doe",
   "role": "qa_engineer",
-  "company_id": "company-mastercard",
+  "company_id": "novatech",
   "department_id": "dept-decision-mgmt",
   "primary_team_id": "team-nebula-id",
   "is_active": true,
@@ -201,7 +201,7 @@ Content-Type: application/json
     "first_name": "User",
     "last_name": "One",
     "role": "qa_manager",
-    "company_id": "company-mastercard",
+    "company_id": "novatech",
     "department_id": "dept-decision-mgmt",
     "primary_team_id": "team-nebula-id",
     "is_active": true,
@@ -378,7 +378,7 @@ HTTP/1.1 201 Created
 
 {
   "id": "team-{timestamp}-{random}",
-  "company_id": "company-mastercard",
+  "company_id": "novatech",
   "department_id": "dept-decision-mgmt",
   "name": "Phoenix Team",
   "description": "Innovation team",

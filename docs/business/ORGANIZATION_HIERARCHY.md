@@ -20,7 +20,7 @@ Company (e.g., Mastercard)
 ## Example: Mastercard Structure
 
 ### Company
-- **Mastercard** (company-mastercard)
+- **Mastercard** (novatech)
 
 ### Departments
 1. **Decision Management** - AI-powered decision management and fraud detection

@@ -70,19 +70,19 @@ Then paste:
 ```sql
 -- Create Mastercard company
 INSERT INTO companies (id, name, domain, is_active) 
-VALUES ('company-mastercard', 'Mastercard', 'mastercard.com', true);
+VALUES ('novatech', 'Mastercard', 'mastercard.com', true);
 
 -- Create Decision Management department
 INSERT INTO departments (id, company_id, name, description, is_active)
-VALUES ('dept-decision-mgmt', 'company-mastercard', 'Decision Management', 'AI-powered decision management and fraud detection', true);
+VALUES ('dept-decision-mgmt', 'novatech', 'Decision Management', 'AI-powered decision management and fraud detection', true);
 
 -- Create Quasars team
 INSERT INTO teams (id, company_id, department_id, name, description, platform, is_active)
-VALUES ('team-quasars', 'company-mastercard', 'dept-decision-mgmt', 'Quasars', 'AI/ML decision engine development', 'Backend', true);
+VALUES ('team-quasars', 'novatech', 'dept-decision-mgmt', 'Quasars', 'AI/ML decision engine development', 'Backend', true);
 
 -- Create Pulsars team
 INSERT INTO teams (id, company_id, department_id, name, description, platform, is_active)
-VALUES ('team-pulsars', 'company-mastercard', 'dept-decision-mgmt', 'Pulsars', 'Real-time decision processing', 'API', true);
+VALUES ('team-pulsars', 'novatech', 'dept-decision-mgmt', 'Pulsars', 'Real-time decision processing', 'API', true);
 
 -- Verify
 SELECT * FROM companies;
@@ -138,7 +138,7 @@ curl -X POST http://localhost:3000/api/auth/register \
     "firstName": "Test",
     "lastName": "User",
     "role": "qa_engineer",
-    "companyId": "company-mastercard",
+    "companyId": "novatech",
     "departmentId": "dept-decision-mgmt",
     "teamId": "team-quasars"
   }'
@@ -275,7 +275,7 @@ Update `src/contexts/AuthContext.tsx` to use real API instead of mock data.
 ### 2. Add More Teams
 ```sql
 INSERT INTO teams (id, company_id, department_id, name, platform)
-VALUES ('team-watchmen', 'company-mastercard', 'dept-decision-mgmt', 'Watchmen', 'DevOps');
+VALUES ('team-watchmen', 'novatech', 'dept-decision-mgmt', 'Watchmen', 'DevOps');
 ```
 
 ### 3. Customize Metrics Sync

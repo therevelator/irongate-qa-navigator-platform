@@ -57,7 +57,7 @@ Open `http://localhost:5173` and see:
 
 If you seeded demo users:
 ```
-Email: admin@mastercard.com
+Email: admin@novatech.io
 Password: admin123
 ```
 
