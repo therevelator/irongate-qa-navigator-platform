@@ -289,7 +289,12 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             // Build lookup by developer name
             if (metricsData.metrics && Array.isArray(metricsData.metrics)) {
               metricsData.metrics.forEach((m: any) => {
-                dbMetrics[m.name] = m;
+                if (m.developerId) {
+                  dbMetrics[`id:${m.developerId}`] = m;
+                }
+                if (m.name) {
+                  dbMetrics[`name:${m.name.toLowerCase()}`] = m;
+                }
               });
             }
           }
@@ -297,7 +302,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           // Map members to metrics (use DB values if available, otherwise generate defaults)
           const metricsDataFinal = members.map((member: TeamMember) => {
             const fullName = `${member.first_name} ${member.last_name}`;
-            const dbData = dbMetrics[fullName];
+            const idKey = `id:${member.id}`;
+            const nameKey = `name:${fullName.toLowerCase()}`;
+            const dbData = dbMetrics[idKey] || dbMetrics[nameKey];
             
             // If we have DB data, use it; otherwise generate placeholder values
             if (dbData) {

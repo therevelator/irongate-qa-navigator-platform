@@ -78,6 +78,19 @@ const CONFIG_SECTIONS = {
       { key: 'ext_db_password', label: 'Password', type: 'password', placeholder: '••••••••', hint: 'Database password' },
     ]
   },
+  financial: {
+    title: 'Financial & ROI Settings',
+    icon: Gauge,
+    description: 'Configure costs for accurate technical debt ROI calculations',
+    companyOnly: false,
+    fields: [
+      { key: 'developer_hourly_rate', label: 'Developer Hourly Rate ($)', type: 'number', placeholder: '75', hint: 'Average developer cost per hour (fully loaded)' },
+      { key: 'support_ticket_cost', label: 'Support Ticket Cost ($)', type: 'number', placeholder: '25', hint: 'Average cost to handle one support ticket' },
+      { key: 'revenue_per_user_monthly', label: 'Revenue per User/Month ($)', type: 'number', placeholder: '50', hint: 'Average monthly revenue per active user' },
+      { key: 'downtime_cost_per_minute', label: 'Downtime Cost/Minute ($)', type: 'number', placeholder: '100', hint: 'Revenue lost per minute of downtime' },
+      { key: 'sla_breach_penalty', label: 'SLA Breach Penalty ($)', type: 'number', placeholder: '1000', hint: 'Penalty cost per SLA violation' },
+    ]
+  },
 };
 
 const ParametersConfiguration: React.FC<ParametersConfigurationProps> = ({ onBack }) => {

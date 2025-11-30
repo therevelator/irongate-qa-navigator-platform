@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap } from 'lucide-react';
+import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap, Wrench, DollarSign, TrendingUp, Headphones } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -100,6 +100,24 @@ interface DeveloperMetricsInput {
   focusTimeHours: number;      // Focus Time (hours per day)
   meetingTimeHours: number;    // Meeting Time (hours per day)
   contextSwitchesPerDay: number; // Context Switches per day
+}
+
+interface TechnicalDebtItem {
+  id: string;
+  title: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  estimated_effort_hours: number;
+  affected_users: number;
+  support_tickets_monthly: number;
+  downtime_minutes_monthly: number;
+  revenue_impact_percent: number;
+  sla_breaches_monthly: number;
+  // Calculated fields
+  investment_cost?: number;
+  monthly_cost_of_delay?: number;
+  annual_savings?: number;
+  roi_percentage?: number;
+  payback_months?: number;
 }
 
 // Calculate Happiness Score (0-100)
@@ -804,6 +822,18 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const [expandedDevelopers, setExpandedDevelopers] = useState<boolean>(true);
   const [savingDeveloperMetrics, setSavingDeveloperMetrics] = useState(false);
 
+  // Technical debt state
+  const [technicalDebtItems, setTechnicalDebtItems] = useState<TechnicalDebtItem[]>([]);
+  const [expandedTechnicalDebt, setExpandedTechnicalDebt] = useState<boolean>(true);
+  const [savingTechnicalDebt, setSavingTechnicalDebt] = useState(false);
+  const [financialConfig, setFinancialConfig] = useState<Record<string, number>>({
+    developer_hourly_rate: 75,
+    support_ticket_cost: 25,
+    revenue_per_user_monthly: 50,
+    downtime_cost_per_minute: 100,
+    sla_breach_penalty: 1000
+  });
+
   // Check if user has access (super_admin, manager, or team_lead)
   const allowedRoles = ['super_admin', 'manager', 'team_lead'];
   if (!user || !allowedRoles.includes(user.role)) {
@@ -832,6 +862,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   useEffect(() => {
     if (selectedTeamId) {
       fetchExistingMetrics(selectedTeamId);
+      fetchTechnicalDebt(selectedTeamId);
     }
   }, [selectedTeamId]);
 
@@ -918,6 +949,124 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       setExistingMetrics(null);
     } finally {
       setLoadingMetrics(false);
+    }
+  };
+
+  // Fetch technical debt items for the team
+  const fetchTechnicalDebt = async (teamId: string) => {
+    try {
+      const token = localStorage.getItem('irongate_token');
+      const response = await fetch(`${API_URL}/analytics/technical-debt?teamId=${teamId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setTechnicalDebtItems(data.debts || []);
+        if (data.financial_config) {
+          setFinancialConfig(data.financial_config);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching technical debt:', error);
+    }
+  };
+
+  // Calculate ROI for a debt item based on current financial config
+  const calculateDebtROI = (item: TechnicalDebtItem, config: Record<string, number>): TechnicalDebtItem => {
+    const effortHours = item.estimated_effort_hours || 0;
+    const investmentCost = effortHours * (config.developer_hourly_rate || 75);
+    
+    // Calculate monthly cost of delay
+    const supportCost = (item.support_tickets_monthly || 0) * (config.support_ticket_cost || 25);
+    const downtimeCost = (item.downtime_minutes_monthly || 0) * (config.downtime_cost_per_minute || 100);
+    const revenueLoss = (item.affected_users || 0) * (config.revenue_per_user_monthly || 50) * ((item.revenue_impact_percent || 0) / 100);
+    const slaPenalties = (item.sla_breaches_monthly || 0) * (config.sla_breach_penalty || 1000);
+    
+    const monthlyCostOfDelay = supportCost + downtimeCost + revenueLoss + slaPenalties;
+    const annualSavings = monthlyCostOfDelay * 12;
+    
+    // Calculate ROI percentage
+    const roiPercentage = investmentCost > 0 
+      ? Math.round(((annualSavings - investmentCost) / investmentCost) * 100)
+      : 0;
+    
+    // Calculate payback period in months
+    const paybackMonths = monthlyCostOfDelay > 0 
+      ? Math.round((investmentCost / monthlyCostOfDelay) * 10) / 10
+      : 0;
+    
+    return {
+      ...item,
+      investment_cost: Math.round(investmentCost),
+      monthly_cost_of_delay: Math.round(monthlyCostOfDelay),
+      annual_savings: Math.round(annualSavings),
+      roi_percentage: roiPercentage,
+      payback_months: paybackMonths
+    };
+  };
+
+  // Handle technical debt impact change - recalculate ROI in real-time
+  const handleDebtImpactChange = (debtId: string, field: string, value: string) => {
+    const numValue = value === '' ? 0 : parseFloat(value);
+    if (isNaN(numValue)) return;
+    
+    setTechnicalDebtItems(prev => prev.map(item => {
+      if (item.id !== debtId) return item;
+      const updatedItem = { ...item, [field]: numValue };
+      return calculateDebtROI(updatedItem, financialConfig);
+    }));
+  };
+
+  // Save technical debt impact metrics
+  const handleSaveTechnicalDebt = async () => {
+    if (!selectedTeamId || technicalDebtItems.length === 0) {
+      toast.error('No technical debt items to save');
+      return;
+    }
+
+    setSavingTechnicalDebt(true);
+    try {
+      const token = localStorage.getItem('irongate_token');
+      
+      // Save each debt item's impact metrics
+      const promises = technicalDebtItems.map(item => 
+        fetch(`${API_URL}/analytics/technical-debt/${item.id}/impact`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            affected_users: item.affected_users,
+            support_tickets_monthly: item.support_tickets_monthly,
+            downtime_minutes_monthly: item.downtime_minutes_monthly,
+            revenue_impact_percent: item.revenue_impact_percent,
+            sla_breaches_monthly: item.sla_breaches_monthly,
+            estimated_effort_hours: item.estimated_effort_hours
+          })
+        })
+      );
+
+      await Promise.all(promises);
+
+      Swal.fire({
+        icon: 'success',
+        title: 'Technical Debt Impact Saved',
+        text: `Updated impact metrics for ${technicalDebtItems.length} debt items`,
+        confirmButtonColor: '#3b82f6',
+      });
+
+      // Emit event to notify TechnicalDebtTracker to refresh
+      window.dispatchEvent(new CustomEvent('technical-debt-updated'));
+
+      // Refresh to get updated ROI calculations from server
+      fetchTechnicalDebt(selectedTeamId);
+    } catch (error) {
+      console.error('Error saving technical debt:', error);
+      toast.error('Failed to save technical debt impact');
+    } finally {
+      setSavingTechnicalDebt(false);
     }
   };
 
@@ -1766,6 +1915,204 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                   >
                     <Save className="w-4 h-4" />
                     {savingDeveloperMetrics ? 'Saving...' : 'Save Developer Metrics'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Technical Debt Impact Section */}
+        {selectedTeamId && technicalDebtItems.length > 0 && (
+          <div className="bg-slate-800 rounded-xl overflow-hidden">
+            {/* Section Header */}
+            <button
+              onClick={() => setExpandedTechnicalDebt(!expandedTechnicalDebt)}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
+                  <Wrench className="w-5 h-5 text-white" />
+                </div>
+                <div className="text-left">
+                  <h2 className="text-lg font-semibold text-white">Technical Debt ROI Impact</h2>
+                  <p className="text-sm text-slate-400">{technicalDebtItems.length} debt items</p>
+                </div>
+              </div>
+              {expandedTechnicalDebt ? (
+                <ChevronDown className="w-5 h-5 text-slate-400" />
+              ) : (
+                <ChevronRight className="w-5 h-5 text-slate-400" />
+              )}
+            </button>
+
+            {/* Technical Debt Items List */}
+            {expandedTechnicalDebt && (
+              <div className="px-6 pb-6 space-y-4">
+                <div className="bg-slate-700/30 rounded-lg p-4 mb-4">
+                  <div className="flex items-start gap-2">
+                    <Info className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-slate-300">
+                      Configure business impact metrics for each technical debt item. <strong>ROI</strong>, <strong>Annual Savings</strong>, and <strong>Payback Period</strong> are calculated automatically based on financial settings.
+                    </p>
+                  </div>
+                </div>
+
+                {technicalDebtItems.map(item => {
+                  const severityColors: Record<string, string> = {
+                    critical: 'bg-red-500/20 text-red-400 border-red-500/30',
+                    high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+                    medium: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+                    low: 'bg-green-500/20 text-green-400 border-green-500/30'
+                  };
+                  
+                  return (
+                    <div key={item.id} className="bg-slate-700/30 rounded-xl p-5">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
+                            <Wrench className="w-5 h-5 text-orange-400" />
+                          </div>
+                          <div>
+                            <h3 className="text-white font-medium">{item.title}</h3>
+                            <span className={`text-xs px-2 py-0.5 rounded border ${severityColors[item.severity]}`}>
+                              {item.severity.toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        {/* Calculated ROI Results - Updates in real-time */}
+                        {(item.investment_cost !== undefined || item.monthly_cost_of_delay !== undefined) && (
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500">Investment</div>
+                              <div className="text-sm font-bold text-blue-400">
+                                ${(item.investment_cost || 0).toLocaleString()}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500">Monthly Loss</div>
+                              <div className="text-sm font-bold text-red-400">
+                                ${(item.monthly_cost_of_delay || 0).toLocaleString()}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500">Annual Savings</div>
+                              <div className="text-sm font-bold text-green-400">
+                                ${(item.annual_savings || 0).toLocaleString()}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xs text-slate-500">ROI</div>
+                              <div className={`text-lg font-bold ${
+                                (item.roi_percentage || 0) > 200 ? 'text-emerald-400' :
+                                (item.roi_percentage || 0) > 100 ? 'text-green-400' :
+                                (item.roi_percentage || 0) > 0 ? 'text-amber-400' : 'text-red-400'
+                              }`}>
+                                {item.roi_percentage || 0}%
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Input Fields Grid */}
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Effort (hours)</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 40"
+                            min={0}
+                            step={1}
+                            value={item.estimated_effort_hours || ''}
+                            onChange={(e) => handleDebtImpactChange(item.id, 'estimated_effort_hours', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Affected Users</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 500"
+                            min={0}
+                            step={1}
+                            value={item.affected_users || ''}
+                            onChange={(e) => handleDebtImpactChange(item.id, 'affected_users', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Support Tickets/mo</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 25"
+                            min={0}
+                            step={1}
+                            value={item.support_tickets_monthly || ''}
+                            onChange={(e) => handleDebtImpactChange(item.id, 'support_tickets_monthly', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Downtime min/mo</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 30"
+                            min={0}
+                            step={1}
+                            value={item.downtime_minutes_monthly || ''}
+                            onChange={(e) => handleDebtImpactChange(item.id, 'downtime_minutes_monthly', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">Revenue Impact %</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 2.5"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                            value={item.revenue_impact_percent || ''}
+                            onChange={(e) => handleDebtImpactChange(item.id, 'revenue_impact_percent', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-slate-400 mb-1">SLA Breaches/mo</label>
+                          <input
+                            type="number"
+                            placeholder="e.g., 3"
+                            min={0}
+                            step={1}
+                            value={item.sla_breaches_monthly || ''}
+                            onChange={(e) => handleDebtImpactChange(item.id, 'sla_breaches_monthly', e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Payback indicator */}
+                      {item.payback_months && (
+                        <div className="mt-3 text-xs text-slate-400">
+                          <TrendingUp className="w-3 h-3 inline mr-1" />
+                          Payback period: <span className="text-green-400 font-medium">{item.payback_months} months</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Save Technical Debt Button */}
+                <div className="flex justify-end mt-4">
+                  <button
+                    onClick={handleSaveTechnicalDebt}
+                    disabled={savingTechnicalDebt}
+                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:from-orange-600 hover:to-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4" />
+                    {savingTechnicalDebt ? 'Saving...' : 'Save Technical Debt Impact'}
                   </button>
                 </div>
               </div>

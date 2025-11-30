@@ -200,7 +200,7 @@ function App() {
   if (currentView === 'developer-productivity') {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <DeveloperProductivity onBack={() => setCurrentView('features')} />
+        <DeveloperProductivity onBack={() => setCurrentView('features')} teamId={analyticsTeamId} />
       </Layout>
     );
   }

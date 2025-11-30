@@ -382,10 +382,83 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
 // TECHNICAL DEBT TRACKER
 // ============================================================================
 
+// Helper to get financial config with inheritance
+async function getFinancialConfig(companyId: string, teamId?: string): Promise<Record<string, number>> {
+  const defaults: Record<string, number> = {
+    developer_hourly_rate: 75,
+    support_ticket_cost: 25,
+    revenue_per_user_monthly: 50,
+    downtime_cost_per_minute: 100,
+    sla_breach_penalty: 1000
+  };
+
+  try {
+    // Fetch configs with inheritance (company → department → team)
+    let sql = `SELECT config_key, config_value FROM configs WHERE company_id = ?`;
+    const params: any[] = [companyId];
+    
+    if (teamId) {
+      sql += ` AND (team_id = ? OR team_id IS NULL)`;
+      params.push(teamId);
+    } else {
+      sql += ` AND team_id IS NULL`;
+    }
+    sql += ` ORDER BY team_id IS NOT NULL DESC`; // Team-specific overrides first
+
+    const configs = await query<any>(sql, params);
+    
+    for (const cfg of configs) {
+      if (defaults.hasOwnProperty(cfg.config_key) && !isNaN(parseFloat(cfg.config_value))) {
+        defaults[cfg.config_key] = parseFloat(cfg.config_value);
+      }
+    }
+  } catch (e) {
+    // Use defaults on error
+  }
+
+  return defaults;
+}
+
+// Calculate ROI metrics for a debt item
+function calculateROI(
+  debt: any, 
+  config: Record<string, number>
+): { investment: number; monthlyCost: number; annualSavings: number; roi: number; paybackMonths: number } {
+  const effortHours = Number(debt.estimated_effort_hours) || 0;
+  const affectedUsers = Number(debt.affected_users) || 0;
+  const supportTickets = Number(debt.support_tickets_monthly) || 0;
+  const downtimeMinutes = Number(debt.downtime_minutes_monthly) || 0;
+  const revenueImpactPct = Number(debt.revenue_impact_percent) || 0;
+  const slaBreaches = Number(debt.sla_breaches_monthly) || 0;
+
+  // Investment = developer hours × hourly rate
+  const investment = effortHours * config.developer_hourly_rate;
+
+  // Monthly cost of delay = sum of all impact costs
+  const supportCost = supportTickets * config.support_ticket_cost;
+  const downtimeCost = downtimeMinutes * config.downtime_cost_per_minute;
+  const revenueLoss = affectedUsers * config.revenue_per_user_monthly * (revenueImpactPct / 100);
+  const slaPenalties = slaBreaches * config.sla_breach_penalty;
+
+  const monthlyCost = supportCost + downtimeCost + revenueLoss + slaPenalties;
+  const annualSavings = monthlyCost * 12;
+
+  // ROI = ((annual savings - investment) / investment) × 100
+  const roi = investment > 0 ? ((annualSavings - investment) / investment) * 100 : 0;
+
+  // Payback period in months
+  const paybackMonths = monthlyCost > 0 ? investment / monthlyCost : Infinity;
+
+  return { investment, monthlyCost, annualSavings, roi, paybackMonths };
+}
+
 router.get('/technical-debt', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
     const { teamId, status } = req.query;
+
+    // Get financial config for ROI calculations
+    const financialConfig = await getFinancialConfig(companyId, teamId as string);
 
     let sql = `
       SELECT 
@@ -399,6 +472,11 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
         td.priority_score,
         td.status,
         td.created_at as created_date,
+        td.affected_users,
+        td.support_tickets_monthly,
+        td.downtime_minutes_monthly,
+        td.revenue_impact_percent,
+        td.sla_breaches_monthly,
         CONCAT(u.first_name, ' ', u.last_name) as assigned_to_name
       FROM technical_debt td
       LEFT JOIN users u ON td.assigned_to = u.id
@@ -420,24 +498,96 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
 
     const debts = await query<any>(sql, params);
 
-    const result = debts.map((d: any) => ({
-      id: d.id,
-      title: d.title,
-      description: d.description || '',
-      category: d.category || 'code_quality',
-      severity: d.severity,
-      estimated_effort_hours: Number(d.estimated_effort_hours) || 0,
-      cost_of_delay: Number(d.cost_of_delay) || 0,
-      priority_score: Number(d.priority_score) || 0,
-      status: d.status,
-      created_date: d.created_date,
-      assigned_to: d.assigned_to_name
-    }));
+    const result = debts.map((d: any) => {
+      const roi = calculateROI(d, financialConfig);
+      
+      return {
+        id: d.id,
+        title: d.title,
+        description: d.description || '',
+        category: d.category || 'code_quality',
+        severity: d.severity,
+        estimated_effort_hours: Number(d.estimated_effort_hours) || 0,
+        cost_of_delay: Number(d.cost_of_delay) || roi.monthlyCost, // Use calculated if legacy is 0
+        priority_score: Number(d.priority_score) || 0,
+        status: d.status,
+        created_date: d.created_date,
+        assigned_to: d.assigned_to_name,
+        // Impact metrics
+        affected_users: Number(d.affected_users) || 0,
+        support_tickets_monthly: Number(d.support_tickets_monthly) || 0,
+        downtime_minutes_monthly: Number(d.downtime_minutes_monthly) || 0,
+        revenue_impact_percent: Number(d.revenue_impact_percent) || 0,
+        sla_breaches_monthly: Number(d.sla_breaches_monthly) || 0,
+        // Calculated ROI fields
+        investment_cost: Math.round(roi.investment),
+        monthly_cost_of_delay: Math.round(roi.monthlyCost),
+        annual_savings: Math.round(roi.annualSavings),
+        roi_percentage: Math.round(roi.roi),
+        payback_months: roi.paybackMonths === Infinity ? null : Math.round(roi.paybackMonths * 10) / 10
+      };
+    });
 
-    res.json({ debts: result });
+    // Also return the financial config for transparency
+    res.json({ 
+      debts: result,
+      financial_config: financialConfig
+    });
   } catch (error) {
     console.error('Error fetching technical debt:', error);
     res.status(500).json({ error: 'Failed to fetch technical debt' });
+  }
+});
+
+// Update technical debt impact metrics
+router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId } = req.user;
+    const { id } = req.params;
+    const {
+      affected_users,
+      support_tickets_monthly,
+      downtime_minutes_monthly,
+      revenue_impact_percent,
+      sla_breaches_monthly,
+      estimated_effort_hours
+    } = req.body;
+
+    // Verify the debt item belongs to the company
+    const existing = await queryOne<any>(
+      'SELECT id FROM technical_debt WHERE id = ? AND company_id = ?',
+      [id, companyId]
+    );
+
+    if (!existing) {
+      return res.status(404).json({ error: 'Technical debt item not found' });
+    }
+
+    await query(
+      `UPDATE technical_debt SET
+        affected_users = ?,
+        support_tickets_monthly = ?,
+        downtime_minutes_monthly = ?,
+        revenue_impact_percent = ?,
+        sla_breaches_monthly = ?,
+        effort_hours = ?,
+        updated_at = NOW()
+      WHERE id = ?`,
+      [
+        affected_users || 0,
+        support_tickets_monthly || 0,
+        downtime_minutes_monthly || 0,
+        revenue_impact_percent || 0,
+        sla_breaches_monthly || 0,
+        estimated_effort_hours || 0,
+        id
+      ]
+    );
+
+    res.json({ message: 'Impact metrics updated successfully' });
+  } catch (error) {
+    console.error('Error updating technical debt impact:', error);
+    res.status(500).json({ error: 'Failed to update impact metrics' });
   }
 });
 

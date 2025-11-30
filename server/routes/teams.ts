@@ -769,6 +769,7 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
 
     // Build developer metrics payload for AI
     const devMetricsPayload = developerMetrics.map((dev: any) => ({
+      developerId: dev.developer_id,
       name: dev.name,
       prMergeTimeHours: Number(dev.pr_merge_time_avg) || 0,
       codeReviewTimeHours: Number(dev.code_review_time_avg) || 0,

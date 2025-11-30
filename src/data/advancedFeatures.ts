@@ -72,6 +72,18 @@ export interface TechnicalDebt {
   priority_score: number;
   created_date: string;
   status: 'open' | 'in_progress' | 'resolved';
+  // Impact metrics for ROI calculation
+  affected_users?: number;
+  support_tickets_monthly?: number;
+  downtime_minutes_monthly?: number;
+  revenue_impact_percent?: number;
+  sla_breaches_monthly?: number;
+  // Calculated ROI fields (from backend)
+  investment_cost?: number;
+  monthly_cost_of_delay?: number;
+  annual_savings?: number;
+  roi_percentage?: number;
+  payback_months?: number;
 }
 
 export interface BusinessImpact {
