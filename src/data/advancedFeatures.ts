@@ -22,6 +22,7 @@ export interface FlakyTest {
   first_detected: string;
   last_occurrence: string;
   suggested_fix: string;
+  root_cause: string;
   history: { date: string; passed: boolean }[];
 }
 
@@ -126,20 +127,24 @@ export const generateFlakyTests = (): FlakyTest[] => {
     'UserRegistrationTest'
   ];
 
-  return testNames.map((name, index) => ({
-    id: `flaky-${index}`,
-    test_name: name,
-    flakiness_score: Number((Math.random() * 100).toFixed(1)),
-    failure_pattern: patterns[Math.floor(Math.random() * patterns.length)],
-    occurrences: Math.floor(Math.random() * 50) + 5,
-    first_detected: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-    last_occurrence: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-    suggested_fix: getSuggestedFix(patterns[Math.floor(Math.random() * patterns.length)]),
-    history: Array.from({ length: 20 }, (_, i) => ({
-      date: new Date(Date.now() - (19 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      passed: Math.random() > 0.3
-    }))
-  }));
+  return testNames.map((name, index) => {
+    const pattern = patterns[index % patterns.length];
+    return {
+      id: `flaky-${index}`,
+      test_name: name,
+      flakiness_score: Number((Math.random() * 100).toFixed(1)),
+      failure_pattern: pattern,
+      occurrences: Math.floor(Math.random() * 50) + 5,
+      first_detected: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
+      last_occurrence: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
+      suggested_fix: getSuggestedFix(pattern),
+      root_cause: getRootCause(pattern),
+      history: Array.from({ length: 20 }, (_, i) => ({
+        date: new Date(Date.now() - (19 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        passed: Math.random() > 0.3
+      }))
+    };
+  });
 };
 
 const getSuggestedFix = (pattern: string): string => {
@@ -147,10 +152,21 @@ const getSuggestedFix = (pattern: string): string => {
     timing: 'Add explicit waits or increase timeout values',
     environment: 'Ensure consistent test environment setup',
     data: 'Use data factories or fixtures for consistent test data',
-    network: 'Mock external API calls or add retry logic',
+    network: 'Mock external APIs or add retry logic',
     unknown: 'Add detailed logging to identify root cause'
   };
   return fixes[pattern] || 'Investigate test implementation';
+};
+
+const getRootCause = (pattern: string): string => {
+  const causes: Record<string, string> = {
+    timing: 'timeout keyword detected in error logs',
+    environment: 'environment keyword detected in error logs',
+    data: 'assertion failed keyword detected in error logs',
+    network: 'ECONNREFUSED keyword detected in error logs',
+    unknown: 'No matching pattern found'
+  };
+  return causes[pattern] || 'Pattern analysis pending';
 };
 
 export const generatePipelineStages = (): PipelineStage[] => {

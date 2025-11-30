@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Menu, X, Palette, Calculator, Clock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme, themes } from '../contexts/ThemeContext';
-import type { ThemeName } from '../contexts/ThemeContext';
+import { useTheme } from '../contexts/ThemeContext';
 import { getRoleBadgeColor } from '../types/auth';
 import ThemeToggle from './ThemeToggle';
 
@@ -27,7 +26,7 @@ import API_URL from '../config/api';
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange, hideSidebar, gridColumns = 3, onGridChange }) => {
   const { user, logout } = useAuth();
-  const { isDark, themeName, setThemeName, toggleTheme } = useTheme();
+  const { isDark } = useTheme();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
@@ -78,18 +77,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
     setIsMobileMenuOpen(false);
   };
 
-  // Theme-specific background classes
-  const mainBgClass = themeName === 'aurora' 
-    ? isDark 
-      ? 'bg-neutral-950' 
-      : 'bg-white'
-    : 'bg-gray-50 dark:bg-slate-950';
-
-  const sidebarBgClass = themeName === 'aurora'
-    ? isDark
-      ? 'bg-neutral-950 border-neutral-800'
-      : 'bg-white border-neutral-200'
-    : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800';
+  // Background classes
+  const mainBgClass = 'bg-gray-50 dark:bg-slate-950';
+  const sidebarBgClass = 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800';
 
   const sidebarHidden = hideSidebar || !sidebarVisible;
 
@@ -98,9 +88,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       {/* Menu Overlay */}
       {isMobileMenuOpen && (
         <div 
-          className={`fixed inset-0 z-40 ${
-            themeName === 'aurora' ? 'bg-neutral-900/50 backdrop-blur-sm' : 'bg-black bg-opacity-50'
-          }`}
+          className="fixed inset-0 z-40 bg-black bg-opacity-50"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
@@ -252,37 +240,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </div>
         </nav>
 
-        {/* Theme Selector */}
-        <div className="px-4 py-3 border-t border-gray-200 dark:border-slate-800">
-          <p className="text-xs font-semibold text-gray-400 dark:text-slate-500 uppercase tracking-wide mb-2 px-3">Theme</p>
-          <div className={`flex flex-wrap gap-1 p-1 rounded-lg ${
-            themeName === 'aurora'
-              ? isDark ? 'bg-neutral-900' : 'bg-neutral-100'
-              : 'bg-gray-100 dark:bg-slate-800'
-          }`}>
-            {(Object.keys(themes) as ThemeName[]).map((theme) => (
-              <button
-                key={theme}
-                onClick={() => setThemeName(theme)}
-                className={`flex-1 px-3 py-2 rounded text-xs font-medium transition-all ${
-                  themeName === theme
-                    ? theme === 'ocean'
-                      ? 'bg-cyan-500 text-white shadow-sm'
-                      : theme === 'aurora'
-                        ? 'bg-neutral-800 text-white shadow-sm'
-                        : 'bg-gray-800 text-white shadow-sm'
-                    : themeName === 'aurora' && isDark
-                      ? 'text-neutral-400 hover:text-neutral-200'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                }`}
-                title={themes[theme].description}
-              >
-                {themes[theme].name}
-              </button>
-            ))}
-          </div>
-        </div>
-
         {/* Sign Out */}
         <div className="p-4 border-t border-gray-200 dark:border-slate-800">
           <button
@@ -298,29 +255,17 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Top Bar with Welcome and Theme Toggle */}
-        <div className={`px-4 sm:px-6 py-3 flex items-center justify-between border-b transition-all ${
-          themeName === 'aurora'
-            ? isDark
-              ? 'bg-neutral-950/95 backdrop-blur-md border-neutral-800'
-              : 'bg-white/95 backdrop-blur-md border-neutral-200'
-            : 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800'
-        }`}>
+        <div className="px-4 sm:px-6 py-3 flex items-center justify-between border-b transition-all bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-3 sm:space-x-4">
             {/* Menu Button - Always visible */}
             <button
               onClick={() => setIsMobileMenuOpen(true)}
-              className={`p-2 rounded-md transition-colors ${
-                themeName === 'aurora'
-                  ? 'hover:bg-neutral-200 dark:hover:bg-neutral-800'
-                  : 'hover:bg-gray-100 dark:hover:bg-slate-800'
-              }`}
+              className="p-2 rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-slate-800"
             >
-              <Menu size={20} className={themeName === 'aurora' && isDark ? 'text-neutral-300' : 'text-gray-600 dark:text-gray-400'} />
+              <Menu size={20} className="text-gray-600 dark:text-gray-400" />
             </button>
             
-            <h2 className={`text-xs sm:text-sm font-medium truncate ${
-              themeName === 'aurora' && isDark ? 'text-neutral-200' : 'text-gray-600 dark:text-slate-400'
-            }`}>
+            <h2 className="text-xs sm:text-sm font-medium truncate text-gray-600 dark:text-slate-400">
               Welcome, {user?.firstName}
             </h2>
           </div>

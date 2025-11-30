@@ -83,7 +83,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     businessImpact: boolean;
     performance: boolean;
     developerProductivity: boolean;
-    testCaseManagement: boolean;
     executionTimeline: boolean;
     gamification: boolean;
   };
@@ -111,7 +110,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
       businessImpact: true,
       performance: true,
       developerProductivity: true,
-      testCaseManagement: true,
       executionTimeline: true,
       gamification: true,
     },
@@ -139,7 +137,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
       businessImpact: true,
       performance: true,
       developerProductivity: true,
-      testCaseManagement: true,
       executionTimeline: true,
       gamification: true,
     },
@@ -167,7 +164,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
       businessImpact: false,
       performance: true,
       developerProductivity: true,
-      testCaseManagement: true,
       executionTimeline: true,
       gamification: true,
     },
@@ -195,7 +191,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
       businessImpact: false,
       performance: true,
       developerProductivity: false,
-      testCaseManagement: true,
       executionTimeline: true,
       gamification: true, // View only
     },
@@ -223,7 +218,6 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
       businessImpact: false,
       performance: false,
       developerProductivity: false,
-      testCaseManagement: false,
       executionTimeline: false,
       gamification: true, // View only
     },

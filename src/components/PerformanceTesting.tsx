@@ -301,7 +301,7 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
           <h2 className="text-xl font-bold text-gray-900 dark:text-white dark:text-white">Endpoint Performance Analysis</h2>
           {metricsWithScore.map(metric => (
             <EndpointCard 
-              key={metric.endpoint}
+              key={metric.id || `${metric.endpoint}-${metric.method}`}
               metric={metric}
               isSelected={selectedEndpoint === metric.endpoint}
               onSelect={() => setSelectedEndpoint(selectedEndpoint === metric.endpoint ? null : metric.endpoint)}

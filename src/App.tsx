@@ -11,7 +11,6 @@ import PipelineVisualization from './components/PipelineVisualization';
 import BusinessImpactAnalysis from './components/BusinessImpactAnalysis';
 import PerformanceTesting from './components/PerformanceTesting';
 import DeveloperProductivity from './components/DeveloperProductivity';
-import TestCaseManagement from './components/TestCaseManagement';
 import TestExecutionTimeline from './components/TestExecutionTimeline';
 import TeamGamification from './components/TeamGamification';
 import TeamManagement from './components/TeamManagement';
@@ -201,14 +200,6 @@ function App() {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
         <DeveloperProductivity onBack={() => setCurrentView('features')} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'test-case-management') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <TestCaseManagement onBack={() => setCurrentView('features')} />
       </Layout>
     );
   }

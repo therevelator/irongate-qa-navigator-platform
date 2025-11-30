@@ -19,15 +19,6 @@ export const advancedFeatures: FeatureModule[] = [
     category: 'testing'
   },
   {
-    id: 'test-case-management',
-    name: 'Test Case Management',
-    description: 'Link test cases to requirements and track effectiveness',
-    icon: 'TestTube',
-    enabled: true,
-    route: '/test-cases',
-    category: 'testing'
-  },
-  {
     id: 'flaky-test-intelligence',
     name: 'Flaky Test Intelligence',
     description: 'Dedicated tracker with pattern analysis and suggested fixes',

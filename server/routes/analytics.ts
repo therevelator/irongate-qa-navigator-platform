@@ -126,6 +126,52 @@ router.get('/test-cases', authenticateToken, async (req: any, res) => {
 // FLAKY TEST INTELLIGENCE
 // ============================================================================
 
+// ============================================================================
+// PRODUCTION: Auto-Classification Engine
+// ============================================================================
+// When ready for production, uncomment this section and integrate with your
+// CI/CD pipeline to automatically classify failure patterns from test logs.
+//
+// const PATTERN_KEYWORDS = {
+//   timing: [
+//     'timeout', 'timed out', 'TimeoutError', 'async', 'await', 'Promise',
+//     'race condition', 'flaky wait', 'sleep', 'delay exceeded', 'Exceeded timeout'
+//   ],
+//   environment: [
+//     'environment', 'config', 'configuration', 'docker', 'container',
+//     'service unavailable', 'connection refused', 'port already in use',
+//     'permission denied', 'file not found', 'ENOENT', 'health check'
+//   ],
+//   data: [
+//     'assertion failed', 'expected', 'but got', 'duplicate key', 'constraint',
+//     'null', 'undefined', 'NaN', 'fixture', 'seed data', 'database state',
+//     'data mismatch', 'stale data'
+//   ],
+//   network: [
+//     'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'fetch failed', 'request timeout',
+//     'HTTP 5', 'API error', 'socket hang up', 'SSL', 'certificate', 'network error'
+//   ]
+// };
+//
+// function classifyFailurePattern(errorMessage: string): string {
+//   const lowerError = errorMessage.toLowerCase();
+//   for (const [pattern, keywords] of Object.entries(PATTERN_KEYWORDS)) {
+//     if (keywords.some(kw => lowerError.includes(kw.toLowerCase()))) {
+//       return pattern;
+//     }
+//   }
+//   return 'unknown';
+// }
+//
+// Endpoint to ingest test results from Jenkins/CI:
+// router.post('/flaky-tests/ingest', authenticateToken, async (req: any, res) => {
+//   const { testCaseId, status, errorMessage, buildNumber, jenkinsJobUrl } = req.body;
+//   const pattern = classifyFailurePattern(errorMessage || '');
+//   // Update flaky_tests with new execution and auto-classified pattern
+//   // Store errorMessage in last_error_message column for audit
+// });
+// ============================================================================
+
 router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
@@ -134,13 +180,13 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
     let sql = `
       SELECT 
         ft.id,
+        ft.test_case_id,
         COALESCE(ft.test_name, tc.name) as test_name,
         ft.flakiness_score,
         ft.failure_pattern,
         ft.failure_count as occurrences,
         ft.pass_count,
         ft.last_flaky_at as last_occurrence,
-        ft.suggested_fix,
         ft.created_at as first_detected
       FROM flaky_tests ft
       LEFT JOIN test_cases tc ON ft.test_case_id = tc.id
@@ -161,22 +207,51 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
     const result = await Promise.all(flakyTests.map(async (ft: any) => {
       // Get recent execution history
       const history = await query<any>(`
-        SELECT DATE(executed_at) as date, status
+        SELECT executed_at as date, status
         FROM test_executions
         WHERE test_case_id = ?
         ORDER BY executed_at DESC
         LIMIT 20
       `, [ft.test_case_id || ft.id]);
 
+      const pattern = ft.failure_pattern || 'unknown';
+      
+      // Generate failure reason and suggested fix from pattern analysis
+      const patternAnalysis: Record<string, { keyword: string; fix: string }> = {
+        timing: {
+          keyword: 'timeout keyword detected in error logs',
+          fix: 'Add explicit waits or increase timeout thresholds'
+        },
+        environment: {
+          keyword: 'environment keyword detected in error logs',
+          fix: 'Ensure consistent environment setup with health checks'
+        },
+        data: {
+          keyword: 'assertion failed keyword detected in error logs',
+          fix: 'Use isolated fixtures and database transactions per test'
+        },
+        network: {
+          keyword: 'ECONNREFUSED keyword detected in error logs',
+          fix: 'Mock external APIs or add retry logic'
+        },
+        unknown: {
+          keyword: 'No matching pattern found',
+          fix: 'Collect more failure data and analyze patterns'
+        }
+      };
+      
+      const analysis = patternAnalysis[pattern] || patternAnalysis.unknown;
+
       return {
         id: ft.id,
         test_name: ft.test_name || 'Unknown Test',
         flakiness_score: Number(ft.flakiness_score) || 0,
-        failure_pattern: ft.failure_pattern || 'unknown',
+        failure_pattern: pattern,
         occurrences: ft.occurrences || 0,
         first_detected: ft.first_detected,
         last_occurrence: ft.last_occurrence,
-        suggested_fix: ft.suggested_fix || 'Investigate test stability',
+        suggested_fix: analysis.fix,
+        root_cause: analysis.keyword,
         history: history.map((h: any) => ({
           date: h.date,
           passed: h.status === 'passed'

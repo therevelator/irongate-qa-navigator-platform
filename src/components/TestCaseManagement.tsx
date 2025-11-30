@@ -58,6 +58,10 @@ const TestCaseManagement: React.FC<TestCaseManagementProps> = ({ onBack }) => {
     { name: 'Redundant', value: redundantTests, color: '#f59e0b' }
   ];
 
+  const statusDataDisplay = statusData.filter(item => item.value > 0);
+
+  const totalTests = testCases.length;
+
   // Prepare data for effectiveness vs execution
   const effectivenessData = testCases.map(t => ({
     name: t.name.substring(0, 20),
@@ -169,48 +173,45 @@ const TestCaseManagement: React.FC<TestCaseManagementProps> = ({ onBack }) => {
           <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6">
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Test Status Distribution</h2>
             <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={statusData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
-                    outerRadius={100}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {statusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              {statusDataDisplay.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={statusDataDisplay}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
+                      outerRadius={100}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {statusDataDisplay.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-gray-500 dark:text-slate-400">
+                  No test cases available to display
+                </div>
+              )}
             </div>
             <div className="mt-4 space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-green-500 mr-2"></div>
-                  Active Tests
-                </span>
-                <span className="font-bold">{activeTests} ({((activeTests/testCases.length)*100).toFixed(0)}%)</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-red-500 mr-2"></div>
-                  Obsolete Tests
-                </span>
-                <span className="font-bold">{obsoleteTests} ({((obsoleteTests/testCases.length)*100).toFixed(0)}%)</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="flex items-center">
-                  <div className="w-3 h-3 rounded-full bg-yellow-500 mr-2"></div>
-                  Redundant Tests
-                </span>
-                <span className="font-bold">{redundantTests} ({((redundantTests/testCases.length)*100).toFixed(0)}%)</span>
-              </div>
+              {statusDataDisplay.map((entry) => (
+                <div className="flex items-center justify-between text-sm" key={entry.name}>
+                  <span className="flex items-center">
+                    <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: entry.color }}></div>
+                    {entry.name} Tests
+                  </span>
+                  <span className="font-bold">
+                    {entry.value}
+                    {totalTests > 0 ? ` (${((entry.value / totalTests) * 100).toFixed(0)}%)` : ''}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
 

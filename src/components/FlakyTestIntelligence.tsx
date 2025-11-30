@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { ArrowLeft, AlertTriangle, TrendingDown, Clock, Zap, Loader2 } from 'lucide-react';
 import type { FlakyTest } from '../data/advancedFeatures';
-import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { API_URL } from '../config/api';
 
 interface FlakyTestIntelligenceProps {
@@ -65,7 +65,7 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack })
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-10">
-        <div className="px-8 py-6">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
           <button 
             onClick={onBack}
             className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
@@ -74,27 +74,27 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack })
             <span className="font-medium">Back to Dashboard</span>
           </button>
           
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-                <Zap className="mr-3 text-yellow-500" size={32} />
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white flex items-center">
+                <Zap className="mr-2 sm:mr-3 text-yellow-500" size={24} />
                 Flaky Test Intelligence
               </h1>
-              <p className="text-gray-500 dark:text-slate-400 mt-1">Identify, analyze, and fix unstable tests</p>
+              <p className="text-gray-500 dark:text-slate-400 mt-1 text-sm sm:text-base">Identify, analyze, and fix unstable tests</p>
             </div>
             
-            <div className="flex items-center space-x-6">
+            <div className="grid grid-cols-3 gap-4 sm:gap-6">
               <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Total Flaky</p>
-                <div className="text-3xl font-bold text-gray-900 dark:text-white">{totalFlaky}</div>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Total Flaky</p>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">{totalFlaky}</div>
               </div>
               <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Avg Flakiness</p>
-                <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-400">{avgFlakiness}%</div>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Avg Flakiness</p>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-yellow-600 dark:text-yellow-400">{avgFlakiness}%</div>
               </div>
               <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Critical</p>
-                <div className="text-3xl font-bold text-red-600 dark:text-red-400">{criticalTests}</div>
+                <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Critical</p>
+                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600 dark:text-red-400">{criticalTests}</div>
               </div>
             </div>
           </div>
@@ -102,29 +102,32 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack })
       </div>
 
       {/* Pattern Filter */}
-      <div className="px-8 py-6 bg-white dark:bg-slate-900 border-b dark:border-slate-800">
-        <div className="flex items-center space-x-4">
-          <span className="text-sm font-semibold text-gray-700 dark:text-slate-300">Filter by Pattern:</span>
-          {patterns.map(pattern => (
-            <button
-              key={pattern.id}
-              onClick={() => setSelectedPattern(pattern.id)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                selectedPattern === pattern.id
-                  ? 'bg-blue-600 text-white shadow-md'
-                  : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
-              }`}
-            >
-              <span className="mr-2">{pattern.icon}</span>
-              {pattern.name}
-            </button>
-          ))}
+      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 bg-white dark:bg-slate-900 border-b dark:border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <span className="text-sm font-semibold text-gray-700 dark:text-slate-300 whitespace-nowrap">Filter by Pattern:</span>
+          <div className="flex flex-wrap gap-2">
+            {patterns.map(pattern => (
+              <button
+                key={pattern.id}
+                onClick={() => setSelectedPattern(pattern.id)}
+                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
+                  selectedPattern === pattern.id
+                    ? 'bg-blue-600 text-white shadow-md'
+                    : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
+                }`}
+              >
+                <span className="mr-1 sm:mr-2">{pattern.icon}</span>
+                <span className="hidden sm:inline">{pattern.name}</span>
+                <span className="sm:hidden">{pattern.name.split(' ')[0]}</span>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Flaky Tests List */}
-      <div className="px-8 py-8">
-        <div className="space-y-6">
+      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
+        <div className="space-y-4 sm:space-y-6">
           {filteredTests.map(test => (
             <FlakyTestCard key={test.id} test={test} getPatternColor={getPatternColor} />
           ))}
@@ -140,6 +143,18 @@ interface FlakyTestCardProps {
 }
 
 const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) => {
+  const historyData = useMemo(() => {
+    const seen = new Set<string>();
+    return [...test.history]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .filter(entry => {
+        const key = `${new Date(entry.date).getTime()}-${entry.passed}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [test.history]);
+
   const [expanded, setExpanded] = useState(false);
   
   const passRate = ((test.history.filter(h => h.passed).length / test.history.length) * 100).toFixed(1);
@@ -147,35 +162,35 @@ const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) 
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 overflow-hidden hover:shadow-md transition-shadow">
-      <div className="p-6">
-        <div className="flex items-start justify-between mb-4">
-          <div className="flex-1">
-            <div className="flex items-center space-x-3 mb-2">
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white">{test.test_name}</h3>
-              <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getPatternColor(test.failure_pattern)}`}>
+      <div className="p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">{test.test_name}</h3>
+              <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${getPatternColor(test.failure_pattern)}`}>
                 {test.failure_pattern.toUpperCase()}
               </span>
             </div>
-            <div className="flex items-center space-x-6 text-sm text-gray-600 dark:text-slate-400">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs sm:text-sm text-gray-600 dark:text-slate-400">
               <span className="flex items-center">
-                <AlertTriangle size={16} className="mr-1 text-yellow-500" />
+                <AlertTriangle size={14} className="mr-1 text-yellow-500" />
                 {test.occurrences} failures
               </span>
               <span className="flex items-center">
-                <Clock size={16} className="mr-1 text-blue-500" />
+                <Clock size={14} className="mr-1 text-blue-500" />
                 {daysSinceFirst} days old
               </span>
               <span className="flex items-center">
-                <TrendingDown size={16} className="mr-1 text-green-500" />
+                <TrendingDown size={14} className="mr-1 text-green-500" />
                 {passRate}% pass rate
               </span>
             </div>
           </div>
           
-          <div className="text-right">
-            <div className="text-3xl font-bold text-gray-900 dark:text-white">{test.flakiness_score.toFixed(1)}</div>
-            <div className="text-xs text-gray-500 dark:text-slate-400">Flakiness Score</div>
-            <div className={`mt-2 px-3 py-1 rounded-full text-xs font-semibold ${
+          <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:gap-0 sm:text-right">
+            <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{test.flakiness_score.toFixed(1)}</div>
+            <div className="text-xs text-gray-500 dark:text-slate-400 hidden sm:block">Flakiness Score</div>
+            <div className={`sm:mt-2 px-2 sm:px-3 py-1 rounded-full text-xs font-semibold ${
               test.flakiness_score > 70 ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200' :
               test.flakiness_score > 40 ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-200' :
               'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200'
@@ -205,13 +220,7 @@ const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) 
           <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">20-Day History</h4>
           <div className="h-24">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={test.history}>
-                <defs>
-                  <linearGradient id={`gradient-${test.id}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
+              <LineChart data={historyData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                 <XAxis dataKey="date" hide />
                 <YAxis hide domain={[0, 1]} />
                 <Tooltip 
@@ -227,14 +236,27 @@ const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) 
                     return null;
                   }}
                 />
-                <Area 
-                  type="stepAfter" 
+                <Line 
+                  type="linear" 
                   dataKey={(entry) => entry.passed ? 1 : 0}
-                  stroke="#ef4444" 
-                  fill={`url(#gradient-${test.id})`}
+                  stroke="#9ca3af"
                   strokeWidth={2}
+                  dot={(props: any) => {
+                    const { cx, cy, payload } = props;
+                    return (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={5}
+                        fill={payload.passed ? '#22c55e' : '#ef4444'}
+                        stroke={payload.passed ? '#16a34a' : '#dc2626'}
+                        strokeWidth={2}
+                      />
+                    );
+                  }}
+                  activeDot={{ r: 7 }}
                 />
-              </AreaChart>
+              </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -250,7 +272,22 @@ const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) 
         {/* Expanded Details */}
         {expanded && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-700 space-y-3">
-            <div className="grid grid-cols-2 gap-4 text-sm text-gray-900 dark:text-white">
+            {/* Failure Reason / Detection */}
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
+                    <span className="text-white text-sm">🔍</span>
+                  </div>
+                </div>
+                <div className="ml-3 flex-1">
+                  <h4 className="text-sm font-semibold text-red-900 dark:text-red-200 mb-1">Most Common Failure Reason</h4>
+                  <p className="text-sm text-red-800 dark:text-red-300">{test.root_cause || 'Pattern analysis pending'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm text-gray-900 dark:text-white">
               <div>
                 <span className="text-gray-500 dark:text-slate-400">First Detected:</span>
                 <span className="ml-2 font-medium">{new Date(test.first_detected).toLocaleDateString()}</span>
@@ -273,10 +310,56 @@ const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) 
               <h5 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">Recommended Actions</h5>
               <ul className="text-sm text-gray-600 dark:text-slate-400 space-y-1 list-disc list-inside">
                 <li>Review test logs for common failure patterns</li>
-                <li>Check for race conditions or timing dependencies</li>
                 <li>Verify test environment consistency</li>
                 <li>Consider quarantining if flakiness persists</li>
               </ul>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700">
+              <div className="p-4 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
+                <h5 className="text-sm font-semibold text-gray-900 dark:text-white">Recent Runs</h5>
+                <span className="text-xs text-gray-500 dark:text-slate-400">Last {historyData.length} events</span>
+              </div>
+              <div className="max-h-60 overflow-x-auto overflow-y-auto">
+                <table className="min-w-full text-xs sm:text-sm">
+                  <thead>
+                    <tr className="bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-slate-400">
+                      <th className="px-4 py-2 text-left font-semibold">Date</th>
+                      <th className="px-4 py-2 text-left font-semibold">Time</th>
+                      <th className="px-4 py-2 text-left font-semibold">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {historyData.map((run, idx) => {
+                      const runDate = new Date(run.date);
+                      return (
+                        <tr key={`${run.date}-${idx}`} className="border-t border-gray-100 dark:border-slate-800">
+                          <td className="px-4 py-2 text-gray-800 dark:text-slate-200">
+                            {runDate.toLocaleDateString(undefined, {
+                              weekday: 'short',
+                              day: '2-digit',
+                              month: 'short',
+                              year: 'numeric'
+                            })}
+                          </td>
+                          <td className="px-4 py-2 text-gray-600 dark:text-slate-400">
+                            {runDate.toLocaleTimeString(undefined, {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
+                          </td>
+                          <td className="px-4 py-2">
+                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${run.passed ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
+                              {run.passed ? 'Passed' : 'Failed'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
