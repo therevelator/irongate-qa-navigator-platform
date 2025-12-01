@@ -14,95 +14,26 @@ import { useTheme } from '../contexts/ThemeContext';
 
 // Simple markdown renderer component
 const MarkdownRenderer: React.FC<{ content: string; isDark: boolean }> = ({ content, isDark }) => {
-  const renderMarkdown = (text: string) => {
-    const lines = text.split('\n');
-    const elements: React.ReactNode[] = [];
-    let listItems: string[] = [];
-    let listKey = 0;
+  // Add styling classes for the HTML content
+  const styledContent = content
+    .replace(/<table>/g, `<table class="w-full border-collapse my-4 text-sm">`)
+    .replace(/<th>/g, `<th class="border ${isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-slate-100'} px-3 py-2 text-left font-semibold">`)
+    .replace(/<td>/g, `<td class="border ${isDark ? 'border-slate-600' : 'border-slate-300'} px-3 py-2">`)
+    .replace(/<h2>/g, `<h2 class="text-lg font-bold mt-4 mb-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}">`)
+    .replace(/<h3>/g, `<h3 class="text-base font-semibold mt-3 mb-1 ${isDark ? 'text-slate-200' : 'text-slate-800'}">`)
+    .replace(/<ul>/g, `<ul class="list-disc list-inside my-2 space-y-1 ml-4">`)
+    .replace(/<li>/g, `<li class="leading-relaxed">`)
+    .replace(/<p>/g, `<p class="my-2 leading-relaxed">`)
+    .replace(/<strong>/g, `<strong class="font-semibold">`)
+    .replace(/class="positive"/g, `class="text-emerald-500 font-medium"`)
+    .replace(/class="negative"/g, `class="text-red-500 font-medium"`);
 
-    const flushList = () => {
-      if (listItems.length > 0) {
-        elements.push(
-          <ul key={`list-${listKey++}`} className="list-disc list-inside my-2 space-y-1">
-            {listItems.map((item, idx) => (
-              <li key={idx} className="ml-4">{formatInlineText(item)}</li>
-            ))}
-          </ul>
-        );
-        listItems = [];
-      }
-    };
-
-    const formatInlineText = (text: string): React.ReactNode => {
-      // Bold text **text**
-      const parts = text.split(/(\*\*[^*]+\*\*)/g);
-      return parts.map((part, idx) => {
-        if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={idx}>{part.slice(2, -2)}</strong>;
-        }
-        return part;
-      });
-    };
-
-    lines.forEach((line, index) => {
-      const trimmedLine = line.trim();
-      
-      // Headers
-      if (trimmedLine.startsWith('# ')) {
-        flushList();
-        elements.push(
-          <h1 key={index} className="text-xl font-bold mt-4 mb-2">
-            {formatInlineText(trimmedLine.slice(2))}
-          </h1>
-        );
-      } else if (trimmedLine.startsWith('## ')) {
-        flushList();
-        elements.push(
-          <h2 key={index} className="text-lg font-semibold mt-3 mb-2">
-            {formatInlineText(trimmedLine.slice(3))}
-          </h2>
-        );
-      } else if (trimmedLine.startsWith('### ')) {
-        flushList();
-        elements.push(
-          <h3 key={index} className="text-base font-semibold mt-2 mb-1">
-            {formatInlineText(trimmedLine.slice(4))}
-          </h3>
-        );
-      }
-      // Horizontal rule
-      else if (trimmedLine === '---') {
-        flushList();
-        elements.push(<hr key={index} className={`my-4 ${isDark ? 'border-slate-700' : 'border-slate-300'}`} />);
-      }
-      // List items
-      else if (trimmedLine.startsWith('- ') || trimmedLine.startsWith('* ')) {
-        listItems.push(trimmedLine.slice(2));
-      }
-      else if (/^\d+\.\s/.test(trimmedLine)) {
-        listItems.push(trimmedLine.replace(/^\d+\.\s/, ''));
-      }
-      // Empty line
-      else if (trimmedLine === '') {
-        flushList();
-        elements.push(<div key={index} className="h-2" />);
-      }
-      // Regular paragraph
-      else {
-        flushList();
-        elements.push(
-          <p key={index} className="my-1">
-            {formatInlineText(trimmedLine)}
-          </p>
-        );
-      }
-    });
-
-    flushList();
-    return elements;
-  };
-
-  return <div className="space-y-1">{renderMarkdown(content)}</div>;
+  return (
+    <div 
+      className="ai-html-content"
+      dangerouslySetInnerHTML={{ __html: styledContent }}
+    />
+  );
 };
 
 interface BusinessImpactAnalysisV2Props {
@@ -450,8 +381,17 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
         significant: c.is_significant
       }));
 
-      // Create comprehensive analysis prompt
+      // Create comprehensive analysis prompt - requesting HTML output
       const analysisPrompt = `You are a Senior Data Scientist and Business Intelligence expert. Analyze this correlation matrix from a QA dashboard that measures the relationship between software quality metrics and business outcomes over 12 months.
+
+IMPORTANT: Output your response as clean HTML that can be directly rendered. Use these HTML elements:
+- <h2> for section headers
+- <h3> for subsection headers  
+- <p> for paragraphs
+- <ul> and <li> for bullet lists
+- <table>, <thead>, <tbody>, <tr>, <th>, <td> for any tables
+- <strong> for bold text
+- <span class="positive"> for positive correlations, <span class="negative"> for negative ones
 
 DATASET CONTEXT:
 - Time Period: 12 consecutive months of data
@@ -471,7 +411,7 @@ ANALYSIS REQUIREMENTS:
 4. Strategic Recommendations: Which quality metrics should be prioritized?
 5. Risk Assessment: Business risks from quality degradation
 
-Provide actionable insights that a CTO would understand and use to make investment decisions.`;
+Provide actionable insights that a CTO would understand and use to make investment decisions. Output ONLY valid HTML, no markdown.`;
 
       // Make actual API call to Groq (placeholder - needs backend implementation)
       console.log('🚀 Making Groq API call with payload:');
