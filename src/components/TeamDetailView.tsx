@@ -22,17 +22,19 @@ interface TeamWithKPI extends Team {
     sprintVelocity?: number;
     sprintCommitmentRate?: number;
     sprintCarryover?: number;
-    firstTimePassRate?: number;
+    firstPassRate?: number;
     blockedTimeHours?: number;
     automationCoverage?: number;
     automationRoi?: number;
     changeFailureRate?: number;
     mtbfHours?: number;
-    systemAvailability?: number;
-    infrastructureFailures?: number;
+    availability?: number;
+    infraFailures?: number;
   };
 }
+
 import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Bug, Bot, BarChart3, Clock, GitPullRequest, Zap, Users, Activity, RefreshCcw, Timer } from 'lucide-react';
+import BatteryIndicator from './BatteryIndicator';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface TeamMember {
@@ -509,28 +511,18 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               </div>
             )}
             
-            {/* QA Score - Compact with ring */}
+            {/* QA Score - Compact with battery */}
             <div className="flex items-center gap-2">
               <div className="text-right">
                 <p className="text-[10px] text-gray-400 dark:text-slate-500">Team QA Score</p>
                 <div className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}/100</div>
               </div>
-              <div className="relative w-10 h-10">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle cx="20" cy="20" r="16" stroke="#e5e7eb" strokeWidth="3" fill="transparent" className="dark:stroke-slate-700" />
-                  <circle 
-                    cx="20" cy="20" r="16" 
-                    stroke={scoreColor} 
-                    strokeWidth="3" 
-                    fill="transparent"
-                    strokeDasharray={2 * Math.PI * 16}
-                    strokeDashoffset={2 * Math.PI * 16 - (team.qaScore / 100) * 2 * Math.PI * 16}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-900 dark:text-white">
-                  {team.qaScore}
-                </div>
+              <div className="max-[800px]:hidden">
+                <BatteryIndicator
+                  percentage={team.qaScore}
+                  size="sm"
+                  mode="3d"
+                />
               </div>
             </div>
           </div>
@@ -596,24 +588,12 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 <p className="text-sm text-gray-500 dark:text-slate-400">Team QA Score</p>
                 <div className="text-4xl font-bold text-gray-900 dark:text-white">{team.qaScore}/100</div>
               </div>
-              <div className="relative w-20 h-20">
-                <svg className="w-full h-full transform -rotate-90">
-                  <circle cx="40" cy="40" r="35" stroke="#e5e7eb" strokeWidth="6" fill="transparent" className="dark:stroke-slate-700" />
-                  <circle 
-                    cx="40" 
-                    cy="40" 
-                    r="35" 
-                    stroke={scoreColor} 
-                    strokeWidth="6" 
-                    fill="transparent"
-                    strokeDasharray={2 * Math.PI * 35}
-                    strokeDashoffset={2 * Math.PI * 35 - (team.qaScore / 100) * 2 * Math.PI * 35}
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center text-xl font-bold text-gray-900 dark:text-white">
-                  {team.qaScore}
-                </div>
+              <div className="max-[800px]:hidden">
+                <BatteryIndicator
+                  percentage={team.qaScore}
+                  size="lg"
+                  mode="3d"
+                />
               </div>
             </div>
           </div>

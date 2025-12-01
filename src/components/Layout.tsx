@@ -296,9 +296,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Grid Selector */}
+            {/* Grid Selector - Hidden on mobile */}
             {currentView === 'dashboard' && onGridChange && (
-              <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
+              <div className="hidden sm:flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
                 <span className="text-[10px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide px-1.5">Grid</span>
                 {([1, 2, 3] as const).map((cols) => (
                   <button

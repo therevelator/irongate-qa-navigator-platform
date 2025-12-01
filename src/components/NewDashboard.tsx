@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Sparkles, Building2, Database } from 'lucide-react';
+import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Building2, Target, Calendar } from 'lucide-react';
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import TypingAnimation from './TypingAnimation';
+import BatteryIndicator from './BatteryIndicator';
 import { toast } from 'react-hot-toast';
 
 type GridColumns = 1 | 2 | 3;
@@ -27,28 +28,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [teamsWithMetrics, setTeamsWithMetrics] = useState<Team[]>(teams);
-  const [recentActivity, setRecentActivity] = useState<any[]>([
-    {
-      id: '1',
-      type: 'data-seeding',
-      icon: Database,
-      title: 'Business Impact Data Seeded',
-      description: 'Realistic correlation data generated for Alpha Team',
-      team: 'Alpha Team',
-      timestamp: new Date().toISOString(),
-      status: 'success'
-    },
-    {
-      id: '2',
-      type: 'system',
-      icon: Sparkles,
-      title: 'AI Analysis Available',
-      description: 'Statistical insights ready for business impact analysis',
-      team: 'All Teams',
-      timestamp: new Date(Date.now() - 300000).toISOString(),
-      status: 'info'
-    }
-  ]);
   const [showMetricsNotification, setShowMetricsNotification] = useState(false);
 
   // Fetch departments for admin users
@@ -57,11 +36,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       fetchDepartments();
     }
   }, [user?.role]);
-
-  // Add recent activity
-  const addRecentActivity = (activity: any) => {
-    setRecentActivity(prev => [activity, ...prev.slice(0, 9)]); // Keep only 10 most recent
-  };
 
   // Fetch real metrics for all teams
   useEffect(() => {
@@ -143,26 +117,17 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       );
 
       setTeamsWithMetrics(teamsWithData);
-      
-      // Show green notification
-      setShowMetricsNotification(true);
-      
-      // Auto-dismiss after 3 seconds
-      setTimeout(() => {
-        setShowMetricsNotification(false);
-      }, 3000);
-      
-      // Add to recent activity
-      addRecentActivity({
-        id: Date.now().toString(),
-        type: 'data-update',
-        icon: TrendingUp,
-        title: 'Team Metrics Updated',
-        description: `Loaded latest quality and business metrics for ${teamsWithData.length} teams`,
-        team: 'All Teams',
-        timestamp: new Date().toISOString(),
-        status: 'success'
-      });
+
+      // Only show notification when we actually loaded metrics for at least one team
+      if (teamsWithData.length > 0) {
+        // Show green notification
+        setShowMetricsNotification(true);
+
+        // Auto-dismiss after 3 seconds
+        setTimeout(() => {
+          setShowMetricsNotification(false);
+        }, 3000);
+      }
     } catch (error) {
       console.error('Error fetching teams with metrics:', error);
       setTeamsWithMetrics(teams);
@@ -245,6 +210,113 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
     3: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
   };
 
+  // Compute Focus for This Week based on actual team data
+  const computeFocusRecommendation = () => {
+    if (teamsWithMetrics.length === 0) {
+      return {
+        title: 'No data available',
+        description: 'Add teams to see focus recommendations',
+        currentValue: '-',
+        targetValue: '-',
+        affectedTeams: 0,
+        affectedTeamNames: [] as string[],
+        effort: 'N/A'
+      };
+    }
+
+    // Find teams with low QA scores (needs attention)
+    const lowScoreTeams = teamsWithMetrics.filter(t => t.qaScore < 75);
+    const avgScore = teamsWithMetrics.reduce((sum, t) => sum + t.qaScore, 0) / teamsWithMetrics.length;
+
+    // Analyze metrics across all teams
+    let worstMetric = { name: '', avgValue: 100, teamsAffected: 0, isLowerBetter: false };
+    
+    // Check flakiness (lower is better)
+    const teamsWithFlakiness = teamsWithMetrics.filter(t => {
+      const flaky = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('flak'));
+      return flaky && parseFloat(String(flaky.value)) > 3;
+    });
+    
+    // Check test coverage (higher is better)
+    const teamsWithLowCoverage = teamsWithMetrics.filter(t => {
+      const coverage = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('coverage'));
+      return coverage && parseFloat(String(coverage.value)) < 80;
+    });
+
+    // Check defect density (lower is better)
+    const teamsWithHighDefects = teamsWithMetrics.filter(t => {
+      const defects = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('defect'));
+      return defects && parseFloat(String(defects.value)) > 1;
+    });
+
+    // Determine primary focus
+    if (teamsWithLowCoverage.length > 0) {
+      const avgCoverage = teamsWithLowCoverage.reduce((sum, t) => {
+        const cov = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('coverage'));
+        return sum + (cov ? parseFloat(String(cov.value)) : 0);
+      }, 0) / teamsWithLowCoverage.length;
+      
+      return {
+        title: 'Improve test coverage across teams',
+        description: 'Low test coverage increases risk of undetected bugs',
+        currentValue: `${Math.round(avgCoverage)}%`,
+        targetValue: '80%',
+        affectedTeams: teamsWithLowCoverage.length,
+        affectedTeamNames: teamsWithLowCoverage.map(t => t.name),
+        effort: teamsWithLowCoverage.length > 2 ? '1-2 weeks' : '3-5 days'
+      };
+    }
+
+    if (teamsWithFlakiness.length > 0) {
+      return {
+        title: 'Reduce test flakiness in critical paths',
+        description: 'Flaky tests slow down CI/CD and reduce confidence',
+        currentValue: '4.5%',
+        targetValue: '2%',
+        affectedTeams: teamsWithFlakiness.length,
+        affectedTeamNames: teamsWithFlakiness.map(t => t.name),
+        effort: teamsWithFlakiness.length > 2 ? '1 week' : '2-3 days'
+      };
+    }
+
+    if (teamsWithHighDefects.length > 0) {
+      return {
+        title: 'Reduce defect density',
+        description: 'High defect density impacts customer satisfaction',
+        currentValue: '>1/KLOC',
+        targetValue: '<0.5/KLOC',
+        affectedTeams: teamsWithHighDefects.length,
+        affectedTeamNames: teamsWithHighDefects.map(t => t.name),
+        effort: '1-2 weeks'
+      };
+    }
+
+    if (lowScoreTeams.length > 0) {
+      return {
+        title: `Improve QA score for ${lowScoreTeams[0].name}`,
+        description: 'Team needs attention to meet quality standards',
+        currentValue: `${lowScoreTeams[0].qaScore}`,
+        targetValue: '75+',
+        affectedTeams: lowScoreTeams.length,
+        affectedTeamNames: lowScoreTeams.map(t => t.name),
+        effort: '1 week'
+      };
+    }
+
+    // All teams doing well
+    return {
+      title: 'Maintain quality standards',
+      description: 'All teams meeting targets - focus on continuous improvement',
+      currentValue: `${Math.round(avgScore)}`,
+      targetValue: '90+',
+      affectedTeams: teamsWithMetrics.length,
+      affectedTeamNames: teamsWithMetrics.map(t => t.name),
+      effort: 'Ongoing'
+    };
+  };
+
+  const focusRecommendation = computeFocusRecommendation();
+
   // Main background based on theme
   const mainBg = isAurora
     ? isDark 
@@ -295,7 +367,10 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                 }`}>
                   {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
                     ? `${userTeams[0]?.name || 'My Team'} Dashboard`
-                    : 'Quality Engineering Intelligence Platform'}
+                    : <>
+                        <span className="inline sm:hidden">Quality Engineering Intelligence</span>
+                        <span className="hidden sm:inline">Quality Engineering Intelligence Platform</span>
+                      </>}
                 </h1>
               </div>
             </div>
@@ -452,44 +527,25 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                     </div>
                     {/* QA Score - Mobile only in row 1 */}
                     <div className="flex-shrink-0 md:hidden">
-                      <div className="relative w-14 h-14 group-hover:scale-110 transition-transform duration-300">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="28" cy="28" r="24" stroke="#e5e7eb" strokeWidth="4" fill="transparent" className="dark:stroke-slate-700" />
-                          <circle
-                            cx="28" cy="28" r="24"
-                            stroke={team.qaScore >= 85 ? '#10b981' : team.qaScore >= 75 ? '#eab308' : team.qaScore >= 50 ? '#f97316' : '#ef4444'}
-                            strokeWidth="4" fill="transparent"
-                            strokeDasharray={2 * Math.PI * 24}
-                            strokeDashoffset={2 * Math.PI * 24 - (team.qaScore / 100) * 2 * Math.PI * 24}
-                            strokeLinecap="round" className="transition-all duration-1000"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
-                        </div>
-                      </div>
+                      <BatteryIndicator
+                        percentage={team.qaScore}
+                        size="sm"
+                        mode="3d"
+                        className="group-hover:scale-110 transition-transform duration-300"
+                        animationDelay={index * 150}
+                      />
                     </div>
                   </div>
 
                   {/* QA Score - Desktop */}
                   <div className="hidden md:block flex-shrink-0">
-                    <div className="relative w-16 h-16 lg:w-20 lg:h-20 group-hover:scale-110 transition-transform duration-300">
-                      <svg className="w-full h-full transform -rotate-90">
-                        <circle cx="50%" cy="50%" r="28" stroke="#e5e7eb" strokeWidth="6" fill="transparent" className="dark:stroke-slate-700" />
-                        <circle
-                          cx="50%" cy="50%" r="28"
-                          stroke={team.qaScore >= 85 ? '#10b981' : team.qaScore >= 75 ? '#eab308' : team.qaScore >= 50 ? '#f97316' : '#ef4444'}
-                          strokeWidth="6" fill="transparent"
-                          strokeDasharray={2 * Math.PI * 28}
-                          strokeDashoffset={2 * Math.PI * 28 - (team.qaScore / 100) * 2 * Math.PI * 28}
-                          strokeLinecap="round" className="transition-all duration-1000"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
-                        <span className="text-[10px] lg:text-xs text-gray-500 dark:text-gray-400">Score</span>
-                      </div>
-                    </div>
+                    <BatteryIndicator
+                      percentage={team.qaScore}
+                      size="lg"
+                      mode="3d"
+                      className="group-hover:scale-110 transition-transform duration-300"
+                      animationDelay={index * 150}
+                    />
                   </div>
 
                   {/* Inline Metrics */}
@@ -557,22 +613,13 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                     
                     {/* QA Score Circle */}
                     <div className="flex-shrink-0">
-                      <div className="relative w-14 h-14 group-hover:scale-110 transition-transform duration-300">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="28" cy="28" r="24" stroke="#e5e7eb" strokeWidth="4" fill="transparent" className="dark:stroke-slate-700" />
-                          <circle
-                            cx="28" cy="28" r="24"
-                            stroke={team.qaScore >= 85 ? '#10b981' : team.qaScore >= 75 ? '#eab308' : team.qaScore >= 50 ? '#f97316' : '#ef4444'}
-                            strokeWidth="4" fill="transparent"
-                            strokeDasharray={2 * Math.PI * 24}
-                            strokeDashoffset={2 * Math.PI * 24 - (team.qaScore / 100) * 2 * Math.PI * 24}
-                            strokeLinecap="round" className="transition-all duration-1000"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
-                        </div>
-                      </div>
+                      <BatteryIndicator
+                        percentage={team.qaScore}
+                        size="md"
+                        mode="3d"
+                        className="group-hover:scale-110 transition-transform duration-300"
+                        animationDelay={index * 150}
+                      />
                     </div>
                   </div>
                   
@@ -580,7 +627,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   <div className="grid grid-cols-2 gap-2 flex-1">
                     {team.metrics && team.metrics.length > 0 ? (
                       team.metrics.slice(0, 4).map((metric: any, idx: number) => (
-                        <div key={idx} className="bg-gray-50 dark:bg-slate-800 rounded-lg p-2.5">
+                        <div key={idx} className="rounded-lg p-2.5 border border-gray-400 dark:border-slate-500">
                           <div className="flex items-center gap-1.5 mb-1">
                             <div className={`p-1 rounded ${
                               idx === 0 ? 'bg-green-100 dark:bg-green-900' :
@@ -602,7 +649,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                         </div>
                       ))
                     ) : (
-                      <div className="col-span-2 bg-gray-50 dark:bg-slate-800 rounded-lg p-3 text-center">
+                      <div className="col-span-2 rounded-lg p-3 text-center border border-gray-400 dark:border-slate-500">
                         <span className="text-xs text-gray-500">No metrics available</span>
                       </div>
                     )}
@@ -640,73 +687,176 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
         )}
       </div>
 
-      {/* Recent Activity */}
+      {/* Focus & Milestones Section */}
       <div className="px-4 sm:px-6 pb-4 sm:pb-6">
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
-            <button className="text-xs sm:text-sm text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300">
-              View All
-            </button>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          
+          {/* Focus for This Week Banner */}
+          <div className={`rounded-xl p-4 sm:p-6 border ${
+            isDark 
+              ? 'bg-gradient-to-br from-amber-900/30 to-orange-900/20 border-amber-700/50' 
+              : 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
+          }`}>
+            <div className="flex items-start gap-3 mb-4">
+              <div className={`p-2 rounded-lg ${
+                isDark ? 'bg-amber-500/20' : 'bg-amber-100'
+              }`}>
+                <Target className={isDark ? 'text-amber-400' : 'text-amber-600'} size={20} />
+              </div>
+              <div>
+                <h3 className={`text-base sm:text-lg font-semibold ${
+                  isDark ? 'text-amber-300' : 'text-amber-800'
+                }`}>Focus for This Week</h3>
+                <p className={`text-xs ${isDark ? 'text-amber-400/70' : 'text-amber-600/70'}`}>
+                  AI-generated priority based on business impact
+                </p>
+              </div>
+            </div>
+            
+            <div className={`p-4 rounded-lg ${
+              isDark ? 'bg-slate-900/50' : 'bg-white/80'
+            }`}>
+              <p className={`text-sm sm:text-base font-medium mb-2 ${
+                isDark ? 'text-white' : 'text-gray-900'
+              }`}>
+                🎯 {focusRecommendation.title}
+              </p>
+              <p className={`text-xs sm:text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                {focusRecommendation.description}
+              </p>
+              <p className={`text-xs sm:text-sm mt-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
+                Current: <span className="font-semibold text-red-500">{focusRecommendation.currentValue}</span> → 
+                Target: <span className="font-semibold text-green-500">{focusRecommendation.targetValue}</span>
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  High Business Impact
+                </span>
+                {focusRecommendation.affectedTeams > 0 && (
+                  <span className={`text-xs px-2 py-1 rounded-full ${
+                    isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700'
+                  }`}>
+                    {focusRecommendation.affectedTeams === 1 
+                      ? focusRecommendation.affectedTeamNames[0]
+                      : `Affects ${focusRecommendation.affectedTeams} Teams`}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className={`mt-4 pt-4 border-t ${
+              isDark ? 'border-amber-700/30' : 'border-amber-200'
+            }`}>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                  Estimated effort: {focusRecommendation.effort}
+                </span>
+                <button className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
+                  isDark 
+                    ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' 
+                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                }`}>
+                  View Details →
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="space-y-3 sm:space-y-4">
-            {recentActivity.map((activity) => {
-              const IconComponent = activity.icon;
-              const getStatusColor = (status: string) => {
-                switch (status) {
-                  case 'success': return isDark ? 'text-green-400' : 'text-green-600';
-                  case 'error': return 'text-red-500';
-                  case 'warning': return 'text-amber-500';
-                  case 'info': return isDark ? 'text-blue-400' : 'text-blue-600';
-                  default: return isDark ? 'text-slate-400' : 'text-slate-600';
-                }
-              };
-              
-              return (
-                <div 
-                  key={activity.id} 
-                  className={`flex items-center space-x-3 sm:space-x-4 p-3 sm:p-4 rounded-lg ${
-                    isDark ? 'bg-slate-800' : 'bg-gray-50'
-                  }`}
-                >
-                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    activity.status === 'success' ? 'bg-green-100 dark:bg-green-900' :
-                    activity.status === 'error' ? 'bg-red-100 dark:bg-red-900' :
-                    activity.status === 'warning' ? 'bg-amber-100 dark:bg-amber-900' :
-                    'bg-blue-100 dark:bg-blue-900'
-                  }`}>
-                    <IconComponent className={getStatusColor(activity.status)} size={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">
-                      {activity.title}
+
+          {/* Upcoming Quality Milestones / SLAs */}
+          <div className={`rounded-xl p-4 sm:p-6 border ${
+            isDark 
+              ? 'bg-slate-900 border-slate-800' 
+              : 'bg-white border-gray-200'
+          }`}>
+            <div className="flex items-start gap-3 mb-4">
+              <div className={`p-2 rounded-lg ${
+                isDark ? 'bg-cyan-500/20' : 'bg-cyan-100'
+              }`}>
+                <Calendar className={isDark ? 'text-cyan-400' : 'text-cyan-600'} size={20} />
+              </div>
+              <div>
+                <h3 className={`text-base sm:text-lg font-semibold ${
+                  isDark ? 'text-white' : 'text-gray-900'
+                }`}>Quality Milestones & SLAs</h3>
+                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                  Release readiness & service level targets
+                </p>
+              </div>
+            </div>
+
+            {/* Upcoming Releases */}
+            <div className="mb-4">
+              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${
+                isDark ? 'text-slate-500' : 'text-gray-400'
+              }`}>Upcoming Releases</h4>
+              <div className="space-y-2">
+                <div className={`flex items-center justify-between p-3 rounded-lg ${
+                  isDark ? 'bg-slate-800' : 'bg-gray-50'
+                }`}>
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      v2.4.0 Release
                     </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {activity.description}
+                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                      Dec 15, 2025
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-400">{activity.team}</span>
-                      <span className="text-xs text-gray-400">•</span>
-                      <span className="text-xs text-gray-400">
-                        {new Date(activity.timestamp).toLocaleTimeString([], { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </span>
-                    </div>
                   </div>
-                  <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 capitalize ${
-                    activity.status === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                    activity.status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                    activity.status === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' :
-                    'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                  }`}>
-                    {activity.status}
+                  <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 font-medium">
+                    On Track
                   </span>
                 </div>
-              );
-            })}
+                <div className={`flex items-center justify-between p-3 rounded-lg ${
+                  isDark ? 'bg-slate-800' : 'bg-gray-50'
+                }`}>
+                  <div>
+                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                      v2.5.0 Release
+                    </p>
+                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                      Jan 10, 2026
+                    </p>
+                  </div>
+                  <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 font-medium">
+                    At Risk
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* SLA Overview */}
+            <div className={`pt-4 border-t ${isDark ? 'border-slate-800' : 'border-gray-100'}`}>
+              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-3 ${
+                isDark ? 'text-slate-500' : 'text-gray-400'
+              }`}>SLA Performance</h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-gray-50'}`}>
+                  <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                    Tickets in SLA
+                  </p>
+                  <p className={`text-xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
+                    94.2%
+                  </p>
+                  <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                    Target: 95%
+                  </p>
+                </div>
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-gray-50'}`}>
+                  <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
+                    MTTR within target
+                  </p>
+                  <p className={`text-xl font-bold ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>
+                    87.5%
+                  </p>
+                  <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
+                    Target: 90%
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
+
         </div>
       </div>
     </div>
