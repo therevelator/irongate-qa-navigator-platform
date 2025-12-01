@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Sparkles, Building2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Sparkles, Building2, Database } from 'lucide-react';
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
