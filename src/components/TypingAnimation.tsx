@@ -80,12 +80,12 @@ const TypingAnimation: React.FC<TypingAnimationProps> = ({ className = '' }) => 
   return (
     <div className={`${className} min-h-[2.5rem] sm:min-h-[3rem] flex items-start py-1`}>
       {isCodeMessage ? (
-        <pre className="font-mono text-[11px] sm:text-xs md:text-sm text-green-600 dark:text-green-400 whitespace-pre-wrap leading-relaxed">
+        <pre className="font-mono text-[11px] sm:text-xs md:text-sm text-green-300 whitespace-pre-wrap leading-relaxed">
           {displayedText}
           <span className={`${showCursor ? 'opacity-100' : 'opacity-0'} transition-opacity`}>▊</span>
         </pre>
       ) : (
-        <p className="text-xs sm:text-sm md:text-base text-gray-600 dark:text-gray-300 leading-relaxed">
+        <p className="text-xs sm:text-sm md:text-base glass-text-secondary leading-relaxed">
           {displayedText}
           <span className={`${showCursor ? 'opacity-100' : 'opacity-0'} transition-opacity`}>▊</span>
         </p>
