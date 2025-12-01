@@ -147,6 +147,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       // Show green notification
       setShowMetricsNotification(true);
       
+      // Auto-dismiss after 3 seconds
+      setTimeout(() => {
+        setShowMetricsNotification(false);
+      }, 3000);
+      
       // Add to recent activity
       addRecentActivity({
         id: Date.now().toString(),
@@ -283,14 +288,14 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
             }`}></div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className={`text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold truncate ${
+                <h1 className={`text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold truncate ml-0 md:ml-8 ${
                   isAurora && isDark 
                     ? 'text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.6)]' 
                     : 'text-gray-900 dark:text-white'
                 }`}>
                   {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
                     ? `${userTeams[0]?.name || 'My Team'} Dashboard`
-                    : 'Quality Engineering Dashboard'}
+                    : 'Quality Engineering Intelligence Platform'}
                 </h1>
               </div>
             </div>
