@@ -37,6 +37,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
     }
   }, [user?.id]);
 
+  // Scroll to top when view changes
+  useEffect(() => {
+    setTimeout(() => {
+      const scrollContainer = document.querySelector('.flex-1.overflow-auto') as HTMLElement;
+      if (scrollContainer) {
+        scrollContainer.scrollTop = 0;
+      }
+    }, 0);
+  }, [currentView]);
+
   const fetchDepartments = async () => {
     try {
       const token = localStorage.getItem('irongate_token');

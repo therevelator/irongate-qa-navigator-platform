@@ -801,15 +801,122 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
   }
 });
 
+// Get business impact configuration for a team
+router.get('/business-impact-config/:teamId', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { teamId } = req.params;
+
+    // Get business impact configurations
+    const impactConfigs = await query<any>(
+      `SELECT metric_name, quality_score, revenue_impact, customer_satisfaction,
+              feature_adoption_rate, correlation_strength
+       FROM business_impact_config
+       WHERE team_id = ? AND manually_edited = TRUE
+       ORDER BY metric_name`,
+      [teamId]
+    );
+
+    // Get historical trends configuration
+    const historicalConfigs = await query<any>(
+      `SELECT month_year, quality_score, revenue_impact, customer_satisfaction, churn_rate
+       FROM business_impact_history
+       WHERE team_id = ? AND manually_edited = TRUE
+       ORDER BY month_year`,
+      [teamId]
+    );
+
+    res.json({
+      impactConfigs,
+      historicalConfigs,
+      hasConfiguredData: impactConfigs.length > 0 || historicalConfigs.length > 0
+    });
+  } catch (error) {
+    console.error('Get business impact config error:', error);
+    res.status(500).json({ error: 'Failed to get business impact configuration' });
+  }
+});
+
+// Save business impact configuration for a team
+router.post('/business-impact-config/:teamId', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { teamId } = req.params;
+    const { impactConfigs, historicalConfigs } = req.body;
+
+    // Validate input
+    if (!Array.isArray(impactConfigs) || !Array.isArray(historicalConfigs)) {
+      return res.status(400).json({ error: 'Invalid data format' });
+    }
+
+    // Save impact configurations
+    for (const config of impactConfigs) {
+      await query(
+        `INSERT INTO business_impact_config
+         (id, team_id, metric_name, quality_score, revenue_impact, customer_satisfaction,
+          feature_adoption_rate, correlation_strength, manually_edited)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+         ON DUPLICATE KEY UPDATE
+           quality_score = VALUES(quality_score),
+           revenue_impact = VALUES(revenue_impact),
+           customer_satisfaction = VALUES(customer_satisfaction),
+           feature_adoption_rate = VALUES(feature_adoption_rate),
+           correlation_strength = VALUES(correlation_strength),
+           manually_edited = TRUE,
+           updated_at = CURRENT_TIMESTAMP`,
+        [
+          require('crypto').randomUUID(),
+          teamId,
+          config.metric_name,
+          config.quality_score,
+          config.revenue_impact,
+          config.customer_satisfaction,
+          config.feature_adoption_rate,
+          config.correlation_strength
+        ]
+      );
+    }
+
+    // Save historical configurations
+    for (const config of historicalConfigs) {
+      await query(
+        `INSERT INTO business_impact_history
+         (id, team_id, month_year, quality_score, revenue_impact, customer_satisfaction,
+          churn_rate, manually_edited)
+         VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
+         ON DUPLICATE KEY UPDATE
+           quality_score = VALUES(quality_score),
+           revenue_impact = VALUES(revenue_impact),
+           customer_satisfaction = VALUES(customer_satisfaction),
+           churn_rate = VALUES(churn_rate),
+           manually_edited = TRUE,
+           updated_at = CURRENT_TIMESTAMP`,
+        [
+          require('crypto').randomUUID(),
+          teamId,
+          config.month_year,
+          config.quality_score,
+          config.revenue_impact,
+          config.customer_satisfaction,
+          config.churn_rate
+        ]
+      );
+    }
+
+    res.json({ success: true, message: 'Business impact configuration saved successfully' });
+  } catch (error) {
+    console.error('Save business impact config error:', error);
+    res.status(500).json({ error: 'Failed to save business impact configuration' });
+  }
+});
+
 // Helper function to determine DORA performance level
 function getDORALevel(kpi: any): string {
   if (!kpi) return 'Unknown';
-  
+
   const deployFreq = Number(kpi.deployment_frequency_per_week) || 0;
   const leadTime = Number(kpi.lead_time_days) || 999;
   const changeFailure = Number(kpi.change_failure_rate) || 100;
   const mttr = Number(kpi.mttr_hours) || 999;
-  
+
   // Elite: Deploy multiple times/day, lead time <1 day, CFR <5%, MTTR <1hr
   if (deployFreq >= 7 && leadTime < 1 && changeFailure < 5 && mttr < 1) return 'Elite';
   // High: Deploy weekly-daily, lead time <1 week, CFR <10%, MTTR <1 day

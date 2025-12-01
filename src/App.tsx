@@ -8,7 +8,7 @@ import FeaturesMenu from './components/FeaturesMenu';
 import FlakyTestIntelligence from './components/FlakyTestIntelligence';
 import TechnicalDebtTracker from './components/TechnicalDebtTracker';
 import PipelineVisualization from './components/PipelineVisualization';
-import BusinessImpactAnalysis from './components/BusinessImpactAnalysis';
+import BusinessImpactAnalysisV2 from './components/BusinessImpactAnalysisV2';
 import PerformanceTesting from './components/PerformanceTesting';
 import DeveloperProductivity from './components/DeveloperProductivity';
 import TestExecutionTimeline from './components/TestExecutionTimeline';
@@ -184,7 +184,7 @@ function App() {
   if (currentView === 'business-impact') {
     return (
       <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <BusinessImpactAnalysis onBack={() => setCurrentView('features')} />
+        <BusinessImpactAnalysisV2 onBack={() => setCurrentView('features')} teamId={analyticsTeamId} />
       </Layout>
     );
   }

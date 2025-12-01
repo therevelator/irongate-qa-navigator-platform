@@ -13,6 +13,17 @@ const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack 
   const [impactData, setImpactData] = useState<BusinessImpact[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Historical data state - now configurable
+  const [historicalData, setHistoricalData] = useState(() =>
+    Array.from({ length: 12 }, (_, i) => ({
+      month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
+      quality: Number((70 + Math.random() * 20).toFixed(2)),
+      revenue: Number((200 + Math.random() * 100).toFixed(2)),
+      satisfaction: Number((75 + Math.random() * 15).toFixed(2)),
+      churn: Number((5 - Math.random() * 2).toFixed(2))
+    }))
+  );
+
   useEffect(() => {
     const fetchImpact = async () => {
       try {
@@ -33,6 +44,42 @@ const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack 
     fetchImpact();
   }, []);
 
+  // Fetch configured historical data
+  useEffect(() => {
+    const fetchHistoricalData = async () => {
+      try {
+        const token = localStorage.getItem('irongate_token');
+        // Try to get configured historical data for the current team
+        const teamId = localStorage.getItem('current_team_id'); // Assuming this is stored
+        if (teamId) {
+          const response = await fetch(`${API_URL}/metrics/business-impact-config/${teamId}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            if (data.historicalConfigs && data.historicalConfigs.length > 0) {
+              // Use configured historical data
+              const configuredHistory = data.historicalConfigs.map((item: any) => ({
+                month: item.month_year.substring(5, 7) + '/' + item.month_year.substring(2, 4), // MM/YY format
+                quality: Number(item.quality_score) || 0,
+                revenue: Number(item.revenue_impact) / 1000 || 0, // Convert to K for chart
+                satisfaction: Number(item.customer_satisfaction) || 0,
+                churn: Number(item.churn_rate) || 0
+              })).slice(-12); // Last 12 months
+
+              // Override the simulated data
+              setHistoricalData(configuredHistory);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching historical data:', error);
+        // Keep simulated data as fallback
+      }
+    };
+    fetchHistoricalData();
+  }, []);
+
   // Calculate overall statistics
   const avgCorrelation = impactData.length > 0 ? (impactData.reduce((acc, d) => acc + d.correlation_strength, 0) / impactData.length).toFixed(2) : '0';
   const totalRevenue = impactData.reduce((acc, d) => acc + d.revenue_impact, 0);
@@ -47,15 +94,6 @@ const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack 
     satisfaction: item.customer_satisfaction,
     adoption: item.feature_adoption_rate,
     correlation: item.correlation_strength
-  }));
-
-  // Historical trend simulation (will be replaced with actual historical data)
-  const historicalData = Array.from({ length: 12 }, (_, i) => ({
-    month: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][i],
-    quality: 70 + Math.random() * 20,
-    revenue: 200 + Math.random() * 100,
-    satisfaction: 75 + Math.random() * 15,
-    churn: 5 - Math.random() * 2
   }));
 
   return (
@@ -87,7 +125,7 @@ const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack 
               </div>
               <div className="text-center">
                 <p className="text-sm text-gray-500 dark:text-slate-400">Revenue Impact</p>
-                <div className="text-3xl font-bold text-green-600 dark:text-green-400">${(totalRevenue / 1000).toFixed(0)}K</div>
+                <div className="text-3xl font-bold text-green-600 dark:text-green-400">${(totalRevenue / 1000000).toFixed(2)} M</div>
               </div>
               <div className="text-center">
                 <p className="text-sm text-gray-500 dark:text-slate-400">Avg NPS</p>
@@ -158,7 +196,7 @@ const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack 
                         <div className="bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg">
                           <p className="font-bold mb-2">{data.name}</p>
                           <p className="text-sm">Quality: {data.quality.toFixed(1)}</p>
-                          <p className="text-sm">Revenue: ${data.revenue.toFixed(0)}K</p>
+                          <p className="text-sm">Revenue: ${(data.revenue / 1000).toFixed(2)} M</p>
                           <p className="text-sm">Correlation: {data.correlation.toFixed(2)}</p>
                           <p className="text-sm">NPS: {data.satisfaction.toFixed(1)}</p>
                         </div>
@@ -322,7 +360,7 @@ const MetricImpactCard: React.FC<MetricImpactCardProps> = ({ metric, isSelected,
               <DollarSign size={16} className="mr-1" />
               <span className="text-xs font-semibold">Revenue Impact</span>
             </div>
-            <div className="text-xl font-bold text-green-900 dark:text-green-200">${(metric.revenue_impact / 1000).toFixed(0)}K</div>
+            <div className="text-xl font-bold text-green-900 dark:text-green-200">${(metric.revenue_impact / 1000000).toFixed(2)} M</div>
           </div>
 
           <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
@@ -362,7 +400,7 @@ const MetricImpactCard: React.FC<MetricImpactCardProps> = ({ metric, isSelected,
                   <span className="mr-2">•</span>
                   <span>
                     <strong>Revenue Correlation:</strong> Every 10% improvement in {metric.metric_name.toLowerCase()} 
-                    correlates with ${(metric.revenue_impact * 0.1 / 1000).toFixed(1)}K additional revenue
+                    correlates with ${(metric.revenue_impact * 0.1 / 1000000).toFixed(2)} M additional revenue
                   </span>
                 </li>
                 <li className="flex items-start">
@@ -396,7 +434,7 @@ const MetricImpactCard: React.FC<MetricImpactCardProps> = ({ metric, isSelected,
                 </li>
                 <li className="flex items-start">
                   <span className="mr-2">3.</span>
-                  <span>Focus on feature adoption strategies to maximize the ${(metric.revenue_impact / 1000).toFixed(0)}K revenue potential</span>
+                  <span>Focus on feature adoption strategies to maximize the ${(metric.revenue_impact / 1000000).toFixed(2)} M revenue potential</span>
                 </li>
               </ul>
             </div>
@@ -408,14 +446,14 @@ const MetricImpactCard: React.FC<MetricImpactCardProps> = ({ metric, isSelected,
                 <div>
                   <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">If quality improves by 20%:</p>
                   <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
-                    +${(metric.revenue_impact * 0.2 / 1000).toFixed(1)}K revenue
+                    +${(metric.revenue_impact * 0.2 / 1000000).toFixed(2)} M revenue
                   </p>
                   <p className="text-xs text-purple-700 dark:text-purple-300">+{(metric.customer_satisfaction * 0.1).toFixed(1)} NPS points</p>
                 </div>
                 <div>
                   <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">If quality degrades by 10%:</p>
                   <p className="text-lg font-bold text-red-900 dark:text-red-200">
-                    -${(metric.revenue_impact * 0.1 / 1000).toFixed(1)}K revenue
+                    -${(metric.revenue_impact * 0.1 / 1000000).toFixed(2)} M revenue
                   </p>
                   <p className="text-xs text-red-700 dark:text-red-300">-{(metric.customer_satisfaction * 0.05).toFixed(1)} NPS points</p>
                 </div>

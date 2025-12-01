@@ -2,6 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
 import { seedAllAnalyticsData, updateDailyAnalytics } from '../jobs/analyticsSync';
+import { randomUUID } from 'crypto';
 
 const router = express.Router();
 
@@ -375,6 +376,9 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error fetching developer metrics:', error);
     res.status(500).json({ error: 'Failed to fetch developer metrics' });
+      // Make logging more visible
+      alert("🚀 Preparing Groq API Call - Check server console!");
+      console.error("🚀🚀🚀 GROQ API CALL STARTING 🚀🚀🚀");
   }
 });
 
@@ -608,7 +612,7 @@ router.get('/pipeline-config', authenticateToken, async (req: any, res) => {
 
     // Create default config if not exists
     if (!config) {
-      const id = require('crypto').randomUUID();
+      const id = randomUUID();
       await query(
         `INSERT INTO pipeline_config (id, company_id, time_savings_percent, cost_savings_percent, cost_per_minute)
          VALUES (?, ?, 30.00, 25.00, 0.50)`,
@@ -662,7 +666,7 @@ router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
         [timeSavings, costSavings, costPerMin, companyId]
       );
     } else {
-      const id = require('crypto').randomUUID();
+      const id = randomUUID();
       await query(
         `INSERT INTO pipeline_config (id, company_id, time_savings_percent, cost_savings_percent, cost_per_minute)
          VALUES (?, ?, ?, ?, ?)`,
@@ -788,7 +792,7 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
 
         // Create team-specific copies
         for (const def of companyDefaults) {
-          const newId = require('crypto').randomUUID();
+          const newId = randomUUID();
           await query(`
             INSERT INTO pipeline_stages 
             (id, company_id, team_id, name, stage_order, avg_duration_seconds, success_rate,
@@ -929,29 +933,115 @@ router.get('/business-impact', authenticateToken, async (req: any, res) => {
     const { days = '30' } = req.query;
     const numDays = Math.min(parseInt(days as string) || 30, 90);
 
-    const metrics = await query<any>(`
-      SELECT 
-        metric_name,
-        AVG(quality_score) as quality_score,
-        SUM(revenue_impact) as revenue_impact,
-        AVG(customer_satisfaction) as customer_satisfaction,
-        AVG(feature_adoption_rate) as feature_adoption_rate,
-        AVG(correlation_strength) as correlation_strength
-      FROM business_impact_metrics
-      WHERE company_id = ?
-        AND recorded_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
-      GROUP BY metric_name
-      ORDER BY correlation_strength DESC
-    `, [companyId, numDays]);
+    // First, try to get configured data for this company
+    // We need to get teams for this company and check for configured data
+    const teams = await query<any>('SELECT id FROM teams WHERE company_id = ?', [companyId]);
 
-    const result = metrics.map((m: any) => ({
-      metric_name: m.metric_name,
-      quality_score: Number(m.quality_score) || 0,
-      revenue_impact: Number(m.revenue_impact) || 0,
-      customer_satisfaction: Number(m.customer_satisfaction) || 0,
-      feature_adoption_rate: Number(m.feature_adoption_rate) || 0,
-      correlation_strength: Number(m.correlation_strength) || 0
-    }));
+    let configuredMetrics: any[] = [];
+
+    // Check each team for configured business impact data
+    for (const team of teams) {
+      try {
+        const teamConfig = await query<any>(
+          `SELECT metric_name, quality_score, revenue_impact, customer_satisfaction,
+                  feature_adoption_rate, correlation_strength
+           FROM business_impact_config
+           WHERE team_id = ? AND manually_edited = TRUE`,
+          [team.id]
+        );
+        if (teamConfig.length > 0) {
+          configuredMetrics = teamConfig;
+          break; // Use the first team's configured data
+        }
+      } catch (e) {
+        // Continue to next team
+      }
+    }
+
+    let result: any[] = [];
+
+    if (configuredMetrics.length > 0) {
+      // Use configured data
+      result = configuredMetrics.map(m => ({
+        metric_name: m.metric_name,
+        quality_score: Number(m.quality_score) || 0,
+        revenue_impact: Number(m.revenue_impact) || 0,
+        customer_satisfaction: Number(m.customer_satisfaction) || 0,
+        feature_adoption_rate: Number(m.feature_adoption_rate) || 0,
+        correlation_strength: Number(m.correlation_strength) || 0
+      }));
+    } else {
+      // Fall back to database metrics
+      const metrics = await query<any>(`
+        SELECT
+          metric_name,
+          AVG(quality_score) as quality_score,
+          SUM(revenue_impact) as revenue_impact,
+          AVG(customer_satisfaction) as customer_satisfaction,
+          AVG(feature_adoption_rate) as feature_adoption_rate,
+          AVG(correlation_strength) as correlation_strength
+        FROM business_impact_metrics
+        WHERE company_id = ?
+          AND recorded_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        GROUP BY metric_name
+        ORDER BY correlation_strength DESC
+      `, [companyId, numDays]);
+
+      if (metrics.length > 0) {
+        result = metrics.map((m: any) => ({
+          metric_name: m.metric_name,
+          quality_score: Number(m.quality_score) || 0,
+          revenue_impact: Number(m.revenue_impact) || 0,
+          customer_satisfaction: Number(m.customer_satisfaction) || 0,
+          feature_adoption_rate: Number(m.feature_adoption_rate) || 0,
+          correlation_strength: Number(m.correlation_strength) || 0
+        }));
+      } else {
+        // Fall back to simulated data
+        result = [
+          {
+            metric_name: 'test_coverage',
+            quality_score: 85.5,
+            revenue_impact: 4178000,
+            customer_satisfaction: 82.3,
+            feature_adoption_rate: 73.1,
+            correlation_strength: 0.85
+          },
+          {
+            metric_name: 'defect_escape_rate',
+            quality_score: 12.2,
+            revenue_impact: 2896000,
+            customer_satisfaction: 76.8,
+            feature_adoption_rate: 68.4,
+            correlation_strength: 0.72
+          },
+          {
+            metric_name: 'code_quality_score',
+            quality_score: 78.9,
+            revenue_impact: 3452000,
+            customer_satisfaction: 79.5,
+            feature_adoption_rate: 71.2,
+            correlation_strength: 0.68
+          },
+          {
+            metric_name: 'test_execution_time',
+            quality_score: 156.3,
+            revenue_impact: 1987000,
+            customer_satisfaction: 74.1,
+            feature_adoption_rate: 66.8,
+            correlation_strength: 0.55
+          },
+          {
+            metric_name: 'deployment_frequency',
+            quality_score: 21.4,
+            revenue_impact: 2674000,
+            customer_satisfaction: 77.9,
+            feature_adoption_rate: 69.7,
+            correlation_strength: 0.61
+          }
+        ];
+      }
+    }
 
     res.json({ metrics: result });
   } catch (error) {
@@ -999,6 +1089,753 @@ router.post('/update-daily', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error triggering update:', error);
     res.status(500).json({ error: 'Failed to trigger update' });
+  }
+});
+
+// ============================================================================
+// ENHANCED BUSINESS IMPACT CORRELATION API (V2)
+// ============================================================================
+
+// Helper: Calculate Pearson correlation coefficient
+function calculatePearsonCorrelation(x: number[], y: number[]): { correlation: number; pValue: number; sampleSize: number } {
+  const n = Math.min(x.length, y.length);
+  if (n < 3) return { correlation: 0, pValue: 1, sampleSize: n };
+
+  const meanX = x.reduce((a, b) => a + b, 0) / n;
+  const meanY = y.reduce((a, b) => a + b, 0) / n;
+
+  let numerator = 0;
+  let denomX = 0;
+  let denomY = 0;
+
+  for (let i = 0; i < n; i++) {
+    const dx = x[i] - meanX;
+    const dy = y[i] - meanY;
+    numerator += dx * dy;
+    denomX += dx * dx;
+    denomY += dy * dy;
+  }
+
+  const denominator = Math.sqrt(denomX * denomY);
+  const correlation = denominator === 0 ? 0 : numerator / denominator;
+
+  // Approximate p-value using t-distribution
+  const t = correlation * Math.sqrt((n - 2) / (1 - correlation * correlation));
+  // Simplified p-value approximation
+  const pValue = n < 6 ? 1 : Math.exp(-0.5 * t * t / n);
+
+  return { correlation: Math.round(correlation * 1000) / 1000, pValue, sampleSize: n };
+}
+
+// Helper: Get correlation strength label
+function getCorrelationStrength(r: number): string {
+  const absR = Math.abs(r);
+  if (absR >= 0.7) return 'strong';
+  if (absR >= 0.5) return 'moderate';
+  if (absR >= 0.3) return 'weak';
+  return 'none';
+}
+
+// GET: Fetch all correlation data for a team
+router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, res) => {
+  try {
+    const { teamId } = req.params;
+
+    // Fetch quality metrics time series
+    const qualityMetrics = await query<any>(
+      `SELECT * FROM business_impact_quality_metrics 
+       WHERE team_id = ? ORDER BY month_year ASC`,
+      [teamId]
+    );
+
+    // Fetch business KPIs time series
+    const businessKpis = await query<any>(
+      `SELECT * FROM business_impact_business_kpis 
+       WHERE team_id = ? ORDER BY month_year ASC`,
+      [teamId]
+    );
+
+    // Fetch context data
+    const contextData = await query<any>(
+      `SELECT * FROM business_impact_context 
+       WHERE team_id = ? ORDER BY month_year ASC`,
+      [teamId]
+    );
+
+    // Fetch cached correlations
+    const correlations = await query<any>(
+      `SELECT * FROM business_impact_correlations 
+       WHERE team_id = ? ORDER BY ABS(pearson_correlation) DESC`,
+      [teamId]
+    );
+
+    // Fetch data status
+    const dataStatus = await query<any>(
+      `SELECT * FROM business_impact_data_status WHERE team_id = ?`,
+      [teamId]
+    );
+
+    // Calculate data completeness
+    const monthsWithQuality = qualityMetrics.length;
+    const monthsWithKpis = businessKpis.length;
+    
+    // Find paired months (both X and Y exist)
+    const qualityMonths = new Set(qualityMetrics.map((m: any) => m.month_year));
+    const kpiMonths = new Set(businessKpis.map((m: any) => m.month_year));
+    const pairedMonths = [...qualityMonths].filter(m => kpiMonths.has(m));
+
+    res.json({
+      qualityMetrics,
+      businessKpis,
+      contextData,
+      correlations,
+      dataStatus: dataStatus[0] || null,
+      summary: {
+        monthsWithQualityData: monthsWithQuality,
+        monthsWithKpiData: monthsWithKpis,
+        monthsWithPairedData: pairedMonths.length,
+        isCorrelationReady: pairedMonths.length >= 6,
+        earliestMonth: qualityMetrics[0]?.month_year || businessKpis[0]?.month_year || null,
+        latestMonth: qualityMetrics[qualityMetrics.length - 1]?.month_year || 
+                     businessKpis[businessKpis.length - 1]?.month_year || null
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching business impact v2:', error);
+    res.status(500).json({ error: 'Failed to fetch business impact data' });
+  }
+});
+
+// POST: Save quality metrics for a month
+router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, async (req: any, res) => {
+  try {
+    const { teamId } = req.params;
+    const { month_year, ...metrics } = req.body;
+
+    if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
+      return res.status(400).json({ error: 'Invalid month_year format. Use YYYY-MM' });
+    }
+
+    const id = randomUUID();
+    
+    await query(
+      `INSERT INTO business_impact_quality_metrics
+       (id, team_id, month_year, test_coverage, defect_density, defect_escape_rate,
+        mttr_hours, deployment_frequency, lead_time_days, code_quality_score,
+        change_failure_rate, manually_edited, data_source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'manual')
+       ON DUPLICATE KEY UPDATE
+         test_coverage = COALESCE(VALUES(test_coverage), test_coverage),
+         defect_density = COALESCE(VALUES(defect_density), defect_density),
+         defect_escape_rate = COALESCE(VALUES(defect_escape_rate), defect_escape_rate),
+         mttr_hours = COALESCE(VALUES(mttr_hours), mttr_hours),
+         deployment_frequency = COALESCE(VALUES(deployment_frequency), deployment_frequency),
+         lead_time_days = COALESCE(VALUES(lead_time_days), lead_time_days),
+         code_quality_score = COALESCE(VALUES(code_quality_score), code_quality_score),
+         change_failure_rate = COALESCE(VALUES(change_failure_rate), change_failure_rate),
+         manually_edited = TRUE,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        id, teamId, month_year,
+        metrics.test_coverage || null,
+        metrics.defect_density || null,
+        metrics.defect_escape_rate || null,
+        metrics.mttr_hours || null,
+        metrics.deployment_frequency || null,
+        metrics.lead_time_days || null,
+        metrics.code_quality_score || null,
+        metrics.change_failure_rate || null
+      ]
+    );
+
+    res.json({ success: true, message: 'Quality metrics saved' });
+  } catch (error) {
+    console.error('Error saving quality metrics:', error);
+    res.status(500).json({ error: 'Failed to save quality metrics' });
+  }
+});
+
+// POST: Save business KPIs for a month
+router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, async (req: any, res) => {
+  try {
+    const { teamId } = req.params;
+    const { month_year, ...kpis } = req.body;
+
+    if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
+      return res.status(400).json({ error: 'Invalid month_year format. Use YYYY-MM' });
+    }
+
+    const id = randomUUID();
+    
+    await query(
+      `INSERT INTO business_impact_business_kpis
+       (id, team_id, month_year, monthly_revenue, active_users, churn_rate,
+        feature_adoption_rate, new_customers, customer_lifetime_value,
+        nps_score, csat_score, support_ticket_volume, avg_resolution_time_hours,
+        manually_edited, data_source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'manual')
+       ON DUPLICATE KEY UPDATE
+         monthly_revenue = COALESCE(VALUES(monthly_revenue), monthly_revenue),
+         active_users = COALESCE(VALUES(active_users), active_users),
+         churn_rate = COALESCE(VALUES(churn_rate), churn_rate),
+         feature_adoption_rate = COALESCE(VALUES(feature_adoption_rate), feature_adoption_rate),
+         new_customers = COALESCE(VALUES(new_customers), new_customers),
+         customer_lifetime_value = COALESCE(VALUES(customer_lifetime_value), customer_lifetime_value),
+         nps_score = COALESCE(VALUES(nps_score), nps_score),
+         csat_score = COALESCE(VALUES(csat_score), csat_score),
+         support_ticket_volume = COALESCE(VALUES(support_ticket_volume), support_ticket_volume),
+         avg_resolution_time_hours = COALESCE(VALUES(avg_resolution_time_hours), avg_resolution_time_hours),
+         manually_edited = TRUE,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        id, teamId, month_year,
+        kpis.monthly_revenue || null,
+        kpis.active_users || null,
+        kpis.churn_rate || null,
+        kpis.feature_adoption_rate || null,
+        kpis.new_customers || null,
+        kpis.customer_lifetime_value || null,
+        kpis.nps_score || null,
+        kpis.csat_score || null,
+        kpis.support_ticket_volume || null,
+        kpis.avg_resolution_time_hours || null
+      ]
+    );
+
+    res.json({ success: true, message: 'Business KPIs saved' });
+  } catch (error) {
+    console.error('Error saving business KPIs:', error);
+    res.status(500).json({ error: 'Failed to save business KPIs' });
+  }
+});
+
+// POST: Save context data for a month
+router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req: any, res) => {
+  try {
+    const { teamId } = req.params;
+    const { month_year, ...context } = req.body;
+
+    if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
+      return res.status(400).json({ error: 'Invalid month_year format. Use YYYY-MM' });
+    }
+
+    const id = randomUUID();
+    
+    await query(
+      `INSERT INTO business_impact_context
+       (id, team_id, month_year, team_size, sprint_length_days, working_days,
+        feature_release_count, bug_fix_count, tech_debt_items_resolved,
+        user_growth_rate, total_user_base, is_holiday_season, marketing_spend,
+        major_incident_count, downtime_minutes, notes, manually_edited)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+       ON DUPLICATE KEY UPDATE
+         team_size = COALESCE(VALUES(team_size), team_size),
+         sprint_length_days = COALESCE(VALUES(sprint_length_days), sprint_length_days),
+         working_days = COALESCE(VALUES(working_days), working_days),
+         feature_release_count = COALESCE(VALUES(feature_release_count), feature_release_count),
+         bug_fix_count = COALESCE(VALUES(bug_fix_count), bug_fix_count),
+         tech_debt_items_resolved = COALESCE(VALUES(tech_debt_items_resolved), tech_debt_items_resolved),
+         user_growth_rate = COALESCE(VALUES(user_growth_rate), user_growth_rate),
+         total_user_base = COALESCE(VALUES(total_user_base), total_user_base),
+         is_holiday_season = COALESCE(VALUES(is_holiday_season), is_holiday_season),
+         marketing_spend = COALESCE(VALUES(marketing_spend), marketing_spend),
+         major_incident_count = COALESCE(VALUES(major_incident_count), major_incident_count),
+         downtime_minutes = COALESCE(VALUES(downtime_minutes), downtime_minutes),
+         notes = COALESCE(VALUES(notes), notes),
+         manually_edited = TRUE,
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        id, teamId, month_year,
+        context.team_size || null,
+        context.sprint_length_days || 14,
+        context.working_days || null,
+        context.feature_release_count || null,
+        context.bug_fix_count || null,
+        context.tech_debt_items_resolved || null,
+        context.user_growth_rate || null,
+        context.total_user_base || null,
+        context.is_holiday_season ? 1 : 0,
+        context.marketing_spend || null,
+        context.major_incident_count || 0,
+        context.downtime_minutes || 0,
+        context.notes || null
+      ]
+    );
+
+    res.json({ success: true, message: 'Context data saved' });
+  } catch (error) {
+    console.error('Error saving context data:', error);
+    res.status(500).json({ error: 'Failed to save context data' });
+  }
+});
+
+// POST: Calculate and cache correlations for a team
+router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateToken, async (req: any, res) => {
+  try {
+    const { teamId } = req.params;
+
+    // Fetch all quality metrics
+    const qualityMetrics = await query<any>(
+      `SELECT * FROM business_impact_quality_metrics 
+       WHERE team_id = ? ORDER BY month_year ASC`,
+      [teamId]
+    );
+
+    // Fetch all business KPIs
+    const businessKpis = await query<any>(
+      `SELECT * FROM business_impact_business_kpis 
+       WHERE team_id = ? ORDER BY month_year ASC`,
+      [teamId]
+    );
+
+    if (qualityMetrics.length < 6 || businessKpis.length < 6) {
+      return res.status(400).json({ 
+        error: 'Insufficient data. Need at least 6 months of both quality metrics and business KPIs.',
+        qualityMonths: qualityMetrics.length,
+        kpiMonths: businessKpis.length
+      });
+    }
+
+    // Create month-indexed maps
+    const qualityByMonth: Record<string, any> = {};
+    qualityMetrics.forEach((m: any) => { qualityByMonth[m.month_year] = m; });
+    
+    const kpiByMonth: Record<string, any> = {};
+    businessKpis.forEach((k: any) => { kpiByMonth[k.month_year] = k; });
+
+    // Find paired months
+    const pairedMonths = Object.keys(qualityByMonth).filter(m => kpiByMonth[m]).sort();
+    
+    if (pairedMonths.length < 6) {
+      return res.status(400).json({ 
+        error: 'Insufficient paired data. Need at least 6 months where both X and Y data exist.',
+        pairedMonths: pairedMonths.length
+      });
+    }
+
+    // Define metric pairs to correlate
+    const qualityFields = [
+      'test_coverage', 'defect_density', 'defect_escape_rate', 'mttr_hours',
+      'deployment_frequency', 'lead_time_days', 'code_quality_score', 'change_failure_rate'
+    ];
+    const kpiFields = [
+      'monthly_revenue', 'active_users', 'churn_rate', 'feature_adoption_rate',
+      'nps_score', 'csat_score', 'support_ticket_volume'
+    ];
+
+    const correlationResults: any[] = [];
+
+    // Calculate correlation for each pair
+    for (const qField of qualityFields) {
+      for (const kField of kpiFields) {
+        const xValues: number[] = [];
+        const yValues: number[] = [];
+
+        pairedMonths.forEach(month => {
+          const qVal = qualityByMonth[month][qField];
+          const kVal = kpiByMonth[month][kField];
+          if (qVal !== null && kVal !== null) {
+            xValues.push(Number(qVal));
+            yValues.push(Number(kVal));
+          }
+        });
+
+        if (xValues.length >= 6) {
+          const { correlation, pValue, sampleSize } = calculatePearsonCorrelation(xValues, yValues);
+          const strength = getCorrelationStrength(correlation);
+          const isSignificant = pValue < 0.05;
+
+          correlationResults.push({
+            quality_metric: qField,
+            business_kpi: kField,
+            pearson_correlation: correlation,
+            p_value: pValue,
+            sample_size: sampleSize,
+            correlation_strength: strength,
+            is_significant: isSignificant
+          });
+
+          // Save to database
+          const id = randomUUID();
+          await query(
+            `INSERT INTO business_impact_correlations
+             (id, team_id, quality_metric, business_kpi, pearson_correlation, p_value,
+              sample_size, correlation_strength, is_significant, start_month, end_month, calculated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE
+               pearson_correlation = VALUES(pearson_correlation),
+               p_value = VALUES(p_value),
+               sample_size = VALUES(sample_size),
+               correlation_strength = VALUES(correlation_strength),
+               is_significant = VALUES(is_significant),
+               start_month = VALUES(start_month),
+               end_month = VALUES(end_month),
+               calculated_at = NOW(),
+               updated_at = CURRENT_TIMESTAMP`,
+            [
+              id, teamId, qField, kField, correlation, pValue, sampleSize,
+              strength, isSignificant ? 1 : 0,
+              pairedMonths[0], pairedMonths[pairedMonths.length - 1]
+            ]
+          );
+        }
+      }
+    }
+
+    // Update data status
+    const statusId = randomUUID();
+    await query(
+      `INSERT INTO business_impact_data_status
+       (id, team_id, months_with_quality_data, months_with_kpi_data, months_with_paired_data,
+        earliest_month, latest_month, is_correlation_ready, last_validated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, NOW())
+       ON DUPLICATE KEY UPDATE
+         months_with_quality_data = VALUES(months_with_quality_data),
+         months_with_kpi_data = VALUES(months_with_kpi_data),
+         months_with_paired_data = VALUES(months_with_paired_data),
+         earliest_month = VALUES(earliest_month),
+         latest_month = VALUES(latest_month),
+         is_correlation_ready = TRUE,
+         last_validated_at = NOW(),
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        statusId, teamId, qualityMetrics.length, businessKpis.length, pairedMonths.length,
+        pairedMonths[0], pairedMonths[pairedMonths.length - 1]
+      ]
+    );
+
+    // Return top correlations sorted by absolute value
+    const topCorrelations = correlationResults
+      .sort((a, b) => Math.abs(b.pearson_correlation) - Math.abs(a.pearson_correlation))
+      .slice(0, 20);
+
+    res.json({
+      success: true,
+      correlationsCalculated: correlationResults.length,
+      pairedMonths: pairedMonths.length,
+      dateRange: { start: pairedMonths[0], end: pairedMonths[pairedMonths.length - 1] },
+      topCorrelations
+    });
+  } catch (error) {
+    console.error('Error calculating correlations:', error);
+    res.status(500).json({ error: 'Failed to calculate correlations' });
+  }
+});
+
+// POST: Bulk save monthly data (quality + KPIs + context for multiple months)
+router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (req: any, res) => {
+  try {
+    const { teamId } = req.params;
+    const { monthlyData } = req.body;
+
+    if (!Array.isArray(monthlyData)) {
+      return res.status(400).json({ error: 'monthlyData must be an array' });
+    }
+
+    let saved = 0;
+
+    for (const month of monthlyData) {
+      const { month_year, quality, kpis, context } = month;
+      
+      if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) continue;
+
+      // Save quality metrics
+      if (quality && Object.keys(quality).length > 0) {
+        const qId = randomUUID();
+        await query(
+          `INSERT INTO business_impact_quality_metrics
+           (id, team_id, month_year, test_coverage, defect_density, defect_escape_rate,
+            mttr_hours, deployment_frequency, lead_time_days, code_quality_score,
+            change_failure_rate, manually_edited)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+           ON DUPLICATE KEY UPDATE
+             test_coverage = COALESCE(VALUES(test_coverage), test_coverage),
+             defect_density = COALESCE(VALUES(defect_density), defect_density),
+             defect_escape_rate = COALESCE(VALUES(defect_escape_rate), defect_escape_rate),
+             mttr_hours = COALESCE(VALUES(mttr_hours), mttr_hours),
+             deployment_frequency = COALESCE(VALUES(deployment_frequency), deployment_frequency),
+             lead_time_days = COALESCE(VALUES(lead_time_days), lead_time_days),
+             code_quality_score = COALESCE(VALUES(code_quality_score), code_quality_score),
+             change_failure_rate = COALESCE(VALUES(change_failure_rate), change_failure_rate),
+             manually_edited = TRUE,
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            qId, teamId, month_year,
+            quality.test_coverage, quality.defect_density, quality.defect_escape_rate,
+            quality.mttr_hours, quality.deployment_frequency, quality.lead_time_days,
+            quality.code_quality_score, quality.change_failure_rate
+          ]
+        );
+      }
+
+      // Save business KPIs
+      if (kpis && Object.keys(kpis).length > 0) {
+        const kId = randomUUID();
+        await query(
+          `INSERT INTO business_impact_business_kpis
+           (id, team_id, month_year, monthly_revenue, active_users, churn_rate,
+            feature_adoption_rate, nps_score, csat_score, support_ticket_volume, manually_edited)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+           ON DUPLICATE KEY UPDATE
+             monthly_revenue = COALESCE(VALUES(monthly_revenue), monthly_revenue),
+             active_users = COALESCE(VALUES(active_users), active_users),
+             churn_rate = COALESCE(VALUES(churn_rate), churn_rate),
+             feature_adoption_rate = COALESCE(VALUES(feature_adoption_rate), feature_adoption_rate),
+             nps_score = COALESCE(VALUES(nps_score), nps_score),
+             csat_score = COALESCE(VALUES(csat_score), csat_score),
+             support_ticket_volume = COALESCE(VALUES(support_ticket_volume), support_ticket_volume),
+             manually_edited = TRUE,
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            kId, teamId, month_year,
+            kpis.monthly_revenue, kpis.active_users, kpis.churn_rate,
+            kpis.feature_adoption_rate, kpis.nps_score, kpis.csat_score, kpis.support_ticket_volume
+          ]
+        );
+      }
+
+      // Save context
+      if (context && Object.keys(context).length > 0) {
+        const cId = randomUUID();
+        await query(
+          `INSERT INTO business_impact_context
+           (id, team_id, month_year, team_size, feature_release_count, user_growth_rate,
+            total_user_base, is_holiday_season, downtime_minutes, manually_edited)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+           ON DUPLICATE KEY UPDATE
+             team_size = COALESCE(VALUES(team_size), team_size),
+             feature_release_count = COALESCE(VALUES(feature_release_count), feature_release_count),
+             user_growth_rate = COALESCE(VALUES(user_growth_rate), user_growth_rate),
+             total_user_base = COALESCE(VALUES(total_user_base), total_user_base),
+             is_holiday_season = COALESCE(VALUES(is_holiday_season), is_holiday_season),
+             downtime_minutes = COALESCE(VALUES(downtime_minutes), downtime_minutes),
+             manually_edited = TRUE,
+             updated_at = CURRENT_TIMESTAMP`,
+          [
+            cId, teamId, month_year,
+            context.team_size, context.feature_release_count, context.user_growth_rate,
+            context.total_user_base, context.is_holiday_season ? 1 : 0, context.downtime_minutes
+          ]
+        );
+      }
+
+      saved++;
+    }
+
+    res.json({ success: true, monthsSaved: saved });
+  } catch (error) {
+    console.error('Error bulk saving:', error);
+    res.status(500).json({ error: 'Failed to bulk save data' });
+  }
+});
+
+// POST: Generate realistic correlation data (not persisted)
+router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateToken, async (req: any, res) => {
+  try {
+    const { teamId } = req.params;
+
+    // Generate 12 months of realistic data
+    const months: string[] = [];
+    const now = new Date();
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+    }
+
+    // Realistic base values and trends
+    const generateRealisticData = () => {
+      const qualityBase = {
+        test_coverage: 65 + Math.random() * 20, // 65-85%
+        defect_density: 3.5 + Math.random() * 2, // 3.5-5.5 bugs/KLOC
+        defect_escape_rate: 15 + Math.random() * 10, // 15-25%
+        mttr_hours: 6 + Math.random() * 4, // 6-10 hours
+        deployment_frequency: 3 + Math.random() * 4, // 3-7 deployments/month
+        lead_time_days: 10 + Math.random() * 5, // 10-15 days
+        code_quality_score: 70 + Math.random() * 15, // 70-85%
+        change_failure_rate: 18 + Math.random() * 8, // 18-26%
+      };
+
+      const kpiBase = {
+        monthly_revenue: 350000 + Math.random() * 200000, // $350K-550K
+        active_users: 10000 + Math.random() * 15000, // 10K-25K users
+        churn_rate: 4 + Math.random() * 4, // 4-8%
+        feature_adoption_rate: 35 + Math.random() * 20, // 35-55%
+        nps_score: 20 + Math.random() * 40, // 20-60
+        csat_score: 65 + Math.random() * 15, // 65-80%
+        support_ticket_volume: 400 + Math.random() * 300, // 400-700 tickets
+      };
+
+      return { qualityBase, kpiBase };
+    };
+
+    const { qualityBase, kpiBase } = generateRealisticData();
+
+    // Generate time series with realistic correlations and noise
+    const qualityMetrics = [];
+    const businessKpis = [];
+    const contextData = [];
+
+    for (let i = 0; i < 12; i++) {
+      const progress = i / 11; // 0 to 1 over 12 months
+      const seasonalFactor = 1 + 0.1 * Math.sin(2 * Math.PI * i / 12); // Seasonal variation
+      const randomNoise = () => (Math.random() - 0.5) * 0.15; // ±7.5% noise
+
+      // Quality metrics with gradual improvement trend + realistic noise
+      const qualityTrend = progress * 0.3; // 30% improvement over 12 months
+      const qualityData = {
+        id: `q_${i + 1}`,
+        team_id: teamId,
+        month_year: months[i],
+        test_coverage: Math.max(40, Math.min(95, qualityBase.test_coverage + qualityTrend * 25 + randomNoise() * 20)),
+        defect_density: Math.max(1, qualityBase.defect_density - qualityTrend * 2 + randomNoise() * 1.5),
+        defect_escape_rate: Math.max(5, Math.min(40, qualityBase.defect_escape_rate - qualityTrend * 8 + randomNoise() * 6)),
+        mttr_hours: Math.max(2, qualityBase.mttr_hours - qualityTrend * 3 + randomNoise() * 2),
+        deployment_frequency: Math.max(1, qualityBase.deployment_frequency + qualityTrend * 8 + randomNoise() * 3),
+        lead_time_days: Math.max(3, qualityBase.lead_time_days - qualityTrend * 4 + randomNoise() * 3),
+        code_quality_score: Math.max(50, Math.min(95, qualityBase.code_quality_score + qualityTrend * 20 + randomNoise() * 12)),
+        change_failure_rate: Math.max(5, Math.min(35, qualityBase.change_failure_rate - qualityTrend * 10 + randomNoise() * 6)),
+        manually_edited: false
+      };
+      qualityMetrics.push(qualityData);
+
+      // Business KPIs with realistic correlation but not perfect
+      // Add independent noise to break perfect correlations
+      const qualityScore = (qualityData.test_coverage * 0.4 + qualityData.code_quality_score * 0.4 + (100 - qualityData.defect_escape_rate) * 0.2) / 100;
+      const correlationStrength = 0.6 + Math.random() * 0.3; // 0.6-0.9 realistic correlation
+      
+      // Independent business factors (external influences)
+      const marketConditions = 0.8 + Math.random() * 0.4; // Market conditions affect business
+      const competitivePressure = 0.9 + Math.random() * 0.2; // Competition affects business
+      const operationalEfficiency = 0.85 + Math.random() * 0.3; // Internal operations
+
+      const businessData = {
+        id: `k_${i + 1}`,
+        team_id: teamId,
+        month_year: months[i],
+        monthly_revenue: Math.max(200000, kpiBase.monthly_revenue * seasonalFactor * marketConditions * operationalEfficiency *
+          (1 + qualityScore * correlationStrength * 0.5 + randomNoise() * 0.4)),
+        active_users: Math.max(5000, kpiBase.active_users * seasonalFactor * competitivePressure * operationalEfficiency *
+          (1 + qualityScore * correlationStrength * 0.4 + randomNoise() * 0.35)),
+        churn_rate: Math.max(1, Math.min(15, kpiBase.churn_rate * (1 - marketConditions * 0.3) * (1 - operationalEfficiency * 0.2) *
+          (1 - qualityScore * correlationStrength * 0.6 + randomNoise() * 0.5))),
+        feature_adoption_rate: Math.max(20, Math.min(80, kpiBase.feature_adoption_rate * competitivePressure * operationalEfficiency +
+          qualityScore * correlationStrength * 25 + randomNoise() * 12)),
+        nps_score: Math.max(-20, Math.min(80, kpiBase.nps_score * marketConditions * operationalEfficiency +
+          qualityScore * correlationStrength * 50 + randomNoise() * 20)),
+        csat_score: Math.max(40, Math.min(95, kpiBase.csat_score * operationalEfficiency * competitivePressure +
+          qualityScore * correlationStrength * 20 + randomNoise() * 12)),
+        support_ticket_volume: Math.max(100, Math.min(1500, kpiBase.support_ticket_volume * (1 - operationalEfficiency * 0.3) * (1 - qualityScore * correlationStrength * 0.4) +
+          randomNoise() * 200)),
+        manually_edited: false
+      };
+      businessKpis.push(businessData);
+
+      // Context data
+      const contextItem = {
+        id: `c_${i + 1}`,
+        team_id: teamId,
+        month_year: months[i],
+        team_size: 8 + Math.floor(i / 3), // Team grows every 3 months
+        sprint_length_days: 14,
+        feature_release_count: 2 + Math.floor(i / 2) + Math.floor(Math.random() * 3), // 2-4 features/month
+        total_user_base: 40000 + i * 2000 + Math.floor(Math.random() * 5000), // Growing user base
+        user_growth_rate: 4 + Math.random() * 8, // 4-12% growth
+        downtime_minutes: 150 - i * 10 + Math.floor(Math.random() * 100), // Decreasing downtime
+        is_holiday_season: i === 0 ? 1 : 0, // December has holiday season
+        manually_edited: false
+      };
+      contextData.push(contextItem);
+    }
+
+    // Calculate realistic correlations
+    const correlations = [];
+
+    // Helper function to generate random correlation between 0.3 and 0.8
+    const randomCorrelation = (isNegative: boolean = false) => {
+      const base = 0.3 + Math.random() * 0.5; // Random between 0.3 and 0.8
+      return isNegative ? -base : base;
+    };
+
+    // Define correlation pairs with random realistic strengths (0.3-0.8)
+    const correlationPairs = [
+      { quality: 'test_coverage', kpi: 'monthly_revenue', expectedR: randomCorrelation(false) },
+      { quality: 'test_coverage', kpi: 'active_users', expectedR: randomCorrelation(false) },
+      { quality: 'test_coverage', kpi: 'churn_rate', expectedR: randomCorrelation(true) },
+      { quality: 'test_coverage', kpi: 'feature_adoption_rate', expectedR: randomCorrelation(false) },
+      { quality: 'test_coverage', kpi: 'nps_score', expectedR: randomCorrelation(false) },
+      { quality: 'test_coverage', kpi: 'csat_score', expectedR: randomCorrelation(false) },
+      { quality: 'test_coverage', kpi: 'support_ticket_volume', expectedR: randomCorrelation(true) },
+
+      { quality: 'defect_density', kpi: 'monthly_revenue', expectedR: randomCorrelation(true) },
+      { quality: 'defect_density', kpi: 'active_users', expectedR: randomCorrelation(true) },
+      { quality: 'defect_density', kpi: 'churn_rate', expectedR: randomCorrelation(false) },
+      { quality: 'defect_density', kpi: 'feature_adoption_rate', expectedR: randomCorrelation(true) },
+      { quality: 'defect_density', kpi: 'nps_score', expectedR: randomCorrelation(true) },
+      { quality: 'defect_density', kpi: 'csat_score', expectedR: randomCorrelation(true) },
+      { quality: 'defect_density', kpi: 'support_ticket_volume', expectedR: randomCorrelation(false) },
+
+      { quality: 'defect_escape_rate', kpi: 'monthly_revenue', expectedR: randomCorrelation(true) },
+      { quality: 'defect_escape_rate', kpi: 'active_users', expectedR: randomCorrelation(true) },
+      { quality: 'defect_escape_rate', kpi: 'churn_rate', expectedR: randomCorrelation(false) },
+      { quality: 'defect_escape_rate', kpi: 'feature_adoption_rate', expectedR: randomCorrelation(true) },
+      { quality: 'defect_escape_rate', kpi: 'nps_score', expectedR: randomCorrelation(true) },
+      { quality: 'defect_escape_rate', kpi: 'csat_score', expectedR: randomCorrelation(true) },
+      { quality: 'defect_escape_rate', kpi: 'support_ticket_volume', expectedR: randomCorrelation(false) },
+
+      { quality: 'mttr_hours', kpi: 'monthly_revenue', expectedR: randomCorrelation(true) },
+      { quality: 'mttr_hours', kpi: 'csat_score', expectedR: randomCorrelation(true) },
+      { quality: 'mttr_hours', kpi: 'nps_score', expectedR: randomCorrelation(true) },
+
+      { quality: 'code_quality_score', kpi: 'monthly_revenue', expectedR: randomCorrelation(false) },
+      { quality: 'code_quality_score', kpi: 'active_users', expectedR: randomCorrelation(false) },
+      { quality: 'code_quality_score', kpi: 'churn_rate', expectedR: randomCorrelation(true) },
+
+      { quality: 'deployment_frequency', kpi: 'feature_adoption_rate', expectedR: randomCorrelation(false) },
+      { quality: 'deployment_frequency', kpi: 'active_users', expectedR: randomCorrelation(false) },
+    ];
+
+    for (const pair of correlationPairs) {
+      const qualityValues = qualityMetrics.map((q: any) => Number(q[pair.quality as keyof typeof q]));
+      const kpiValues = businessKpis.map((k: any) => Number(k[pair.kpi as keyof typeof k]));
+
+      const { correlation, pValue, sampleSize } = calculatePearsonCorrelation(qualityValues, kpiValues);
+      const strength = getCorrelationStrength(Math.abs(correlation));
+      const isSignificant = pValue < 0.05;
+
+      correlations.push({
+        quality_metric: pair.quality,
+        business_kpi: pair.kpi,
+        pearson_correlation: correlation,
+        p_value: pValue,
+        sample_size: sampleSize,
+        correlation_strength: strength,
+        is_significant: isSignificant
+      });
+    }
+
+    // Sort by absolute correlation strength
+    correlations.sort((a, b) => Math.abs(b.pearson_correlation) - Math.abs(a.pearson_correlation));
+
+    res.json({
+      success: true,
+      dataGenerated: true,
+      dateRange: { start: months[0], end: months[11] },
+      qualityMetrics,
+      businessKpis,
+      contextData,
+      correlations: correlations.slice(0, 20), // Top 20 correlations
+      summary: {
+        monthsWithQualityData: 12,
+        monthsWithKpiData: 12,
+        monthsWithPairedData: 12,
+        isCorrelationReady: true,
+        earliestMonth: months[0],
+        latestMonth: months[11]
+      }
+    });
+  } catch (error) {
+    console.error('Error generating realistic data:', error);
+    res.status(500).json({ error: 'Failed to generate realistic data' });
   }
 });
 

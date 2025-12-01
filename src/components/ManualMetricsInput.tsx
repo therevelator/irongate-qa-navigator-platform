@@ -876,6 +876,29 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const [allMetricsData, setAllMetricsData] = useState<any>(null);
   const [loadingAllMetrics, setLoadingAllMetrics] = useState(false);
 
+  // Business impact configuration state
+  const [businessImpactConfig, setBusinessImpactConfig] = useState<{
+    impactConfigs: Array<{
+      metric_name: string;
+      quality_score: string;
+      revenue_impact: string;
+      customer_satisfaction: string;
+      correlation_strength: string;
+    }>;
+    historicalConfigs: Array<{
+      month_year: string;
+      quality_score: string;
+      revenue_impact: string;
+      customer_satisfaction: string;
+      churn_rate: string;
+    }>;
+  }>({
+    impactConfigs: [],
+    historicalConfigs: []
+  });
+  const [loadingBusinessImpact, setLoadingBusinessImpact] = useState(false);
+  const [savingBusinessImpact, setSavingBusinessImpact] = useState(false);
+
   // Check if user has access (super_admin, manager, or team_lead)
   const allowedRoles = ['super_admin', 'manager', 'team_lead'];
   if (!user || !allowedRoles.includes(user.role)) {
@@ -1162,6 +1185,160 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       toast.error('Failed to fetch metrics');
     } finally {
       setLoadingAllMetrics(false);
+    }
+  };
+
+  // Fetch business impact configuration
+  const fetchBusinessImpactConfig = async () => {
+    if (!selectedTeamId) {
+      toast.error('Please select a team first');
+      return;
+    }
+
+    setLoadingBusinessImpact(true);
+    try {
+      const token = localStorage.getItem('irongate_token');
+      const response = await fetch(`${API_URL}/metrics/business-impact-config/${selectedTeamId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        // Initialize with default months if no historical data
+        const defaultMonths = Array.from({ length: 12 }, (_, i) => {
+          const date = new Date();
+          date.setMonth(date.getMonth() - (11 - i));
+          return {
+            month_year: date.toISOString().slice(0, 7), // YYYY-MM format
+            quality_score: '',
+            revenue_impact: '',
+            customer_satisfaction: '',
+            churn_rate: ''
+          };
+        });
+
+        // Merge existing data with defaults
+        const mergedHistorical = defaultMonths.map(defaultMonth => {
+          const existing = data.historicalConfigs?.find((h: any) => h.month_year === defaultMonth.month_year);
+          return existing || defaultMonth;
+        });
+
+        setBusinessImpactConfig({
+          impactConfigs: data.impactConfigs || [],
+          historicalConfigs: mergedHistorical
+        });
+
+        toast.success('Configuration loaded successfully');
+      } else {
+        // Initialize with empty defaults
+        const defaultMonths = Array.from({ length: 12 }, (_, i) => {
+          const date = new Date();
+          date.setMonth(date.getMonth() - (11 - i));
+          return {
+            month_year: date.toISOString().slice(0, 7),
+            quality_score: '',
+            revenue_impact: '',
+            customer_satisfaction: '',
+            churn_rate: ''
+          };
+        });
+
+        setBusinessImpactConfig({
+          impactConfigs: [],
+          historicalConfigs: defaultMonths
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching business impact config:', error);
+      toast.error('Failed to load configuration');
+    } finally {
+      setLoadingBusinessImpact(false);
+    }
+  };
+
+  // Update business impact metric
+  const updateBusinessImpactMetric = (metricName: string, field: string, value: string) => {
+    setBusinessImpactConfig(prev => {
+      const existingIndex = prev.impactConfigs.findIndex(c => c.metric_name === metricName);
+      const updatedConfigs = [...prev.impactConfigs];
+
+      if (existingIndex >= 0) {
+        updatedConfigs[existingIndex] = {
+          ...updatedConfigs[existingIndex],
+          [field]: value
+        };
+      } else {
+        updatedConfigs.push({
+          metric_name: metricName,
+          quality_score: field === 'quality_score' ? value : '',
+          revenue_impact: field === 'revenue_impact' ? value : '',
+          customer_satisfaction: field === 'customer_satisfaction' ? value : '',
+          correlation_strength: field === 'correlation_strength' ? value : ''
+        });
+      }
+
+      return {
+        ...prev,
+        impactConfigs: updatedConfigs
+      };
+    });
+  };
+
+  // Update historical metric
+  const updateHistoricalMetric = (monthYear: string, field: string, value: string) => {
+    setBusinessImpactConfig(prev => ({
+      ...prev,
+      historicalConfigs: prev.historicalConfigs.map(month =>
+        month.month_year === monthYear
+          ? { ...month, [field]: value }
+          : month
+      )
+    }));
+  };
+
+  // Save business impact configuration
+  const saveBusinessImpactConfig = async () => {
+    if (!selectedTeamId) {
+      toast.error('Please select a team first');
+      return;
+    }
+
+    setSavingBusinessImpact(true);
+    try {
+      const token = localStorage.getItem('irongate_token');
+
+      // Filter out empty configurations
+      const filteredImpactConfigs = businessImpactConfig.impactConfigs.filter(config =>
+        config.quality_score || config.revenue_impact || config.customer_satisfaction || config.correlation_strength
+      );
+
+      const filteredHistoricalConfigs = businessImpactConfig.historicalConfigs.filter(config =>
+        config.quality_score || config.revenue_impact || config.customer_satisfaction || config.churn_rate
+      );
+
+      const response = await fetch(`${API_URL}/metrics/business-impact-config/${selectedTeamId}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          impactConfigs: filteredImpactConfigs,
+          historicalConfigs: filteredHistoricalConfigs
+        })
+      });
+
+      if (response.ok) {
+        toast.success('Business impact configuration saved successfully!');
+      } else {
+        toast.error('Failed to save configuration');
+      }
+    } catch (error) {
+      console.error('Error saving business impact config:', error);
+      toast.error('Failed to save configuration');
+    } finally {
+      setSavingBusinessImpact(false);
     }
   };
 
@@ -2530,7 +2707,281 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         )}
       </div>
 
-      {/* All Metrics Viewer Section */}
+      {/* Business Impact Configuration Section */}
+      <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-700">
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-500/20 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-green-400" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-white">Business Impact Demo Configuration</h2>
+              <p className="text-sm text-slate-400">Configure your company's business impact correlations for demo purposes</p>
+            </div>
+          </div>
+          <button
+            onClick={fetchBusinessImpactConfig}
+            disabled={loadingBusinessImpact || !selectedTeamId}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+          >
+            {loadingBusinessImpact ? (
+              <>
+                <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                Loading...
+              </>
+            ) : (
+              <>
+                <TrendingUp className="w-4 h-4" />
+                Load Config
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Business Impact Metrics Configuration */}
+        <div className="space-y-4 mb-6">
+          <h3 className="text-md font-semibold text-white">Impact Correlations</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Test Coverage */}
+            <div className="bg-slate-700 rounded-lg p-4">
+              <label className="block text-sm font-medium text-white mb-2">Test Coverage</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Quality Score %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="85.5"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'test_coverage')?.quality_score || ''}
+                    onChange={(e) => updateBusinessImpactMetric('test_coverage', 'quality_score', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Revenue Impact $</label>
+                  <input
+                    type="number"
+                    step="1000"
+                    placeholder="4178000"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'test_coverage')?.revenue_impact || ''}
+                    onChange={(e) => updateBusinessImpactMetric('test_coverage', 'revenue_impact', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">NPS Score</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="82.3"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'test_coverage')?.customer_satisfaction || ''}
+                    onChange={(e) => updateBusinessImpactMetric('test_coverage', 'customer_satisfaction', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Correlation</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    placeholder="0.85"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'test_coverage')?.correlation_strength || ''}
+                    onChange={(e) => updateBusinessImpactMetric('test_coverage', 'correlation_strength', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Defect Escape Rate */}
+            <div className="bg-slate-700 rounded-lg p-4">
+              <label className="block text-sm font-medium text-white mb-2">Defect Escape Rate</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Quality Score %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="12.2"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'defect_escape_rate')?.quality_score || ''}
+                    onChange={(e) => updateBusinessImpactMetric('defect_escape_rate', 'quality_score', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Revenue Impact $</label>
+                  <input
+                    type="number"
+                    step="1000"
+                    placeholder="2896000"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'defect_escape_rate')?.revenue_impact || ''}
+                    onChange={(e) => updateBusinessImpactMetric('defect_escape_rate', 'revenue_impact', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">NPS Score</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="76.8"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'defect_escape_rate')?.customer_satisfaction || ''}
+                    onChange={(e) => updateBusinessImpactMetric('defect_escape_rate', 'customer_satisfaction', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Correlation</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    placeholder="0.72"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'defect_escape_rate')?.correlation_strength || ''}
+                    onChange={(e) => updateBusinessImpactMetric('defect_escape_rate', 'correlation_strength', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Code Quality Score */}
+            <div className="bg-slate-700 rounded-lg p-4">
+              <label className="block text-sm font-medium text-white mb-2">Code Quality Score</label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Quality Score %</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="78.9"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'code_quality_score')?.quality_score || ''}
+                    onChange={(e) => updateBusinessImpactMetric('code_quality_score', 'quality_score', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Revenue Impact $</label>
+                  <input
+                    type="number"
+                    step="1000"
+                    placeholder="3452000"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'code_quality_score')?.revenue_impact || ''}
+                    onChange={(e) => updateBusinessImpactMetric('code_quality_score', 'revenue_impact', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">NPS Score</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    placeholder="79.5"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'code_quality_score')?.customer_satisfaction || ''}
+                    onChange={(e) => updateBusinessImpactMetric('code_quality_score', 'customer_satisfaction', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-slate-400 mb-1">Correlation</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="1"
+                    placeholder="0.68"
+                    value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'code_quality_score')?.correlation_strength || ''}
+                    onChange={(e) => updateBusinessImpactMetric('code_quality_score', 'correlation_strength', e.target.value)}
+                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Historical Trends Configuration */}
+        <div className="space-y-4 mb-6">
+          <h3 className="text-md font-semibold text-white">Historical Trends (12 Months)</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full bg-slate-700 rounded-lg overflow-hidden">
+              <thead>
+                <tr className="bg-slate-600">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">Month</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">Quality Score</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">Revenue ($K)</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">NPS</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">Churn %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {businessImpactConfig.historicalConfigs.map((month, index) => (
+                  <tr key={month.month_year} className="border-t border-slate-600">
+                    <td className="px-3 py-2 text-sm text-white font-medium">
+                      {new Date(month.month_year + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="70.0"
+                        value={month.quality_score || ''}
+                        onChange={(e) => updateHistoricalMetric(month.month_year, 'quality_score', e.target.value)}
+                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        step="10"
+                        placeholder="200"
+                        value={month.revenue_impact || ''}
+                        onChange={(e) => updateHistoricalMetric(month.month_year, 'revenue_impact', e.target.value)}
+                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="75.0"
+                        value={month.customer_satisfaction || ''}
+                        onChange={(e) => updateHistoricalMetric(month.month_year, 'customer_satisfaction', e.target.value)}
+                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                      />
+                    </td>
+                    <td className="px-3 py-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="3.0"
+                        value={month.churn_rate || ''}
+                        onChange={(e) => updateHistoricalMetric(month.month_year, 'churn_rate', e.target.value)}
+                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Save Business Impact Configuration */}
+        <div className="flex justify-end">
+          <button
+            onClick={saveBusinessImpactConfig}
+            disabled={savingBusinessImpact || !selectedTeamId}
+            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Save className="w-4 h-4" />
+            {savingBusinessImpact ? 'Saving...' : 'Save Business Impact Config'}
+          </button>
+        </div>
+      </div>
       <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-700">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
