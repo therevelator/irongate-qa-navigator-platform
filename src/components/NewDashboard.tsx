@@ -144,12 +144,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
       setTeamsWithMetrics(teamsWithData);
       
-      // Show notification for data seeding
-      toast.success('Team metrics updated with latest data!', {
-        duration: 3000,
-        icon: '📊'
-      });
-      
       // Show green notification
       setShowMetricsNotification(true);
       
