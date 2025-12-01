@@ -68,6 +68,20 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
       const data = getMockData(period.days);
       const doc = new jsPDF();
 
+      // Load logo image
+      let logoDataUrl: string | null = null;
+      try {
+        const response = await fetch('/irongate-logo.png');
+        const blob = await response.blob();
+        logoDataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.readAsDataURL(blob);
+        });
+      } catch (logoError) {
+        console.warn('Could not load logo:', logoError);
+      }
+
       // Page dimensions
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -91,15 +105,20 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ onBack }) => {
       doc.setFillColor(37, 99, 235); // Darker blue
       doc.rect(0, 40, pageWidth, 20, 'F');
 
+      // Add logo if loaded
+      if (logoDataUrl) {
+        doc.addImage(logoDataUrl, 'PNG', 15, 8, 35, 35);
+      }
+
       // Logo/Company Name
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(28);
       doc.setFont('helvetica', 'bold');
-      doc.text('IronGate QA Navigator', pageWidth / 2, 30, { align: 'center' });
+      doc.text('IronGate QA Navigator', logoDataUrl ? 55 : pageWidth / 2, 30, { align: logoDataUrl ? 'left' : 'center' });
 
       doc.setFontSize(14);
       doc.setFont('helvetica', 'normal');
-      doc.text('Comprehensive Quality Engineering Report', pageWidth / 2, 45, { align: 'center' });
+      doc.text('Comprehensive Quality Engineering Report', logoDataUrl ? 55 : pageWidth / 2, 45, { align: logoDataUrl ? 'left' : 'center' });
 
       // Report Period
       yPos = 80;
