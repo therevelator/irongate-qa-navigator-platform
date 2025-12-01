@@ -265,63 +265,83 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
   return (
     <div className={`flex flex-col h-full overflow-auto ${mainBg}`} onClick={handleDashboardClick}>
-      {/* Hero Section - Theme-aware gradient */}
-      <div className={`bg-gradient-to-br ${config.heroGradient} p-4 sm:p-6 relative overflow-hidden ${
-        isAurora && isDark ? 'border-b border-neutral-800' : isOcean && isDark ? 'border-b border-cyan-500/20' : ''
-      }`} style={{ minHeight: '150px' }}>
-        <div className="relative z-10 max-w-7xl mx-auto">
-          <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-3">
-            <div className={`p-2 rounded-xl backdrop-blur-sm ${
-              isAurora 
-                ? isDark ? 'bg-neutral-800/50 border border-neutral-700' : 'bg-white/90 border border-neutral-200'
-                : isDark ? 'bg-white/10' : 'bg-white/70'
-            }`}>
-              <img 
-                src="/irongate-logo.png" 
-                alt="IronGate QA Navigator" 
-                className="h-8 sm:h-10 md:h-12 w-auto object-contain"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            </div>
-            <div className={`h-8 sm:h-10 md:h-12 w-px ${
-              isAurora && isDark ? 'bg-neutral-700' : isDark ? 'bg-white/20' : 'bg-gray-300'
-            }`}></div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className={`text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold truncate ml-0 md:ml-8 ${
-                  isAurora && isDark 
-                    ? 'text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.6)]' 
-                    : 'text-gray-900 dark:text-white'
-                }`}>
-                  {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
-                    ? `${userTeams[0]?.name || 'My Team'} Dashboard`
-                    : 'Quality Engineering Intelligence Platform'}
-                </h1>
-              </div>
+      {/* Hero Section - Interactive Circuit Board */}
+      <div className="relative px-4 sm:px-6 py-12 sm:py-16 lg:py-20 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 border-b border-slate-200 dark:border-slate-700">
+        {/* Circuit Board Background - Light mode only */}
+        {!isDark && (
+          <div className="absolute inset-0 opacity-20">
+            {/* Circuit Board Grid */}
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 600" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="circuit-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <rect x="0" y="0" width="40" height="40" fill="none" stroke="#e2e8f0" strokeWidth="0.5"/>
+                  <circle cx="20" cy="20" r="1" fill="#94a3b8"/>
+                </pattern>
+                <linearGradient id="electric-flow" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0"/>
+                  <stop offset="20%" stopColor="#3b82f6" stopOpacity="1"/>
+                  <stop offset="80%" stopColor="#06b6d4" stopOpacity="1"/>
+                  <stop offset="100%" stopColor="#06b6d4" stopOpacity="0"/>
+                </linearGradient>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#circuit-grid)"/>
+            </svg>
+
+            {/* Circuit Traces */}
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 600">
+              {/* Horizontal traces */}
+              <path d="M0 150 L1200 150" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
+              <path d="M0 300 L1200 300" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
+              <path d="M0 450 L1200 450" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
+              {/* Vertical traces */}
+              <path d="M200 0 L200 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
+              <path d="M600 0 L600 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
+              <path d="M1000 0 L1000 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
+            </svg>
+
+            {/* Flowing Electricity Animation */}
+            <div className="absolute inset-0">
+              {/* Horizontal electricity flows */}
+              <div className="absolute top-[150px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-electric-flow-1 opacity-80"></div>
+              <div className="absolute top-[300px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-electric-flow-2 opacity-60"></div>
+              <div className="absolute top-[450px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-electric-flow-3 opacity-70"></div>
+
+              {/* Circuit nodes with pulsing */}
+              <div className="absolute top-[148px] left-[200px] w-4 h-4 bg-blue-500 rounded-full animate-pulse opacity-60"></div>
+              <div className="absolute top-[298px] left-[600px] w-3 h-3 bg-cyan-500 rounded-full animate-pulse opacity-70" style={{ animationDelay: '0.5s' }}></div>
+              <div className="absolute top-[448px] left-[1000px] w-4 h-4 bg-blue-600 rounded-full animate-pulse opacity-50" style={{ animationDelay: '1s' }}></div>
+              <div className="absolute top-[148px] left-[1000px] w-3 h-3 bg-cyan-400 rounded-full animate-pulse opacity-80" style={{ animationDelay: '1.5s' }}></div>
+
+              {/* Data packets flowing */}
+              <div className="absolute top-[145px] w-2 h-2 bg-yellow-400 rounded-full animate-data-flow-1 opacity-90 shadow-lg shadow-yellow-400/50"></div>
+              <div className="absolute top-[295px] w-2 h-2 bg-green-400 rounded-full animate-data-flow-2 opacity-85 shadow-lg shadow-green-400/50"></div>
+              <div className="absolute top-[445px] w-2 h-2 bg-purple-400 rounded-full animate-data-flow-3 opacity-75 shadow-lg shadow-purple-400/50"></div>
             </div>
           </div>
-          <TypingAnimation className="max-w-4xl" />
-        </div>
-        {/* Animated background elements - Theme-aware */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {!isMinimal && (
-            <>
-              <div className={`absolute -top-4 -right-4 w-32 h-32 sm:w-48 sm:h-48 ${config.blob1} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`}></div>
-              <div className={`absolute -bottom-4 -left-4 w-32 h-32 sm:w-48 sm:h-48 ${config.blob2} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`} style={{ animationDelay: '2s' }}></div>
-            </>
-          )}
-          {/* Aurora decorations removed for minimalism */}
-          {isOcean && isDark && (
-            <>
-              <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-cyan-400 rounded-full animate-pulse opacity-60"></div>
-              <div className="absolute bottom-1/4 left-1/4 w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse opacity-70" style={{ animationDelay: '0.7s' }}></div>
-            </>
-          )}
-          {!isMinimal && (
-            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-96 sm:h-96 rounded-full filter blur-3xl ${
-              isAurora ? 'bg-transparent' : isOcean && isDark ? 'bg-cyan-500/10' : isDark ? 'bg-white/5' : 'bg-white/30'
-            }`}></div>
-          )}
+        )}
+
+        {/* Content */}
+        <div className="relative z-10 max-w-5xl mx-auto text-center">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6">
+            {/* Logo */}
+            <img
+              src="/irongate-logo.png"
+              alt="IronGate QA Navigator"
+              className="h-8 sm:h-10 w-auto object-contain"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+
+            {/* Title */}
+            <div className="flex-1 max-w-2xl">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800 dark:text-slate-100 leading-tight">
+                {(user?.role === 'qa_engineer' || user?.role === 'viewer')
+                  ? `${userTeams[0]?.name || 'My Team'} Dashboard`
+                  : 'Quality Engineering Intelligence Platform'}
+              </h1>
+            </div>
+          </div>
+
+          <TypingAnimation className="max-w-3xl" />
         </div>
       </div>
 
@@ -411,14 +431,14 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
               style={{ 
                 animationDelay: `${index * 50}ms`,
                 backgroundColor: isDark
-                  ? team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.18)' 
-                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.18)' 
-                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.18)' 
-                    : 'rgba(239, 68, 68, 0.18)'
-                  : team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.12)' 
-                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.12)' 
-                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.12)' 
-                    : 'rgba(239, 68, 68, 0.12)'
+                  ? team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.30)' 
+                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.30)' 
+                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.30)' 
+                    : 'rgba(239, 68, 68, 0.30)'
+                  : team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.30)' 
+                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.30)' 
+                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.30)' 
+                    : 'rgba(239, 68, 68, 0.30)'
               }}
             >
               {/* Soft theme-aware hover overlay (not on minimal) */}

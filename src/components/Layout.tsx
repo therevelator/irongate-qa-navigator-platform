@@ -95,18 +95,24 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
 
   return (
     <div className={`flex h-screen ${mainBgClass}`}>
-      {/* Menu Overlay */}
+      {/* Menu Overlay - Mobile only */}
       {isMobileMenuOpen && (
         <div 
-          className="fixed inset-0 z-40 bg-black bg-opacity-50"
+          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar Navigation - Always slide-in menu */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col border-r transform transition-all duration-300 ease-in-out ${sidebarBgClass} ${
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      {/* Sidebar Navigation - Push content on desktop, overlay on mobile */}
+      <aside className={`
+        fixed lg:relative inset-y-0 left-0 z-50 lg:z-auto
+        w-64 flex-shrink-0 flex flex-col border-r
+        transform transition-all duration-300 ease-in-out
+        ${sidebarBgClass}
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${isMobileMenuOpen ? 'lg:w-64' : 'lg:w-0 lg:border-r-0'}
+        overflow-hidden
+      `}>
         {/* Logo */}
         <div className="px-6 py-6 sm:py-8 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -123,7 +129,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800"
+            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800"
           >
             <X size={20} className="text-gray-600 dark:text-gray-400" />
           </button>
@@ -284,7 +290,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           <div className="flex items-center space-x-3 sm:space-x-4">
             {/* Menu Button - Always visible */}
             <button
-              onClick={() => setIsMobileMenuOpen(true)}
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2 rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-slate-800"
             >
               <Menu size={20} className="text-gray-600 dark:text-gray-400" />
