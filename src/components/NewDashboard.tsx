@@ -49,6 +49,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       status: 'info'
     }
   ]);
+  const [showMetricsNotification, setShowMetricsNotification] = useState(false);
 
   // Fetch departments for admin users
   useEffect(() => {
@@ -148,6 +149,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
         duration: 3000,
         icon: '📊'
       });
+      
+      // Show green notification
+      setShowMetricsNotification(true);
       
       // Add to recent activity
       addRecentActivity({
@@ -253,8 +257,15 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
         : 'bg-gradient-to-b from-sky-50 to-cyan-50'
       : 'bg-gray-50 dark:bg-slate-950';
 
+  // Handle click to dismiss notification
+  const handleDashboardClick = () => {
+    if (showMetricsNotification) {
+      setShowMetricsNotification(false);
+    }
+  };
+
   return (
-    <div className={`flex flex-col h-full overflow-auto ${mainBg}`}>
+    <div className={`flex flex-col h-full overflow-auto ${mainBg}`} onClick={handleDashboardClick}>
       {/* Hero Section - Theme-aware gradient */}
       <div className={`bg-gradient-to-br ${config.heroGradient} p-4 sm:p-6 relative overflow-hidden ${
         isAurora && isDark ? 'border-b border-neutral-800' : isOcean && isDark ? 'border-b border-cyan-500/20' : ''
@@ -314,6 +325,13 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
           )}
         </div>
       </div>
+
+      {/* Metrics Updated Notification */}
+      {showMetricsNotification && (
+        <div className="fixed top-20 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform transition-transform duration-500 ease-in-out animate-slide-in-right">
+          <p className="font-medium">Metrics Updated</p>
+        </div>
+      )}
 
 
       {/* Teams Overview */}

@@ -607,3 +607,19 @@ html {
 .animate-count-up {
   animation: countUp 0.5s ease-out forwards;
 }
+
+/* Notification Animation */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.5s ease-out forwards;
+}
