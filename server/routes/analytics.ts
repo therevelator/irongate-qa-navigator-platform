@@ -1819,6 +1819,7 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
     res.json({
       success: true,
       dataGenerated: true,
+      message: 'Realistic business impact data seeded successfully! 12 months of correlated quality metrics and KPIs generated.',
       dateRange: { start: months[0], end: months[11] },
       qualityMetrics,
       businessKpis,

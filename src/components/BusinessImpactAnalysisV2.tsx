@@ -217,7 +217,15 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
           setCorrelations(data.correlations || []);
           setDataSummary(data.summary || null);
           
-          toast.success('Loaded real data from database!');
+          // Show seeding notification if data was just generated
+          if (data.dataGenerated) {
+            toast.success(data.message || 'Data seeded successfully!', {
+              duration: 4000,
+              icon: '🌱'
+            });
+          } else {
+            toast.success('Loaded real data from database!');
+          }
         } else if (response.status === 404) {
           // No data found, offer to generate realistic data
           toast.success('No historical data found. Use the data entry tab to add business impact data.');

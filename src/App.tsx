@@ -31,7 +31,7 @@ function App() {
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | 'admin-panel' | string>('dashboard');
   const [teams, setTeams] = useState<Team[]>([]);
-  const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(3);
+  const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(1);
   const [userTeams, setUserTeams] = useState<any[]>([]);
   const [analyticsTeamId, setAnalyticsTeamId] = useState<string | undefined>(undefined);
 

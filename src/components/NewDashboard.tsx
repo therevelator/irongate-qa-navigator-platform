@@ -5,6 +5,7 @@ import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import TypingAnimation from './TypingAnimation';
+import { toast } from 'react-hot-toast';
 
 type GridColumns = 1 | 2 | 3;
 
@@ -19,13 +20,35 @@ interface NewDashboardProps {
   gridColumns?: GridColumns;
 }
 
-const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridColumns = 3 }) => {
+const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridColumns = 1 }) => {
   const { user } = useAuth();
   const { themeName, isDark } = useTheme();
   const [filter, setFilter] = useState<'all' | 'high' | 'needs-attention'>('all');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [teamsWithMetrics, setTeamsWithMetrics] = useState<Team[]>(teams);
+  const [recentActivity, setRecentActivity] = useState<any[]>([
+    {
+      id: '1',
+      type: 'data-seeding',
+      icon: Database,
+      title: 'Business Impact Data Seeded',
+      description: 'Realistic correlation data generated for Alpha Team',
+      team: 'Alpha Team',
+      timestamp: new Date().toISOString(),
+      status: 'success'
+    },
+    {
+      id: '2',
+      type: 'system',
+      icon: Sparkles,
+      title: 'AI Analysis Available',
+      description: 'Statistical insights ready for business impact analysis',
+      team: 'All Teams',
+      timestamp: new Date(Date.now() - 300000).toISOString(),
+      status: 'info'
+    }
+  ]);
 
   // Fetch departments for admin users
   useEffect(() => {
@@ -33,6 +56,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       fetchDepartments();
     }
   }, [user?.role]);
+
+  // Add recent activity
+  const addRecentActivity = (activity: any) => {
+    setRecentActivity(prev => [activity, ...prev.slice(0, 9)]); // Keep only 10 most recent
+  };
 
   // Fetch real metrics for all teams
   useEffect(() => {
@@ -114,6 +142,24 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       );
 
       setTeamsWithMetrics(teamsWithData);
+      
+      // Show notification for data seeding
+      toast.success('Team metrics updated with latest data!', {
+        duration: 3000,
+        icon: '📊'
+      });
+      
+      // Add to recent activity
+      addRecentActivity({
+        id: Date.now().toString(),
+        type: 'data-update',
+        icon: TrendingUp,
+        title: 'Team Metrics Updated',
+        description: `Loaded latest quality and business metrics for ${teamsWithData.length} teams`,
+        team: 'All Teams',
+        timestamp: new Date().toISOString(),
+        status: 'success'
+      });
     } catch (error) {
       console.error('Error fetching teams with metrics:', error);
       setTeamsWithMetrics(teams);
@@ -587,38 +633,62 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
             </button>
           </div>
           <div className="space-y-3 sm:space-y-4">
-            <div className="flex items-center space-x-3 sm:space-x-4 p-3 sm:p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center flex-shrink-0">
-                <Shield className="text-green-600 dark:text-green-300" size={16} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">Test suite passed for Payment Module</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Frontend Team • 2 minutes ago</p>
-              </div>
-              <span className="text-xs text-green-600 bg-green-100 dark:bg-green-900 dark:text-green-300 px-2 py-1 rounded-full flex-shrink-0 hidden sm:inline">Success</span>
-            </div>
-            
-            <div className="flex items-center space-x-3 sm:space-x-4 p-3 sm:p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center flex-shrink-0">
-                <BarChart3 className="text-blue-600 dark:text-blue-300" size={16} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">New deployment to staging environment</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">DevOps Team • 15 minutes ago</p>
-              </div>
-              <span className="text-xs text-blue-600 bg-blue-100 dark:bg-blue-900 dark:text-blue-300 px-2 py-1 rounded-full flex-shrink-0 hidden sm:inline">Deployment</span>
-            </div>
-            
-            <div className="flex items-center space-x-3 sm:space-x-4 p-3 sm:p-4 bg-gray-50 dark:bg-slate-800 rounded-lg">
-              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-amber-100 dark:bg-amber-900 rounded-full flex items-center justify-center flex-shrink-0">
-                <Bug className="text-amber-600 dark:text-amber-300" size={16} />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">Critical bug detected in user authentication</p>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Backend Team • 1 hour ago</p>
-              </div>
-              <span className="text-xs text-amber-600 bg-amber-100 dark:bg-amber-900 dark:text-amber-300 px-2 py-1 rounded-full flex-shrink-0 hidden sm:inline">Critical</span>
-            </div>
+            {recentActivity.map((activity) => {
+              const IconComponent = activity.icon;
+              const getStatusColor = (status: string) => {
+                switch (status) {
+                  case 'success': return isDark ? 'text-green-400' : 'text-green-600';
+                  case 'error': return 'text-red-500';
+                  case 'warning': return 'text-amber-500';
+                  case 'info': return isDark ? 'text-blue-400' : 'text-blue-600';
+                  default: return isDark ? 'text-slate-400' : 'text-slate-600';
+                }
+              };
+              
+              return (
+                <div 
+                  key={activity.id} 
+                  className={`flex items-center space-x-3 sm:space-x-4 p-3 sm:p-4 rounded-lg ${
+                    isDark ? 'bg-slate-800' : 'bg-gray-50'
+                  }`}
+                >
+                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    activity.status === 'success' ? 'bg-green-100 dark:bg-green-900' :
+                    activity.status === 'error' ? 'bg-red-100 dark:bg-red-900' :
+                    activity.status === 'warning' ? 'bg-amber-100 dark:bg-amber-900' :
+                    'bg-blue-100 dark:bg-blue-900'
+                  }`}>
+                    <IconComponent className={getStatusColor(activity.status)} size={16} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {activity.title}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      {activity.description}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className="text-xs text-gray-400">{activity.team}</span>
+                      <span className="text-xs text-gray-400">•</span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(activity.timestamp).toLocaleTimeString([], { 
+                          hour: '2-digit', 
+                          minute: '2-digit' 
+                        })}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 capitalize ${
+                    activity.status === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
+                    activity.status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                    activity.status === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' :
+                    'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                  }`}>
+                    {activity.status}
+                  </span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
