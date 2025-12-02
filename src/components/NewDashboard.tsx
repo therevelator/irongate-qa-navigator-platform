@@ -27,28 +27,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [teamsWithMetrics, setTeamsWithMetrics] = useState<Team[]>(teams);
-  const [recentActivity, setRecentActivity] = useState<any[]>([
-    {
-      id: '1',
-      type: 'data-seeding',
-      icon: Database,
-      title: 'Business Impact Data Seeded',
-      description: 'Realistic correlation data generated for Alpha Team',
-      team: 'Alpha Team',
-      timestamp: new Date().toISOString(),
-      status: 'success'
-    },
-    {
-      id: '2',
-      type: 'system',
-      icon: Sparkles,
-      title: 'AI Analysis Available',
-      description: 'Statistical insights ready for business impact analysis',
-      team: 'All Teams',
-      timestamp: new Date(Date.now() - 300000).toISOString(),
-      status: 'info'
-    }
-  ]);
   const [showMetricsNotification, setShowMetricsNotification] = useState(false);
 
   // Fetch departments for admin users
@@ -57,11 +35,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       fetchDepartments();
     }
   }, [user?.role]);
-
-  // Add recent activity
-  const addRecentActivity = (activity: any) => {
-    setRecentActivity(prev => [activity, ...prev.slice(0, 9)]); // Keep only 10 most recent
-  };
 
   // Fetch real metrics for all teams
   useEffect(() => {
@@ -334,9 +307,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
             {/* Title */}
             <div className="flex-1 max-w-2xl">
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800 dark:text-slate-100 leading-tight">
-                {(user?.role === 'qa_engineer' || user?.role === 'viewer')
-                  ? `${userTeams[0]?.name || 'My Team'} Dashboard`
-                  : 'Quality Engineering Intelligence Platform'}
+                IronGate QE Navigator
               </h1>
             </div>
           </div>
@@ -660,75 +631,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
         )}
       </div>
 
-      {/* Recent Activity */}
-      <div className="px-4 sm:px-6 pb-4 sm:pb-6">
-        <div className="bg-white dark:bg-slate-900 rounded-xl p-4 sm:p-6 border border-gray-200 dark:border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">Recent Activity</h3>
-            <button className="text-xs sm:text-sm text-cyan-600 hover:text-cyan-700 dark:text-cyan-400 dark:hover:text-cyan-300">
-              View All
-            </button>
-          </div>
-          <div className="space-y-3 sm:space-y-4">
-            {recentActivity.map((activity) => {
-              const IconComponent = activity.icon;
-              const getStatusColor = (status: string) => {
-                switch (status) {
-                  case 'success': return isDark ? 'text-green-400' : 'text-green-600';
-                  case 'error': return 'text-red-500';
-                  case 'warning': return 'text-amber-500';
-                  case 'info': return isDark ? 'text-blue-400' : 'text-blue-600';
-                  default: return isDark ? 'text-slate-400' : 'text-slate-600';
-                }
-              };
-              
-              return (
-                <div 
-                  key={activity.id} 
-                  className={`flex items-center space-x-3 sm:space-x-4 p-3 sm:p-4 rounded-lg ${
-                    isDark ? 'bg-slate-800' : 'bg-gray-50'
-                  }`}
-                >
-                  <div className={`w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    activity.status === 'success' ? 'bg-green-100 dark:bg-green-900' :
-                    activity.status === 'error' ? 'bg-red-100 dark:bg-red-900' :
-                    activity.status === 'warning' ? 'bg-amber-100 dark:bg-amber-900' :
-                    'bg-blue-100 dark:bg-blue-900'
-                  }`}>
-                    <IconComponent className={getStatusColor(activity.status)} size={16} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs sm:text-sm font-medium text-gray-900 dark:text-white truncate">
-                      {activity.title}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                      {activity.description}
-                    </p>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className="text-xs text-gray-400">{activity.team}</span>
-                      <span className="text-xs text-gray-400">•</span>
-                      <span className="text-xs text-gray-400">
-                        {new Date(activity.timestamp).toLocaleTimeString([], { 
-                          hour: '2-digit', 
-                          minute: '2-digit' 
-                        })}
-                      </span>
-                    </div>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 capitalize ${
-                    activity.status === 'success' ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' :
-                    activity.status === 'error' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                    activity.status === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' :
-                    'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
-                  }`}>
-                    {activity.status}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
