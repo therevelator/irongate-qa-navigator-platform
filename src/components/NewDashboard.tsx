@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Sparkles, Building2, Database } from 'lucide-react';
+import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Building2, Target, Calendar } from 'lucide-react';
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import TypingAnimation from './TypingAnimation';
+import BatteryIndicator from './BatteryIndicator';
 import { toast } from 'react-hot-toast';
 
 type GridColumns = 1 | 2 | 3;
@@ -18,9 +19,10 @@ interface NewDashboardProps {
   teams: Team[];
   onTeamClick?: (team: Team) => void;
   gridColumns?: GridColumns;
+  is3DMode?: boolean;
 }
 
-const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridColumns = 1 }) => {
+const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridColumns = 1, is3DMode = true }) => {
   const { user } = useAuth();
   const { themeName, isDark } = useTheme();
   const [filter, setFilter] = useState<'all' | 'high' | 'needs-attention'>('all');
@@ -116,26 +118,17 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       );
 
       setTeamsWithMetrics(teamsWithData);
-      
-      // Show green notification
-      setShowMetricsNotification(true);
-      
-      // Auto-dismiss after 3 seconds
-      setTimeout(() => {
-        setShowMetricsNotification(false);
-      }, 3000);
-      
-      // Add to recent activity
-      addRecentActivity({
-        id: Date.now().toString(),
-        type: 'data-update',
-        icon: TrendingUp,
-        title: 'Team Metrics Updated',
-        description: `Loaded latest quality and business metrics for ${teamsWithData.length} teams`,
-        team: 'All Teams',
-        timestamp: new Date().toISOString(),
-        status: 'success'
-      });
+
+      // Only show notification when we actually loaded metrics for at least one team
+      if (teamsWithData.length > 0) {
+        // Show green notification
+        setShowMetricsNotification(true);
+
+        // Auto-dismiss after 3 seconds
+        setTimeout(() => {
+          setShowMetricsNotification(false);
+        }, 3000);
+      }
     } catch (error) {
       console.error('Error fetching teams with metrics:', error);
       setTeamsWithMetrics(teams);
@@ -217,6 +210,113 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
     2: 'grid-cols-1 md:grid-cols-2',
     3: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
   };
+
+  // Compute Focus for This Week based on actual team data
+  const computeFocusRecommendation = () => {
+    if (teamsWithMetrics.length === 0) {
+      return {
+        title: 'No data available',
+        description: 'Add teams to see focus recommendations',
+        currentValue: '-',
+        targetValue: '-',
+        affectedTeams: 0,
+        affectedTeamNames: [] as string[],
+        effort: 'N/A'
+      };
+    }
+
+    // Find teams with low QA scores (needs attention)
+    const lowScoreTeams = teamsWithMetrics.filter(t => t.qaScore < 75);
+    const avgScore = teamsWithMetrics.reduce((sum, t) => sum + t.qaScore, 0) / teamsWithMetrics.length;
+
+    // Analyze metrics across all teams
+    let worstMetric = { name: '', avgValue: 100, teamsAffected: 0, isLowerBetter: false };
+    
+    // Check flakiness (lower is better)
+    const teamsWithFlakiness = teamsWithMetrics.filter(t => {
+      const flaky = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('flak'));
+      return flaky && parseFloat(String(flaky.value)) > 3;
+    });
+    
+    // Check test coverage (higher is better)
+    const teamsWithLowCoverage = teamsWithMetrics.filter(t => {
+      const coverage = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('coverage'));
+      return coverage && parseFloat(String(coverage.value)) < 80;
+    });
+
+    // Check defect density (lower is better)
+    const teamsWithHighDefects = teamsWithMetrics.filter(t => {
+      const defects = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('defect'));
+      return defects && parseFloat(String(defects.value)) > 1;
+    });
+
+    // Determine primary focus
+    if (teamsWithLowCoverage.length > 0) {
+      const avgCoverage = teamsWithLowCoverage.reduce((sum, t) => {
+        const cov = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('coverage'));
+        return sum + (cov ? parseFloat(String(cov.value)) : 0);
+      }, 0) / teamsWithLowCoverage.length;
+      
+      return {
+        title: 'Improve test coverage across teams',
+        description: 'Low test coverage increases risk of undetected bugs',
+        currentValue: `${Math.round(avgCoverage)}%`,
+        targetValue: '80%',
+        affectedTeams: teamsWithLowCoverage.length,
+        affectedTeamNames: teamsWithLowCoverage.map(t => t.name),
+        effort: teamsWithLowCoverage.length > 2 ? '1-2 weeks' : '3-5 days'
+      };
+    }
+
+    if (teamsWithFlakiness.length > 0) {
+      return {
+        title: 'Reduce test flakiness in critical paths',
+        description: 'Flaky tests slow down CI/CD and reduce confidence',
+        currentValue: '4.5%',
+        targetValue: '2%',
+        affectedTeams: teamsWithFlakiness.length,
+        affectedTeamNames: teamsWithFlakiness.map(t => t.name),
+        effort: teamsWithFlakiness.length > 2 ? '1 week' : '2-3 days'
+      };
+    }
+
+    if (teamsWithHighDefects.length > 0) {
+      return {
+        title: 'Reduce defect density',
+        description: 'High defect density impacts customer satisfaction',
+        currentValue: '>1/KLOC',
+        targetValue: '<0.5/KLOC',
+        affectedTeams: teamsWithHighDefects.length,
+        affectedTeamNames: teamsWithHighDefects.map(t => t.name),
+        effort: '1-2 weeks'
+      };
+    }
+
+    if (lowScoreTeams.length > 0) {
+      return {
+        title: `Improve QA score for ${lowScoreTeams[0].name}`,
+        description: 'Team needs attention to meet quality standards',
+        currentValue: `${lowScoreTeams[0].qaScore}`,
+        targetValue: '75+',
+        affectedTeams: lowScoreTeams.length,
+        affectedTeamNames: lowScoreTeams.map(t => t.name),
+        effort: '1 week'
+      };
+    }
+
+    // All teams doing well
+    return {
+      title: 'Maintain quality standards',
+      description: 'All teams meeting targets - focus on continuous improvement',
+      currentValue: `${Math.round(avgScore)}`,
+      targetValue: '90+',
+      affectedTeams: teamsWithMetrics.length,
+      affectedTeamNames: teamsWithMetrics.map(t => t.name),
+      effort: 'Ongoing'
+    };
+  };
+
+  const focusRecommendation = computeFocusRecommendation();
 
   // Main background based on theme
   const mainBg = isAurora
@@ -390,14 +490,16 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
             <div
               key={team.id}
               onClick={() => onTeamClick?.(team)}
-              className={`team-card cursor-pointer relative overflow-hidden group h-full p-3 sm:p-4 rounded-xl border transition-all duration-200 ${
+              className={`team-card cursor-pointer relative overflow-hidden group h-full p-3 sm:p-4 rounded-xl border transition-all duration-300 ease-out transform-gpu ${
                 isMinimal
                   ? isDark
-                    ? 'border-gray-700 hover:border-gray-600'
-                    : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                    ? 'border-gray-700 hover:border-gray-600 shadow-lg hover:shadow-xl hover:shadow-gray-900/20'
+                    : 'border-gray-200 hover:border-gray-300 hover:shadow-lg hover:shadow-gray-900/10'
                   : isDark
-                    ? 'border-slate-700/50 hover:border-slate-600'
-                    : 'border-gray-200/80 hover:border-gray-300 hover:shadow-md'
+                    ? 'border-slate-700/50 hover:border-slate-600 shadow-lg hover:shadow-xl hover:shadow-slate-900/30'
+                    : 'border-gray-200/80 hover:border-gray-300 hover:shadow-xl hover:shadow-gray-900/15'
+              } ${is3DMode ? 'hover:-translate-y-1 hover:scale-[1.02]' : 'hover:scale-[1.01]'} ${
+                is3DMode && isDark ? 'hover:shadow-slate-900/40' : is3DMode ? 'hover:shadow-gray-900/20' : ''
               }`}
               style={{ 
                 animationDelay: `${index * 50}ms`,
@@ -422,6 +524,40 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   }`}
                 />
               )}
+
+              {/* 3D Depth Effects */}
+              {is3DMode && (
+                <>
+                  {/* Outer shadow ring */}
+                  <div className="absolute -inset-1 rounded-xl opacity-20 blur-sm group-hover:opacity-40 transition-opacity duration-300"
+                    style={{
+                      background: isDark
+                        ? team.qaScore >= 85 ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.4))'
+                          : team.qaScore >= 75 ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(217, 119, 6, 0.4))'
+                          : team.qaScore >= 50 ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.3), rgba(234, 88, 12, 0.4))'
+                          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.4))'
+                        : team.qaScore >= 85 ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.3))'
+                          : team.qaScore >= 75 ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(217, 119, 6, 0.3))'
+                          : team.qaScore >= 50 ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(234, 88, 12, 0.3))'
+                          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.3))'
+                    }}
+                  />
+
+                  {/* Inner highlight for 3D effect */}
+                  <div className="absolute top-0 left-0 right-0 h-8 rounded-t-xl opacity-30 group-hover:opacity-50 transition-opacity duration-300"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 50%, transparent 100%)'
+                    }}
+                  />
+
+                  {/* Bottom shadow for depth */}
+                  <div className="absolute bottom-0 left-0 right-0 h-4 rounded-b-xl opacity-20 group-hover:opacity-30 transition-opacity duration-300"
+                    style={{
+                      background: 'linear-gradient(0deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.05) 50%, transparent 100%)'
+                    }}
+                  />
+                </>
+              )}
               
               {/* Card Layout - Adapts based on grid columns */}
               {gridColumns === 1 ? (
@@ -443,51 +579,32 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                     </div>
                     {/* QA Score - Mobile only in row 1 */}
                     <div className="flex-shrink-0 md:hidden">
-                      <div className="relative w-14 h-14 group-hover:scale-110 transition-transform duration-300">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="28" cy="28" r="24" stroke="#e5e7eb" strokeWidth="4" fill="transparent" className="dark:stroke-slate-700" />
-                          <circle
-                            cx="28" cy="28" r="24"
-                            stroke={team.qaScore >= 85 ? '#10b981' : team.qaScore >= 75 ? '#eab308' : team.qaScore >= 50 ? '#f97316' : '#ef4444'}
-                            strokeWidth="4" fill="transparent"
-                            strokeDasharray={2 * Math.PI * 24}
-                            strokeDashoffset={2 * Math.PI * 24 - (team.qaScore / 100) * 2 * Math.PI * 24}
-                            strokeLinecap="round" className="transition-all duration-1000"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
-                        </div>
-                      </div>
+                      <BatteryIndicator
+                        percentage={team.qaScore}
+                        size="sm"
+                        mode={is3DMode ? "3d" : "flat"}
+                        className="group-hover:scale-110 transition-transform duration-300"
+                        animationDelay={index * 150}
+                      />
                     </div>
                   </div>
 
                   {/* QA Score - Desktop */}
                   <div className="hidden md:block flex-shrink-0">
-                    <div className="relative w-16 h-16 lg:w-20 lg:h-20 group-hover:scale-110 transition-transform duration-300">
-                      <svg className="w-full h-full transform -rotate-90">
-                        <circle cx="50%" cy="50%" r="28" stroke="#e5e7eb" strokeWidth="6" fill="transparent" className="dark:stroke-slate-700" />
-                        <circle
-                          cx="50%" cy="50%" r="28"
-                          stroke={team.qaScore >= 85 ? '#10b981' : team.qaScore >= 75 ? '#eab308' : team.qaScore >= 50 ? '#f97316' : '#ef4444'}
-                          strokeWidth="6" fill="transparent"
-                          strokeDasharray={2 * Math.PI * 28}
-                          strokeDashoffset={2 * Math.PI * 28 - (team.qaScore / 100) * 2 * Math.PI * 28}
-                          strokeLinecap="round" className="transition-all duration-1000"
-                        />
-                      </svg>
-                      <div className="absolute inset-0 flex flex-col items-center justify-center">
-                        <span className="text-xl lg:text-2xl font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
-                        <span className="text-[10px] lg:text-xs text-gray-500 dark:text-gray-400">Score</span>
-                      </div>
-                    </div>
+                    <BatteryIndicator
+                      percentage={team.qaScore}
+                      size="lg"
+                      mode={is3DMode ? "3d" : "flat"}
+                      className="group-hover:scale-110 transition-transform duration-300"
+                      animationDelay={index * 150}
+                    />
                   </div>
 
                   {/* Inline Metrics */}
                   <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
                     {team.metrics && team.metrics.length > 0 ? (
                       team.metrics.slice(0, 4).map((metric: any, idx: number) => (
-                        <div key={idx} className="group/metric hover:scale-105 transition-transform">
+                        <div key={idx} className="relative group/metric">
                           <div className="flex items-center gap-1.5 lg:gap-2 mb-1">
                             <div className={`p-1 lg:p-1.5 rounded ${
                               idx === 0 ? 'bg-green-100 dark:bg-green-900' :
@@ -548,22 +665,13 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                     
                     {/* QA Score Circle */}
                     <div className="flex-shrink-0">
-                      <div className="relative w-14 h-14 group-hover:scale-110 transition-transform duration-300">
-                        <svg className="w-full h-full transform -rotate-90">
-                          <circle cx="28" cy="28" r="24" stroke="#e5e7eb" strokeWidth="4" fill="transparent" className="dark:stroke-slate-700" />
-                          <circle
-                            cx="28" cy="28" r="24"
-                            stroke={team.qaScore >= 85 ? '#10b981' : team.qaScore >= 75 ? '#eab308' : team.qaScore >= 50 ? '#f97316' : '#ef4444'}
-                            strokeWidth="4" fill="transparent"
-                            strokeDasharray={2 * Math.PI * 24}
-                            strokeDashoffset={2 * Math.PI * 24 - (team.qaScore / 100) * 2 * Math.PI * 24}
-                            strokeLinecap="round" className="transition-all duration-1000"
-                          />
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center">
-                          <span className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}</span>
-                        </div>
-                      </div>
+                      <BatteryIndicator
+                        percentage={team.qaScore}
+                        size="md"
+                        mode={is3DMode ? "3d" : "flat"}
+                        className="group-hover:scale-110 transition-transform duration-300"
+                        animationDelay={index * 150}
+                      />
                     </div>
                   </div>
                   
@@ -571,7 +679,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   <div className="grid grid-cols-2 gap-2 flex-1">
                     {team.metrics && team.metrics.length > 0 ? (
                       team.metrics.slice(0, 4).map((metric: any, idx: number) => (
-                        <div key={idx} className="bg-gray-50 dark:bg-slate-800 rounded-lg p-2.5">
+                        <div key={idx} className="relative rounded-lg p-2.5 border border-gray-400 dark:border-slate-500">
                           <div className="flex items-center gap-1.5 mb-1">
                             <div className={`p-1 rounded ${
                               idx === 0 ? 'bg-green-100 dark:bg-green-900' :
@@ -593,7 +701,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                         </div>
                       ))
                     ) : (
-                      <div className="col-span-2 bg-gray-50 dark:bg-slate-800 rounded-lg p-3 text-center">
+                      <div className="col-span-2 rounded-lg p-3 text-center border border-gray-400 dark:border-slate-500">
                         <span className="text-xs text-gray-500">No metrics available</span>
                       </div>
                     )}
