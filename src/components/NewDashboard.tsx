@@ -19,9 +19,10 @@ interface NewDashboardProps {
   teams: Team[];
   onTeamClick?: (team: Team) => void;
   gridColumns?: GridColumns;
+  is3DMode?: boolean;
 }
 
-const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridColumns = 1 }) => {
+const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridColumns = 1, is3DMode = true }) => {
   const { user } = useAuth();
   const { themeName, isDark } = useTheme();
   const [filter, setFilter] = useState<'all' | 'high' | 'needs-attention'>('all');
@@ -474,14 +475,16 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
             <div
               key={team.id}
               onClick={() => onTeamClick?.(team)}
-              className={`team-card cursor-pointer relative overflow-hidden group h-full p-3 sm:p-4 rounded-xl border transition-all duration-200 ${
+              className={`team-card cursor-pointer relative overflow-hidden group h-full p-3 sm:p-4 rounded-xl border transition-all duration-300 ease-out transform-gpu ${
                 isMinimal
                   ? isDark
-                    ? 'border-gray-700 hover:border-gray-600'
-                    : 'border-gray-200 hover:border-gray-300 hover:shadow-md'
+                    ? 'border-gray-700 hover:border-gray-600 shadow-lg hover:shadow-xl hover:shadow-gray-900/20'
+                    : 'border-gray-200 hover:border-gray-300 hover:shadow-lg hover:shadow-gray-900/10'
                   : isDark
-                    ? 'border-slate-700/50 hover:border-slate-600'
-                    : 'border-gray-200/80 hover:border-gray-300 hover:shadow-md'
+                    ? 'border-slate-700/50 hover:border-slate-600 shadow-lg hover:shadow-xl hover:shadow-slate-900/30'
+                    : 'border-gray-200/80 hover:border-gray-300 hover:shadow-xl hover:shadow-gray-900/15'
+              } ${is3DMode ? 'hover:-translate-y-1 hover:scale-[1.02]' : 'hover:scale-[1.01]'} ${
+                is3DMode && isDark ? 'hover:shadow-slate-900/40' : is3DMode ? 'hover:shadow-gray-900/20' : ''
               }`}
               style={{ 
                 animationDelay: `${index * 50}ms`,
@@ -505,6 +508,40 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                       : 'bg-cyan-500/5'
                   }`}
                 />
+              )}
+
+              {/* 3D Depth Effects */}
+              {is3DMode && (
+                <>
+                  {/* Outer shadow ring */}
+                  <div className="absolute -inset-1 rounded-xl opacity-20 blur-sm group-hover:opacity-40 transition-opacity duration-300"
+                    style={{
+                      background: isDark
+                        ? team.qaScore >= 85 ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.4))'
+                          : team.qaScore >= 75 ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(217, 119, 6, 0.4))'
+                          : team.qaScore >= 50 ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.3), rgba(234, 88, 12, 0.4))'
+                          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.4))'
+                        : team.qaScore >= 85 ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.3))'
+                          : team.qaScore >= 75 ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(217, 119, 6, 0.3))'
+                          : team.qaScore >= 50 ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(234, 88, 12, 0.3))'
+                          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.3))'
+                    }}
+                  />
+
+                  {/* Inner highlight for 3D effect */}
+                  <div className="absolute top-0 left-0 right-0 h-8 rounded-t-xl opacity-30 group-hover:opacity-50 transition-opacity duration-300"
+                    style={{
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 50%, transparent 100%)'
+                    }}
+                  />
+
+                  {/* Bottom shadow for depth */}
+                  <div className="absolute bottom-0 left-0 right-0 h-4 rounded-b-xl opacity-20 group-hover:opacity-30 transition-opacity duration-300"
+                    style={{
+                      background: 'linear-gradient(0deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.05) 50%, transparent 100%)'
+                    }}
+                  />
+                </>
               )}
               
               {/* Card Layout - Adapts based on grid columns */}
@@ -530,7 +567,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                       <BatteryIndicator
                         percentage={team.qaScore}
                         size="sm"
-                        mode="3d"
+                        mode={is3DMode ? "3d" : "flat"}
                         className="group-hover:scale-110 transition-transform duration-300"
                         animationDelay={index * 150}
                       />
@@ -542,7 +579,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                     <BatteryIndicator
                       percentage={team.qaScore}
                       size="lg"
-                      mode="3d"
+                      mode={is3DMode ? "3d" : "flat"}
                       className="group-hover:scale-110 transition-transform duration-300"
                       animationDelay={index * 150}
                     />
@@ -552,7 +589,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
                     {team.metrics && team.metrics.length > 0 ? (
                       team.metrics.slice(0, 4).map((metric: any, idx: number) => (
-                        <div key={idx} className="group/metric hover:scale-105 transition-transform">
+                        <div key={idx} className="relative group/metric">
                           <div className="flex items-center gap-1.5 lg:gap-2 mb-1">
                             <div className={`p-1 lg:p-1.5 rounded ${
                               idx === 0 ? 'bg-green-100 dark:bg-green-900' :
@@ -616,7 +653,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                       <BatteryIndicator
                         percentage={team.qaScore}
                         size="md"
-                        mode="3d"
+                        mode={is3DMode ? "3d" : "flat"}
                         className="group-hover:scale-110 transition-transform duration-300"
                         animationDelay={index * 150}
                       />
@@ -627,7 +664,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   <div className="grid grid-cols-2 gap-2 flex-1">
                     {team.metrics && team.metrics.length > 0 ? (
                       team.metrics.slice(0, 4).map((metric: any, idx: number) => (
-                        <div key={idx} className="rounded-lg p-2.5 border border-gray-400 dark:border-slate-500">
+                        <div key={idx} className="relative rounded-lg p-2.5 border border-gray-400 dark:border-slate-500">
                           <div className="flex items-center gap-1.5 mb-1">
                             <div className={`p-1 rounded ${
                               idx === 0 ? 'bg-green-100 dark:bg-green-900' :

@@ -20,11 +20,13 @@ interface LayoutProps {
   hideSidebar?: boolean;
   gridColumns?: 1 | 2 | 3;
   onGridChange?: (cols: 1 | 2 | 3) => void;
+  is3DMode?: boolean;
+  on3DModeChange?: (is3D: boolean) => void;
 }
 
 import API_URL from '../config/api';
 
-const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange, hideSidebar, gridColumns = 3, onGridChange }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange, hideSidebar, gridColumns = 3, onGridChange, is3DMode = true, on3DModeChange }) => {
   const { user, logout } = useAuth();
   const { isDark } = useTheme();
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -95,24 +97,30 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
 
   return (
     <div className={`flex h-screen ${mainBgClass}`}>
-      {/* Menu Overlay */}
+      {/* Menu Overlay - Mobile only */}
       {isMobileMenuOpen && (
-        <div 
-          className="fixed inset-0 z-40 bg-black bg-opacity-50"
+        <div
+          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
       )}
 
-      {/* Sidebar Navigation - Always slide-in menu */}
-      <aside className={`fixed inset-y-0 left-0 z-50 w-64 flex flex-col border-r transform transition-all duration-300 ease-in-out ${sidebarBgClass} ${
-        isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-      }`}>
+      {/* Sidebar Navigation - Push content on desktop, overlay on mobile */}
+      <aside className={`
+        fixed lg:relative inset-y-0 left-0 z-50 lg:z-auto
+        w-64 flex-shrink-0 flex flex-col border-r
+        transform lg:transform-none transition-all duration-300 ease-in-out
+        ${sidebarBgClass}
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        ${isMobileMenuOpen ? 'lg:w-64' : 'lg:w-0 lg:border-r-0'}
+        overflow-hidden
+      `}>
         {/* Logo */}
         <div className="px-6 py-6 sm:py-8 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img 
-              src="/irongate-logo.png" 
-              alt="IronGate" 
+            <img
+              src="/irongate-logo.png"
+              alt="IronGate"
               className="h-8 w-auto object-contain"
               onError={(e) => { e.currentTarget.style.display = 'none'; }}
             />
@@ -278,13 +286,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out">
         {/* Top Bar with Welcome and Theme Toggle */}
         <div className="px-4 sm:px-6 py-3 flex items-center justify-between border-b transition-all bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800">
           <div className="flex items-center space-x-3 sm:space-x-4">
             {/* Menu Button - Always visible */}
             <button
-              onClick={() => setIsMobileMenuOpen(true)}
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="p-2 rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-slate-800"
             >
               <Menu size={20} className="text-gray-600 dark:text-gray-400" />
@@ -316,6 +324,31 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                 ))}
               </div>
             )}
+            {/* 2D/3D Mode Toggle */}
+            <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
+              <button
+                onClick={() => on3DModeChange?.(false)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                  !is3DMode
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+                }`}
+                title="2D Mode - Clean and lightweight"
+              >
+                2D
+              </button>
+              <button
+                onClick={() => on3DModeChange?.(true)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
+                  is3DMode
+                    ? 'bg-blue-600 text-white shadow'
+                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+                }`}
+                title="3D Mode - Enhanced visual effects"
+              >
+                3D
+              </button>
+            </div>
             {/* Dark/Light Mode Toggle */}
             <ThemeToggle compact />
           </div>

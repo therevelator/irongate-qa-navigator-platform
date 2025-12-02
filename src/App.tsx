@@ -34,6 +34,7 @@ function App() {
   const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(1);
   const [userTeams, setUserTeams] = useState<any[]>([]);
   const [analyticsTeamId, setAnalyticsTeamId] = useState<string | undefined>(undefined);
+  const [is3DMode, setIs3DMode] = useState(true); // Default to 3D mode
 
   // Fetch departments and teams based on user role
   useEffect(() => {
@@ -293,8 +294,8 @@ function App() {
           },
         }}
       />
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab} gridColumns={gridColumns} onGridChange={setGridColumns}>
-        <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} gridColumns={gridColumns} />
+      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab} gridColumns={gridColumns} onGridChange={setGridColumns} is3DMode={is3DMode} on3DModeChange={setIs3DMode}>
+        <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} gridColumns={gridColumns} is3DMode={is3DMode} />
       </Layout>
     </>
   );

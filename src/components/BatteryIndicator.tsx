@@ -55,101 +55,162 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
   }, [percentage, animationDelay]);
 
   const sizeClasses = {
-    sm: { width: 'w-20', height: 'h-7', text: 'text-xs' },
-    md: { width: 'w-28', height: 'h-10', text: 'text-sm' },
-    lg: { width: 'w-32', height: 'h-12', text: 'text-base' }
+    sm: { width: 'w-16', height: 'h-16', text: 'text-xs', stroke: '4' },
+    md: { width: 'w-20', height: 'h-20', text: 'text-sm', stroke: '6' },
+    lg: { width: 'w-24', height: 'h-24', text: 'text-base', stroke: '8' }
   };
 
   const sizeConfig = sizeClasses[size];
 
-  // Determine battery color based on current display percentage
-  const getBatteryColors = (pct: number) => {
+  // Determine circle color based on current display percentage
+  const getCircleColors = (pct: number) => {
     const isDark = document.documentElement.classList.contains('dark');
 
     if (pct >= 80) {
       return isDark
-        ? { fill: '#10b981', dark: '#34d399' } // green
-        : { fill: '#22c55e', dark: '#4ade80' }; // brighter green
+        ? { fill: '#10b981', stroke: '#34d399', glow: '#10b981' } // green
+        : { fill: '#22c55e', stroke: '#4ade80', glow: '#22c55e' }; // brighter green
     }
     if (pct >= 60) {
       return isDark
-        ? { fill: '#eab308', dark: '#facc15' } // yellow
-        : { fill: '#facc15', dark: '#fde047' }; // brighter yellow
+        ? { fill: '#eab308', stroke: '#facc15', glow: '#eab308' } // yellow
+        : { fill: '#facc15', stroke: '#fde047', glow: '#facc15' }; // brighter yellow
     }
     if (pct >= 40) {
       return isDark
-        ? { fill: '#f97316', dark: '#fb923c' } // orange
-        : { fill: '#fb923c', dark: '#fdba74' }; // brighter orange
+        ? { fill: '#f97316', stroke: '#fb923c', glow: '#f97316' } // orange
+        : { fill: '#fb923c', stroke: '#fdba74', glow: '#fb923c' }; // brighter orange
     }
     return isDark
-      ? { fill: '#ef4444', dark: '#f87171' } // red
-      : { fill: '#f87171', dark: '#fca5a5' }; // brighter red
+      ? { fill: '#ef4444', stroke: '#f87171', glow: '#ef4444' } // red
+      : { fill: '#f87171', stroke: '#fca5a5', glow: '#f87171' }; // brighter red
   };
 
-  const colors = getBatteryColors(displayPercentage);
-  const fillWidth = Math.max(5, Math.min(85, displayPercentage)); // Clamp between 5% and 85%
+  const colors = getCircleColors(displayPercentage);
+  const radius = 40; // SVG coordinate radius
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (displayPercentage / 100) * circumference;
 
   if (mode === '3d') {
-    // 3D Battery with gradients and effects
+    // 3D Circular Progress with gradients and depth effects
     return (
-      <div className={`relative ${sizeConfig.width} ${sizeConfig.height} ${animate ? 'animate-battery-charge' : ''} ${className}`}>
-        <div
-          className="absolute inset-0 rounded border-2 border-gray-300 dark:border-slate-600 bg-gradient-to-r from-gray-200 to-gray-100 dark:from-slate-700 dark:to-slate-600"
-          style={{
-            borderRadius: '4px 6px 6px 4px',
-            backgroundImage: `
-              linear-gradient(to right, transparent 5%, ${colors.fill} 5%, ${colors.fill} 7%, ${colors.fill} 8%, ${colors.fill} 10%, ${colors.fill} 11%, ${colors.fill} ${fillWidth}%, ${colors.dark} ${fillWidth + 1}%, ${colors.dark} ${fillWidth + 3}%, ${colors.fill} ${fillWidth + 3}%, black ${fillWidth + 8}%, black 95%, transparent 95%),
-              linear-gradient(to bottom, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.4) 4%, rgba(255,255,255,0.2) 7%, rgba(255,255,255,0.2) 14%, rgba(255,255,255,0.8) 14%, rgba(255,255,255,0.2) 40%, rgba(255,255,255,0) 41%, rgba(255,255,255,0) 80%, rgba(255,255,255,0.2) 80%, rgba(255,255,255,0.4) 86%, rgba(255,255,255,0.6) 90%, rgba(255,255,255,0.1) 92%, rgba(255,255,255,0.1) 95%, rgba(255,255,255,0.5) 98%)
-            `
-          }}
+      <div className={`relative ${sizeConfig.width} ${sizeConfig.height} ${animate ? 'animate-pulse' : ''} ${className}`}>
+        {/* Outer shadow ring */}
+        <div className="absolute inset-0 rounded-full bg-gray-300 dark:bg-slate-600 opacity-20 blur-sm"></div>
+
+        {/* Main circle with 3D depth */}
+        <svg
+          className="w-full h-full transform -rotate-90"
+          viewBox="0 0 100 100"
         >
-          {/* Battery nib */}
-          <div
-            className="absolute right-0 top-1/2 transform -translate-y-1/2 w-1 h-3 rounded-r bg-gray-300 dark:bg-slate-600"
+          {/* Background circle with 3D depth */}
+          <circle
+            cx="50"
+            cy="50"
+            r={radius}
+            stroke="#e5e7eb"
+            strokeWidth={sizeConfig.stroke}
+            fill="none"
+            className="dark:stroke-slate-700"
             style={{
-              backgroundImage: '-webkit-linear-gradient(rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 14%, rgba(255,255,255,0.8) 14%, rgba(255,255,255,0.3) 40%, rgba(255,255,255,0) 41%, rgba(255,255,255,0) 80%, rgba(255,255,255,0.2) 80%, rgba(255,255,255,0.4) 86%, rgba(255,255,255,0.6) 90%, rgba(255,255,255,0.1) 92%, rgba(255,255,255,0.1) 95%, rgba(255,255,255,0.5) 98%)'
+              filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.1))'
             }}
           />
-          {/* Inner shadow/highlight */}
-          <div
-            className="absolute inset-1 rounded"
+
+          {/* Progress circle with 3D gradient */}
+          <circle
+            cx="50"
+            cy="50"
+            r={radius}
+            stroke={colors.stroke}
+            strokeWidth={sizeConfig.stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            className="transition-all duration-1000 ease-out"
             style={{
-              backgroundImage: `
-                -webkit-linear-gradient(rgba(255,255,255,0.3) 4%, rgba(255,255,255,0.2) 5%, transparent 5%, transparent 14%, rgba(255,255,255,0.3) 14%, rgba(255,255,255,0.12) 40%, rgba(0,0,0,0.05) 42%, rgba(0,0,0,0.05) 48%, transparent 60%, transparent 80%, rgba(255,255,255,0.3) 87%, rgba(255,255,255,0.3) 92%, transparent 92%, transparent 97%, rgba(255,255,255,0.4) 97%),
-                linear-gradient(to left, rgba(255,255,255,0.2) 0%, rgba(255,255,255,0.2) 2%, black 2%, black 6%, transparent 6%),
-                linear-gradient(rgba(255,255,255,0) 0%, rgba(255,255,255,0) 35%, rgba(255,255,255,0.3) 90%, rgba(255,255,255,0) 90%)
-              `,
-              borderRadius: '2px 4px 4px 2px'
+              filter: `drop-shadow(0 0 8px ${colors.glow}40)`,
+              background: `conic-gradient(from 0deg, ${colors.fill} 0%, ${colors.stroke} 100%)`,
+              WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 6px))',
+              mask: 'radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 6px))'
             }}
           />
-        </div>
-        <div className="absolute inset-0 flex items-center justify-center">
+
+          {/* Inner highlight for 3D effect */}
+          <circle
+            cx="50"
+            cy="50"
+            r={radius - 3}
+            fill="none"
+            stroke="rgba(255,255,255,0.3)"
+            strokeWidth="2"
+            strokeDasharray={`${circumference * 0.7} ${circumference * 0.3}`}
+            strokeDashoffset={circumference * 0.2}
+          />
+
+          {/* Outer rim highlight */}
+          <circle
+            cx="50"
+            cy="50"
+            r={radius + 1}
+            fill="none"
+            stroke="rgba(255,255,255,0.4)"
+            strokeWidth="1"
+            className="dark:stroke-slate-300"
+          />
+        </svg>
+
+        {/* Center content */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center">
           <span className={`font-bold text-gray-900 dark:text-white ${sizeConfig.text}`}>
-            {displayPercentage}
+            {displayPercentage}%
           </span>
         </div>
       </div>
     );
   }
 
-  // Flat Battery
+  // Flat Circular Progress
   return (
-    <div className={`relative ${sizeConfig.width} ${sizeConfig.height} ${animate ? 'animate-battery-charge' : ''} ${className}`}>
-      <div className="absolute inset-0 bg-gray-200 dark:bg-slate-700 rounded border border-gray-300 dark:border-slate-600 flex items-center">
-        {/* Battery fill */}
-        <div
-          className="h-full rounded-l transition-all duration-1000"
+    <div className={`relative ${sizeConfig.width} ${sizeConfig.height} ${animate ? 'animate-pulse' : ''} ${className}`}>
+      <svg
+        className="w-full h-full transform -rotate-90"
+        viewBox="0 0 100 100"
+      >
+        {/* Background circle */}
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          stroke="#e5e7eb"
+          strokeWidth={sizeConfig.stroke}
+          fill="none"
+          className="dark:stroke-slate-700"
+        />
+
+        {/* Progress circle */}
+        <circle
+          cx="50"
+          cy="50"
+          r={radius}
+          stroke={colors.fill}
+          strokeWidth={sizeConfig.stroke}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={strokeDashoffset}
+          className="transition-all duration-1000 ease-out"
           style={{
-            width: `${fillWidth}%`,
-            backgroundColor: colors.fill
+            filter: `drop-shadow(0 0 4px ${colors.glow}30)`
           }}
         />
-        {/* Battery nib */}
-        <div className="w-1 h-2 bg-gray-300 dark:bg-slate-600 rounded-r ml-0.5" />
-      </div>
-      <div className="absolute inset-0 flex items-center justify-center">
+      </svg>
+
+      {/* Center content */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className={`font-bold text-gray-900 dark:text-white ${sizeConfig.text}`}>
-          {displayPercentage}
+          {displayPercentage}%
         </span>
       </div>
     </div>
