@@ -366,7 +366,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
               <div className="flex items-center gap-2">
                 <span>© 2025 IronGate QA Navigator</span>
                 <span className="hidden sm:inline">•</span>
-                <span className="hidden sm:inline">Built with passion</span>
+                <span className="hidden sm:inline">Driven By Experience</span>
                 <span className="hidden sm:inline">•</span>
                 <span className="hidden sm:inline">All rights reserved</span>
               </div>
