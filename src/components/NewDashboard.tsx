@@ -125,17 +125,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
         setShowMetricsNotification(false);
       }, 3000);
       
-      // Add to recent activity
-      addRecentActivity({
-        id: Date.now().toString(),
-        type: 'data-update',
-        icon: TrendingUp,
-        title: 'Team Metrics Updated',
-        description: `Loaded latest quality and business metrics for ${teamsWithData.length} teams`,
-        team: 'All Teams',
-        timestamp: new Date().toISOString(),
-        status: 'success'
-      });
+      // Update teams with metrics
+      setTeamsWithMetrics(teams);
     } catch (error) {
       console.error('Error fetching teams with metrics:', error);
       setTeamsWithMetrics(teams);
