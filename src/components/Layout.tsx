@@ -99,7 +99,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
     <div className={`flex h-screen ${mainBgClass}`}>
       {/* Menu Overlay - Mobile only */}
       {isMobileMenuOpen && (
-        <div
+        <div 
           className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
@@ -109,9 +109,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       <aside className={`
         fixed lg:relative inset-y-0 left-0 z-50 lg:z-auto
         w-64 flex-shrink-0 flex flex-col border-r
-        transform lg:transform-none transition-all duration-300 ease-in-out
+        transform transition-all duration-300 ease-in-out
         ${sidebarBgClass}
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
         ${isMobileMenuOpen ? 'lg:w-64' : 'lg:w-0 lg:border-r-0'}
         overflow-hidden
       `}>
@@ -131,7 +131,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
-            className="lg:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800"
+            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800"
           >
             <X size={20} className="text-gray-600 dark:text-gray-400" />
           </button>

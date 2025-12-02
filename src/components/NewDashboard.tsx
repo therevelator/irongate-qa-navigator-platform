@@ -338,66 +338,81 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
   return (
     <div className={`flex flex-col h-full overflow-auto ${mainBg}`} onClick={handleDashboardClick}>
-      {/* Hero Section - Theme-aware gradient */}
-      <div className={`bg-gradient-to-br ${config.heroGradient} p-4 sm:p-6 relative overflow-hidden ${
-        isAurora && isDark ? 'border-b border-neutral-800' : isOcean && isDark ? 'border-b border-cyan-500/20' : ''
-      }`} style={{ minHeight: '150px' }}>
-        <div className="relative z-10 max-w-7xl mx-auto">
-          <div className="flex items-center gap-2 sm:gap-4 mb-2 sm:mb-3">
-            <div className={`p-2 rounded-xl backdrop-blur-sm ${
-              isAurora 
-                ? isDark ? 'bg-neutral-800/50 border border-neutral-700' : 'bg-white/90 border border-neutral-200'
-                : isDark ? 'bg-white/10' : 'bg-white/70'
-            }`}>
-              <img 
-                src="/irongate-logo.png" 
-                alt="IronGate QA Navigator" 
-                className="h-8 sm:h-10 md:h-12 w-auto object-contain"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            </div>
-            <div className={`h-8 sm:h-10 md:h-12 w-px ${
-              isAurora && isDark ? 'bg-neutral-700' : isDark ? 'bg-white/20' : 'bg-gray-300'
-            }`}></div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <h1 className={`text-lg sm:text-xl md:text-2xl lg:text-3xl font-bold truncate ml-0 md:ml-8 ${
-                  isAurora && isDark 
-                    ? 'text-white drop-shadow-[0_0_20px_rgba(16,185,129,0.6)]' 
-                    : 'text-gray-900 dark:text-white'
-                }`}>
-                  {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
-                    ? `${userTeams[0]?.name || 'My Team'} Dashboard`
-                    : <>
-                        <span className="inline sm:hidden">Quality Engineering Intelligence</span>
-                        <span className="hidden sm:inline">Quality Engineering Intelligence Platform</span>
-                      </>}
-                </h1>
-              </div>
+      {/* Hero Section - Interactive Circuit Board */}
+      <div className="relative px-4 sm:px-6 py-12 sm:py-16 lg:py-20 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 border-b border-slate-200 dark:border-slate-700">
+        {/* Circuit Board Background - Light mode only */}
+        {!isDark && (
+          <div className="absolute inset-0 opacity-20">
+            {/* Circuit Board Grid */}
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 600" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <pattern id="circuit-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+                  <rect x="0" y="0" width="40" height="40" fill="none" stroke="#e2e8f0" strokeWidth="0.5"/>
+                  <circle cx="20" cy="20" r="1" fill="#94a3b8"/>
+                </pattern>
+                <linearGradient id="electric-flow" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0"/>
+                  <stop offset="20%" stopColor="#3b82f6" stopOpacity="1"/>
+                  <stop offset="80%" stopColor="#06b6d4" stopOpacity="1"/>
+                  <stop offset="100%" stopColor="#06b6d4" stopOpacity="0"/>
+                </linearGradient>
+              </defs>
+              <rect width="100%" height="100%" fill="url(#circuit-grid)"/>
+            </svg>
+
+            {/* Circuit Traces */}
+            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 600">
+              {/* Horizontal traces */}
+              <path d="M0 150 L1200 150" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
+              <path d="M0 300 L1200 300" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
+              <path d="M0 450 L1200 450" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
+              {/* Vertical traces */}
+              <path d="M200 0 L200 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
+              <path d="M600 0 L600 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
+              <path d="M1000 0 L1000 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
+            </svg>
+
+            {/* Flowing Electricity Animation */}
+            <div className="absolute inset-0">
+              {/* Horizontal electricity flows */}
+              <div className="absolute top-[150px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-electric-flow-1 opacity-80"></div>
+              <div className="absolute top-[300px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-electric-flow-2 opacity-60"></div>
+              <div className="absolute top-[450px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-electric-flow-3 opacity-70"></div>
+
+              {/* Circuit nodes with pulsing */}
+              <div className="absolute top-[148px] left-[200px] w-4 h-4 bg-blue-500 rounded-full animate-pulse opacity-60"></div>
+              <div className="absolute top-[298px] left-[600px] w-3 h-3 bg-cyan-500 rounded-full animate-pulse opacity-70" style={{ animationDelay: '0.5s' }}></div>
+              <div className="absolute top-[448px] left-[1000px] w-4 h-4 bg-blue-600 rounded-full animate-pulse opacity-50" style={{ animationDelay: '1s' }}></div>
+              <div className="absolute top-[148px] left-[1000px] w-3 h-3 bg-cyan-400 rounded-full animate-pulse opacity-80" style={{ animationDelay: '1.5s' }}></div>
+
+              {/* Data packets flowing */}
+              <div className="absolute top-[145px] w-2 h-2 bg-yellow-400 rounded-full animate-data-flow-1 opacity-90 shadow-lg shadow-yellow-400/50"></div>
+              <div className="absolute top-[295px] w-2 h-2 bg-green-400 rounded-full animate-data-flow-2 opacity-85 shadow-lg shadow-green-400/50"></div>
+              <div className="absolute top-[445px] w-2 h-2 bg-purple-400 rounded-full animate-data-flow-3 opacity-75 shadow-lg shadow-purple-400/50"></div>
             </div>
           </div>
-          <TypingAnimation className="max-w-4xl" />
-        </div>
-        {/* Animated background elements - Theme-aware */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          {!isMinimal && (
-            <>
-              <div className={`absolute -top-4 -right-4 w-32 h-32 sm:w-48 sm:h-48 ${config.blob1} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`}></div>
-              <div className={`absolute -bottom-4 -left-4 w-32 h-32 sm:w-48 sm:h-48 ${config.blob2} rounded-full mix-blend-multiply dark:mix-blend-screen filter blur-xl opacity-40 animate-float`} style={{ animationDelay: '2s' }}></div>
-            </>
-          )}
-          {/* Aurora decorations removed for minimalism */}
-          {isOcean && isDark && (
-            <>
-              <div className="absolute top-1/3 right-1/4 w-2 h-2 bg-cyan-400 rounded-full animate-pulse opacity-60"></div>
-              <div className="absolute bottom-1/4 left-1/4 w-1.5 h-1.5 bg-blue-400 rounded-full animate-pulse opacity-70" style={{ animationDelay: '0.7s' }}></div>
-            </>
-          )}
-          {!isMinimal && (
-            <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 sm:w-96 sm:h-96 rounded-full filter blur-3xl ${
-              isAurora ? 'bg-transparent' : isOcean && isDark ? 'bg-cyan-500/10' : isDark ? 'bg-white/5' : 'bg-white/30'
-            }`}></div>
-          )}
+        )}
+
+        {/* Content */}
+        <div className="relative z-10 max-w-5xl mx-auto text-center">
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6">
+            {/* Logo */}
+            <img
+              src="/irongate-logo.png"
+              alt="IronGate QA Navigator"
+              className="h-8 sm:h-10 w-auto object-contain"
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+
+            {/* Title */}
+            <div className="flex-1 max-w-2xl">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800 dark:text-slate-100 leading-tight">
+                IronGate QE Navigator
+              </h1>
+            </div>
+          </div>
+
+          <TypingAnimation className="max-w-3xl" />
         </div>
       </div>
 
@@ -489,14 +504,14 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
               style={{ 
                 animationDelay: `${index * 50}ms`,
                 backgroundColor: isDark
-                  ? team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.18)' 
-                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.18)' 
-                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.18)' 
-                    : 'rgba(239, 68, 68, 0.18)'
-                  : team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.12)' 
-                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.12)' 
-                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.12)' 
-                    : 'rgba(239, 68, 68, 0.12)'
+                  ? team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.30)' 
+                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.30)' 
+                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.30)' 
+                    : 'rgba(239, 68, 68, 0.30)'
+                  : team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.30)' 
+                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.30)' 
+                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.30)' 
+                    : 'rgba(239, 68, 68, 0.30)'
               }}
             >
               {/* Soft theme-aware hover overlay (not on minimal) */}
@@ -724,178 +739,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
         )}
       </div>
 
-      {/* Focus & Milestones Section */}
-      <div className="px-4 sm:px-6 pb-4 sm:pb-6">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          
-          {/* Focus for This Week Banner */}
-          <div className={`rounded-xl p-4 sm:p-6 border ${
-            isDark 
-              ? 'bg-gradient-to-br from-amber-900/30 to-orange-900/20 border-amber-700/50' 
-              : 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'
-          }`}>
-            <div className="flex items-start gap-3 mb-4">
-              <div className={`p-2 rounded-lg ${
-                isDark ? 'bg-amber-500/20' : 'bg-amber-100'
-              }`}>
-                <Target className={isDark ? 'text-amber-400' : 'text-amber-600'} size={20} />
-              </div>
-              <div>
-                <h3 className={`text-base sm:text-lg font-semibold ${
-                  isDark ? 'text-amber-300' : 'text-amber-800'
-                }`}>Focus for This Week</h3>
-                <p className={`text-xs ${isDark ? 'text-amber-400/70' : 'text-amber-600/70'}`}>
-                  AI-generated priority based on business impact
-                </p>
-              </div>
-            </div>
-            
-            <div className={`p-4 rounded-lg ${
-              isDark ? 'bg-slate-900/50' : 'bg-white/80'
-            }`}>
-              <p className={`text-sm sm:text-base font-medium mb-2 ${
-                isDark ? 'text-white' : 'text-gray-900'
-              }`}>
-                🎯 {focusRecommendation.title}
-              </p>
-              <p className={`text-xs sm:text-sm ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                {focusRecommendation.description}
-              </p>
-              <p className={`text-xs sm:text-sm mt-2 ${isDark ? 'text-slate-400' : 'text-gray-600'}`}>
-                Current: <span className="font-semibold text-red-500">{focusRecommendation.currentValue}</span> → 
-                Target: <span className="font-semibold text-green-500">{focusRecommendation.targetValue}</span>
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className={`text-xs px-2 py-1 rounded-full ${
-                  isDark ? 'bg-amber-500/20 text-amber-300' : 'bg-amber-100 text-amber-700'
-                }`}>
-                  High Business Impact
-                </span>
-                {focusRecommendation.affectedTeams > 0 && (
-                  <span className={`text-xs px-2 py-1 rounded-full ${
-                    isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700'
-                  }`}>
-                    {focusRecommendation.affectedTeams === 1 
-                      ? focusRecommendation.affectedTeamNames[0]
-                      : `Affects ${focusRecommendation.affectedTeams} Teams`}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            <div className={`mt-4 pt-4 border-t ${
-              isDark ? 'border-amber-700/30' : 'border-amber-200'
-            }`}>
-              <div className="flex items-center justify-between">
-                <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                  Estimated effort: {focusRecommendation.effort}
-                </span>
-                <button className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
-                  isDark 
-                    ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30' 
-                    : 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                }`}>
-                  View Details →
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Upcoming Quality Milestones / SLAs */}
-          <div className={`rounded-xl p-4 sm:p-6 border ${
-            isDark 
-              ? 'bg-slate-900 border-slate-800' 
-              : 'bg-white border-gray-200'
-          }`}>
-            <div className="flex items-start gap-3 mb-4">
-              <div className={`p-2 rounded-lg ${
-                isDark ? 'bg-cyan-500/20' : 'bg-cyan-100'
-              }`}>
-                <Calendar className={isDark ? 'text-cyan-400' : 'text-cyan-600'} size={20} />
-              </div>
-              <div>
-                <h3 className={`text-base sm:text-lg font-semibold ${
-                  isDark ? 'text-white' : 'text-gray-900'
-                }`}>Quality Milestones & SLAs</h3>
-                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                  Release readiness & service level targets
-                </p>
-              </div>
-            </div>
-
-            {/* Upcoming Releases */}
-            <div className="mb-4">
-              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-2 ${
-                isDark ? 'text-slate-500' : 'text-gray-400'
-              }`}>Upcoming Releases</h4>
-              <div className="space-y-2">
-                <div className={`flex items-center justify-between p-3 rounded-lg ${
-                  isDark ? 'bg-slate-800' : 'bg-gray-50'
-                }`}>
-                  <div>
-                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      v2.4.0 Release
-                    </p>
-                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                      Dec 15, 2025
-                    </p>
-                  </div>
-                  <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-400 font-medium">
-                    On Track
-                  </span>
-                </div>
-                <div className={`flex items-center justify-between p-3 rounded-lg ${
-                  isDark ? 'bg-slate-800' : 'bg-gray-50'
-                }`}>
-                  <div>
-                    <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                      v2.5.0 Release
-                    </p>
-                    <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                      Jan 10, 2026
-                    </p>
-                  </div>
-                  <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/50 dark:text-amber-400 font-medium">
-                    At Risk
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* SLA Overview */}
-            <div className={`pt-4 border-t ${isDark ? 'border-slate-800' : 'border-gray-100'}`}>
-              <h4 className={`text-xs font-semibold uppercase tracking-wide mb-3 ${
-                isDark ? 'text-slate-500' : 'text-gray-400'
-              }`}>SLA Performance</h4>
-              <div className="grid grid-cols-2 gap-3">
-                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-gray-50'}`}>
-                  <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    Tickets in SLA
-                  </p>
-                  <p className={`text-xl font-bold ${isDark ? 'text-green-400' : 'text-green-600'}`}>
-                    94.2%
-                  </p>
-                  <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
-                    Target: 95%
-                  </p>
-                </div>
-                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-gray-50'}`}>
-                  <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-gray-500'}`}>
-                    MTTR within target
-                  </p>
-                  <p className={`text-xl font-bold ${isDark ? 'text-cyan-400' : 'text-cyan-600'}`}>
-                    87.5%
-                  </p>
-                  <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-gray-400'}`}>
-                    Target: 90%
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div>
-      </div>
     </div>
   );
 };
