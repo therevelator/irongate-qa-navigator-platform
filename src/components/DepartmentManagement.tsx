@@ -37,11 +37,8 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
   const fetchDepartments = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/departments/all`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -67,13 +64,10 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
     }
 
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/departments`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(formData)
       });
 
@@ -98,13 +92,10 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
     if (!editingDepartment) return;
 
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/departments/${editingDepartment.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(formData)
       });
 
@@ -127,12 +118,9 @@ const DepartmentManagement: React.FC<DepartmentManagementProps> = ({ onBack }) =
     if (!deletingDepartment) return;
 
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/departments/${deletingDepartment.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
 
       if (response.ok) {

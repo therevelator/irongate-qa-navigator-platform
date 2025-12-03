@@ -27,9 +27,8 @@ const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack 
   useEffect(() => {
     const fetchImpact = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
         const response = await fetch(`${API_URL}/analytics/business-impact?days=30`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         if (response.ok) {
           const data = await response.json();
@@ -48,12 +47,11 @@ const BusinessImpactAnalysis: React.FC<BusinessImpactAnalysisProps> = ({ onBack 
   useEffect(() => {
     const fetchHistoricalData = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
         // Try to get configured historical data for the current team
         const teamId = localStorage.getItem('current_team_id'); // Assuming this is stored
         if (teamId) {
           const response = await fetch(`${API_URL}/metrics/business-impact-config/${teamId}`, {
-            headers: { 'Authorization': `Bearer ${token}` }
+            credentials: 'include'
           });
           if (response.ok) {
             const data = await response.json();

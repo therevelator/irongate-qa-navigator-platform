@@ -33,13 +33,12 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack, t
   const [loading, setLoading] = useState(true);
 
   const fetchTeamDevelopers = async (
-    team: TeamSummary,
-    headers: Record<string, string>
+    team: TeamSummary
   ): Promise<DeveloperProductivityMetric[]> => {
     try {
       const [teamResponse, metricsResponse] = await Promise.all([
-        fetch(`${API_URL}/teams/${team.id}`, { headers }),
-        fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, { headers })
+        fetch(`${API_URL}/teams/${team.id}`, { credentials: 'include' }),
+        fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, { credentials: 'include' })
       ]);
 
       let members: any[] = [];
@@ -110,15 +109,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack, t
     const fetchAllDevelopers = async () => {
       try {
         setLoading(true);
-        const token = localStorage.getItem('irongate_token');
-        if (!token) {
-          setTeams([]);
-          setDevelopers([]);
-          return;
-        }
-
-        const headers = { 'Authorization': `Bearer ${token}` };
-        const teamsResponse = await fetch(`${API_URL}/teams`, { headers });
+        const teamsResponse = await fetch(`${API_URL}/teams`, { credentials: 'include' });
 
         if (!teamsResponse.ok) {
           throw new Error('Failed to fetch teams');
@@ -138,7 +129,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ onBack, t
         }
 
         const developerResults = await Promise.all(
-          teamSummaries.map(team => fetchTeamDevelopers(team, headers))
+          teamSummaries.map(team => fetchTeamDevelopers(team))
         );
 
         setDevelopers(developerResults.flat());

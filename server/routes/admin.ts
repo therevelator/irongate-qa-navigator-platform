@@ -7,8 +7,8 @@ const router = express.Router();
 
 // Role hierarchy and permissions
 const ROLE_HIERARCHY: Record<string, string[]> = {
-  super_admin: ['manager', 'team_lead', 'qa_engineer', 'viewer'],
-  manager: ['team_lead', 'qa_engineer', 'viewer'],
+  super_admin: ['qa_manager', 'team_lead', 'qa_engineer', 'viewer'],
+  qa_manager: ['team_lead', 'qa_engineer', 'viewer'],
   team_lead: ['qa_engineer', 'viewer'],
   qa_engineer: [],
   viewer: []
@@ -23,7 +23,7 @@ const ROLE_PERMISSIONS = {
     resetPassword: true,
     advancedFeatures: true
   },
-  manager: {
+  qa_manager: {
     departments: { create: false, read: true, update: false, delete: false },
     teams: { create: true, read: true, update: true, delete: true },
     users: { create: true, read: true, update: true, delete: true },
@@ -91,8 +91,8 @@ router.get('/users', authenticateToken, async (req: any, res) => {
          ORDER BY u.created_at DESC`,
         [companyId]
       );
-    } else if (role === 'manager') {
-      // Manager sees users in their department
+    } else if (role === 'qa_manager') {
+      // QA Manager sees users in their department
       users = await query<any>(
         `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
                 u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
@@ -192,7 +192,7 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     }
 
     // QA Manager can only assign users to teams in their department
-    if (creatorRole === 'manager') {
+    if (creatorRole === 'qa_manager') {
       if (team.department_id !== departmentId) {
         return res.status(403).json({ 
           error: 'Can only assign users to teams in your department' 
@@ -255,8 +255,8 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
     const { id: userId } = req.params;
     const { firstName, lastName, email, role, departmentId, primaryTeamId } = req.body;
 
-    // Only Super Admin and Manager can update users
-    if (creatorRole !== 'super_admin' && creatorRole !== 'manager') {
+    // Only Super Admin and QA Manager can update users
+    if (creatorRole !== 'super_admin' && creatorRole !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -266,8 +266,8 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Manager can only update users in their department
-    if (creatorRole === 'manager' && existingUser.department_id !== userDeptId) {
+    // QA Manager can only update users in their department
+    if (creatorRole === 'qa_manager' && existingUser.department_id !== userDeptId) {
       return res.status(403).json({ error: 'Can only update users in your department' });
     }
 
@@ -298,22 +298,27 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
 // Toggle user active status
 router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res) => {
   try {
-    const { role: creatorRole, companyId, departmentId: userDeptId } = req.user;
+    const { role: creatorRole, companyId, departmentId: userDeptId, primaryTeamId: userTeamId } = req.user;
     const { id: userId } = req.params;
 
-    // Only Super Admin and Manager can toggle user status
-    if (creatorRole !== 'super_admin' && creatorRole !== 'manager') {
+    // Only Super Admin, QA Manager, and Team Lead can toggle user status
+    if (creatorRole !== 'super_admin' && creatorRole !== 'qa_manager' && creatorRole !== 'team_lead') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    // Get user to check department and current status
-    const existingUser = await queryOne<any>('SELECT department_id, is_active FROM users WHERE id = ?', [userId]);
+    // Get user to check permissions
+    const existingUser = await queryOne<any>('SELECT department_id, primary_team_id, is_active FROM users WHERE id = ?', [userId]);
     if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Manager can only toggle users in their department
-    if (creatorRole === 'manager' && existingUser.department_id !== userDeptId) {
+    // Team lead can only toggle users in their team
+    if (creatorRole === 'team_lead' && existingUser.primary_team_id !== userTeamId) {
+      return res.status(403).json({ error: 'Can only manage users in your team' });
+    }
+
+    // QA Manager can only toggle users in their department
+    if (creatorRole === 'qa_manager' && existingUser.department_id !== userDeptId) {
       return res.status(403).json({ error: 'Can only manage users in your department' });
     }
 
@@ -334,12 +339,12 @@ router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res)
 // Toggle developer insights for a user (team lead and above)
 router.patch('/users/:id/developer-insights-toggle', authenticateToken, async (req: any, res) => {
   try {
-    const { role: userRole, companyId, departmentId: userDeptId } = req.user;
+    const { role: userRole, companyId, departmentId: userDeptId, primaryTeamId: userTeamId } = req.user;
     const { id: userId } = req.params;
     const { enabled } = req.body;
 
     // Only team_lead and above can toggle developer insights
-    if (!['super_admin', 'manager', 'team_lead'].includes(userRole)) {
+    if (!['super_admin', 'qa_manager', 'team_lead'].includes(userRole)) {
       return res.status(403).json({ error: 'Team lead or above required' });
     }
 
@@ -349,13 +354,13 @@ router.patch('/users/:id/developer-insights-toggle', authenticateToken, async (r
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Team lead can only toggle for users in their team/department
-    if (userRole === 'team_lead' && targetUser.department_id !== userDeptId) {
-      return res.status(403).json({ error: 'Can only manage users in your department' });
+    // Team lead can only toggle for users in their team
+    if (userRole === 'team_lead' && targetUser.primary_team_id !== userTeamId) {
+      return res.status(403).json({ error: 'Can only manage users in your team' });
     }
 
-    // Manager can only toggle for users in their department
-    if (userRole === 'manager' && targetUser.department_id !== userDeptId) {
+    // QA Manager can only toggle for users in their department
+    if (userRole === 'qa_manager' && targetUser.department_id !== userDeptId) {
       return res.status(403).json({ error: 'Can only manage users in your department' });
     }
 
@@ -377,8 +382,8 @@ router.post('/teams/:id/toggle-status', authenticateToken, async (req: any, res)
     const { role: userRole, companyId, departmentId: userDeptId } = req.user;
     const { id: teamId } = req.params;
 
-    // Only Super Admin and Manager can toggle team status
-    if (userRole !== 'super_admin' && userRole !== 'manager') {
+    // Only Super Admin and QA Manager can toggle team status
+    if (userRole !== 'super_admin' && userRole !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -388,8 +393,8 @@ router.post('/teams/:id/toggle-status', authenticateToken, async (req: any, res)
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    // Manager can only toggle teams in their department
-    if (userRole === 'manager' && existingTeam.department_id !== userDeptId) {
+    // QA Manager can only toggle teams in their department
+    if (userRole === 'qa_manager' && existingTeam.department_id !== userDeptId) {
       return res.status(403).json({ error: 'Can only manage teams in your department' });
     }
 
@@ -440,37 +445,20 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
   }
 });
 
-// Get all teams (with department names)
+// Get all teams (with department names) - everyone can view for dashboard
 router.get('/teams', authenticateToken, async (req: any, res) => {
   try {
-    const { role, companyId, departmentId } = req.user;
+    const { companyId } = req.user;
 
-    let teams;
-    
-    if (role === 'super_admin') {
-      // Super admin sees all teams in their company
-      teams = await query<any>(
-        `SELECT t.*, d.name as department_name 
-         FROM teams t 
-         LEFT JOIN departments d ON t.department_id = d.id 
-         WHERE t.company_id = ? 
-         ORDER BY t.created_at DESC`,
-        [companyId]
-      );
-    } else if (role === 'manager' || role === 'team_lead') {
-      // Manager and Team Lead see teams in their department
-      teams = await query<any>(
-        `SELECT t.*, d.name as department_name 
-         FROM teams t 
-         LEFT JOIN departments d ON t.department_id = d.id 
-         WHERE t.company_id = ? AND t.department_id = ? 
-         ORDER BY t.created_at DESC`,
-        [companyId, departmentId]
-      );
-    } else {
-      // Other roles don't have access to teams list
-      return res.status(403).json({ error: 'Insufficient permissions' });
-    }
+    // Everyone can see all teams in their company for the dashboard
+    const teams = await query<any>(
+      `SELECT t.*, d.name as department_name 
+       FROM teams t 
+       LEFT JOIN departments d ON t.department_id = d.id 
+       WHERE t.company_id = ? AND t.is_active = true
+       ORDER BY t.created_at DESC`,
+      [companyId]
+    );
 
     res.json(teams);
   } catch (error) {
@@ -486,7 +474,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
     const { name, description, departmentId: requestDepartmentId } = req.body;
 
     // Only QA Manager and Super Admin can create teams
-    if (role !== 'manager' && role !== 'super_admin') {
+    if (role !== 'qa_manager' && role !== 'super_admin') {
       return res.status(403).json({ error: 'Only QA Managers and Super Admins can create teams' });
     }
 
@@ -572,7 +560,7 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
     const { name, description } = req.body;
 
     // Only Super Admin and QA Manager can update teams
-    if (role !== 'super_admin' && role !== 'manager') {
+    if (role !== 'super_admin' && role !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -583,7 +571,7 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
     }
 
     // QA Manager can only update teams in their department
-    if (role === 'manager' && team.department_id !== userDeptId) {
+    if (role === 'qa_manager' && team.department_id !== userDeptId) {
       return res.status(403).json({ error: 'Can only update teams in your department' });
     }
 
@@ -607,7 +595,7 @@ router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
     const { id: teamId } = req.params;
 
     // Only Super Admin and QA Manager can delete teams
-    if (role !== 'super_admin' && role !== 'manager') {
+    if (role !== 'super_admin' && role !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -618,7 +606,7 @@ router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
     }
 
     // QA Manager can only delete teams in their department
-    if (role === 'manager' && team.department_id !== userDeptId) {
+    if (role === 'qa_manager' && team.department_id !== userDeptId) {
       return res.status(403).json({ error: 'Can only delete teams in your department' });
     }
 
@@ -674,7 +662,7 @@ router.delete('/users/:id', authenticateToken, async (req: any, res) => {
       }
     }
     // QA Manager can delete users in their department that they created
-    else if (role === 'manager') {
+    else if (role === 'qa_manager') {
       if (targetUser.department_id !== userDeptId) {
         return res.status(403).json({ error: 'Can only delete users in your department' });
       }
@@ -715,26 +703,16 @@ router.get('/available-roles', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Get departments based on user role
+// Get departments - everyone can view all departments for dashboard
 router.get('/departments', authenticateToken, async (req: any, res) => {
   try {
-    const { role, companyId, departmentId } = req.user;
+    const { companyId } = req.user;
 
-    let departments;
-
-    if (role === 'super_admin') {
-      // Super admin sees all departments in their company
-      departments = await query<any>(
-        'SELECT id, name, company_id, created_at FROM departments WHERE company_id = ? ORDER BY name',
-        [companyId]
-      );
-    } else {
-      // All other roles see only their department
-      departments = await query<any>(
-        'SELECT id, name, company_id, created_at FROM departments WHERE id = ? AND company_id = ?',
-        [departmentId, companyId]
-      );
-    }
+    // Everyone can see all departments in their company for the dashboard
+    const departments = await query<any>(
+      'SELECT id, name, company_id, created_at FROM departments WHERE company_id = ? ORDER BY name',
+      [companyId]
+    );
 
     res.json(departments);
   } catch (error) {

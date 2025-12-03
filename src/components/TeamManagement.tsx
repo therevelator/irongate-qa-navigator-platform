@@ -45,23 +45,16 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const token = localStorage.getItem('irongate_token');
-      if (!token) return;
-
-      const headers = {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'application/json'
-      };
 
       // Fetch departments
-      const deptResponse = await fetch(`${API_URL}/admin/departments`, { headers });
+      const deptResponse = await fetch(`${API_URL}/admin/departments`, { credentials: 'include' });
       if (deptResponse.ok) {
         const deptData = await deptResponse.json();
         setDepartments(Array.isArray(deptData) ? deptData : []);
       }
 
       // Fetch teams
-      const teamsResponse = await fetch(`${API_URL}/admin/teams`, { headers });
+      const teamsResponse = await fetch(`${API_URL}/admin/teams`, { credentials: 'include' });
       if (teamsResponse.ok) {
         const teamsData = await teamsResponse.json();
         setTeams(Array.isArray(teamsData) ? teamsData : []);
@@ -80,12 +73,9 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
     if (!result.isConfirmed) return;
 
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/teams/${teamId}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -124,13 +114,10 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
     if (!editingTeam) return;
 
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/teams/${editingTeam}`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name: formData.name,
           description: formData.description
@@ -159,13 +146,10 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
     }
 
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/teams`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           name: formData.name,
           description: formData.description || '',

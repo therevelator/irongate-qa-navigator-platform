@@ -254,7 +254,6 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
         const stagesUrl = teamId
           ? `${API_URL}/analytics/pipeline-stages?teamId=${teamId}`
           : `${API_URL}/analytics/pipeline-stages`;
@@ -262,12 +261,8 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
           ? `${API_URL}/analytics/pipeline-history?days=14&teamId=${teamId}`
           : `${API_URL}/analytics/pipeline-history?days=14`;
         const [stagesRes, historyRes] = await Promise.all([
-          fetch(stagesUrl, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          }),
-          fetch(historyUrl, {
-            headers: { 'Authorization': `Bearer ${token}` }
-          })
+          fetch(stagesUrl, { credentials: 'include' }),
+          fetch(historyUrl, { credentials: 'include' })
         ]);
 
         if (stagesRes.ok) {

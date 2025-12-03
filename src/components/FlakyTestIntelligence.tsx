@@ -16,9 +16,8 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack })
   useEffect(() => {
     const fetchFlakyTests = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
         const response = await fetch(`${API_URL}/analytics/flaky-tests`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         if (response.ok) {
           const data = await response.json();
@@ -58,7 +57,7 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack })
   };
 
   const totalFlaky = flakyTests.length;
-  const avgFlakiness = (flakyTests.reduce((acc, t) => acc + t.flakiness_score, 0) / totalFlaky).toFixed(1);
+  const avgFlakiness = totalFlaky > 0 ? (flakyTests.reduce((acc, t) => acc + t.flakiness_score, 0) / totalFlaky).toFixed(1) : '0.0';
   const criticalTests = flakyTests.filter(t => t.flakiness_score > 70).length;
 
   return (
@@ -127,11 +126,29 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack })
 
       {/* Flaky Tests List */}
       <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-        <div className="space-y-4 sm:space-y-6">
-          {filteredTests.map(test => (
-            <FlakyTestCard key={test.id} test={test} getPatternColor={getPatternColor} />
-          ))}
-        </div>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
+            <p className="text-gray-500 dark:text-slate-400">Analyzing flaky tests...</p>
+          </div>
+        ) : totalFlaky === 0 ? (
+          <div className="text-center py-12">
+            <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Flaky Tests Detected</h3>
+            <p className="text-gray-500 dark:text-slate-400 mb-4">
+              Great news! No flaky tests were found in your recent test executions.
+            </p>
+            <p className="text-sm text-gray-400 dark:text-slate-500">
+              Flaky tests will appear here when they are automatically detected by the system.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4 sm:space-y-6">
+            {filteredTests.map(test => (
+              <FlakyTestCard key={test.id} test={test} getPatternColor={getPatternColor} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -157,7 +174,7 @@ const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) 
 
   const [expanded, setExpanded] = useState(false);
   
-  const passRate = ((test.history.filter(h => h.passed).length / test.history.length) * 100).toFixed(1);
+  const passRate = test.history.length > 0 ? ((test.history.filter(h => h.passed).length / test.history.length) * 100).toFixed(1) : '0.0';
   const daysSinceFirst = Math.floor((Date.now() - new Date(test.first_detected).getTime()) / (1000 * 60 * 60 * 24));
 
   return (
@@ -302,7 +319,7 @@ const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) 
               </div>
               <div>
                 <span className="text-gray-500 dark:text-slate-400">Failure Rate:</span>
-                <span className="ml-2 font-medium">{(100 - parseFloat(passRate)).toFixed(1)}%</span>
+                <span className="ml-2 font-medium">{test.history.length > 0 ? (100 - parseFloat(passRate)).toFixed(1) : '0.0'}%</span>
               </div>
             </div>
             

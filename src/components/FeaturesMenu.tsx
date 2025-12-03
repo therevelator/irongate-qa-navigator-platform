@@ -3,6 +3,7 @@ import { ArrowLeft, BarChart3, TestTube, Zap, TrendingUp, Code, Wrench, GitBranc
 import { advancedFeatures } from '../data/features';
 import type { FeatureModule } from '../data/features';
 import API_URL from '../config/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Department {
   id: string;
@@ -24,18 +25,33 @@ interface FeaturesMenuProps {
 type GridColumns = 1 | 2 | 3 | 4 | 5;
 
 const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) => {
+  const { user } = useAuth();
   const [gridColumns, setGridColumns] = useState<GridColumns>(3);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [filteredTeams, setFilteredTeams] = useState<Team[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
+  const [initialized, setInitialized] = useState(false);
 
   // Fetch departments and teams
   useEffect(() => {
     fetchDepartments();
     fetchTeams();
   }, []);
+
+  // Pre-select team lead's department and team after data is loaded
+  useEffect(() => {
+    if (!initialized && user?.role === 'team_lead' && teams.length > 0 && departments.length > 0) {
+      // Find the team lead's team to get their department
+      const userTeam = teams.find(t => t.id === user.primaryTeamId);
+      if (userTeam && userTeam.department_id) {
+        setSelectedDepartment(String(userTeam.department_id));
+        setSelectedTeam(user.primaryTeamId || 'all');
+        setInitialized(true);
+      }
+    }
+  }, [user, teams, departments, initialized]);
 
   // Filter teams when department changes
   useEffect(() => {
@@ -46,14 +62,16 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
       const filtered = teams.filter(t => String(t.department_id) === String(selectedDepartment));
       setFilteredTeams(filtered);
     }
-    setSelectedTeam('all'); // Reset team selection when department changes
+    // Only reset team selection when department changes manually (not on initial load)
+    if (initialized && user?.role !== 'team_lead') {
+      setSelectedTeam('all');
+    }
   }, [selectedDepartment, teams]);
 
   const fetchDepartments = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/departments`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
@@ -68,9 +86,8 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
 
   const fetchTeams = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/teams`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
@@ -123,7 +140,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950" data-testid="features-menu">
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800">
         <div className="px-4 sm:px-6 lg:px-8 py-6">
@@ -162,56 +179,88 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
 
             {/* Filters Row */}
             <div className="flex flex-wrap items-center gap-4">
-              {/* Department Selector */}
-              <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-2">
-                <Building2 size={16} className="text-gray-500 dark:text-slate-400" />
-                <select
-                  value={selectedDepartment}
-                  onChange={(e) => setSelectedDepartment(e.target.value)}
-                  className="text-sm font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6 min-w-[140px]"
-                >
-                  <option value="all">All Departments</option>
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.id}>{dept.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Team Selector */}
-              <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-2">
-                <Users size={16} className="text-gray-500 dark:text-slate-400" />
-                <select
-                  value={selectedTeam}
-                  onChange={(e) => setSelectedTeam(e.target.value)}
-                  className="text-sm font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6 min-w-[140px]"
-                >
-                  <option value="all">All Teams</option>
-                  {filteredTeams.map((team) => (
-                    <option key={team.id} value={team.id}>{team.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Selected Team Indicator */}
-              {selectedTeam !== 'all' && (
-                <div className="flex items-center gap-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg px-3 py-2 text-sm font-medium">
-                  <span>Viewing: {filteredTeams.find(t => t.id === selectedTeam)?.name}</span>
-                  <button 
-                    onClick={() => setSelectedTeam('all')}
-                    className="hover:text-cyan-900 dark:hover:text-cyan-200"
-                  >
-                    ✕
-                  </button>
+              {/* Team Lead sees only their team - static label */}
+              {user?.role === 'team_lead' ? (
+                <div className="flex items-center gap-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg px-4 py-2.5" data-testid="team-static-label">
+                  <Users size={18} className="text-cyan-600 dark:text-cyan-400" />
+                  <span className="text-sm font-semibold">
+                    Viewing: {teams.find(t => t.id === user.primaryTeamId)?.name || 'Your Team'}
+                  </span>
                 </div>
+              ) : (
+                <>
+                  {/* Department Selector */}
+                  <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-2">
+                    <Building2 size={16} className="text-gray-500 dark:text-slate-400" />
+                    <select
+                      value={selectedDepartment}
+                      onChange={(e) => setSelectedDepartment(e.target.value)}
+                      className="text-sm font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6 min-w-[140px]"
+                    >
+                      <option value="all">All Departments</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>{dept.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Team Selector */}
+                  <div className="flex items-center gap-2 bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-2">
+                    <Users size={16} className="text-gray-500 dark:text-slate-400" />
+                    <select
+                      value={selectedTeam}
+                      onChange={(e) => setSelectedTeam(e.target.value)}
+                      className="text-sm font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6 min-w-[140px]"
+                    >
+                      <option value="all">All Teams</option>
+                      {filteredTeams.map((team) => (
+                        <option key={team.id} value={team.id}>{team.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Selected Team Indicator */}
+                  {selectedTeam !== 'all' && (
+                    <div className="flex items-center gap-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg px-3 py-2 text-sm font-medium">
+                      <span>Viewing: {filteredTeams.find(t => t.id === selectedTeam)?.name}</span>
+                      <button 
+                        onClick={() => setSelectedTeam('all')}
+                        className="hover:text-cyan-900 dark:hover:text-cyan-200"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
         </div>
       </div>
 
-      {/* Features Grid - Only show when team is selected */}
+      {/* Features Grid - Only show when team is selected or for team leads */}
       <div className="px-4 sm:px-6 lg:px-8 py-8">
-        {selectedTeam === 'all' ? (
+        {(user?.role === 'team_lead' || selectedTeam !== 'all') ? (
+          /* Team selected or team lead - show features */
+          <div className={`grid ${getGridClass(gridColumns)} gap-6`}>
+            {advancedFeatures
+              .filter(f => f.enabled)
+              .map(feature => (
+                <FeatureCard 
+                  key={feature.id} 
+                  feature={feature} 
+                  getIcon={getIcon}
+                  getCategoryColor={getCategoryColor}
+                  getCategoryName={(categoryId: string) => {
+                    const cat = categories.find(c => c.id === categoryId);
+                    return cat ? `${cat.emoji} ${cat.name}` : '';
+                  }}
+                  onSelect={() => onSelectFeature(feature.id, user?.role === 'team_lead' ? user.primaryTeamId : selectedTeam)}
+                  gridSize={gridColumns}
+                />
+              ))}
+          </div>
+        ) : (
           /* No team selected - show prompt */
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="w-20 h-20 rounded-full bg-gray-100 dark:bg-slate-800 flex items-center justify-center mb-6">
@@ -230,26 +279,6 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
               <Users size={16} />
               <span>{teams.length} teams available</span>
             </div>
-          </div>
-        ) : (
-          /* Team selected - show features */
-          <div className={`grid ${getGridClass(gridColumns)} gap-6`}>
-            {advancedFeatures
-              .filter(f => f.enabled)
-              .map(feature => (
-                <FeatureCard 
-                  key={feature.id} 
-                  feature={feature} 
-                  getIcon={getIcon}
-                  getCategoryColor={getCategoryColor}
-                  getCategoryName={(categoryId: string) => {
-                    const cat = categories.find(c => c.id === categoryId);
-                    return cat ? `${cat.emoji} ${cat.name}` : '';
-                  }}
-                  onSelect={() => onSelectFeature(feature.id, selectedTeam)}
-                  gridSize={gridColumns}
-                />
-              ))}
           </div>
         )}
       </div>

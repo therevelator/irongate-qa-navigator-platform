@@ -108,17 +108,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     sql += ' AND t.company_id = ?';
     params.push(req.companyId);
 
-    // Role-based filtering
-    if (userRole === 'team_lead') {
-      // Team leads only see their own team
-      sql += ' AND t.id = ?';
-      params.push(userPrimaryTeamId);
-    } else if (userRole === 'qa_manager') {
-      // QA managers see teams in their department
-      sql += ' AND t.department_id = (SELECT department_id FROM users WHERE id = ?)';
-      params.push(userId);
-    }
-    // super_admin sees all teams (no additional filter)
+    // Role-based filtering for main dashboard
+    // Everyone can see all teams on the dashboard - filtering is optional
+    // Only filter by department if a specific departmentId is requested
 
     if (departmentId) {
       sql += ' AND t.department_id = ?';
@@ -336,10 +328,18 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Toggle AI enabled for a team (admin only)
+// Toggle AI enabled for a team (admin, manager, or team lead for own team)
 router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    if (req.userRole !== 'super_admin' && req.userRole !== 'manager') {
+    const teamId = req.params.id;
+    
+    // Super admin and qa_manager can toggle any team
+    // Team lead can only toggle their own team
+    if (req.userRole === 'team_lead') {
+      if (req.user?.primaryTeamId !== teamId) {
+        return res.status(403).json({ error: 'Can only toggle AI for your own team' });
+      }
+    } else if (req.userRole !== 'super_admin' && req.userRole !== 'qa_manager') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -347,7 +347,7 @@ router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) 
     
     await query(
       'UPDATE teams SET ai_enabled = ? WHERE id = ? AND company_id = ?',
-      [enabled ? 1 : 0, req.params.id, req.companyId]
+      [enabled ? 1 : 0, teamId, req.companyId]
     );
 
     res.json({ success: true, ai_enabled: !!enabled });
@@ -428,8 +428,19 @@ router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) 
 });
 
 // Get AI suggestions for a team (uses Groq API if available, otherwise rule-based fallback)
+// Only accessible by team_lead, manager, and super_admin
 router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, res) => {
   try {
+    const userRole = req.user?.role;
+    
+    // Only leads, managers, and admins can see AI insights
+    if (!['super_admin', 'manager', 'team_lead'].includes(userRole || '')) {
+      return res.status(403).json({ 
+        error: 'AI insights are only available to team leads, managers, and admins',
+        restricted: true 
+      });
+    }
+    
     const team = await queryOne<any>(
       `SELECT t.*, 
               t.ai_enabled,
@@ -725,8 +736,19 @@ Focus on:
 });
 
 // Get AI suggestions for developers in a team
+// Only accessible by team_lead, manager, and super_admin
 router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthRequest, res) => {
   try {
+    const userRole = req.user?.role;
+    
+    // Only leads, managers, and admins can see developer stats and AI insights
+    if (!['super_admin', 'manager', 'team_lead'].includes(userRole || '')) {
+      return res.status(403).json({ 
+        error: 'Developer insights are only available to team leads, managers, and admins',
+        restricted: true 
+      });
+    }
+    
     const team = await queryOne<any>(
       `SELECT t.*, t.ai_enabled FROM teams t WHERE t.id = ? AND t.company_id = ?`,
       [req.params.id, req.companyId]

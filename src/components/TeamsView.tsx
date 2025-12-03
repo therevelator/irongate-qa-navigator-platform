@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Users, Search, Edit2, Trash2, UserPlus, Save } from 'lucide-react';
+import { Users, Search, Edit2, Trash2, UserPlus, Save, Bot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
 import { confirmDelete, showCannotDeleteWarning, showSuccess } from '../utils/alerts';
@@ -13,6 +13,7 @@ interface Team {
   department_name: string;
   department_id: string;
   is_active: boolean;
+  ai_enabled?: boolean;
 }
 
 import API_URL from '../config/api';
@@ -36,15 +37,9 @@ const TeamsView: React.FC = () => {
   const fetchData = async () => {
     try {
       const [teamsRes, usersRes, deptsRes] = await Promise.all([
-        fetch(`${API_URL}/admin/teams`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/users`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/departments`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        })
+        fetch(`${API_URL}/admin/teams`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/users`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/departments`, { credentials: 'include' })
       ]);
 
       if (teamsRes.ok) {
@@ -78,9 +73,22 @@ const TeamsView: React.FC = () => {
     `${t.name} ${t.department_name || ''} ${t.platform}`
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
-  );
+  ).filter(t => {
+    // Team leads can only see their own team in admin view
+    if (user?.role === 'team_lead') {
+      return t.id === user.primaryTeamId;
+    }
+    return true;
+  });
 
-  const canManageTeams = user?.role === 'super_admin' || user?.role === 'manager';
+  // Check if user can manage a specific team
+  const canManageTeam = (teamId: string) => {
+    if (user?.role === 'super_admin' || user?.role === 'qa_manager') return true;
+    if (user?.role === 'team_lead' && teamId === user.primaryTeamId) return true;
+    return false;
+  };
+
+  const canCreateTeams = user?.role === 'super_admin' || user?.role === 'qa_manager';
 
   if (loading) {
     return (
@@ -103,7 +111,7 @@ const TeamsView: React.FC = () => {
             </div>
           </div>
           
-          {canManageTeams && (
+          {canCreateTeams && (
             <button 
               onClick={() => {
                 setEditForm({ name: '', description: '', departmentId: user?.departmentId || '' });
@@ -194,6 +202,40 @@ const TeamsView: React.FC = () => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex gap-2">
+                          {/* AI Toggle - for team leads on their own team, or admins/managers */}
+                          {canManageTeam(team.id) && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                const response = await fetch(`${API_URL}/teams/${team.id}/ai-toggle`, {
+                                  method: 'PATCH',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  credentials: 'include',
+                                  body: JSON.stringify({ enabled: !team.ai_enabled })
+                                });
+                                
+                                if (response.ok) {
+                                  toast.success(`AI ${team.ai_enabled ? 'disabled' : 'enabled'} for ${team.name}`);
+                                  fetchData();
+                                } else {
+                                  toast.error('Failed to toggle AI');
+                                }
+                              } catch (error) {
+                                console.error('Error toggling AI:', error);
+                                toast.error('Error toggling AI');
+                              }
+                            }}
+                            className={`p-2 transition-colors rounded ${
+                              team.ai_enabled
+                                ? 'text-purple-500 dark:text-purple-400 hover:text-purple-600 dark:hover:text-purple-300'
+                                : 'text-gray-400 dark:text-slate-400 hover:text-purple-500 dark:hover:text-purple-400'
+                            }`}
+                            title={team.ai_enabled ? 'Disable AI Suggestions' : 'Enable AI Suggestions'}
+                          >
+                            <Bot size={18} />
+                          </button>
+                          )}
+                          {canManageTeam(team.id) && (
                           <button
                             onClick={() => {
                               setSelectedTeam(team);
@@ -209,7 +251,8 @@ const TeamsView: React.FC = () => {
                           >
                             <Edit2 size={18} />
                           </button>
-                          {canManageTeams && (
+                          )}
+                          {canManageTeam(team.id) && (user?.role === 'super_admin' || user?.role === 'qa_manager') && (
                             <button
                               onClick={async () => {
                                 const result = await confirmDelete(team.name, 'team');
@@ -217,9 +260,7 @@ const TeamsView: React.FC = () => {
                                   try {
                                     const response = await fetch(`${API_URL}/admin/teams/${team.id}`, {
                                       method: 'DELETE',
-                                      headers: {
-                                        'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-                                      }
+                                      credentials: 'include'
                                     });
                                     
                                     if (response.ok) {
@@ -274,10 +315,8 @@ const TeamsView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/teams/${selectedTeam?.id}`, {
               method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 name: editForm.name,
                 description: editForm.description || null
@@ -356,10 +395,8 @@ const TeamsView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/teams`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 name: editForm.name,
                 description: editForm.description || null,

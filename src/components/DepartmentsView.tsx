@@ -34,15 +34,9 @@ const DepartmentsView: React.FC = () => {
   const fetchData = async () => {
     try {
       const [deptsRes, teamsRes, usersRes] = await Promise.all([
-        fetch(`${API_URL}/admin/departments`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/teams`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/users`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        })
+        fetch(`${API_URL}/admin/departments`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/teams`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/users`, { credentials: 'include' })
       ]);
 
       if (deptsRes.ok) {
@@ -212,9 +206,7 @@ const DepartmentsView: React.FC = () => {
                                 try {
                                   const response = await fetch(`${API_URL}/admin/departments/${dept.id}`, {
                                     method: 'DELETE',
-                                    headers: {
-                                      'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-                                    }
+                                    credentials: 'include'
                                   });
                                   
                                   if (response.ok) {
@@ -252,10 +244,8 @@ const DepartmentsView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/departments`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 name: deptForm.name,
                 description: deptForm.description || null
@@ -300,10 +290,8 @@ const DepartmentsView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/departments/${selectedDept?.id}`, {
               method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 name: deptForm.name,
                 description: deptForm.description || null

@@ -935,9 +935,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
   const fetchTeams = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/teams`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (response.ok) {
@@ -975,9 +974,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const fetchExistingMetrics = async (teamId: string) => {
     setLoadingMetrics(true);
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/teams/${teamId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (response.ok) {
@@ -1022,9 +1020,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   // Fetch technical debt items for the team
   const fetchTechnicalDebt = async (teamId: string) => {
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/analytics/technical-debt?teamId=${teamId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (response.ok) {
@@ -1042,12 +1039,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   // Fetch pipeline stages for team
   const fetchPipelineStages = async (teamId?: string) => {
     try {
-      const token = localStorage.getItem('irongate_token');
       const url = teamId 
         ? `${API_URL}/analytics/pipeline-stages?teamId=${teamId}`
         : `${API_URL}/analytics/pipeline-stages`;
       const response = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (response.ok) {
@@ -1083,13 +1079,10 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const handleSavePipelineConfig = async () => {
     setSavingPipelineConfig(true);
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/analytics/pipeline-config`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(pipelineConfig)
       });
 
@@ -1126,15 +1119,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
     setSavingPipeline(true);
     try {
-      const token = localStorage.getItem('irongate_token');
-      
       const promises = pipelineStages.map(stage => 
         fetch(`${API_URL}/analytics/pipeline-stages/${stage.id}`, {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             team_id: selectedTeamId || null,
             duration: stage.duration,
@@ -1168,9 +1157,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
     setLoadingAllMetrics(true);
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/metrics/team/${selectedTeamId}/all`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -1197,9 +1185,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
     setLoadingBusinessImpact(true);
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/metrics/business-impact-config/${selectedTeamId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -1306,8 +1293,6 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
     setSavingBusinessImpact(true);
     try {
-      const token = localStorage.getItem('irongate_token');
-
       // Filter out empty configurations
       const filteredImpactConfigs = businessImpactConfig.impactConfigs.filter(config =>
         config.quality_score || config.revenue_impact || config.customer_satisfaction || config.correlation_strength
@@ -1319,10 +1304,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
       const response = await fetch(`${API_URL}/metrics/business-impact-config/${selectedTeamId}`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           impactConfigs: filteredImpactConfigs,
           historicalConfigs: filteredHistoricalConfigs
@@ -1397,16 +1380,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
     setSavingTechnicalDebt(true);
     try {
-      const token = localStorage.getItem('irongate_token');
-      
       // Save each debt item's impact metrics
       const promises = technicalDebtItems.map(item => 
         fetch(`${API_URL}/analytics/technical-debt/${item.id}/impact`, {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             affected_users: item.affected_users,
             support_tickets_monthly: item.support_tickets_monthly,
@@ -1536,17 +1515,13 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     setSavingDeveloperMetrics(true);
 
     try {
-      const token = localStorage.getItem('irongate_token');
-      
       for (const [developerId, metrics] of metricsToSave) {
         const happinessScore = calculateHappinessScore(metrics);
         
         const response = await fetch(`${API_URL}/metrics/developer`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({
             teamId: selectedTeamId,
             developerId,
@@ -1671,8 +1646,6 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     setSaving(true);
 
     try {
-      const token = localStorage.getItem('irongate_token');
-      
       // Map calculated values to database column names
       const metricsPayload = {
         teamId: selectedTeamId,
@@ -1703,10 +1676,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
       const response = await fetch(`${API_URL}/metrics/manual`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(metricsPayload)
       });
 

@@ -42,10 +42,9 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
   useEffect(() => {
     const fetchMetrics = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
         const days = timeRange === '24h' ? 1 : timeRange === '7d' ? 7 : 30;
         const response = await fetch(`${API_URL}/analytics/performance-metrics?days=${days}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         if (response.ok) {
           const data = await response.json();

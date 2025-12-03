@@ -105,6 +105,7 @@ const historicalData = Array.from({ length: 12 }, (_, i) => ({
 
 **Note:** Currently uses simulated data. In production, this would connect to historical business impact data.
 
+
 **Chart Lines:**
 - **Quality Score:** Blue line, left Y-axis
 - **Customer Satisfaction:** Purple line, left Y-axis
