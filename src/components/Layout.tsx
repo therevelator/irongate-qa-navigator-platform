@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { getRoleBadgeColor } from '../types/auth';
 import ThemeToggle from './ThemeToggle';
+import { Toaster } from 'react-hot-toast';
 
 interface Department {
   id: string;
@@ -97,7 +98,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
     <div className={`flex h-screen ${mainBgClass}`}>
       {/* Menu Overlay - Mobile only */}
       {isMobileMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
           onClick={() => setIsMobileMenuOpen(false)}
         />
@@ -141,11 +142,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {/* Dashboard */}
             <button
               onClick={handleAllClick}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                currentView === 'dashboard'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-              }`}
+              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'dashboard'
+                ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                }`}
             >
               <LayoutDashboard size={20} />
               <span>Dashboard</span>
@@ -155,11 +155,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
               <button
                 onClick={() => handleNavClick('users')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  currentView === 'users'
-                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'users'
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                  }`}
               >
                 <UsersIcon size={20} />
                 <span>Users</span>
@@ -170,11 +169,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
               <button
                 onClick={() => handleNavClick('teams')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  currentView === 'teams'
-                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'teams'
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                  }`}
               >
                 <TeamsIcon size={20} />
                 <span>Teams</span>
@@ -185,11 +183,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {user?.role === 'super_admin' && (
               <button
                 onClick={() => handleNavClick('departments')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  currentView === 'departments'
-                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'departments'
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                  }`}
               >
                 <Building2 size={20} />
                 <span>Departments</span>
@@ -198,28 +195,26 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
 
             {/* Analytics - Everyone except qa_engineer and viewer */}
             {(user?.role !== 'qa_engineer' && user?.role !== 'viewer') && (
-            <button
-              onClick={() => handleNavClick('features')}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                currentView === 'features'
+              <button
+                onClick={() => handleNavClick('features')}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'features'
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800/50 hover:text-gray-900 dark:hover:text-white'
-              }`}
-            >
-              <BarChart3 size={20} />
-              <span>Analytics</span>
-            </button>
+                  }`}
+              >
+                <BarChart3 size={20} />
+                <span>Analytics</span>
+              </button>
             )}
 
             {/* Admin Panel - Admin only */}
             {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
               <button
                 onClick={() => handleNavClick('admin-panel')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  currentView === 'admin-panel'
-                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'admin-panel'
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                  }`}
               >
                 <Shield size={20} />
                 <span>Admin</span>
@@ -230,11 +225,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {user?.role === 'super_admin' && (
               <button
                 onClick={() => handleNavClick('manual-metrics')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  currentView === 'manual-metrics'
-                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'manual-metrics'
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                  }`}
               >
                 <Calculator size={20} />
                 <span>Manual Metrics</span>
@@ -245,11 +239,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
               <button
                 onClick={() => handleNavClick('metric-intervals')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  currentView === 'metric-intervals'
-                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'metric-intervals'
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                  }`}
               >
                 <Clock size={20} />
                 <span>Metric Intervals</span>
@@ -260,11 +253,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
               <button
                 onClick={() => handleNavClick('parameters-config')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
-                  currentView === 'parameters-config'
-                    ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
+                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'parameters-config'
+                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
+                  }`}
               >
                 <SlidersHorizontal size={20} />
                 <span>Parameters Config</span>
@@ -297,12 +289,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             >
               <Menu size={20} className="text-gray-600 dark:text-gray-400" />
             </button>
-            
+
             <h2 className="text-xs sm:text-sm font-medium truncate text-gray-600 dark:text-slate-400">
               Welcome, {user?.firstName}
             </h2>
           </div>
-          
+
           <div className="flex items-center gap-2 sm:gap-4">
             {/* Grid Selector - Hidden on mobile */}
             {currentView === 'dashboard' && onGridChange && (
@@ -312,11 +304,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   <button
                     key={cols}
                     onClick={() => onGridChange(cols)}
-                    className={`w-7 h-7 text-xs font-semibold rounded-md transition-all ${
-                      gridColumns === cols
-                        ? 'bg-cyan-600 text-white shadow'
-                        : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                    }`}
+                    className={`w-7 h-7 text-xs font-semibold rounded-md transition-all ${gridColumns === cols
+                      ? 'bg-cyan-600 text-white shadow'
+                      : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+                      }`}
                     title={`${cols} column${cols > 1 ? 's' : ''}`}
                   >
                     {cols}
@@ -328,22 +319,20 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
               <button
                 onClick={() => on3DModeChange?.(false)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                  !is3DMode
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                }`}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${!is3DMode
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+                  }`}
                 title="2D Mode - Clean and lightweight"
               >
                 2D
               </button>
               <button
                 onClick={() => on3DModeChange?.(true)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${
-                  is3DMode
-                    ? 'bg-blue-600 text-white shadow'
-                    : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                }`}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${is3DMode
+                  ? 'bg-blue-600 text-white shadow'
+                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
+                  }`}
                 title="3D Mode - Enhanced visual effects"
               >
                 3D
@@ -359,7 +348,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           <div className="flex-1">
             {children}
           </div>
-          
+
           {/* Footer */}
           <footer className="bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 px-4 sm:px-6 py-4 mt-auto">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-gray-500 dark:text-slate-400">
@@ -381,6 +370,28 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </footer>
         </div>
       </div>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 3000,
+          style: {
+            background: '#333',
+            color: '#fff',
+          },
+          success: {
+            iconTheme: {
+              primary: '#10b981',
+              secondary: '#fff',
+            },
+          },
+          error: {
+            iconTheme: {
+              primary: '#ef4444',
+              secondary: '#fff',
+            },
+          },
+        }}
+      />
     </div>
   );
 };

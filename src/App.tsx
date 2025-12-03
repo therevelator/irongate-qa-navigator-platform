@@ -25,8 +25,36 @@ import ManualMetricsInput from './components/ManualMetricsInput';
 import MetricIntervalsConfig from './components/MetricIntervalsConfig';
 import ParametersConfiguration from './components/ParametersConfiguration';
 
+// Map views to URL paths
+const VIEW_TO_PATH: Record<string, string> = {
+  'dashboard': '/',
+  'users': '/users',
+  'teams': '/teams',
+  'departments': '/departments',
+  'features': '/analytics',
+  'manage-teams': '/manage-teams',
+  'admin-panel': '/admin-panel',
+  'manual-metrics': '/manual-metrics',
+  'metric-intervals': '/metric-intervals',
+  'parameters-config': '/parameters-config',
+  'flaky-test-intelligence': '/analytics/flaky-tests',
+  'technical-debt': '/analytics/technical-debt',
+  'pipeline-visualization': '/analytics/pipeline',
+  'business-impact': '/analytics/business-impact',
+  'performance-metrics': '/analytics/performance',
+  'developer-productivity': '/analytics/productivity',
+  'test-execution-timeline': '/analytics/timeline',
+  'team-gamification': '/analytics/gamification',
+  'pdf-report-generator': '/analytics/reports'
+};
+
+const PATH_TO_VIEW = Object.entries(VIEW_TO_PATH).reduce((acc, [view, path]) => {
+  acc[path] = view;
+  return acc;
+}, {} as Record<string, string>);
+
 function App() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState('all');
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
   const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | 'admin-panel' | string>('dashboard');
@@ -34,7 +62,78 @@ function App() {
   const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(1);
   const [userTeams, setUserTeams] = useState<any[]>([]);
   const [analyticsTeamId, setAnalyticsTeamId] = useState<string | undefined>(undefined);
-  const [is3DMode, setIs3DMode] = useState(true); // Default to 3D mode
+  const [is3DMode, setIs3DMode] = useState(true);
+
+  // Handle URL routing on mount and popstate
+  useEffect(() => {
+    const handleLocationChange = () => {
+      const path = window.location.pathname;
+      // Find exact match or best match
+      const view = PATH_TO_VIEW[path] || 'dashboard';
+
+      // Check permissions before setting view
+      if (hasPermission(view)) {
+        setCurrentView(view);
+      } else {
+        // Redirect to dashboard if not authorized
+        window.history.replaceState(null, '', '/');
+        setCurrentView('dashboard');
+      }
+    };
+
+    // Initial check
+    if (!isLoading) {
+      handleLocationChange();
+    }
+
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
+  }, [isLoading, user]); // Re-run when user loads to enforce permissions
+
+  // Update URL when view changes
+  const handleViewChange = (view: string) => {
+    const path = VIEW_TO_PATH[view];
+    if (path) {
+      window.history.pushState(null, '', path);
+    }
+    setCurrentView(view);
+  };
+
+  // Permission check function
+  const hasPermission = (view: string): boolean => {
+    if (!user) return view === 'dashboard'; // Guest only sees dashboard (or login)
+
+    const role = user.role;
+
+    switch (view) {
+      case 'dashboard':
+        return true;
+      case 'users':
+      case 'teams':
+        return ['super_admin', 'qa_manager', 'team_lead'].includes(role);
+      case 'departments':
+        return role === 'super_admin';
+      case 'features':
+      case 'flaky-test-intelligence':
+      case 'technical-debt':
+      case 'pipeline-visualization':
+      case 'business-impact':
+      case 'performance-metrics':
+      case 'developer-productivity':
+      case 'test-execution-timeline':
+      case 'team-gamification':
+      case 'pdf-report-generator':
+        return !['qa_engineer', 'viewer'].includes(role);
+      case 'admin-panel':
+      case 'metric-intervals':
+      case 'parameters-config':
+        return ['super_admin', 'qa_manager'].includes(role);
+      case 'manual-metrics':
+        return role === 'super_admin';
+      default:
+        return true;
+    }
+  };
 
   // Fetch departments and teams based on user role
   useEffect(() => {
@@ -48,20 +147,16 @@ function App() {
       const headers: HeadersInit = {
         'Content-Type': 'application/json'
       };
-      
-      // Fetch teams with metrics from database
+
       try {
-        const teamsResponse = await fetch(`${API_URL}/teams`, { 
+        const teamsResponse = await fetch(`${API_URL}/teams`, {
           headers,
-          credentials: 'include' // Use cookies for auth
+          credentials: 'include'
         });
         if (teamsResponse.ok) {
           const { teams: teamsData } = await teamsResponse.json();
-          
-          // Teams are already transformed by the API
           setTeams(teamsData);
           setUserTeams(teamsData);
-          console.log('Fetched teams from database:', teamsData);
         }
       } catch (error) {
         console.error('Error fetching teams:', error);
@@ -73,43 +168,46 @@ function App() {
 
   // Use API teams if available, otherwise fall back to mock teams
   const apiTeams = userTeams.length > 0 ? userTeams : teams;
-  
+
   // Filter teams based on active tab and user permissions
   let filteredTeams = apiTeams;
-  
+
   if (activeTab !== 'all') {
-    // Filter by department ID from API teams
     filteredTeams = apiTeams.filter((t: any) => t.department_id === activeTab);
   }
-  
+
   // Apply role-based filtering
-  if (user?.role === 'qa_engineer') {
-    // QA engineers see only their team on dashboard
-    filteredTeams = filteredTeams.filter((t: any) => t.id === user?.primaryTeamId);
-  } else if (user?.role === 'qa_manager') {
+  if (user?.role === 'qa_manager') {
     // QA managers see teams in their department
     if (activeTab === 'all') {
       filteredTeams = filteredTeams.filter((t: any) => t.department_id === user?.departmentId);
     }
   }
-  // Team leads see all teams on dashboard (no filtering needed)
-  
-  // Handle feature navigation with optional team context
+  // Team leads and QA Engineers see all teams on dashboard (no filtering needed)
+
   const handleFeatureSelect = (featureId: string, teamId?: string) => {
     setAnalyticsTeamId(teamId);
-    setCurrentView(featureId);
+    handleViewChange(featureId);
   };
+
+  // Enforce permissions on render
+  if (!hasPermission(currentView) && !isLoading) {
+    // If somehow we are in a restricted view, redirect to dashboard
+    // This handles cases where permission changes or initial state is wrong
+    setTimeout(() => handleViewChange('dashboard'), 0);
+    return null; // Or loading spinner
+  }
 
   // If a team is selected, show detail view (sidebar hidden, top bar visible)
   if (selectedTeam) {
     return (
-      <Layout 
-        currentView={currentView} 
+      <Layout
+        currentView={currentView}
         onViewChange={(view) => {
-          setSelectedTeam(null); // Clear selected team when navigating
-          setCurrentView(view);
-        }} 
-        activeTab={activeTab} 
+          setSelectedTeam(null);
+          handleViewChange(view);
+        }}
+        activeTab={activeTab}
         onTabChange={setActiveTab}
         hideSidebar
       >
@@ -118,158 +216,57 @@ function App() {
     );
   }
 
-  // Users View
-  if (currentView === 'users') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <UsersView />
-      </Layout>
-    );
-  }
+  // Helper to render layout
+  const renderLayout = (content: React.ReactNode) => (
+    <Layout
+      currentView={currentView}
+      onViewChange={handleViewChange}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      gridColumns={gridColumns}
+      onGridChange={setGridColumns}
+      is3DMode={is3DMode}
+      on3DModeChange={setIs3DMode}
+    >
+      {content}
+    </Layout>
+  );
 
-  // Teams View
-  if (currentView === 'teams') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <TeamsView />
-      </Layout>
-    );
-  }
+  // Views
+  if (currentView === 'users') return renderLayout(<UsersView />);
+  if (currentView === 'teams') return renderLayout(<TeamsView />);
+  if (currentView === 'departments') return renderLayout(<DepartmentsView />);
 
-  // Departments View
-  if (currentView === 'departments') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <DepartmentsView />
-      </Layout>
-    );
-  }
-
-  // If features menu is open (Analytics)
   if (currentView === 'features') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <FeaturesMenu onBack={() => setCurrentView('dashboard')} onSelectFeature={handleFeatureSelect} />
-      </Layout>
+    return renderLayout(
+      <FeaturesMenu onBack={() => handleViewChange('dashboard')} onSelectFeature={handleFeatureSelect} />
     );
   }
 
-  // If a specific feature is selected
-  if (currentView === 'flaky-test-intelligence') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <FlakyTestIntelligence onBack={() => setCurrentView('features')} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'technical-debt') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <TechnicalDebtTracker onBack={() => setCurrentView('features')} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'pipeline-visualization') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <PipelineVisualization onBack={() => setCurrentView('features')} teamId={analyticsTeamId} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'business-impact') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <BusinessImpactAnalysisV2 onBack={() => setCurrentView('features')} teamId={analyticsTeamId} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'performance-metrics') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <PerformanceTesting onBack={() => setCurrentView('features')} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'developer-productivity') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <DeveloperProductivity onBack={() => setCurrentView('features')} teamId={analyticsTeamId} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'test-execution-timeline') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <TestExecutionTimeline onBack={() => setCurrentView('features')} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'team-gamification') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <TeamGamification onBack={() => setCurrentView('features')} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'pdf-report-generator') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <PDFReportGenerator onBack={() => setCurrentView('features')} />
-      </Layout>
-    );
-  }
+  if (currentView === 'flaky-test-intelligence') return renderLayout(<FlakyTestIntelligence onBack={() => handleViewChange('features')} />);
+  if (currentView === 'technical-debt') return renderLayout(<TechnicalDebtTracker onBack={() => handleViewChange('features')} />);
+  if (currentView === 'pipeline-visualization') return renderLayout(<PipelineVisualization onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
+  if (currentView === 'business-impact') return renderLayout(<BusinessImpactAnalysisV2 onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
+  if (currentView === 'performance-metrics') return renderLayout(<PerformanceTesting onBack={() => handleViewChange('features')} />);
+  if (currentView === 'developer-productivity') return renderLayout(<DeveloperProductivity onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
+  if (currentView === 'test-execution-timeline') return renderLayout(<TestExecutionTimeline onBack={() => handleViewChange('features')} />);
+  if (currentView === 'team-gamification') return renderLayout(<TeamGamification onBack={() => handleViewChange('features')} />);
+  if (currentView === 'pdf-report-generator') return renderLayout(<PDFReportGenerator onBack={() => handleViewChange('features')} />);
 
   if (currentView === 'manage-teams') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <TeamManagement teams={teams} onBack={() => setCurrentView('dashboard')} onUpdateTeams={setTeams} />
-      </Layout>
+    return renderLayout(
+      <TeamManagement teams={teams} onBack={() => handleViewChange('dashboard')} onUpdateTeams={setTeams} />
     );
   }
 
-  if (currentView === 'admin-panel') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <AdminPanel />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'manual-metrics') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <ManualMetricsInput onBack={() => setCurrentView('dashboard')} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'metric-intervals') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <MetricIntervalsConfig onBack={() => setCurrentView('dashboard')} />
-      </Layout>
-    );
-  }
-
-  if (currentView === 'parameters-config') {
-    return (
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab}>
-        <ParametersConfiguration onBack={() => setCurrentView('admin-panel')} />
-      </Layout>
-    );
-  }
+  if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
+  if (currentView === 'manual-metrics') return renderLayout(<ManualMetricsInput onBack={() => handleViewChange('dashboard')} />);
+  if (currentView === 'metric-intervals') return renderLayout(<MetricIntervalsConfig onBack={() => handleViewChange('dashboard')} />);
+  if (currentView === 'parameters-config') return renderLayout(<ParametersConfiguration onBack={() => handleViewChange('admin-panel')} />);
 
   return (
     <>
-      <Toaster 
+      <Toaster
         position="top-right"
         toastOptions={{
           duration: 3000,
@@ -291,7 +288,16 @@ function App() {
           },
         }}
       />
-      <Layout currentView={currentView} onViewChange={setCurrentView} activeTab={activeTab} onTabChange={setActiveTab} gridColumns={gridColumns} onGridChange={setGridColumns} is3DMode={is3DMode} on3DModeChange={setIs3DMode}>
+      <Layout
+        currentView={currentView}
+        onViewChange={handleViewChange}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        gridColumns={gridColumns}
+        onGridChange={setGridColumns}
+        is3DMode={is3DMode}
+        on3DModeChange={setIs3DMode}
+      >
         <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} gridColumns={gridColumns} is3DMode={is3DMode} />
       </Layout>
     </>

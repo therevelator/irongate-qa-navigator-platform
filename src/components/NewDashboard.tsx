@@ -379,16 +379,16 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
               <div className="absolute top-[448px] left-[1000px] w-4 h-4 bg-blue-600 rounded-full animate-pulse opacity-50" style={{ animationDelay: '1s' }}></div>
               <div className="absolute top-[148px] left-[1000px] w-3 h-3 bg-cyan-400 rounded-full animate-pulse opacity-80" style={{ animationDelay: '1.5s' }}></div>
 
-              {/* Data packets flowing */}
-              <div className="absolute top-[145px] w-2 h-2 bg-yellow-400 rounded-full animate-data-flow-1 opacity-90 shadow-lg shadow-yellow-400/50"></div>
-              <div className="absolute top-[295px] w-2 h-2 bg-green-400 rounded-full animate-data-flow-2 opacity-85 shadow-lg shadow-green-400/50"></div>
-              <div className="absolute top-[445px] w-2 h-2 bg-purple-400 rounded-full animate-data-flow-3 opacity-75 shadow-lg shadow-purple-400/50"></div>
-            </div>
+            {/* Data packets flowing */}
+            <div className="absolute top-[145px] w-2 h-2 bg-yellow-400 rounded-full animate-data-flow-1 opacity-90 shadow-lg shadow-yellow-400/50"></div>
+            <div className="absolute top-[295px] w-2 h-2 bg-green-400 rounded-full animate-data-flow-2 opacity-85 shadow-lg shadow-green-400/50"></div>
+            <div className="absolute top-[445px] w-2 h-2 bg-purple-400 rounded-full animate-data-flow-3 opacity-75 shadow-lg shadow-purple-400/50"></div>
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Content */}
         <div className="relative z-10 max-w-5xl mx-auto text-center">
+          {/* Content */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6">
             {/* Logo */}
             <img
@@ -419,7 +419,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
 
       {/* Teams Overview */}
-      <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-[15px]">
+      <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-[15px]" data-testid="dashboard">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
             Team Performance
@@ -505,6 +505,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                     : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.30)' 
                     : 'rgba(239, 68, 68, 0.30)'
               }}
+              data-testid="team-card"
             >
               {/* Soft theme-aware hover overlay (not on minimal) */}
               {!isMinimal && (
@@ -564,7 +565,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                           : themeName === 'ocean' 
                             ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
                             : 'group-hover:text-neutral-700 dark:group-hover:text-neutral-300'
-                      }`}>
+                      }`} data-testid="team-name">
                         {team.name}
                       </h3>
                       <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
@@ -643,13 +644,13 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   {/* Header: Team Name + Score */}
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1 min-w-0 pr-3">
-                      <h3 className={`text-base font-bold text-gray-900 dark:text-white mb-1 transition-colors ${
+                      <h3 className={`text-base font-bold text-gray-900 dark:text-white mb-1 transition-colors truncate ${
                         isMinimal
                           ? 'group-hover:text-gray-700 dark:group-hover:text-gray-200'
                           : themeName === 'ocean' 
                             ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
                             : 'group-hover:text-neutral-700 dark:group-hover:text-neutral-300'
-                      }`}>
+                      }`} data-testid="team-name">
                         {team.name}
                       </h3>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{team.department || 'Unknown Department'}</p>

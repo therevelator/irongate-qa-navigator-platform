@@ -140,7 +140,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950" data-testid="features-menu">
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800">
         <div className="px-4 sm:px-6 lg:px-8 py-6">
@@ -181,7 +181,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
             <div className="flex flex-wrap items-center gap-4">
               {/* Team Lead sees only their team - static label */}
               {user?.role === 'team_lead' ? (
-                <div className="flex items-center gap-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg px-4 py-2.5">
+                <div className="flex items-center gap-2 bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded-lg px-4 py-2.5" data-testid="team-static-label">
                   <Users size={18} className="text-cyan-600 dark:text-cyan-400" />
                   <span className="text-sm font-semibold">
                     Viewing: {teams.find(t => t.id === user.primaryTeamId)?.name || 'Your Team'}

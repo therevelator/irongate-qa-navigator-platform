@@ -611,7 +611,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
         );
       })() : (
         /* Main Admin Panel View */
-    <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
+    <div className="min-h-screen bg-white dark:bg-slate-900 p-8" data-testid="admin-panel">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -713,7 +713,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                           const isTeamExpanded = expandedTeams.has(team.id);
                           
                           return (
-                            <div key={team.id} className="border-b border-gray-200 last:border-b-0">
+                            <div key={team.id} className="border-b border-gray-200 last:border-b-0" data-testid="team-row">
                               {/* Team Header */}
                               <div className="px-6 py-3 ml-8 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center justify-between">
                                 <div 
@@ -780,6 +780,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                         : 'text-gray-400 dark:text-slate-400 hover:text-purple-500 dark:hover:text-purple-400'
                                     }`}
                                     title={team.ai_enabled ? 'Disable AI Suggestions' : 'Enable AI Suggestions'}
+                                    data-testid="team-ai-toggle"
                                   >
                                     <Bot className="w-4 h-4" />
                                   </button>
@@ -888,7 +889,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                         </thead>
                                         <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-100 dark:divide-slate-700">
                                           {teamUsers.map((u) => (
-                                            <tr key={u.id} className="hover:bg-gray-50 dark:bg-slate-700">
+                                            <tr key={u.id} className="hover:bg-gray-50 dark:bg-slate-700" data-testid="user-row">
                                               <td className="px-3 py-2 whitespace-nowrap">
                                                 <div className="font-medium text-gray-900 dark:text-white text-sm">{u.first_name} {u.last_name}</div>
                                               </td>
@@ -903,7 +904,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                   u.is_active 
                                                     ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
                                                     : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                                                }`}>
+                                                }`} data-testid="user-status">
                                                   {u.is_active ? 'Active' : 'Inactive'}
                                                 </span>
                                               </td>
@@ -967,6 +968,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                           : 'text-gray-400 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400'
                                                       }`}
                                                       title={u.developer_insights_enabled ? 'Disable Developer Insights' : 'Enable Developer Insights'}
+                                                      data-testid="user-ai-toggle"
                                                     >
                                                       <Eye className="w-4 h-4" />
                                                     </button>
@@ -999,6 +1001,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                             : 'text-gray-400 dark:text-slate-400 hover:text-green-500 dark:hover:text-green-400'
                                                         }`}
                                                         title={u.is_active ? 'Deactivate user' : 'Activate user'}
+                                                        data-testid="user-status-toggle"
                                                       >
                                                         {u.is_active ? <UserX className="w-4 h-4" /> : <UserCheck className="w-4 h-4" />}
                                                       </button>
