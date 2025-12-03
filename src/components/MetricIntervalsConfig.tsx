@@ -60,8 +60,6 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = ({ onBack })
   const [hasChanges, setHasChanges] = useState(false);
   const [originalIntervals, setOriginalIntervals] = useState<MetricInterval[]>([]);
 
-  const token = localStorage.getItem('irongate_token');
-
   useEffect(() => {
     fetchIntervals();
   }, []);
@@ -70,7 +68,7 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = ({ onBack })
     try {
       setLoading(true);
       const response = await fetch(`${API_URL}/settings/metric-intervals`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -103,10 +101,8 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = ({ onBack })
       setSaving(true);
       const response = await fetch(`${API_URL}/settings/metric-intervals`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ intervals })
       });
 
@@ -129,7 +125,7 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = ({ onBack })
     try {
       const response = await fetch(`${API_URL}/settings/metric-intervals/${metricKey}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
 
       if (response.ok) {

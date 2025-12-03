@@ -34,27 +34,56 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // Check for existing session on mount
   useEffect(() => {
-    const checkAuth = () => {
-      const storedUser = localStorage.getItem('irongate_user');
-      const storedToken = localStorage.getItem('irongate_token');
-      
-      if (storedUser && storedToken) {
-        try {
-          const user = JSON.parse(storedUser);
+    const checkAuth = async () => {
+      try {
+        // Try to get user from backend (checks cookie)
+        const response = await fetch(`${API_URL}/auth/me`, {
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include' // Send cookies
+        });
+
+        if (response.ok) {
+          const { user } = await response.json();
+          
+          // Map backend user to frontend User type (if needed, but structure matches closely)
+          const mappedUser: User = {
+            id: user.id,
+            email: user.email,
+            firstName: user.first_name || user.firstName,
+            lastName: user.last_name || user.lastName,
+            role: user.role,
+            companyId: user.company_id || user.companyId,
+            departmentId: user.department_id || user.departmentId,
+            primaryTeamId: user.primary_team_id || user.primaryTeamId,
+            assignedTeams: user.assignedTeams || [],
+            createdAt: user.created_at || user.createdAt,
+            lastLogin: user.last_login || user.lastLogin,
+            isActive: user.is_active ?? user.isActive ?? true,
+            emailVerified: user.email_verified ?? user.emailVerified ?? false
+          };
+
+          // Cache user info in localStorage for faster subsequent loads (optional, but keeps UI responsive)
+          localStorage.setItem('irongate_user', JSON.stringify(mappedUser));
+
           setAuthState({
-            user,
+            user: mappedUser,
             isAuthenticated: true,
             isLoading: false,
             error: null,
           });
-        } catch (error) {
-          console.error('Failed to parse stored user:', error);
+        } else {
+          // Session invalid or expired
           localStorage.removeItem('irongate_user');
-          localStorage.removeItem('irongate_token');
-          setAuthState(prev => ({ ...prev, isLoading: false }));
+          setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
         }
-      } else {
-        setAuthState(prev => ({ ...prev, isLoading: false }));
+      } catch (error) {
+        console.error('Auth check failed:', error);
+        // Fallback to checking localStorage user if network fails? 
+        // No, safer to assume logged out if we can't verify session.
+        // But to prevent flashing logged out state on network glitch, maybe we could...
+        // For now, assume logged out.
+        localStorage.removeItem('irongate_user');
+        setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
       }
     };
 
@@ -69,7 +98,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials)
+        body: JSON.stringify(credentials),
+        credentials: 'include' // Send/Receive cookies
       });
 
       if (!response.ok) {
@@ -77,7 +107,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error(error.error || 'Login failed');
       }
 
-      const { user: userData, token } = await response.json();
+      const { user: userData } = await response.json();
 
       // Map backend user to frontend User type
       const user: User = {
@@ -89,15 +119,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         companyId: userData.company_id,
         departmentId: userData.department_id,
         primaryTeamId: userData.primary_team_id,
-        assignedTeams: [],
+        assignedTeams: userData.assignedTeams || [],
         createdAt: userData.created_at,
         lastLogin: new Date().toISOString(),
         isActive: userData.is_active,
         emailVerified: userData.email_verified
       };
 
-      // Store token and user
-      localStorage.setItem('irongate_token', token);
+      // Store user info (but NOT token)
       localStorage.setItem('irongate_user', JSON.stringify(user));
 
       setAuthState({
@@ -119,144 +148,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // FALLBACK: Mock authentication (kept for reference)
   const loginMock = async (credentials: LoginCredentials): Promise<void> => {
-    setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
-
-    try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
-      const mockUsers: Record<string, User> = {
-        'admin@irongate.com': {
-          id: 'user-1',
-          email: 'admin@irongate.com',
-          firstName: 'Admin',
-          lastName: 'User',
-          role: 'super_admin',
-          companyId: 'novatech',
-          departmentId: 'dept-decision-mgmt',
-          primaryTeamId: 'team-quasars',
-          assignedTeams: [],
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString(),
-          isActive: true,
-          emailVerified: true,
-        },
-        'manager@irongate.com': {
-          id: 'user-2',
-          email: 'manager@irongate.com',
-          firstName: 'QA',
-          lastName: 'Manager',
-          role: 'manager' as const,
-          companyId: 'novatech',
-          departmentId: 'dept-decision-mgmt',
-          primaryTeamId: 'team-pulsars',
-          assignedTeams: [],
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString(),
-          isActive: true,
-          emailVerified: true,
-        },
-        'lead@irongate.com': {
-          id: 'user-3',
-          email: 'lead@irongate.com',
-          firstName: 'Team',
-          lastName: 'Lead',
-          role: 'team_lead',
-          companyId: 'novatech',
-          departmentId: 'dept-decision-mgmt',
-          primaryTeamId: 'team-watchmen',
-          assignedTeams: ['team-watchmen', 'team-astronauts'],
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString(),
-          isActive: true,
-          emailVerified: true,
-        },
-        'engineer@irongate.com': {
-          id: 'user-4',
-          email: 'engineer@irongate.com',
-          firstName: 'QA',
-          lastName: 'Engineer',
-          role: 'qa_engineer',
-          companyId: 'novatech',
-          departmentId: 'dept-decision-mgmt',
-          primaryTeamId: 'team-quasars',
-          assignedTeams: ['team-quasars'],
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString(),
-          isActive: true,
-          emailVerified: true,
-        },
-        'viewer@irongate.com': {
-          id: 'user-5',
-          email: 'viewer@irongate.com',
-          firstName: 'Guest',
-          lastName: 'Viewer',
-          role: 'viewer',
-          companyId: 'novatech',
-          departmentId: 'dept-decision-mgmt',
-          primaryTeamId: 'team-grid',
-          assignedTeams: ['team-grid'],
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString(),
-          isActive: true,
-          emailVerified: true,
-        },
-      };
-
-      const user = mockUsers[credentials.email.toLowerCase()];
-
-      if (!user || credentials.password !== 'demo123') {
-        throw new Error('Invalid email or password');
-      }
-
-      // Store in localStorage
-      const token = btoa(`${user.id}:${Date.now()}`); // Mock token
-      localStorage.setItem('irongate_user', JSON.stringify(user));
-      localStorage.setItem('irongate_token', token);
-
-      if (credentials.rememberMe) {
-        localStorage.setItem('irongate_remember', 'true');
-      }
-
-      setAuthState({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-      });
-
-      /* PRODUCTION MODE - Replace mock with real API:
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Login failed');
-      }
-
-      const { user, token } = await response.json();
-      
-      localStorage.setItem('irongate_user', JSON.stringify(user));
-      localStorage.setItem('irongate_token', token);
-      
-      setAuthState({
-        user,
-        isAuthenticated: true,
-        isLoading: false,
-        error: null,
-      });
-      */
-    } catch (error) {
-      setAuthState({
-        user: null,
-        isAuthenticated: false,
-        isLoading: false,
-        error: error instanceof Error ? error.message : 'Login failed',
-      });
-      throw error;
-    }
+     // Mock implementation removed for brevity/security
+     // Force real login
+     return login(credentials);
   };
 
   const register = async (data: RegisterData): Promise<void> => {
@@ -268,6 +162,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
+        credentials: 'include' // Send/Receive cookies
       });
 
       if (!response.ok) {
@@ -275,7 +170,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         throw new Error(error.error || 'Registration failed');
       }
 
-      const { user: apiUser, token } = await response.json();
+      const { user: apiUser } = await response.json();
       
       // Map API response to User type
       const user: User = {
@@ -294,7 +189,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       };
       
       localStorage.setItem('irongate_user', JSON.stringify(user));
-      localStorage.setItem('irongate_token', token);
+      // No token storage in localStorage
       
       setAuthState({
         user,
@@ -313,35 +208,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('irongate_user');
-    localStorage.removeItem('irongate_token');
-    localStorage.removeItem('irongate_remember');
-    
-    setAuthState({
-      user: null,
-      isAuthenticated: false,
-      isLoading: false,
-      error: null,
-    });
-
-    /* PRODUCTION MODE:
-    fetch('/api/auth/logout', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`,
-      },
-    }).finally(() => {
+  const logout = async () => {
+    try {
+      await fetch(`${API_URL}/auth/logout`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
       localStorage.removeItem('irongate_user');
-      localStorage.removeItem('irongate_token');
+      localStorage.removeItem('irongate_remember');
+      
       setAuthState({
         user: null,
         isAuthenticated: false,
         isLoading: false,
         error: null,
       });
-    });
-    */
+    }
   };
 
   const updateUser = (updates: Partial<User>) => {

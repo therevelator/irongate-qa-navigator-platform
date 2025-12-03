@@ -51,13 +51,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
 
   const fetchDepartments = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
-      if (!token) return;
-
       const response = await fetch(`${API_URL}/admin/departments`, {
         headers: {
-          'Authorization': `Bearer ${token}`
-        }
+          'Content-Type': 'application/json'
+        },
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -153,8 +151,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
               <span>Dashboard</span>
             </button>
 
-            {/* Users - Super Admin, Manager, Team Lead only */}
-            {(user?.role === 'super_admin' || user?.role === 'manager' || user?.role === 'team_lead') && (
+            {/* Users - Super Admin, QA Manager, Team Lead only */}
+            {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
               <button
                 onClick={() => handleNavClick('users')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
@@ -168,8 +166,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
               </button>
             )}
 
-            {/* Teams - Super Admin, Manager, Team Lead only */}
-            {(user?.role === 'super_admin' || user?.role === 'manager' || user?.role === 'team_lead') && (
+            {/* Teams - Super Admin, QA Manager, Team Lead only */}
+            {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
               <button
                 onClick={() => handleNavClick('teams')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
@@ -198,7 +196,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
               </button>
             )}
 
-            {/* Analytics */}
+            {/* Analytics - Everyone except qa_engineer and viewer */}
+            {(user?.role !== 'qa_engineer' && user?.role !== 'viewer') && (
             <button
               onClick={() => handleNavClick('features')}
               className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
@@ -210,9 +209,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
               <BarChart3 size={20} />
               <span>Analytics</span>
             </button>
+            )}
 
             {/* Admin Panel - Admin only */}
-            {(user?.role === 'super_admin' || user?.role === 'manager') && (
+            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
               <button
                 onClick={() => handleNavClick('admin-panel')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
@@ -242,7 +242,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             )}
 
             {/* Metric Intervals - Admin and Manager only */}
-            {(user?.role === 'super_admin' || user?.role === 'manager') && (
+            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
               <button
                 onClick={() => handleNavClick('metric-intervals')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${
@@ -257,7 +257,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
             )}
 
             {/* Parameters Configuration */}
-            {(user?.role === 'super_admin' || user?.role === 'manager') && (
+            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
               <button
                 onClick={() => handleNavClick('parameters-config')}
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${

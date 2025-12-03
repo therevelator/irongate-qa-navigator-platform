@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './tests/e2e',
+  tsconfig: './tsconfig.playwright.json',
   
   /* Maximum time one test can run */
   timeout: 60 * 1000, // 60 seconds per test

@@ -51,9 +51,8 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
 
   const fetchDepartments = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/departments`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
@@ -68,9 +67,8 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onBack, onSelectFeature }) 
 
   const fetchTeams = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/teams`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();

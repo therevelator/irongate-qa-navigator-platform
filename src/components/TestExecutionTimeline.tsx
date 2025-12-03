@@ -24,9 +24,8 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ onBack })
   useEffect(() => {
     const fetchExecutions = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
         const response = await fetch(`${API_URL}/analytics/test-executions?days=7`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         if (response.ok) {
           const data = await response.json();

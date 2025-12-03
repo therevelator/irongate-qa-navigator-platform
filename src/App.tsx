@@ -45,20 +45,16 @@ function App() {
 
   const fetchDepartmentsAndTeams = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
-      
-      if (!token) {
-        return;
-      }
-      
       const headers: HeadersInit = {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Content-Type': 'application/json'
       };
-
+      
       // Fetch teams with metrics from database
       try {
-        const teamsResponse = await fetch(`${API_URL}/teams`, { headers });
+        const teamsResponse = await fetch(`${API_URL}/teams`, { 
+          headers,
+          credentials: 'include' // Use cookies for auth
+        });
         if (teamsResponse.ok) {
           const { teams: teamsData } = await teamsResponse.json();
           

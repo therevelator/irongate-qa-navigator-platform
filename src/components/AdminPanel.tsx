@@ -93,13 +93,11 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     confirmPassword: ''
   });
 
-  const token = localStorage.getItem('irongate_token');
-
   useEffect(() => {
-    if (token) {
+    if (user) {
       fetchData();
     }
-  }, [token]);
+  }, [user]);
 
   const fetchData = async () => {
     try {
@@ -107,7 +105,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       
       // Fetch users
       const usersRes = await fetch(`${API_URL}/admin/users`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (usersRes.ok) {
@@ -120,7 +118,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
 
       // Fetch teams
       const teamsRes = await fetch(`${API_URL}/admin/teams`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (teamsRes.ok) {
@@ -137,7 +135,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
 
       // Fetch available roles
       const rolesRes = await fetch(`${API_URL}/admin/available-roles`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       
       if (rolesRes.ok) {
@@ -151,7 +149,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       // Fetch departments (Super Admin only)
       if (user?.role === 'super_admin') {
         const deptsRes = await fetch(`${API_URL}/admin/departments/all`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         
         if (deptsRes.ok) {
@@ -184,10 +182,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       
       const response = await fetch(`${API_URL}/admin/users`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           ...newUser,
           departmentId
@@ -216,10 +212,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     try {
       const response = await fetch(`${API_URL}/admin/teams`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(newTeam)
       });
 
@@ -254,10 +248,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     try {
       const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}/reset-password`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ newPassword: resetPasswordData.newPassword })
       });
 
@@ -288,10 +280,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     try {
       const response = await fetch(`${API_URL}/admin/departments`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(newDepartment)
       });
 
@@ -318,10 +308,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     try {
       const response = await fetch(`${API_URL}/admin/departments/${selectedDepartment.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(newDepartment)
       });
 
@@ -347,9 +335,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     try {
       const response = await fetch(`${API_URL}/admin/departments/${selectedDepartment.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -391,10 +377,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     try {
       const response = await fetch(`${API_URL}/users/${selectedUser?.id}`, {
         method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(editUserData)
       });
 
@@ -428,9 +412,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     try {
       const response = await fetch(`${API_URL}/admin/users/${selectedUser.id}`, {
         method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -776,10 +758,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                       try {
                                         const response = await fetch(`${API_URL}/teams/${team.id}/ai-toggle`, {
                                           method: 'PATCH',
-                                          headers: {
-                                            'Authorization': `Bearer ${token}`,
-                                            'Content-Type': 'application/json'
-                                          },
+                                          headers: { 'Content-Type': 'application/json' },
+                                          credentials: 'include',
                                           body: JSON.stringify({ enabled: !team.ai_enabled })
                                         });
                                         
@@ -821,9 +801,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                       try {
                                         const response = await fetch(`${API_URL}/admin/teams/${team.id}/toggle-status`, {
                                           method: 'POST',
-                                          headers: {
-                                            'Authorization': `Bearer ${token}`
-                                          }
+                                          credentials: 'include'
                                         });
                                         
                                         if (response.ok) {
@@ -854,9 +832,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                         try {
                                           const response = await fetch(`${API_URL}/admin/teams/${team.id}`, {
                                             method: 'DELETE',
-                                            headers: {
-                                              'Authorization': `Bearer ${token}`
-                                            }
+                                            credentials: 'include'
                                           });
                                           
                                           if (response.ok) {
@@ -969,10 +945,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                         try {
                                                           const response = await fetch(`${API_URL}/admin/users/${u.id}/developer-insights-toggle`, {
                                                             method: 'PATCH',
-                                                            headers: {
-                                                              'Authorization': `Bearer ${token}`,
-                                                              'Content-Type': 'application/json'
-                                                            },
+                                                            headers: { 'Content-Type': 'application/json' },
+                                                            credentials: 'include',
                                                             body: JSON.stringify({ enabled: !u.developer_insights_enabled })
                                                           });
                                                           
@@ -1005,9 +979,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                           try {
                                                             const response = await fetch(`${API_URL}/admin/users/${u.id}/toggle-status`, {
                                                               method: 'POST',
-                                                              headers: {
-                                                                'Authorization': `Bearer ${token}`
-                                                              }
+                                                              credentials: 'include'
                                                             });
                                                             
                                                             if (response.ok) {

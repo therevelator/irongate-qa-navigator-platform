@@ -49,18 +49,10 @@ const UsersView: React.FC = () => {
   const fetchUsers = async () => {
     try {
       const [usersRes, teamsRes, deptsRes, rolesRes] = await Promise.all([
-        fetch(`${API_URL}/admin/users`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/teams`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/departments`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/available-roles`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        })
+        fetch(`${API_URL}/admin/users`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/teams`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/departments`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/available-roles`, { credentials: 'include' })
       ]);
       
       if (usersRes.ok) {
@@ -290,9 +282,7 @@ const UsersView: React.FC = () => {
                                 try {
                                   const response = await fetch(`${API_URL}/admin/users/${u.id}/toggle-status`, {
                                     method: 'POST',
-                                    headers: {
-                                      'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-                                    }
+                                    credentials: 'include'
                                   });
                                   
                                   if (response.ok) {
@@ -322,9 +312,7 @@ const UsersView: React.FC = () => {
                                   try {
                                     const response = await fetch(`${API_URL}/admin/users/${u.id}`, {
                                       method: 'DELETE',
-                                      headers: {
-                                        'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-                                      }
+                                      credentials: 'include'
                                     });
                                     
                                     if (response.ok) {
@@ -363,10 +351,8 @@ const UsersView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/users`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 firstName: userForm.firstName,
                 lastName: userForm.lastName,
@@ -374,7 +360,7 @@ const UsersView: React.FC = () => {
                 password: userForm.password,
                 role: userForm.role,
                 departmentId: userForm.departmentId,
-                primaryTeamId: userForm.primaryTeamId || null
+                teamId: userForm.primaryTeamId
               })
             });
             
@@ -447,10 +433,8 @@ const UsersView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}`, {
               method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 firstName: userForm.firstName,
                 lastName: userForm.lastName,
@@ -536,10 +520,8 @@ const UsersView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}/reset-password`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({ newPassword: userForm.password })
             });
             

@@ -36,15 +36,9 @@ const TeamsView: React.FC = () => {
   const fetchData = async () => {
     try {
       const [teamsRes, usersRes, deptsRes] = await Promise.all([
-        fetch(`${API_URL}/admin/teams`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/users`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        }),
-        fetch(`${API_URL}/admin/departments`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('irongate_token')}` }
-        })
+        fetch(`${API_URL}/admin/teams`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/users`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/departments`, { credentials: 'include' })
       ]);
 
       if (teamsRes.ok) {
@@ -217,9 +211,7 @@ const TeamsView: React.FC = () => {
                                   try {
                                     const response = await fetch(`${API_URL}/admin/teams/${team.id}`, {
                                       method: 'DELETE',
-                                      headers: {
-                                        'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-                                      }
+                                      credentials: 'include'
                                     });
                                     
                                     if (response.ok) {
@@ -274,10 +266,8 @@ const TeamsView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/teams/${selectedTeam?.id}`, {
               method: 'PUT',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 name: editForm.name,
                 description: editForm.description || null
@@ -356,10 +346,8 @@ const TeamsView: React.FC = () => {
           try {
             const response = await fetch(`${API_URL}/admin/teams`, {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-              },
+              headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify({
                 name: editForm.name,
                 description: editForm.description || null,

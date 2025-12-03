@@ -33,7 +33,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
   // Fetch departments for admin users
   useEffect(() => {
-    if (user?.role === 'super_admin' || user?.role === 'manager') {
+    if (user?.role === 'super_admin' || user?.role === 'qa_manager') {
       fetchDepartments();
     }
   }, [user?.role]);
@@ -45,15 +45,12 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
   const fetchTeamsWithMetrics = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
-      if (!token) return;
-
       // Fetch metrics for each team
       const teamsWithData = await Promise.all(
         teams.map(async (team) => {
           try {
             const response = await fetch(`${API_URL}/teams/${team.id}`, {
-              headers: { 'Authorization': `Bearer ${token}` }
+              credentials: 'include'
             });
             
             if (response.ok) {
@@ -137,9 +134,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
   const fetchDepartments = async () => {
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/departments`, {
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
@@ -187,8 +183,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   const config = themeConfig[themeName] || themeConfig.ocean;
 
   // Filter teams based on user role
-  // QA Engineers and Viewers only see their own team
-  const userTeams = (user?.role === 'qa_engineer' || user?.role === 'viewer')
+  // QA Engineers only see their own team, Viewers see all teams
+  const userTeams = (user?.role === 'qa_engineer')
     ? teamsWithMetrics.filter(team => team.id === user?.primaryTeamId)
     : teamsWithMetrics;
 
@@ -428,7 +424,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-[15px]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-            {(user?.role === 'qa_engineer' || user?.role === 'viewer') 
+            {(user?.role === 'qa_engineer') 
               ? 'My Team Performance'
               : 'Team Performance'}
           </h2>
@@ -466,7 +462,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
               </button>
             </div>
             {/* Department Selector - Admin only */}
-            {(user?.role === 'super_admin' || user?.role === 'manager') && departments.length > 0 && (
+            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && departments.length > 0 && (
               <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg px-3 py-2 shadow-sm">
                 <Building2 size={16} className="text-gray-500 dark:text-slate-400" />
                 <select

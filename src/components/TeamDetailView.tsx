@@ -3,6 +3,7 @@ import type { Team } from '../data/mockData';
 import { generateDetailedKPIs } from '../data/detailedKPIs';
 import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAuth } from '../contexts/AuthContext';
 import { getMetricTextColor, getMetricStatus, getMetricBgColor, METRICS_CONFIG } from '../config/metricsConfig';
 
 // Extended Team type with kpiData from API
@@ -112,6 +113,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   // Use useMemo to prevent regenerating KPIs on every render
   const detailedKPIs = useMemo(() => generateDetailedKPIs(team), [team]);
   const { isDark } = useTheme();
+  const { user } = useAuth();
+  
+  // Only leads, managers, and admins can see developer stats and AI insights
+  const canViewDeveloperInsights = ['super_admin', 'qa_manager', 'team_lead'].includes(user?.role || '');
   
   // Get real values from kpiData or use defaults
   const kpi = team.kpiData || {};
@@ -199,11 +204,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   useEffect(() => {
     const fetchMetricIntervals = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
-        if (!token) return;
-
         const response = await fetch(`${API_URL}/settings/metric-intervals`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
 
         if (response.ok) {
@@ -226,11 +228,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   useEffect(() => {
     const fetchKpiHistory = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
-        if (!token) return;
-
         const response = await fetch(`${API_URL}/teams/${team.id}/kpi-history?days=30`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
 
         if (response.ok) {
@@ -249,19 +248,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   useEffect(() => {
     const fetchTeamMembers = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
-        if (!token) {
-          console.error('No auth token found');
-          setLoading(false);
-          return;
-        }
-
         console.log(`Fetching members for team: ${team.id} (${team.name})`);
         const response = await fetch(`${API_URL}/teams/${team.id}`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
         });
 
         console.log('Response status:', response.status);
@@ -279,10 +269,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
           // Fetch real developer metrics from database
           const metricsResponse = await fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include'
           });
 
           let dbMetrics: Record<string, any> = {};
@@ -353,22 +341,18 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
     fetchTeamMembers();
   }, [team.id, team.name]);
   
+  // Only fetch AI suggestions for users who can view them (leads, managers, admins)
   useEffect(() => {
+    if (!canViewDeveloperInsights) return;
+    
     const fetchAISuggestions = async () => {
       try {
         setAILoading(true);
         setAIError(null);
-        const token = localStorage.getItem('irongate_token');
-        if (!token) {
-          setAILoading(false);
-          return;
-        }
 
         const response = await fetch(`${API_URL}/teams/${team.id}/ai-suggestions`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
         });
 
         if (!response.ok) {
@@ -388,24 +372,19 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
     };
 
     fetchAISuggestions();
-  }, [team.id]);
+  }, [team.id, canViewDeveloperInsights]);
 
-  // Fetch developer AI suggestions
+  // Fetch developer AI suggestions - only for leads, managers, admins
   useEffect(() => {
+    if (!canViewDeveloperInsights) return;
+    
     const fetchDevAISuggestions = async () => {
       try {
         setDevAILoading(true);
-        const token = localStorage.getItem('irongate_token');
-        if (!token) {
-          setDevAILoading(false);
-          return;
-        }
 
         const response = await fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include'
         });
 
         if (response.ok) {
@@ -420,7 +399,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
     };
 
     fetchDevAISuggestions();
-  }, [team.id]);
+  }, [team.id, canViewDeveloperInsights]);
   
   const categories = [
     { id: 'quality', name: 'Quality & Testing', color: 'blue' },
@@ -711,6 +690,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
       </div>
 
       {/* Developer Productivity Section */}
+      {user?.role !== 'qa_engineer' && (
       <div className="px-8 py-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
@@ -840,6 +820,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           </div>
         )}
       </div>
+      )}
 
       {/* Content */}
       <div className="px-8 py-8">
@@ -944,7 +925,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           );
         })}
       </div>
-            <div className="px-4 sm:px-6 lg:px-8 pb-10">
+
+      {/* Metrics Overview and AI Insights Section */}
+      <div className="px-4 sm:px-6 lg:px-8 pb-10">
         <div className="w-full">
           {/* Metrics Overview Section */}
           {team.kpiData && (
@@ -1082,7 +1065,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 {kpi.changeFailureRate !== undefined && (
                   <div className={`rounded-lg border p-3 ${
                     Number(kpi.changeFailureRate) <= 5 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    Number(kpi.changeFailureRate) <= 15 ? 'border-amber-500/40 bg-amber-500/10' :
+                    Number(kpi.changeFailureRate) <= 15 ? 'border-emerald-500/40 bg-emerald-500/10' :
                     'border-red-500/40 bg-red-500/10'
                   }`}>
                     <div className="flex items-center justify-between mb-1">
@@ -1123,7 +1106,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             </div>
           )}
 
-          {/* AI Insights Header */}
+          {/* AI Insights Header - Only visible to leads, managers, and admins */}
+          {canViewDeveloperInsights && (
           <div className="mb-6 flex flex-col gap-3">
             <div className="flex items-center gap-3 text-lg font-semibold text-gray-700 dark:text-slate-300">
               <span className="p-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full text-white">
@@ -1138,21 +1122,22 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               <span className="text-sm text-gray-500 dark:text-slate-400">Generating recommendations...</span>
             )}
           </div>
+          )}
 
-          {aiError && (
+          {canViewDeveloperInsights && aiError && (
             <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
               {aiError}
             </div>
           )}
 
-          {!aiLoading && !aiError && !aiSuggestions && (
+          {canViewDeveloperInsights && !aiLoading && !aiError && !aiSuggestions && (
             <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
               No AI insights available yet for this team. Make sure metrics are recorded.
             </div>
           )}
 
           {/* AI Disabled Message */}
-          {aiSuggestions && !aiSuggestions.aiEnabled && (
+          {canViewDeveloperInsights && aiSuggestions?.aiEnabled === false && (
             <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
               <span className="font-medium">AI suggestions are disabled for this team.</span>
               <span className="ml-1 text-amber-400/80">Enable AI in admin settings to get personalized recommendations.</span>
@@ -1160,10 +1145,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           )}
 
           {/* AI Enabled - Show Suggestions */}
-          {aiSuggestions && aiSuggestions.aiEnabled && (
+          {canViewDeveloperInsights && aiSuggestions?.aiEnabled && (
             <>
               {/* Source indicator and disclaimer */}
-              {aiSuggestions.source && (
+              {aiSuggestions?.source && (
                 <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
                   <div className="text-xs text-slate-500 dark:text-slate-400">
                     Powered by: <span className="text-purple-400">{aiSuggestions.source === 'groq' ? 'AI' : 'Rule-based analysis'}</span>
@@ -1179,10 +1164,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm dark:from-slate-900 dark:to-slate-800 dark:border-slate-700">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Strongpoints</span>
-                    <span className="text-[10px] text-slate-400">{aiSuggestions.strongpoints.length} items</span>
+                    <span className="text-[10px] text-slate-400">{aiSuggestions?.strongpoints?.length || 0} items</span>
                   </div>
                   <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-200">
-                    {aiSuggestions.strongpoints.length ? aiSuggestions.strongpoints.map((point, idx) => (
+                    {(aiSuggestions?.strongpoints?.length || 0) > 0 ? aiSuggestions.strongpoints.map((point, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <span className="mt-0.5 text-emerald-500">•</span>
                         <span>{point}</span>
@@ -1195,10 +1180,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold uppercase tracking-wide text-amber-500">Areas of Improvement</span>
-                    <span className="text-[10px] text-slate-400">{aiSuggestions.areasOfImprovement.length} items</span>
+                    <span className="text-[10px] text-slate-400">{aiSuggestions?.areasOfImprovement?.length || 0} items</span>
                   </div>
                   <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-200">
-                    {aiSuggestions.areasOfImprovement.length ? aiSuggestions.areasOfImprovement.map((area, idx) => (
+                    {(aiSuggestions?.areasOfImprovement?.length || 0) > 0 ? aiSuggestions.areasOfImprovement.map((area, idx) => (
                       <li key={idx} className="flex items-start gap-2">
                         <span className="mt-0.5 text-amber-500">•</span>
                         <span>{area}</span>
@@ -1211,10 +1196,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-semibold uppercase tracking-wide text-cyan-500">Action Plan</span>
-                    <span className="text-[10px] text-slate-400">{aiSuggestions.actionPlan.length} items</span>
+                    <span className="text-[10px] text-slate-400">{aiSuggestions?.actionPlan?.length || 0} items</span>
                   </div>
                   <div className="space-y-3">
-                    {aiSuggestions.actionPlan.length ? aiSuggestions.actionPlan.map((item, idx) => (
+                    {(aiSuggestions?.actionPlan?.length || 0) > 0 ? aiSuggestions.actionPlan.map((item, idx) => (
                       <div key={idx} className="rounded-xl border border-gray-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
                         <div className="flex items-center justify-between mb-1">
                           <span className={`text-[10px] font-semibold uppercase tracking-wide ${
@@ -1239,181 +1224,185 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
         </div>
       </div>
 
-      {/* Developer AI Insights Section */}
-      <div className="px-4 sm:px-6 lg:px-8 pb-10">
-        <div className="w-full">
-          <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Users className="text-indigo-500" size={24} />
-              Developer Insights
-            </h2>
-            {devAILoading && (
-              <span className="text-sm text-gray-500 dark:text-slate-400">Analyzing developer metrics...</span>
-            )}
-          </div>
-
-          {/* Team Insight Summary */}
-          {devAISuggestions && devAISuggestions.aiEnabled && devAISuggestions.teamInsight && (
-            <div className="mb-4 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-3">
-              <p className="text-sm text-indigo-300">{devAISuggestions.teamInsight}</p>
-              {devAISuggestions.source && (
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-[10px] text-slate-500">
-                    Powered by: <span className="text-purple-400">{devAISuggestions.source === 'groq' ? 'AI' : 'Rule-based analysis'}</span>
-                  </span>
-                  {devAISuggestions.source === 'groq' && (
-                    <span className="text-[10px] text-slate-500 italic">
-                      ⚠️ Generated by AI. May contain inaccuracies.
-                    </span>
-                  )}
-                </div>
+      {/* Developer AI Insights Section - Only visible to leads, managers, and admins */}
+      {canViewDeveloperInsights && (
+        <>
+          <div className="px-4 sm:px-6 lg:px-8 pb-10">
+          <div className="w-full">
+            <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Users className="text-indigo-500" size={24} />
+                Developer Insights
+              </h2>
+              {devAILoading && (
+                <span className="text-sm text-gray-500 dark:text-slate-400">Analyzing developer metrics...</span>
               )}
             </div>
-          )}
 
-          {/* Raw Developer Metrics Table */}
-          {devAISuggestions?.metrics && devAISuggestions.metrics.length > 0 && (
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Saved Developer Metrics</h3>
-                <span className="text-xs text-gray-600">
-                  Showing {devAISuggestions.metrics.length} developer{devAISuggestions.metrics.length > 1 ? 's' : ''}
-                </span>
-              </div>
-              <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
-                <table className="min-w-full text-xs sm:text-sm text-left">
-                  <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Developer</th>
-                      <th className="px-4 py-3 font-medium">PR Time (h)</th>
-                      <th className="px-4 py-3 font-medium">Review (h)</th>
-                      <th className="px-4 py-3 font-medium">Focus (h/day)</th>
-                      <th className="px-4 py-3 font-medium">Meetings (h/day)</th>
-                      <th className="px-4 py-3 font-medium">Context Switches</th>
-                      <th className="px-4 py-3 font-medium">Happiness</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {devAISuggestions.metrics.map((metric) => (
-                      <tr key={metric.name} className="border-t border-gray-100 dark:border-slate-800/70">
-                        <td className="px-4 py-3 text-gray-900 font-medium dark:text-slate-100">{metric.name}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.prMergeTimeHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.codeReviewTimeHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.focusTimeHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.meetingTimeHours.toFixed(1)}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.contextSwitchesPerDay}</td>
-                        <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.happinessScore.toFixed(0)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          {/* No data message */}
-          {!devAILoading && devAISuggestions && devAISuggestions.developers.length === 0 && (
-            <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-300">
-              {devAISuggestions.message || 'No developer metrics available. Add developer metrics in the Manual Metrics Input section.'}
-            </div>
-          )}
-
-          {/* Developer Cards */}
-          {devAISuggestions && devAISuggestions.aiEnabled && devAISuggestions.developers.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {devAISuggestions.developers.map((dev, idx) => {
-                const metrics = devAISuggestions.metrics?.find(m => m.name === dev.name);
-                return (
-                  <div 
-                    key={idx} 
-                    className={`rounded-lg border p-4 text-slate-800 transition-shadow hover:shadow-xl dark:text-slate-100 ${
-                      dev.status === 'healthy'
-                        ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-400 dark:bg-slate-900/70'
-                        : dev.status === 'at-risk'
-                          ? 'border-amber-300 bg-amber-50/60 dark:border-amber-400 dark:bg-slate-900/70'
-                          : 'border-rose-300 bg-rose-50/60 dark:border-rose-400 dark:bg-slate-900/70'
-                    }`
-                  }
-                  >
-                    {/* Header */}
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{dev.name}</h4>
-                      <span className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
-                        dev.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-400' :
-                        dev.status === 'at-risk' ? 'bg-amber-500/20 text-amber-400' :
-                        'bg-red-500/20 text-red-400'
-                      }`}>
-                        {dev.status.replace('-', ' ')}
+            {/* Team Insight Summary */}
+            {devAISuggestions?.aiEnabled && devAISuggestions?.teamInsight && (
+              <div className="mb-4 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-3">
+                <p className="text-sm text-indigo-300">{devAISuggestions.teamInsight}</p>
+                {devAISuggestions.source && (
+                  <div className="mt-2 flex items-center justify-between">
+                    <span className="text-[10px] text-slate-500">
+                      Powered by: <span className="text-purple-400">{devAISuggestions.source === 'groq' ? 'AI' : 'Rule-based analysis'}</span>
+                    </span>
+                    {devAISuggestions.source === 'groq' && (
+                      <span className="text-[10px] text-slate-500 italic">
+                        ⚠️ Generated by AI. May contain inaccuracies.
                       </span>
-                    </div>
-
-                    {/* Metrics Row */}
-                    {metrics && (
-                      <div className="grid grid-cols-5 gap-1 mb-3 text-center">
-                        {(
-                          [
-                            { label: 'PR', value: `${metrics.prMergeTimeHours.toFixed(1)}h`, key: 'prMergeTimeHours' },
-                            { label: 'Review', value: `${metrics.codeReviewTimeHours.toFixed(1)}h`, key: 'codeReviewTimeHours' },
-                            { label: 'Focus', value: `${metrics.focusTimeHours.toFixed(1)}h`, key: 'focusTimeHours' },
-                            { label: 'Mtgs', value: `${metrics.meetingTimeHours.toFixed(1)}h`, key: 'meetingTimeHours' },
-                            { label: 'Ctx', value: `${metrics.contextSwitchesPerDay}`, key: 'contextSwitchesPerDay' }
-                          ] as const
-                        ).map((item) => (
-                          <div key={item.label} className="bg-slate-100/60 dark:bg-slate-800/50 rounded p-1.5">
-                            <div className="text-[10px] text-slate-400 uppercase">{item.label}</div>
-                            <div className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}` }>
-                              {item.value}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
                     )}
-
-                    {/* Summary */}
-                    <p className="text-sm text-slate-600 mb-2 leading-relaxed">{dev.summary}</p>
-
-                    {/* Strengths */}
-                    {dev.strengths.length > 0 && (
-                      <div className="mb-2">
-                        <div className="text-[10px] text-emerald-500 uppercase font-medium mb-1">Strengths</div>
-                        <div className="flex flex-wrap gap-1">
-                          {dev.strengths.map((s, i) => (
-                            <span key={i} className="text-[10px] bg-emerald-500/10 text-emerald-700 px-1.5 py-0.5 rounded">
-                              {s}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Concerns */}
-                    {dev.concerns.length > 0 && (
-                      <div className="mb-2">
-                        <div className="text-[10px] text-amber-500 uppercase font-medium mb-1">Concerns</div>
-                        <div className="flex flex-wrap gap-1">
-                          {dev.concerns.map((c, i) => (
-                            <span key={i} className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded">
-                              {c}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Suggestion */}
-                    <div className="mt-3 pt-2 border-t border-slate-700">
-                      <div className="text-[10px] text-cyan-400 uppercase font-medium mb-1">Recommendation</div>
-                      <p className="text-sm text-slate-600 leading-relaxed">{dev.suggestion}</p>
-                    </div>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+                )}
+              </div>
+            )}
+
+            {/* Raw Developer Metrics Table */}
+            {devAISuggestions?.metrics && devAISuggestions.metrics.length > 0 && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Saved Developer Metrics</h3>
+                  <span className="text-xs text-gray-600">
+                    Showing {devAISuggestions.metrics.length} developer{devAISuggestions.metrics.length > 1 ? 's' : ''}
+                  </span>
+                </div>
+                <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
+                  <table className="min-w-full text-xs sm:text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
+                      <tr>
+                        <th className="px-4 py-3 font-medium">Developer</th>
+                        <th className="px-4 py-3 font-medium">PR Time (h)</th>
+                        <th className="px-4 py-3 font-medium">Review (h)</th>
+                        <th className="px-4 py-3 font-medium">Focus (h/day)</th>
+                        <th className="px-4 py-3 font-medium">Meetings (h/day)</th>
+                        <th className="px-4 py-3 font-medium">Context Switches</th>
+                        <th className="px-4 py-3 font-medium">Happiness</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {devAISuggestions.metrics.map((metric) => (
+                        <tr key={metric.name} className="border-t border-gray-100 dark:border-slate-800/70">
+                          <td className="px-4 py-3 text-gray-900 font-medium dark:text-slate-100">{metric.name}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.prMergeTimeHours.toFixed(1)}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.codeReviewTimeHours.toFixed(1)}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.focusTimeHours.toFixed(1)}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.meetingTimeHours.toFixed(1)}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.contextSwitchesPerDay}</td>
+                          <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.happinessScore.toFixed(0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* No data message */}
+            {!devAILoading && devAISuggestions && devAISuggestions.developers?.length === 0 && (
+              <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-300">
+                {devAISuggestions.message || 'No developer metrics available. Add developer metrics in the Manual Metrics Input section.'}
+              </div>
+            )}
+
+            {/* Developer Cards */}
+            {devAISuggestions?.aiEnabled && devAISuggestions?.developers && devAISuggestions.developers.length > 0 && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {devAISuggestions.developers.map((dev, idx) => {
+                  const metrics = devAISuggestions.metrics?.find(m => m.name === dev.name);
+                  return (
+                    <div 
+                      key={idx} 
+                      className={`rounded-lg border p-4 text-slate-800 transition-shadow hover:shadow-xl dark:text-slate-100 ${
+                        dev.status === 'healthy'
+                          ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-400 dark:bg-slate-900/70'
+                          : dev.status === 'at-risk'
+                            ? 'border-amber-300 bg-amber-50/60 dark:border-amber-400 dark:bg-slate-900/70'
+                            : 'border-rose-300 bg-rose-50/60 dark:border-rose-400 dark:bg-slate-900/70'
+                      }`
+                    }
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{dev.name}</h4>
+                        <span className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${
+                          dev.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-400' :
+                          dev.status === 'at-risk' ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-red-500/20 text-red-400'
+                        }`}>
+                          {dev.status.replace('-', ' ')}
+                        </span>
+                      </div>
+
+                      {/* Metrics Row */}
+                      {metrics && (
+                        <div className="grid grid-cols-5 gap-1 mb-3 text-center">
+                          {(
+                            [
+                              { label: 'PR', value: `${metrics.prMergeTimeHours.toFixed(1)}h`, key: 'prMergeTimeHours' },
+                              { label: 'Review', value: `${metrics.codeReviewTimeHours.toFixed(1)}h`, key: 'codeReviewTimeHours' },
+                              { label: 'Focus', value: `${metrics.focusTimeHours.toFixed(1)}h`, key: 'focusTimeHours' },
+                              { label: 'Mtgs', value: `${metrics.meetingTimeHours.toFixed(1)}h`, key: 'meetingTimeHours' },
+                              { label: 'Ctx', value: `${metrics.contextSwitchesPerDay}`, key: 'contextSwitchesPerDay' }
+                            ] as const
+                          ).map((item) => (
+                            <div key={item.label} className="bg-slate-100/60 dark:bg-slate-800/50 rounded p-1.5">
+                              <div className="text-[10px] text-slate-400 uppercase">{item.label}</div>
+                              <div className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}` }>
+                                {item.value}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Summary */}
+                      <p className="text-sm text-slate-600 mb-2 leading-relaxed">{dev.summary}</p>
+
+                      {/* Strengths */}
+                      {dev.strengths?.length > 0 && (
+                        <div className="mb-2">
+                          <div className="text-[10px] text-emerald-500 uppercase font-medium mb-1">Strengths</div>
+                          <div className="flex flex-wrap gap-1">
+                            {dev.strengths.map((s, i) => (
+                              <span key={i} className="text-[10px] bg-emerald-500/10 text-emerald-700 px-1.5 py-0.5 rounded">
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Concerns */}
+                      {dev.concerns?.length > 0 && (
+                        <div className="mb-2">
+                          <div className="text-[10px] text-amber-500 uppercase font-medium mb-1">Concerns</div>
+                          <div className="flex flex-wrap gap-1">
+                            {dev.concerns.map((c, i) => (
+                              <span key={i} className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded">
+                                {c}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Suggestion */}
+                      <div className="mt-3 pt-2 border-t border-slate-700">
+                        <div className="text-[10px] text-cyan-400 uppercase font-medium mb-1">Recommendation</div>
+                        <p className="text-sm text-slate-600 leading-relaxed">{dev.suggestion}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          </div>
+        </>
+      )}
+  </div>
+);
 };
 
 export default TeamDetailView;

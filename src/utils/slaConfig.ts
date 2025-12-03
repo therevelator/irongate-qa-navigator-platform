@@ -31,14 +31,11 @@ export const fetchSLAConfig = async (teamId?: string): Promise<SLAConfig> => {
   }
 
   try {
-    const token = localStorage.getItem('irongate_token');
-    if (!token) return DEFAULT_SLA_CONFIG;
-
     const params = new URLSearchParams();
     if (teamId) params.append('teamId', teamId);
 
     const response = await fetch(`${API_URL}/admin/configs?${params}`, {
-      headers: { 'Authorization': `Bearer ${token}` }
+      credentials: 'include'
     });
 
     if (!response.ok) {

@@ -152,12 +152,27 @@ router.post('/register', async (req, res) => {
 
     // Generate token
     const token = jwt.sign(
-      { userId: user.id, role: user.role, companyId: user.company_id },
+      { 
+        userId: user.id, 
+        role: user.role, 
+        companyId: user.company_id,
+        departmentId: user.department_id,
+        primaryTeamId: user.primary_team_id
+      },
       secrettoken,
       { expiresIn: '7d' }
     );
 
-    res.status(201).json({ user, token });
+    // Set secure cookie
+    const isProduction = process.env.NODE_ENV === 'production';
+    res.cookie('irongate_token', token, {
+      httpOnly: true,
+      secure: isProduction, // secure only in production (https)
+      sameSite: isProduction ? 'strict' : 'lax', // lax for local dev
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    res.status(201).json({ user });
   } catch (error) {
     console.error('Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
@@ -222,18 +237,41 @@ router.post('/login', async (req, res) => {
       { expiresIn: '7d' }
     );
 
-    res.json({ user, token });
+    // Set secure cookie
+    res.cookie('irongate_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    res.json({ user });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
   }
 });
 
+// Logout
+router.post('/logout', (req, res) => {
+  res.clearCookie('irongate_token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax'
+  });
+  res.json({ message: 'Logged out successfully' });
+});
+
 // Get current user
 router.get('/me', async (req, res) => {
   try {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+    // Check cookie first, then header
+    let token = req.cookies.irongate_token;
+    
+    if (!token) {
+      const authHeader = req.headers['authorization'];
+      token = authHeader && authHeader.split(' ')[1];
+    }
 
     if (!token) {
       return res.status(401).json({ error: 'Token required' });
@@ -268,6 +306,10 @@ router.get('/me', async (req, res) => {
 
     res.json({ user });
   } catch (error) {
+    // Don't log "jwt malformed" or "jwt expired" as errors, just return 401
+    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
     console.error('Get user error:', error);
     res.status(500).json({ error: 'Failed to get user' });
   }

@@ -40,16 +40,14 @@ const Dashboard: React.FC = () => {
       setLoading(true);
       
       // Fetch data based on user role
-      const token = localStorage.getItem('irongate_token');
       const headers: HeadersInit = {
         'Content-Type': 'application/json'
       };
       
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const response = await fetch(`${API_URL}/metrics/dashboard`, { headers });
+      const response = await fetch(`${API_URL}/metrics/dashboard`, { 
+        headers,
+        credentials: 'include'
+      });
       
       if (response.ok) {
         const data = await response.json();

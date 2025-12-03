@@ -139,9 +139,8 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
     
     const fetchTeams = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
         const response = await fetch(`${API_URL}/teams`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         if (response.ok) {
           const data = await response.json();
@@ -164,11 +163,9 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
     const fetchData = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem('irongate_token');
-        
         // Fetch real data from database
         const response = await fetch(`${API_URL}/analytics/business-impact-v2/${selectedTeamId}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         
         if (response.ok) {
@@ -295,8 +292,6 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
 
     setSaving(true);
     try {
-      const token = localStorage.getItem('irongate_token');
-      
       // Filter to only months with data
       const dataToSave = monthlyData.filter(m => 
         Object.values(m.quality).some(v => v !== null) ||
@@ -306,10 +301,8 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
 
       const response = await fetch(`${API_URL}/analytics/business-impact-v2/${selectedTeamId}/bulk-save`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ monthlyData: dataToSave })
       });
 
@@ -336,10 +329,9 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
 
     setCalculating(true);
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/analytics/business-impact-v2/${selectedTeamId}/calculate-correlations`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` }
+        credentials: 'include'
       });
 
       if (response.ok) {
@@ -421,14 +413,8 @@ ANALYSIS REQUIREMENTS:
 
 Provide actionable insights that a CTO would understand and use to make investment decisions. Output ONLY valid HTML, no markdown.`;
 
-      // Make actual API call to Groq (placeholder - needs backend implementation)
-      console.log('🚀 Making Groq API call with payload:');
-      console.log('URL:', `${API_URL}/api/groq/chat/completions`);
-      console.log('Method:', 'POST');
-      console.log('Headers:', {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('irongate_token')}`
-      });
+      // Make actual API call to Groq
+      console.log('🚀 Making Groq API call...');
       console.log('Body:', JSON.stringify({
         model: 'mixtral-8x7b-32768',
         messages: [

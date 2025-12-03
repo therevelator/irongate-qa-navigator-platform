@@ -107,12 +107,9 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = ({ onBac
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
-        const headers = { 'Authorization': `Bearer ${token}` };
-
         const [deptRes, teamsRes] = await Promise.all([
-          fetch(`${API_URL}/admin/departments`, { headers }),
-          fetch(`${API_URL}/teams`, { headers })
+          fetch(`${API_URL}/admin/departments`, { credentials: 'include' }),
+          fetch(`${API_URL}/teams`, { credentials: 'include' })
         ]);
 
         if (deptRes.ok) {
@@ -135,13 +132,12 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = ({ onBac
     const fetchConfigs = async () => {
       setLoading(true);
       try {
-        const token = localStorage.getItem('irongate_token');
         const params = new URLSearchParams();
         if (selectedDepartment !== 'all') params.append('departmentId', selectedDepartment);
         if (selectedTeam !== 'all') params.append('teamId', selectedTeam);
 
         const response = await fetch(`${API_URL}/admin/configs/raw?${params}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
 
         if (response.ok) {
@@ -164,13 +160,10 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = ({ onBac
   const handleSave = async () => {
     setSaving(true);
     try {
-      const token = localStorage.getItem('irongate_token');
       const response = await fetch(`${API_URL}/admin/configs`, {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           departmentId: selectedDepartment,
           teamId: selectedTeam,

@@ -16,9 +16,8 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack })
   useEffect(() => {
     const fetchFlakyTests = async () => {
       try {
-        const token = localStorage.getItem('irongate_token');
         const response = await fetch(`${API_URL}/analytics/flaky-tests`, {
-          headers: { 'Authorization': `Bearer ${token}` }
+          credentials: 'include'
         });
         if (response.ok) {
           const data = await response.json();
