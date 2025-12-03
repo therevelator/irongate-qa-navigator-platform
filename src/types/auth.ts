@@ -173,7 +173,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     description: 'Own team only',
     level: 2,
     permissions: {
-      viewAllTeams: false,
+      viewAllTeams: true,  // Allow viewing all teams
       manageTeams: false,
       manageUsers: false,
       accessAdvancedFeatures: true, // Limited features
@@ -184,7 +184,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
       manageBilling: false,
     },
     features: {
-      dashboard: 'own',
+      dashboard: 'all',  // Allow viewing all teams and departments
       flakyTests: true,
       technicalDebt: true,
       pipeline: true,

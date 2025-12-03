@@ -183,10 +183,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   const config = themeConfig[themeName] || themeConfig.ocean;
 
   // Filter teams based on user role
-  // QA Engineers only see their own team, Viewers see all teams
-  const userTeams = (user?.role === 'qa_engineer')
-    ? teamsWithMetrics.filter(team => team.id === user?.primaryTeamId)
-    : teamsWithMetrics;
+  // All roles now see all teams (no filtering)
+  const userTeams = teamsWithMetrics;
 
   // Filter teams by department (for admins) and performance filter
   const filteredTeams = userTeams.filter(team => {
@@ -424,9 +422,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-[15px]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-            {(user?.role === 'qa_engineer') 
-              ? 'My Team Performance'
-              : 'Team Performance'}
+            Team Performance
           </h2>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
             <div className="flex flex-wrap gap-2">

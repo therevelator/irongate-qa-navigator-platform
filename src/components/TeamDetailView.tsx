@@ -689,8 +689,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
         </div>
       </div>
 
-      {/* Developer Productivity Section */}
-      {user?.role !== 'qa_engineer' && (
+      {/* Developer Productivity Section - Show for all except QA Engineers who aren't on this team */}
+      {(user?.role !== 'qa_engineer' || team.id === user?.primaryTeamId) && (
       <div className="px-8 py-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
@@ -698,7 +698,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             Team Members
           </h2>
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            {loading ? 'Loading...' : `${developers.length} ${developers.length === 1 ? 'developer' : 'developers'}`}
+            {loading ? 'Loading...' : (() => {
+              const filteredCount = developers.filter(developer => {
+                if (user?.role === 'qa_engineer' && team.id === user.primaryTeamId) {
+                  return developer.developer_id === user.id;
+                }
+                return true;
+              }).length;
+              return `${filteredCount} ${filteredCount === 1 ? 'developer' : 'developers'}`;
+            })()}
           </span>
         </div>
         
@@ -706,7 +714,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
           </div>
-        ) : developers.length === 0 ? (
+        ) : (() => {
+          const filteredDevelopers = developers.filter(developer => {
+            if (user?.role === 'qa_engineer' && team.id === user.primaryTeamId) {
+              return developer.developer_id === user.id;
+            }
+            return true;
+          });
+          return filteredDevelopers.length === 0;
+        })() ? (
           <div className="bg-gray-50 dark:bg-slate-800 rounded-xl p-8 text-center">
             <Users className="mx-auto mb-4 text-gray-400" size={48} />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Team Members</h3>
@@ -714,7 +730,16 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           </div>
         ) : (
           <div className="space-y-4">
-            {developers.map((developer) => {
+            {developers
+              .filter(developer => {
+                // For QA Engineers viewing their own team, only show themselves
+                if (user?.role === 'qa_engineer' && team.id === user.primaryTeamId) {
+                  return developer.developer_id === user.id;
+                }
+                // For all others, show all developers
+                return true;
+              })
+              .map((developer) => {
             const workLifeBalance = ((developer.focus_time_hours / (developer.focus_time_hours + developer.meeting_time_hours)) * 100).toFixed(0);
             const happinessEmoji = developer.happiness_score >= 85 ? '😊' : developer.happiness_score >= 70 ? '🙂' : '😐';
             
