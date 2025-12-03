@@ -180,12 +180,9 @@ router.get('/dashboard', async (req: AuthRequest, res) => {
     let teamFilter = '';
     let params: any[] = [];
     
-    if (userRole === 'team_lead' && primaryTeamId) {
-      // Team lead sees only their team
-      teamFilter = 'WHERE t.id = ?';
-      params.push(primaryTeamId);
-    }
-    // qa_manager and super_admin see all teams (no filter)
+    // All roles can see all teams on the dashboard
+    // No role-based filtering for the main dashboard view
+    // qa_manager, team_lead, and super_admin see all teams (no filter)
     // Public users see all teams (no filter)
     
     // Get total teams count

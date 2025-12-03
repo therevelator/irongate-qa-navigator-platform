@@ -115,8 +115,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const { isDark } = useTheme();
   const { user } = useAuth();
   
+  // Check if this is the user's own team
+  const isOwnTeam = user?.primaryTeamId === team.id || user?.assignedTeams?.includes(team.id);
+  
   // Only leads, managers, and admins can see developer stats and AI insights
-  const canViewDeveloperInsights = ['super_admin', 'qa_manager', 'team_lead'].includes(user?.role || '');
+  // Team leads can only see these for their own team
+  const canViewDeveloperInsights = 
+    user?.role === 'super_admin' || 
+    user?.role === 'qa_manager' || 
+    (user?.role === 'team_lead' && isOwnTeam);
   
   // Get real values from kpiData or use defaults
   const kpi = team.kpiData || {};
@@ -689,8 +696,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
         </div>
       </div>
 
-      {/* Developer Productivity Section - Show for all except QA Engineers who aren't on this team */}
-      {(user?.role !== 'qa_engineer' || team.id === user?.primaryTeamId) && (
+      {/* Developer Productivity Section - Show for admins/managers always, team leads only for own team, QA engineers only for own team (themselves only) */}
+      {(user?.role === 'super_admin' || user?.role === 'qa_manager' || 
+        (user?.role === 'team_lead' && isOwnTeam) ||
+        (user?.role === 'qa_engineer' && team.id === user?.primaryTeamId)) && (
       <div className="px-8 py-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">

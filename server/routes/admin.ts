@@ -298,18 +298,23 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
 // Toggle user active status
 router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res) => {
   try {
-    const { role: creatorRole, companyId, departmentId: userDeptId } = req.user;
+    const { role: creatorRole, companyId, departmentId: userDeptId, primaryTeamId: userTeamId } = req.user;
     const { id: userId } = req.params;
 
-    // Only Super Admin and QA Manager can toggle user status
-    if (creatorRole !== 'super_admin' && creatorRole !== 'qa_manager') {
+    // Only Super Admin, QA Manager, and Team Lead can toggle user status
+    if (creatorRole !== 'super_admin' && creatorRole !== 'qa_manager' && creatorRole !== 'team_lead') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    // Get user to check department and current status
-    const existingUser = await queryOne<any>('SELECT department_id, is_active FROM users WHERE id = ?', [userId]);
+    // Get user to check permissions
+    const existingUser = await queryOne<any>('SELECT department_id, primary_team_id, is_active FROM users WHERE id = ?', [userId]);
     if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Team lead can only toggle users in their team
+    if (creatorRole === 'team_lead' && existingUser.primary_team_id !== userTeamId) {
+      return res.status(403).json({ error: 'Can only manage users in your team' });
     }
 
     // QA Manager can only toggle users in their department
@@ -334,7 +339,7 @@ router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res)
 // Toggle developer insights for a user (team lead and above)
 router.patch('/users/:id/developer-insights-toggle', authenticateToken, async (req: any, res) => {
   try {
-    const { role: userRole, companyId, departmentId: userDeptId } = req.user;
+    const { role: userRole, companyId, departmentId: userDeptId, primaryTeamId: userTeamId } = req.user;
     const { id: userId } = req.params;
     const { enabled } = req.body;
 
@@ -349,9 +354,9 @@ router.patch('/users/:id/developer-insights-toggle', authenticateToken, async (r
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Team lead can only toggle for users in their team/department
-    if (userRole === 'team_lead' && targetUser.department_id !== userDeptId) {
-      return res.status(403).json({ error: 'Can only manage users in your department' });
+    // Team lead can only toggle for users in their team
+    if (userRole === 'team_lead' && targetUser.primary_team_id !== userTeamId) {
+      return res.status(403).json({ error: 'Can only manage users in your team' });
     }
 
     // QA Manager can only toggle for users in their department

@@ -328,10 +328,18 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Toggle AI enabled for a team (admin only)
+// Toggle AI enabled for a team (admin, manager, or team lead for own team)
 router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    if (req.userRole !== 'super_admin' && req.userRole !== 'manager') {
+    const teamId = req.params.id;
+    
+    // Super admin and qa_manager can toggle any team
+    // Team lead can only toggle their own team
+    if (req.userRole === 'team_lead') {
+      if (req.user?.primaryTeamId !== teamId) {
+        return res.status(403).json({ error: 'Can only toggle AI for your own team' });
+      }
+    } else if (req.userRole !== 'super_admin' && req.userRole !== 'qa_manager') {
       return res.status(403).json({ error: 'Admin access required' });
     }
 
@@ -339,7 +347,7 @@ router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) 
     
     await query(
       'UPDATE teams SET ai_enabled = ? WHERE id = ? AND company_id = ?',
-      [enabled ? 1 : 0, req.params.id, req.companyId]
+      [enabled ? 1 : 0, teamId, req.companyId]
     );
 
     res.json({ success: true, ai_enabled: !!enabled });

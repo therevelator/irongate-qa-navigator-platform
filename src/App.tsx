@@ -83,15 +83,16 @@ function App() {
   }
   
   // Apply role-based filtering
-  if (user?.role === 'team_lead' || user?.role === 'qa_engineer') {
-    // Team leads and QA engineers see only their team
+  if (user?.role === 'qa_engineer') {
+    // QA engineers see only their team on dashboard
     filteredTeams = filteredTeams.filter((t: any) => t.id === user?.primaryTeamId);
-  } else if (user?.role === 'manager') {
+  } else if (user?.role === 'qa_manager') {
     // QA managers see teams in their department
     if (activeTab === 'all') {
       filteredTeams = filteredTeams.filter((t: any) => t.department_id === user?.departmentId);
     }
   }
+  // Team leads see all teams on dashboard (no filtering needed)
   
   // Handle feature navigation with optional team context
   const handleFeatureSelect = (featureId: string, teamId?: string) => {

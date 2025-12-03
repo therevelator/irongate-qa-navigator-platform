@@ -146,24 +146,24 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     description: 'Own team + limited cross-team visibility',
     level: 3,
     permissions: {
-      viewAllTeams: true, // Can view summary only
+      viewAllTeams: true, // Can view all teams on dashboard
       manageTeams: false, // Can only edit own team
       manageUsers: true, // Can manage own team members only
       accessAdvancedFeatures: true,
-      accessBusinessAnalytics: false,
+      accessBusinessAnalytics: true, // Can access analytics panel
       configureIntegrations: false,
       viewAuditLogs: false,
       exportData: true, // Own team only
       manageBilling: false,
     },
     features: {
-      dashboard: 'assigned',
+      dashboard: 'all',  // Can view all teams and departments
       flakyTests: true,
       technicalDebt: true,
       pipeline: true,
-      businessImpact: false,
+      businessImpact: true, // Can access analytics
       performance: true,
-      developerProductivity: true,
+      developerProductivity: true, // Only for own team (handled in component)
       executionTimeline: true,
       gamification: true,
     },

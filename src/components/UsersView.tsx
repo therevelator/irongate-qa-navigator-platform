@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Users, Search, Edit2, Key, Trash2, UserPlus, Save, UserCheck, UserX } from 'lucide-react';
+import { Users, Search, Edit2, Key, Trash2, UserPlus, Save, UserCheck, UserX, Bot } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
 import { confirmDelete } from '../utils/alerts';
@@ -16,6 +16,7 @@ interface User {
   department_id: string;
   primary_team_id: string;
   is_active: boolean;
+  developer_insights_enabled?: boolean;
 }
 
 import API_URL from '../config/api';
@@ -104,7 +105,28 @@ const UsersView: React.FC = () => {
     `${u.first_name} ${u.last_name} ${u.email} ${u.department_name || ''} ${u.team_name || ''}`
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
-  );
+  ).filter(u => {
+    // Team leads can only see users from their own team
+    if (user?.role === 'team_lead') {
+      return u.primary_team_id === user.primaryTeamId;
+    }
+    return true;
+  });
+
+  // Check if current user can manage a specific target user
+  const canManageTargetUser = (targetUser: User) => {
+    if (!user) return false;
+    
+    // Super admin and qa_manager can manage anyone
+    if (user.role === 'super_admin' || user.role === 'qa_manager') return true;
+    
+    // Team lead can only manage users from their own team
+    if (user.role === 'team_lead') {
+      return targetUser.primary_team_id === user.primaryTeamId;
+    }
+    
+    return false;
+  };
 
   const getRoleDisplay = (role: string) => {
     const roleMap: Record<string, string> = {
@@ -117,7 +139,7 @@ const UsersView: React.FC = () => {
     return roleMap[role] || role;
   };
 
-  const canManageUsers = user?.role === 'super_admin' || user?.role === 'manager' || user?.role === 'team_lead';
+  const canManageUsers = user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead';
 
   if (loading) {
     return (
@@ -245,6 +267,7 @@ const UsersView: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="flex items-center gap-1">
+                        {canManageTargetUser(u) && (
                         <button
                           onClick={() => {
                             setSelectedUser(u);
@@ -264,6 +287,8 @@ const UsersView: React.FC = () => {
                         >
                           <Edit2 size={16} />
                         </button>
+                        )}
+                        {canManageTargetUser(u) && (
                         <button
                           onClick={() => {
                             setSelectedUser(u);
@@ -275,8 +300,40 @@ const UsersView: React.FC = () => {
                         >
                           <Key size={16} />
                         </button>
-                        {canManageUsers && u.id !== user?.id && (
+                        )}
+                        {canManageTargetUser(u) && u.id !== user?.id && (
                           <>
+                            {/* AI Toggle for developer insights */}
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch(`${API_URL}/admin/users/${u.id}/developer-insights-toggle`, {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    credentials: 'include',
+                                    body: JSON.stringify({ enabled: !u.developer_insights_enabled })
+                                  });
+                                  
+                                  if (response.ok) {
+                                    toast.success(`Developer insights ${u.developer_insights_enabled ? 'disabled' : 'enabled'} for ${u.first_name}`);
+                                    fetchUsers();
+                                  } else {
+                                    toast.error('Failed to toggle developer insights');
+                                  }
+                                } catch (error) {
+                                  console.error('Error toggling developer insights:', error);
+                                  toast.error('Error toggling developer insights');
+                                }
+                              }}
+                              className={`p-1.5 transition-colors rounded hover:bg-gray-100 dark:hover:bg-slate-700 ${
+                                u.developer_insights_enabled
+                                  ? 'text-purple-500 dark:text-purple-400 hover:text-purple-600 dark:hover:text-purple-300'
+                                  : 'text-gray-400 dark:text-slate-400 hover:text-purple-500 dark:hover:text-purple-400'
+                              }`}
+                              title={u.developer_insights_enabled ? 'Disable Developer Insights' : 'Enable Developer Insights'}
+                            >
+                              <Bot size={16} />
+                            </button>
                             <button
                               onClick={async () => {
                                 try {
@@ -305,6 +362,8 @@ const UsersView: React.FC = () => {
                             >
                               {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
                             </button>
+                            {/* Delete button - only for super_admin and qa_manager */}
+                            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
                             <button
                               onClick={async () => {
                                 const result = await confirmDelete(`${u.first_name} ${u.last_name}`, 'user');
@@ -332,6 +391,7 @@ const UsersView: React.FC = () => {
                             >
                               <Trash2 size={16} />
                             </button>
+                            )}
                           </>
                         )}
                       </div>
