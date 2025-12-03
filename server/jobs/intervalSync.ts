@@ -153,9 +153,29 @@ async function recalculateQAScore(teamId: string): Promise<void> {
   );
 }
 
-// Get all active teams
+// Get all active teams that are NOT excluded from auto-sync (manually edited data)
 async function getActiveTeams(): Promise<{ id: string; name: string }[]> {
-  return await query<any>('SELECT id, name FROM teams WHERE is_active = true');
+  // Get teams not excluded from auto-sync
+  const teams = await query<any>(
+    `SELECT id, name FROM teams 
+     WHERE is_active = true 
+     AND (exclude_from_auto_sync = 0 OR exclude_from_auto_sync IS NULL)`
+  );
+  
+  // Also check for teams with manually edited snapshots
+  const manualTeams = await query<any>(
+    `SELECT DISTINCT team_id FROM kpi_snapshots WHERE manually_edited = 1`
+  );
+  const manualTeamIds = new Set(manualTeams.map((t: any) => t.team_id));
+  
+  // Filter out teams with manually edited data
+  const teamsToSync = teams.filter((t: any) => !manualTeamIds.has(t.id));
+  
+  if (teams.length !== teamsToSync.length) {
+    console.log(`  ℹ️  Skipping ${teams.length - teamsToSync.length} teams with manually edited data`);
+  }
+  
+  return teamsToSync;
 }
 
 // ============================================================================

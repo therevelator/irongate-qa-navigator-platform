@@ -8,14 +8,25 @@ cron.schedule('*/15 * * * *', async () => {
   console.log('🔄 Starting metrics sync...', new Date().toISOString());
   
   try {
-    // Get all active teams
+    // Get all active teams that are NOT excluded from auto-sync (manually edited data)
     const teams = await query<any[]>(
-      'SELECT id, name, company_id FROM teams WHERE is_active = true'
+      `SELECT id, name, company_id FROM teams 
+       WHERE is_active = true 
+       AND (exclude_from_auto_sync = 0 OR exclude_from_auto_sync IS NULL)`
     );
     
-    console.log(`Found ${teams.length} active teams to sync`);
+    // Also get teams with manually edited snapshots to skip
+    const manualTeams = await query<any[]>(
+      `SELECT DISTINCT team_id FROM kpi_snapshots WHERE manually_edited = 1`
+    );
+    const manualTeamIds = new Set(manualTeams.map(t => t.team_id));
     
-    for (const team of teams) {
+    // Filter out teams with manually edited data
+    const teamsToSync = teams.filter(t => !manualTeamIds.has(t.id));
+    
+    console.log(`Found ${teams.length} active teams, syncing ${teamsToSync.length} (skipping ${teams.length - teamsToSync.length} with manual data)`);
+    
+    for (const team of teamsToSync) {
       try {
         // In production, you would:
         // 1. Fetch from Jenkins API

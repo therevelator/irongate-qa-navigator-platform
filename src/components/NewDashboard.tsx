@@ -739,6 +739,180 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
         )}
       </div>
 
+      {/* Strategic Overview Cards */}
+      <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-[15px]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
+          {/* Focus of the Week Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow duration-200">
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-2 rounded-lg ${
+                  isMinimal ? 'bg-gray-100 dark:bg-slate-800' :
+                  isOcean ? 'bg-cyan-100 dark:bg-cyan-900' :
+                  'bg-neutral-100 dark:bg-neutral-800'
+                }`}>
+                  <Target className={`w-5 h-5 ${
+                    isMinimal ? 'text-gray-600 dark:text-slate-400' :
+                    isOcean ? 'text-cyan-600 dark:text-cyan-400' :
+                    'text-neutral-600 dark:text-neutral-400'
+                  }`} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Focus of the Week</h3>
+                  <p className="text-sm text-gray-500 dark:text-slate-400">Priority improvement areas</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <div className="flex items-start justify-between mb-2">
+                    <h4 className="font-semibold text-gray-900 dark:text-white">{focusRecommendation.title}</h4>
+                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
+                      {focusRecommendation.effort}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-slate-400 mb-3">{focusRecommendation.description}</p>
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-4">
+                      <span className="text-gray-500 dark:text-slate-500">Current:</span>
+                      <span className="font-semibold text-gray-900 dark:text-white">{focusRecommendation.currentValue}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp size={14} className="text-green-600" />
+                      <span className="text-green-600 font-medium">Target: {focusRecommendation.targetValue}</span>
+                    </div>
+                  </div>
+                  {focusRecommendation.affectedTeams > 0 && (
+                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-700">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500 dark:text-slate-500">
+                          {focusRecommendation.affectedTeams} team{focusRecommendation.affectedTeams > 1 ? 's' : ''} affected
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {focusRecommendation.affectedTeamNames.slice(0, 2).map((name, idx) => (
+                            <span key={idx} className="text-xs px-2 py-1 bg-gray-100 dark:bg-slate-800 rounded-full text-gray-700 dark:text-slate-300">
+                              {name}
+                            </span>
+                          ))}
+                          {focusRecommendation.affectedTeamNames.length > 2 && (
+                            <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-slate-800 rounded-full text-gray-700 dark:text-slate-300">
+                              +{focusRecommendation.affectedTeamNames.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* QA SLAs Card */}
+          <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow duration-200">
+            <div className="p-4 sm:p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <div className={`p-2 rounded-lg ${
+                  isMinimal ? 'bg-gray-100 dark:bg-slate-800' :
+                  isOcean ? 'bg-cyan-100 dark:bg-cyan-900' :
+                  'bg-neutral-100 dark:bg-neutral-800'
+                }`}>
+                  <Calendar className={`w-5 h-5 ${
+                    isMinimal ? 'text-gray-600 dark:text-slate-400' :
+                    isOcean ? 'text-cyan-600 dark:text-cyan-400' :
+                    'text-neutral-600 dark:text-neutral-400'
+                  }`} />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">QA SLAs</h3>
+                  <p className="text-sm text-gray-500 dark:text-slate-400">Release compliance status</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {/* On Target Releases */}
+                <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 rounded-lg border border-green-200 dark:border-green-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <span className="font-semibold text-gray-900 dark:text-white">On Target</span>
+                    </div>
+                    <span className="text-sm font-medium px-2 py-1 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
+                      8 releases
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-slate-400">Payment Gateway v2.1.0</span>
+                      <span className="text-green-600 font-medium">Released</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-slate-400">Auth Service v1.8.2</span>
+                      <span className="text-green-600 font-medium">Released</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-slate-400">User Portal v3.0.1</span>
+                      <span className="text-green-600 font-medium">In Testing</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Warning Release */}
+                <div className="p-4 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                      <span className="font-semibold text-gray-900 dark:text-white">Warning</span>
+                    </div>
+                    <span className="text-sm font-medium px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300">
+                      1 release
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600 dark:text-slate-400">Mobile App v4.2.0</span>
+                      <span className="text-yellow-600 font-medium">Delayed</span>
+                    </div>
+                    <div className="text-xs text-gray-500 dark:text-slate-500 mt-2">
+                      Critical bug found in production environment. Release delayed by 2 days.
+                    </div>
+                    <div className="flex items-center gap-4 mt-2">
+                      <div className="text-xs">
+                        <span className="text-gray-500 dark:text-slate-500">Due:</span>
+                        <span className="font-medium text-gray-900 dark:text-white ml-1">Dec 5</span>
+                      </div>
+                      <div className="text-xs">
+                        <span className="text-gray-500 dark:text-slate-500">Status:</span>
+                        <span className="font-medium text-yellow-600 ml-1">85% Complete</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* SLA Summary */}
+                <div className="pt-3 border-t border-gray-200 dark:border-slate-700">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-lg font-bold text-green-600">89%</div>
+                      <div className="text-xs text-gray-500 dark:text-slate-500">On Time</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-bold text-yellow-600">8%</div>
+                      <div className="text-xs text-gray-500 dark:text-slate-500">Delayed</div>
+                    </div>
+                    <div>
+                      <div className="text-lg font-bold text-red-600">3%</div>
+                      <div className="text-xs text-gray-500 dark:text-slate-500">Missed</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        </div>
+
     </div>
   );
 };
