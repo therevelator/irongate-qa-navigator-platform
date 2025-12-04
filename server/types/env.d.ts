@@ -28,6 +28,10 @@ declare global {
       JIRA_TOKEN?: string;
       SONARQUBE_URL?: string;
       SONARQUBE_TOKEN?: string;
+
+      // Netlify (auto-set by Netlify)
+      URL?: string;
+      DEPLOY_PRIME_URL?: string;
     }
   }
 }
