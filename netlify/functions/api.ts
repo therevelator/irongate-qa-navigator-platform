@@ -1,6 +1,7 @@
 import express, { Router } from 'express';
 import serverless from 'serverless-http';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import { testConnection } from '../../src/lib/db';
 
 // Import routes - Note: These will be bundled by esbuild
@@ -22,6 +23,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

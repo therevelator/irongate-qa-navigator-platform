@@ -10,7 +10,7 @@ const broadcast = (_wss: any, _data: any) => {}; // No-op in serverless
 const wss = null; // Not available in serverless
 
 const router = express.Router();
-const secrettoken = process.env.secrettoken || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.secrettoken || 'your-secret-key-change-in-production';
 
 // Helper to generate human-readable 12-character company ID
 // Format: 8 alphanumeric chars + 4 digit checksum
@@ -159,7 +159,7 @@ router.post('/register', async (req, res) => {
         departmentId: user.department_id,
         primaryTeamId: user.primary_team_id
       },
-      secrettoken,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -233,7 +233,7 @@ router.post('/login', async (req, res) => {
         departmentId: user.department_id,
         primaryTeamId: user.primary_team_id
       },
-      secrettoken,
+      JWT_SECRET,
       { expiresIn: '7d' }
     );
 
@@ -277,7 +277,7 @@ router.get('/me', async (req, res) => {
       return res.status(401).json({ error: 'Token required' });
     }
 
-    const decoded = jwt.verify(token, secrettoken) as any;
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
 
     const user = await queryOne<any>(
       `SELECT id, email, first_name, last_name, role, 
