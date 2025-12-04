@@ -176,9 +176,12 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
   const getFilteredTeams = () => {
     if (user?.role === 'super_admin') {
       return teams; // Super admin sees all teams
-    } else if (user?.role === 'qa_manager' || user?.role === 'team_lead') {
-      // Manager and Team Lead see teams from their department
+    } else if (user?.role === 'qa_manager') {
+      // Manager sees all teams in their department
       return teams.filter(team => team.department_id === user.departmentId);
+    } else if (user?.role === 'team_lead') {
+      // Team lead sees only their own team
+      return teams.filter(team => team.id === user.primaryTeamId);
     }
     return [];
   };
