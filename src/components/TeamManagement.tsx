@@ -176,7 +176,7 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
   const getFilteredTeams = () => {
     if (user?.role === 'super_admin') {
       return teams; // Super admin sees all teams
-    } else if (user?.role === 'manager' || user?.role === 'team_lead') {
+    } else if (user?.role === 'qa_manager' || user?.role === 'team_lead') {
       // Manager and Team Lead see teams from their department
       return teams.filter(team => team.department_id === user.departmentId);
     }
@@ -184,9 +184,9 @@ const TeamManagement: React.FC<TeamManagementProps> = ({ onBack }) => {
   };
 
   // Check permissions
-  const canCreate = user?.role === 'super_admin' || user?.role === 'manager';
-  const canDelete = user?.role === 'super_admin' || user?.role === 'manager';
-  const canEdit = user?.role === 'super_admin' || user?.role === 'manager' || user?.role === 'team_lead';
+  const canCreate = user?.role === 'super_admin' || user?.role === 'qa_manager';
+  const canDelete = user?.role === 'super_admin' || user?.role === 'qa_manager';
+  const canEdit = user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead';
 
   const filteredTeams = getFilteredTeams();
 

@@ -944,7 +944,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         let filteredTeams = data.teams || [];
         
         // Filter teams based on user role
-        if (user?.role === 'manager') {
+        if (user?.role === 'qa_manager') {
           // Manager: only teams in their department
           filteredTeams = filteredTeams.filter((t: Team) => 
             t.department_id === user.departmentId

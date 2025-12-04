@@ -442,7 +442,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     return colors[role] || 'bg-gray-100 text-gray-800';
   };
 
-  const canCreateTeam = user?.role === 'manager' || user?.role === 'super_admin';
+  const canCreateTeam = user?.role === 'qa_manager' || user?.role === 'super_admin';
 
   const toggleDepartment = (deptId: string) => {
     const newExpanded = new Set(expandedDepartments);
@@ -939,7 +939,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                     <Key className="w-4 h-4" />
                                                   </button>
                                                   {/* Developer Insights Toggle - Team Lead and above */}
-                                                  {['super_admin', 'manager', 'team_lead'].includes(user?.role || '') && (
+                                                  {['super_admin', 'qa_manager', 'team_lead'].includes(user?.role || '') && (
                                                     <button
                                                       onClick={async (e) => {
                                                         e.stopPropagation();
