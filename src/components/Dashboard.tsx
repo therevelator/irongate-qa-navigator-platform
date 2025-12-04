@@ -68,7 +68,7 @@ const Dashboard: React.FC = () => {
     if (user.role === 'super_admin') return true;
     
     // Manager can manage all teams in their department
-    if (user.role === 'manager') return true;
+    if (user.role === 'qa_manager') return true;
     
     // Team lead can only manage their own team
     if (user.role === 'team_lead' && user.primaryTeamId === teamId) return true;
