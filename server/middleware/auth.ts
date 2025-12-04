@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const secrettoken = process.env.secrettoken || 'your-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET || process.env.secrettoken || 'your-secret-key-change-in-production';
 
 export interface AuthRequest extends Request {
   user?: {
@@ -38,7 +38,7 @@ export function authenticateToken(req: AuthRequest, res: Response, next: NextFun
   console.log('[Auth] Token found, length:', token.length, 'starts with:', token.substring(0, 20) + '...');
 
   try {
-    const decoded = jwt.verify(token, secrettoken) as any;
+    const decoded = jwt.verify(token, JWT_SECRET) as any;
     
     // Set user object for new routes
     req.user = {
