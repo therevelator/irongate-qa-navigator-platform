@@ -73,14 +73,7 @@ html {
   filter: brightness(1.2);
 }
 
-.theme-ocean .team-card::after {
-  content: '';
-  position: absolute;
-  inset: 2px;
-  background: inherit;
-  border-radius: calc(16px - 2px);
-  z-index: 0;
-}
+/* Removed ::after overlay - using inline background colors instead */
 
 .theme-ocean .team-card > * {
   position: relative;
