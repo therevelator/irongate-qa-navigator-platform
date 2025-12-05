@@ -104,6 +104,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
   const [activeTab, setActiveTab] = useState<'overview' | 'data-entry' | 'correlations'>('overview');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [seeding, setSeeding] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
@@ -328,6 +329,81 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
       toast.error('Failed to save data');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Regenerate realistic demo data for the selected team
+  const regenerateData = async () => {
+    if (!selectedTeamId) {
+      toast.error('Please select a team first');
+      return;
+    }
+
+    setSeeding(true);
+    try {
+      const response = await fetch(`${API_URL}/analytics/business-impact-v2/${selectedTeamId}/generate-realistic-data`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+
+        const months = getLast12Months();
+        const mergedData: MonthlyData[] = months.map(month => {
+          const quality = data.qualityMetrics?.find((q: any) => q.month_year === month) || {};
+          const kpis = data.businessKpis?.find((k: any) => k.month_year === month) || {};
+          const context = data.contextData?.find((c: any) => c.month_year === month) || {};
+
+          return {
+            month_year: month,
+            quality: {
+              test_coverage: quality.test_coverage ?? null,
+              defect_density: quality.defect_density ?? null,
+              defect_escape_rate: quality.defect_escape_rate ?? null,
+              mttr_hours: quality.mttr_hours ?? null,
+              deployment_frequency: quality.deployment_frequency ?? null,
+              lead_time_days: quality.lead_time_days ?? null,
+              code_quality_score: quality.code_quality_score ?? null,
+              change_failure_rate: quality.change_failure_rate ?? null,
+            },
+            kpis: {
+              monthly_revenue: kpis.monthly_revenue ?? null,
+              active_users: kpis.active_users ?? null,
+              churn_rate: kpis.churn_rate ?? null,
+              feature_adoption_rate: kpis.feature_adoption_rate ?? null,
+              nps_score: kpis.nps_score ?? null,
+              csat_score: kpis.csat_score ?? null,
+              support_ticket_volume: kpis.support_ticket_volume ?? null,
+            },
+            context: {
+              team_size: context.team_size ?? null,
+              feature_release_count: context.feature_release_count ?? null,
+              total_user_base: context.total_user_base ?? null,
+              user_growth_rate: context.user_growth_rate ?? null,
+              downtime_minutes: context.downtime_minutes ?? null,
+              is_holiday_season: !!context.is_holiday_season,
+            }
+          };
+        });
+
+        setMonthlyData(mergedData);
+        setCorrelations(data.correlations || []);
+        setDataSummary(data.summary || null);
+
+        toast.success(data.message || 'Realistic data generated successfully!', {
+          duration: 4000,
+          icon: '🌱'
+        });
+      } else {
+        const error = await response.json().catch(() => null);
+        toast.error(error?.error || 'Failed to regenerate data');
+      }
+    } catch (error) {
+      console.error('Error regenerating data:', error);
+      toast.error('Failed to regenerate data');
+    } finally {
+      setSeeding(false);
     }
   };
 
@@ -1168,10 +1244,11 @@ ${data.analysis}`;
                   Save Current Data
                 </button>
                 <button
-                  onClick={() => window.location.reload()}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                  onClick={regenerateData}
+                  disabled={seeding}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
                 >
-                  <RefreshCw size={18} />
+                  {seeding ? <Loader2 className="animate-spin" size={18} /> : <RefreshCw size={18} />}
                   Regenerate Data
                 </button>
               </div>

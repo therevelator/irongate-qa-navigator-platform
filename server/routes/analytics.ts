@@ -1212,6 +1212,29 @@ router.post('/update-daily', authenticateToken, async (req: any, res) => {
 // ENHANCED BUSINESS IMPACT CORRELATION API (V2)
 // ============================================================================
 
+// Helper: Error function approximation for normal CDF
+function erf(x: number): number {
+  const sign = x < 0 ? -1 : 1;
+  const absX = Math.abs(x);
+
+  // Abramowitz and Stegun formula 7.1.26
+  const a1 = 0.254829592;
+  const a2 = -0.284496736;
+  const a3 = 1.421413741;
+  const a4 = -1.453152027;
+  const a5 = 1.061405429;
+  const p = 0.3275911;
+
+  const t = 1 / (1 + p * absX);
+  const y = 1 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t) * Math.exp(-absX * absX);
+
+  return sign * y;
+}
+
+function normalCdf(z: number): number {
+  return 0.5 * (1 + erf(z / Math.SQRT2));
+}
+
 // Helper: Calculate Pearson correlation coefficient
 function calculatePearsonCorrelation(x: number[], y: number[]): { correlation: number; pValue: number; sampleSize: number } {
   const n = Math.min(x.length, y.length);
@@ -1235,10 +1258,14 @@ function calculatePearsonCorrelation(x: number[], y: number[]): { correlation: n
   const denominator = Math.sqrt(denomX * denomY);
   const correlation = denominator === 0 ? 0 : numerator / denominator;
 
-  // Approximate p-value using t-distribution
-  const t = correlation * Math.sqrt((n - 2) / (1 - correlation * correlation));
-  // Simplified p-value approximation
-  const pValue = n < 6 ? 1 : Math.exp(-0.5 * t * t / n);
+  // Approximate two-tailed p-value using normal distribution for the t statistic
+  let pValue = 1;
+  if (n >= 6 && correlation > -1 && correlation < 1) {
+    const t = correlation * Math.sqrt((n - 2) / (1 - correlation * correlation));
+    const z = Math.abs(t);
+    const cdf = normalCdf(z);
+    pValue = Math.max(0, Math.min(1, 2 * (1 - cdf)));
+  }
 
   return { correlation: Math.round(correlation * 1000) / 1000, pValue, sampleSize: n };
 }
@@ -1765,27 +1792,29 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
       months.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
     }
 
-    // Realistic base values and trends
+    // Realistic base values and trends (biased towards generally positive performance)
     const generateRealisticData = () => {
       const qualityBase = {
-        test_coverage: 65 + Math.random() * 20, // 65-85%
-        defect_density: 3.5 + Math.random() * 2, // 3.5-5.5 bugs/KLOC
-        defect_escape_rate: 15 + Math.random() * 10, // 15-25%
-        mttr_hours: 6 + Math.random() * 4, // 6-10 hours
-        deployment_frequency: 3 + Math.random() * 4, // 3-7 deployments/month
-        lead_time_days: 10 + Math.random() * 5, // 10-15 days
-        code_quality_score: 70 + Math.random() * 15, // 70-85%
-        change_failure_rate: 18 + Math.random() * 8, // 18-26%
+        // Higher starting quality and faster improvement
+        test_coverage: 75 + Math.random() * 15, // 75-90%
+        defect_density: 1.5 + Math.random() * 1.5, // 1.5-3.0 bugs/KLOC
+        defect_escape_rate: 8 + Math.random() * 6, // 8-14%
+        mttr_hours: 3 + Math.random() * 3, // 3-6 hours
+        deployment_frequency: 5 + Math.random() * 4, // 5-9 deployments/month
+        lead_time_days: 5 + Math.random() * 5, // 5-10 days
+        code_quality_score: 80 + Math.random() * 15, // 80-95%
+        change_failure_rate: 8 + Math.random() * 8, // 8-16%
       };
 
       const kpiBase = {
-        monthly_revenue: 350000 + Math.random() * 200000, // $350K-550K
-        active_users: 10000 + Math.random() * 15000, // 10K-25K users
-        churn_rate: 4 + Math.random() * 4, // 4-8%
-        feature_adoption_rate: 35 + Math.random() * 20, // 35-55%
-        nps_score: 20 + Math.random() * 40, // 20-60
-        csat_score: 65 + Math.random() * 15, // 65-80%
-        support_ticket_volume: 400 + Math.random() * 300, // 400-700 tickets
+        // Stronger business performance baseline
+        monthly_revenue: 500000 + Math.random() * 300000, // $500K-800K
+        active_users: 20000 + Math.random() * 30000, // 20K-50K users
+        churn_rate: 2 + Math.random() * 4, // 2-6%
+        feature_adoption_rate: 50 + Math.random() * 25, // 50-75%
+        nps_score: 30 + Math.random() * 40, // 30-70
+        csat_score: 80 + Math.random() * 15, // 80-95%
+        support_ticket_volume: 200 + Math.random() * 400, // 200-600 tickets
       };
 
       return { qualityBase, kpiBase };
@@ -2017,8 +2046,9 @@ ANALYSIS REQUIREMENTS:
 3. Business Impact Analysis: What do these correlations mean for decision-making?
 4. Strategic Recommendations: Which quality metrics should be prioritized?
 5. Risk Assessment: Business risks from quality degradation
+6. Keep the total response under approximately 1500 words and limit any correlation tables to at most 25 rows.
 
-Provide actionable insights that a CTO would understand and use to make investment decisions. In another section, forget about the numerics and provide explanations about the correlations that a business person and a technical person understands. Easy to read, easy to follow, with explanation of the terms and numbersOutput ONLY valid HTML, no markdown.`;
+Provide actionable insights that a CTO would understand and use to make investment decisions. In another section, forget about the numerics and provide explanations about the correlations that both a business person and a technical person can understand. Easy to read, easy to follow, with explanation of the terms and numbers. Output ONLY valid HTML, no markdown.`;
 
     console.log('[AI][BIA] Calling Groq API for correlation analysis...');
 
@@ -2045,7 +2075,7 @@ Provide actionable insights that a CTO would understand and use to make investme
             }
           ],
           temperature: 0.7,
-          max_tokens: 2000
+          max_tokens: 3500
         }),
         signal: controller.signal
       });
@@ -2057,10 +2087,18 @@ Provide actionable insights that a CTO would understand and use to make investme
         console.log('[AI][BIA] Groq API success:', {
           status: aiResponse.status,
           model: groqData.model,
-          usage: groqData.usage
+          usage: groqData.usage,
+          finish_reason: groqData.choices?.[0]?.finish_reason
         });
 
-        const content = groqData.choices?.[0]?.message?.content || 'No response from AI';
+        const choice = groqData.choices?.[0];
+        let content = choice?.message?.content || 'No response from AI';
+
+        if (choice?.finish_reason === 'length') {
+          console.warn('[AI][BIA] Groq response was truncated due to max_tokens limit');
+          content += '<p><em>Note: This AI response was truncated due to token limits. Consider reducing the time range or number of metrics if you need a shorter, more focused analysis.</em></p>';
+        }
+
         res.json({ success: true, analysis: content });
       } else {
         const errorText = await aiResponse.text();
