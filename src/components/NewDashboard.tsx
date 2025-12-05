@@ -534,17 +534,10 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                     }}
                   />
 
-                  {/* Inner highlight for 3D effect */}
-                  <div className="absolute top-0 left-0 right-0 h-8 rounded-t-xl opacity-30 group-hover:opacity-50 transition-opacity duration-300"
+                  {/* Inner highlight for 3D effect - covers full card */}
+                  <div className="absolute inset-0 rounded-xl pointer-events-none z-0"
                     style={{
-                      background: 'linear-gradient(180deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 50%, transparent 100%)'
-                    }}
-                  />
-
-                  {/* Bottom shadow for depth */}
-                  <div className="absolute bottom-0 left-0 right-0 h-4 rounded-b-xl opacity-20 group-hover:opacity-30 transition-opacity duration-300"
-                    style={{
-                      background: 'linear-gradient(0deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.05) 50%, transparent 100%)'
+                      background: 'linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 30%, transparent 60%, rgba(0,0,0,0.03) 100%)'
                     }}
                   />
                 </>
