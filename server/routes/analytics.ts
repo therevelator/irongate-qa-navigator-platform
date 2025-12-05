@@ -1963,4 +1963,123 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
   }
 });
 
+// POST: AI analysis of correlations using backend Groq API key
+router.post('/business-impact-v2/:teamId/ai-analysis', authenticateToken, async (req: any, res) => {
+  try {
+    const { correlations } = req.body;
+
+    if (!correlations || correlations.length === 0) {
+      return res.status(400).json({ error: 'No correlations provided for analysis' });
+    }
+
+    const groqApiKey = process.env.GROQ_API_KEY;
+    console.log('[AI][BIA] GROQ_API_KEY present:', !!groqApiKey, 'length:', groqApiKey?.length ?? 0);
+
+    if (!groqApiKey || groqApiKey.length <= 10) {
+      return res.status(400).json({ error: 'Groq API key not configured on server' });
+    }
+
+    // Create correlation matrix for analysis
+    const correlationMatrix = correlations.map((c: any) => ({
+      quality_metric: c.quality_metric.replace(/_/g, ' '),
+      business_kpi: c.business_kpi.replace(/_/g, ' '),
+      correlation: c.pearson_correlation,
+      p_value: c.p_value,
+      strength: c.correlation_strength,
+      significant: c.is_significant
+    }));
+
+    const analysisPrompt = `You are a Senior Data Scientist and Business Intelligence expert. Analyze this correlation matrix from a QA dashboard that measures the relationship between software quality metrics and business outcomes over 12 months.
+
+IMPORTANT: Output your response as clean HTML that can be directly rendered. Use these HTML elements:
+- <h2> for section headers
+- <h3> for subsection headers  
+- <p> for paragraphs
+- <ul> and <li> for bullet lists
+- <table>, <thead>, <tbody>, <tr>, <th>, <td> for any tables
+- <strong> for bold text
+- <span class="positive"> for positive correlations, <span class="negative"> for negative ones
+
+DATASET CONTEXT:
+- Time Period: 12 consecutive months of data
+- Quality Metrics (X variables): Software testing and development metrics
+- Business KPIs (Y variables): Revenue, user engagement, satisfaction metrics
+- Statistical Method: Pearson correlation coefficient with p-value significance testing
+
+CORRELATION MATRIX DATA:
+${correlationMatrix.map((c: any) =>
+  `${c.quality_metric} → ${c.business_kpi}: r=${Number(c.correlation).toFixed(3)}, p=${Number(c.p_value) < 0.001 ? '<0.001' : Number(c.p_value).toFixed(4)}, ${c.strength}, ${c.significant ? 'significant' : 'not significant'}`
+).join('\n')}
+
+ANALYSIS REQUIREMENTS:
+1. Executive Summary: Key findings in 3-5 bullet points
+2. Statistical Assessment: Evaluate data quality and correlation validity
+3. Business Impact Analysis: What do these correlations mean for decision-making?
+4. Strategic Recommendations: Which quality metrics should be prioritized?
+5. Risk Assessment: Business risks from quality degradation
+
+Provide actionable insights that a CTO would understand and use to make investment decisions. In another section, forget about the numerics and provide explanations about the correlations that a business person and a technical person understands. Easy to read, easy to follow, with explanation of the terms and numbersOutput ONLY valid HTML, no markdown.`;
+
+    console.log('[AI][BIA] Calling Groq API for correlation analysis...');
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    try {
+      const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${groqApiKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          model: 'openai/gpt-oss-120b',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a Senior Data Scientist and Business Intelligence expert. Analyze correlation data and provide actionable business insights.'
+            },
+            {
+              role: 'user',
+              content: analysisPrompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 2000
+        }),
+        signal: controller.signal
+      });
+
+      clearTimeout(timeout);
+
+      if (aiResponse.ok) {
+        const groqData = await aiResponse.json();
+        console.log('[AI][BIA] Groq API success:', {
+          status: aiResponse.status,
+          model: groqData.model,
+          usage: groqData.usage
+        });
+
+        const content = groqData.choices?.[0]?.message?.content || 'No response from AI';
+        res.json({ success: true, analysis: content });
+      } else {
+        const errorText = await aiResponse.text();
+        console.error('[AI][BIA] Groq API error:', aiResponse.status, errorText);
+        res.status(500).json({ error: `Groq API error: ${aiResponse.status}` });
+      }
+    } catch (fetchError: any) {
+      clearTimeout(timeout);
+      if (fetchError.name === 'AbortError') {
+        console.error('[AI][BIA] Groq API timeout');
+        res.status(504).json({ error: 'AI analysis timed out' });
+      } else {
+        throw fetchError;
+      }
+    }
+  } catch (error) {
+    console.error('[AI][BIA] Error:', error);
+    res.status(500).json({ error: 'Failed to analyze correlations' });
+  }
+});
+
 export default router;

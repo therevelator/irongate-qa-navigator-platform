@@ -144,13 +144,24 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
         });
         if (response.ok) {
           const data = await response.json();
-          setTeams(data);
-          if (data.length > 0 && !selectedTeamId) {
-            setSelectedTeamId(data[0].id);
+          // Handle both { teams: [...] } and plain array responses
+          const loadedTeams = Array.isArray(data) ? data : (data.teams || []);
+          console.log('[BIA] Teams loaded:', loadedTeams.length);
+          setTeams(loadedTeams);
+          if (loadedTeams.length > 0 && !selectedTeamId) {
+            console.log('[BIA] Auto-selecting first team:', loadedTeams[0].id);
+            setSelectedTeamId(loadedTeams[0].id);
+          } else if (loadedTeams.length === 0) {
+            // No teams available, stop loading
+            setLoading(false);
           }
+        } else {
+          console.error('[BIA] Failed to fetch teams:', response.status);
+          setLoading(false);
         }
       } catch (error) {
         console.error('Error fetching teams:', error);
+        setLoading(false);
       }
     };
     fetchTeams();
@@ -357,7 +368,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
     }
   };
 
-  // Analyze correlations with AI
+  // Analyze correlations with AI (via backend)
   const analyzeCorrelationsWithAI = async () => {
     console.log('🎯 analyzeCorrelationsWithAI function called');
     console.log('📊 Correlations available:', correlations.length);
@@ -368,142 +379,45 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
       return;
     }
 
-    console.log('🚀 Starting AI analysis...');
+    if (!selectedTeamId) {
+      toast.error('Please select a team first');
+      return;
+    }
+
+    console.log('🚀 Starting AI analysis via backend...');
     setAiAnalyzing(true);
     try {
-      // Create correlation matrix for analysis
-      const correlationMatrix = correlations.map(c => ({
-        quality_metric: c.quality_metric.replace(/_/g, ' '),
-        business_kpi: c.business_kpi.replace(/_/g, ' '),
-        correlation: c.pearson_correlation,
-        p_value: c.p_value,
-        strength: c.correlation_strength,
-        significant: c.is_significant
-      }));
+      const response = await fetch(`${API_URL}/analytics/business-impact-v2/${selectedTeamId}/ai-analysis`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ correlations })
+      });
 
-      // Create comprehensive analysis prompt - requesting HTML output
-      const analysisPrompt = `You are a Senior Data Scientist and Business Intelligence expert. Analyze this correlation matrix from a QA dashboard that measures the relationship between software quality metrics and business outcomes over 12 months.
+      console.log('📡 Backend response:', response.status);
 
-IMPORTANT: Output your response as clean HTML that can be directly rendered. Use these HTML elements:
-- <h2> for section headers
-- <h3> for subsection headers  
-- <p> for paragraphs
-- <ul> and <li> for bullet lists
-- <table>, <thead>, <tbody>, <tr>, <th>, <td> for any tables
-- <strong> for bold text
-- <span class="positive"> for positive correlations, <span class="negative"> for negative ones
-
-DATASET CONTEXT:
-- Time Period: 12 consecutive months of data
-- Quality Metrics (X variables): Software testing and development metrics
-- Business KPIs (Y variables): Revenue, user engagement, satisfaction metrics
-- Statistical Method: Pearson correlation coefficient with p-value significance testing
-
-CORRELATION MATRIX DATA:
-${correlationMatrix.map(c =>
-  `${c.quality_metric} → ${c.business_kpi}: r=${Number(c.correlation).toFixed(3)}, p=${Number(c.p_value) < 0.001 ? '<0.001' : Number(c.p_value).toFixed(4)}, ${c.strength}, ${c.significant ? 'significant' : 'not significant'}`
-).join('\n')}
-
-ANALYSIS REQUIREMENTS:
-1. Executive Summary: Key findings in 3-5 bullet points
-2. Statistical Assessment: Evaluate data quality and correlation validity
-3. Business Impact Analysis: What do these correlations mean for decision-making?
-4. Strategic Recommendations: Which quality metrics should be prioritized?
-5. Risk Assessment: Business risks from quality degradation
-
-Provide actionable insights that a CTO would understand and use to make investment decisions. Output ONLY valid HTML, no markdown.`;
-
-      // Make actual API call to Groq
-      console.log('🚀 Making Groq API call...');
-      console.log('Body:', JSON.stringify({
-        model: 'mixtral-8x7b-32768',
-        messages: [
-          {
-            role: 'system',
-            content: 'You are a Senior Data Scientist and Business Intelligence expert. Analyze this correlation matrix from a QA dashboard that measures the relationship between software quality metrics and business outcomes over 12 months.'
-          },
-          {
-            role: 'user',
-            content: analysisPrompt
-          }
-        ],
-        temperature: 0.7,
-        max_tokens: 2000
-      }, null, 2));
-
-      // Get Groq API key (using the key from .env file)
-      const groqApiKey = localStorage.getItem('groq_api_key') || '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';
-      console.log('🔑 Groq API key found:', groqApiKey ? 'Yes' : 'No');
-      console.log('🔑 API key length:', groqApiKey.length);
-
-      if (!groqApiKey) {
-        console.error('❌ No Groq API key found');
-        toast.error('Groq API key not configured');
-        setAiAnalyzing(false);
-        return;
-      }
-
-      console.log('🌐 Making direct call to Groq API...');
-      // Make direct call to Groq API
-      try {
-        console.log('📡 Fetching from Groq API...');
-        const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'openai/gpt-oss-120b',
-            messages: [
-              {
-                role: 'system',
-                content: 'You are a Senior Data Scientist and Business Intelligence expert. Analyze this correlation matrix from a QA dashboard that measures the relationship between software quality metrics and business outcomes over 12 months.'
-              },
-              {
-                role: 'user',
-                content: analysisPrompt
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 2000
-          })
-        });
-
-        console.log('📡 API response received:', aiResponse.status, aiResponse.statusText);
-
-        if (!aiResponse.ok) {
-          throw new Error(`Groq API failed: ${aiResponse.status} ${aiResponse.statusText}`);
-        }
-
-        console.log('📄 Parsing response...');
-        const groqData = await aiResponse.json();
-        console.log('✅ Groq API Response received:', groqData);
-        
-        // Extract the AI analysis from the response
-        const aiResponseContent = groqData.choices?.[0]?.message?.content || 'No response from AI';
-        console.log('📝 AI response content length:', aiResponseContent.length);
+      if (response.ok) {
+        const data = await response.json();
+        console.log('✅ AI analysis received');
         
         // Add AI disclaimer to the response
         const aiWithDisclaimer = `⚠️ **AI-Generated Content** - This analysis was generated by AI. Please verify all information and check for potential inaccuracies before making business decisions.
 
 ---
 
-${aiResponseContent}`;
+${data.analysis}`;
         
         setAiAnalysis(aiWithDisclaimer);
-        setAiAnalyzing(false);
         toast.success('AI analysis completed!');
-        
-      } catch (apiError) {
-        console.error('❌ Groq API Error:', apiError);
-        setAiAnalyzing(false);
-        toast.error(`Groq API failed: ${apiError}. Please try again.`);
+      } else {
+        const error = await response.json();
+        console.error('❌ Backend error:', error);
+        toast.error(error.error || 'Failed to analyze correlations');
       }
-
     } catch (error) {
       console.error('❌ Error in AI analysis:', error);
       toast.error('Failed to analyze correlations');
+    } finally {
       setAiAnalyzing(false);
     }
   };

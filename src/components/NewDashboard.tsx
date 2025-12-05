@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Building2, Target, Calendar } from 'lucide-react';
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
@@ -6,7 +6,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import TypingAnimation from './TypingAnimation';
 import BatteryIndicator from './BatteryIndicator';
-import { toast } from 'react-hot-toast';
 
 type GridColumns = 1 | 2 | 3;
 
@@ -31,19 +30,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   const [teamsWithMetrics, setTeamsWithMetrics] = useState<Team[]>(teams);
   const [showMetricsNotification, setShowMetricsNotification] = useState(false);
 
-  // Fetch departments for admin users
-  useEffect(() => {
-    if (user?.role === 'super_admin' || user?.role === 'qa_manager') {
-      fetchDepartments();
-    }
-  }, [user?.role]);
-
-  // Fetch real metrics for all teams
-  useEffect(() => {
-    fetchTeamsWithMetrics();
-  }, [teams]);
-
-  const fetchTeamsWithMetrics = async () => {
+  const fetchTeamsWithMetrics = useCallback(async () => {
     try {
       // Fetch metrics for each team
       const teamsWithData = await Promise.all(
@@ -130,9 +117,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
       console.error('Error fetching teams with metrics:', error);
       setTeamsWithMetrics(teams);
     }
-  };
+  }, [teams]);
 
-  const fetchDepartments = async () => {
+  const fetchDepartments = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/admin/departments`, {
         credentials: 'include'
@@ -144,7 +131,19 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
     } catch (error) {
       console.error('Error fetching departments:', error);
     }
-  };
+  }, []);
+
+  // Fetch departments for admin users
+  useEffect(() => {
+    if (user?.role === 'super_admin' || user?.role === 'qa_manager') {
+      fetchDepartments();
+    }
+  }, [user?.role, fetchDepartments]);
+
+  // Fetch real metrics for all teams
+  useEffect(() => {
+    fetchTeamsWithMetrics();
+  }, [fetchTeamsWithMetrics]);
   
   // Theme detection
   const isOcean = themeName === 'ocean';
@@ -224,30 +223,29 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
     const avgScore = teamsWithMetrics.reduce((sum, t) => sum + t.qaScore, 0) / teamsWithMetrics.length;
 
     // Analyze metrics across all teams
-    let worstMetric = { name: '', avgValue: 100, teamsAffected: 0, isLowerBetter: false };
     
     // Check flakiness (lower is better)
     const teamsWithFlakiness = teamsWithMetrics.filter(t => {
-      const flaky = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('flak'));
+      const flaky = t.metrics?.find(m => m.name?.toLowerCase().includes('flak'));
       return flaky && parseFloat(String(flaky.value)) > 3;
     });
     
     // Check test coverage (higher is better)
     const teamsWithLowCoverage = teamsWithMetrics.filter(t => {
-      const coverage = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('coverage'));
+      const coverage = t.metrics?.find(m => m.name?.toLowerCase().includes('coverage'));
       return coverage && parseFloat(String(coverage.value)) < 80;
     });
 
     // Check defect density (lower is better)
     const teamsWithHighDefects = teamsWithMetrics.filter(t => {
-      const defects = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('defect'));
+      const defects = t.metrics?.find(m => m.name?.toLowerCase().includes('defect'));
       return defects && parseFloat(String(defects.value)) > 1;
     });
 
     // Determine primary focus
     if (teamsWithLowCoverage.length > 0) {
       const avgCoverage = teamsWithLowCoverage.reduce((sum, t) => {
-        const cov = t.metrics?.find((m: any) => m.name?.toLowerCase().includes('coverage'));
+        const cov = t.metrics?.find(m => m.name?.toLowerCase().includes('coverage'));
         return sum + (cov ? parseFloat(String(cov.value)) : 0);
       }, 0) / teamsWithLowCoverage.length;
       
@@ -596,7 +594,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   {/* Inline Metrics */}
                   <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
                     {team.metrics && team.metrics.length > 0 ? (
-                      team.metrics.slice(0, 4).map((metric: any, idx: number) => (
+                      team.metrics.slice(0, 4).map((metric, idx) => (
                         <div key={idx} className="relative group/metric">
                           <div className="flex items-center gap-1.5 lg:gap-2 mb-1">
                             <div className={`p-1 lg:p-1.5 rounded ${
@@ -671,7 +669,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   {/* Metrics Grid */}
                   <div className="grid grid-cols-2 gap-2 flex-1">
                     {team.metrics && team.metrics.length > 0 ? (
-                      team.metrics.slice(0, 4).map((metric: any, idx: number) => (
+                      team.metrics.slice(0, 4).map((metric, idx) => (
                         <div key={idx} className="relative rounded-lg p-2.5 border border-gray-400 dark:border-slate-500">
                           <div className="flex items-center gap-1.5 mb-1">
                             <div className={`p-1 rounded ${

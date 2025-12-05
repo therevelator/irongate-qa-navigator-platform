@@ -522,9 +522,15 @@ router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, re
 
     // Try Groq API if key is configured (with 10 second timeout)
     const groqApiKey = process.env.GROQ_API_KEY;
-    
+    console.log('[AI][Team] GROQ_API_KEY present:', !!groqApiKey, 'length:', groqApiKey?.length ?? 0);
+
+    if (!groqApiKey || groqApiKey.length <= 10) {
+      console.log('[AI][Team] Skipping Groq (no or short key), using rule-based suggestions');
+    }
+
     if (groqApiKey && groqApiKey.length > 10) {
       try {
+        console.log('[AI][Team] Calling Groq API for team suggestions...');
         // Create abort controller for timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
@@ -537,7 +543,7 @@ router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, re
           },
           signal: controller.signal,
           body: JSON.stringify({
-            model: 'openai/gpt-oss-20b',
+            model: 'openai/gpt-oss-120b',
             messages: [
               {
                 role: 'system',
@@ -579,6 +585,11 @@ Focus on:
         
         if (aiResponse.ok) {
           const groqData = await aiResponse.json();
+          console.log('[AI][Team] Groq API success:', {
+            status: aiResponse.status,
+            model: groqData.model,
+            usage: groqData.usage
+          });
           const content = groqData.choices?.[0]?.message?.content;
           
           if (content) {
@@ -614,7 +625,8 @@ Focus on:
             }
           }
         } else {
-          console.error('Groq API error:', aiResponse.status, await aiResponse.text());
+          const errorText = await aiResponse.text();
+          console.error('Groq API error:', aiResponse.status, errorText);
         }
       } catch (groqError: any) {
         if (groqError.name === 'AbortError') {
@@ -808,9 +820,15 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
 
     // Try Groq API with timeout
     const groqApiKey = process.env.GROQ_API_KEY;
-    
+    console.log('[AI][Developers] GROQ_API_KEY present:', !!groqApiKey, 'length:', groqApiKey?.length ?? 0);
+
+    if (!groqApiKey || groqApiKey.length <= 10) {
+      console.log('[AI][Developers] Skipping Groq (no or short key), returning metrics-only / non-AI response');
+    }
+
     if (groqApiKey && groqApiKey.length > 10) {
       try {
+        console.log('[AI][Developers] Calling Groq API for developer suggestions...');
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for multiple devs
         
@@ -822,7 +840,7 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
           },
           signal: controller.signal,
           body: JSON.stringify({
-            model: 'openai/gpt-oss-20b',
+            model: 'openai/gpt-oss-120b',
             messages: [
               {
                 role: 'system',
@@ -865,6 +883,11 @@ Metric benchmarks:
         
         if (aiResponse.ok) {
           const groqData = await aiResponse.json();
+          console.log('[AI][Developers] Groq API success:', {
+            status: aiResponse.status,
+            model: groqData.model,
+            usage: groqData.usage
+          });
           const content = groqData.choices?.[0]?.message?.content;
           
           if (content) {
@@ -890,7 +913,8 @@ Metric benchmarks:
             }
           }
         } else {
-          console.error('Groq API error (developers):', aiResponse.status);
+          const errorText = await aiResponse.text();
+          console.error('Groq API error (developers):', aiResponse.status, errorText);
         }
       } catch (groqError: any) {
         if (groqError.name === 'AbortError') {
