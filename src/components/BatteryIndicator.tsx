@@ -55,9 +55,10 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
   }, [percentage, animationDelay]);
 
   const sizeClasses = {
-    sm: { width: 'w-16', height: 'h-16', text: 'text-xs', stroke: '4' },
-    md: { width: 'w-20', height: 'h-20', text: 'text-sm', stroke: '6' },
-    lg: { width: 'w-24', height: 'h-24', text: 'text-base', stroke: '8' }
+    // Slightly thicker stroke for a bolder QA score ring
+    sm: { width: 'w-16', height: 'h-16', text: 'text-xs', stroke: '6' },
+    md: { width: 'w-20', height: 'h-20', text: 'text-sm', stroke: '8' },
+    lg: { width: 'w-24', height: 'h-24', text: 'text-base', stroke: '10' }
   };
 
   const sizeConfig = sizeClasses[size];
