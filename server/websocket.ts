@@ -49,7 +49,22 @@ export function broadcast(wss: WebSocketServer, data: any): void {
     }
   });
   
-  console.log(`📡 Broadcasted to ${wss.clients.size} clients:`, data.type);
+  if (data.type === 'JOB_NOTIFICATION') {
+    const { source, frequency, message: jobMessage } = data as {
+      source?: string;
+      frequency?: string;
+      message?: string;
+    };
+
+    console.log(
+      `📡 Broadcasted to ${wss.clients.size} clients: JOB_NOTIFICATION` +
+        (source || frequency || jobMessage
+          ? ` [${source ?? 'unknown'}/${frequency ?? 'n/a'}] - ${jobMessage ?? ''}`
+          : '')
+    );
+  } else {
+    console.log(`📡 Broadcasted to ${wss.clients.size} clients:`, data.type);
+  }
 }
 
 // Broadcast to specific company

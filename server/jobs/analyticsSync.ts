@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { query } from '../../src/lib/db';
+import { emitJobNotification } from '../eventBus';
 
 // Only log in non-serverless environments
 if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -521,6 +522,12 @@ async function updateDailyAnalytics(): Promise<void> {
     }
 
     console.log('📊 [DAILY ANALYTICS] ✅ Complete!');
+    emitJobNotification({
+      source: 'analytics',
+      frequency: 'daily',
+      message: 'Analytics data updated',
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
     console.error('📊 [DAILY ANALYTICS] ❌ Failed:', error);
   }

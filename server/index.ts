@@ -3,7 +3,8 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import http from 'http';
 import { testConnection } from '../src/lib/db';
-import { setupWebSocket } from './websocket';
+import { setupWebSocket, broadcast } from './websocket';
+import { jobEvents } from './eventBus';
 import authRoutes from './routes/auth';
 import teamsRoutes from './routes/teams';
 import metricsRoutes from './routes/metrics';
@@ -24,6 +25,13 @@ const server = http.createServer(app);
 
 // Setup WebSocket
 export const wss = setupWebSocket(server);
+
+jobEvents.on('job-notification', (payload) => {
+  broadcast(wss, {
+    type: 'JOB_NOTIFICATION',
+    ...payload,
+  });
+});
 
 // Middleware
 const allowedOrigins = [

@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { query, queryOne } from '../../src/lib/db';
 import { runPipelineSeederForAllCompanies } from '../seeders/pipelineSeeder';
+import { emitJobNotification } from '../eventBus';
 
 // Only log in non-serverless environments
 if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -200,6 +201,13 @@ async function runHourlySync(): Promise<void> {
     }
     
     console.log(`⏰ [HOURLY] ✅ Updated ${totalUpdates} metrics (${HOURLY_METRICS.join(', ')}) for ${teams.length} teams`);
+    emitJobNotification({
+      source: 'metrics',
+      frequency: 'hourly',
+      message: 'Hourly metrics updated',
+      updatedMetrics: HOURLY_METRICS,
+      timestamp,
+    });
   } catch (error) {
     console.error('⏰ [HOURLY] ❌ Sync failed:', error);
   }
@@ -223,6 +231,13 @@ async function runDailySync(): Promise<void> {
     }
     
     console.log(`📅 [DAILY] ✅ Updated ${totalUpdates} metrics for ${teams.length} teams`);
+    emitJobNotification({
+      source: 'metrics',
+      frequency: 'daily',
+      message: 'Daily metrics updated',
+      updatedMetrics: DAILY_METRICS,
+      timestamp,
+    });
   } catch (error) {
     console.error('📅 [DAILY] ❌ Sync failed:', error);
   }
@@ -246,6 +261,13 @@ async function runWeeklySync(): Promise<void> {
     }
     
     console.log(`📆 [WEEKLY] ✅ Updated ${totalUpdates} metrics for ${teams.length} teams`);
+    emitJobNotification({
+      source: 'metrics',
+      frequency: 'weekly',
+      message: 'Weekly metrics updated',
+      updatedMetrics: WEEKLY_METRICS,
+      timestamp,
+    });
   } catch (error) {
     console.error('📆 [WEEKLY] ❌ Sync failed:', error);
   }
@@ -269,6 +291,13 @@ async function runMonthlySync(): Promise<void> {
     }
     
     console.log(`🗓️ [MONTHLY] ✅ Updated ${totalUpdates} metrics for ${teams.length} teams`);
+    emitJobNotification({
+      source: 'metrics',
+      frequency: 'monthly',
+      message: 'Monthly metrics updated',
+      updatedMetrics: MONTHLY_METRICS,
+      timestamp,
+    });
   } catch (error) {
     console.error('🗓️ [MONTHLY] ❌ Sync failed:', error);
   }
@@ -295,6 +324,13 @@ if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
     console.log('🔄 [PIPELINE] Running pipeline seeder...');
     try {
       await runPipelineSeederForAllCompanies();
+      emitJobNotification({
+        source: 'pipeline',
+        frequency: '5-min',
+        message: 'Pipeline data updated',
+        timestamp: new Date().toISOString(),
+        updatedMetrics: [],
+      });
     } catch (error) {
       console.error('🔄 [PIPELINE] Seeder failed:', error);
     }
@@ -302,7 +338,9 @@ if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   console.log('  🔄 Pipeline job scheduled: */5 * * * * (every 5 minutes)');
 
   // Hourly: At minute 0 of every hour
-  cron.schedule('0 * * * *', runHourlySync);
+  cron.schedule('0 * * * *', async () => {
+    await runHourlySync();
+  });
   console.log('  ⏰ Hourly job scheduled: 0 * * * * (every hour at :00)');
 
   // Daily: At 00:05 every day

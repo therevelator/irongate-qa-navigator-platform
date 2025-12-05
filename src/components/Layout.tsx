@@ -33,6 +33,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [sidebarVisible, setSidebarVisible] = useState(false);
+  const [jobNotification, setJobNotification] = useState<{ message: string; timestamp?: string } | null>(null);
 
   useEffect(() => {
     if (user?.id) {
@@ -49,6 +50,37 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
       }
     }, 0);
   }, [currentView]);
+
+  useEffect(() => {
+    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+      return;
+    }
+
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${protocol}://localhost:3000/ws`);
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.type === 'JOB_NOTIFICATION' && data.message) {
+          setJobNotification({
+            message: data.message,
+            timestamp: data.timestamp,
+          });
+
+          setTimeout(() => {
+            setJobNotification(null);
+          }, 5000);
+        }
+      } catch (error) {
+        console.error('Error handling job notification message', error);
+      }
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   const fetchDepartments = async () => {
     try {
@@ -370,6 +402,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
           </footer>
         </div>
       </div>
+      {jobNotification && (
+        <div className="fixed top-20 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform transition-transform duration-500 ease-in-out animate-slide-in-right">
+          <p className="font-medium">{jobNotification.message}</p>
+        </div>
+      )}
       <Toaster
         position="top-right"
         toastOptions={{
