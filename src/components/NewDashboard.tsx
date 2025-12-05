@@ -5,6 +5,7 @@ import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import TypingAnimation from './TypingAnimation';
+import BrainCircuitHero from './BrainCircuitHero';
 import BatteryIndicator from './BatteryIndicator';
 
 type GridColumns = 1 | 2 | 3;
@@ -330,83 +331,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
   return (
     <div className={`flex flex-col h-full overflow-auto ${mainBg}`} onClick={handleDashboardClick}>
-      {/* Hero Section - Interactive Circuit Board */}
-      <div className="relative px-4 sm:px-6 py-12 sm:py-16 lg:py-20 overflow-hidden bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 border-b border-slate-200 dark:border-slate-700">
-        {/* Circuit Board Background - Light mode only */}
-        {!isDark && (
-          <div className="absolute inset-0 opacity-20">
-            {/* Circuit Board Grid */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 600" xmlns="http://www.w3.org/2000/svg">
-              <defs>
-                <pattern id="circuit-grid" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
-                  <rect x="0" y="0" width="40" height="40" fill="none" stroke="#e2e8f0" strokeWidth="0.5"/>
-                  <circle cx="20" cy="20" r="1" fill="#94a3b8"/>
-                </pattern>
-                <linearGradient id="electric-flow" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stopColor="#3b82f6" stopOpacity="0"/>
-                  <stop offset="20%" stopColor="#3b82f6" stopOpacity="1"/>
-                  <stop offset="80%" stopColor="#06b6d4" stopOpacity="1"/>
-                  <stop offset="100%" stopColor="#06b6d4" stopOpacity="0"/>
-                </linearGradient>
-              </defs>
-              <rect width="100%" height="100%" fill="url(#circuit-grid)"/>
-            </svg>
-
-            {/* Circuit Traces */}
-            <svg className="absolute inset-0 w-full h-full" viewBox="0 0 1200 600">
-              {/* Horizontal traces */}
-              <path d="M0 150 L1200 150" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
-              <path d="M0 300 L1200 300" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
-              <path d="M0 450 L1200 450" stroke="#cbd5e1" strokeWidth="2" strokeDasharray="5,5"/>
-              {/* Vertical traces */}
-              <path d="M200 0 L200 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
-              <path d="M600 0 L600 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
-              <path d="M1000 0 L1000 600" stroke="#cbd5e1" strokeWidth="1" strokeDasharray="3,3"/>
-            </svg>
-
-            {/* Flowing Electricity Animation */}
-            <div className="absolute inset-0">
-              {/* Horizontal electricity flows */}
-              <div className="absolute top-[150px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-400 to-transparent animate-electric-flow-1 opacity-80"></div>
-              <div className="absolute top-[300px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-cyan-400 to-transparent animate-electric-flow-2 opacity-60"></div>
-              <div className="absolute top-[450px] left-0 w-full h-0.5 bg-gradient-to-r from-transparent via-blue-500 to-transparent animate-electric-flow-3 opacity-70"></div>
-
-              {/* Circuit nodes with pulsing */}
-              <div className="absolute top-[148px] left-[200px] w-4 h-4 bg-blue-500 rounded-full animate-pulse opacity-60"></div>
-              <div className="absolute top-[298px] left-[600px] w-3 h-3 bg-cyan-500 rounded-full animate-pulse opacity-70" style={{ animationDelay: '0.5s' }}></div>
-              <div className="absolute top-[448px] left-[1000px] w-4 h-4 bg-blue-600 rounded-full animate-pulse opacity-50" style={{ animationDelay: '1s' }}></div>
-              <div className="absolute top-[148px] left-[1000px] w-3 h-3 bg-cyan-400 rounded-full animate-pulse opacity-80" style={{ animationDelay: '1.5s' }}></div>
-
-            {/* Data packets flowing */}
-            <div className="absolute top-[145px] w-2 h-2 bg-yellow-400 rounded-full animate-data-flow-1 opacity-90 shadow-lg shadow-yellow-400/50"></div>
-            <div className="absolute top-[295px] w-2 h-2 bg-green-400 rounded-full animate-data-flow-2 opacity-85 shadow-lg shadow-green-400/50"></div>
-            <div className="absolute top-[445px] w-2 h-2 bg-purple-400 rounded-full animate-data-flow-3 opacity-75 shadow-lg shadow-purple-400/50"></div>
-          </div>
-        </div>
-      )}
-
-        <div className="relative z-10 max-w-5xl mx-auto text-center">
-          {/* Content */}
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 sm:gap-6 mb-6">
-            {/* Logo */}
-            <img
-              src="/irongate-logo.png"
-              alt="IronGate QA Navigator"
-              className="h-8 sm:h-10 w-auto object-contain"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-
-            {/* Title */}
-            <div className="flex-1 max-w-2xl">
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800 dark:text-slate-100 leading-tight">
-                IronGate QE Navigator
-              </h1>
-            </div>
-          </div>
-
-          <TypingAnimation className="max-w-3xl" />
-        </div>
-      </div>
+      {/* Brain-Circuit Hero */}
+      <BrainCircuitHero />
 
       {/* Metrics Updated Notification */}
       {showMetricsNotification && (
@@ -491,17 +417,18 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
               } ${is3DMode ? 'hover:-translate-y-1 hover:scale-[1.02]' : 'hover:scale-[1.01]'} ${
                 is3DMode && isDark ? 'hover:shadow-slate-900/40' : is3DMode ? 'hover:shadow-gray-900/20' : ''
               }`}
-              style={{ 
+              style={{
                 animationDelay: `${index * 50}ms`,
-                backgroundColor: isDark
-                  ? team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.30)' 
-                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.30)' 
-                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.30)' 
-                    : 'rgba(239, 68, 68, 0.30)'
-                  : team.qaScore >= 85 ? 'rgba(16, 185, 129, 0.30)' 
-                    : team.qaScore >= 75 ? 'rgba(234, 179, 8, 0.30)' 
-                    : team.qaScore >= 50 ? 'rgba(249, 115, 22, 0.30)' 
-                    : 'rgba(239, 68, 68, 0.30)'
+                // Match BatteryIndicator thresholds using CSS variables
+                // Colors are defined in src/index.css as --qa-*-bg so they can be edited with a color picker
+                backgroundColor:
+                  team.qaScore >= 80
+                    ? 'var(--qa-high-bg)'
+                    : team.qaScore >= 60
+                      ? 'var(--qa-mid-bg)'
+                      : team.qaScore >= 40
+                        ? 'var(--qa-low-bg)'
+                        : 'var(--qa-bad-bg)'
               }}
               data-testid="team-card"
             >
@@ -520,24 +447,35 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
               {is3DMode && (
                 <>
                   {/* Outer shadow ring */}
-                  <div className="absolute -inset-1 rounded-xl opacity-20 blur-sm group-hover:opacity-40 transition-opacity duration-300"
+                  <div
+                    className="absolute -inset-1 rounded-xl opacity-20 blur-sm group-hover:opacity-40 transition-opacity duration-300 team-card-outer-ring"
                     style={{
+                      // Match BatteryIndicator thresholds for rim glow
                       background: isDark
-                        ? team.qaScore >= 85 ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(5, 150, 105, 0.4))'
-                          : team.qaScore >= 75 ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.3), rgba(217, 119, 6, 0.4))'
-                          : team.qaScore >= 50 ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.3), rgba(234, 88, 12, 0.4))'
-                          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.3), rgba(220, 38, 38, 0.4))'
-                        : team.qaScore >= 85 ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(5, 150, 105, 0.3))'
-                          : team.qaScore >= 75 ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.2), rgba(217, 119, 6, 0.3))'
-                          : team.qaScore >= 50 ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.2), rgba(234, 88, 12, 0.3))'
-                          : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(220, 38, 38, 0.3))'
+                        ? team.qaScore >= 80
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.32), rgba(5, 150, 105, 0.46))'
+                          : team.qaScore >= 60
+                            ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.30), rgba(217, 119, 6, 0.44))'
+                            : team.qaScore >= 40
+                              ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.30), rgba(234, 88, 12, 0.44))'
+                              : 'linear-gradient(135deg, rgba(239, 68, 68, 0.32), rgba(220, 38, 38, 0.46))'
+                        : team.qaScore >= 80
+                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.26), rgba(5, 150, 105, 0.36))'
+                          : team.qaScore >= 60
+                            ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.26), rgba(217, 119, 6, 0.36))'
+                            : team.qaScore >= 40
+                              ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.26), rgba(234, 88, 12, 0.36))'
+                              : 'linear-gradient(135deg, rgba(239, 68, 68, 0.28), rgba(220, 38, 38, 0.38))'
                     }}
                   />
 
                   {/* Inner highlight for 3D effect - covers full card */}
-                  <div className="absolute inset-0 rounded-xl pointer-events-none z-0"
+                  <div
+                    className="absolute inset-0 rounded-xl team-card-3d-layer"
                     style={{
-                      background: 'linear-gradient(180deg, rgba(255,255,255,0.25) 0%, rgba(255,255,255,0.05) 30%, transparent 60%, rgba(0,0,0,0.03) 100%)'
+                      // Stronger top light, soft fade to subtle shadow at bottom
+                      background:
+                        'linear-gradient(180deg, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0.32) 28%, rgba(255,255,255,0.10) 60%, rgba(0,0,0,0.12) 100%)',
                     }}
                   />
                 </>

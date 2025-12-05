@@ -9,6 +9,20 @@
   --theme-accent: 59 130 246;
   --theme-primary-rgb: 6, 182, 212;
   --cache-bust: "20251205";
+
+  /* QA score-based team card backgrounds (light mode defaults) */
+  --qa-high-bg: rgba(17, 180, 30, 0.69);
+  --qa-mid-bg: rgba(255, 243, 75, 0.629);
+  --qa-low-bg: rgba(249, 116, 22, 0.574);
+  --qa-bad-bg: rgba(217, 20, 20, 0.725);
+}
+
+/* Dark mode overrides for QA score backgrounds */
+.dark {
+  --qa-high-bg: rgba(19, 140, 31, 0);
+  --qa-mid-bg: rgba(193, 154, 0, 0);
+  --qa-low-bg: rgba(249, 116, 22, 0);
+  --qa-bad-bg: rgba(239, 68, 68, 0);
 }
 
 /* Smooth transitions for theme changes */
@@ -78,6 +92,13 @@ html {
 .theme-ocean .team-card > * {
   position: relative;
   z-index: 1;
+}
+
+.theme-ocean .team-card .team-card-outer-ring,
+.theme-ocean .team-card .team-card-3d-layer {
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
 }
 
 .theme-ocean .team-card:hover {
