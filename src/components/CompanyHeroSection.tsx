@@ -39,6 +39,10 @@ interface CompanySummary {
   
   // Generated
   aiSummary: string;
+
+  // Counts
+  teamCount: number;
+  teamsWithKpiData: number;
 }
 
 const CompanyHeroSection: React.FC = () => {
@@ -213,6 +217,9 @@ const CompanyHeroSection: React.FC = () => {
                   <div className="flex items-center justify-center gap-1 mt-1">
                     {getRiskBadge(summary.riskLevel)}
                   </div>
+                  <div className="mt-1 text-[10px] text-gray-400 dark:text-gray-500">
+                    {summary.teamsWithKpiData}/{summary.teamCount} teams in calculation
+                  </div>
                 </div>
               </div>
 
@@ -337,12 +344,61 @@ const CompanyHeroSection: React.FC = () => {
                 </div>
               ) : insightsData ? (
                 <>
-                  {/* AI Analysis Text */}
+                  {/* AI Analysis Text - Formatted */}
                   <div className={`p-5 rounded-xl ${isDark ? 'bg-slate-800/50' : 'bg-gray-50'} border ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
-                    <div className="prose dark:prose-invert max-w-none">
-                      <div className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed text-gray-700 dark:text-gray-300">
-                        {insightsData.analysis}
-                      </div>
+                    <div className="prose dark:prose-invert max-w-none text-sm sm:text-base leading-relaxed text-gray-700 dark:text-gray-300">
+                      {insightsData.analysis.split('\n').map((line: string, idx: number) => {
+                        const trimmed = line.trim();
+                        
+                        // Empty line = paragraph break
+                        if (!trimmed) return <div key={idx} className="h-3" />;
+                        
+                        // Headers (## or **)
+                        if (trimmed.startsWith('##') || trimmed.startsWith('**')) {
+                          const text = trimmed.replace(/^##\s*/, '').replace(/^\*\*/, '').replace(/\*\*$/, '');
+                          return (
+                            <h4 key={idx} className="font-semibold text-gray-900 dark:text-white mt-4 mb-2 flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-500" />
+                              {text}
+                            </h4>
+                          );
+                        }
+                        
+                        // Numbered list (1. 2. 3.)
+                        if (/^\d+\.\s/.test(trimmed)) {
+                          const num = trimmed.match(/^(\d+)\./)?.[1];
+                          const text = trimmed.replace(/^\d+\.\s*/, '');
+                          return (
+                            <div key={idx} className="flex gap-3 ml-2 mb-2">
+                              <span className="flex-shrink-0 w-6 h-6 rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 text-xs font-bold flex items-center justify-center">
+                                {num}
+                              </span>
+                              <span className="flex-1">{text.replace(/\*\*/g, '')}</span>
+                            </div>
+                          );
+                        }
+                        
+                        // Bullet points (- or •)
+                        if (trimmed.startsWith('-') || trimmed.startsWith('•')) {
+                          const text = trimmed.replace(/^[-•]\s*/, '');
+                          return (
+                            <div key={idx} className="flex gap-2 ml-4 mb-1.5">
+                              <span className="text-purple-500 mt-1">•</span>
+                              <span>{text.replace(/\*\*/g, '')}</span>
+                            </div>
+                          );
+                        }
+                        
+                        // Regular paragraph - handle inline bold
+                        const formattedLine = trimmed.split(/(\*\*[^*]+\*\*)/).map((part, i) => {
+                          if (part.startsWith('**') && part.endsWith('**')) {
+                            return <strong key={i} className="font-semibold text-gray-900 dark:text-white">{part.slice(2, -2)}</strong>;
+                          }
+                          return part;
+                        });
+                        
+                        return <p key={idx} className="mb-2">{formattedLine}</p>;
+                      })}
                     </div>
                     {/* Disclaimer */}
                     <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mt-4 pt-3 border-t border-gray-200 dark:border-slate-700">

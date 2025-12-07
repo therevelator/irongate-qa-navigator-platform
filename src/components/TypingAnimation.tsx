@@ -7,15 +7,18 @@ interface TypingAnimationProps {
 const messages = [
   'CI/CD: because manually deploying is how horror stories begin.',
   'Ship with confidence, not with crossed fingers.',
-  'Turning chaos into predictable, measurable reliability.',
-  'Quality without exception. Reliability without compromise.',
-  'Operational certainty through engineered, repeatable precision.',
-  'Because mission-critical software requires non-optional excellence.',
-  'Delivering confidence through disciplined engineering practices.',
-  'From scattered technical signals to clear business outcomes.',
-  'From disconnected logs and metrics to revenue-aligned intelligence.',
-  'Turning random metrics into insights you can explain in meetings.',
-  'Transforming uncertainty into confidence—one defect at a time'
+  'Building confidence, one fix at a time.',
+  'Turning surprises into scheduled tasks.',
+  'Quality: because hope is not a test plan.',
+  'Keeping outages off the weekend calendar.',
+  'Making reliability boring—in the best way.',
+  'Written with the wisdom of past outages.',
+  'Lessons learned the hard way, applied the smart way.',
+  'Because some mistakes only need to happen once.',
+  'Turning noise into signals you can trust.',
+  'Seeing patterns where others see problems.',
+  'Finding order in the things that look unpredictable.',
+  'Bringing order to the metrics chaos'
 ];
 
 const TypingAnimation: React.FC<TypingAnimationProps> = ({ className = '' }) => {

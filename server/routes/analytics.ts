@@ -1,6 +1,6 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { seedAllAnalyticsData, updateDailyAnalytics } from '../jobs/analyticsSync';
 import { randomUUID } from 'crypto';
 
@@ -445,13 +445,14 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
 router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    const { teamId, days = '30' } = req.query;
-    const numDays = Math.min(parseInt(days as string) || 30, 90);
+    const { teamId } = req.query;
 
+    // Note: developer_metrics in the live DB is effectively a current snapshot per developer.
+    // We aggregate over all rows for the company without a recorded_date filter.
     let sql = `
       SELECT 
         dm.id,
-        dm.user_id as developer_id,
+        dm.developer_id as developer_id,
         CONCAT(u.first_name, ' ', u.last_name) as name,
         AVG(dm.code_review_time_avg) as code_review_time_avg,
         AVG(dm.pr_merge_time_avg) as pr_merge_time_avg,
@@ -460,13 +461,12 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
         AVG(dm.focus_time_hours) as focus_time_hours,
         AVG(dm.meeting_time_hours) as meeting_time_hours
       FROM developer_metrics dm
-      JOIN users u ON dm.user_id = u.id
+      JOIN users u ON dm.developer_id = u.id
       JOIN team_members tm ON u.id = tm.user_id
       JOIN teams t ON tm.team_id = t.id
       WHERE t.company_id = ?
-        AND dm.recorded_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
     `;
-    const params: any[] = [companyId, numDays];
+    const params: any[] = [companyId];
 
     if (teamId) {
       sql += ' AND tm.team_id = ?';
@@ -492,9 +492,6 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error fetching developer metrics:', error);
     res.status(500).json({ error: 'Failed to fetch developer metrics' });
-      // Make logging more visible
-      alert("🚀 Preparing Groq API Call - Check server console!");
-      console.error("🚀🚀🚀 GROQ API CALL STARTING 🚀🚀🚀");
   }
 });
 
@@ -2136,7 +2133,8 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
     // 1. Get all teams and their LATEST KPI snapshots for this company
     const teamsWithKpis = await query<any>(`
       SELECT 
-        t.id, t.name,
+        t.id AS team_id,
+        t.name,
         ks.*
       FROM teams t
       LEFT JOIN kpi_snapshots ks ON t.id = ks.team_id
@@ -2144,11 +2142,11 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
       ORDER BY ks.snapshot_date DESC
     `, [companyId]);
 
-    // Get unique teams with their latest snapshot only
+    // Get unique teams with their latest snapshot only (first row per team_id due to DESC ordering)
     const teamMap = new Map<string, any>();
     for (const row of teamsWithKpis) {
-      if (!teamMap.has(row.id)) {
-        teamMap.set(row.id, row);
+      if (!teamMap.has(row.team_id)) {
+        teamMap.set(row.team_id, row);
       }
     }
     const teams = Array.from(teamMap.values());
@@ -2174,11 +2172,12 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
 
     // ============================================================================
     // METRIC 1: Global QA Score
-    // Source: AVG(kpi_snapshots.qa_score) across all teams
-    // ============================================================================
-    const globalQaScore = Math.round(
-      teamsWithData.reduce((sum, t) => sum + Number(t.qa_score), 0) / teamsWithData.length
-    );
+    // Source: simple average of team QA scores used on the dashboard
+    // Formula: (sum of all team qa_score) / (number of teams with KPI data)
+    const qaScores = teamsWithData.map(t => Number(t.qa_score) || 0);
+    const globalQaScore = qaScores.length
+      ? Math.round(qaScores.reduce((sum, score) => sum + score, 0) / qaScores.length)
+      : 0;
 
     // Trend: Compare to historical data (if available)
     const historicalKpis = await query<any>(`
@@ -2389,7 +2388,8 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
          AVG(dm.context_switches_per_day) as avg_switches
        FROM developer_metrics dm
        JOIN users u ON dm.developer_id = u.id
-       JOIN teams t ON dm.team_id = t.id
+       JOIN team_members tm ON u.id = tm.user_id
+       JOIN teams t ON tm.team_id = t.id
        WHERE t.company_id = ?`,
       [companyId]
     );
@@ -2425,10 +2425,10 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
 
     // 3. Delivery Performance Score (DORA)
     // Based on averages from kpi_snapshots (teamsWithData)
-    const avgDeployFreq = teamsWithData.reduce((sum, t) => sum + (Number(t.deployment_frequency_per_week) || 0), 0) / (teamsWithData.length || 1);
-    const avgLeadTime = teamsWithData.reduce((sum, t) => sum + (Number(t.lead_time_days) || 0), 0) / (teamsWithData.length || 1);
-    const avgFailureRate = teamsWithData.reduce((sum, t) => sum + (Number(t.change_failure_rate) || 0), 0) / (teamsWithData.length || 1);
-    const avgMttr = teamsWithData.reduce((sum, t) => sum + (Number(t.mttr_hours) || 0), 0) / (teamsWithData.length || 1);
+    const avgDeployFreq = teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.deployment_frequency_per_week) || 0), 0) / (teamsWithData.length || 1);
+    const avgLeadTime = teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.lead_time_days) || 0), 0) / (teamsWithData.length || 1);
+    const avgFailureRate = teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.change_failure_rate) || 0), 0) / (teamsWithData.length || 1);
+    const avgMttr = teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.mttr_hours) || 0), 0) / (teamsWithData.length || 1);
 
     let doraLevelScore = 40; // Low
     if (avgDeployFreq >= 7 && avgLeadTime < 1 && avgFailureRate < 5 && avgMttr < 1) {
@@ -2490,7 +2490,12 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
 // Get AI insights for company-wide metrics (Exec Dashboard)
 router.post('/company-insights', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const { companyId, role } = req.user;
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { companyId, role } = user;
     
     if (!['super_admin', 'manager', 'team_lead'].includes(role)) {
       return res.status(403).json({ error: 'Executive insights are restricted.' });
@@ -2583,11 +2588,11 @@ router.post('/company-insights', authenticateToken, async (req: AuthRequest, res
     );
 
     // Detailed Aggregates
-    const avgQaScore = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.qa_score) || 0), 0) / (teamsWithData.length || 1));
-    const avgTestCoverage = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.test_coverage) || 0), 0) / (teamsWithData.length || 1));
-    const avgDefectEscape = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.defect_escape_rate) || 0), 0) / (teamsWithData.length || 1));
-    const avgFlakiness = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.test_flakiness_rate) || 0), 0) / (teamsWithData.length || 1));
-    const automationCov = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.automation_coverage) || 0), 0) / (teamsWithData.length || 1));
+    const avgQaScore = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.qa_score) || 0), 0) / (teamsWithData.length || 1));
+    const avgTestCoverage = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.test_coverage) || 0), 0) / (teamsWithData.length || 1));
+    const avgDefectEscape = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.defect_escape_rate) || 0), 0) / (teamsWithData.length || 1));
+    const avgFlakiness = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.test_flakiness_rate) || 0), 0) / (teamsWithData.length || 1));
+    const automationCov = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.automation_coverage) || 0), 0) / (teamsWithData.length || 1));
 
     // 2. Store Snapshot
     await query(`
