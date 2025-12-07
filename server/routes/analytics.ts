@@ -2137,14 +2137,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
     const teamsWithKpis = await query<any>(`
       SELECT 
         t.id, t.name,
-        ks.qa_score,
-        ks.test_coverage,
-        ks.automation_coverage,
-        ks.defect_escape_rate,
-        ks.defect_density,
-        ks.test_flakiness_rate,
-        ks.first_time_pass_rate,
-        ks.snapshot_date
+        ks.*
       FROM teams t
       LEFT JOIN kpi_snapshots ks ON t.id = ks.team_id
       WHERE t.company_id = ? AND t.is_active = 1
@@ -2353,35 +2346,342 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
     });
 
     // ============================================================================
+    // NEW METRICS CALCULATION (Engineering Health, DORA, Wellness, Tech Debt)
+    // ============================================================================
+
+    // 1. Technical Debt Status
+    // Fetch aggregated tech debt for the company
+    const techDebtSummary = await queryOne<any>(
+      `SELECT 
+         SUM(CASE 
+               WHEN status NOT IN ('resolved','wont_fix') THEN
+                 CASE severity
+                   WHEN 'critical' THEN 30
+                   WHEN 'high' THEN 20
+                   WHEN 'medium' THEN 10
+                   WHEN 'low' THEN 5
+                   ELSE 0
+                 END
+               ELSE 0
+             END) AS total_weight,
+         SUM(CASE WHEN status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items,
+         COUNT(*) as total_items
+       FROM technical_debt td
+       JOIN teams t ON td.team_id = t.id
+       WHERE t.company_id = ?`,
+      [companyId]
+    );
+
+    const totalTechDebtScore = Math.min(100, Number(techDebtSummary?.total_weight || 0) / (teams.length || 1)); // Normalized per team roughly
+    const techDebtStatusScore = Math.round(Math.max(0, 100 - totalTechDebtScore) * 10) / 10; // one decimal place
+    const techDebtResolutionRate = techDebtSummary?.total_items > 0 
+      ? Math.round(((techDebtSummary.total_items - techDebtSummary.open_items) / techDebtSummary.total_items) * 100)
+      : 100;
+
+    // 2. Developer Wellness Index
+    // Fetch aggregated developer metrics
+    // Note: developer_metrics table is a current snapshot (unique key team_id, developer_id), so no date filter needed
+    const devMetricsSummary = await queryOne<any>(
+      `SELECT 
+         AVG(dm.happiness_score) as avg_happiness,
+         AVG(dm.focus_time_hours) as avg_focus,
+         AVG(dm.meeting_time_hours) as avg_meetings,
+         AVG(dm.context_switches_per_day) as avg_switches
+       FROM developer_metrics dm
+       JOIN users u ON dm.developer_id = u.id
+       JOIN teams t ON dm.team_id = t.id
+       WHERE t.company_id = ?`,
+      [companyId]
+    );
+
+    const happiness = Number(devMetricsSummary?.avg_happiness || 75); // Default to 75 if no data
+    const focusTime = Number(devMetricsSummary?.avg_focus || 4);
+    const meetingTime = Number(devMetricsSummary?.avg_meetings || 3);
+    
+    // Calculate Burnout Risk (Categorical -> Score)
+    // Heuristic: High risk if happiness < 50 OR meeting > 5 OR focus < 2
+    let burnoutRiskScore = 100; // Low risk
+    if (happiness < 50 || meetingTime > 5 || focusTime < 2) burnoutRiskScore = 20; // High risk
+    else if (happiness < 70 || meetingTime > 4 || focusTime < 3) burnoutRiskScore = 60; // Moderate risk
+
+    // Focus Time Score
+    let focusTimeScore = 40;
+    if (focusTime >= 4) focusTimeScore = 100;
+    else if (focusTime >= 3) focusTimeScore = 80;
+    else if (focusTime >= 2) focusTimeScore = 60;
+
+    // Meeting Load Score
+    let meetingLoadScore = 40;
+    if (meetingTime <= 2) meetingLoadScore = 100;
+    else if (meetingTime <= 4) meetingLoadScore = 80;
+    else if (meetingTime <= 6) meetingLoadScore = 60;
+
+    const developerWellnessIndex = Math.round(
+      (happiness * 0.6) +
+      (burnoutRiskScore * 0.2) +
+      (focusTimeScore * 0.1) +
+      (meetingLoadScore * 0.1)
+    );
+
+    // 3. Delivery Performance Score (DORA)
+    // Based on averages from kpi_snapshots (teamsWithData)
+    const avgDeployFreq = teamsWithData.reduce((sum, t) => sum + (Number(t.deployment_frequency_per_week) || 0), 0) / (teamsWithData.length || 1);
+    const avgLeadTime = teamsWithData.reduce((sum, t) => sum + (Number(t.lead_time_days) || 0), 0) / (teamsWithData.length || 1);
+    const avgFailureRate = teamsWithData.reduce((sum, t) => sum + (Number(t.change_failure_rate) || 0), 0) / (teamsWithData.length || 1);
+    const avgMttr = teamsWithData.reduce((sum, t) => sum + (Number(t.mttr_hours) || 0), 0) / (teamsWithData.length || 1);
+
+    let doraLevelScore = 40; // Low
+    if (avgDeployFreq >= 7 && avgLeadTime < 1 && avgFailureRate < 5 && avgMttr < 1) {
+      doraLevelScore = 100; // Elite
+    } else if (avgDeployFreq >= 1 && avgLeadTime < 7 && avgFailureRate < 15 && avgMttr < 24) {
+      doraLevelScore = 80; // High
+    } else if (avgDeployFreq >= 0.25 && avgLeadTime < 30 && avgFailureRate < 30 && avgMttr < 48) {
+      doraLevelScore = 60; // Medium
+    }
+
+    const deliveryPerformanceScore = doraLevelScore;
+
+    // 4. Pipeline Health Score (Constant as requested)
+    const pipelineHealthScore = 96;
+
+    // 5. Engineering Health Score (Overall Composite)
+    const engineeringHealthScore = Math.round(
+      (doraLevelScore * 0.35) +
+      (pipelineHealthScore * 0.25) +
+      (techDebtStatusScore * 0.20) +
+      (happiness * 0.15) +
+      (burnoutRiskScore * 0.05)
+    );
+
+    // ============================================================================
     // RESPONSE - All values from real database data
     // ============================================================================
     res.json({
-      // Core metrics from kpi_snapshots
-      globalQaScore,           // AVG(qa_score)
-      globalQaScoreTrend,      // Change vs 7 days ago
-      riskLevel,               // Based on globalQaScore thresholds
-      avgTestCoverage,         // AVG(test_coverage)
-      avgDefectEscapeRate,     // AVG(defect_escape_rate)
-      automationCoverage,      // AVG(automation_coverage)
-      avgFlakinessRate,        // AVG(test_flakiness_rate)
+      // New Executive Metrics
+      engineeringHealthScore,
+      deliveryPerformanceScore,
+      developerWellnessIndex,
+      techDebtStatusScore,
+      pipelineHealthScore,
+      techDebtResolutionRate,
       
-      // Team rankings from kpi_snapshots
-      topImproving,            // Top 3 by qa_score
-      needsAttention,          // Bottom 3 by qa_score
+      // Keep existing metrics for compatibility or drill-downs
+      globalQaScore,
+      globalQaScoreTrend,
+      riskLevel,
+      avgTestCoverage,
+      avgDefectEscapeRate,
+      automationCoverage,
+      avgFlakinessRate,
       
-      // KPI status counts
+      topImproving,
+      needsAttention,
       kpiStatus: { onTrack, atRisk, offTrack },
-      
-      // Generated summary
       aiSummary,
-      
-      // Meta
       teamCount: teams.length,
       teamsWithKpiData: teamsWithData.length
     });
   } catch (error) {
     console.error('Error fetching company summary:', error);
     res.status(500).json({ error: 'Failed to fetch company summary' });
+  }
+});
+
+// Get AI insights for company-wide metrics (Exec Dashboard)
+router.post('/company-insights', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const { companyId, role } = req.user;
+    
+    if (!['super_admin', 'manager', 'team_lead'].includes(role)) {
+      return res.status(403).json({ error: 'Executive insights are restricted.' });
+    }
+
+    // 1. Calculate Metrics (Same logic as company-summary)
+    const teams = await query<any[]>(
+      'SELECT id, name, company_id FROM teams WHERE company_id = ? AND is_active = true',
+      [companyId]
+    );
+
+    const kpiData = await query<any>(`
+      SELECT ks.*, t.name 
+      FROM kpi_snapshots ks
+      INNER JOIN (
+        SELECT team_id, MAX(snapshot_date) as max_date
+        FROM kpi_snapshots
+        GROUP BY team_id
+      ) latest ON ks.team_id = latest.team_id AND ks.snapshot_date = latest.max_date
+      JOIN teams t ON ks.team_id = t.id
+      WHERE t.company_id = ?
+    `, [companyId]);
+
+    const teamsWithData = kpiData || [];
+
+    // Tech Debt
+    const techDebtSummary = await queryOne<any>(
+      `SELECT 
+         SUM(CASE 
+               WHEN status NOT IN ('resolved','wont_fix') THEN
+                 CASE severity WHEN 'critical' THEN 30 WHEN 'high' THEN 20 WHEN 'medium' THEN 10 WHEN 'low' THEN 5 ELSE 0 END
+               ELSE 0
+             END) AS total_weight,
+         COUNT(*) as total_items
+       FROM technical_debt td
+       JOIN teams t ON td.team_id = t.id
+       WHERE t.company_id = ?`,
+      [companyId]
+    );
+    const totalTechDebtScore = Math.min(100, Number(techDebtSummary?.total_weight || 0) / (teams.length || 1));
+    const techDebtStatusScore = Math.round(Math.max(0, 100 - totalTechDebtScore) * 10) / 10;
+
+    // Dev Wellness
+    const devMetricsSummary = await queryOne<any>(
+      `SELECT 
+         AVG(dm.happiness_score) as avg_happiness,
+         AVG(dm.focus_time_hours) as avg_focus,
+         AVG(dm.meeting_time_hours) as avg_meetings
+       FROM developer_metrics dm
+       JOIN users u ON dm.developer_id = u.id
+       JOIN teams t ON dm.team_id = t.id
+       WHERE t.company_id = ?`,
+      [companyId]
+    );
+    const happiness = Number(devMetricsSummary?.avg_happiness || 75);
+    const focusTime = Number(devMetricsSummary?.avg_focus || 4);
+    const meetingTime = Number(devMetricsSummary?.avg_meetings || 3);
+    
+    let burnoutRiskScore = 100;
+    if (happiness < 50 || meetingTime > 5 || focusTime < 2) burnoutRiskScore = 20;
+    else if (happiness < 70 || meetingTime > 4 || focusTime < 3) burnoutRiskScore = 60;
+
+    let focusTimeScore = focusTime >= 4 ? 100 : focusTime >= 3 ? 80 : focusTime >= 2 ? 60 : 40;
+    let meetingLoadScore = meetingTime <= 2 ? 100 : meetingTime <= 4 ? 80 : meetingTime <= 6 ? 60 : 40;
+
+    const developerWellnessIndex = Math.round(
+      (happiness * 0.6) + (burnoutRiskScore * 0.2) + (focusTimeScore * 0.1) + (meetingLoadScore * 0.1)
+    );
+
+    // DORA
+    const avgDeployFreq = teamsWithData.reduce((sum, t) => sum + (Number(t.deployment_frequency_per_week) || 0), 0) / (teamsWithData.length || 1);
+    const avgLeadTime = teamsWithData.reduce((sum, t) => sum + (Number(t.lead_time_days) || 0), 0) / (teamsWithData.length || 1);
+    const avgFailureRate = teamsWithData.reduce((sum, t) => sum + (Number(t.change_failure_rate) || 0), 0) / (teamsWithData.length || 1);
+    const avgMttr = teamsWithData.reduce((sum, t) => sum + (Number(t.mttr_hours) || 0), 0) / (teamsWithData.length || 1);
+
+    let doraLevelScore = 40;
+    if (avgDeployFreq >= 7 && avgLeadTime < 1 && avgFailureRate < 5 && avgMttr < 1) doraLevelScore = 100;
+    else if (avgDeployFreq >= 1 && avgLeadTime < 7 && avgFailureRate < 15 && avgMttr < 24) doraLevelScore = 80;
+    else if (avgDeployFreq >= 0.25 && avgLeadTime < 30 && avgFailureRate < 30 && avgMttr < 48) doraLevelScore = 60;
+
+    const deliveryPerformanceScore = doraLevelScore;
+    const pipelineHealthScore = 96;
+
+    const engineeringHealthScore = Math.round(
+      (doraLevelScore * 0.35) +
+      (pipelineHealthScore * 0.25) +
+      (techDebtStatusScore * 0.20) +
+      (happiness * 0.15) +
+      (burnoutRiskScore * 0.05)
+    );
+
+    // Detailed Aggregates
+    const avgQaScore = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.qa_score) || 0), 0) / (teamsWithData.length || 1));
+    const avgTestCoverage = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.test_coverage) || 0), 0) / (teamsWithData.length || 1));
+    const avgDefectEscape = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.defect_escape_rate) || 0), 0) / (teamsWithData.length || 1));
+    const avgFlakiness = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.test_flakiness_rate) || 0), 0) / (teamsWithData.length || 1));
+    const automationCov = Math.round(teamsWithData.reduce((sum, t) => sum + (Number(t.automation_coverage) || 0), 0) / (teamsWithData.length || 1));
+
+    // 2. Store Snapshot
+    await query(`
+      INSERT INTO company_kpi_snapshots 
+      (company_id, snapshot_date, engineering_health_score, delivery_performance_score, developer_wellness_index, tech_debt_status_score, pipeline_health_score, avg_qa_score, avg_test_coverage, avg_defect_escape_rate, avg_flakiness_rate, automation_coverage)
+      VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+      engineering_health_score = VALUES(engineering_health_score),
+      delivery_performance_score = VALUES(delivery_performance_score),
+      developer_wellness_index = VALUES(developer_wellness_index),
+      tech_debt_status_score = VALUES(tech_debt_status_score),
+      pipeline_health_score = VALUES(pipeline_health_score),
+      avg_qa_score = VALUES(avg_qa_score),
+      avg_test_coverage = VALUES(avg_test_coverage),
+      avg_defect_escape_rate = VALUES(avg_defect_escape_rate),
+      avg_flakiness_rate = VALUES(avg_flakiness_rate),
+      automation_coverage = VALUES(automation_coverage)
+    `, [
+      companyId, 
+      engineeringHealthScore, deliveryPerformanceScore, developerWellnessIndex, techDebtStatusScore, pipelineHealthScore,
+      avgQaScore, avgTestCoverage, avgDefectEscape, avgFlakiness, automationCov
+    ]);
+
+    // 3. Fetch History (Last 30 days)
+    const history = await query<any[]>(`
+      SELECT * FROM company_kpi_snapshots 
+      WHERE company_id = ? 
+      ORDER BY snapshot_date ASC 
+      LIMIT 30
+    `, [companyId]);
+
+    // 4. Generate AI Analysis
+    const groqApiKey = process.env.GROQ_API_KEY;
+    let aiAnalysis = "AI analysis unavailable.";
+
+    if (groqApiKey && groqApiKey.length > 10) {
+      console.log('🤖 Generating Company Insights via Groq AI...');
+      try {
+        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${groqApiKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            model: 'openai/gpt-oss-120b',
+            messages: [
+              {
+                role: 'system',
+                content: `You are a CTO/VP of Engineering advisor. Analyze these company-wide metrics and trends.
+                
+Current Metrics:
+- Engineering Health: ${engineeringHealthScore}/100
+- Delivery (DORA): ${deliveryPerformanceScore}/100
+- Wellness: ${developerWellnessIndex}/100
+- Tech Debt Status: ${techDebtStatusScore}/100
+- Pipeline Health: ${pipelineHealthScore}/100
+
+Provide a concise executive summary (3-4 sentences) highlighting the biggest risk and the biggest win. Then provide 3 strategic recommendations.`
+              },
+              {
+                role: 'user',
+                content: `Here is the 30-day trend data: ${JSON.stringify(history.map(h => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
+              }
+            ],
+            temperature: 0.7,
+            max_tokens: 500
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          aiAnalysis = data.choices?.[0]?.message?.content || "Analysis generation failed.";
+        }
+      } catch (err) {
+        console.error("Groq API failed:", err);
+      }
+    }
+
+    res.json({
+      metrics: {
+        engineeringHealthScore,
+        deliveryPerformanceScore,
+        developerWellnessIndex,
+        techDebtStatusScore,
+        pipelineHealthScore
+      },
+      history,
+      analysis: aiAnalysis
+    });
+
+  } catch (error) {
+    console.error('Error generating company insights:', error);
+    res.status(500).json({ error: 'Failed to generate insights' });
   }
 });
 

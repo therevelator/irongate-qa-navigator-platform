@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   TrendingUp, TrendingDown, Shield, AlertTriangle, CheckCircle2, 
-  Activity, Bug, Zap, Bot
+  Activity, Bug, Zap, Bot, Heart, GitMerge, FileWarning, Gauge, X, Loader2
 } from 'lucide-react';
 import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -28,22 +28,17 @@ interface CompanySummary {
   globalQaScore: number;           // AVG(qa_score) across all teams
   globalQaScoreTrend: number;      // Change vs 7 days ago
   riskLevel: 'stable' | 'watch' | 'at-risk' | 'unknown';
-  avgTestCoverage: number;         // AVG(test_coverage) across all teams
-  avgDefectEscapeRate: number;     // AVG(defect_escape_rate) across all teams
-  automationCoverage: number;      // AVG(automation_coverage) across all teams
-  avgFlakinessRate: number;        // AVG(test_flakiness_rate) across all teams
   
-  // Team rankings
-  topImproving: Array<{ name: string; score: number }>;
-  needsAttention: Array<{ name: string; score: number; issue: string }>;
-  
-  // KPI status
-  kpiStatus: { onTrack: number; atRisk: number; offTrack: number };
+  // New Executive Metrics
+  engineeringHealthScore: number;
+  deliveryPerformanceScore: number;
+  developerWellnessIndex: number;
+  techDebtStatusScore: number;
+  pipelineHealthScore: number;
+  techDebtResolutionRate: number;
   
   // Generated
   aiSummary: string;
-  teamCount: number;
-  teamsWithKpiData: number;
 }
 
 const CompanyHeroSection: React.FC = () => {
@@ -61,6 +56,29 @@ const CompanyHeroSection: React.FC = () => {
 
   const TYPE_SPEED = 50;
   const PAUSE_AFTER_COMPLETE = 30 * 60 * 1000; // 30 minutes
+
+  const [showInsights, setShowInsights] = useState(false);
+  const [insightsLoading, setInsightsLoading] = useState(false);
+  const [insightsData, setInsightsData] = useState<any>(null);
+
+  const fetchInsights = async () => {
+    if (insightsData) return;
+    try {
+      setInsightsLoading(true);
+      const response = await fetch(`${API_URL}/analytics/company-insights`, {
+        method: 'POST',
+        credentials: 'include'
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setInsightsData(data);
+      }
+    } catch (error) {
+      console.error('Error fetching insights:', error);
+    } finally {
+      setInsightsLoading(false);
+    }
+  };
 
   // Typing animation effect
   useEffect(() => {
@@ -119,12 +137,6 @@ const CompanyHeroSection: React.FC = () => {
     fetchSummary();
   }, [fetchSummary]);
 
-  const formatNumber = (num: number): string => {
-    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-    if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-    return num.toString();
-  };
-
   const getRiskBadge = (level: string) => {
     switch (level) {
       case 'stable':
@@ -154,33 +166,18 @@ const CompanyHeroSection: React.FC = () => {
     }
   };
 
-  // Mini sparkline component
-  const Sparkline: React.FC<{ data: number[]; color?: string }> = ({ data, color = '#10b981' }) => {
-    if (!data || data.length === 0) return null;
-    const max = Math.max(...data);
-    const min = Math.min(...data);
-    const range = max - min || 1;
-    const width = 80;
-    const height = 24;
-    const points = data.map((val, i) => {
-      const x = (i / (data.length - 1)) * width;
-      const y = height - ((val - min) / range) * height;
-      return `${x},${y}`;
-    }).join(' ');
-
-    return (
-      <svg width={width} height={height} className="inline-block">
-        <polyline
-          points={points}
-          fill="none"
-          stroke={color}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    );
-  };
+  const MetricCard = ({ label, value, sublabel, icon: Icon, colorClass }: any) => (
+    <div className={`p-3 rounded-xl ${isDark ? 'bg-slate-900/60' : 'bg-white'} border ${isDark ? 'border-slate-700' : 'border-gray-200'} flex flex-col justify-between h-full hover:shadow-md transition-shadow`}>
+      <div className="flex items-center gap-2 mb-2">
+        <Icon size={16} className={colorClass} />
+        <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 uppercase tracking-wide">{label}</span>
+      </div>
+      <div>
+        <p className="text-2xl font-bold text-gray-900 dark:text-white leading-none mb-1">{value}</p>
+        <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-tight">{sublabel}</p>
+      </div>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -204,138 +201,195 @@ const CompanyHeroSection: React.FC = () => {
         
         {/* Main Hero Content */}
         <div className="p-4 sm:p-5">
-          <div className="flex flex-col lg:flex-row items-stretch gap-4">
+          <div className="flex flex-col xl:flex-row items-stretch gap-6">
             
-            {/* Left: Vertical Battery (Global QA Score) */}
-            <div className="flex-shrink-0 flex flex-col items-center justify-center">
-              <HeroBattery percentage={summary.globalQaScore} size="lg" showLabel={true} />
-              <div className="mt-2 text-center">
-                <span className="text-xs text-gray-500 dark:text-gray-400">Global QA Score</span>
-                <div className="flex items-center justify-center gap-1 mt-1">
-                  {getRiskBadge(summary.riskLevel)}
+            {/* Left Group: Battery + Branding */}
+            <div className="flex flex-col sm:flex-row items-center sm:items-stretch gap-6 flex-shrink-0 xl:w-1/3">
+              {/* Vertical Battery (Global QA Score) */}
+              <div className="flex-shrink-0 flex flex-col items-center justify-center min-w-[100px]">
+                <HeroBattery percentage={summary.globalQaScore} size="lg" showLabel={true} />
+                <div className="mt-2 text-center">
+                  <span className="text-xs text-gray-500 dark:text-gray-400">Global QA Score</span>
+                  <div className="flex items-center justify-center gap-1 mt-1">
+                    {getRiskBadge(summary.riskLevel)}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            {/* Center: IronGate Branding + Typing Animation */}
-            <div className="flex-1 min-w-0 flex flex-col justify-center">
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-800 dark:text-slate-100 leading-tight mb-1">
-                IronGate QE Navigator
-              </h1>
-              <div className="relative h-6 overflow-hidden mb-2">
-                <div
-                  ref={containerRef}
-                  className={`whitespace-nowrap text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-mono transition-all duration-500 ease-in-out ${
-                    slideOut ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'
-                  }`}
+              {/* IronGate Branding + Typing Animation */}
+              <div className="flex-1 min-w-0 flex flex-col justify-center text-center sm:text-left">
+                <h1 className="text-xl sm:text-2xl font-bold text-slate-800 dark:text-slate-100 leading-tight mb-2">
+                  IronGate QE Navigator
+                </h1>
+                <div className="relative h-10 sm:h-8 overflow-hidden mb-2">
+                  <div
+                    ref={containerRef}
+                    className={`whitespace-normal sm:whitespace-nowrap text-xs sm:text-sm text-gray-600 dark:text-gray-300 font-mono transition-all duration-500 ease-in-out ${
+                      slideOut ? 'translate-x-full opacity-0' : 'translate-x-0 opacity-100'
+                    }`}
+                  >
+                    {displayedText}
+                    <span className="animate-pulse">|</span>
+                  </div>
+                </div>
+                
+                {/* AI Summary - Compact */}
+                <button 
+                  onClick={() => { setShowInsights(true); fetchInsights(); }}
+                  className="flex items-center justify-center sm:justify-start gap-1.5 text-[10px] text-purple-600 dark:text-purple-400 mt-1 hover:text-purple-700 dark:hover:text-purple-300 transition-colors cursor-pointer w-full sm:w-auto font-medium"
                 >
-                  {displayedText}
-                  <span className="animate-pulse">|</span>
-                </div>
-              </div>
-              
-              {/* AI Summary - Compact */}
-              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 dark:text-gray-400">
-                <Bot size={12} className="text-purple-500 flex-shrink-0" />
-                <span className="truncate">{summary.aiSummary}</span>
+                  <Bot size={12} className="flex-shrink-0" />
+                  <span className="truncate text-left">Generate AI Executive Analysis</span>
+                </button>
               </div>
             </div>
 
-            {/* KPI Tiles - All from real kpi_snapshots data */}
-            <div className="flex-1 max-w-xl w-full">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {/* Test Coverage - AVG(test_coverage) */}
-                <div className={`p-3 sm:p-4 rounded-xl ${isDark ? 'bg-slate-900/60' : 'bg-white'} border ${isDark ? 'border-slate-700' : 'border-gray-200'} flex flex-col justify-between`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <Shield size={16} className="text-green-500" />
-                      <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Coverage</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white leading-tight">{summary.avgTestCoverage}%</p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Avg test coverage</p>
-                  </div>
+            {/* Right Group: 5 Executive Metrics Grid */}
+            <div className="flex-1 border-t xl:border-t-0 xl:border-l border-gray-200 dark:border-slate-800 pt-4 xl:pt-0 xl:pl-6">
+              <div className="h-full flex flex-col justify-center">
+                <div className="flex items-center gap-2 mb-3">
+                  <Activity size={14} className="text-blue-500" />
+                  <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">Executive Engineering Metrics</h3>
                 </div>
+                
+                <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+                  {/* 1. Engineering Health Score (Primary) */}
+                  <MetricCard 
+                    label="Health Score" 
+                    value={summary.engineeringHealthScore} 
+                    sublabel="Engineering Health"
+                    icon={Activity}
+                    colorClass="text-blue-500"
+                  />
 
-                {/* Escape Rate - AVG(defect_escape_rate) */}
-                <div className={`p-3 sm:p-4 rounded-xl ${isDark ? 'bg-slate-900/60' : 'bg-white'} border ${isDark ? 'border-slate-700' : 'border-gray-200'} flex flex-col justify-between`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <Bug size={16} className="text-red-500" />
-                      <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Escape Rate</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white leading-tight">{summary.avgDefectEscapeRate}%</p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Defects reaching prod</p>
-                  </div>
-                </div>
+                  {/* 2. Delivery Performance (DORA) */}
+                  <MetricCard 
+                    label="Delivery (DORA)" 
+                    value={summary.deliveryPerformanceScore} 
+                    sublabel="Deployment Perf"
+                    icon={Zap}
+                    colorClass="text-amber-500"
+                  />
 
-                {/* Automation - AVG(automation_coverage) */}
-                <div className={`p-3 sm:p-4 rounded-xl ${isDark ? 'bg-slate-900/60' : 'bg-white'} border ${isDark ? 'border-slate-700' : 'border-gray-200'} flex flex-col justify-between`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <Zap size={16} className="text-amber-500" />
-                      <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Automation</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white leading-tight">{summary.automationCoverage}%</p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Automated coverage</p>
-                  </div>
-                </div>
+                  {/* 3. Developer Wellness */}
+                  <MetricCard 
+                    label="Dev Wellness" 
+                    value={summary.developerWellnessIndex} 
+                    sublabel="Sustainability Index"
+                    icon={Heart}
+                    colorClass="text-pink-500"
+                  />
 
-                {/* Flakiness - AVG(test_flakiness_rate) */}
-                <div className={`p-3 sm:p-4 rounded-xl ${isDark ? 'bg-slate-900/60' : 'bg-white'} border ${isDark ? 'border-slate-700' : 'border-gray-200'} flex flex-col justify-between`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-1.5">
-                      <Activity size={16} className="text-purple-500" />
-                      <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300">Flakiness</span>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-white leading-tight">{summary.avgFlakinessRate}%</p>
-                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">Unstable tests</p>
-                  </div>
+                  {/* 4. Technical Debt Status */}
+                  <MetricCard 
+                    label="Tech Debt Status" 
+                    value={summary.techDebtStatusScore} 
+                    sublabel="Risk Status"
+                    icon={FileWarning}
+                    colorClass="text-orange-500"
+                  />
+
+                  {/* 5. Pipeline Health */}
+                  <MetricCard 
+                    label="Pipeline Health" 
+                    value={summary.pipelineHealthScore} 
+                    sublabel="CI/CD Stability"
+                    icon={GitMerge}
+                    colorClass="text-green-500"
+                  />
                 </div>
               </div>
             </div>
 
-            {/* Top Performing Teams */}
-            <div className={`flex-shrink-0 p-2.5 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-white'} border ${isDark ? 'border-slate-700' : 'border-gray-200'} min-w-[140px]`}>
-              <div className="flex items-center gap-1 mb-2">
-                <TrendingUp size={12} className="text-green-500" />
-                <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300">Top Performing</span>
-              </div>
-              <div className="space-y-1">
-                {summary.topImproving.slice(0, 3).map((team, i) => (
-                  <div key={i} className="flex items-center justify-between text-[10px]">
-                    <span className="text-gray-600 dark:text-gray-400 truncate max-w-[90px]">{team.name}</span>
-                    <span className="font-semibold text-green-600 dark:text-green-400">{team.score}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Needs Attention Teams */}
-            <div className={`flex-shrink-0 p-2.5 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-white'} border ${isDark ? 'border-slate-700' : 'border-gray-200'} min-w-[140px]`}>
-              <div className="flex items-center gap-1 mb-2">
-                <AlertTriangle size={12} className="text-amber-500" />
-                <span className="text-[10px] font-medium text-gray-700 dark:text-gray-300">Needs Attention</span>
-              </div>
-              <div className="space-y-1">
-                {summary.needsAttention.slice(0, 3).map((team, i) => (
-                  <div key={i} className="flex items-center justify-between text-[10px]">
-                    <span className="text-gray-600 dark:text-gray-400 truncate max-w-[70px]">{team.name}</span>
-                    <span className="text-amber-600 dark:text-amber-400">{team.score}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         </div>
       </div>
+      {/* AI Insights Overlay */}
+      {showInsights && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fadeIn">
+          <div className={`w-full max-w-3xl max-h-[85vh] overflow-y-auto rounded-2xl shadow-2xl border ${isDark ? 'bg-slate-900 border-slate-700' : 'bg-white border-gray-200'} flex flex-col`}>
+            
+            {/* Header */}
+            <div className={`flex items-center justify-between p-5 border-b ${isDark ? 'border-slate-800' : 'border-gray-100'} sticky top-0 ${isDark ? 'bg-slate-900' : 'bg-white'} z-10`}>
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                  <Bot size={24} className="text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 dark:text-white">Executive Engineering Insights</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">AI-driven analysis of company-wide metrics</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowInsights(false)}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500 dark:text-gray-400 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6 space-y-6">
+              {insightsLoading ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 size={40} className="text-purple-500 animate-spin mb-4" />
+                  <p className="text-gray-500 dark:text-gray-400">Analyzing engineering data...</p>
+                </div>
+              ) : insightsData ? (
+                <>
+                  {/* AI Analysis Text */}
+                  <div className={`p-5 rounded-xl ${isDark ? 'bg-slate-800/50' : 'bg-gray-50'} border ${isDark ? 'border-slate-700' : 'border-gray-200'}`}>
+                    <div className="prose dark:prose-invert max-w-none">
+                      <div className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed text-gray-700 dark:text-gray-300">
+                        {insightsData.analysis}
+                      </div>
+                    </div>
+                    {/* Disclaimer */}
+                    <div className="flex items-center gap-2 text-xs text-gray-400 dark:text-gray-500 mt-4 pt-3 border-t border-gray-200 dark:border-slate-700">
+                      <Bot size={12} className="text-gray-400" />
+                      <span>Analysis generated by AI. Please verify critical metrics independently.</span>
+                    </div>
+                  </div>
+
+                  {/* Trend History Visualization (Simple) */}
+                  {insightsData.history && insightsData.history.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3 uppercase tracking-wider flex items-center gap-2">
+                        <Activity size={14} className="text-blue-500" />
+                        30-Day Health Trend
+                      </h3>
+                      <div className="h-32 w-full flex items-end gap-1">
+                        {insightsData.history.map((point: any, i: number) => {
+                          const height = `${Math.max(10, point.engineering_health_score)}%`;
+                          return (
+                            <div key={i} className="flex-1 flex flex-col justify-end group relative">
+                              <div 
+                                style={{ height }} 
+                                className={`w-full rounded-t-sm opacity-80 hover:opacity-100 transition-all ${
+                                  point.engineering_health_score >= 80 ? 'bg-green-500' : 
+                                  point.engineering_health_score >= 60 ? 'bg-blue-500' : 'bg-amber-500'
+                                }`}
+                              />
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block z-20 whitespace-nowrap bg-gray-900 text-white text-xs px-2 py-1 rounded shadow-lg">
+                                {new Date(point.snapshot_date).toLocaleDateString()} : {point.engineering_health_score}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  <p>Failed to load insights. Please try again.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
