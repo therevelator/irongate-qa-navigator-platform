@@ -44,7 +44,7 @@ jobs:
         env:
           MYSQL_PWD: testpassword
         run: |
-          mysql -h 127.0.0.1 -u root irongate_qa < database/schema.sql
+          mysql -h 127.0.0.1 -u root irongate_qa < schema_updated.sql
           mysql -h 127.0.0.1 -u root irongate_qa < local_seed_data.sql
           mysql -h 127.0.0.1 -u root irongate_qa < local_users.sql
           mysql -h 127.0.0.1 -u root irongate_qa < seed_teams_with_metrics.sql
