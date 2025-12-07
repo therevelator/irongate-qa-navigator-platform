@@ -525,11 +525,10 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
         [teamId, companyId, targetDepartmentId, name, description || '']
       );
 
-      // Create initial KPI snapshot with default values
-      const snapshotId = `kpi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+      // Create initial KPI snapshot with default values (id is auto-increment)
       await query<any>(
         `INSERT INTO kpi_snapshots (
-          id, team_id, snapshot_date, qa_score, status,
+          team_id, snapshot_date, qa_score, status,
           test_coverage, test_flakiness_rate, defect_density, defect_escape_rate,
           code_quality_score, avg_build_time_minutes, test_execution_time_minutes,
           deployment_frequency_per_week, lead_time_days, mttr_hours,
@@ -537,9 +536,9 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
           sprint_carryover, first_time_pass_rate, blocked_time_hours,
           automation_coverage, automation_roi, change_failure_rate,
           mtbf_hours, system_availability, infrastructure_failures
-        ) VALUES (?, ?, CURDATE(), 0, 'warning',
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99.9, 0)`,
-        [snapshotId, teamId]
+        ) VALUES (?, CURDATE(), 0, 'warning',
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99.9, 0)`,
+        [teamId]
       );
 
       newTeam = await queryOne<any>('SELECT * FROM teams WHERE id = ?', [teamId]);
