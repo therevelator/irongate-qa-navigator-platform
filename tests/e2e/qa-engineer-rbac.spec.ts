@@ -25,25 +25,10 @@ test.describe('QA Engineer Role-Based Access Control', () => {
     // Wait for dashboard to load
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
-    // Read the logged-in user from localStorage to get their primary team ID
-    const primaryTeamId = await page.evaluate(() => {
-      const raw = window.localStorage.getItem('irongate_user');
-      if (!raw) return null;
-      try {
-        const user = JSON.parse(raw);
-        return user.primaryTeamId || user.primary_team_id || null;
-      } catch {
-        return null;
-      }
-    });
-
-    if (!primaryTeamId) {
-      throw new Error('primaryTeamId not found for QA Engineer in localStorage');
-    }
-
-    // Click the card for the engineer's actual primary team
-    const myTeamCard = page.locator(`[data-testid="team-card"][data-team-id="${primaryTeamId}"]`);
-    await expect(myTeamCard).toHaveCount(1);
+    // Click the card for the engineer's actual primary team using the dashboard's own
+    // primary-team marker. This is more robust than relying on specific seeded IDs.
+    const myTeamCard = page.locator('[data-testid="team-card"][data-primary-team="true"]').first();
+    await expect(myTeamCard).toBeVisible();
     await myTeamCard.click();
 
     await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });

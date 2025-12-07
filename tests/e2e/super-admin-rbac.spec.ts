@@ -30,7 +30,9 @@ test.describe('Super Admin Role-Based Access Control', () => {
     await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
 
     // Super Admin should see all sections: team members, AI insights, developer insights
-    await expect(page.locator('text=Team Members')).toBeVisible();
+    // Use a precise heading locator to avoid strict-mode conflicts with "No Team Members" text.
+    const teamMembersHeader = page.getByRole('heading', { name: 'Team Members', exact: true });
+    await expect(teamMembersHeader).toBeVisible();
     await expect(page.locator('text=AI Insights')).toBeVisible();
     await expect(page.locator('text=Developer Insights')).toBeVisible();
 
