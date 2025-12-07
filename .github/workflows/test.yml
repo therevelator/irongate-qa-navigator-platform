@@ -115,7 +115,7 @@ jobs:
             -H "Content-Type: application/json" \
             -d '{"email":"admin@irongate.com","password":"demo123"}')
           
-          if echo "$response" | grep -q "token"; then
+          if echo "$response" | grep -q '"user"'; then
             echo "✅ Backend login successful!"
             exit 0
           else
