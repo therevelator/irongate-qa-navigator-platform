@@ -325,6 +325,9 @@ describe('Admin API Endpoints', () => {
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send(newTeam);
 
+      if (response.status !== 201) {
+        console.error('Create team failed:', response.status, response.body);
+      }
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('id');
       expect(response.body.name).toBe(newTeam.name);
@@ -344,6 +347,9 @@ describe('Admin API Endpoints', () => {
         .set('Authorization', `Bearer ${qaManagerToken}`)
         .send(newTeam);
 
+      if (response.status !== 201) {
+        console.error('QA Manager create team failed:', response.status, response.body);
+      }
       expect(response.status).toBe(201);
       expect(response.body).toHaveProperty('id');
     });
