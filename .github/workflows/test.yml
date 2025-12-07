@@ -136,12 +136,8 @@ jobs:
         run: npm run test:api
         timeout-minutes: 5
 
-      - name: Run E2E tests (simple suite for CI)
-        run: npx playwright test simple-test.spec.ts --project=chromium
-        timeout-minutes: 10
-        
-      - name: Run SPA E2E suite (optional, can fail)
-        run: npx playwright test auth-spa.spec.ts --project=chromium --max-failures=5
+      - name: Run E2E tests (RBAC suite)
+        run: npx playwright test tests/e2e/ --project=chromium --max-failures=5
         continue-on-error: true
         timeout-minutes: 15
 
