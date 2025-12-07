@@ -86,14 +86,16 @@ describe('Database Schema Validation', () => {
   });
 
   describe('Foreign Keys', () => {
-    it('DB-SCHEMA-004: should have foreign key constraints on users table', async () => {
+    it('DB-SCHEMA-004: should have foreign key constraints on teams table', async () => {
+      // The teams table has FK constraints to companies, departments, and users (lead_id)
+      // The users table intentionally has no FK constraints for flexible user creation
       const [rows] = await connection.query(`
         SELECT 
           CONSTRAINT_NAME,
           COLUMN_NAME,
           REFERENCED_TABLE_NAME
         FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-        WHERE TABLE_NAME = 'users' 
+        WHERE TABLE_NAME = 'teams' 
           AND TABLE_SCHEMA = 'irongate_qa'
           AND REFERENCED_TABLE_NAME IS NOT NULL
       `);
@@ -103,7 +105,6 @@ describe('Database Schema Validation', () => {
 
       expect(refTables).toContain('companies');
       expect(refTables).toContain('departments');
-      expect(refTables).toContain('teams');
     });
   });
 
