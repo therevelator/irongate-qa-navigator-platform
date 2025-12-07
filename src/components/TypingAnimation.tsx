@@ -8,14 +8,13 @@ const messages = [
   'CI/CD: because manually deploying is how horror stories begin.',
   'Ship with confidence, not with crossed fingers.',
   'Turning chaos into predictable, measurable reliability.',
-  'Driving software performance with uncompromising quality discipline.',
   'Quality without exception. Reliability without compromise.',
   'Operational certainty through engineered, repeatable precision.',
   'Because mission-critical software requires non-optional excellence.',
-  'Delivering confidence at scale through disciplined engineering practices.',
-  'From scattered technical signals to clear, measurable business outcomes.',
-  'From disconnected logs and metrics to unified, revenue-aligned intelligence.',
-  'Turning random metrics into insights you can actually explain in meetings.',
+  'Delivering confidence through disciplined engineering practices.',
+  'From scattered technical signals to clear business outcomes.',
+  'From disconnected logs and metrics to revenue-aligned intelligence.',
+  'Turning random metrics into insights you can explain in meetings.',
   'Transforming uncertainty into confidence—one defect at a time'
 ];
 
@@ -28,7 +27,7 @@ const TypingAnimation: React.FC<TypingAnimationProps> = ({ className = '' }) => 
   const currentMessage = messages[currentMessageIndex];
   const typingSpeed = 30; // ms per character
   const deletingSpeed = 15; // ms per character when deleting
-  const pauseAfterTyping = 3000; // ms to pause after typing complete
+  const pauseAfterTyping = 30 * 60 * 1000; // ms to pause after typing complete (30 minutes)
   const pauseAfterDeleting = 500; // ms to pause after deleting complete
 
   // Cursor blink effect

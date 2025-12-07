@@ -2120,4 +2120,269 @@ Provide actionable insights that a CTO would understand and use to make investme
   }
 });
 
+// ============================================================================
+// COMPANY-WIDE DASHBOARD SUMMARY (Hero Section)
+// ============================================================================
+
+router.get('/company-summary', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId } = req.user;
+
+    // ============================================================================
+    // ALL METRICS ARE CALCULATED FROM REAL DATABASE DATA
+    // Source: kpi_snapshots table joined with teams table
+    // ============================================================================
+
+    // 1. Get all teams and their LATEST KPI snapshots for this company
+    const teamsWithKpis = await query<any>(`
+      SELECT 
+        t.id, t.name,
+        ks.qa_score,
+        ks.test_coverage,
+        ks.automation_coverage,
+        ks.defect_escape_rate,
+        ks.defect_density,
+        ks.test_flakiness_rate,
+        ks.first_time_pass_rate,
+        ks.snapshot_date
+      FROM teams t
+      LEFT JOIN kpi_snapshots ks ON t.id = ks.team_id
+      WHERE t.company_id = ? AND t.is_active = 1
+      ORDER BY ks.snapshot_date DESC
+    `, [companyId]);
+
+    // Get unique teams with their latest snapshot only
+    const teamMap = new Map<string, any>();
+    for (const row of teamsWithKpis) {
+      if (!teamMap.has(row.id)) {
+        teamMap.set(row.id, row);
+      }
+    }
+    const teams = Array.from(teamMap.values());
+    const teamsWithData = teams.filter(t => t.qa_score != null);
+
+    if (teams.length === 0 || teamsWithData.length === 0) {
+      return res.json({
+        globalQaScore: 0,
+        globalQaScoreTrend: 0,
+        riskLevel: 'unknown',
+        avgTestCoverage: 0,
+        avgDefectEscapeRate: 0,
+        automationCoverage: 0,
+        avgFlakinessRate: 0,
+        topImproving: [],
+        needsAttention: [],
+        kpiStatus: { onTrack: 0, atRisk: 0, offTrack: 0 },
+        aiSummary: 'No data available. Add teams and KPI snapshots to see insights.',
+        teamCount: teams.length,
+        teamsWithKpiData: 0
+      });
+    }
+
+    // ============================================================================
+    // METRIC 1: Global QA Score
+    // Source: AVG(kpi_snapshots.qa_score) across all teams
+    // ============================================================================
+    const globalQaScore = Math.round(
+      teamsWithData.reduce((sum, t) => sum + Number(t.qa_score), 0) / teamsWithData.length
+    );
+
+    // Trend: Compare to historical data (if available)
+    const historicalKpis = await query<any>(`
+      SELECT AVG(ks.qa_score) as avg_score
+      FROM kpi_snapshots ks
+      JOIN teams t ON ks.team_id = t.id
+      WHERE t.company_id = ?
+        AND ks.snapshot_date >= DATE_SUB(NOW(), INTERVAL 14 DAY)
+        AND ks.snapshot_date < DATE_SUB(NOW(), INTERVAL 7 DAY)
+    `, [companyId]);
+    
+    const prevScore = historicalKpis[0]?.avg_score ? Number(historicalKpis[0].avg_score) : globalQaScore;
+    const globalQaScoreTrend = Math.round(globalQaScore - prevScore);
+
+    // Risk Level based on global score
+    let riskLevel: 'stable' | 'watch' | 'at-risk' = 'stable';
+    if (globalQaScore < 60) riskLevel = 'at-risk';
+    else if (globalQaScore < 75) riskLevel = 'watch';
+
+    // ============================================================================
+    // METRIC 2: Average Test Coverage
+    // Source: AVG(kpi_snapshots.test_coverage) across all teams
+    // ============================================================================
+    const avgTestCoverage = Math.round(
+      teamsWithData.reduce((sum, t) => sum + (Number(t.test_coverage) || 0), 0) / teamsWithData.length * 10
+    ) / 10; // One decimal place
+
+    // ============================================================================
+    // METRIC 3: Average Defect Escape Rate
+    // Source: AVG(kpi_snapshots.defect_escape_rate) across all teams
+    // Lower is better - this is % of defects that escaped to production
+    // ============================================================================
+    const avgDefectEscapeRate = Math.round(
+      teamsWithData.reduce((sum, t) => sum + (Number(t.defect_escape_rate) || 0), 0) / teamsWithData.length * 10
+    ) / 10; // One decimal place
+
+    // ============================================================================
+    // METRIC 4: Automation Coverage
+    // Source: AVG(kpi_snapshots.automation_coverage) across all teams
+    // ============================================================================
+    const automationCoverage = Math.round(
+      teamsWithData.reduce((sum, t) => sum + (Number(t.automation_coverage) || 0), 0) / teamsWithData.length * 10
+    ) / 10; // One decimal place
+
+    // ============================================================================
+    // METRIC 5: Average Flakiness Rate
+    // Source: AVG(kpi_snapshots.test_flakiness_rate) across all teams
+    // Lower is better
+    // ============================================================================
+    const avgFlakinessRate = Math.round(
+      teamsWithData.reduce((sum, t) => sum + (Number(t.test_flakiness_rate) || 0), 0) / teamsWithData.length * 10
+    ) / 10; // One decimal place
+
+    // ============================================================================
+    // METRIC 6: Top Performing Teams
+    // Source: Teams sorted by kpi_snapshots.qa_score DESC
+    // ============================================================================
+    const sortedByScore = [...teamsWithData].sort((a, b) => (Number(b.qa_score) || 0) - (Number(a.qa_score) || 0));
+    const topImproving = sortedByScore.slice(0, 3).map(t => ({
+      name: t.name,
+      score: Math.round(Number(t.qa_score) || 0)
+    }));
+
+    // ============================================================================
+    // METRIC 7: Teams Needing Attention
+    // Source: Only teams outside the "good" QA band are considered
+    //         QA status thresholds (mirrors frontend METRICS_CONFIG.qaScore):
+    //           - good:    qa_score >= 85
+    //           - warning: qa_score >= 70
+    //           - critical: qa_score < 70
+    //         We only surface teams in warning/critical (qa_score < 85).
+    // ============================================================================
+    const QA_GOOD_THRESHOLD = 85;
+
+    const needsAttention = [...teamsWithData]
+      // Only teams that are not green
+      .filter(t => (Number(t.qa_score) || 0) < QA_GOOD_THRESHOLD)
+      // Lowest scores first
+      .sort((a, b) => (Number(a.qa_score) || 0) - (Number(b.qa_score) || 0))
+      // Take worst 3
+      .slice(0, 3)
+      .map(t => {
+        const score = Number(t.qa_score) || 0;
+        const escapeRate = Number(t.defect_escape_rate) || 0;
+
+        let issue: string;
+        if (score < 70) issue = 'Critical QA Score';
+        else if (escapeRate > 2) issue = 'High Escape Rate';
+        else issue = 'Below Target';
+
+        return {
+          name: t.name,
+          score: Math.round(score),
+          issue,
+        };
+      });
+
+    // ============================================================================
+    // METRIC 8: KPI Status (teams meeting thresholds)
+    // Source: Count of teams meeting each KPI threshold from kpi_snapshots
+    // ============================================================================
+    const kpiThresholds = {
+      coverage: 80,      // test_coverage >= 80%
+      flakiness: 3,      // test_flakiness_rate <= 3%
+      escapeRate: 2,     // defect_escape_rate <= 2%
+      automation: 70     // automation_coverage >= 70%
+    };
+    
+    let onTrack = 0, atRisk = 0, offTrack = 0;
+    for (const t of teamsWithData) {
+      const coverage = Number(t.test_coverage) || 0;
+      const flakiness = Number(t.test_flakiness_rate) || 0;
+      const escapeRate = Number(t.defect_escape_rate) || 0;
+      const automation = Number(t.automation_coverage) || 0;
+      
+      // Count how many thresholds this team meets
+      const meetsThresholds = (
+        (coverage >= kpiThresholds.coverage ? 1 : 0) +
+        (flakiness <= kpiThresholds.flakiness ? 1 : 0) +
+        (escapeRate <= kpiThresholds.escapeRate ? 1 : 0) +
+        (automation >= kpiThresholds.automation ? 1 : 0)
+      );
+      
+      if (meetsThresholds >= 3) onTrack++;
+      else if (meetsThresholds >= 2) atRisk++;
+      else offTrack++;
+    }
+
+    // ============================================================================
+    // AI Summary - Generated from real metrics
+    // ============================================================================
+    const teamsLowCoverage = teamsWithData.filter(t => (Number(t.test_coverage) || 0) < 80).length;
+    
+    let aiSummary = '';
+    if (globalQaScoreTrend > 0) {
+      aiSummary = `Quality improved by ${globalQaScoreTrend} points. `;
+    } else if (globalQaScoreTrend < 0) {
+      aiSummary = `Quality declined by ${Math.abs(globalQaScoreTrend)} points. `;
+    } else {
+      aiSummary = 'Quality metrics stable. ';
+    }
+    
+    if (teamsLowCoverage > 0) {
+      aiSummary += `${teamsLowCoverage} team${teamsLowCoverage > 1 ? 's' : ''} below 80% coverage. `;
+    }
+    
+    if (automationCoverage < 70) {
+      aiSummary += `Automation at ${automationCoverage}% - consider increasing.`;
+    } else {
+      aiSummary += `Automation coverage at ${automationCoverage}%.`;
+    }
+
+    // Debug: Log what data we're using
+    console.log('Company Summary Debug:', {
+      totalTeams: teams.length,
+      teamsWithKpiData: teamsWithData.length,
+      teamMetrics: teamsWithData.map(t => ({
+        name: t.name,
+        qa_score: t.qa_score,
+        test_coverage: t.test_coverage,
+        automation_coverage: t.automation_coverage,
+        defect_escape_rate: t.defect_escape_rate,
+        test_flakiness_rate: t.test_flakiness_rate
+      }))
+    });
+
+    // ============================================================================
+    // RESPONSE - All values from real database data
+    // ============================================================================
+    res.json({
+      // Core metrics from kpi_snapshots
+      globalQaScore,           // AVG(qa_score)
+      globalQaScoreTrend,      // Change vs 7 days ago
+      riskLevel,               // Based on globalQaScore thresholds
+      avgTestCoverage,         // AVG(test_coverage)
+      avgDefectEscapeRate,     // AVG(defect_escape_rate)
+      automationCoverage,      // AVG(automation_coverage)
+      avgFlakinessRate,        // AVG(test_flakiness_rate)
+      
+      // Team rankings from kpi_snapshots
+      topImproving,            // Top 3 by qa_score
+      needsAttention,          // Bottom 3 by qa_score
+      
+      // KPI status counts
+      kpiStatus: { onTrack, atRisk, offTrack },
+      
+      // Generated summary
+      aiSummary,
+      
+      // Meta
+      teamCount: teams.length,
+      teamsWithKpiData: teamsWithData.length
+    });
+  } catch (error) {
+    console.error('Error fetching company summary:', error);
+    res.status(500).json({ error: 'Failed to fetch company summary' });
+  }
+});
+
 export default router;

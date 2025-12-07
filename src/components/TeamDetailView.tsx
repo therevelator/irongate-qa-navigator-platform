@@ -517,7 +517,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
       {/* Main Header */}
       <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800">
-        <div className="px-8 py-6">
+        <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
           <button
             onClick={onBack}
             className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
@@ -527,13 +527,13 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             <span className="font-medium">Back to Teams</span>
           </button>
 
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{team.name}</h1>
               <p className="text-gray-500 dark:text-slate-400 mt-1">{team.department} • Detailed Quality Metrics</p>
             </div>
 
-            <div className="flex items-center space-x-8">
+            <div className="flex flex-wrap items-start justify-start md:justify-end gap-4 md:gap-8">
               {/* Technical Debt Score */}
               {team.technicalDebtScore !== undefined && (
                 <div className="text-right">

@@ -4,8 +4,7 @@ import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import TypingAnimation from './TypingAnimation';
-import BrainCircuitHero from './BrainCircuitHero';
+import CompanyHeroSection from './CompanyHeroSection';
 import BatteryIndicator from './BatteryIndicator';
 
 type GridColumns = 1 | 2 | 3;
@@ -338,8 +337,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
   return (
     <div className={`flex flex-col h-full overflow-auto ${mainBg}`} onClick={handleDashboardClick}>
-      {/* Brain-Circuit Hero */}
-      <BrainCircuitHero />
+      {/* Company-Wide Hero Section with Real Data */}
+      <CompanyHeroSection />
 
       {/* Metrics Updated Notification */}
       {showMetricsNotification && (
