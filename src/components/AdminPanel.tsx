@@ -472,6 +472,28 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     return users.filter(u => u.primary_team_id === teamId);
   };
 
+  const getVisibleDepartments = (): Department[] => {
+    if (user?.role === 'super_admin') {
+      return departments;
+    }
+    if (user?.role === 'qa_manager') {
+      const deptId = user.departmentId;
+      if (!deptId) return [];
+      const deptTeams = teams.filter(t => t.department_id === deptId);
+      if (deptTeams.length === 0) return [];
+      return [
+        {
+          id: deptId,
+          name: 'My Department',
+          description: 'Teams in your department',
+          company_id: '',
+          created_at: new Date().toISOString()
+        }
+      ];
+    }
+    return [];
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -660,14 +682,14 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
           <p className="text-sm text-gray-400 dark:text-slate-400 mt-1">Departments → Teams → Users</p>
         </div>
         <div className="divide-y divide-gray-200">
-          {departments.length === 0 ? (
+          {getVisibleDepartments().length === 0 ? (
             <div className="text-center py-12 text-gray-500 dark:text-slate-400">
               <Building2 className="w-16 h-16 mx-auto mb-3 text-gray-300" />
               <p className="text-lg font-medium">No departments yet</p>
               <p className="text-sm mt-1">Create a department to get started</p>
             </div>
           ) : (
-            departments.map((dept) => {
+            getVisibleDepartments().map((dept) => {
               const deptTeams = getTeamsByDepartment(dept.id);
               const isDeptExpanded = expandedDepartments.has(dept.id);
               

@@ -10,6 +10,11 @@ test.describe('QA Manager Role-Based Access Control', () => {
     // Wait for dashboard to load
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
+    // QA Manager should see the same global team overview as other roles on the main dashboard.
+    const teamCards = page.locator('[data-testid="team-card"]');
+    const teamCount = await teamCards.count();
+    expect(teamCount).toBeGreaterThan(1);
+
     // Check navigation menu - should see Users, Teams, Analytics, Admin, Metric Intervals, Parameters Config
     // Should NOT see Departments, Manual Metrics
     await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible();

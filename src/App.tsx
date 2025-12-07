@@ -169,21 +169,13 @@ function App() {
   // Use API teams if available, otherwise fall back to mock teams
   const apiTeams = userTeams.length > 0 ? userTeams : teams;
 
-  // Filter teams based on active tab and user permissions
+  // Filter teams based only on active tab (department), not role.
+  // Everyone sees all teams by default; selecting a department tab just narrows by department.
   let filteredTeams = apiTeams;
 
   if (activeTab !== 'all') {
     filteredTeams = apiTeams.filter((t: any) => t.department_id === activeTab);
   }
-
-  // Apply role-based filtering
-  if (user?.role === 'qa_manager') {
-    // QA managers see teams in their department
-    if (activeTab === 'all') {
-      filteredTeams = filteredTeams.filter((t: any) => t.department_id === user?.departmentId);
-    }
-  }
-  // Team leads and QA Engineers see all teams on dashboard (no filtering needed)
 
   const handleFeatureSelect = (featureId: string, teamId?: string) => {
     setAnalyticsTeamId(teamId);

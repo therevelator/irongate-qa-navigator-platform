@@ -26,6 +26,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   const { user } = useAuth();
   const { themeName, isDark } = useTheme();
   const [filter, setFilter] = useState<'all' | 'high' | 'needs-attention'>('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [teamsWithMetrics, setTeamsWithMetrics] = useState<Team[]>(teams);
@@ -40,7 +41,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
             const response = await fetch(`${API_URL}/teams/${team.id}`, {
               credentials: 'include'
             });
-            
+
             if (response.ok) {
               const data = await response.json();
               const teamData = data.team || {};
@@ -187,7 +188,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
   const userTeams = teamsWithMetrics;
 
   // Filter teams by department (for admins) and performance filter
-  const filteredTeams = userTeams.filter(team => {
+  const filteredTeams = userTeams.filter((team) => {
     // Department filter (admin only)
     if (selectedDepartment !== 'all' && team.department !== selectedDepartment) {
       return false;
@@ -198,6 +199,12 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
     if (filter === 'needs-attention') return team.qaScore < 75;
     return true;
   });
+
+  // Apply live search by team name (case-insensitive). As the user types into
+  // the search bar, the set of visible team cards narrows accordingly.
+  const visibleTeams = filteredTeams.filter((team) =>
+    team.name.toLowerCase().includes(searchTerm.trim().toLowerCase())
+  );
 
   const gridClassMap: Record<GridColumns, string> = {
     1: 'grid-cols-1',
@@ -348,7 +355,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
             Team Performance
           </h2>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 w-full lg:w-auto">
             <div className="flex flex-wrap gap-2">
               <button
                 onClick={() => setFilter('all')}
@@ -381,28 +388,56 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                 Needs Attention
               </button>
             </div>
-            {/* Department Selector - Admin only */}
-            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && departments.length > 0 && (
-              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg px-3 py-2 shadow-sm">
-                <Building2 size={16} className="text-gray-500 dark:text-slate-400" />
-                <select
-                  value={selectedDepartment}
-                  onChange={(e) => setSelectedDepartment(e.target.value)}
-                  className="text-xs font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6"
+
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center w-full sm:w-auto">
+              {/* Department Selector - Admin only */}
+              {(user?.role === 'super_admin' || user?.role === 'qa_manager') && departments.length > 0 && (
+                <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg px-3 py-2 shadow-sm">
+                  <Building2 size={16} className="text-gray-500 dark:text-slate-400" />
+                  <select
+                    value={selectedDepartment}
+                    onChange={(e) => setSelectedDepartment(e.target.value)}
+                    className="text-xs font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6"
+                  >
+                    <option value="all">All Departments</option>
+                    {departments.map((dept) => (
+                      <option key={dept.id} value={dept.name}>{dept.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Team search bar */}
+              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-full px-3 py-1.5 shadow-sm w-full sm:w-60">
+                <svg
+                  className="w-4 h-4 text-gray-400 dark:text-slate-500"
+                  xmlns="http://www.w3.org/2000/svg"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
                 >
-                  <option value="all">All Departments</option>
-                  {departments.map((dept) => (
-                    <option key={dept.id} value={dept.name}>{dept.name}</option>
-                  ))}
-                </select>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"
+                  />
+                </svg>
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Search teams..."
+                  className="flex-1 bg-transparent text-xs sm:text-sm text-gray-700 dark:text-slate-200 placeholder-gray-400 dark:placeholder-slate-500 outline-none border-none"
+                />
               </div>
-            )}
+            </div>
           </div>
         </div>
 
         {/* Teams as Rows - Theme-specific card styles */}
         <div className={`grid ${gridClassMap[gridColumns]} gap-3`}>
-          {filteredTeams.map((team, index) => {
+          {visibleTeams.map((team: Team, index: number) => {
             const isPrimaryTeam =
               user?.primaryTeamId != null &&
               team?.id != null &&
@@ -412,7 +447,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
             <div
               key={team.id}
               onClick={() => onTeamClick?.(team)}
-              className={`team-card cursor-pointer relative overflow-hidden group h-full p-3 sm:p-4 rounded-xl border transition-all duration-300 ease-out transform-gpu ${
+              className={`team-card cursor-pointer relative overflow-hidden group h-full p-1.5 sm:p-2 rounded-xl border transition-all duration-300 ease-out transform-gpu ${
                 isMinimal
                   ? isDark
                     ? 'border-gray-700 hover:border-gray-600 shadow-lg hover:shadow-xl hover:shadow-gray-900/20'
@@ -493,11 +528,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
               {/* Card Layout - Adapts based on grid columns */}
               {gridColumns === 1 ? (
                 /* Single Column: Horizontal Row Layout */
-                <div className="relative flex flex-col md:flex-row md:items-center gap-4 lg:gap-6">
+                <div className="relative flex flex-col md:flex-row md:items-center gap-2 lg:gap-2.5">
                   {/* Team Info */}
-                  <div className="flex items-start md:items-center gap-4 flex-shrink-0 md:w-48 lg:w-56">
+                  <div className="flex items-start md:items-center gap-2 flex-shrink-0 md:w-40 lg:w-48">
                     <div className="flex-1 min-w-0">
-                      <h3 className={`text-base lg:text-lg font-bold text-gray-900 dark:text-white mb-1 transition-colors truncate ${
+                      <h3 className={`text-xs lg:text-sm font-semibold text-gray-900 dark:text-white mb-0 transition-colors truncate ${
                         isMinimal
                           ? 'group-hover:text-gray-700 dark:group-hover:text-gray-200'
                           : themeName === 'ocean' 
@@ -506,10 +541,10 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                       }`} data-testid="team-name">
                         {team.name}
                       </h3>
-                      <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
+                      <p className="text-[11px] lg:text-xs text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
                     </div>
                     {/* QA Score - Mobile only in row 1 */}
-                    <div className="flex-shrink-0 md:hidden">
+                    <div className="flex-shrink-0 md:hidden mt-0.5">
                       <BatteryIndicator
                         percentage={team.qaScore}
                         size="sm"
@@ -532,11 +567,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   </div>
 
                   {/* Inline Metrics */}
-                  <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-3 lg:gap-4">
+                  <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-1 lg:gap-1.5">
                     {team.metrics && team.metrics.length > 0 ? (
                       team.metrics.slice(0, 4).map((metric, idx) => (
                         <div key={idx} className="relative group/metric">
-                          <div className="flex items-center gap-1.5 lg:gap-2 mb-1">
+                          <div className="flex items-center gap-1.5 lg:gap-2 mb-0.5">
                             <div className={`p-1 lg:p-1.5 rounded ${
                               idx === 0 ? 'bg-green-100 dark:bg-green-900' :
                               idx === 1 ? 'bg-amber-100 dark:bg-amber-900' :
@@ -551,8 +586,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                             <span className="text-[10px] lg:text-xs text-gray-500 dark:text-gray-400 truncate">{metric.name}</span>
                           </div>
                           <div className="flex items-baseline gap-1">
-                            <span className="text-lg lg:text-2xl font-bold text-gray-900 dark:text-white">{metric.value}</span>
-                            {metric.unit && <span className="text-xs lg:text-sm text-gray-500">{metric.unit}</span>}
+                            <span className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">{metric.value}</span>
+                            {metric.unit && <span className="text-[11px] lg:text-xs text-gray-500">{metric.unit}</span>}
                             {metric.trend === 'up' && <TrendingUp size={12} className="text-green-600 ml-1 hidden lg:block" />}
                             {metric.trend === 'down' && <TrendingDown size={12} className="text-green-600 ml-1 hidden lg:block" />}
                           </div>
@@ -580,9 +615,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                 /* Multi-Column: Card Layout */
                 <div className="relative flex flex-col h-full">
                   {/* Header: Team Name + Score */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1 min-w-0 pr-3">
-                      <h3 className={`text-base font-bold text-gray-900 dark:text-white mb-1 transition-colors truncate ${
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1 min-w-0 pr-1.5">
+                      <h3 className={`text-xs font-semibold text-gray-900 dark:text-white mb-0 transition-colors truncate ${
                         isMinimal
                           ? 'group-hover:text-gray-700 dark:group-hover:text-gray-200'
                           : themeName === 'ocean' 
@@ -591,7 +626,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                       }`} data-testid="team-name">
                         {team.name}
                       </h3>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">{team.department || 'Unknown Department'}</p>
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{team.department || 'Unknown Department'}</p>
                     </div>
                     
                     {/* QA Score Circle */}
@@ -607,11 +642,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                   </div>
                   
                   {/* Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-2 flex-1">
+                  <div className="grid grid-cols-2 gap-1.5 flex-1">
                     {team.metrics && team.metrics.length > 0 ? (
                       team.metrics.slice(0, 4).map((metric, idx) => (
-                        <div key={idx} className="relative rounded-lg p-2.5 border border-gray-400 dark:border-slate-500">
-                          <div className="flex items-center gap-1.5 mb-1">
+                        <div key={idx} className="relative rounded-lg p-2 border border-gray-400 dark:border-slate-500">
+                          <div className="flex items-center gap-1.5 mb-0.5">
                             <div className={`p-1 rounded ${
                               idx === 0 ? 'bg-green-100 dark:bg-green-900' :
                               idx === 1 ? 'bg-amber-100 dark:bg-amber-900' :
@@ -657,7 +692,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
           )})}
         </div>
 
-        {filteredTeams.length === 0 && (
+        {visibleTeams.length === 0 && (
           <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 p-8 sm:p-12 text-center">
             <div className="text-gray-400 dark:text-slate-500 mb-4">
               <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
