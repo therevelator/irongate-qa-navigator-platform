@@ -1,5 +1,5 @@
 -- QA Dashboard Database Schema
--- Compatible with MySQL 5.7+ and PlanetScale
+-- Compatible with MySQL 5.7+ and PlanetScale 
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (
