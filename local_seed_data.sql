@@ -1,4 +1,4 @@
-mysqldump: [Warning] Using a password on the command line interface can be insecure.
+-- mysqldump: [Warning] Using a password on the command line interface can be insecure.
 -- MySQL dump 10.13  Distrib 9.3.0, for macos14.7 (arm64)
 --
 -- Host: localhost    Database: irongate_qa
