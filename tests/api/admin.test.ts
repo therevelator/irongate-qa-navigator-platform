@@ -317,7 +317,7 @@ describe('Admin API Endpoints', () => {
       const newTeam = {
         name: `Test Team ${timestamp}`,
         description: 'Test team description',
-        platform: 'Web',
+        departmentId: validDepartmentId, // Required for super admin
       };
 
       const response = await request(API_URL)
@@ -336,7 +336,7 @@ describe('Admin API Endpoints', () => {
       const newTeam = {
         name: `QA Manager Team ${timestamp}`,
         description: 'Team created by QA Manager',
-        platform: 'API',
+        // QA Manager uses their own department automatically
       };
 
       const response = await request(API_URL)
