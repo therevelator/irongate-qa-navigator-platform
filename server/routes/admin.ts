@@ -526,6 +526,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
       );
 
       // Create initial KPI snapshot with default values (id is auto-increment)
+      // 26 columns: team_id, snapshot_date, qa_score, status + 22 metric columns
       await query<any>(
         `INSERT INTO kpi_snapshots (
           team_id, snapshot_date, qa_score, status,
@@ -537,7 +538,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
           automation_coverage, automation_roi, change_failure_rate,
           mtbf_hours, system_availability, infrastructure_failures
         ) VALUES (?, CURDATE(), 0, 'warning',
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99.9, 0)`,
+          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99.9, 0)`,
         [teamId]
       );
 
