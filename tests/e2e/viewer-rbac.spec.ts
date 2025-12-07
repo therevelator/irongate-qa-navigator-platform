@@ -10,19 +10,19 @@ test.describe('Viewer Role-Based Access Control', () => {
     // Wait for dashboard to load
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
-    // Check navigation menu - should ONLY see Dashboard
+    // Check navigation menu - should ONLY see Dashboard (nav button)
     // Should NOT see Users, Teams, Departments, Analytics, Admin, Manual Metrics, etc.
-    await expect(page.locator('text=Dashboard')).toBeVisible();
+    await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible();
 
-    // Should NOT see these restricted items
-    await expect(page.locator('text=Users')).not.toBeVisible();
-    await expect(page.locator('text=Teams')).not.toBeVisible();
-    await expect(page.locator('text=Departments')).not.toBeVisible();
-    await expect(page.locator('text=Analytics')).not.toBeVisible();
-    await expect(page.locator('text=Admin')).not.toBeVisible();
-    await expect(page.locator('text=Manual Metrics')).not.toBeVisible();
-    await expect(page.locator('text=Metric Intervals')).not.toBeVisible();
-    await expect(page.locator('text=Parameters Config')).not.toBeVisible();
+    // Should NOT see these restricted nav items at all
+    await expect(page.locator('[data-testid="nav-users"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-teams"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-departments"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-analytics"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-admin"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-manual-metrics"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-metric-intervals"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-parameters-config"]')).toHaveCount(0);
   });
 
   test('Viewer can view dashboard with all teams and departments', async ({ page }) => {
@@ -112,7 +112,7 @@ test.describe('Viewer Role-Based Access Control', () => {
 
     // Try to access restricted pages directly - should be redirected or show access denied
     const restrictedUrls = [
-      '/users', '/teams', '/departments', '/features', '/admin-panel',
+      '/users', '/teams', '/departments', '/analytics', '/admin-panel',
       '/manual-metrics', '/metric-intervals', '/parameters-config'
     ];
 

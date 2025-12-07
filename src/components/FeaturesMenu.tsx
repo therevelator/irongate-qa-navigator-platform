@@ -303,6 +303,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ feature, getIcon, getCategory
   return (
     <button
       onClick={onSelect}
+      data-testid="feature-card"
       className={`bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 hover:shadow-lg hover:border-cyan-500 dark:hover:border-cyan-500 transition-all duration-200 text-left group relative ${
         isVeryCompact ? 'p-4' : 'p-6'
       }`}

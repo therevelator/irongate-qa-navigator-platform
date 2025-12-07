@@ -99,7 +99,7 @@ const TeamsView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 p-8" data-testid="teams-page">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -118,6 +118,7 @@ const TeamsView: React.FC = () => {
                 setShowCreateModal(true);
               }}
               className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700 text-white rounded-md transition-colors"
+              data-testid="add-team-btn"
             >
               <UserPlus size={20} />
               Create Team
@@ -179,7 +180,13 @@ const TeamsView: React.FC = () => {
                 filteredTeams.map((team) => {
                   const counts = getTeamUserCounts(team.id);
                   return (
-                    <tr key={team.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+                    <tr
+                      key={team.id}
+                      className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                      data-testid="team-row"
+                      data-team-id={team.id}
+                      data-team-name={team.name}
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="font-medium text-gray-900 dark:text-white">{team.name}</div>
                       </td>
@@ -231,7 +238,14 @@ const TeamsView: React.FC = () => {
                                 : 'text-gray-400 dark:text-slate-400 hover:text-purple-500 dark:hover:text-purple-400'
                             }`}
                             title={team.ai_enabled ? 'Disable AI Suggestions' : 'Enable AI Suggestions'}
+                            data-testid="team-ai-toggle"
                           >
+                            <span
+                              data-testid="team-ai-status"
+                              className="sr-only"
+                            >
+                              {team.ai_enabled ? 'enabled' : 'disabled'}
+                            </span>
                             <Bot size={18} />
                           </button>
                           )}
@@ -430,6 +444,7 @@ const TeamsView: React.FC = () => {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 required
                 placeholder="Enter team name"
+                data-testid="team-name-input"
               />
             </div>
             
@@ -460,6 +475,7 @@ const TeamsView: React.FC = () => {
                 rows={3}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
                 placeholder="Brief description of the team"
+                data-testid="team-description-input"
               />
             </div>
           </div>
@@ -475,6 +491,7 @@ const TeamsView: React.FC = () => {
             <button
               type="submit"
               className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors"
+              data-testid="create-team-btn"
             >
               <UserPlus size={18} />
               Create Team

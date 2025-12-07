@@ -16,7 +16,7 @@ Viewer (Lowest)
 
 ## Navigation & View Access
 
-### Dashboard
+### Access to admin features
 - **Access**: All roles
 - **View**:
   - **Super Admin**: All teams across all departments
@@ -24,6 +24,15 @@ Viewer (Lowest)
   - **Team Lead**: All teams in their department
   - **QA Engineer**: Only their own team
   - **Viewer**: Only their own team
+
+### Access to dashboard:
+anyone can view any team from any department:
+
+- the team details: the viewer can only view team's details, metrics, without the developers and the ai insights
+- team details: the engineer can only see himself in the team details, no other developers and no ai insights
+- the team lead can view his team's developers, not other teams developers and only his team's ai insights
+- the manager can view all teams developers and ai insights
+- the super admin can view all teams developers and ai insights
 
 ### Users View
 - **Access**: Super Admin, Manager, Team Lead

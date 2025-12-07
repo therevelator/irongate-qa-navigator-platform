@@ -402,7 +402,13 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
 
         {/* Teams as Rows - Theme-specific card styles */}
         <div className={`grid ${gridClassMap[gridColumns]} gap-3`}>
-          {filteredTeams.map((team, index) => (
+          {filteredTeams.map((team, index) => {
+            const isPrimaryTeam =
+              user?.primaryTeamId != null &&
+              team?.id != null &&
+              String(user.primaryTeamId) === String(team.id);
+
+            return (
             <div
               key={team.id}
               onClick={() => onTeamClick?.(team)}
@@ -431,6 +437,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                         : 'var(--qa-bad-bg)'
               }}
               data-testid="team-card"
+              data-team-id={team.id}
+              data-team-name={team.name}
+              data-primary-team={isPrimaryTeam ? 'true' : 'false'}
             >
               {/* Soft theme-aware hover overlay (not on minimal) */}
               {!isMinimal && (
@@ -645,7 +654,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridCol
                 </div>
               )}
             </div>
-          ))}
+          )})}
         </div>
 
         {filteredTeams.length === 0 && (

@@ -150,7 +150,7 @@ const UsersView: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 p-8">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 p-8" data-testid="users-page">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -177,6 +177,7 @@ const UsersView: React.FC = () => {
                 setShowCreateModal(true);
               }}
               className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 dark:bg-cyan-600 dark:hover:bg-cyan-700 text-white rounded-md transition-colors"
+              data-testid="add-user-btn"
             >
               <UserPlus size={20} />
               Create User
@@ -236,7 +237,11 @@ const UsersView: React.FC = () => {
                 </tr>
               ) : (
                 filteredUsers.map((u) => (
-                  <tr key={u.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
+                  <tr
+                    key={u.id}
+                    className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors"
+                    data-testid="user-row"
+                  >
                     <td className="px-4 py-3 whitespace-nowrap">
                       <div className="font-medium text-sm text-gray-900 dark:text-white">
                         {u.first_name} {u.last_name}
@@ -254,14 +259,22 @@ const UsersView: React.FC = () => {
                       <div className="text-sm text-gray-600 dark:text-slate-400">{u.department_name || '-'}</div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <div className="text-sm text-gray-600 dark:text-slate-400">{u.team_name || '-'}</div>
+                      <div
+                        className="text-sm text-gray-600 dark:text-slate-400"
+                        data-testid="user-team"
+                      >
+                        {u.team_name || '-'}
+                      </div>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
-                      <span className={`px-2 py-1 text-xs font-medium rounded-md ${
-                        u.is_active 
-                          ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
-                          : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-                      }`}>
+                      <span
+                        className={`px-2 py-1 text-xs font-medium rounded-md ${
+                          u.is_active 
+                            ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
+                            : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
+                        }`}
+                        data-testid="user-status"
+                      >
                         {u.is_active ? 'Active' : 'Inactive'}
                       </span>
                     </td>
@@ -331,7 +344,14 @@ const UsersView: React.FC = () => {
                                   : 'text-gray-400 dark:text-slate-400 hover:text-purple-500 dark:hover:text-purple-400'
                               }`}
                               title={u.developer_insights_enabled ? 'Disable Developer Insights' : 'Enable Developer Insights'}
+                              data-testid="user-ai-toggle"
                             >
+                              <span
+                                data-testid="user-ai-status"
+                                className="sr-only"
+                              >
+                                {u.developer_insights_enabled ? 'enabled' : 'disabled'}
+                              </span>
                               <Bot size={16} />
                             </button>
                             <button
@@ -359,6 +379,7 @@ const UsersView: React.FC = () => {
                                   : 'text-gray-400 dark:text-slate-400 hover:text-green-500 dark:hover:text-green-400'
                               }`}
                               title={u.is_active ? 'Deactivate user' : 'Activate user'}
+                              data-testid="user-status-toggle"
                             >
                               {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
                             </button>
@@ -442,46 +463,105 @@ const UsersView: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">First Name</label>
-                <input type="text" value={userForm.firstName} onChange={(e) => setUserForm({ ...userForm, firstName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+                <input
+                  type="text"
+                  value={userForm.firstName}
+                  onChange={(e) => setUserForm({ ...userForm, firstName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  required
+                  data-testid="first-name-input"
+                />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Last Name</label>
-                <input type="text" value={userForm.lastName} onChange={(e) => setUserForm({ ...userForm, lastName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+                <input
+                  type="text"
+                  value={userForm.lastName}
+                  onChange={(e) => setUserForm({ ...userForm, lastName: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                  required
+                  data-testid="last-name-input"
+                />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
-              <input type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required />
+              <input
+                type="email"
+                value={userForm.email}
+                onChange={(e) => setUserForm({ ...userForm, email: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                required
+                data-testid="email-input"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
-              <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required minLength={6} />
+              <input
+                type="password"
+                value={userForm.password}
+                onChange={(e) => setUserForm({ ...userForm, password: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                required
+                minLength={6}
+                data-testid="password-input"
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>
-              <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required>
+              <select
+                value={userForm.role}
+                onChange={(e) => setUserForm({ ...userForm, role: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                required
+                data-testid="role-select"
+              >
                 <option value="">Select a role</option>
                 {roles.map(role => (<option key={role.id} value={role.id}>{role.name}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Department</label>
-              <select value={userForm.departmentId} onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent" required>
+              <select
+                value={userForm.departmentId}
+                onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                required
+                data-testid="department-select"
+              >
                 <option value="">Select a department</option>
                 {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
               </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Team (Optional)</label>
-              <select value={userForm.primaryTeamId} onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent">
+              <select
+                value={userForm.primaryTeamId}
+                onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                data-testid="team-select"
+              >
                 <option value="">No team</option>
                 {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
               </select>
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-6">
-            <button type="button" onClick={() => setShowCreateModal(false)} className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">Cancel</button>
-            <button type="submit" className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors"><UserPlus size={18} />Create User</button>
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(false)}
+              className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex items-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-md transition-colors"
+              data-testid="create-user-btn"
+            >
+              <UserPlus size={18} />
+              Create User
+            </button>
           </div>
         </form>
       </Modal>

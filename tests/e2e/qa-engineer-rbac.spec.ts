@@ -22,30 +22,38 @@ test.describe('QA Engineer Role-Based Access Control', () => {
   test('QA Engineer sees themselves in Team Members for their own team', async ({ page }) => {
     await setupAuth(page, 'qa_engineer');
 
-    // Go to dashboard
+    // Wait for dashboard to load
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
-    // Find their own team (QualityCowboys based on seed data usually, or check text)
-    // For now, we'll click the one that says "QualityCowboys" if possible, or just iterate
-    // But we know from seed data that engineer@irongate.com is in QualityCowboys
+    // Read the logged-in user from localStorage to get their primary team ID
+    const primaryTeamId = await page.evaluate(() => {
+      const raw = window.localStorage.getItem('irongate_user');
+      if (!raw) return null;
+      try {
+        const user = JSON.parse(raw);
+        return user.primaryTeamId || user.primary_team_id || null;
+      } catch {
+        return null;
+      }
+    });
 
-    const myTeamCard = page.locator('[data-testid="team-card"]').filter({ hasText: 'QualityCowboys' });
-    if (await myTeamCard.count() > 0) {
-      await myTeamCard.click();
-    } else {
-      // Fallback: click first team if we can't find specific one (might fail if not own team)
-      // Better to log warning
-      console.log('Could not find QualityCowboys team card, clicking first available');
-      await page.locator('[data-testid="team-card"]').first().click();
+    if (!primaryTeamId) {
+      throw new Error('primaryTeamId not found for QA Engineer in localStorage');
     }
+
+    // Click the card for the engineer's actual primary team
+    const myTeamCard = page.locator(`[data-testid="team-card"][data-team-id="${primaryTeamId}"]`);
+    await expect(myTeamCard).toHaveCount(1);
+    await myTeamCard.click();
 
     await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
 
-    // Should see Team Members section
+    // Team Members section should be visible for their own team
     await expect(page.locator('text=Team Members')).toBeVisible();
 
-    // Should see themselves
-    await expect(page.locator('text=QA Engineer')).toBeVisible();
+    // For QA Engineers, TeamDetailView shows only themselves as a member for their own team
+    const memberCards = page.locator('[data-testid="team-member-card"]');
+    await expect(memberCards).toHaveCount(1);
   });
 
   test('QA Engineer does NOT see Team Members for other teams', async ({ page }) => {

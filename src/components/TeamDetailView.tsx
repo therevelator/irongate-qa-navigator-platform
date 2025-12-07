@@ -115,8 +115,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const { isDark } = useTheme();
   const { user } = useAuth();
 
-  // Check if this is the user's own team
-  const isOwnTeam = user?.primaryTeamId === team.id || user?.assignedTeams?.includes(team.id);
+  // Check if this is the user's own team (normalize IDs to strings to avoid type mismatches)
+  const isOwnTeam =
+    (user?.primaryTeamId != null && team?.id != null && String(user.primaryTeamId) === String(team.id)) ||
+    (Array.isArray(user?.assignedTeams) && team?.id != null && user!.assignedTeams!.some(tid => String(tid) === String(team.id)));
 
   // Only leads, managers, and admins can see developer stats and AI insights
   // Team leads can only see these for their own team
@@ -519,6 +521,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
           <button
             onClick={onBack}
             className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
+            data-testid="back-to-dashboard"
           >
             <ArrowLeft size={20} />
             <span className="font-medium">Back to Teams</span>
@@ -735,7 +738,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 <p className="text-sm text-gray-500 dark:text-gray-400">This team doesn't have any members assigned yet.</p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="space-y-4" data-testid="team-members-section">
                 {developers
                   .filter(developer => {
                     // For QA Engineers viewing their own team, only show themselves
@@ -750,7 +753,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                     const happinessEmoji = developer.happiness_score >= 85 ? '😊' : developer.happiness_score >= 70 ? '🙂' : '😐';
 
                     return (
-                      <div key={developer.developer_id} className="bg-white dark:bg-gradient-to-br dark:from-slate-800 dark:to-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-5 hover:shadow-xl transition-all">
+                      <div
+                        key={developer.developer_id}
+                        className="bg-white dark:bg-gradient-to-br dark:from-slate-800 dark:to-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-5 hover:shadow-xl transition-all"
+                        data-testid="team-member-card"
+                      >
                         {/* Developer Header */}
                         <div className="flex items-center justify-between mb-5">
                           <div className="flex items-center gap-4">
@@ -1119,7 +1126,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
           {/* AI Insights Header - Only visible to leads, managers, and admins */}
           {canViewDeveloperInsights && (
-            <div className="mb-6 flex flex-col gap-3">
+            <div className="mb-6 flex flex-col gap-3" data-testid="ai-insights-header">
               <div className="flex items-center gap-3 text-lg font-semibold text-gray-700 dark:text-slate-300">
                 <span className="p-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full text-white">
                   <Bot size={20} />

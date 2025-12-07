@@ -169,7 +169,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 py-6 px-4">
+        <nav className="flex-1 py-6 px-4" data-testid="sidebar-nav">
           <div className="space-y-0.5">
             {/* Dashboard */}
             <button
@@ -178,6 +178,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                 ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                 : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
                 }`}
+              data-testid="nav-dashboard"
             >
               <LayoutDashboard size={20} />
               <span>Dashboard</span>
@@ -191,6 +192,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
                   }`}
+                data-testid="nav-users"
               >
                 <UsersIcon size={20} />
                 <span>Users</span>
@@ -205,6 +207,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
                   }`}
+                data-testid="nav-teams"
               >
                 <TeamsIcon size={20} />
                 <span>Teams</span>
@@ -219,6 +222,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
                   }`}
+                data-testid="nav-departments"
               >
                 <Building2 size={20} />
                 <span>Departments</span>
@@ -233,6 +237,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800/50 hover:text-gray-900 dark:hover:text-white'
                   }`}
+                data-testid="nav-analytics"
               >
                 <BarChart3 size={20} />
                 <span>Analytics</span>
@@ -247,6 +252,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
                   }`}
+                data-testid="nav-admin"
               >
                 <Shield size={20} />
                 <span>Admin</span>
@@ -261,6 +267,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
                   }`}
+                data-testid="nav-manual-metrics"
               >
                 <Calculator size={20} />
                 <span>Manual Metrics</span>
@@ -275,6 +282,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
                   }`}
+                data-testid="nav-metric-intervals"
               >
                 <Clock size={20} />
                 <span>Metric Intervals</span>
@@ -289,6 +297,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
                   ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
                   : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
                   }`}
+                data-testid="nav-parameters-config"
               >
                 <SlidersHorizontal size={20} />
                 <span>Parameters Config</span>
