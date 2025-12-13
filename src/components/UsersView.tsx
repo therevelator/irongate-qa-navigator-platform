@@ -4,7 +4,7 @@ import { Users, Search, Edit2, Key, Trash2, UserPlus, Save, UserCheck, UserX, Bo
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import Modal from './Modal';
-import { confirmDelete } from '../utils/alerts';
+import { confirmDelete, showAlert } from '../utils/alerts';
 import BatteryIndicator from './BatteryIndicator';
 import { METRIC_EXPLANATIONS } from './TeamDetailView';
 
@@ -52,9 +52,11 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [expandedUserIds, setExpandedUserIds] = useState<Set<string>>(new Set());
   const [userMetrics, setUserMetrics] = useState<Record<string, DeveloperMetrics>>({});
+  const [usersWithMetricsIds, setUsersWithMetricsIds] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [gridColumns, setGridColumns] = useState<2 | 3 | 4>(3);
   const [currentPage, setCurrentPage] = useState(1);
+  const [showOnlyWithMetrics, setShowOnlyWithMetrics] = useState(false);
   const usersPerPage = gridColumns * 3; // 3 rows per page
   const [userForm, setUserForm] = useState({
     firstName: '',
@@ -68,6 +70,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
 
   useEffect(() => {
     fetchUsers();
+    fetchAllUsersWithMetrics(); // Pre-load list of users with metrics for filtering
   }, []);
 
   const fetchUsers = async () => {
@@ -164,6 +167,44 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     }
   };
 
+  // Fetch list of all users who have metrics (for filtering AND for ranking)
+  const fetchAllUsersWithMetrics = async () => {
+    try {
+      const response = await fetch(`${API_URL}/analytics/developer-metrics`, {
+        credentials: 'include'
+      });
+
+      if (!response.ok) {
+        console.log('fetchAllUsersWithMetrics: Response not ok', response.status);
+        return;
+      }
+
+      const data = await response.json();
+      const developers = data.developers || [];
+      console.log('fetchAllUsersWithMetrics: Got developers:', developers.length, developers);
+
+      // Create a set of user IDs that have metrics
+      const idsWithMetrics = new Set<string>(developers.map((d: any) => d.developer_id));
+      setUsersWithMetricsIds(idsWithMetrics);
+
+      // Also populate userMetrics for the happiness ranking
+      const metricsMap: Record<string, DeveloperMetrics> = {};
+      developers.forEach((d: any) => {
+        metricsMap[d.developer_id] = {
+          pr_merge_time_avg: Number(d.pr_merge_time_avg) || 0,
+          code_review_time_avg: Number(d.code_review_time_avg) || 0,
+          focus_time_hours: Number(d.focus_time_hours) || 0,
+          meeting_time_hours: Number(d.meeting_time_hours) || 0,
+          context_switches_per_day: Number(d.context_switches_per_day) || 0,
+          happiness_score: Number(d.happiness_score) || 0
+        };
+      });
+      setUserMetrics(prev => ({ ...prev, ...metricsMap }));
+    } catch (error) {
+      console.error('Error fetching users with metrics:', error);
+    }
+  };
+
   const toggleUserExpanded = (userId: string, userRole: string) => {
     setExpandedUserIds(prev => {
       const newSet = new Set(prev);
@@ -186,6 +227,12 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   ).filter(u => {
     if (user?.role === 'team_lead') {
       return u.primary_team_id === user.primaryTeamId;
+    }
+    return true;
+  }).filter(u => {
+    // Filter by metrics if checkbox is checked
+    if (showOnlyWithMetrics) {
+      return usersWithMetricsIds.has(u.id);
     }
     return true;
   });
@@ -338,8 +385,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
         </div>
 
         {/* Search */}
-        <div className="mb-6">
-          <div className="relative max-w-md">
+        <div className="mb-6 flex items-center gap-4 flex-wrap">
+          <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-slate-500" size={20} />
             <input
               type="text"
@@ -349,6 +396,16 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
               className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 dark:focus:ring-cyan-600 focus:border-transparent transition-all"
             />
           </div>
+          {/* Show only users with metrics checkbox */}
+          <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-slate-400 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showOnlyWithMetrics}
+              onChange={(e) => { setShowOnlyWithMetrics(e.target.checked); setCurrentPage(1); }}
+              className="w-4 h-4 rounded border-gray-300 dark:border-slate-600 text-cyan-600 focus:ring-cyan-500 bg-white dark:bg-slate-800"
+            />
+            Show only users with metrics
+          </label>
         </div>
 
         {/* Users Grid/List */}
@@ -858,12 +915,20 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
               </select>
             </div>
-            {/* Primary Team - only show for roles that need it */}
-            {userForm.role && !['super_admin', 'qa_manager'].includes(userForm.role) && (
+            {/* Primary Team - show for engineers and leads (required), hidden for managers/superadmins, optional text for viewers */}
+            {userForm.role && ['qa_engineer', 'team_lead', 'viewer'].includes(userForm.role) && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Team {userForm.role === 'qa_engineer' || userForm.role === 'team_lead' ? '' : '(Optional)'}</label>
-                <select value={userForm.primaryTeamId} onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" data-testid="team-select" required={userForm.role === 'qa_engineer' || userForm.role === 'team_lead'}>
-                  <option value="">Select a team</option>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Primary Team {userForm.role === 'viewer' ? '(Optional)' : ''}
+                </label>
+                <select
+                  value={userForm.primaryTeamId}
+                  onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500"
+                  data-testid="team-select"
+                  required={userForm.role === 'qa_engineer' || userForm.role === 'team_lead'}
+                >
+                  <option value="">{userForm.role === 'viewer' ? 'No team' : 'Select a team'}</option>
                   {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
                 </select>
               </div>
@@ -880,6 +945,22 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
       <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title={`Edit User: ${selectedUser?.first_name} ${selectedUser?.last_name}`} size="md">
         <form onSubmit={async (e) => {
           e.preventDefault();
+
+          // Check if email is already in use by another user
+          const emailInUse = users.find(u =>
+            u.email.toLowerCase() === userForm.email.toLowerCase() &&
+            u.id !== selectedUser?.id
+          );
+
+          if (emailInUse) {
+            showAlert(
+              'Email Already in Use',
+              `The email <strong>${userForm.email}</strong> is already assigned to another user.<br><br>Please use a different email address.`,
+              'error'
+            );
+            return;
+          }
+
           try {
             const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}`, {
               method: 'PUT',
@@ -946,17 +1027,34 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Department</label>
-              <select value={userForm.departmentId} onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required>
-                <option value="">Select a department</option>
-                {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
-              </select>
+              {/* Only super_admin can change departments */}
+              {user?.role === 'super_admin' ? (
+                <select value={userForm.departmentId} onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required>
+                  <option value="">Select a department</option>
+                  {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
+                </select>
+              ) : (
+                <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white">
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm">{departments.find(d => d.id === userForm.departmentId)?.name || 'No department'}</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">(Only Super Admin can change)</span>
+                  </span>
+                </div>
+              )}
             </div>
-            {/* Primary Team - only show for roles that need it */}
-            {userForm.role && !['super_admin', 'qa_manager'].includes(userForm.role) && (
+            {/* Primary Team - show for engineers and leads (required), optional for viewers, hidden for managers/superadmins */}
+            {userForm.role && ['qa_engineer', 'team_lead', 'viewer'].includes(userForm.role) && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Team</label>
-                <select value={userForm.primaryTeamId} onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500">
-                  <option value="">No team</option>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Primary Team {userForm.role === 'viewer' ? '(Optional)' : ''}
+                </label>
+                <select
+                  value={userForm.primaryTeamId}
+                  onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500"
+                  required={userForm.role === 'qa_engineer' || userForm.role === 'team_lead'}
+                >
+                  <option value="">{userForm.role === 'viewer' ? 'No team' : 'Select a team'}</option>
                   {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
                 </select>
               </div>
