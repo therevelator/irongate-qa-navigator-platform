@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  ArrowLeft, DollarSign, TrendingUp, Users, Target, AlertCircle, BarChart3, 
+import {
+  ArrowLeft, DollarSign, TrendingUp, Users, Target, AlertCircle, BarChart3,
   Loader2, Save, RefreshCw, CheckCircle, XCircle, ChevronDown, ChevronRight,
   Database, Calculator, Calendar, Info, Plus, Trash2, Download, Sun, Moon
 } from 'lucide-react';
-import { 
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, 
+import {
+  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   Legend, ScatterChart, Scatter, ZAxis, Cell, BarChart, Bar
 } from 'recharts';
 import { API_URL } from '../config/api';
@@ -29,7 +29,7 @@ const MarkdownRenderer: React.FC<{ content: string; isDark: boolean }> = ({ cont
     .replace(/class="negative"/g, `class="text-red-500 font-medium"`);
 
   return (
-    <div 
+    <div
       className="ai-html-content"
       dangerouslySetInnerHTML={{ __html: styledContent }}
     />
@@ -108,10 +108,10 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
   const [calculating, setCalculating] = useState(false);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
-  
+
   // Use global theme context
   const { isDark, toggleMode } = useTheme();
-  
+
   // Team selection - use prop if available, otherwise load teams
   const [teams, setTeams] = useState<any[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>(propTeamId || '');
@@ -119,10 +119,10 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [correlations, setCorrelations] = useState<Correlation[]>([]);
   const [dataSummary, setDataSummary] = useState<DataSummary | null>(null);
-  
+
   // Expanded sections
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
-  
+
   // Generate last 12 months
   const getLast12Months = useCallback(() => {
     const months: string[] = [];
@@ -137,7 +137,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
   // Fetch teams only if we need to show team selector
   useEffect(() => {
     if (!useTeamSelector) return;
-    
+
     const fetchTeams = async () => {
       try {
         const response = await fetch(`${API_URL}/teams`, {
@@ -171,7 +171,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
   // Fetch correlation data when team changes - now using real database data
   useEffect(() => {
     if (!selectedTeamId) return;
-    
+
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -179,17 +179,17 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
         const response = await fetch(`${API_URL}/analytics/business-impact-v2/${selectedTeamId}`, {
           credentials: 'include'
         });
-        
+
         if (response.ok) {
           const data = await response.json();
-          
+
           // Merge quality metrics, KPIs, and context into monthly data
           const months = getLast12Months();
           const mergedData: MonthlyData[] = months.map(month => {
             const quality = data.qualityMetrics?.find((q: any) => q.month_year === month) || {};
             const kpis = data.businessKpis?.find((k: any) => k.month_year === month) || {};
             const context = data.contextData?.find((c: any) => c.month_year === month) || {};
-            
+
             return {
               month_year: month,
               quality: {
@@ -221,11 +221,11 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
               }
             };
           });
-          
+
           setMonthlyData(mergedData);
           setCorrelations(data.correlations || []);
           setDataSummary(data.summary || null);
-          
+
           // Show seeding notification if data was just generated
           if (data.dataGenerated) {
             toast.success(data.message || 'Data seeded successfully!', {
@@ -238,7 +238,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
         } else if (response.status === 404) {
           // No data found, offer to generate realistic data
           toast.success('No historical data found. Use the data entry tab to add business impact data.');
-          
+
           // Initialize with empty data
           const months = getLast12Months();
           setMonthlyData(months.map(month => ({
@@ -250,7 +250,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
         } else {
           const error = await response.json();
           toast.error(error.error || 'Failed to load data');
-          
+
           // Fallback to empty data
           const months = getLast12Months();
           setMonthlyData(months.map(month => ({
@@ -263,7 +263,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
       } catch (error) {
         console.error('Error fetching data:', error);
         toast.error('Failed to load correlation data');
-        
+
         // Fallback to empty data
         const months = getLast12Months();
         setMonthlyData(months.map(month => ({
@@ -276,7 +276,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
         setLoading(false);
       }
     };
-    
+
     fetchData();
   }, [selectedTeamId, getLast12Months]);
 
@@ -305,7 +305,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
     setSaving(true);
     try {
       // Filter to only months with data
-      const dataToSave = monthlyData.filter(m => 
+      const dataToSave = monthlyData.filter(m =>
         Object.values(m.quality).some(v => v !== null) ||
         Object.values(m.kpis).some(v => v !== null) ||
         Object.values(m.context).some(v => v !== null && v !== false)
@@ -425,7 +425,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
         const result = await response.json();
         setCorrelations(result.topCorrelations || []);
         toast.success(`Calculated ${result.correlationsCalculated} correlations from ${result.pairedMonths} months of data`);
-        
+
         // Update summary
         setDataSummary(prev => prev ? {
           ...prev,
@@ -475,14 +475,14 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ onB
       if (response.ok) {
         const data = await response.json();
         console.log('✅ AI analysis received');
-        
+
         // Add AI disclaimer to the response
         const aiWithDisclaimer = `⚠️ **AI-Generated Content** - This analysis was generated by AI. Please verify all information and check for potential inaccuracies before making business decisions.
 
 ---
 
 ${data.analysis}`;
-        
+
         setAiAnalysis(aiWithDisclaimer);
         toast.success('AI analysis completed!');
       } else {
@@ -507,7 +507,7 @@ ${data.analysis}`;
       return next;
     });
   };
-  
+
   // Format month for display
   const formatMonth = (monthYear: string) => {
     const [year, month] = monthYear.split('-');
@@ -551,11 +551,11 @@ ${data.analysis}`;
   const getDataCompleteness = () => {
     const qualityFields = QUALITY_METRICS.map(m => m.key);
     const kpiFields = BUSINESS_KPIS.map(k => k.key);
-    
+
     let qualityComplete = 0;
     let kpiComplete = 0;
     let paired = 0;
-    
+
     monthlyData.forEach(m => {
       const hasQuality = qualityFields.some(f => m.quality[f] !== null);
       const hasKpi = kpiFields.some(f => m.kpis[f] !== null);
@@ -563,7 +563,7 @@ ${data.analysis}`;
       if (hasKpi) kpiComplete++;
       if (hasQuality && hasKpi) paired++;
     });
-    
+
     return { qualityComplete, kpiComplete, paired };
   };
 
@@ -572,67 +572,56 @@ ${data.analysis}`;
   // Debug: Show loading info instead of spinner
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center ${
-        isDark 
-          ? 'bg-slate-950 text-slate-100' 
-          : 'bg-slate-50 text-slate-900'
-      }`}>
+      <div className={`min-h-screen flex items-center justify-center ${isDark
+        ? 'bg-slate-950 text-slate-100'
+        : 'bg-slate-50 text-slate-900'
+        }`}>
         <div className="text-center">
-          <Loader2 className={`w-8 h-8 animate-spin mx-auto mb-4 ${
-            isDark ? 'text-cyan-400' : 'text-cyan-600'
-          }`} />
+          <Loader2 className={`w-8 h-8 animate-spin mx-auto mb-4 ${isDark ? 'text-cyan-400' : 'text-cyan-600'
+            }`} />
           <p className="mb-2">Loading Business Impact Analysis...</p>
-          <p className={`text-sm ${
-            isDark ? 'text-slate-400' : 'text-slate-600'
-          }`}>Fetching teams and data...</p>
-          <p className={`text-xs mt-4 ${
-            isDark ? 'text-slate-500' : 'text-slate-600'
-          }`}>Selected Team: {selectedTeamId || 'None'}</p>
-          <p className={`text-xs ${
-            isDark ? 'text-slate-500' : 'text-slate-600'
-          }`}>Teams Loaded: {teams.length}</p>
-          <p className={`text-xs ${
-            isDark ? 'text-slate-500' : 'text-slate-600'
-          }`}>Monthly Data: {monthlyData.length} months</p>
-          <p className={`text-xs ${
-            isDark ? 'text-slate-500' : 'text-slate-600'
-          }`}>Team Selector: {useTeamSelector ? 'Enabled' : 'Disabled (using prop)'}</p>
+          <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'
+            }`}>Fetching teams and data...</p>
+          <p className={`text-xs mt-4 ${isDark ? 'text-slate-500' : 'text-slate-600'
+            }`}>Selected Team: {selectedTeamId || 'None'}</p>
+          <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-600'
+            }`}>Teams Loaded: {teams.length}</p>
+          <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-600'
+            }`}>Monthly Data: {monthlyData.length} months</p>
+          <p className={`text-xs ${isDark ? 'text-slate-500' : 'text-slate-600'
+            }`}>Team Selector: {useTeamSelector ? 'Enabled' : 'Disabled (using prop)'}</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen transition-colors duration-300 ${
-      isDark 
-        ? 'bg-slate-950 text-slate-100' 
-        : 'bg-slate-50 text-slate-900'
-    }`}>
+    <div className={`min-h-screen transition-colors duration-300 ${isDark
+      ? 'bg-slate-950 text-slate-100'
+      : 'bg-slate-50 text-slate-900'
+      }`}>
       {/* Header */}
-      <div className={`border-b transition-colors duration-300 ${
-        isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-      } sticky top-0 z-10 shadow-sm`}>
+      <div className={`border-b transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+        } sticky top-0 z-10 shadow-sm`}>
         <div className="px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <button 
+            <button
               onClick={onBack}
-              className={`flex items-center space-x-2 transition-colors hover:text-blue-500 ${
-                isDark ? 'text-slate-400' : 'text-slate-600'
-              } mb-4 sm:mb-0`}
+              className={`flex items-center space-x-2 transition-colors hover:text-blue-500 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                } mb-4 sm:mb-0`}
             >
               <ArrowLeft size={20} />
               <span className="font-medium">Back to Features</span>
             </button>
-            
+
             {/* Theme Toggle */}
             <div className="flex items-center gap-4">
               <button
                 onClick={toggleMode}
-                className={`p-2 rounded-lg transition-colors ${
-                  isDark 
-                    ? 'hover:bg-slate-800 text-slate-400 hover:text-slate-200' 
-                    : 'hover:bg-slate-100 text-slate-600 hover:text-slate-800'
-                }`}
+                className={`p-2 rounded-lg transition-colors ${isDark
+                  ? 'hover:bg-slate-800 text-slate-400 hover:text-slate-200'
+                  : 'hover:bg-slate-100 text-slate-600 hover:text-slate-800'
+                  }`}
                 title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
               >
                 {isDark ? <Sun size={20} /> : <Moon size={20} />}
@@ -643,11 +632,10 @@ ${data.analysis}`;
                 <select
                   value={selectedTeamId}
                   onChange={(e) => setSelectedTeamId(e.target.value)}
-                  className={`px-3 py-2 rounded-lg transition-colors border ${
-                    isDark
-                      ? 'bg-slate-800 border-slate-700 text-slate-200 focus:border-blue-500'
-                      : 'bg-white border-slate-300 text-slate-900 focus:border-blue-500'
-                  } focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
+                  className={`px-3 py-2 rounded-lg transition-colors border ${isDark
+                    ? 'bg-slate-800 border-slate-700 text-slate-200 focus:border-blue-500'
+                    : 'bg-white border-slate-300 text-slate-900 focus:border-blue-500'
+                    } focus:outline-none focus:ring-2 focus:ring-blue-500/20`}
                 >
                   <option value="">Select Team</option>
                   {teams.map(team => (
@@ -662,14 +650,12 @@ ${data.analysis}`;
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mt-4">
             <div>
               <h1 className="text-2xl sm:text-3xl font-bold flex items-center">
-                <DollarSign className={`mr-3 ${
-                  isDark ? 'text-green-500' : 'text-green-600'
-                }`} size={28} />
+                <DollarSign className={`mr-3 ${isDark ? 'text-green-500' : 'text-green-600'
+                  }`} size={28} />
                 Business Impact Correlation
               </h1>
-              <p className={`mt-1 text-sm sm:text-base ${
-                isDark ? 'text-slate-400' : 'text-slate-600'
-              }`}>
+              <p className={`mt-1 text-sm sm:text-base ${isDark ? 'text-slate-400' : 'text-slate-600'
+                }`}>
                 Statistical analysis of quality metrics vs business outcomes
               </p>
             </div>
@@ -685,13 +671,12 @@ ${data.analysis}`;
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all text-sm sm:text-base ${
-                  activeTab === tab.id 
-                    ? 'bg-blue-600 text-white shadow-lg' 
-                    : isDark
-                      ? 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
-                      : 'bg-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-300'
-                }`}
+                className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg transition-all text-sm sm:text-base ${activeTab === tab.id
+                  ? 'bg-blue-600 text-white shadow-lg'
+                  : isDark
+                    ? 'bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700'
+                    : 'bg-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-300'
+                  }`}
               >
                 <tab.icon size={18} />
                 {tab.label}
@@ -702,9 +687,8 @@ ${data.analysis}`;
       </div>
 
       {/* Data Requirements Banner */}
-      <div className={`px-4 sm:px-6 lg:px-8 py-4 transition-colors duration-300 ${
-        isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-100/50 border-slate-200'
-      } border-b`}>
+      <div className={`px-4 sm:px-6 lg:px-8 py-4 transition-colors duration-300 ${isDark ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-100/50 border-slate-200'
+        } border-b`}>
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-8">
           <div className="flex items-center gap-2">
             {completeness.paired >= 6 ? (
@@ -714,9 +698,8 @@ ${data.analysis}`;
             )}
             <span className="text-sm">
               <span className="font-medium">{completeness.paired}/12</span> months paired data
-              <span className={`ml-1 ${
-                isDark ? 'text-slate-500' : 'text-slate-600'
-              }`}>(min 6 required)</span>
+              <span className={`ml-1 ${isDark ? 'text-slate-500' : 'text-slate-600'
+                }`}>(min 6 required)</span>
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -744,61 +727,48 @@ ${data.analysis}`;
           <div className="space-y-4 sm:space-y-6">
             {/* Summary Cards - Responsive Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className={`rounded-xl p-4 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
-                <div className={`text-sm mb-1 ${
-                  isDark ? 'text-slate-400' : 'text-slate-600'
-                }`}>Strongest Correlation</div>
+              <div className={`rounded-xl p-4 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                }`}>
+                <div className={`text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}>Strongest Correlation</div>
                 <div className="text-2xl font-bold text-green-500">
                   {correlations.length > 0 ? Number(correlations[0].pearson_correlation).toFixed(3) : 'N/A'}
                 </div>
-                <div className={`text-xs mt-1 ${
-                  isDark ? 'text-slate-500' : 'text-slate-600'
-                }`}>
+                <div className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-600'
+                  }`}>
                   {correlations.length > 0 ? `${correlations[0].quality_metric.replace(/_/g, ' ')} → ${correlations[0].business_kpi.replace(/_/g, ' ')}` : 'No data'}
                 </div>
               </div>
-              <div className={`rounded-xl p-4 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
-                <div className={`text-sm mb-1 ${
-                  isDark ? 'text-slate-400' : 'text-slate-600'
-                }`}>Significant Correlations</div>
+              <div className={`rounded-xl p-4 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                }`}>
+                <div className={`text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}>Significant Correlations</div>
                 <div className="text-2xl font-bold text-blue-500">
                   {correlations.filter(c => c.is_significant).length}
                 </div>
-                <div className={`text-xs mt-1 ${
-                  isDark ? 'text-slate-500' : 'text-slate-600'
-                }`}>p-value &lt; 0.05</div>
+                <div className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-600'
+                  }`}>p-value &lt; 0.05</div>
               </div>
-              <div className={`rounded-xl p-4 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
-                <div className={`text-sm mb-1 ${
-                  isDark ? 'text-slate-400' : 'text-slate-600'
-                }`}>Data Points</div>
+              <div className={`rounded-xl p-4 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                }`}>
+                <div className={`text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}>Data Points</div>
                 <div className="text-2xl font-bold text-purple-500">
                   {completeness.paired * (QUALITY_METRICS.length + BUSINESS_KPIS.length)}
                 </div>
-                <div className={`text-xs mt-1 ${
-                  isDark ? 'text-slate-500' : 'text-slate-600'
-                }`}>Across {completeness.paired} months</div>
+                <div className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-600'
+                  }`}>Across {completeness.paired} months</div>
               </div>
-              <div className={`rounded-xl p-4 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
-                <div className={`text-sm mb-1 ${
-                  isDark ? 'text-slate-400' : 'text-slate-600'
-                }`}>Correlation Ready</div>
-                <div className={`text-2xl font-bold ${
-                  completeness.paired >= 6 ? 'text-green-500' : 'text-red-500'
+              <div className={`rounded-xl p-4 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
                 }`}>
+                <div className={`text-sm mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}>Correlation Ready</div>
+                <div className={`text-2xl font-bold ${completeness.paired >= 6 ? 'text-green-500' : 'text-red-500'
+                  }`}>
                   {completeness.paired >= 6 ? 'Yes' : 'No'}
                 </div>
-                <div className={`text-xs mt-1 ${
-                  isDark ? 'text-slate-500' : 'text-slate-600'
-                }`}>
+                <div className={`text-xs mt-1 ${isDark ? 'text-slate-500' : 'text-slate-600'
+                  }`}>
                   {completeness.paired >= 6 ? 'Ready to calculate' : `Need ${6 - completeness.paired} more months`}
                 </div>
               </div>
@@ -810,11 +780,10 @@ ${data.analysis}`;
                 <button
                   onClick={analyzeCorrelationsWithAI}
                   disabled={aiAnalyzing}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-all disabled:opacity-50 ${
-                    isDark
-                      ? 'bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 hover:border-slate-600'
-                      : 'bg-white text-slate-900 border border-slate-300 hover:bg-slate-50 hover:border-slate-400'
-                  }`}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-all disabled:opacity-50 ${isDark
+                    ? 'bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 hover:border-slate-600'
+                    : 'bg-white text-slate-900 border border-slate-300 hover:bg-slate-50 hover:border-slate-400'
+                    }`}
                 >
                   {aiAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <BarChart3 size={20} />}
                   {aiAnalyzing ? 'Analyzing...' : 'Analyze with AI'}
@@ -824,18 +793,16 @@ ${data.analysis}`;
 
             {/* AI Analysis Results */}
             {aiAnalysis && (
-              <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
+              <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                }`}>
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <BarChart3 className={isDark ? 'text-purple-400' : 'text-purple-600'} size={20} />
                   AI Business Impact Analysis
                 </h3>
-                
+
                 {/* AI Response - Formatted */}
-                <div className={`text-sm leading-relaxed ${
-                  isDark ? 'text-slate-300' : 'text-slate-700'
-                }`}>
+                <div className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'
+                  }`}>
                   <MarkdownRenderer content={aiAnalysis} isDark={isDark} />
                 </div>
               </div>
@@ -843,23 +810,19 @@ ${data.analysis}`;
 
             {/* Empty State - Show when no data */}
             {completeness.paired === 0 && (
-              <div className={`rounded-xl p-6 sm:p-8 border transition-colors duration-300 text-center ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
-                <Database size={48} className={`mx-auto mb-4 ${
-                  isDark ? 'text-slate-600' : 'text-slate-400'
-                }`} />
-                <h3 className="text-xl font-semibold mb-2">No Historical Data Found</h3>
-                <p className={`mb-6 max-w-md mx-auto ${
-                  isDark ? 'text-slate-400' : 'text-slate-600'
+              <div className={`rounded-xl p-6 sm:p-8 border transition-colors duration-300 text-center ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
                 }`}>
+                <Database size={48} className={`mx-auto mb-4 ${isDark ? 'text-slate-600' : 'text-slate-400'
+                  }`} />
+                <h3 className="text-xl font-semibold mb-2">No Historical Data Found</h3>
+                <p className={`mb-6 max-w-md mx-auto ${isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}>
                   No business impact data exists for this team in the database.
                   The system will automatically load real data when available.
                 </p>
                 <div className="flex gap-4 justify-center">
-                  <div className={`text-sm ${
-                    isDark ? 'text-slate-500' : 'text-slate-600'
-                  }`}>
+                  <div className={`text-sm ${isDark ? 'text-slate-500' : 'text-slate-600'
+                    }`}>
                     Select a team above to load correlation data
                   </div>
                 </div>
@@ -868,9 +831,8 @@ ${data.analysis}`;
 
             {/* Time Series Chart */}
             {monthlyData.length > 0 ? (
-              <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
+              <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                }`}>
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <TrendingUp className={isDark ? 'text-cyan-400' : 'text-cyan-600'} size={20} />
                   Quality Metrics vs Business KPIs Over Time
@@ -888,7 +850,7 @@ ${data.analysis}`;
                             <XAxis dataKey="month" stroke={isDark ? '#94a3b8' : '#64748b'} />
                             <YAxis yAxisId="left" stroke={isDark ? '#94a3b8' : '#64748b'} />
                             <YAxis yAxisId="right" orientation="right" stroke={isDark ? '#94a3b8' : '#64748b'} />
-                            <Tooltip 
+                            <Tooltip
                               contentStyle={{
                                 backgroundColor: isDark ? '#1e293b' : '#ffffff',
                                 border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
@@ -917,9 +879,8 @@ ${data.analysis}`;
                 </div>
               </div>
             ) : (
-              <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
+              <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                }`}>
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <TrendingUp className={isDark ? 'text-cyan-400' : 'text-cyan-600'} size={20} />
                   Quality Metrics vs Business KPIs Over Time
@@ -931,72 +892,61 @@ ${data.analysis}`;
             )}
 
             {/* Parameter Explanations */}
-            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${
-              isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-            }`}>
+            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+              }`}>
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Info className={isDark ? 'text-blue-400' : 'text-blue-600'} size={20} />
                 Chart Parameters Explained
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div className={`p-3 rounded-lg border transition-colors ${
-                  isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                }`}>
+                <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                  }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
                     <span className="font-medium text-blue-500">Test Coverage %</span>
                   </div>
-                  <p className={`text-sm ${
-                    isDark ? 'text-slate-400' : 'text-slate-600'
-                  }`}>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}>
                     Percentage of code covered by automated tests. Higher coverage indicates better quality assurance and fewer production defects.
                   </p>
                 </div>
 
-                <div className={`p-3 rounded-lg border transition-colors ${
-                  isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                }`}>
+                <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                  }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
                     <span className="font-medium text-purple-500">NPS Score</span>
                   </div>
-                  <p className={`text-sm ${
-                    isDark ? 'text-slate-400' : 'text-slate-600'
-                  }`}>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}>
                     Net Promoter Score measures customer loyalty and satisfaction. Ranges from -100 (all detractors) to +100 (all promoters).
                   </p>
                 </div>
 
-                <div className={`p-3 rounded-lg border transition-colors ${
-                  isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                }`}>
+                <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                  }`}>
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-3 h-3 bg-red-500 rounded-full"></div>
                     <span className="font-medium text-red-500">Churn Rate %</span>
                   </div>
-                  <p className={`text-sm ${
-                    isDark ? 'text-slate-400' : 'text-slate-600'
-                  }`}>
+                  <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}>
                     Percentage of customers who stop using the service. Lower rates indicate better customer retention and product-market fit.
                   </p>
                 </div>
               </div>
-              <div className={`mt-4 p-3 rounded-lg border transition-colors ${
-                isDark ? 'border-amber-600 bg-amber-900/20' : 'border-amber-200 bg-amber-50'
-              }`}>
+              <div className={`mt-4 p-3 rounded-lg border transition-colors ${isDark ? 'border-amber-600 bg-amber-900/20' : 'border-amber-200 bg-amber-50'
+                }`}>
                 <div className="flex items-start gap-2">
-                  <Info className={`mt-0.5 flex-shrink-0 ${
-                    isDark ? 'text-amber-400' : 'text-amber-600'
-                  }`} size={16} />
+                  <Info className={`mt-0.5 flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-600'
+                    }`} size={16} />
                   <div>
-                    <p className={`text-sm font-medium mb-1 ${
-                      isDark ? 'text-amber-300' : 'text-amber-800'
-                    }`}>
+                    <p className={`text-sm font-medium mb-1 ${isDark ? 'text-amber-300' : 'text-amber-800'
+                      }`}>
                       Correlation Analysis
                     </p>
-                    <p className={`text-sm ${
-                      isDark ? 'text-slate-400' : 'text-slate-600'
-                    }`}>
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'
+                      }`}>
                       This chart shows how quality metrics (test coverage) correlate with business outcomes (NPS, churn rate).
                       Strong correlations help identify which quality improvements drive the most business impact.
                     </p>
@@ -1007,26 +957,24 @@ ${data.analysis}`;
 
             {/* Top Correlations */}
             {correlations.length > 0 && (
-              <div className={`rounded-xl p-6 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
+              <div className={`rounded-xl p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                }`}>
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <Calculator className={isDark ? 'text-green-400' : 'text-green-600'} size={20} />
                   Top Correlations (Realistic Data)
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   {correlations.slice(0, 10).map((c, i) => (
-                    <div 
-                      key={i} 
+                    <div
+                      key={i}
                       className={`p-3 rounded-lg ${getCorrelationBg(c.pearson_correlation)} flex items-center justify-between transition-colors`}
                     >
                       <div>
                         <div className="text-sm font-medium">
                           {c.quality_metric.replace(/_/g, ' ')} → {c.business_kpi.replace(/_/g, ' ')}
                         </div>
-                        <div className={`text-xs ${
-                          isDark ? 'text-slate-400' : 'text-slate-600'
-                        }`}>
+                        <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'
+                          }`}>
                           {c.sample_size} data points • {c.correlation_strength}
                           {c.is_significant && <span className="ml-1 text-green-400">• significant</span>}
                         </div>
@@ -1041,9 +989,8 @@ ${data.analysis}`;
             )}
 
             {/* Metric Explanations */}
-            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${
-              isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-            }`}>
+            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+              }`}>
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Info className={isDark ? 'text-cyan-400' : 'text-cyan-600'} size={20} />
                 Quality Metrics & Business KPIs Explained
@@ -1054,72 +1001,64 @@ ${data.analysis}`;
                 <div>
                   <h4 className="text-sm font-semibold mb-3 text-blue-500">Quality Metrics (X Variables)</h4>
                   <div className="space-y-3">
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Test Coverage %</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Percentage of code covered by automated tests. Higher coverage indicates better quality assurance and fewer production defects.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Defect Density</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Number of bugs per thousand lines of code (KLOC). Lower density indicates higher code quality and fewer defects.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Defect Escape Rate %</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Percentage of bugs that reach production undetected. Lower rates indicate better testing effectiveness.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">MTTR (Mean Time to Restore)</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Average time in hours to restore service after an incident. Lower MTTR indicates better operational efficiency.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Deployment Frequency</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Number of deployments per month. Higher frequency indicates better DevOps practices and faster delivery.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Lead Time</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Time in days from code commit to production deployment. Shorter lead times indicate better engineering efficiency.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Code Quality Score</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Overall code quality assessment (0-100). Higher scores indicate better maintainability and fewer technical issues.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Change Failure Rate %</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Percentage of deployments that fail or require immediate fixes. Lower rates indicate more reliable deployments.
@@ -1132,63 +1071,56 @@ ${data.analysis}`;
                 <div>
                   <h4 className="text-sm font-semibold mb-3 text-green-500">Business KPIs (Y Variables)</h4>
                   <div className="space-y-3">
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Monthly Revenue</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Total revenue generated per month in dollars. Primary measure of business growth and financial performance.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Active Users</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Number of monthly active users. Indicates product adoption and user engagement levels.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Churn Rate %</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Percentage of customers who stop using the service. Lower rates indicate better customer retention.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Feature Adoption Rate %</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Percentage of users who adopt new features. Higher rates indicate better product-market fit.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">NPS Score</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Net Promoter Score (-100 to +100). Measures customer loyalty and likelihood to recommend.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">CSAT Score %</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Customer Satisfaction Score (0-100%). Measures customer happiness with recent interactions.
                       </div>
                     </div>
 
-                    <div className={`p-3 rounded-lg border transition-colors ${
-                      isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
-                    }`}>
+                    <div className={`p-3 rounded-lg border transition-colors ${isDark ? 'border-slate-700 bg-slate-800' : 'border-slate-200 bg-slate-50'
+                      }`}>
                       <div className="font-medium text-sm mb-1">Support Ticket Volume</div>
                       <div className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                         Number of customer support tickets per month. Lower volumes indicate better product quality.
@@ -1198,22 +1130,18 @@ ${data.analysis}`;
                 </div>
               </div>
 
-              <div className={`mt-4 p-3 rounded-lg border transition-colors ${
-                isDark ? 'border-amber-600 bg-amber-900/20' : 'border-amber-200 bg-amber-50'
-              }`}>
+              <div className={`mt-4 p-3 rounded-lg border transition-colors ${isDark ? 'border-amber-600 bg-amber-900/20' : 'border-amber-200 bg-amber-50'
+                }`}>
                 <div className="flex items-start gap-2">
-                  <Info className={`mt-0.5 flex-shrink-0 ${
-                    isDark ? 'text-amber-400' : 'text-amber-600'
-                  }`} size={16} />
+                  <Info className={`mt-0.5 flex-shrink-0 ${isDark ? 'text-amber-400' : 'text-amber-600'
+                    }`} size={16} />
                   <div>
-                    <p className={`text-sm font-medium mb-1 ${
-                      isDark ? 'text-amber-300' : 'text-amber-800'
-                    }`}>
+                    <p className={`text-sm font-medium mb-1 ${isDark ? 'text-amber-300' : 'text-amber-800'
+                      }`}>
                       Understanding Correlations
                     </p>
-                    <p className={`text-sm ${
-                      isDark ? 'text-slate-400' : 'text-slate-600'
-                    }`}>
+                    <p className={`text-sm ${isDark ? 'text-slate-400' : 'text-slate-600'
+                      }`}>
                       Strong positive correlations (red +1.000) indicate quality improvements strongly drive business outcomes.
                       Strong negative correlations (red -1.000) show quality issues severely impact business results.
                       Realistic correlations typically range from 0.3 to 0.8 in software development.
@@ -1228,9 +1156,8 @@ ${data.analysis}`;
           <div className="space-y-4">
             {/* Action Buttons */}
             <div className="flex justify-between items-center">
-              <div className={`flex items-center gap-2 ${
-                isDark ? 'text-slate-400' : 'text-slate-600'
-              }`}>
+              <div className={`flex items-center gap-2 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                }`}>
                 <Info size={16} />
                 <span className="text-sm">Data is generated automatically on page load with realistic correlations</span>
               </div>
@@ -1259,17 +1186,15 @@ ${data.analysis}`;
               const isExpanded = expandedMonths.has(month.month_year);
               const hasQuality = Object.values(month.quality).some(v => v !== null);
               const hasKpis = Object.values(month.kpis).some(v => v !== null);
-              
+
               return (
-                <div key={month.month_year} className={`rounded-xl border overflow-hidden transition-colors duration-300 ${
-                  isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-                }`}>
+                <div key={month.month_year} className={`rounded-xl border overflow-hidden transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                  }`}>
                   {/* Month Header */}
                   <button
                     onClick={() => toggleMonth(month.month_year)}
-                    className={`w-full px-6 py-4 flex items-center justify-between transition-colors ${
-                      isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'
-                    }`}
+                    className={`w-full px-6 py-4 flex items-center justify-between transition-colors ${isDark ? 'hover:bg-slate-800/50' : 'hover:bg-slate-50'
+                      }`}
                   >
                     <div className="flex items-center gap-4">
                       <span className="text-lg font-medium">{formatMonth(month.month_year)}</span>
@@ -1293,18 +1218,16 @@ ${data.analysis}`;
                     <div className="px-6 pb-6 space-y-6">
                       {/* Quality Metrics */}
                       <div>
-                        <h4 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${
-                          isDark ? 'text-blue-400' : 'text-blue-600'
-                        }`}>
+                        <h4 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-blue-400' : 'text-blue-600'
+                          }`}>
                           <BarChart3 size={16} />
                           Quality Metrics (X Variables)
                         </h4>
                         <div className="grid grid-cols-4 gap-3">
                           {QUALITY_METRICS.map(metric => (
                             <div key={metric.key}>
-                              <label className={`block text-xs mb-1 ${
-                                isDark ? 'text-slate-400' : 'text-slate-600'
-                              }`}>
+                              <label className={`block text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                                }`}>
                                 {metric.label} {metric.unit && <span className="text-slate-500">({metric.unit})</span>}
                               </label>
                               <input
@@ -1313,11 +1236,10 @@ ${data.analysis}`;
                                 value={month.quality[metric.key] ?? ''}
                                 onChange={(e) => updateMetric(month.month_year, 'quality', metric.key, e.target.value)}
                                 placeholder={metric.description}
-                                className={`w-full rounded px-3 py-2 text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${
-                                  isDark
-                                    ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-blue-500'
-                                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-blue-500'
-                                }`}
+                                className={`w-full rounded px-3 py-2 text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/20 ${isDark
+                                  ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-blue-500'
+                                  : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-blue-500'
+                                  }`}
                               />
                             </div>
                           ))}
@@ -1326,18 +1248,16 @@ ${data.analysis}`;
 
                       {/* Business KPIs */}
                       <div>
-                        <h4 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${
-                          isDark ? 'text-green-400' : 'text-green-600'
-                        }`}>
+                        <h4 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-green-400' : 'text-green-600'
+                          }`}>
                           <DollarSign size={16} />
                           Business KPIs (Y Variables)
                         </h4>
                         <div className="grid grid-cols-4 gap-3">
                           {BUSINESS_KPIS.map(kpi => (
                             <div key={kpi.key}>
-                              <label className={`block text-xs mb-1 ${
-                                isDark ? 'text-slate-400' : 'text-slate-600'
-                              }`}>
+                              <label className={`block text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                                }`}>
                                 {kpi.label} {kpi.unit && <span className="text-slate-500">({kpi.unit})</span>}
                               </label>
                               <input
@@ -1346,11 +1266,10 @@ ${data.analysis}`;
                                 value={month.kpis[kpi.key] ?? ''}
                                 onChange={(e) => updateMetric(month.month_year, 'kpis', kpi.key, e.target.value)}
                                 placeholder={kpi.description}
-                                className={`w-full rounded px-3 py-2 text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-green-500/20 ${
-                                  isDark
-                                    ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-green-500'
-                                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-green-500'
-                                }`}
+                                className={`w-full rounded px-3 py-2 text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-green-500/20 ${isDark
+                                  ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-green-500'
+                                  : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-green-500'
+                                  }`}
                               />
                             </div>
                           ))}
@@ -1359,29 +1278,26 @@ ${data.analysis}`;
 
                       {/* Context/Normalization */}
                       <div>
-                        <h4 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${
-                          isDark ? 'text-purple-400' : 'text-purple-600'
-                        }`}>
+                        <h4 className={`text-sm font-semibold mb-3 flex items-center gap-2 ${isDark ? 'text-purple-400' : 'text-purple-600'
+                          }`}>
                           <Target size={16} />
                           Context / Normalization (Optional)
                         </h4>
                         <div className="grid grid-cols-6 gap-3">
                           {CONTEXT_FIELDS.map(field => (
                             <div key={field.key}>
-                              <label className={`block text-xs mb-1 ${
-                                isDark ? 'text-slate-400' : 'text-slate-600'
-                              }`}>
+                              <label className={`block text-xs mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                                }`}>
                                 {field.label}
                               </label>
                               {field.key === 'is_holiday_season' ? (
                                 <select
                                   value={month.context[field.key] ? 'true' : 'false'}
                                   onChange={(e) => updateMetric(month.month_year, 'context', field.key, e.target.value)}
-                                  className={`w-full rounded px-3 py-2 text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/20 ${
-                                    isDark
-                                      ? 'bg-slate-800 border-slate-700 text-white focus:border-purple-500'
-                                      : 'bg-white border-slate-300 text-slate-900 focus:border-purple-500'
-                                  }`}
+                                  className={`w-full rounded px-3 py-2 text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/20 ${isDark
+                                    ? 'bg-slate-800 border-slate-700 text-white focus:border-purple-500'
+                                    : 'bg-white border-slate-300 text-slate-900 focus:border-purple-500'
+                                    }`}
                                 >
                                   <option value="false">No</option>
                                   <option value="true">Yes</option>
@@ -1393,11 +1309,10 @@ ${data.analysis}`;
                                   value={month.context[field.key] as number ?? ''}
                                   onChange={(e) => updateMetric(month.month_year, 'context', field.key, e.target.value)}
                                   placeholder={field.description}
-                                  className={`w-full rounded px-3 py-2 text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/20 ${
-                                    isDark
-                                      ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-purple-500'
-                                      : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-purple-500'
-                                  }`}
+                                  className={`w-full rounded px-3 py-2 text-sm border transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500/20 ${isDark
+                                    ? 'bg-slate-800 border-slate-700 text-white placeholder-slate-500 focus:border-purple-500'
+                                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400 focus:border-purple-500'
+                                    }`}
                                 />
                               )}
                             </div>
@@ -1416,15 +1331,13 @@ ${data.analysis}`;
         {activeTab === 'correlations' && (
           <div className="space-y-4 sm:space-y-6">
             {/* Correlation Matrix */}
-            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${
-              isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-            }`}>
+            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+              }`}>
               <h3 className="text-lg font-semibold mb-4">Correlation Matrix</h3>
-              
+
               {correlations.length === 0 ? (
-                <div className={`text-center py-8 sm:py-12 ${
-                  isDark ? 'text-slate-400' : 'text-slate-600'
-                }`}>
+                <div className={`text-center py-8 sm:py-12 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                  }`}>
                   <Calculator size={48} className="mx-auto mb-4 opacity-50" />
                   <p>No correlations calculated yet.</p>
                   <p className="text-sm mt-2">Enter at least 6 months of paired data and click "Calculate Correlations"</p>
@@ -1434,9 +1347,8 @@ ${data.analysis}`;
                   <div className="inline-block min-w-full align-middle px-4 sm:px-6">
                     <table className="min-w-full text-sm">
                       <thead>
-                        <tr className={`border-b ${
-                          isDark ? 'border-slate-700' : 'border-slate-300'
-                        }`}>
+                        <tr className={`border-b ${isDark ? 'border-slate-700' : 'border-slate-300'
+                          }`}>
                           <th className="text-left py-3 px-3 font-medium">Quality Metric</th>
                           <th className="text-left py-3 px-3 font-medium">Business KPI</th>
                           <th className="text-center py-3 px-3 font-medium">Correlation (r)</th>
@@ -1448,34 +1360,30 @@ ${data.analysis}`;
                       </thead>
                       <tbody>
                         {correlations.map((c, i) => (
-                          <tr key={i} className={`border-b transition-colors ${
-                            isDark 
-                              ? 'border-slate-800 hover:bg-slate-800/50' 
-                              : 'border-slate-200 hover:bg-slate-50'
-                          }`}>
+                          <tr key={i} className={`border-b transition-colors ${isDark
+                            ? 'border-slate-800 hover:bg-slate-800/50'
+                            : 'border-slate-200 hover:bg-slate-50'
+                            }`}>
                             <td className="py-3 px-3 font-medium">{c.quality_metric.replace(/_/g, ' ')}</td>
                             <td className="py-3 px-3">{c.business_kpi.replace(/_/g, ' ')}</td>
                             <td className={`py-3 px-3 text-center font-bold ${getCorrelationColor(c.pearson_correlation)}`}>
                               {c.pearson_correlation > 0 ? '+' : ''}{Number(c.pearson_correlation).toFixed(3)}
                             </td>
-                            <td className={`py-3 px-3 text-center ${
-                              isDark ? 'text-slate-400' : 'text-slate-600'
-                            }`}>
+                            <td className={`py-3 px-3 text-center ${isDark ? 'text-slate-400' : 'text-slate-600'
+                              }`}>
                               {Number(c.p_value) < 0.001 ? '<0.001' : Number(c.p_value).toFixed(4)}
                             </td>
                             <td className="py-3 px-3 text-center">
-                              <span className={`px-2 py-0.5 rounded text-xs ${
-                                c.correlation_strength === 'strong' ? 'bg-green-500/20 text-green-400' :
+                              <span className={`px-2 py-0.5 rounded text-xs ${c.correlation_strength === 'strong' ? 'bg-green-500/20 text-green-400' :
                                 c.correlation_strength === 'moderate' ? 'bg-blue-500/20 text-blue-400' :
-                                c.correlation_strength === 'weak' ? 'bg-yellow-500/20 text-yellow-400' :
-                                'bg-slate-500/20 text-slate-400'
-                              }`}>
+                                  c.correlation_strength === 'weak' ? 'bg-yellow-500/20 text-yellow-400' :
+                                    'bg-slate-500/20 text-slate-400'
+                                }`}>
                                 {c.correlation_strength}
                               </span>
                             </td>
-                            <td className={`py-3 px-3 text-center ${
-                              isDark ? 'text-slate-400' : 'text-slate-600'
-                            }`}>{c.sample_size}</td>
+                            <td className={`py-3 px-3 text-center ${isDark ? 'text-slate-400' : 'text-slate-600'
+                              }`}>{c.sample_size}</td>
                             <td className="py-3 px-3 text-center">
                               {c.is_significant ? (
                                 <CheckCircle className="inline text-green-500" size={16} />
@@ -1490,6 +1398,67 @@ ${data.analysis}`;
                   </div>
                 </div>
               )}
+
+              {/* Pearson Correlation Formula Explanation - Business-Friendly */}
+              <div className={`mt-6 p-4 rounded-lg border ${isDark ? 'border-slate-700 bg-slate-800/50' : 'border-slate-200 bg-slate-50'
+                }`}>
+                <div className="flex items-start gap-2">
+                  <Info size={18} className={`mt-0.5 flex-shrink-0 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} />
+                  <div className={`text-sm ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                    <h4 className={`font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                      Understanding Correlation Analysis
+                    </h4>
+
+                    <div className="space-y-3">
+                      <div>
+                        <strong className={isDark ? 'text-slate-200' : 'text-slate-700'}>What is Pearson Correlation?</strong>
+                        <p className="mt-1">
+                          The Pearson correlation coefficient (r) measures how strongly two variables move together.
+                          Think of it as answering: "When our test coverage goes up, does our customer satisfaction also go up?"
+                        </p>
+                      </div>
+
+                      <div>
+                        <strong className={isDark ? 'text-slate-200' : 'text-slate-700'}>Correlation Values Explained:</strong>
+                        <ul className="mt-1 ml-4 space-y-1 list-disc">
+                          <li><span className="text-green-500 font-semibold">+0.7 to +1.0 (Strong Positive):</span> As quality improves, business results improve proportionally</li>
+                          <li><span className="text-blue-500 font-semibold">+0.5 to +0.7 (Moderate Positive):</span> Quality and business metrics tend to move together</li>
+                          <li><span className="text-yellow-500 font-semibold">+0.3 to +0.5 (Weak Positive):</span> Some relationship exists, but other factors are involved</li>
+                          <li><span className="text-slate-400 font-semibold">-0.3 to +0.3 (No Correlation):</span> No meaningful relationship between metrics</li>
+                          <li><span className="text-red-500 font-semibold">-0.5 to -1.0 (Negative):</span> As one goes up, the other tends to go down</li>
+                        </ul>
+                      </div>
+
+                      <div>
+                        <strong className={isDark ? 'text-slate-200' : 'text-slate-700'}>What is the p-value?</strong>
+                        <p className="mt-1">
+                          The p-value tells you if the relationship is real or just random chance.
+                          <span className="text-green-500 font-semibold"> A p-value below 0.05 means "statistically significant"</span> —
+                          there's less than a 5% probability the correlation happened by chance. The lower the p-value, the more confident we are.
+                        </p>
+                      </div>
+
+                      <div className={`mt-4 p-3 rounded ${isDark ? 'bg-slate-700/50' : 'bg-white'}`}>
+                        <strong className={isDark ? 'text-slate-200' : 'text-slate-700'}>Metrics Explained:</strong>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 text-xs">
+                          <div><span className="font-medium">Test Coverage:</span> How much of your code has automated tests</div>
+                          <div><span className="font-medium">Defect Density:</span> Bugs per 1,000 lines of code written</div>
+                          <div><span className="font-medium">Lead Time:</span> Days from code commit to production deployment</div>
+                          <div><span className="font-medium">MTTR:</span> Average hours to fix issues when they occur</div>
+                          <div><span className="font-medium">NPS Score:</span> Net Promoter Score — customer loyalty indicator</div>
+                          <div><span className="font-medium">Churn Rate:</span> Percentage of customers who stop using the product</div>
+                          <div><span className="font-medium">CSAT:</span> Customer Satisfaction Score from surveys</div>
+                          <div><span className="font-medium">Change Failure Rate:</span> Percentage of deployments causing issues</div>
+                        </div>
+                      </div>
+
+                      <div className={`text-xs italic ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                        <strong>Formula:</strong> r = Σ[(xi - x̄)(yi - ȳ)] / √[Σ(xi - x̄)² × Σ(yi - ȳ)²] where x and y are the paired monthly values
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* AI Analysis Button */}
@@ -1498,11 +1467,10 @@ ${data.analysis}`;
                 <button
                   onClick={analyzeCorrelationsWithAI}
                   disabled={aiAnalyzing}
-                  className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-all disabled:opacity-50 ${
-                    isDark
-                      ? 'bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 hover:border-slate-600'
-                      : 'bg-white text-slate-900 border border-slate-300 hover:bg-slate-50 hover:border-slate-400'
-                  }`}
+                  className={`flex items-center gap-2 px-6 py-3 rounded-lg transition-all disabled:opacity-50 ${isDark
+                    ? 'bg-slate-800 text-slate-200 border border-slate-700 hover:bg-slate-700 hover:border-slate-600'
+                    : 'bg-white text-slate-900 border border-slate-300 hover:bg-slate-50 hover:border-slate-400'
+                    }`}
                 >
                   {aiAnalyzing ? <Loader2 className="animate-spin" size={20} /> : <BarChart3 size={20} />}
                   {aiAnalyzing ? 'Analyzing...' : 'Analyze with AI'}
@@ -1512,27 +1480,24 @@ ${data.analysis}`;
 
             {/* AI Analysis Results */}
             {aiAnalysis && (
-              <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${
-                isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-              }`}>
+              <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+                }`}>
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <BarChart3 className={isDark ? 'text-purple-400' : 'text-purple-600'} size={20} />
                   AI Business Impact Analysis
                 </h3>
-                
+
                 {/* AI Response - Formatted */}
-                <div className={`text-sm leading-relaxed ${
-                  isDark ? 'text-slate-300' : 'text-slate-700'
-                }`}>
+                <div className={`text-sm leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'
+                  }`}>
                   <MarkdownRenderer content={aiAnalysis} isDark={isDark} />
                 </div>
               </div>
             )}
 
             {/* Interpretation Guide */}
-            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${
-              isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
-            }`}>
+            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+              }`}>
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Info className={isDark ? 'text-cyan-400' : 'text-cyan-600'} size={20} />
                 Interpretation Guide
@@ -1540,9 +1505,8 @@ ${data.analysis}`;
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-sm">
                 <div>
                   <h4 className="font-medium mb-2">Correlation Strength</h4>
-                  <ul className={`space-y-1 ${
-                    isDark ? 'text-slate-400' : 'text-slate-600'
-                  }`}>
+                  <ul className={`space-y-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}>
                     <li><span className="text-green-400">|r| ≥ 0.7</span> — Strong correlation</li>
                     <li><span className="text-blue-400">0.5 ≤ |r| &lt; 0.7</span> — Moderate correlation</li>
                     <li><span className="text-yellow-400">0.3 ≤ |r| &lt; 0.5</span> — Weak correlation</li>
@@ -1551,9 +1515,8 @@ ${data.analysis}`;
                 </div>
                 <div>
                   <h4 className="font-medium mb-2">Statistical Significance</h4>
-                  <ul className={`space-y-1 ${
-                    isDark ? 'text-slate-400' : 'text-slate-600'
-                  }`}>
+                  <ul className={`space-y-1 ${isDark ? 'text-slate-400' : 'text-slate-600'
+                    }`}>
                     <li><span className="text-green-400">p &lt; 0.05</span> — Statistically significant</li>
                     <li><span className="text-slate-400">p ≥ 0.05</span> — Not significant (may be due to chance)</li>
                     <li className="mt-2">
@@ -1561,6 +1524,190 @@ ${data.analysis}`;
                       relationships but don't prove one metric causes changes in another.
                     </li>
                   </ul>
+                </div>
+              </div>
+            </div>
+
+            {/* Worked Example - How Pearson Correlation is Calculated */}
+            <div className={`rounded-xl p-4 sm:p-6 border transition-colors duration-300 ${isDark ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'
+              }`}>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Calculator className={isDark ? 'text-purple-400' : 'text-purple-600'} size={20} />
+                How We Calculate Pearson Correlation - Worked Example
+              </h3>
+
+              <div className={`text-sm space-y-4 ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                {/* Data Source */}
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <h4 className={`font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                    📊 Step 1: Collect Monthly Data Pairs
+                  </h4>
+                  <p className="mb-2">
+                    We pair each <span className="text-blue-400 font-medium">Quality Metric</span> (X) with each
+                    <span className="text-green-400 font-medium"> Business KPI</span> (Y) for the same month.
+                  </p>
+                  <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    Example: Correlating <strong className="text-blue-400">Test Coverage %</strong> with <strong className="text-green-400">NPS Score</strong>
+                  </p>
+                  <div className="overflow-x-auto mt-3">
+                    <table className={`min-w-full text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                      <thead>
+                        <tr className={isDark ? 'bg-slate-700' : 'bg-slate-200'}>
+                          <th className="px-2 py-1 text-left">Month</th>
+                          <th className="px-2 py-1 text-center text-blue-400">X (Test Coverage %)</th>
+                          <th className="px-2 py-1 text-center text-green-400">Y (NPS Score)</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr><td className="px-2 py-1">Jan</td><td className="px-2 py-1 text-center">72</td><td className="px-2 py-1 text-center">38</td></tr>
+                        <tr className={isDark ? 'bg-slate-800/50' : 'bg-slate-50'}><td className="px-2 py-1">Feb</td><td className="px-2 py-1 text-center">75</td><td className="px-2 py-1 text-center">42</td></tr>
+                        <tr><td className="px-2 py-1">Mar</td><td className="px-2 py-1 text-center">78</td><td className="px-2 py-1 text-center">45</td></tr>
+                        <tr className={isDark ? 'bg-slate-800/50' : 'bg-slate-50'}><td className="px-2 py-1">Apr</td><td className="px-2 py-1 text-center">80</td><td className="px-2 py-1 text-center">48</td></tr>
+                        <tr><td className="px-2 py-1">May</td><td className="px-2 py-1 text-center">82</td><td className="px-2 py-1 text-center">52</td></tr>
+                        <tr className={isDark ? 'bg-slate-800/50' : 'bg-slate-50'}><td className="px-2 py-1">Jun</td><td className="px-2 py-1 text-center">85</td><td className="px-2 py-1 text-center">55</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Calculate Means */}
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <h4 className={`font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                    🧮 Step 2: Calculate the Mean (Average) of Each Variable
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p><span className="text-blue-400 font-medium">X̄ (Mean Test Coverage)</span></p>
+                      <p className={`text-xs font-mono ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                        = (72 + 75 + 78 + 80 + 82 + 85) ÷ 6
+                      </p>
+                      <p className="text-blue-400 font-bold">= 78.67%</p>
+                    </div>
+                    <div>
+                      <p><span className="text-green-400 font-medium">Ȳ (Mean NPS Score)</span></p>
+                      <p className={`text-xs font-mono ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                        = (38 + 42 + 45 + 48 + 52 + 55) ÷ 6
+                      </p>
+                      <p className="text-green-400 font-bold">= 46.67</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Calculate Deviations */}
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <h4 className={`font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                    📐 Step 3: Calculate Deviations from the Mean
+                  </h4>
+                  <p className="mb-2">For each month, subtract the mean: <code className="text-cyan-400">(xi - X̄)</code> and <code className="text-cyan-400">(yi - Ȳ)</code></p>
+                  <div className="overflow-x-auto">
+                    <table className={`min-w-full text-xs ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                      <thead>
+                        <tr className={isDark ? 'bg-slate-700' : 'bg-slate-200'}>
+                          <th className="px-2 py-1">Month</th>
+                          <th className="px-2 py-1 text-blue-400">(xi - X̄)</th>
+                          <th className="px-2 py-1 text-green-400">(yi - Ȳ)</th>
+                          <th className="px-2 py-1 text-purple-400">(xi - X̄)(yi - Ȳ)</th>
+                          <th className="px-2 py-1 text-blue-400">(xi - X̄)²</th>
+                          <th className="px-2 py-1 text-green-400">(yi - Ȳ)²</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr><td className="px-2 py-1">Jan</td><td className="px-2 py-1 text-center">-6.67</td><td className="px-2 py-1 text-center">-8.67</td><td className="px-2 py-1 text-center text-purple-400">57.82</td><td className="px-2 py-1 text-center">44.49</td><td className="px-2 py-1 text-center">75.17</td></tr>
+                        <tr className={isDark ? 'bg-slate-800/50' : 'bg-slate-50'}><td className="px-2 py-1">Feb</td><td className="px-2 py-1 text-center">-3.67</td><td className="px-2 py-1 text-center">-4.67</td><td className="px-2 py-1 text-center text-purple-400">17.14</td><td className="px-2 py-1 text-center">13.47</td><td className="px-2 py-1 text-center">21.81</td></tr>
+                        <tr><td className="px-2 py-1">Mar</td><td className="px-2 py-1 text-center">-0.67</td><td className="px-2 py-1 text-center">-1.67</td><td className="px-2 py-1 text-center text-purple-400">1.12</td><td className="px-2 py-1 text-center">0.45</td><td className="px-2 py-1 text-center">2.79</td></tr>
+                        <tr className={isDark ? 'bg-slate-800/50' : 'bg-slate-50'}><td className="px-2 py-1">Apr</td><td className="px-2 py-1 text-center">+1.33</td><td className="px-2 py-1 text-center">+1.33</td><td className="px-2 py-1 text-center text-purple-400">1.77</td><td className="px-2 py-1 text-center">1.77</td><td className="px-2 py-1 text-center">1.77</td></tr>
+                        <tr><td className="px-2 py-1">May</td><td className="px-2 py-1 text-center">+3.33</td><td className="px-2 py-1 text-center">+5.33</td><td className="px-2 py-1 text-center text-purple-400">17.75</td><td className="px-2 py-1 text-center">11.09</td><td className="px-2 py-1 text-center">28.41</td></tr>
+                        <tr className={isDark ? 'bg-slate-800/50' : 'bg-slate-50'}><td className="px-2 py-1">Jun</td><td className="px-2 py-1 text-center">+6.33</td><td className="px-2 py-1 text-center">+8.33</td><td className="px-2 py-1 text-center text-purple-400">52.73</td><td className="px-2 py-1 text-center">40.07</td><td className="px-2 py-1 text-center">69.39</td></tr>
+                        <tr className={`font-bold ${isDark ? 'bg-slate-700' : 'bg-slate-200'}`}>
+                          <td className="px-2 py-1">SUM (Σ)</td>
+                          <td className="px-2 py-1 text-center">—</td>
+                          <td className="px-2 py-1 text-center">—</td>
+                          <td className="px-2 py-1 text-center text-purple-400">148.33</td>
+                          <td className="px-2 py-1 text-center text-blue-400">111.34</td>
+                          <td className="px-2 py-1 text-center text-green-400">199.34</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Apply Formula */}
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800' : 'bg-slate-100'}`}>
+                  <h4 className={`font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                    🔢 Step 4: Apply the Pearson Formula
+                  </h4>
+                  <div className={`p-3 rounded font-mono text-sm ${isDark ? 'bg-slate-900' : 'bg-white'} mb-3`}>
+                    <p className="text-center mb-2">
+                      <span className="text-cyan-400 font-bold">r = Σ[(xi - X̄)(yi - Ȳ)] / √[Σ(xi - X̄)² × Σ(yi - Ȳ)²]</span>
+                    </p>
+                    <p className="text-center text-xs mb-2">Substituting our values:</p>
+                    <p className="text-center">
+                      r = <span className="text-purple-400">148.33</span> / √(<span className="text-blue-400">111.34</span> × <span className="text-green-400">199.34</span>)
+                    </p>
+                    <p className="text-center">
+                      r = <span className="text-purple-400">148.33</span> / √(22,196.54)
+                    </p>
+                    <p className="text-center">
+                      r = <span className="text-purple-400">148.33</span> / 148.98
+                    </p>
+                    <p className="text-center text-lg font-bold text-green-400 mt-2">
+                      r = 0.996 (Strong Positive Correlation!)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Interpretation */}
+                <div className={`p-3 rounded-lg border-2 ${isDark ? 'border-green-500/30 bg-green-500/10' : 'border-green-200 bg-green-50'}`}>
+                  <h4 className={`font-semibold mb-2 ${isDark ? 'text-green-400' : 'text-green-700'}`}>
+                    ✅ Step 5: Interpret the Result
+                  </h4>
+                  <p className={isDark ? 'text-slate-300' : 'text-slate-700'}>
+                    <strong className="text-green-400">r = 0.996</strong> is extremely close to 1.0, indicating a
+                    <strong> near-perfect positive correlation</strong> between Test Coverage and NPS Score.
+                  </p>
+                  <ul className={`mt-2 space-y-1 text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    <li>• When test coverage increases, NPS score also tends to increase</li>
+                    <li>• This suggests investing in test automation may improve customer satisfaction</li>
+                    <li>• We then calculate the p-value to confirm this isn't random chance</li>
+                  </ul>
+                </div>
+
+                {/* What Metrics We Compare */}
+                <div className={`p-3 rounded-lg ${isDark ? 'bg-slate-800/50' : 'bg-slate-50'}`}>
+                  <h4 className={`font-semibold mb-2 ${isDark ? 'text-slate-100' : 'text-slate-900'}`}>
+                    📋 Metrics We Compare
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <p className="font-medium text-blue-400 mb-1">Quality Metrics (X variables):</p>
+                      <ul className={isDark ? 'text-slate-400' : 'text-slate-600'}>
+                        <li>• Test Coverage %</li>
+                        <li>• Defect Density (/KLOC)</li>
+                        <li>• Defect Escape Rate %</li>
+                        <li>• MTTR (hours)</li>
+                        <li>• Lead Time (days)</li>
+                        <li>• Code Quality Score</li>
+                        <li>• Change Failure Rate %</li>
+                        <li>• Deploy Frequency (/mo)</li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="font-medium text-green-400 mb-1">Business KPIs (Y variables):</p>
+                      <ul className={isDark ? 'text-slate-400' : 'text-slate-600'}>
+                        <li>• Monthly Revenue ($)</li>
+                        <li>• Active Users (count)</li>
+                        <li>• Churn Rate %</li>
+                        <li>• Feature Adoption Rate %</li>
+                        <li>• NPS Score (-100 to 100)</li>
+                        <li>• CSAT Score %</li>
+                        <li>• Support Ticket Volume</li>
+                      </ul>
+                    </div>
+                  </div>
+                  <p className={`mt-3 text-xs ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
+                    We calculate correlations for <strong>every combination</strong> of quality metric × business KPI
+                    (8 × 7 = 56 possible correlations), then rank them by strength.
+                  </p>
                 </div>
               </div>
             </div>

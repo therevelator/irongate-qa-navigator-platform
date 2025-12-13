@@ -331,7 +331,7 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
         `, [ft.test_case_id || ft.id]);
 
         const pattern = ft.failure_pattern || 'unknown';
-        
+
         // Generate failure reason and suggested fix from pattern analysis
         const patternAnalysis: Record<string, { keyword: string; fix: string }> = {
           timing: {
@@ -355,7 +355,7 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
             fix: 'Collect more failure data and analyze patterns'
           }
         };
-        
+
         const analysis = patternAnalysis[pattern] || patternAnalysis.unknown;
 
         return {
@@ -448,10 +448,9 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
     const { teamId } = req.query;
 
     // Note: developer_metrics in the live DB is effectively a current snapshot per developer.
-    // We aggregate over all rows for the company without a recorded_date filter.
+    // Query simplified to not require team_members join for basic metrics lookup
     let sql = `
       SELECT 
-        dm.id,
         dm.developer_id as developer_id,
         CONCAT(u.first_name, ' ', u.last_name) as name,
         AVG(dm.code_review_time_avg) as code_review_time_avg,
@@ -462,18 +461,16 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
         AVG(dm.meeting_time_hours) as meeting_time_hours
       FROM developer_metrics dm
       JOIN users u ON dm.developer_id = u.id
-      JOIN team_members tm ON u.id = tm.user_id
-      JOIN teams t ON tm.team_id = t.id
-      WHERE t.company_id = ?
+      WHERE u.company_id = ?
     `;
     const params: any[] = [companyId];
 
     if (teamId) {
-      sql += ' AND tm.team_id = ?';
+      sql += ' AND u.primary_team_id = ?';
       params.push(teamId);
     }
 
-    sql += ' GROUP BY dm.user_id, u.first_name, u.last_name ORDER BY happiness_score DESC';
+    sql += ' GROUP BY dm.developer_id, u.first_name, u.last_name ORDER BY happiness_score DESC';
 
     const metrics = await query<any>(sql, params);
 
@@ -513,7 +510,7 @@ async function getFinancialConfig(companyId: string, teamId?: string): Promise<R
     // Fetch configs with inheritance (company → department → team)
     let sql = `SELECT config_key, config_value FROM configs WHERE company_id = ?`;
     const params: any[] = [companyId];
-    
+
     if (teamId) {
       sql += ` AND (team_id = ? OR team_id IS NULL)`;
       params.push(teamId);
@@ -523,7 +520,7 @@ async function getFinancialConfig(companyId: string, teamId?: string): Promise<R
     sql += ` ORDER BY team_id IS NOT NULL DESC`; // Team-specific overrides first
 
     const configs = await query<any>(sql, params);
-    
+
     for (const cfg of configs) {
       if (defaults.hasOwnProperty(cfg.config_key) && !isNaN(parseFloat(cfg.config_value))) {
         defaults[cfg.config_key] = parseFloat(cfg.config_value);
@@ -538,7 +535,7 @@ async function getFinancialConfig(companyId: string, teamId?: string): Promise<R
 
 // Calculate ROI metrics for a debt item
 function calculateROI(
-  debt: any, 
+  debt: any,
   config: Record<string, number>
 ): { investment: number; monthlyCost: number; annualSavings: number; roi: number; paybackMonths: number } {
   const effortHours = Number(debt.estimated_effort_hours) || 0;
@@ -617,7 +614,7 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
 
     const result = debts.map((d: any) => {
       const roi = calculateROI(d, financialConfig);
-      
+
       return {
         id: d.id,
         title: d.title,
@@ -646,7 +643,7 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
     });
 
     // Also return the financial config for transparency
-    res.json({ 
+    res.json({
       debts: result,
       financial_config: financialConfig
     });
@@ -787,8 +784,8 @@ router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
       );
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       config: {
         time_savings_percent: timeSavings,
         cost_savings_percent: costSavings,
@@ -912,7 +909,7 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
              cpu_usage, memory_usage, cost_per_run, bottleneck_score, is_active)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true)
           `, [newId, companyId, teamId, def.name, def.stage_order, def.avg_duration_seconds,
-              def.success_rate, def.cpu_usage, def.memory_usage, def.cost_per_run, def.bottleneck_score]);
+            def.success_rate, def.cpu_usage, def.memory_usage, def.cost_per_run, def.bottleneck_score]);
         }
 
         // Refetch the newly created team stages
@@ -973,7 +970,7 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
       };
     });
 
-    res.json({ 
+    res.json({
       stages: result,
       config: {
         time_savings_percent: Number(config?.time_savings_percent) || 30,
@@ -1325,7 +1322,7 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
     // Calculate data completeness
     const monthsWithQuality = qualityMetrics.length;
     const monthsWithKpis = businessKpis.length;
-    
+
     // Find paired months (both X and Y exist)
     const qualityMonths = new Set(qualityMetrics.map((m: any) => m.month_year));
     const kpiMonths = new Set(businessKpis.map((m: any) => m.month_year));
@@ -1343,8 +1340,8 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
         monthsWithPairedData: pairedMonths.length,
         isCorrelationReady: pairedMonths.length >= 6,
         earliestMonth: qualityMetrics[0]?.month_year || businessKpis[0]?.month_year || null,
-        latestMonth: qualityMetrics[qualityMetrics.length - 1]?.month_year || 
-                     businessKpis[businessKpis.length - 1]?.month_year || null
+        latestMonth: qualityMetrics[qualityMetrics.length - 1]?.month_year ||
+          businessKpis[businessKpis.length - 1]?.month_year || null
       }
     });
   } catch (error) {
@@ -1364,7 +1361,7 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
     }
 
     const id = randomUUID();
-    
+
     await query(
       `INSERT INTO business_impact_quality_metrics
        (id, team_id, month_year, test_coverage, defect_density, defect_escape_rate,
@@ -1413,7 +1410,7 @@ router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, asyn
     }
 
     const id = randomUUID();
-    
+
     await query(
       `INSERT INTO business_impact_business_kpis
        (id, team_id, month_year, monthly_revenue, active_users, churn_rate,
@@ -1467,7 +1464,7 @@ router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req
     }
 
     const id = randomUUID();
-    
+
     await query(
       `INSERT INTO business_impact_context
        (id, team_id, month_year, team_size, sprint_length_days, working_days,
@@ -1536,7 +1533,7 @@ router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateTo
     );
 
     if (qualityMetrics.length < 6 || businessKpis.length < 6) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Insufficient data. Need at least 6 months of both quality metrics and business KPIs.',
         qualityMonths: qualityMetrics.length,
         kpiMonths: businessKpis.length
@@ -1546,15 +1543,15 @@ router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateTo
     // Create month-indexed maps
     const qualityByMonth: Record<string, any> = {};
     qualityMetrics.forEach((m: any) => { qualityByMonth[m.month_year] = m; });
-    
+
     const kpiByMonth: Record<string, any> = {};
     businessKpis.forEach((k: any) => { kpiByMonth[k.month_year] = k; });
 
     // Find paired months
     const pairedMonths = Object.keys(qualityByMonth).filter(m => kpiByMonth[m]).sort();
-    
+
     if (pairedMonths.length < 6) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: 'Insufficient paired data. Need at least 6 months where both X and Y data exist.',
         pairedMonths: pairedMonths.length
       });
@@ -1683,7 +1680,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
 
     for (const month of monthlyData) {
       const { month_year, quality, kpis, context } = month;
-      
+
       if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) continue;
 
       // Save quality metrics
@@ -1851,7 +1848,7 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
       // Add independent noise to break perfect correlations
       const qualityScore = (qualityData.test_coverage * 0.4 + qualityData.code_quality_score * 0.4 + (100 - qualityData.defect_escape_rate) * 0.2) / 100;
       const correlationStrength = 0.6 + Math.random() * 0.3; // 0.6-0.9 realistic correlation
-      
+
       // Independent business factors (external influences)
       const marketConditions = 0.8 + Math.random() * 0.4; // Market conditions affect business
       const competitivePressure = 0.9 + Math.random() * 0.2; // Competition affects business
@@ -2034,8 +2031,8 @@ DATASET CONTEXT:
 
 CORRELATION MATRIX DATA:
 ${correlationMatrix.map((c: any) =>
-  `${c.quality_metric} → ${c.business_kpi}: r=${Number(c.correlation).toFixed(3)}, p=${Number(c.p_value) < 0.001 ? '<0.001' : Number(c.p_value).toFixed(4)}, ${c.strength}, ${c.significant ? 'significant' : 'not significant'}`
-).join('\n')}
+      `${c.quality_metric} → ${c.business_kpi}: r=${Number(c.correlation).toFixed(3)}, p=${Number(c.p_value) < 0.001 ? '<0.001' : Number(c.p_value).toFixed(4)}, ${c.strength}, ${c.significant ? 'significant' : 'not significant'}`
+    ).join('\n')}
 
 ANALYSIS REQUIREMENTS:
 1. Executive Summary: Key findings in 3-5 bullet points
@@ -2188,7 +2185,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
         AND ks.snapshot_date >= DATE_SUB(NOW(), INTERVAL 14 DAY)
         AND ks.snapshot_date < DATE_SUB(NOW(), INTERVAL 7 DAY)
     `, [companyId]);
-    
+
     const prevScore = historicalKpis[0]?.avg_score ? Number(historicalKpis[0].avg_score) : globalQaScore;
     const globalQaScoreTrend = Math.round(globalQaScore - prevScore);
 
@@ -2285,14 +2282,14 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
       escapeRate: 2,     // defect_escape_rate <= 2%
       automation: 70     // automation_coverage >= 70%
     };
-    
+
     let onTrack = 0, atRisk = 0, offTrack = 0;
     for (const t of teamsWithData) {
       const coverage = Number(t.test_coverage) || 0;
       const flakiness = Number(t.test_flakiness_rate) || 0;
       const escapeRate = Number(t.defect_escape_rate) || 0;
       const automation = Number(t.automation_coverage) || 0;
-      
+
       // Count how many thresholds this team meets
       const meetsThresholds = (
         (coverage >= kpiThresholds.coverage ? 1 : 0) +
@@ -2300,7 +2297,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
         (escapeRate <= kpiThresholds.escapeRate ? 1 : 0) +
         (automation >= kpiThresholds.automation ? 1 : 0)
       );
-      
+
       if (meetsThresholds >= 3) onTrack++;
       else if (meetsThresholds >= 2) atRisk++;
       else offTrack++;
@@ -2310,7 +2307,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
     // AI Summary - Generated from real metrics
     // ============================================================================
     const teamsLowCoverage = teamsWithData.filter(t => (Number(t.test_coverage) || 0) < 80).length;
-    
+
     let aiSummary = '';
     if (globalQaScoreTrend > 0) {
       aiSummary = `Quality improved by ${globalQaScoreTrend} points. `;
@@ -2319,11 +2316,11 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
     } else {
       aiSummary = 'Quality metrics stable. ';
     }
-    
+
     if (teamsLowCoverage > 0) {
       aiSummary += `${teamsLowCoverage} team${teamsLowCoverage > 1 ? 's' : ''} below 80% coverage. `;
     }
-    
+
     if (automationCoverage < 70) {
       aiSummary += `Automation at ${automationCoverage}% - consider increasing.`;
     } else {
@@ -2373,7 +2370,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
 
     const totalTechDebtScore = Math.min(100, Number(techDebtSummary?.total_weight || 0) / (teams.length || 1)); // Normalized per team roughly
     const techDebtStatusScore = Math.round(Math.max(0, 100 - totalTechDebtScore) * 10) / 10; // one decimal place
-    const techDebtResolutionRate = techDebtSummary?.total_items > 0 
+    const techDebtResolutionRate = techDebtSummary?.total_items > 0
       ? Math.round(((techDebtSummary.total_items - techDebtSummary.open_items) / techDebtSummary.total_items) * 100)
       : 100;
 
@@ -2397,7 +2394,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
     const happiness = Number(devMetricsSummary?.avg_happiness || 75); // Default to 75 if no data
     const focusTime = Number(devMetricsSummary?.avg_focus || 4);
     const meetingTime = Number(devMetricsSummary?.avg_meetings || 3);
-    
+
     // Calculate Burnout Risk (Categorical -> Score)
     // Heuristic: High risk if happiness < 50 OR meeting > 5 OR focus < 2
     let burnoutRiskScore = 100; // Low risk
@@ -2464,7 +2461,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
       techDebtStatusScore,
       pipelineHealthScore,
       techDebtResolutionRate,
-      
+
       // Keep existing metrics for compatibility or drill-downs
       globalQaScore,
       globalQaScoreTrend,
@@ -2473,7 +2470,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
       avgDefectEscapeRate,
       automationCoverage,
       avgFlakinessRate,
-      
+
       topImproving,
       needsAttention,
       kpiStatus: { onTrack, atRisk, offTrack },
@@ -2496,7 +2493,7 @@ router.post('/company-insights', authenticateToken, async (req: AuthRequest, res
     }
 
     const { companyId, role } = user;
-    
+
     if (!['super_admin', 'manager', 'team_lead'].includes(role)) {
       return res.status(403).json({ error: 'Executive insights are restricted.' });
     }
@@ -2553,7 +2550,7 @@ router.post('/company-insights', authenticateToken, async (req: AuthRequest, res
     const happiness = Number(devMetricsSummary?.avg_happiness || 75);
     const focusTime = Number(devMetricsSummary?.avg_focus || 4);
     const meetingTime = Number(devMetricsSummary?.avg_meetings || 3);
-    
+
     let burnoutRiskScore = 100;
     if (happiness < 50 || meetingTime > 5 || focusTime < 2) burnoutRiskScore = 20;
     else if (happiness < 70 || meetingTime > 4 || focusTime < 3) burnoutRiskScore = 60;
@@ -2611,7 +2608,7 @@ router.post('/company-insights', authenticateToken, async (req: AuthRequest, res
       avg_flakiness_rate = VALUES(avg_flakiness_rate),
       automation_coverage = VALUES(automation_coverage)
     `, [
-      companyId, 
+      companyId,
       engineeringHealthScore, deliveryPerformanceScore, developerWellnessIndex, techDebtStatusScore, pipelineHealthScore,
       avgQaScore, avgTestCoverage, avgDefectEscape, avgFlakiness, automationCov
     ]);
