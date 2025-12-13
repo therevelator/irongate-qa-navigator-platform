@@ -34,9 +34,148 @@ interface TeamWithKPI extends Team {
   };
 }
 
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Bug, Bot, BarChart3, Clock, GitPullRequest, Zap, Users, Activity, RefreshCcw, Timer } from 'lucide-react';
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Bug, Bot, BarChart3, Clock, GitPullRequest, Zap, Users, Activity, RefreshCcw, Timer, Info } from 'lucide-react';
 import BatteryIndicator from './BatteryIndicator';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
+
+// Business-friendly metric explanations for tooltips
+export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: string }> = {
+  // Quality & Testing
+  'testCoverage': {
+    short: 'How much of your code has automated tests',
+    detailed: 'Percentage of code lines that are executed during automated tests. Higher coverage means fewer untested code paths that could contain bugs.'
+  },
+  'testFlakinessRate': {
+    short: 'Tests that randomly pass or fail without code changes',
+    detailed: 'Percentage of tests that produce inconsistent results. Flaky tests waste developer time investigating false failures and reduce trust in the test suite.'
+  },
+  'defectDensity': {
+    short: 'Bugs per 1,000 lines of code written',
+    detailed: 'Number of confirmed bugs divided by thousands of lines of code. Lower is better. Industry average is 1-5, elite teams achieve <0.5.'
+  },
+  'defectEscapeRate': {
+    short: 'Bugs found in production vs. caught in testing',
+    detailed: 'Percentage of bugs that escaped testing and were found by users in production. Lower is better. This measures how effective your QA process is.'
+  },
+  'codeQualityScore': {
+    short: 'Overall code health score from static analysis',
+    detailed: 'Aggregate score from code analysis tools measuring maintainability, complexity, duplication, and coding standards compliance. Higher is better.'
+  },
+  'firstPassRate': {
+    short: 'Tests that pass on the first attempt',
+    detailed: 'Percentage of test cases that pass without requiring fixes or retries. High rates indicate stable, well-written code and reliable tests.'
+  },
+  'automationCoverage': {
+    short: 'How many tests are automated vs. manual',
+    detailed: 'Percentage of test cases that run automatically. Higher automation means faster feedback, less manual effort, and more consistent testing.'
+  },
+
+  // Speed & Efficiency
+  'avgBuildTimeMinutes': {
+    short: 'Time to compile and build your application',
+    detailed: 'Average minutes from code commit to completed build. Faster builds mean quicker feedback for developers and more deployments per day.'
+  },
+  'testExecutionTimeMinutes': {
+    short: 'Time to run the full test suite',
+    detailed: 'Average minutes to complete all automated tests. Faster tests enable more frequent runs and quicker release cycles.'
+  },
+  'leadTimeDays': {
+    short: 'Days from code commit to production deployment',
+    detailed: 'Time from first code commit to when it\'s live in production. Shorter lead time = faster delivery of features to customers. Elite: <1 day.'
+  },
+  'mttrHours': {
+    short: 'Average hours to fix issues when they occur',
+    detailed: 'Mean Time To Recovery - how quickly you restore service after an incident. Lower is better. Elite teams recover in <1 hour.'
+  },
+  'parallelTestEfficiency': {
+    short: 'How well tests run in parallel',
+    detailed: 'Ratio of sequential vs. parallel test duration. Higher means your tests effectively utilize parallel execution to save time.'
+  },
+  'deploymentFrequencyPerWeek': {
+    short: 'How often you deploy to production',
+    detailed: 'Number of production deployments per week. More frequent deploys = smaller changes = lower risk. Elite: multiple per day.'
+  },
+
+  // Agile & Process
+  'sprintVelocity': {
+    short: 'Story points delivered per sprint',
+    detailed: 'Average amount of work completed in a sprint. Stable velocity helps predict delivery dates. Focus on consistency over absolute numbers.'
+  },
+  'sprintCommitmentRate': {
+    short: 'Percentage of committed work actually delivered',
+    detailed: 'How much of what you planned actually gets done. High rates indicate accurate estimation and reliable delivery promises.'
+  },
+  'sprintCarryover': {
+    short: 'Work that moves to the next sprint',
+    detailed: 'Percentage of incomplete work that rolls over. Lower is better. High carryover suggests overcommitment or blockers.'
+  },
+  'blockedTimeHours': {
+    short: 'Time tasks spend waiting or blocked',
+    detailed: 'Average hours that work items spend in blocked status. Lower indicates smoother workflow with fewer dependencies and bottlenecks.'
+  },
+  'sizingAccuracy': {
+    short: 'How accurate your task estimates are',
+    detailed: 'Ratio of actual vs. estimated effort. 1.0 = perfect estimation. <1.0 = overestimated, >1.0 = underestimated.'
+  },
+  'automationRoi': {
+    short: 'Return on investment from test automation',
+    detailed: 'Value generated by automation divided by its cost. Calculated as (Manual hours saved × hourly rate) ÷ Automation investment. Higher is better.'
+  },
+
+  // Reliability & Stability
+  'changeFailureRate': {
+    short: 'Percentage of deployments causing issues',
+    detailed: 'Proportion of changes that result in failures requiring rollback or hotfix. Lower is better. Elite teams: <5%.'
+  },
+  'mtbfHours': {
+    short: 'Hours between production failures',
+    detailed: 'Mean Time Between Failures - average uptime between incidents. Higher means more stable systems. Target: >100 hours.'
+  },
+  'availability': {
+    short: 'System uptime percentage',
+    detailed: 'Percentage of time the system is operational. 99.9% = ~8.7 hours downtime/year. 99.99% = ~52 minutes downtime/year.'
+  },
+  'infraFailures': {
+    short: 'Infrastructure incidents count',
+    detailed: 'Number of infrastructure-related failures (servers, network, databases). Lower indicates more stable underlying systems.'
+  },
+
+  // Business Impact
+  'qaScore': {
+    short: 'Overall quality score for the team',
+    detailed: 'Weighted composite score from test coverage, automation, defect density, code quality, first-pass rate, and flakiness. Higher = healthier team.'
+  },
+  'technicalDebtScore': {
+    short: 'Accumulated code issues needing attention',
+    detailed: 'Score reflecting unaddressed code quality issues, outdated dependencies, and shortcuts taken. Lower is better. High debt slows future development.'
+  },
+
+  // Developer Productivity
+  'prMergeTime': {
+    short: 'Hours from PR creation to merge',
+    detailed: 'Time pull requests spend in review before merging. Shorter times indicate efficient code review processes.'
+  },
+  'codeReviewTime': {
+    short: 'Hours spent reviewing code',
+    detailed: 'Average time to complete a code review. Balance speed with thoroughness - too fast may miss issues, too slow blocks progress.'
+  },
+  'focusTime': {
+    short: 'Uninterrupted coding hours per day',
+    detailed: 'Hours of concentrated work without meetings or interruptions. Higher focus time correlates with higher productivity and job satisfaction.'
+  },
+  'meetingTime': {
+    short: 'Hours spent in meetings per day',
+    detailed: 'Average daily meeting time. Some meetings are essential, but excess meetings reduce productive coding time.'
+  },
+  'contextSwitches': {
+    short: 'Task switches per day',
+    detailed: 'Number of times developers switch between different tasks. Fewer switches = deeper focus = higher quality work.'
+  },
+  'happinessScore': {
+    short: 'Developer wellbeing and satisfaction',
+    detailed: 'Self-reported measure of job satisfaction and wellbeing. Happy developers are more productive, creative, and less likely to leave.'
+  }
+};
 
 interface TeamMember {
   id: string;
@@ -489,8 +628,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               <div className="hidden md:block text-right">
                 <p className="text-[10px] text-gray-400 dark:text-slate-500">Sizing Accuracy</p>
                 <div className={`text-lg font-bold ${Math.abs(team.taskSizingAccuracy - 1.0) < 0.15 ? 'text-green-600 dark:text-green-400' :
-                    Math.abs(team.taskSizingAccuracy - 1.0) < 0.3 ? 'text-yellow-600 dark:text-yellow-400' :
-                      'text-red-600 dark:text-red-400'
+                  Math.abs(team.taskSizingAccuracy - 1.0) < 0.3 ? 'text-yellow-600 dark:text-yellow-400' :
+                    'text-red-600 dark:text-red-400'
                   }`}>
                   {team.taskSizingAccuracy.toFixed(2)}<span className="text-xs text-gray-400">x</span>
                 </div>
@@ -554,8 +693,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                   <p className="text-sm text-gray-500 dark:text-slate-400">Sizing Accuracy</p>
                   <div className="flex items-baseline space-x-1">
                     <div className={`text-3xl font-bold ${Math.abs(team.taskSizingAccuracy - 1.0) < 0.15 ? 'text-green-600 dark:text-green-400' :
-                        Math.abs(team.taskSizingAccuracy - 1.0) < 0.3 ? 'text-yellow-600 dark:text-yellow-400' :
-                          'text-red-600 dark:text-red-400'
+                      Math.abs(team.taskSizingAccuracy - 1.0) < 0.3 ? 'text-yellow-600 dark:text-yellow-400' :
+                        'text-red-600 dark:text-red-400'
                       }`}>
                       {team.taskSizingAccuracy.toFixed(2)}
                     </div>
@@ -601,7 +740,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{team.qaScore}%</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Overall Quality Score</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Overall Quality Score</p>
+              <div className="relative group">
+                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
+                  {METRIC_EXPLANATIONS.qaScore.short}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Test Coverage */}
@@ -616,7 +763,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{testCoverage.toFixed(1)}%</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Test Coverage</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Test Coverage</p>
+              <div className="relative group">
+                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
+                  {METRIC_EXPLANATIONS.testCoverage.short}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Defect Density */}
@@ -631,7 +786,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{defectDensity.toFixed(2)}</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Defect Density</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Defect Density</p>
+              <div className="relative group">
+                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
+                  {METRIC_EXPLANATIONS.defectDensity.short}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Automation Rate */}
@@ -646,7 +809,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{automationCoverage.toFixed(1)}%</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Automation Rate</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Automation Rate</p>
+              <div className="relative group">
+                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
+                  {METRIC_EXPLANATIONS.automationCoverage.short}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Avg Build Time */}
@@ -661,7 +832,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{avgBuildTimeMinutes ? avgBuildTimeMinutes.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">min</span></h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Avg Build Time</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Avg Build Time</p>
+              <div className="relative group">
+                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
+                  {METRIC_EXPLANATIONS.avgBuildTimeMinutes.short}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Mean Time To Recovery */}
@@ -676,7 +855,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{mttrHours ? mttrHours.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">h</span></h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Mean Time to Recovery</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Mean Time to Recovery</p>
+              <div className="relative group">
+                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
+                  {METRIC_EXPLANATIONS.mttrHours.short}
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Mean Time Between Failures */}
@@ -691,7 +878,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               </span>
             </div>
             <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{mtbfHours ? mtbfHours.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">h</span></h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400">Mean Time Between Failures</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">Mean Time Between Failures</p>
+              <div className="relative group">
+                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
+                  {METRIC_EXPLANATIONS.mtbfHours.short}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -825,8 +1020,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                           <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3">
                             <div
                               className={`h-3 rounded-full transition-all ${parseInt(workLifeBalance) > 70 ? 'bg-green-500' :
-                                  parseInt(workLifeBalance) > 50 ? 'bg-yellow-500' :
-                                    'bg-red-500'
+                                parseInt(workLifeBalance) > 50 ? 'bg-yellow-500' :
+                                  'bg-red-500'
                                 }`}
                               style={{ width: `${workLifeBalance}%` }}
                             ></div>
@@ -841,10 +1036,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                         <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-slate-700">
                           <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Burnout Risk:</span>
                           <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${developer.happiness_score > 80 && developer.focus_time_hours > 4
-                              ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                              developer.happiness_score > 70
-                                ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
-                                'bg-red-500/20 text-red-400 border border-red-500/30'
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                            developer.happiness_score > 70
+                              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
+                              'bg-red-500/20 text-red-400 border border-red-500/30'
                             }`}>
                             {developer.happiness_score > 80 && developer.focus_time_hours > 4 ? '✅ Low' :
                               developer.happiness_score > 70 ? '⚠️ Moderate' : '❌ High'}
@@ -878,8 +1073,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                         <p className="text-xs text-gray-500 dark:text-slate-400">{kpi.description}</p>
                       </div>
                       <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ml-2 flex-shrink-0 ${kpi.status === 'good' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                          kpi.status === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
-                            'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
+                        kpi.status === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
+                          'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
                         }`}>
                         {kpi.status}
                       </span>
@@ -977,8 +1172,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
                 {/* Test Coverage */}
                 <div className={`rounded-lg border p-3 ${testCoverage >= 80 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    testCoverage >= 60 ? 'border-amber-500/40 bg-amber-500/10' :
-                      'border-red-500/40 bg-red-500/10'
+                  testCoverage >= 60 ? 'border-amber-500/40 bg-amber-500/10' :
+                    'border-red-500/40 bg-red-500/10'
                   }`}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium text-slate-400 uppercase">Test Coverage</span>
@@ -994,8 +1189,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
                 {/* Defect Density */}
                 <div className={`rounded-lg border p-3 ${defectDensity <= 0.5 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    defectDensity <= 1.0 ? 'border-amber-500/40 bg-amber-500/10' :
-                      'border-red-500/40 bg-red-500/10'
+                  defectDensity <= 1.0 ? 'border-amber-500/40 bg-amber-500/10' :
+                    'border-red-500/40 bg-red-500/10'
                   }`}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium text-slate-400 uppercase">Defect Density</span>
@@ -1011,8 +1206,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
 
                 {/* Automation Coverage */}
                 <div className={`rounded-lg border p-3 ${automationCoverage >= 70 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    automationCoverage >= 50 ? 'border-amber-500/40 bg-amber-500/10' :
-                      'border-red-500/40 bg-red-500/10'
+                  automationCoverage >= 50 ? 'border-amber-500/40 bg-amber-500/10' :
+                    'border-red-500/40 bg-red-500/10'
                   }`}>
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs font-medium text-slate-400 uppercase">Automation</span>
@@ -1029,8 +1224,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 {/* Lead Time */}
                 {kpi.leadTimeDays !== undefined && (
                   <div className={`rounded-lg border p-3 ${Number(kpi.leadTimeDays) <= 3 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                      Number(kpi.leadTimeDays) <= 7 ? 'border-amber-500/40 bg-amber-500/10' :
-                        'border-red-500/40 bg-red-500/10'
+                    Number(kpi.leadTimeDays) <= 7 ? 'border-amber-500/40 bg-amber-500/10' :
+                      'border-red-500/40 bg-red-500/10'
                     }`}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-slate-400 uppercase">Lead Time</span>
@@ -1048,8 +1243,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 {/* MTTR */}
                 {kpi.mttrHours !== undefined && (
                   <div className={`rounded-lg border p-3 ${Number(kpi.mttrHours) <= 1 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                      Number(kpi.mttrHours) <= 4 ? 'border-amber-500/40 bg-amber-500/10' :
-                        'border-red-500/40 bg-red-500/10'
+                    Number(kpi.mttrHours) <= 4 ? 'border-amber-500/40 bg-amber-500/10' :
+                      'border-red-500/40 bg-red-500/10'
                     }`}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-slate-400 uppercase">MTTR</span>
@@ -1067,8 +1262,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 {/* Sprint Commitment */}
                 {kpi.sprintCommitmentRate !== undefined && (
                   <div className={`rounded-lg border p-3 ${Number(kpi.sprintCommitmentRate) >= 90 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                      Number(kpi.sprintCommitmentRate) >= 75 ? 'border-amber-500/40 bg-amber-500/10' :
-                        'border-red-500/40 bg-red-500/10'
+                    Number(kpi.sprintCommitmentRate) >= 75 ? 'border-amber-500/40 bg-amber-500/10' :
+                      'border-red-500/40 bg-red-500/10'
                     }`}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-slate-400 uppercase">Sprint Commit</span>
@@ -1086,8 +1281,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 {/* Change Failure Rate */}
                 {kpi.changeFailureRate !== undefined && (
                   <div className={`rounded-lg border p-3 ${Number(kpi.changeFailureRate) <= 5 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                      Number(kpi.changeFailureRate) <= 15 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                        'border-red-500/40 bg-red-500/10'
+                    Number(kpi.changeFailureRate) <= 15 ? 'border-emerald-500/40 bg-emerald-500/10' :
+                      'border-red-500/40 bg-red-500/10'
                     }`}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-slate-400 uppercase">Change Failure</span>
@@ -1105,8 +1300,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 {/* Build Time */}
                 {kpi.avgBuildTimeMinutes !== undefined && (
                   <div className={`rounded-lg border p-3 ${Number(kpi.avgBuildTimeMinutes) <= 10 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                      Number(kpi.avgBuildTimeMinutes) <= 20 ? 'border-amber-500/40 bg-amber-500/10' :
-                        'border-red-500/40 bg-red-500/10'
+                    Number(kpi.avgBuildTimeMinutes) <= 20 ? 'border-amber-500/40 bg-amber-500/10' :
+                      'border-red-500/40 bg-red-500/10'
                     }`}>
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-slate-400 uppercase">Build Time</span>
@@ -1331,10 +1526,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                       <div
                         key={idx}
                         className={`rounded-lg border p-4 text-slate-800 transition-shadow hover:shadow-xl dark:text-slate-100 ${dev.status === 'healthy'
-                            ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-400 dark:bg-slate-900/70'
-                            : dev.status === 'at-risk'
-                              ? 'border-amber-300 bg-amber-50/60 dark:border-amber-400 dark:bg-slate-900/70'
-                              : 'border-rose-300 bg-rose-50/60 dark:border-rose-400 dark:bg-slate-900/70'
+                          ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-400 dark:bg-slate-900/70'
+                          : dev.status === 'at-risk'
+                            ? 'border-amber-300 bg-amber-50/60 dark:border-amber-400 dark:bg-slate-900/70'
+                            : 'border-rose-300 bg-rose-50/60 dark:border-rose-400 dark:bg-slate-900/70'
                           }`
                         }
                       >
@@ -1342,8 +1537,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                         <div className="flex items-center justify-between mb-3">
                           <h4 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{dev.name}</h4>
                           <span className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${dev.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-400' :
-                              dev.status === 'at-risk' ? 'bg-amber-500/20 text-amber-400' :
-                                'bg-red-500/20 text-red-400'
+                            dev.status === 'at-risk' ? 'bg-amber-500/20 text-amber-400' :
+                              'bg-red-500/20 text-red-400'
                             }`}>
                             {dev.status.replace('-', ' ')}
                           </span>

@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 
 export type JobNotificationPayload = {
   source: 'pipeline' | 'metrics' | 'analytics';
-  frequency: '5-min' | 'hourly' | 'daily' | 'weekly' | 'monthly';
+  frequency: '5-min' | 'hourly' | 'daily' | 'weekly' | 'monthly' | 'startup';
   message: string;
   updatedMetrics?: string[];
   timestamp: string;
