@@ -217,6 +217,18 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     return roleMap[role] || role;
   };
 
+  // Check if current user can change password for target user
+  const canChangePassword = (targetUser: User) => {
+    if (!user) return false;
+    // User can always change their own password
+    if (user.id === targetUser.id) return true;
+    // Super admin and QA manager can change password for any user they can see
+    if (user.role === 'super_admin' || user.role === 'qa_manager') return true;
+    // Team lead can change password for team members
+    if (user.role === 'team_lead' && targetUser.primary_team_id === user.primaryTeamId) return true;
+    return false;
+  };
+
   const getRoleColors = (role: string) => {
     const colors: Record<string, { bg: string; text: string; gradient: string }> = {
       super_admin: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300', gradient: 'from-purple-500 to-pink-500' },
@@ -441,99 +453,102 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                               >
                                 <Edit2 size={16} />
                               </button>
+                            </>
+                          )}
+                          {/* Password button - visible based on canChangePassword */}
+                          {canChangePassword(u) && (
+                            <button
+                              onClick={() => {
+                                setSelectedUser(u);
+                                setUserForm({ ...userForm, password: '' });
+                                setShowPasswordModal(true);
+                              }}
+                              className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
+                              title={u.id === user?.id ? 'Change My Password' : 'Reset Password'}
+                            >
+                              <Key size={16} />
+                            </button>
+                          )}
+                          {canManageTargetUser(u) && u.id !== user?.id && (
+                            <>
                               <button
-                                onClick={() => {
-                                  setSelectedUser(u);
-                                  setUserForm({ ...userForm, password: '' });
-                                  setShowPasswordModal(true);
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch(`${API_URL}/admin/users/${u.id}/developer-insights-toggle`, {
+                                      method: 'PATCH',
+                                      headers: { 'Content-Type': 'application/json' },
+                                      credentials: 'include',
+                                      body: JSON.stringify({ enabled: !u.developer_insights_enabled })
+                                    });
+                                    if (response.ok) {
+                                      toast.success(`AI insights ${u.developer_insights_enabled ? 'disabled' : 'enabled'}`);
+                                      fetchUsers();
+                                    } else {
+                                      toast.error('Failed to toggle insights');
+                                    }
+                                  } catch (error) {
+                                    toast.error('Error toggling insights');
+                                  }
                                 }}
-                                className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
-                                title="Reset Password"
+                                className={`p-1.5 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 ${u.developer_insights_enabled
+                                  ? 'text-purple-500 dark:text-purple-400'
+                                  : 'text-gray-400 dark:text-slate-500 hover:text-purple-500'
+                                  }`}
+                                title={u.developer_insights_enabled ? 'Disable AI Insights' : 'Enable AI Insights'}
                               >
-                                <Key size={16} />
+                                <Bot size={16} />
                               </button>
-                              {u.id !== user?.id && (
-                                <>
-                                  <button
-                                    onClick={async () => {
+                              <button
+                                onClick={async () => {
+                                  try {
+                                    const response = await fetch(`${API_URL}/admin/users/${u.id}/toggle-status`, {
+                                      method: 'POST',
+                                      credentials: 'include'
+                                    });
+                                    if (response.ok) {
+                                      toast.success(`User ${u.is_active ? 'deactivated' : 'activated'}`);
+                                      fetchUsers();
+                                    } else {
+                                      toast.error('Failed to update status');
+                                    }
+                                  } catch (error) {
+                                    toast.error('Error updating status');
+                                  }
+                                }}
+                                className={`p-1.5 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 ${u.is_active
+                                  ? 'text-gray-400 dark:text-slate-500 hover:text-orange-500'
+                                  : 'text-gray-400 dark:text-slate-500 hover:text-green-500'
+                                  }`}
+                                title={u.is_active ? 'Deactivate' : 'Activate'}
+                              >
+                                {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
+                              </button>
+                              {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
+                                <button
+                                  onClick={async () => {
+                                    const result = await confirmDelete(`${u.first_name} ${u.last_name}`, 'user');
+                                    if (result.isConfirmed) {
                                       try {
-                                        const response = await fetch(`${API_URL}/admin/users/${u.id}/developer-insights-toggle`, {
-                                          method: 'PATCH',
-                                          headers: { 'Content-Type': 'application/json' },
-                                          credentials: 'include',
-                                          body: JSON.stringify({ enabled: !u.developer_insights_enabled })
-                                        });
-                                        if (response.ok) {
-                                          toast.success(`AI insights ${u.developer_insights_enabled ? 'disabled' : 'enabled'}`);
-                                          fetchUsers();
-                                        } else {
-                                          toast.error('Failed to toggle insights');
-                                        }
-                                      } catch (error) {
-                                        toast.error('Error toggling insights');
-                                      }
-                                    }}
-                                    className={`p-1.5 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 ${u.developer_insights_enabled
-                                      ? 'text-purple-500 dark:text-purple-400'
-                                      : 'text-gray-400 dark:text-slate-500 hover:text-purple-500'
-                                      }`}
-                                    title={u.developer_insights_enabled ? 'Disable AI Insights' : 'Enable AI Insights'}
-                                  >
-                                    <Bot size={16} />
-                                  </button>
-                                  <button
-                                    onClick={async () => {
-                                      try {
-                                        const response = await fetch(`${API_URL}/admin/users/${u.id}/toggle-status`, {
-                                          method: 'POST',
+                                        const response = await fetch(`${API_URL}/admin/users/${u.id}`, {
+                                          method: 'DELETE',
                                           credentials: 'include'
                                         });
                                         if (response.ok) {
-                                          toast.success(`User ${u.is_active ? 'deactivated' : 'activated'}`);
+                                          toast.success('User deleted!');
                                           fetchUsers();
                                         } else {
-                                          toast.error('Failed to update status');
+                                          toast.error('Failed to delete');
                                         }
                                       } catch (error) {
-                                        toast.error('Error updating status');
+                                        toast.error('Error deleting user');
                                       }
-                                    }}
-                                    className={`p-1.5 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 ${u.is_active
-                                      ? 'text-gray-400 dark:text-slate-500 hover:text-orange-500'
-                                      : 'text-gray-400 dark:text-slate-500 hover:text-green-500'
-                                      }`}
-                                    title={u.is_active ? 'Deactivate' : 'Activate'}
-                                  >
-                                    {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
-                                  </button>
-                                  {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
-                                    <button
-                                      onClick={async () => {
-                                        const result = await confirmDelete(`${u.first_name} ${u.last_name}`, 'user');
-                                        if (result.isConfirmed) {
-                                          try {
-                                            const response = await fetch(`${API_URL}/admin/users/${u.id}`, {
-                                              method: 'DELETE',
-                                              credentials: 'include'
-                                            });
-                                            if (response.ok) {
-                                              toast.success('User deleted!');
-                                              fetchUsers();
-                                            } else {
-                                              toast.error('Failed to delete');
-                                            }
-                                          } catch (error) {
-                                            toast.error('Error deleting user');
-                                          }
-                                        }
-                                      }}
-                                      className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
-                                      title="Delete"
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  )}
-                                </>
+                                    }
+                                  }}
+                                  className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
+                                  title="Delete"
+                                >
+                                  <Trash2 size={16} />
+                                </button>
                               )}
                             </>
                           )}
@@ -647,7 +662,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                           </div>
                         )}
                       </div>
-                    )}
+                    )
+                    }
                   </div>
                 );
               })}
@@ -703,76 +719,78 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
       </div>
 
       {/* Happiness Ranking Section - Only show for managers */}
-      {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && Object.entries(userMetrics).filter(([, m]) => m !== null).length > 0 && (
-        <div className="max-w-7xl mx-auto mt-8 mb-6">
-          <div className={`bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 ${is3DMode ? 'shadow-lg' : ''}`}>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-              📊 Engineer Happiness Ranking
-              <span className="text-sm font-normal text-gray-500 dark:text-slate-400">
-                ({Object.entries(userMetrics).filter(([, m]) => m !== null).length} engineers with metrics)
-              </span>
-            </h3>
-            <div className="space-y-2">
-              {Object.entries(userMetrics)
-                .filter(([, m]) => m !== null)
-                .sort(([, a], [, b]) => (b?.happiness_score || 0) - (a?.happiness_score || 0))
-                .map(([userId, metrics], index, arr) => {
-                  const userInfo = users.find(u => u.id === userId);
-                  if (!userInfo || !metrics) return null;
+      {
+        (user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && Object.entries(userMetrics).filter(([, m]) => m !== null).length > 0 && (
+          <div className="max-w-7xl mx-auto mt-8 mb-6">
+            <div className={`bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 ${is3DMode ? 'shadow-lg' : ''}`}>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+                📊 Engineer Happiness Ranking
+                <span className="text-sm font-normal text-gray-500 dark:text-slate-400">
+                  ({Object.entries(userMetrics).filter(([, m]) => m !== null).length} engineers with metrics)
+                </span>
+              </h3>
+              <div className="space-y-2">
+                {Object.entries(userMetrics)
+                  .filter(([, m]) => m !== null)
+                  .sort(([, a], [, b]) => (b?.happiness_score || 0) - (a?.happiness_score || 0))
+                  .map(([userId, metrics], index, arr) => {
+                    const userInfo = users.find(u => u.id === userId);
+                    if (!userInfo || !metrics) return null;
 
-                  const isTop = index < 3;
-                  const isBottom = index >= arr.length - 3 && arr.length > 3;
+                    const isTop = index < 3;
+                    const isBottom = index >= arr.length - 3 && arr.length > 3;
 
-                  return (
-                    <div
-                      key={userId}
-                      className={`flex items-center justify-between p-3 rounded-lg transition-all ${isTop ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' :
-                        isBottom ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' :
-                          'bg-gray-50 dark:bg-slate-700/50'
-                        }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-400 text-yellow-900' :
-                          index === 1 ? 'bg-gray-300 text-gray-700' :
-                            index === 2 ? 'bg-amber-600 text-white' :
-                              'bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-slate-300'
-                          }`}>
-                          {index + 1}
-                        </span>
-                        <div>
-                          <p className="font-medium text-gray-900 dark:text-white">
-                            {userInfo.first_name} {userInfo.last_name}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-slate-400">{userInfo.team_name || 'No team'}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-xs text-gray-500 dark:text-slate-400">Focus Time</p>
-                          <p className="font-medium text-gray-900 dark:text-white">{metrics.focus_time_hours}h</p>
-                        </div>
-                        <div className={`text-2xl font-bold ${metrics.happiness_score >= 80 ? 'text-green-600 dark:text-green-400' :
-                          metrics.happiness_score >= 70 ? 'text-yellow-600 dark:text-yellow-400' :
-                            'text-red-600 dark:text-red-400'
-                          }`}>
-                          {metrics.happiness_score}%
-                          <span className="ml-1">
-                            {metrics.happiness_score >= 80 ? '😊' : metrics.happiness_score >= 70 ? '🙂' : '😟'}
+                    return (
+                      <div
+                        key={userId}
+                        className={`flex items-center justify-between p-3 rounded-lg transition-all ${isTop ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' :
+                          isBottom ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' :
+                            'bg-gray-50 dark:bg-slate-700/50'
+                          }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-400 text-yellow-900' :
+                            index === 1 ? 'bg-gray-300 text-gray-700' :
+                              index === 2 ? 'bg-amber-600 text-white' :
+                                'bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-slate-300'
+                            }`}>
+                            {index + 1}
                           </span>
+                          <div>
+                            <p className="font-medium text-gray-900 dark:text-white">
+                              {userInfo.first_name} {userInfo.last_name}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-slate-400">{userInfo.team_name || 'No team'}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className="text-xs text-gray-500 dark:text-slate-400">Focus Time</p>
+                            <p className="font-medium text-gray-900 dark:text-white">{metrics.focus_time_hours}h</p>
+                          </div>
+                          <div className={`text-2xl font-bold ${metrics.happiness_score >= 80 ? 'text-green-600 dark:text-green-400' :
+                            metrics.happiness_score >= 70 ? 'text-yellow-600 dark:text-yellow-400' :
+                              'text-red-600 dark:text-red-400'
+                            }`}>
+                            {metrics.happiness_score}%
+                            <span className="ml-1">
+                              {metrics.happiness_score >= 80 ? '😊' : metrics.happiness_score >= 70 ? '🙂' : '😟'}
+                            </span>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+              </div>
+              {Object.keys(userMetrics).length === 0 && (
+                <p className="text-center text-gray-500 dark:text-slate-400 py-4">
+                  Click "Metrics" on engineer cards above to load their data
+                </p>
+              )}
             </div>
-            {Object.keys(userMetrics).length === 0 && (
-              <p className="text-center text-gray-500 dark:text-slate-400 py-4">
-                Click "Metrics" on engineer cards above to load their data
-              </p>
-            )}
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* Create User Modal */}
       <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New User" size="md">
@@ -906,18 +924,24 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>
-              {selectedUser?.role === 'super_admin' ? (
-                <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white">
-                  <span className="flex items-center gap-2">
-                    <span className="px-2 py-1 text-xs font-medium rounded bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200">Super Admin</span>
-                    <span className="text-sm text-gray-500 dark:text-gray-400">(Role cannot be changed)</span>
-                  </span>
-                </div>
-              ) : (
-                <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required>
-                  <option value="">Select a role</option>
+              {/* Only super_admin can change roles */}
+              {user?.role === 'super_admin' && selectedUser?.role !== 'super_admin' ? (
+                <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500">
                   {roles.map(role => (<option key={role.id} value={role.id}>{role.name}</option>))}
                 </select>
+              ) : (
+                <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white">
+                  <span className="flex items-center gap-2">
+                    <span className={`px-2 py-1 text-xs font-medium rounded ${selectedUser?.role === 'super_admin' ? 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200' :
+                      selectedUser?.role === 'qa_manager' ? 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200' :
+                        selectedUser?.role === 'team_lead' ? 'bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200' :
+                          'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
+                      }`}>{getRoleDisplay(selectedUser?.role || '')}</span>
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                      {selectedUser?.role === 'super_admin' ? '(Role cannot be changed)' : '(Only Super Admin can change roles)'}
+                    </span>
+                  </span>
+                </div>
               )}
             </div>
             <div>
@@ -927,13 +951,16 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Team (Optional)</label>
-              <select value={userForm.primaryTeamId} onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500">
-                <option value="">No team</option>
-                {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
-              </select>
-            </div>
+            {/* Primary Team - only show for roles that need it */}
+            {userForm.role && !['super_admin', 'qa_manager'].includes(userForm.role) && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Primary Team</label>
+                <select value={userForm.primaryTeamId} onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500">
+                  <option value="">No team</option>
+                  {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
+                </select>
+              </div>
+            )}
           </div>
           <div className="flex justify-end gap-3 mt-6">
             <button type="button" onClick={() => setShowEditModal(false)} className="px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-slate-800 transition-colors">Cancel</button>
@@ -978,7 +1005,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
           </div>
         </form>
       </Modal>
-    </div>
+    </div >
   );
 };
 
