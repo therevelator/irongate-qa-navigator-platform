@@ -225,7 +225,7 @@ function App() {
   );
 
   // Views
-  if (currentView === 'users') return renderLayout(<UsersView />);
+  if (currentView === 'users') return renderLayout(<UsersView is3DMode={is3DMode} />);
   if (currentView === 'teams') return renderLayout(<TeamsView />);
   if (currentView === 'departments') return renderLayout(<DepartmentsView />);
 
