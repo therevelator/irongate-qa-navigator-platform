@@ -68,8 +68,16 @@ function App() {
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
+      const searchParams = new URLSearchParams(window.location.search);
+      const teamIdFromUrl = searchParams.get('teamId') || undefined;
+
       // Find exact match or best match
       const view = PATH_TO_VIEW[path] || 'dashboard';
+
+      // Restore teamId from URL if present (for analytics views)
+      if (teamIdFromUrl) {
+        setAnalyticsTeamId(teamIdFromUrl);
+      }
 
       // Check permissions before setting view
       if (hasPermission(view)) {
@@ -91,10 +99,12 @@ function App() {
   }, [isLoading, user]); // Re-run when user loads to enforce permissions
 
   // Update URL when view changes
-  const handleViewChange = (view: string) => {
+  const handleViewChange = (view: string, teamId?: string) => {
     const path = VIEW_TO_PATH[view];
     if (path) {
-      window.history.pushState(null, '', path);
+      // Include teamId in URL for analytics views
+      const url = teamId ? `${path}?teamId=${teamId}` : path;
+      window.history.pushState(null, '', url);
     }
     setCurrentView(view);
   };
@@ -179,7 +189,7 @@ function App() {
 
   const handleFeatureSelect = (featureId: string, teamId?: string) => {
     setAnalyticsTeamId(teamId);
-    handleViewChange(featureId);
+    handleViewChange(featureId, teamId);
   };
 
   // Enforce permissions on render
@@ -226,7 +236,7 @@ function App() {
 
   // Views
   if (currentView === 'users') return renderLayout(<UsersView is3DMode={is3DMode} />);
-  if (currentView === 'teams') return renderLayout(<TeamsView />);
+  if (currentView === 'teams') return renderLayout(<TeamsView is3DMode={is3DMode} />);
   if (currentView === 'departments') return renderLayout(<DepartmentsView />);
 
   if (currentView === 'features') {
