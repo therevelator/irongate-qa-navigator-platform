@@ -48,7 +48,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
     const handleDebtUpdate = () => {
       fetchDebt();
     };
-    
+
     window.addEventListener('technical-debt-updated', handleDebtUpdate);
     return () => window.removeEventListener('technical-debt-updated', handleDebtUpdate);
   }, []);
@@ -101,7 +101,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
   // Calculate totals for report
   const totalInvestment = sortedDebt.reduce((acc, d) => acc + (d.investment_cost || d.estimated_effort_hours * 75), 0);
   const totalAnnualSavings = sortedDebt.reduce((acc, d) => acc + (d.annual_savings || d.cost_of_delay * 12), 0);
-  const avgROI = sortedDebt.length > 0 
+  const avgROI = sortedDebt.length > 0
     ? Math.round(sortedDebt.reduce((acc, d) => acc + (d.roi_percentage || 0), 0) / sortedDebt.length)
     : 0;
 
@@ -205,7 +205,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
 
         // Logo
         if (logoDataUrl) {
-          try { doc.addImage(logoDataUrl, 'PNG', 10, 5, 12, 12); } catch {}
+          try { doc.addImage(logoDataUrl, 'PNG', 10, 5, 12, 12); } catch { }
         }
 
         // Brand
@@ -292,14 +292,14 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
       <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-10">
         <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <button 
+            <button
               onClick={onBack}
               className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-colors"
             >
               <ArrowLeft size={20} />
               <span className="font-medium">Back to Features</span>
             </button>
-            
+
             <button
               onClick={handleExportPdf}
               disabled={sortedDebt.length === 0}
@@ -309,7 +309,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
               <span>Export PDF</span>
             </button>
           </div>
-          
+
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white flex items-center">
@@ -318,7 +318,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
               </h1>
               <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Prioritize and manage technical debt across your codebase</p>
             </div>
-            
+
             {/* Stats Cards - Responsive Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
               <div className="text-center bg-gray-50 dark:bg-slate-800 rounded-lg p-2 sm:p-3">
@@ -355,11 +355,10 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
-                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${
-                  selectedCategory === cat.id
+                className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${selectedCategory === cat.id
                     ? 'bg-blue-600 text-white shadow-md'
                     : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
-                }`}
+                  }`}
               >
                 <span className="mr-1 sm:mr-2">{cat.icon}</span>
                 <span className="hidden sm:inline">{cat.name}</span>
@@ -378,11 +377,10 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
               <button
                 key={sev.id}
                 onClick={() => setSelectedSeverity(sev.id)}
-                className={`px-2.5 py-1 sm:px-3 sm:py-1 rounded-full text-xs font-semibold transition-all ${
-                  selectedSeverity === sev.id
+                className={`px-2.5 py-1 sm:px-3 sm:py-1 rounded-full text-xs font-semibold transition-all ${selectedSeverity === sev.id
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
-                }`}
+                  }`}
               >
                 {sev.name}
               </button>
@@ -413,22 +411,22 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
           <div className="h-64 sm:h-80 lg:h-96">
             <ResponsiveContainer width="100%" height="100%">
               <ScatterChart margin={{ top: 10, right: 10, bottom: 40, left: 40 }}>
-                <XAxis 
-                  type="number" 
-                  dataKey="effort" 
-                  name="Effort (hours)" 
+                <XAxis
+                  type="number"
+                  dataKey="effort"
+                  name="Effort (hours)"
                   tick={{ fontSize: 10, fill: 'currentColor' }}
                   label={{ value: 'Effort (hours)', position: 'bottom', offset: 25, fontSize: 11 }}
                 />
-                <YAxis 
-                  type="number" 
-                  dataKey="impact" 
-                  name="Impact ($K)" 
+                <YAxis
+                  type="number"
+                  dataKey="impact"
+                  name="Impact ($K)"
                   tick={{ fontSize: 10, fill: 'currentColor' }}
                   label={{ value: 'Impact ($K)', angle: -90, position: 'left', offset: 25, fontSize: 11 }}
                 />
                 <ZAxis type="number" dataKey="priority" range={[60, 400]} />
-                <Tooltip 
+                <Tooltip
                   cursor={{ strokeDasharray: '3 3' }}
                   content={({ payload }) => {
                     if (payload && payload.length) {
@@ -447,13 +445,13 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
                 />
                 <Scatter data={matrixData} fill="#3b82f6">
                   {matrixData.map((entry, index) => (
-                    <Cell 
-                      key={`cell-${index}`} 
+                    <Cell
+                      key={`cell-${index}`}
                       fill={
                         entry.severity === 'critical' ? '#ef4444' :
-                        entry.severity === 'high' ? '#f59e0b' :
-                        entry.severity === 'medium' ? '#3b82f6' :
-                        '#10b981'
+                          entry.severity === 'high' ? '#f59e0b' :
+                            entry.severity === 'medium' ? '#3b82f6' :
+                              '#10b981'
                       }
                     />
                   ))}
@@ -498,6 +496,162 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
               <DebtCard key={item.id} debt={item} />
             ))
           )}
+        </div>
+
+        {/* Cost of Delay Explanation Section */}
+        <div className="mt-8 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-4 sm:p-6">
+          <h2 className="text-lg sm:text-xl font-bold text-gray-900 dark:text-white mb-4 flex items-center">
+            <DollarSign className="mr-2 text-red-500" size={24} />
+            How We Calculate Cost of Delay
+          </h2>
+
+          <div className="space-y-6">
+            {/* Formula in Plain English */}
+            <div className="bg-gradient-to-r from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-lg p-4 border border-red-200 dark:border-red-700">
+              <h3 className="font-semibold text-red-900 dark:text-red-100 mb-3">📐 The Formula (in Plain English)</h3>
+              <p className="text-sm text-red-800 dark:text-red-200 mb-3">
+                <strong>Cost of Delay</strong> represents the monthly financial impact of NOT fixing a technical debt item. It answers: "How much money are we losing each month by leaving this unfixed?"
+              </p>
+              <div className="bg-white dark:bg-slate-800 rounded-lg p-3 font-mono text-sm text-gray-800 dark:text-gray-200">
+                <strong>Monthly Cost of Delay</strong> = Support Cost + Downtime Cost + Revenue Loss + SLA Penalties
+              </div>
+            </div>
+
+            {/* Component Breakdown */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-pink-50 dark:bg-pink-900/20 rounded-lg p-4 border border-pink-200 dark:border-pink-700">
+                <div className="flex items-center mb-2">
+                  <Headphones className="text-pink-600 dark:text-pink-400 mr-2" size={18} />
+                  <h4 className="font-semibold text-pink-900 dark:text-pink-100">Support Cost</h4>
+                </div>
+                <p className="text-sm text-pink-800 dark:text-pink-200 mb-2">
+                  <code className="bg-pink-100 dark:bg-pink-800 px-1 rounded">Tickets per Month × $25/ticket</code>
+                </p>
+                <p className="text-xs text-pink-600 dark:text-pink-400">
+                  How many support tickets does this issue generate? Each ticket costs staff time to resolve.
+                </p>
+              </div>
+
+              <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-700">
+                <div className="flex items-center mb-2">
+                  <Zap className="text-red-600 dark:text-red-400 mr-2" size={18} />
+                  <h4 className="font-semibold text-red-900 dark:text-red-100">Downtime Cost</h4>
+                </div>
+                <p className="text-sm text-red-800 dark:text-red-200 mb-2">
+                  <code className="bg-red-100 dark:bg-red-800 px-1 rounded">Downtime Minutes/Month × $100/minute</code>
+                </p>
+                <p className="text-xs text-red-600 dark:text-red-400">
+                  System outages and degraded performance have direct costs in lost business and productivity.
+                </p>
+              </div>
+
+              <div className="bg-amber-50 dark:bg-amber-900/20 rounded-lg p-4 border border-amber-200 dark:border-amber-700">
+                <div className="flex items-center mb-2">
+                  <Users className="text-amber-600 dark:text-amber-400 mr-2" size={18} />
+                  <h4 className="font-semibold text-amber-900 dark:text-amber-100">Revenue Loss</h4>
+                </div>
+                <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">
+                  <code className="bg-amber-100 dark:bg-amber-800 px-1 rounded">Affected Users × $50/user × Revenue Impact %</code>
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  Users impacted by bugs or poor performance may churn or reduce usage.
+                </p>
+              </div>
+
+              <div className="bg-rose-50 dark:bg-rose-900/20 rounded-lg p-4 border border-rose-200 dark:border-rose-700">
+                <div className="flex items-center mb-2">
+                  <AlertCircle className="text-rose-600 dark:text-rose-400 mr-2" size={18} />
+                  <h4 className="font-semibold text-rose-900 dark:text-rose-100">SLA Penalties</h4>
+                </div>
+                <p className="text-sm text-rose-800 dark:text-rose-200 mb-2">
+                  <code className="bg-rose-100 dark:bg-rose-800 px-1 rounded">SLA Breaches/Month × $1,000/breach</code>
+                </p>
+                <p className="text-xs text-rose-600 dark:text-rose-400">
+                  Contractual penalties for failing to meet service level agreements.
+                </p>
+              </div>
+            </div>
+
+            {/* ROI & Payback */}
+            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4 border border-green-200 dark:border-green-700">
+              <h3 className="font-semibold text-green-900 dark:text-green-100 mb-3">💰 ROI & Payback Calculations</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
+                <div>
+                  <p className="text-green-800 dark:text-green-200 font-medium">Investment Cost</p>
+                  <p className="text-green-600 dark:text-green-400 text-xs">Effort Hours × $75/hour</p>
+                </div>
+                <div>
+                  <p className="text-green-800 dark:text-green-200 font-medium">Annual Savings</p>
+                  <p className="text-green-600 dark:text-green-400 text-xs">Monthly Cost of Delay × 12</p>
+                </div>
+                <div>
+                  <p className="text-green-800 dark:text-green-200 font-medium">Payback Period</p>
+                  <p className="text-green-600 dark:text-green-400 text-xs">Investment ÷ Monthly Savings</p>
+                </div>
+              </div>
+              <p className="text-xs text-green-700 dark:text-green-300 mt-3">
+                <strong>ROI %</strong> = ((Annual Savings − Investment) ÷ Investment) × 100
+              </p>
+            </div>
+
+            {/* Data Sources */}
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-700">
+              <h3 className="font-semibold text-blue-900 dark:text-blue-100 mb-3">📊 Where Does This Data Come From?</h3>
+              <div className="text-sm text-blue-800 dark:text-blue-200 space-y-3">
+                <div className="flex items-start">
+                  <span className="text-blue-500 mr-2">1.</span>
+                  <div>
+                    <strong>Manual Input (Admin Panel → Manual Metrics Input)</strong>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Team leads and managers can enter impact data for each debt item: affected users, support tickets, downtime, revenue impact, SLA breaches, and effort estimates.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start">
+                  <span className="text-blue-500 mr-2">2.</span>
+                  <div>
+                    <strong>Financial Configuration (Configurable Defaults)</strong>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Default rates ($75/hr developer cost, $25/ticket, $100/min downtime, $50/user revenue, $1K/SLA breach) can be customized in settings.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start">
+                  <span className="text-blue-500 mr-2">3.</span>
+                  <div>
+                    <strong>Automatic Calculation</strong>
+                    <p className="text-xs text-blue-600 dark:text-blue-400">
+                      Once you enter the impact metrics, the system auto-calculates Cost of Delay, ROI, and Payback period in real-time.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* How to Input Data */}
+            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-700">
+              <h3 className="font-semibold text-purple-900 dark:text-purple-100 mb-3">🔧 How to Input Impact Data</h3>
+              <ol className="text-sm text-purple-800 dark:text-purple-200 space-y-2 list-decimal list-inside">
+                <li>Go to <strong>Admin Panel → Manual Metrics Input</strong></li>
+                <li>Select your team from the dropdown</li>
+                <li>Scroll down to the <strong>Technical Debt Impact</strong> section</li>
+                <li>For each debt item, enter:
+                  <ul className="ml-6 mt-1 text-xs text-purple-600 dark:text-purple-400 list-disc">
+                    <li>Affected Users (how many users experience this issue)</li>
+                    <li>Support Tickets/Month (tickets generated by this issue)</li>
+                    <li>Downtime Minutes/Month (system outage caused)</li>
+                    <li>Revenue Impact % (percentage of user revenue affected)</li>
+                    <li>SLA Breaches/Month (contract violations)</li>
+                    <li>Estimated Effort (hours to fix)</li>
+                  </ul>
+                </li>
+                <li>Click <strong>Save Technical Debt Impact</strong></li>
+              </ol>
+              <p className="text-xs text-purple-600 dark:text-purple-400 mt-3">
+                💡 <strong>Tip:</strong> Even rough estimates are valuable! You can refine them over time as you gather more data.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -556,7 +710,7 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt }) => {
             </div>
             <p className="text-sm text-gray-600 dark:text-slate-400 line-clamp-2">{debt.description}</p>
           </div>
-          
+
           <div className="text-left sm:text-right flex-shrink-0">
             <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{debt.priority_score.toFixed(1)}</div>
             <div className="text-xs text-gray-500 dark:text-slate-400">Priority Score</div>
@@ -695,18 +849,18 @@ const DebtCard: React.FC<DebtCardProps> = ({ debt }) => {
                 </div>
               </div>
             </div>
-            
+
             <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 sm:p-4">
               <h4 className="text-sm font-semibold text-yellow-900 dark:text-yellow-200 mb-2">⚠️ Priority Justification</h4>
               <p className="text-xs sm:text-sm text-yellow-800 dark:text-yellow-300">
-                {(debt.roi_percentage || 0) > 200 
+                {(debt.roi_percentage || 0) > 200
                   ? `High-value fix: ${debt.roi_percentage}% ROI with ${formatPayback(debt.payback_months)} payback. Immediate action recommended.`
                   : (debt.roi_percentage || 0) > 100
                     ? `Positive ROI: ${debt.roi_percentage}% return. Schedule within current quarter (payback ${formatPayback(debt.payback_months)}).`
                     : `Consider deferring: ROI of ${debt.roi_percentage || 0}% may not justify immediate investment (payback ${formatPayback(debt.payback_months)}).`
                 }
-                {debt.sla_breaches_monthly && debt.sla_breaches_monthly > 0 
-                  ? ` ⚡ Note: This item causes ${debt.sla_breaches_monthly} SLA breaches/month.` 
+                {debt.sla_breaches_monthly && debt.sla_breaches_monthly > 0
+                  ? ` ⚡ Note: This item causes ${debt.sla_breaches_monthly} SLA breaches/month.`
                   : ''
                 }
               </p>

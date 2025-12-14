@@ -268,3 +268,4 @@ border-gray-200 dark:border-slate-700
 3. **Custom Thresholds** - Allow admins to customize DDPS component thresholds
 4. **Export Reports** - PDF/CSV export of productivity reports
 5. **Slack/Teams Integration** - Send weekly DDPS summaries to team channels
+
