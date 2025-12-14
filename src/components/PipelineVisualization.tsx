@@ -289,7 +289,7 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
     };
     fetchData();
   }, [teamId]);
-  
+
   const hasStages = stages.length > 0;
   const totalDuration = hasStages ? stages.reduce((acc, s) => acc + s.duration, 0) : 0;
   const avgSuccessRate = hasStages
@@ -298,8 +298,8 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
   const totalCost = hasStages ? stages.reduce((acc, s) => acc + s.resource_usage.cost, 0) : 0;
   const bottleneck = hasStages
     ? stages.reduce((prev, current) =>
-        current.bottleneck_score > prev.bottleneck_score ? current : prev
-      )
+      current.bottleneck_score > prev.bottleneck_score ? current : prev
+    )
     : null;
 
   return (
@@ -307,14 +307,14 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
       {/* Header */}
       <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-10">
         <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <button 
+          <button
             onClick={onBack}
             className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
           >
             <ArrowLeft size={20} />
             <span className="font-medium">Back to Features</span>
           </button>
-          
+
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white flex items-center">
@@ -323,7 +323,7 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
               </h1>
               <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Optimize your deployment pipeline with data-driven insights</p>
             </div>
-            
+
             {/* Stats Cards */}
             <div className="grid grid-cols-3 gap-3 sm:gap-4 lg:gap-6">
               <div className="text-center bg-gray-50 dark:bg-slate-800 rounded-lg p-2 sm:p-3">
@@ -389,7 +389,7 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
                 <BarChart data={stages}>
                   <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                   <YAxis label={{ value: 'Duration (seconds)', angle: -90, position: 'insideLeft' }} />
-                  <Tooltip 
+                  <Tooltip
                     content={({ payload }) => {
                       if (!payload || !payload.length) return null;
                       const data = payload[0].payload;
@@ -405,7 +405,7 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
                   />
                   <Bar dataKey="duration" radius={[8, 8, 0, 0]}>
                     {stages.map((entry, index) => (
-                      <Cell 
+                      <Cell
                         key={`cell-${index}`}
                         fill={entry.bottleneck_score > 70 ? '#ef4444' : entry.bottleneck_score > 40 ? '#f59e0b' : '#3b82f6'}
                       />
@@ -451,12 +451,12 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
                 <AreaChart data={history} margin={{ left: 0, right: 0, top: 10, bottom: 0 }}>
                   <defs>
                     <linearGradient id="successGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
                     </linearGradient>
                     <linearGradient id="failedGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.2)" />
@@ -481,7 +481,7 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
               <div className="flex-1">
                 <h3 className="text-base sm:text-lg font-bold text-red-900 dark:text-red-200 mb-2">Bottleneck Detected: {bottleneck.name}</h3>
                 <p className="text-sm text-red-800 dark:text-red-300 mb-4">
-                  This stage is taking {Math.floor(bottleneck.duration / 60)} minutes and has a bottleneck score of {bottleneck.bottleneck_score.toFixed(1)}. 
+                  This stage is taking {Math.floor(bottleneck.duration / 60)} minutes and has a bottleneck score of {bottleneck.bottleneck_score.toFixed(1)}.
                   Consider optimization to reduce overall pipeline time.
                 </p>
                 <div className="space-y-2">
@@ -511,6 +511,29 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ onBack, t
               <StageDetailCard key={stage.id} stage={stage} stageIndex={index} totalStages={stages.length} config={config} />
             ))
           )}
+        </div>
+
+        {/* Metric Explanations Footnote */}
+        <div className="mt-8 pt-6 border-t border-gray-200 dark:border-slate-800">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Metric Explanations & Data Sources</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs text-gray-500 dark:text-slate-400">
+            <div>
+              <p className="mb-2">
+                <span className="font-medium text-gray-700 dark:text-slate-300">Cost:</span> Represents the estimated infrastructure and resource cost per pipeline execution.
+              </p>
+              <p>
+                <span className="font-medium text-gray-700 dark:text-slate-300">Bottleneck Score:</span> Calculated based on relative duration (vs. average) and failure rate. Higher scores indicate stages that need optimization.
+              </p>
+            </div>
+            <div>
+              <p className="mb-2">
+                <span className="font-medium text-gray-700 dark:text-slate-300">Data Source:</span> Pipeline stages, costs, and resource usage metrics are manually configured in <span className="font-medium text-purple-600 dark:text-purple-400">Admin Panel &gt; Manual Metrics Input &gt; Pipeline Configuration</span>.
+              </p>
+              <p>
+                <span className="font-medium text-gray-700 dark:text-slate-300">Savings Calculation:</span> Potential savings are projected based on user-defined improvement targets (defaults: 30% time, 25% cost).
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -553,7 +576,7 @@ interface StageDetailCardProps {
 
 const StageDetailCard: React.FC<StageDetailCardProps> = ({ stage, stageIndex, totalStages, config }) => {
   const [expanded, setExpanded] = useState(false);
-  
+
   // Calculate savings based on config
   const timeSavingsMinutes = Math.max(0, Math.floor(stage.duration * (config.time_savings_percent / 100) / 60));
   const costSavings = Math.max(0, stage.resource_usage.cost * (config.cost_savings_percent / 100));
@@ -564,9 +587,8 @@ const StageDetailCard: React.FC<StageDetailCardProps> = ({ stage, stageIndex, to
         {/* Header Row */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-4">
           <div className="flex items-center space-x-3 sm:space-x-4">
-            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center ${
-              stage.success_rate >= 95 ? 'bg-green-100 dark:bg-green-900/30' : stage.success_rate >= 85 ? 'bg-yellow-100 dark:bg-yellow-900/30' : 'bg-red-100 dark:bg-red-900/30'
-            }`}>
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-lg flex items-center justify-center ${stage.success_rate >= 95 ? 'bg-green-100 dark:bg-green-900/30' : stage.success_rate >= 85 ? 'bg-yellow-100 dark:bg-yellow-900/30' : 'bg-red-100 dark:bg-red-900/30'
+              }`}>
               {stage.success_rate >= 95 ? (
                 <CheckCircle className="text-green-600 dark:text-green-400" size={20} />
               ) : stage.success_rate >= 85 ? (
@@ -624,9 +646,8 @@ const StageDetailCard: React.FC<StageDetailCardProps> = ({ stage, stageIndex, to
 
         {/* Bottleneck Score */}
         {stage.bottleneck_score > 50 && (
-          <div className={`rounded-lg p-3 mb-4 ${
-            stage.bottleneck_score > 70 ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700' : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700'
-          }`}>
+          <div className={`rounded-lg p-3 mb-4 ${stage.bottleneck_score > 70 ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700' : 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-700'
+            }`}>
             <div className="flex items-center justify-between">
               <div>
                 <span className={`text-sm font-semibold ${stage.bottleneck_score > 70 ? 'text-red-900 dark:text-red-200' : 'text-yellow-900 dark:text-yellow-200'}`}>
@@ -637,7 +658,7 @@ const StageDetailCard: React.FC<StageDetailCardProps> = ({ stage, stageIndex, to
                 </p>
               </div>
               <div className="w-24 h-2 bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                <div 
+                <div
                   className={`h-full ${stage.bottleneck_score > 70 ? 'bg-red-500' : 'bg-yellow-500'}`}
                   style={{ width: `${stage.bottleneck_score}%` }}
                 ></div>
