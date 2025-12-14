@@ -2687,4 +2687,178 @@ Provide a concise executive summary (3-4 sentences) highlighting the biggest ris
   }
 });
 
+// ============================================================================
+// DDPS (Daily Developer Productivity Score) HISTORY
+// ============================================================================
+router.get('/ddps-history', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId, role, primaryTeamId, id: userId } = req.user;
+    const {
+      developerId,
+      teamId: requestedTeamId,
+      range = '30d' // 1d, 7d, 30d, 3m, 6m
+    } = req.query;
+
+    // Calculate date range
+    const now = new Date();
+    let startDate: Date;
+    switch (range) {
+      case '1d': startDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000); break;
+      case '7d': startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+      case '30d': startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); break;
+      case '3m': startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000); break;
+      case '6m': startDate = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000); break;
+      default: startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    }
+    const startDateStr = startDate.toISOString().split('T')[0];
+
+    // Team leads can only access their own team
+    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
+
+    // Build query
+    let sql = `
+      SELECT 
+        dps.developer_id,
+        CONCAT(u.first_name, ' ', u.last_name) as developer_name,
+        dps.snapshot_date,
+        dps.ddps_score,
+        dps.focus_time_hours,
+        dps.pr_merge_time_avg,
+        dps.code_review_time_avg,
+        dps.meeting_time_hours,
+        dps.context_switches_per_day,
+        dps.focus_time_norm,
+        dps.pr_time_norm,
+        dps.review_time_norm,
+        dps.meeting_time_norm,
+        dps.context_switches_norm
+      FROM developer_productivity_snapshots dps
+      JOIN users u ON dps.developer_id = u.id
+      WHERE u.company_id = ?
+        AND dps.snapshot_date >= ?
+    `;
+    const params: any[] = [companyId, startDateStr];
+
+    // Filter by specific developer
+    if (developerId && developerId !== 'all') {
+      sql += ' AND dps.developer_id = ?';
+      params.push(developerId);
+    }
+
+    // Filter by team
+    if (teamId) {
+      sql += ' AND u.primary_team_id = ?';
+      params.push(teamId);
+    }
+
+    sql += ' ORDER BY dps.snapshot_date ASC, dps.developer_id';
+
+    const snapshots = await query<any>(sql, params);
+
+    // Aggregate data by date for chart
+    const dailyAverages: Record<string, { count: number; totalDDPS: number; date: string }> = {};
+    snapshots.forEach((s: any) => {
+      const dateStr = new Date(s.snapshot_date).toISOString().split('T')[0];
+      if (!dailyAverages[dateStr]) {
+        dailyAverages[dateStr] = { count: 0, totalDDPS: 0, date: dateStr };
+      }
+      dailyAverages[dateStr].count++;
+      dailyAverages[dateStr].totalDDPS += parseFloat(s.ddps_score);
+    });
+
+    const chartData = Object.values(dailyAverages)
+      .map(d => ({
+        date: d.date,
+        ddps: Math.round((d.totalDDPS / d.count) * 100) / 100,
+        developers: d.count
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    // Calculate overall stats
+    const allDDPS = snapshots.map((s: any) => parseFloat(s.ddps_score));
+    const avgDDPS = allDDPS.length > 0 ? allDDPS.reduce((a, b) => a + b, 0) / allDDPS.length : 0;
+    const minDDPS = allDDPS.length > 0 ? Math.min(...allDDPS) : 0;
+    const maxDDPS = allDDPS.length > 0 ? Math.max(...allDDPS) : 0;
+
+    // Calculate trend (compare last 7 days vs previous 7 days)
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+    const recent = snapshots.filter((s: any) =>
+      new Date(s.snapshot_date).toISOString().split('T')[0] >= sevenDaysAgo
+    );
+    const previous = snapshots.filter((s: any) => {
+      const dateStr = new Date(s.snapshot_date).toISOString().split('T')[0];
+      return dateStr >= fourteenDaysAgo && dateStr < sevenDaysAgo;
+    });
+
+    const recentAvg = recent.length > 0
+      ? recent.reduce((a, s: any) => a + parseFloat(s.ddps_score), 0) / recent.length
+      : 0;
+    const previousAvg = previous.length > 0
+      ? previous.reduce((a, s: any) => a + parseFloat(s.ddps_score), 0) / previous.length
+      : 0;
+    const trend = previousAvg > 0 ? ((recentAvg - previousAvg) / previousAvg) * 100 : 0;
+
+    // Generate executive summary
+    const ddpsPercent = Math.round(avgDDPS * 100);
+    let summaryStatus = 'fragmented';
+    if (avgDDPS >= 0.8) summaryStatus = 'exceptional deep-focus';
+    else if (avgDDPS >= 0.6) summaryStatus = 'high productivity';
+    else if (avgDDPS >= 0.4) summaryStatus = 'healthy';
+    else if (avgDDPS >= 0.2) summaryStatus = 'low productivity';
+
+    // Identify loss drivers
+    const avgMetrics = {
+      meeting: snapshots.length > 0
+        ? snapshots.reduce((a, s: any) => a + parseFloat(s.meeting_time_hours), 0) / snapshots.length
+        : 0,
+      contextSwitches: snapshots.length > 0
+        ? snapshots.reduce((a, s: any) => a + parseFloat(s.context_switches_per_day), 0) / snapshots.length
+        : 0,
+      focusTime: snapshots.length > 0
+        ? snapshots.reduce((a, s: any) => a + parseFloat(s.focus_time_hours), 0) / snapshots.length
+        : 0
+    };
+
+    const lossDrivers: string[] = [];
+    if (avgMetrics.meeting > 2.5) lossDrivers.push('meetings');
+    if (avgMetrics.contextSwitches > 5) lossDrivers.push('context switching');
+    if (avgMetrics.focusTime < 4) lossDrivers.push('insufficient focus time');
+
+    const executiveSummary = {
+      headline: `Only ~${ddpsPercent}% of the day converted into deep, value-producing work.`,
+      status: summaryStatus,
+      lossDrivers: lossDrivers.length > 0
+        ? `Primary loss drivers: ${lossDrivers.join(' and ')}.`
+        : 'No significant loss drivers identified.',
+      recommendation: avgDDPS < 0.4
+        ? 'Consider reducing meetings and protecting focus time blocks.'
+        : avgDDPS < 0.6
+          ? 'Team is performing well. Look for opportunities to minimize interruptions.'
+          : 'Excellent productivity! Maintain current practices.'
+    };
+
+    res.json({
+      range,
+      startDate: startDateStr,
+      endDate: now.toISOString().split('T')[0],
+      stats: {
+        average: Math.round(avgDDPS * 10000) / 10000,
+        min: Math.round(minDDPS * 10000) / 10000,
+        max: Math.round(maxDDPS * 10000) / 10000,
+        trend: Math.round(trend * 100) / 100,
+        totalSnapshots: snapshots.length
+      },
+      executiveSummary,
+      chartData,
+      snapshots: snapshots.slice(-100) // Last 100 for detail view
+    });
+
+  } catch (error) {
+    console.error('Error fetching DDPS history:', error);
+    res.status(500).json({ error: 'Failed to fetch DDPS history' });
+  }
+});
+
 export default router;
