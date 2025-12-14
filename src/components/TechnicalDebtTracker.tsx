@@ -356,8 +356,8 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
                 className={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0 ${selectedCategory === cat.id
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
+                  ? 'bg-blue-600 text-white shadow-md'
+                  : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
                   }`}
               >
                 <span className="mr-1 sm:mr-2">{cat.icon}</span>
@@ -378,8 +378,8 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
                 key={sev.id}
                 onClick={() => setSelectedSeverity(sev.id)}
                 className={`px-2.5 py-1 sm:px-3 sm:py-1 rounded-full text-xs font-semibold transition-all ${selectedSeverity === sev.id
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
                   }`}
               >
                 {sev.name}
@@ -653,6 +653,13 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Footnote */}
+      <div className="mt-8 pt-6 border-t border-gray-200 dark:border-slate-800 text-center pb-8">
+        <p className="text-xs text-gray-500 dark:text-slate-500">
+          * Manually input data is sourced from <span className="font-medium text-gray-700 dark:text-slate-300">Admin Panel &gt; Manual Metrics Input</span>.
+        </p>
       </div>
     </div>
   );
