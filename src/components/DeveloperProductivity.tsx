@@ -979,7 +979,9 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ developer, isSelected, on
     return '🔧';
   };
 
-  const workLifeBalance = ((developer.focus_time_hours / (developer.focus_time_hours + developer.meeting_time_hours)) * 100).toFixed(0);
+  const workLifeBalance = (developer.focus_time_hours + developer.meeting_time_hours) > 0
+    ? ((developer.focus_time_hours / (developer.focus_time_hours + developer.meeting_time_hours)) * 100).toFixed(0)
+    : '0';
 
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden hover:shadow-md transition-shadow">
@@ -1182,7 +1184,7 @@ const DeveloperCard: React.FC<DeveloperCardProps> = ({ developer, isSelected, on
                 <div>
                   <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">Work-Life Balance:</p>
                   <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
-                    {parseInt(workLifeBalance) > 70 ? '✅ Healthy' : parseInt(workLifeBalance) > 50 ? '⚠️ Fair' : '❌ Concerning'}
+                    {parseInt(workLifeBalance) >= 60 ? '✅ Healthy' : parseInt(workLifeBalance) >= 40 ? '⚠️ Fair' : '❌ Concerning'}
                   </p>
                   <p className="text-xs text-purple-600 dark:text-purple-400">{workLifeBalance}% productive time</p>
                 </div>

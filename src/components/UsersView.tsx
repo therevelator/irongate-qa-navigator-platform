@@ -649,27 +649,27 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                               <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
                                 <GitPullRequest className="mx-auto mb-1 text-blue-400" size={14} />
                                 <p className="text-[10px] text-gray-500 dark:text-gray-400">PR Time</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.pr_merge_time_avg}h</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.pr_merge_time_avg.toFixed(1)}h</p>
                               </div>
                               <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
                                 <Clock className="mx-auto mb-1 text-green-400" size={14} />
                                 <p className="text-[10px] text-gray-500 dark:text-gray-400">Review</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.code_review_time_avg}h</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.code_review_time_avg.toFixed(1)}h</p>
                               </div>
                               <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
                                 <Zap className="mx-auto mb-1 text-orange-400" size={14} />
                                 <p className="text-[10px] text-gray-500 dark:text-gray-400">Focus</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.focus_time_hours}h</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.focus_time_hours.toFixed(1)}h</p>
                               </div>
                               <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
                                 <Users className="mx-auto mb-1 text-purple-400" size={14} />
                                 <p className="text-[10px] text-gray-500 dark:text-gray-400">Meetings</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.meeting_time_hours}h</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.meeting_time_hours.toFixed(1)}h</p>
                               </div>
                               <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
                                 <TrendingUp className="mx-auto mb-1 text-red-400" size={14} />
                                 <p className="text-[10px] text-gray-500 dark:text-gray-400">Ctx Switch</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.context_switches_per_day}</p>
+                                <p className="text-sm font-bold text-gray-900 dark:text-white">{Math.round(metrics.context_switches_per_day)}</p>
                               </div>
                             </div>
 
@@ -678,18 +678,20 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                               <div className="flex items-center justify-between mb-1.5">
                                 <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Work-Life Balance</span>
                                 <span className="text-xs font-bold text-gray-900 dark:text-white">
-                                  {((metrics.focus_time_hours / (metrics.focus_time_hours + metrics.meeting_time_hours)) * 100).toFixed(0)}% Focus
+                                  {(metrics.focus_time_hours + metrics.meeting_time_hours) ? ((metrics.focus_time_hours / (metrics.focus_time_hours + metrics.meeting_time_hours)) * 100).toFixed(0) : '--'}% Focus
                                 </span>
                               </div>
                               <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
                                 <div
-                                  className={`h-2 rounded-full transition-all ${(metrics.focus_time_hours / (metrics.focus_time_hours + metrics.meeting_time_hours)) * 100 > 70
-                                    ? 'bg-green-500'
-                                    : (metrics.focus_time_hours / (metrics.focus_time_hours + metrics.meeting_time_hours)) * 100 > 50
-                                      ? 'bg-yellow-500'
-                                      : 'bg-red-500'
-                                    }`}
-                                  style={{ width: `${(metrics.focus_time_hours / (metrics.focus_time_hours + metrics.meeting_time_hours)) * 100}%` }}
+                                  className={`h-2 rounded-full transition-all ${(() => {
+                                    const total = metrics.focus_time_hours + metrics.meeting_time_hours;
+                                    const pct = total ? (metrics.focus_time_hours / total) * 100 : 0;
+                                    return pct >= 60 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
+                                  })()}`}
+                                  style={{ width: `${(() => {
+                                    const total = metrics.focus_time_hours + metrics.meeting_time_hours;
+                                    return total ? (metrics.focus_time_hours / total) * 100 : 0;
+                                  })()}%` }}
                                 />
                               </div>
                             </div>
@@ -823,13 +825,13 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                         <div className="flex items-center gap-4">
                           <div className="text-right">
                             <p className="text-xs text-gray-500 dark:text-slate-400">Focus Time</p>
-                            <p className="font-medium text-gray-900 dark:text-white">{metrics.focus_time_hours}h</p>
+                            <p className="font-medium text-gray-900 dark:text-white">{metrics.focus_time_hours.toFixed(1)}h</p>
                           </div>
                           <div className={`text-2xl font-bold ${metrics.happiness_score >= 80 ? 'text-green-600 dark:text-green-400' :
                             metrics.happiness_score >= 70 ? 'text-yellow-600 dark:text-yellow-400' :
                               'text-red-600 dark:text-red-400'
                             }`}>
-                            {metrics.happiness_score}%
+                            {Math.round(metrics.happiness_score)}%
                             <span className="ml-1">
                               {metrics.happiness_score >= 80 ? '😊' : metrics.happiness_score >= 70 ? '🙂' : '😟'}
                             </span>

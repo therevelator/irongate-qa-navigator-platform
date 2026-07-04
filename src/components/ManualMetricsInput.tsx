@@ -2351,7 +2351,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                                 (item.roi_percentage || 0) > 100 ? 'text-green-400' :
                                 (item.roi_percentage || 0) > 0 ? 'text-amber-400' : 'text-red-400'
                               }`}>
-                                {item.roi_percentage || 0}%
+                                {Math.round(item.roi_percentage || 0).toLocaleString()}%
                               </div>
                             </div>
                           </div>
@@ -2439,7 +2439,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       {item.payback_months && (
                         <div className="mt-3 text-xs text-slate-400">
                           <TrendingUp className="w-3 h-3 inline mr-1" />
-                          Payback period: <span className="text-green-400 font-medium">{item.payback_months} months</span>
+                          Payback period: <span className="text-green-400 font-medium">{(item.payback_months ?? 0).toFixed(1)} months</span>
                         </div>
                       )}
                     </div>

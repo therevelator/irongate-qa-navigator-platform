@@ -29,7 +29,11 @@ const calculatePerformanceScore = (metric: PerformanceMetric): number => {
   return (p95Score * 0.4 + errorScore * 0.4 + throughputScore * 0.2);
 };
 
-const formatMilliseconds = (value: number) => `${Number(value).toFixed(3)} ms`;
+const formatMilliseconds = (value: number) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '--';
+  return `${Math.round(n).toLocaleString()} ms`;
+};
 
 const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
@@ -73,10 +77,16 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
     return () => window.removeEventListener('slaConfigUpdated', handler as EventListener);
   }, []);
 
-  // Calculate overall statistics
-  const avgP95 = (metrics.reduce((acc, m) => acc + m.response_time_p95, 0) / metrics.length).toFixed(0);
-  const avgThroughput = (metrics.reduce((acc, m) => acc + m.throughput, 0) / metrics.length).toFixed(0);
-  const avgErrorRate = (metrics.reduce((acc, m) => acc + m.error_rate, 0) / metrics.length).toFixed(2);
+  // Calculate overall statistics (guard against empty data to avoid NaN)
+  const avgP95 = metrics.length
+    ? Math.round(metrics.reduce((acc, m) => acc + m.response_time_p95, 0) / metrics.length).toLocaleString()
+    : '--';
+  const avgThroughput = metrics.length
+    ? Math.round(metrics.reduce((acc, m) => acc + m.throughput, 0) / metrics.length).toLocaleString()
+    : '--';
+  const avgErrorRate = metrics.length
+    ? (metrics.reduce((acc, m) => acc + m.error_rate, 0) / metrics.length).toFixed(2)
+    : '--';
   
   // Calculate performance score for each metric
   const metricsWithScore: ExtendedPerformanceMetric[] = metrics.map(m => ({
@@ -126,9 +136,9 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
 
       return {
         label,
-        p50: parseFloat(Math.max(20, baseline.p50 + noise + variance).toFixed(3)),
-        p95: parseFloat(Math.max(50, baseline.p95 + noise * 1.5 + variance * 1.2).toFixed(3)),
-        p99: parseFloat(Math.max(80, baseline.p99 + noise * 2 + variance * 1.5).toFixed(3))
+        p50: Math.round(Math.max(20, baseline.p50 + noise + variance)),
+        p95: Math.round(Math.max(50, baseline.p95 + noise * 1.5 + variance * 1.2)),
+        p99: Math.round(Math.max(80, baseline.p99 + noise * 2 + variance * 1.5))
       };
     });
   }, [metricsWithScore, selectedTrendEndpoint, timeRange]);
@@ -139,8 +149,8 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
   // Prepare data for load test results
   const loadTestData = Array.from({ length: 10 }, (_, i) => ({
     users: (i + 1) * 100,
-    responseTime: parseFloat((100 + (i * 15) + Math.random() * 20).toFixed(3)),
-    throughput: parseFloat((1000 - (i * 50) + Math.random() * 100).toFixed(3)),
+    responseTime: Math.round(100 + (i * 15) + Math.random() * 20),
+    throughput: Math.round(1000 - (i * 50) + Math.random() * 100),
     errorRate: i > 7 ? (i - 7) * 2 : 0
   }));
 
@@ -303,21 +313,21 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
             <div className="text-center p-3 bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800 rounded-lg">
               <p className="text-sm text-green-700 font-medium">P50 (Median)</p>
               <p className="text-2xl font-bold text-green-900 dark:text-green-200">
-                {latestTrendPoint ? latestTrendPoint.p50.toFixed(3) : '--'}ms
+                {latestTrendPoint ? `${Math.round(latestTrendPoint.p50).toLocaleString()}ms` : '--'}
               </p>
               <p className="text-xs text-green-600 dark:text-green-400">50% of requests</p>
             </div>
             <div className="text-center p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg">
               <p className="text-sm text-blue-700 font-medium">P95</p>
               <p className="text-2xl font-bold text-blue-900 dark:text-blue-200">
-                {latestTrendPoint ? latestTrendPoint.p95.toFixed(3) : '--'}ms
+                {latestTrendPoint ? `${Math.round(latestTrendPoint.p95).toLocaleString()}ms` : '--'}
               </p>
               <p className="text-xs text-blue-600 dark:text-blue-400">95% of requests</p>
             </div>
             <div className="text-center p-3 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-lg">
               <p className="text-sm text-red-700 font-medium">P99</p>
               <p className="text-2xl font-bold text-red-900 dark:text-red-200">
-                {latestTrendPoint ? latestTrendPoint.p99.toFixed(3) : '--'}ms
+                {latestTrendPoint ? `${Math.round(latestTrendPoint.p99).toLocaleString()}ms` : '--'}
               </p>
               <p className="text-xs text-red-600 dark:text-red-400">99% of requests</p>
             </div>
@@ -351,7 +361,7 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ onBack }) => {
                       return formatMilliseconds(value as number);
                     }
                     if (name === 'Throughput (req/s)') {
-                      return `${Number(value).toFixed(3)} req/s`;
+                      return `${Math.round(Number(value)).toLocaleString()} req/s`;
                     }
                     return value;
                   }}

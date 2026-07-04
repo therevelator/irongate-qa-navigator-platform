@@ -944,7 +944,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                     return true;
                   })
                   .map((developer) => {
-                    const workLifeBalance = ((developer.focus_time_hours / (developer.focus_time_hours + developer.meeting_time_hours)) * 100).toFixed(0);
+                    const totalTrackedHours = developer.focus_time_hours + developer.meeting_time_hours;
+                    const workLifeBalance = totalTrackedHours ? ((developer.focus_time_hours / totalTrackedHours) * 100).toFixed(0) : '0';
                     const happinessEmoji = developer.happiness_score >= 85 ? '😊' : developer.happiness_score >= 70 ? '🙂' : '😐';
 
                     return (
@@ -1019,8 +1020,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                           </div>
                           <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3">
                             <div
-                              className={`h-3 rounded-full transition-all ${parseInt(workLifeBalance) > 70 ? 'bg-green-500' :
-                                parseInt(workLifeBalance) > 50 ? 'bg-yellow-500' :
+                              className={`h-3 rounded-full transition-all ${parseInt(workLifeBalance) >= 60 ? 'bg-green-500' :
+                                parseInt(workLifeBalance) >= 40 ? 'bg-yellow-500' :
                                   'bg-red-500'
                                 }`}
                               style={{ width: `${workLifeBalance}%` }}

@@ -31,7 +31,7 @@ const TeamGamification: React.FC<TeamGamificationProps> = ({ onBack }) => {
 
   const leaderboard = gamificationData.leaderboard.sort((a, b) => b.points - a.points);
   const topTeam = leaderboard[0];
-  const avgPoints = (leaderboard.reduce((acc, t) => acc + t.points, 0) / leaderboard.length).toFixed(0);
+  const avgPoints = leaderboard.length ? Math.round(leaderboard.reduce((acc, t) => acc + t.points, 0) / leaderboard.length).toLocaleString() : '--';
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-950">

@@ -3,6 +3,7 @@ import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { seedAllAnalyticsData, updateDailyAnalytics } from '../jobs/analyticsSync';
 import { randomUUID } from 'crypto';
+import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 
 const router = express.Router();
 
@@ -2044,69 +2045,36 @@ ANALYSIS REQUIREMENTS:
 
 Provide actionable insights that a CTO would understand and use to make investment decisions. In another section, forget about the numerics and provide explanations about the correlations that both a business person and a technical person can understand. Easy to read, easy to follow, with explanation of the terms and numbers. Output ONLY valid HTML, no markdown.`;
 
-    console.log('[AI][BIA] Calling Groq API for correlation analysis...');
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    console.log('[AI:BIA] Calling Groq API for correlation analysis...');
 
     try {
-      const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${groqApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          model: 'openai/gpt-oss-120b',
-          messages: [
-            {
-              role: 'system',
-              content: 'You are a Senior Data Scientist and Business Intelligence expert. Analyze correlation data and provide actionable business insights.'
-            },
-            {
-              role: 'user',
-              content: analysisPrompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 3500
-        }),
-        signal: controller.signal
+      const { content: aiText, model, finishReason } = await groqChatCompletion({
+        label: 'AI:BIA',
+        maxTokens: 3500,
+        timeoutMs: 30000,
+        messages: [
+          {
+            role: 'system',
+            content: 'You are a Senior Data Scientist and Business Intelligence expert. Analyze correlation data and provide actionable business insights.'
+          },
+          {
+            role: 'user',
+            content: analysisPrompt
+          }
+        ]
       });
 
-      clearTimeout(timeout);
-
-      if (aiResponse.ok) {
-        const groqData = await aiResponse.json();
-        console.log('[AI][BIA] Groq API success:', {
-          status: aiResponse.status,
-          model: groqData.model,
-          usage: groqData.usage,
-          finish_reason: groqData.choices?.[0]?.finish_reason
-        });
-
-        const choice = groqData.choices?.[0];
-        let content = choice?.message?.content || 'No response from AI';
-
-        if (choice?.finish_reason === 'length') {
-          console.warn('[AI][BIA] Groq response was truncated due to max_tokens limit');
-          content += '<p><em>Note: This AI response was truncated due to token limits. Consider reducing the time range or number of metrics if you need a shorter, more focused analysis.</em></p>';
-        }
-
-        res.json({ success: true, analysis: content });
-      } else {
-        const errorText = await aiResponse.text();
-        console.error('[AI][BIA] Groq API error:', aiResponse.status, errorText);
-        res.status(500).json({ error: `Groq API error: ${aiResponse.status}` });
+      let content = aiText || 'No response from AI';
+      if (finishReason === 'length') {
+        console.warn('[AI:BIA] Groq response was truncated due to max_tokens limit');
+        content += '<p><em>Note: This AI response was truncated due to token limits. Consider reducing the time range or number of metrics if you need a shorter, more focused analysis.</em></p>';
       }
-    } catch (fetchError: any) {
-      clearTimeout(timeout);
-      if (fetchError.name === 'AbortError') {
-        console.error('[AI][BIA] Groq API timeout');
-        res.status(504).json({ error: 'AI analysis timed out' });
-      } else {
-        throw fetchError;
-      }
+
+      console.log('[AI:BIA] Groq responded via', model);
+      res.json({ success: true, analysis: content });
+    } catch (aiError: any) {
+      console.error('[AI:BIA] Groq analysis failed after retries:', aiError.message);
+      res.status(502).json({ error: 'AI analysis unavailable — please try again in a moment' });
     }
   } catch (error) {
     console.error('[AI][BIA] Error:', error);
@@ -2621,26 +2589,20 @@ router.post('/company-insights', authenticateToken, async (req: AuthRequest, res
       LIMIT 30
     `, [companyId]);
 
-    // 4. Generate AI Analysis
-    const groqApiKey = process.env.GROQ_API_KEY;
+    // 4. Generate AI Analysis (retries + smaller-model fallback)
     let aiAnalysis = "AI analysis unavailable.";
 
-    if (groqApiKey && groqApiKey.length > 10) {
+    if (isGroqConfigured()) {
       console.log('🤖 Generating Company Insights via Groq AI...');
       try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            model: 'openai/gpt-oss-120b',
-            messages: [
-              {
-                role: 'system',
-                content: `You are a CTO/VP of Engineering advisor. Analyze these company-wide metrics and trends.
-                
+        const { content, model } = await groqChatCompletion({
+          label: 'AI:Company',
+          maxTokens: 500,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a CTO/VP of Engineering advisor. Analyze these company-wide metrics and trends.
+
 Current Metrics:
 - Engineering Health: ${engineeringHealthScore}/100
 - Delivery (DORA): ${deliveryPerformanceScore}/100
@@ -2649,23 +2611,17 @@ Current Metrics:
 - Pipeline Health: ${pipelineHealthScore}/100
 
 Provide a concise executive summary (3-4 sentences) highlighting the biggest risk and the biggest win. Then provide 3 strategic recommendations.`
-              },
-              {
-                role: 'user',
-                content: `Here is the 30-day trend data: ${JSON.stringify(history.map(h => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 500
-          })
+            },
+            {
+              role: 'user',
+              content: `Here is the 30-day trend data: ${JSON.stringify(history.map(h => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
+            }
+          ]
         });
-
-        if (response.ok) {
-          const data = await response.json();
-          aiAnalysis = data.choices?.[0]?.message?.content || "Analysis generation failed.";
-        }
-      } catch (err) {
-        console.error("Groq API failed:", err);
+        aiAnalysis = content || "Analysis generation failed.";
+        console.log('[AI:Company] Groq responded via', model);
+      } catch (err: any) {
+        console.error("[AI:Company] Groq failed after retries:", err.message);
       }
     }
 

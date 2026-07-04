@@ -1,6 +1,7 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { groqChatCompletion, parseGroqJson, isGroqConfigured } from '../lib/groq';
 
 const router = express.Router();
 
@@ -520,35 +521,18 @@ router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, re
       metrics: teamMetrics
     });
 
-    // Try Groq API if key is configured (with 10 second timeout)
-    const groqApiKey = process.env.GROQ_API_KEY;
-    console.log('[AI][Team] GROQ_API_KEY present:', !!groqApiKey, 'length:', groqApiKey?.length ?? 0);
-
-    if (!groqApiKey || groqApiKey.length <= 10) {
-      console.log('[AI][Team] Skipping Groq (no or short key), using rule-based suggestions');
-    }
-
-    if (groqApiKey && groqApiKey.length > 10) {
+    // Try Groq (retries on the primary model, then a smaller model, then rule-based)
+    if (isGroqConfigured()) {
       try {
-        console.log('[AI][Team] Calling Groq API for team suggestions...');
-        // Create abort controller for timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
-        
-        const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            model: 'openai/gpt-oss-120b',
-            messages: [
-              {
-                role: 'system',
-                content: `You are a QA/Engineering advisor. Analyze team metrics and provide actionable insights.
-                
+        console.log('[AI:Team] Calling Groq API for team suggestions...');
+        const { content, model } = await groqChatCompletion({
+          label: 'AI:Team',
+          maxTokens: 2000,
+          messages: [
+            {
+              role: 'system',
+              content: `You are a QA/Engineering advisor. Analyze team metrics and provide actionable insights.
+
 Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
 {
   "strongpoints": ["string array of 3-7 team strengths based on metrics"],
@@ -570,72 +554,33 @@ Focus on:
 - Build times, deployment frequency
 - MTTR, system availability
 - Technical debt and code quality`
-              },
-              {
-                role: 'user',
-                content: `Analyze this team's metrics and provide suggestions:\n\n${JSON.stringify(teamMetrics, null, 2)}`
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 2000
-          })
+            },
+            {
+              role: 'user',
+              content: `Analyze this team's metrics and provide suggestions:\n\n${JSON.stringify(teamMetrics, null, 2)}`
+            }
+          ]
         });
 
-        clearTimeout(timeoutId); // Clear timeout on response
-        
-        if (aiResponse.ok) {
-          const groqData = await aiResponse.json();
-          console.log('[AI][Team] Groq API success:', {
-            status: aiResponse.status,
-            model: groqData.model,
-            usage: groqData.usage
-          });
-          const content = groqData.choices?.[0]?.message?.content;
-          
-          if (content) {
-            try {
-              // Clean up the response - remove markdown code blocks if present
-              let cleanContent = content.trim();
-              if (cleanContent.startsWith('```json')) {
-                cleanContent = cleanContent.slice(7);
-              }
-              if (cleanContent.startsWith('```')) {
-                cleanContent = cleanContent.slice(3);
-              }
-              if (cleanContent.endsWith('```')) {
-                cleanContent = cleanContent.slice(0, -3);
-              }
-              cleanContent = cleanContent.trim();
-              
-              const aiResult = JSON.parse(cleanContent);
-              
-              return res.json({
-                teamId: team.id,
-                teamName: team.name,
-                qaScore: teamMetrics.qaScore,
-                aiEnabled: true,
-                source: 'groq',
-                strongpoints: aiResult.strongpoints || [],
-                areasOfImprovement: aiResult.areasOfImprovement || [],
-                actionPlan: aiResult.actionPlan || []
-              });
-            } catch (parseError) {
-              console.error('Failed to parse Groq response:', parseError, content);
-              // Fall through to rule-based fallback
-            }
-          }
-        } else {
-          const errorText = await aiResponse.text();
-          console.error('Groq API error:', aiResponse.status, errorText);
-        }
+        const aiResult = parseGroqJson(content);
+        console.log('[AI:Team] Groq responded via', model);
+
+        return res.json({
+          teamId: team.id,
+          teamName: team.name,
+          qaScore: teamMetrics.qaScore,
+          aiEnabled: true,
+          source: 'groq',
+          strongpoints: aiResult.strongpoints || [],
+          areasOfImprovement: aiResult.areasOfImprovement || [],
+          actionPlan: aiResult.actionPlan || []
+        });
       } catch (groqError: any) {
-        if (groqError.name === 'AbortError') {
-          console.log('Groq API timed out after 10s, falling back to rule-based');
-        } else {
-          console.error('Groq API call failed:', groqError);
-        }
+        console.error('[AI:Team] Groq unavailable, using rule-based:', groqError.message);
         // Fall through to rule-based fallback
       }
+    } else {
+      console.log('[AI:Team] Skipping Groq (no or short key), using rule-based suggestions');
     }
 
     // Rule-based fallback if Groq is not available or fails
@@ -818,33 +763,18 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
       metrics: devMetricsPayload
     });
 
-    // Try Groq API with timeout
-    const groqApiKey = process.env.GROQ_API_KEY;
-    console.log('[AI][Developers] GROQ_API_KEY present:', !!groqApiKey, 'length:', groqApiKey?.length ?? 0);
-
-    if (!groqApiKey || groqApiKey.length <= 10) {
-      console.log('[AI][Developers] Skipping Groq (no or short key), returning metrics-only / non-AI response');
-    }
-
-    if (groqApiKey && groqApiKey.length > 10) {
+    // Try Groq (retries on the primary model, then a smaller model, then rule-based)
+    if (isGroqConfigured()) {
       try {
-        console.log('[AI][Developers] Calling Groq API for developer suggestions...');
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout for multiple devs
-        
-        const aiResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${groqApiKey}`,
-            'Content-Type': 'application/json'
-          },
-          signal: controller.signal,
-          body: JSON.stringify({
-            model: 'openai/gpt-oss-120b',
-            messages: [
-              {
-                role: 'system',
-                content: `You are a developer productivity advisor. Analyze individual developer metrics and provide personalized suggestions.
+        console.log('[AI:Developers] Calling Groq API for developer suggestions...');
+        const { content, model } = await groqChatCompletion({
+          label: 'AI:Developers',
+          maxTokens: 2000,
+          timeoutMs: 15000, // allow longer for multiple devs
+          messages: [
+            {
+              role: 'system',
+              content: `You are a developer productivity advisor. Analyze individual developer metrics and provide personalized suggestions.
 
 For each developer, analyze their metrics and provide insights. Return ONLY valid JSON (no markdown) with this structure:
 {
@@ -868,61 +798,30 @@ Metric benchmarks:
 - Meeting Time: <2h ideal, 2-4h acceptable, >4h too high
 - Context Switches: <3 excellent, 3-6 acceptable, >6 disruptive
 - Happiness Score: >7 great, 5-7 okay, <5 concerning`
-              },
-              {
-                role: 'user',
-                content: `Analyze these developer metrics and provide suggestions:\n\n${JSON.stringify(devMetricsPayload, null, 2)}`
-              }
-            ],
-            temperature: 0.7,
-            max_tokens: 2000
-          })
+            },
+            {
+              role: 'user',
+              content: `Analyze these developer metrics and provide suggestions:\n\n${JSON.stringify(devMetricsPayload, null, 2)}`
+            }
+          ]
         });
 
-        clearTimeout(timeoutId);
-        
-        if (aiResponse.ok) {
-          const groqData = await aiResponse.json();
-          console.log('[AI][Developers] Groq API success:', {
-            status: aiResponse.status,
-            model: groqData.model,
-            usage: groqData.usage
-          });
-          const content = groqData.choices?.[0]?.message?.content;
-          
-          if (content) {
-            try {
-              let cleanContent = content.trim();
-              if (cleanContent.startsWith('```json')) cleanContent = cleanContent.slice(7);
-              if (cleanContent.startsWith('```')) cleanContent = cleanContent.slice(3);
-              if (cleanContent.endsWith('```')) cleanContent = cleanContent.slice(0, -3);
-              cleanContent = cleanContent.trim();
-              
-              const aiResult = JSON.parse(cleanContent);
-              
-              return res.json({
-                teamId: team.id,
-                aiEnabled: true,
-                source: 'groq',
-                developers: aiResult.developers || [],
-                teamInsight: aiResult.teamInsight || '',
-                metrics: devMetricsPayload
-              });
-            } catch (parseError) {
-              console.error('Failed to parse Groq developer response:', parseError);
-            }
-          }
-        } else {
-          const errorText = await aiResponse.text();
-          console.error('Groq API error (developers):', aiResponse.status, errorText);
-        }
+        const aiResult = parseGroqJson(content);
+        console.log('[AI:Developers] Groq responded via', model);
+
+        return res.json({
+          teamId: team.id,
+          aiEnabled: true,
+          source: 'groq',
+          developers: aiResult.developers || [],
+          teamInsight: aiResult.teamInsight || '',
+          metrics: devMetricsPayload
+        });
       } catch (groqError: any) {
-        if (groqError.name === 'AbortError') {
-          console.log('Groq API timed out for developer suggestions');
-        } else {
-          console.error('Groq API call failed (developers):', groqError);
-        }
+        console.error('[AI:Developers] Groq unavailable, using rule-based:', groqError.message);
       }
+    } else {
+      console.log('[AI:Developers] Skipping Groq (no or short key), returning metrics-only / non-AI response');
     }
 
     // Rule-based fallback for developers

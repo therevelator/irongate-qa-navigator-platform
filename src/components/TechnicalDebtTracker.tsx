@@ -435,7 +435,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ onBack }) =
                         <div className="bg-gray-900 dark:bg-slate-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm">
                           <p className="font-bold mb-1">{data.name}</p>
                           <p>Effort: {data.effort}h</p>
-                          <p>Impact: ${data.impact}K</p>
+                          <p>Impact: ${data.impact.toFixed(1)}K</p>
                           <p>Priority: {data.priority.toFixed(1)}</p>
                         </div>
                       );

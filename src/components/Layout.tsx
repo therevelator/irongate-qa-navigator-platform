@@ -52,12 +52,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
   }, [currentView]);
 
   useEffect(() => {
-    if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
-      return;
-    }
-
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${protocol}://localhost:3000/ws`);
+    const wsHost = isLocal ? 'localhost:3000' : window.location.host;
+    const ws = new WebSocket(`${protocol}://${wsHost}/ws`);
 
     ws.onmessage = (event) => {
       try {
