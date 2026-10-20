@@ -46,7 +46,7 @@ router.get('/metric-intervals', authenticateToken, async (req: any, res) => {
     const { role, companyId } = req.user;
 
     // Only admin and manager can view
-    if (role !== 'super_admin' && role !== 'manager') {
+    if (role !== 'super_admin' && role !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -95,7 +95,7 @@ router.put('/metric-intervals/:metricKey', authenticateToken, async (req: any, r
     const { interval_value, interval_unit, custom_label } = req.body;
 
     // Only admin and manager can update
-    if (role !== 'super_admin' && role !== 'manager') {
+    if (role !== 'super_admin' && role !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -153,7 +153,7 @@ router.put('/metric-intervals', authenticateToken, async (req: any, res) => {
     const { intervals } = req.body;
 
     // Only admin and manager can update
-    if (role !== 'super_admin' && role !== 'manager') {
+    if (role !== 'super_admin' && role !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -211,7 +211,7 @@ router.delete('/metric-intervals/:metricKey', authenticateToken, async (req: any
     const { metricKey } = req.params;
 
     // Only admin and manager can delete
-    if (role !== 'super_admin' && role !== 'manager') {
+    if (role !== 'super_admin' && role !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -268,7 +268,7 @@ router.get('/sync-status', authenticateToken, async (req: any, res) => {
     const { role, companyId } = req.user;
 
     // Only admin and manager can view
-    if (role !== 'super_admin' && role !== 'manager') {
+    if (role !== 'super_admin' && role !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 

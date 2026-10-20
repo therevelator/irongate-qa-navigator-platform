@@ -2,6 +2,7 @@ import express, { Router } from 'express';
 import serverless from 'serverless-http';
 import cookieParser from 'cookie-parser';
 import { testConnection } from '../../src/lib/db';
+import { apiLimiter } from '../../server/middleware/rateLimit';
 
 // Import routes - Note: These will be bundled by esbuild
 import authRoutes from '../../server/routes/auth';
@@ -14,6 +15,10 @@ import analyticsRoutes from '../../server/routes/analytics';
 import settingsRoutes from '../../server/routes/settings';
 
 const app = express();
+
+// Netlify runs functions behind its edge proxy; trust it so the rate limiter
+// keys on the real client IP (from x-forwarded-for) rather than the proxy.
+app.set('trust proxy', true);
 
 // Allowed origins for CORS (production + local dev)
 const allowedOrigins = [
@@ -58,6 +63,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// Rate limiting (per warm instance — see server/middleware/rateLimit.ts).
+app.use(apiLimiter);
+
 // Routes - Note: Netlify Functions already adds /.netlify/functions/api prefix
 const router = Router();
 router.use('/auth', authRoutes);
@@ -81,11 +89,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handling
+// Error handling. Log the detail server-side but never return it to the client.
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    error: status === 400 ? 'Bad request' : 'Internal server error'
   });
 });
 

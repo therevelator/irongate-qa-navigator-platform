@@ -137,9 +137,8 @@ router.get('/users', authenticateToken, async (req: any, res) => {
   } catch (error: any) {
     console.error('Error fetching users:', error);
     res.status(500).json({ 
-      error: 'Failed to fetch users',
-      details: error.message || String(error)
-    });
+      error: 'Failed to fetch users'
+        });
   }
 });
 
@@ -152,6 +151,10 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     // Validate required fields
     if (!email || !password || !firstName || !lastName || !role || !teamId) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
     // Check if creator can create this role
@@ -183,8 +186,8 @@ router.post('/users', authenticateToken, async (req: any, res) => {
 
     // Get team to validate department
     const team = await queryOne<any>(
-      'SELECT department_id FROM teams WHERE id = ?',
-      [teamId]
+      'SELECT department_id FROM teams WHERE id = ? AND company_id = ?',
+      [teamId, companyId]
     );
 
     if (!team) {
@@ -242,9 +245,8 @@ router.post('/users', authenticateToken, async (req: any, res) => {
   } catch (error: any) {
     console.error('Error creating user:', error);
     res.status(500).json({ 
-      error: 'Failed to create user',
-      details: error.message || String(error)
-    });
+      error: 'Failed to create user'
+        });
   }
 });
 
@@ -260,8 +262,11 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    // Get user to check department
-    const existingUser = await queryOne<any>('SELECT department_id FROM users WHERE id = ?', [userId]);
+    // Get user to check department — scoped to the caller's company (tenant boundary).
+    const existingUser = await queryOne<any>(
+      'SELECT department_id FROM users WHERE id = ? AND company_id = ?',
+      [userId, companyId]
+    );
     if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -271,12 +276,17 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Can only update users in your department' });
     }
 
+    // A caller may only assign a role they are allowed to create (no escalation).
+    if (role !== undefined && !canCreateRole(creatorRole, role)) {
+      return res.status(403).json({ error: `${creatorRole} cannot assign the ${role} role` });
+    }
+
     await query(
-      `UPDATE users 
-       SET first_name = ?, last_name = ?, email = ?, role = ?, 
-           department_id = ?, primary_team_id = ?, updated_at = NOW() 
-       WHERE id = ?`,
-      [firstName, lastName, email, role, departmentId, primaryTeamId, userId]
+      `UPDATE users
+       SET first_name = ?, last_name = ?, email = ?, role = ?,
+           department_id = ?, primary_team_id = ?, updated_at = NOW()
+       WHERE id = ? AND company_id = ?`,
+      [firstName, lastName, email, role, departmentId, primaryTeamId, userId, companyId]
     );
 
     const updatedUser = await queryOne<any>(
@@ -291,7 +301,7 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
     res.json(updatedUser);
   } catch (error: any) {
     console.error('Error updating user:', error);
-    res.status(500).json({ error: 'Failed to update user', details: error.message });
+    res.status(500).json({ error: 'Failed to update user' });
   }
 });
 
@@ -307,7 +317,7 @@ router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res)
     }
 
     // Get user to check permissions
-    const existingUser = await queryOne<any>('SELECT department_id, primary_team_id, is_active FROM users WHERE id = ?', [userId]);
+    const existingUser = await queryOne<any>('SELECT department_id, primary_team_id, is_active FROM users WHERE id = ? AND company_id = ?', [userId, companyId]);
     if (!existingUser) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -325,14 +335,14 @@ router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res)
     // Toggle the status
     const newStatus = !existingUser.is_active;
     await query(
-      'UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ?',
-      [newStatus, userId]
+      'UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+      [newStatus, userId, companyId]
     );
 
     res.json({ message: `User ${newStatus ? 'activated' : 'deactivated'} successfully`, is_active: newStatus });
   } catch (error: any) {
     console.error('Error toggling user status:', error);
-    res.status(500).json({ error: 'Failed to toggle user status', details: error.message });
+    res.status(500).json({ error: 'Failed to toggle user status' });
   }
 });
 
@@ -349,7 +359,7 @@ router.patch('/users/:id/developer-insights-toggle', authenticateToken, async (r
     }
 
     // Get user to check permissions
-    const targetUser = await queryOne<any>('SELECT department_id, primary_team_id FROM users WHERE id = ?', [userId]);
+    const targetUser = await queryOne<any>('SELECT department_id, primary_team_id FROM users WHERE id = ? AND company_id = ?', [userId, companyId]);
     if (!targetUser) {
       return res.status(404).json({ error: 'User not found' });
     }
@@ -388,7 +398,7 @@ router.post('/teams/:id/toggle-status', authenticateToken, async (req: any, res)
     }
 
     // Get team to check department and current status
-    const existingTeam = await queryOne<any>('SELECT department_id, is_active FROM teams WHERE id = ?', [teamId]);
+    const existingTeam = await queryOne<any>('SELECT department_id, is_active FROM teams WHERE id = ? AND company_id = ?', [teamId, companyId]);
     if (!existingTeam) {
       return res.status(404).json({ error: 'Team not found' });
     }
@@ -401,14 +411,14 @@ router.post('/teams/:id/toggle-status', authenticateToken, async (req: any, res)
     // Toggle the status
     const newStatus = !existingTeam.is_active;
     await query(
-      'UPDATE teams SET is_active = ?, updated_at = NOW() WHERE id = ?',
-      [newStatus, teamId]
+      'UPDATE teams SET is_active = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+      [newStatus, teamId, companyId]
     );
 
     res.json({ message: `Team ${newStatus ? 'activated' : 'deactivated'} successfully`, is_active: newStatus });
   } catch (error: any) {
     console.error('Error toggling team status:', error);
-    res.status(500).json({ error: 'Failed to toggle team status', details: error.message });
+    res.status(500).json({ error: 'Failed to toggle team status' });
   }
 });
 
@@ -419,8 +429,8 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
     const { id: targetUserId } = req.params;
     const { newPassword } = req.body;
 
-    if (!newPassword || newPassword.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    if (!newPassword || newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
     // Check if user can manage this user
@@ -555,7 +565,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
 // Update team
 router.put('/teams/:id', authenticateToken, async (req: any, res) => {
   try {
-    const { role, departmentId: userDeptId } = req.user;
+    const { role, companyId, departmentId: userDeptId } = req.user;
     const { id: teamId } = req.params;
     const { name, description } = req.body;
 
@@ -564,8 +574,8 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    // Get team to check department
-    const team = await queryOne<any>('SELECT department_id FROM teams WHERE id = ?', [teamId]);
+    // Get team to check department — scoped to the caller's company.
+    const team = await queryOne<any>('SELECT department_id FROM teams WHERE id = ? AND company_id = ?', [teamId, companyId]);
     if (!team) {
       return res.status(404).json({ error: 'Team not found' });
     }
@@ -576,22 +586,22 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
     }
 
     await query(
-      'UPDATE teams SET name = ?, description = ? WHERE id = ?',
-      [name, description, teamId]
+      'UPDATE teams SET name = ?, description = ? WHERE id = ? AND company_id = ?',
+      [name, description, teamId, companyId]
     );
 
-    const updatedTeam = await queryOne<any>('SELECT * FROM teams WHERE id = ?', [teamId]);
+    const updatedTeam = await queryOne<any>('SELECT * FROM teams WHERE id = ? AND company_id = ?', [teamId, companyId]);
     res.json(updatedTeam);
   } catch (error: any) {
     console.error('Error updating team:', error);
-    res.status(500).json({ error: 'Failed to update team', details: error.message });
+    res.status(500).json({ error: 'Failed to update team' });
   }
 });
 
 // Delete team
 router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
   try {
-    const { role, departmentId: userDeptId } = req.user;
+    const { role, companyId, departmentId: userDeptId } = req.user;
     const { id: teamId } = req.params;
 
     // Only Super Admin and QA Manager can delete teams
@@ -599,8 +609,8 @@ router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    // Get team to check department
-    const team = await queryOne<any>('SELECT department_id FROM teams WHERE id = ?', [teamId]);
+    // Get team to check department — scoped to the caller's company.
+    const team = await queryOne<any>('SELECT department_id FROM teams WHERE id = ? AND company_id = ?', [teamId, companyId]);
     if (!team) {
       return res.status(404).json({ error: 'Team not found' });
     }
@@ -626,18 +636,18 @@ router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
     }
 
     // Soft delete - deactivate the team instead of hard delete
-    await query('UPDATE teams SET is_active = false, updated_at = NOW() WHERE id = ?', [teamId]);
+    await query('UPDATE teams SET is_active = false, updated_at = NOW() WHERE id = ? AND company_id = ?', [teamId, companyId]);
     res.json({ message: 'Team deactivated successfully' });
   } catch (error: any) {
     console.error('Error deleting team:', error);
-    res.status(500).json({ error: 'Failed to delete team', details: error.message });
+    res.status(500).json({ error: 'Failed to delete team' });
   }
 });
 
 // Delete user
 router.delete('/users/:id', authenticateToken, async (req: any, res) => {
   try {
-    const { role, id: userId, departmentId: userDeptId } = req.user;
+    const { role, id: userId, companyId, departmentId: userDeptId } = req.user;
     const { id: targetUserId } = req.params;
 
     // QA Engineers cannot delete users (including themselves)
@@ -645,10 +655,10 @@ router.delete('/users/:id', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Insufficient permissions to delete users' });
     }
 
-    // Get target user
+    // Get target user — scoped to the caller's company (tenant boundary).
     const targetUser = await queryOne<any>(
-      'SELECT role, department_id, created_by FROM users WHERE id = ?',
-      [targetUserId]
+      'SELECT role, department_id, created_by FROM users WHERE id = ? AND company_id = ?',
+      [targetUserId, companyId]
     );
 
     if (!targetUser) {
@@ -679,14 +689,14 @@ router.delete('/users/:id', authenticateToken, async (req: any, res) => {
 
     // Deactivate user instead of deleting
     await query(
-      'UPDATE users SET is_active = false, updated_at = NOW() WHERE id = ?',
-      [targetUserId]
+      'UPDATE users SET is_active = false, updated_at = NOW() WHERE id = ? AND company_id = ?',
+      [targetUserId, companyId]
     );
-    
+
     res.json({ message: 'User deactivated successfully', deactivated: true });
   } catch (error: any) {
     console.error('Error deleting user:', error);
-    res.status(500).json({ error: 'Failed to delete user', details: error.message });
+    res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 
@@ -1016,7 +1026,7 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
     const { companyId, role } = req.user;
     
     // Only super_admin and manager can modify configs
-    if (role !== 'super_admin' && role !== 'manager') {
+    if (role !== 'super_admin' && role !== 'qa_manager') {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 

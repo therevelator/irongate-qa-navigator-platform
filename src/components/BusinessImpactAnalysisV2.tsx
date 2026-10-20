@@ -8,14 +8,19 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
   Legend, ScatterChart, Scatter, ZAxis, Cell, BarChart, Bar
 } from 'recharts';
+import DOMPurify from 'dompurify';
 import { API_URL } from '../config/api';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '../contexts/ThemeContext';
 
 // Simple markdown renderer component
 const MarkdownRenderer: React.FC<{ content: string; isDark: boolean }> = ({ content, isDark }) => {
+  // The content is HTML produced by the LLM. Even though it is model output,
+  // treat it as untrusted and sanitize it before rendering to block any
+  // injected scripts / event handlers (e.g. via prompt injection).
+  const safeContent = DOMPurify.sanitize(content, { USE_PROFILES: { html: true } });
   // Add styling classes for the HTML content
-  const styledContent = content
+  const styledContent = safeContent
     .replace(/<table>/g, `<table class="w-full border-collapse my-4 text-sm">`)
     .replace(/<th>/g, `<th class="border ${isDark ? 'border-slate-600 bg-slate-800' : 'border-slate-300 bg-slate-100'} px-3 py-2 text-left font-semibold">`)
     .replace(/<td>/g, `<td class="border ${isDark ? 'border-slate-600' : 'border-slate-300'} px-3 py-2">`)

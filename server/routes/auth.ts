@@ -2,6 +2,8 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
+import { JWT_SECRET } from '../middleware/auth';
+import { authLimiter } from '../middleware/rateLimit';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -10,7 +12,6 @@ const broadcast = (_wss: any, _data: any) => {}; // No-op in serverless
 const wss = null; // Not available in serverless
 
 const router = express.Router();
-const JWT_SECRET = process.env.JWT_SECRET || process.env.secrettoken || 'your-secret-key-change-in-production';
 
 // Helper to generate human-readable 12-character company ID
 // Format: 8 alphanumeric chars + 4 digit checksum
@@ -35,7 +36,7 @@ const generateUUID = (): string => {
 };
 
 // Register
-router.post('/register', async (req, res) => {
+router.post('/register', authLimiter, async (req, res) => {
   try {
     const { email, password, firstName, lastName, companyName, departmentName, teamName } = req.body;
     // First registered user is always super_admin - additional users created via Admin Panel
@@ -44,6 +45,10 @@ router.post('/register', async (req, res) => {
     // Validate required fields
     if (!email || !password || !firstName || !lastName || !companyName || !departmentName || !teamName) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (typeof password !== 'string' || password.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
     // Check if user already exists
@@ -180,7 +185,7 @@ router.post('/register', async (req, res) => {
 });
 
 // Login
-router.post('/login', async (req, res) => {
+router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
 

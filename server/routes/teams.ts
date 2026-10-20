@@ -1,6 +1,8 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { assertTeamRead, assertTeamWrite, getOwnedTeam, canManageCompanyData } from '../middleware/access';
+import { aiLimiter } from '../middleware/rateLimit';
 import { groqChatCompletion, parseGroqJson, isGroqConfigured } from '../lib/groq';
 
 const router = express.Router();
@@ -361,6 +363,7 @@ router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) 
 // Get KPI history for a team (for graphs)
 router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) => {
   try {
+    if (!(await assertTeamRead(req, res, req.params.id))) return;
     const { days = '30' } = req.query;
     const numDays = Math.min(parseInt(days as string) || 30, 90);
 
@@ -430,20 +433,24 @@ router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) 
 
 // Get AI suggestions for a team (uses Groq API if available, otherwise rule-based fallback)
 // Only accessible by team_lead, manager, and super_admin
-router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, res) => {
+router.get('/:id/ai-suggestions', aiLimiter, authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userRole = req.user?.role;
     
     // Only leads, managers, and admins can see AI insights
-    if (!['super_admin', 'manager', 'team_lead'].includes(userRole || '')) {
-      return res.status(403).json({ 
+    if (!['super_admin', 'qa_manager', 'team_lead'].includes(userRole || '')) {
+      return res.status(403).json({
         error: 'AI insights are only available to team leads, managers, and admins',
-        restricted: true 
+        restricted: true
       });
     }
-    
+    // A team lead may only request insights (and trigger the Groq call) for their own team.
+    if (userRole === 'team_lead' && req.user?.primaryTeamId !== req.params.id) {
+      return res.status(403).json({ error: 'You can only view AI insights for your own team' });
+    }
+
     const team = await queryOne<any>(
-      `SELECT t.*, 
+      `SELECT t.*,
               t.ai_enabled,
               d.name as department_name,
               c.name as company_name,
@@ -694,18 +701,22 @@ Focus on:
 
 // Get AI suggestions for developers in a team
 // Only accessible by team_lead, manager, and super_admin
-router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthRequest, res) => {
+router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async (req: AuthRequest, res) => {
   try {
     const userRole = req.user?.role;
     
     // Only leads, managers, and admins can see developer stats and AI insights
-    if (!['super_admin', 'manager', 'team_lead'].includes(userRole || '')) {
-      return res.status(403).json({ 
+    if (!['super_admin', 'qa_manager', 'team_lead'].includes(userRole || '')) {
+      return res.status(403).json({
         error: 'Developer insights are only available to team leads, managers, and admins',
-        restricted: true 
+        restricted: true
       });
     }
-    
+    // A team lead may only view their own team's developer insights.
+    if (userRole === 'team_lead' && req.user?.primaryTeamId !== req.params.id) {
+      return res.status(403).json({ error: 'You can only view developer insights for your own team' });
+    }
+
     const team = await queryOne<any>(
       `SELECT t.*, t.ai_enabled FROM teams t WHERE t.id = ? AND t.company_id = ?`,
       [req.params.id, req.companyId]
@@ -724,15 +735,16 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
       });
     }
 
-    // Get developer metrics for this team (only for users with developer_insights_enabled)
+    // Get developer metrics for this team — only for users who have opted in
+    // to developer insights (respect the per-user opt-out).
     const developerMetrics = await query<any>(
-      `SELECT dm.*, 
+      `SELECT dm.*,
               (u.first_name || ' ' || u.last_name) as name,
               u.email,
               u.developer_insights_enabled
        FROM developer_metrics dm
        JOIN users u ON dm.developer_id = u.id
-       WHERE dm.team_id = ?
+       WHERE dm.team_id = ? AND u.developer_insights_enabled = true
        ORDER BY u.first_name`,
       [req.params.id]
     );
@@ -913,12 +925,36 @@ Metric benchmarks:
 });
 
 // Create team
+// Validate that a referenced department / lead user belongs to the caller's company.
+async function departmentInCompany(req: AuthRequest, departmentId?: string | null): Promise<boolean> {
+  if (!departmentId) return false;
+  return !!(await queryOne<any>('SELECT id FROM departments WHERE id = ? AND company_id = ?', [departmentId, req.companyId]));
+}
+async function userInCompany(req: AuthRequest, userId?: string | null): Promise<boolean> {
+  if (!userId) return true; // null lead is allowed
+  return !!(await queryOne<any>('SELECT id FROM users WHERE id = ? AND company_id = ?', [userId, req.companyId]));
+}
+
 router.post('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
+    if (!canManageCompanyData(req.userRole)) {
+      return res.status(403).json({ error: 'Only QA Managers and Super Admins can create teams' });
+    }
     const { name, description, departmentId, platform, leadId } = req.body;
 
     if (!name || !departmentId) {
       return res.status(400).json({ error: 'Name and department required' });
+    }
+    // The department and optional lead must belong to the caller's company.
+    if (!(await departmentInCompany(req, departmentId))) {
+      return res.status(400).json({ error: 'Invalid department' });
+    }
+    if (!(await userInCompany(req, leadId))) {
+      return res.status(400).json({ error: 'Invalid team lead' });
+    }
+    // qa_manager can only create teams in their own department.
+    if (req.userRole === 'qa_manager' && departmentId !== req.user?.departmentId) {
+      return res.status(403).json({ error: 'Can only create teams in your department' });
     }
 
     const [result] = await query<any>(
@@ -929,8 +965,8 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     );
 
     const team = await queryOne<any>(
-      'SELECT * FROM teams WHERE id = ?',
-      [result.id]
+      'SELECT * FROM teams WHERE id = ? AND company_id = ?',
+      [result.id, req.companyId]
     );
 
     res.status(201).json({ team });
@@ -943,10 +979,18 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
 // Update team
 router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
+    // Only roles with team-write access may modify a team; also confirms the
+    // team is in the caller's company (team_lead limited to own team).
+    const owned = await assertTeamWrite(req, res, req.params.id);
+    if (!owned) return;
+
     const { name, description, platform, leadId, isActive } = req.body;
+    if (leadId !== undefined && !(await userInCompany(req, leadId))) {
+      return res.status(400).json({ error: 'Invalid team lead' });
+    }
 
     await query(
-      `UPDATE teams 
+      `UPDATE teams
        SET name = COALESCE(?, name),
            description = COALESCE(?, description),
            platform = COALESCE(?, platform),
@@ -957,8 +1001,8 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
     );
 
     const team = await queryOne<any>(
-      'SELECT * FROM teams WHERE id = ?',
-      [req.params.id]
+      'SELECT * FROM teams WHERE id = ? AND company_id = ?',
+      [req.params.id, req.companyId]
     );
 
     res.json({ team });

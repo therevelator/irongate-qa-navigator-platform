@@ -26,13 +26,19 @@ export function showNotification(message: string, type: NotificationType = 'info
     info: 'info-circle'
   };
   
-  notification.innerHTML = `
-    <div class="flex items-center space-x-3">
-      <i class="fas fa-${iconMap[type]} text-xl"></i>
-      <span class="font-medium">${message}</span>
-    </div>
-  `;
-  
+  // Build the DOM without interpolating `message` into HTML: the icon class is
+  // fixed, and the message goes in via textContent so it can never inject markup.
+  const row = document.createElement('div');
+  row.className = 'flex items-center space-x-3';
+  const icon = document.createElement('i');
+  icon.className = `fas fa-${iconMap[type]} text-xl`;
+  const text = document.createElement('span');
+  text.className = 'font-medium';
+  text.textContent = message;
+  row.appendChild(icon);
+  row.appendChild(text);
+  notification.appendChild(row);
+
   document.body.appendChild(notification);
   
   // Animate in

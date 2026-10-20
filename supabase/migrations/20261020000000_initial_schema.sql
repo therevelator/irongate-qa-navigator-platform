@@ -585,6 +585,7 @@ CREATE TABLE "teams" (
   "department_id" varchar(36) NOT NULL,
   "name" varchar(255) NOT NULL,
   "description" text,
+  "platform" varchar(100),
   "lead_id" varchar(36),
   "created_at" timestamptz DEFAULT now(),
   "updated_at" timestamptz DEFAULT now(),

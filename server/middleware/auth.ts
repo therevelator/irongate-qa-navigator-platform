@@ -1,7 +1,14 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || process.env.secrettoken || 'your-secret-key-change-in-production';
+// Resolve the signing secret once. In production a secret MUST be provided;
+// we fail closed (throw on startup) rather than fall back to a public default,
+// which would let anyone forge a super_admin token for any company.
+const CONFIGURED_SECRET = process.env.JWT_SECRET || process.env.secrettoken;
+if (!CONFIGURED_SECRET && process.env.NODE_ENV === 'production') {
+  throw new Error('JWT_SECRET (or secrettoken) must be set in production. Refusing to start with a default secret.');
+}
+export const JWT_SECRET = CONFIGURED_SECRET || 'dev-only-insecure-secret-change-me';
 
 export interface AuthRequest extends Request {
   user?: {

@@ -94,25 +94,39 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
 
     console.log('Update user request:', { userId: req.params.id, body: req.body, companyId: req.companyId });
 
+    const isSelf = req.userId === req.params.id;
+    const isAdmin = req.userRole === 'super_admin' || req.userRole === 'qa_manager';
+
     // Only allow users to update themselves, or admins to update anyone
-    if (req.userId !== req.params.id && req.userRole !== 'super_admin' && req.userRole !== 'qa_manager') {
+    if (!isSelf && !isAdmin) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    // Build dynamic update query
+    // Build dynamic update query. Everyone may edit their own profile fields.
     const updates: string[] = [];
     const values: any[] = [];
-    
+
     if (firstName !== undefined) { updates.push('first_name = ?'); values.push(firstName); }
     if (lastName !== undefined) { updates.push('last_name = ?'); values.push(lastName); }
     if (email !== undefined) { updates.push('email = ?'); values.push(email); }
-    if (role !== undefined) { updates.push('role = ?'); values.push(role); }
-    if (departmentId !== undefined) { updates.push('department_id = ?'); values.push(departmentId); }
-    if (primaryTeamId !== undefined) { updates.push('primary_team_id = ?'); values.push(primaryTeamId); }
     if (phone !== undefined) { updates.push('phone = ?'); values.push(phone); }
     if (timezone !== undefined) { updates.push('timezone = ?'); values.push(timezone); }
-    if (isActive !== undefined) { updates.push('is_active = ?'); values.push(isActive); }
-    
+
+    // Privileged fields (role, department, team, active status) may only be set by
+    // an admin/manager. A non-admin sending these — e.g. role=super_admin for
+    // themselves — is rejected rather than silently applied (privilege escalation).
+    const privileged = { role, departmentId, primaryTeamId, isActive };
+    const sentPrivileged = Object.values(privileged).some(v => v !== undefined);
+    if (sentPrivileged && !isAdmin) {
+      return res.status(403).json({ error: 'You cannot change role, team, department, or status' });
+    }
+    if (isAdmin) {
+      if (role !== undefined) { updates.push('role = ?'); values.push(role); }
+      if (departmentId !== undefined) { updates.push('department_id = ?'); values.push(departmentId); }
+      if (primaryTeamId !== undefined) { updates.push('primary_team_id = ?'); values.push(primaryTeamId); }
+      if (isActive !== undefined) { updates.push('is_active = ?'); values.push(isActive); }
+    }
+
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
     }

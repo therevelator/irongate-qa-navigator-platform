@@ -1,6 +1,8 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { assertTeamRead, assertTeamWrite, getOwnedTeam, canManageCompanyData } from '../middleware/access';
+import { aiLimiter } from '../middleware/rateLimit';
 import { seedAllAnalyticsData, updateDailyAnalytics } from '../jobs/analyticsSync';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
@@ -659,6 +661,9 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
 router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
+    if (!canManageCompanyData(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
     const { id } = req.params;
     const {
       affected_users,
@@ -756,6 +761,9 @@ router.get('/pipeline-config', authenticateToken, async (req: any, res) => {
 router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
+    if (!canManageCompanyData(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
     const { time_savings_percent, cost_savings_percent, cost_per_minute } = req.body;
 
     // Validate inputs
@@ -880,10 +888,16 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
 
     let stages: any[] = [];
 
+    // Reject team ids that are not in the caller's company before any read/write,
+    // so a GET can neither read another team's stages nor seed junk rows for it.
+    if (teamId && !(await getOwnedTeam(req, teamId as string))) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
     if (teamId) {
       // Check if team-specific stages exist
       stages = await query<any>(`
-        SELECT 
+        SELECT
           ps.id, ps.name, ps.stage_order,
           ps.avg_duration_seconds as duration, ps.success_rate,
           ps.cpu_usage, ps.memory_usage, ps.cost_per_run as cost, ps.bottleneck_score
@@ -990,6 +1004,9 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
 router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
+    if (!canManageCompanyData(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
     const { id } = req.params;
     const { team_id, duration, success_rate, cpu_usage, memory_usage, cost_per_run } = req.body;
 
@@ -1286,10 +1303,14 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
     if (!allowed) {
       return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
     }
+    // Tenant scope: the team must belong to the caller's company.
+    if (!(await getOwnedTeam(req, teamId))) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
 
     // Fetch quality metrics time series
     const qualityMetrics = await query<any>(
-      `SELECT * FROM business_impact_quality_metrics 
+      `SELECT * FROM business_impact_quality_metrics
        WHERE team_id = ? ORDER BY month_year ASC`,
       [teamId]
     );
@@ -1356,6 +1377,7 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
 router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
+    if (!(await assertTeamWrite(req, res, teamId))) return;
     const { month_year, ...metrics } = req.body;
 
     if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
@@ -1405,6 +1427,7 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
 router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
+    if (!(await assertTeamWrite(req, res, teamId))) return;
     const { month_year, ...kpis } = req.body;
 
     if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
@@ -1459,6 +1482,7 @@ router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, asyn
 router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
+    if (!(await assertTeamWrite(req, res, teamId))) return;
     const { month_year, ...context } = req.body;
 
     if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
@@ -1519,6 +1543,7 @@ router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req
 router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
+    if (!(await assertTeamWrite(req, res, teamId))) return;
 
     // Fetch all quality metrics
     const qualityMetrics = await query<any>(
@@ -1672,6 +1697,7 @@ router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateTo
 router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
+    if (!(await assertTeamWrite(req, res, teamId))) return;
     const { monthlyData } = req.body;
 
     if (!Array.isArray(monthlyData)) {
@@ -1779,6 +1805,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
 router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
+    if (!(await assertTeamWrite(req, res, teamId))) return;
 
     // Generate 12 months of realistic data
     const months: string[] = [];
@@ -1989,28 +2016,46 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
 });
 
 // POST: AI analysis of correlations using backend Groq API key
-router.post('/business-impact-v2/:teamId/ai-analysis', authenticateToken, async (req: any, res) => {
+router.post('/business-impact-v2/:teamId/ai-analysis', aiLimiter, authenticateToken, async (req: any, res) => {
   try {
-    const { correlations } = req.body;
+    const { teamId } = req.params;
+    // Tenant + role scope (also limits who can spend Groq budget).
+    if (!(await assertTeamRead(req, res, teamId))) return;
+
+    // Rebuild the correlation matrix from the database for THIS team rather than
+    // trusting the request body: the body is attacker-controlled and its strings
+    // were being injected straight into the LLM prompt. This also caps the size.
+    const correlations = await query<any>(
+      `SELECT quality_metric, business_kpi, pearson_correlation, p_value,
+              correlation_strength, is_significant
+       FROM business_impact_correlations
+       WHERE team_id = ?
+       ORDER BY ABS(pearson_correlation) DESC NULLS LAST
+       LIMIT 50`,
+      [teamId]
+    );
 
     if (!correlations || correlations.length === 0) {
-      return res.status(400).json({ error: 'No correlations provided for analysis' });
+      return res.status(400).json({ error: 'No correlations available for analysis. Calculate correlations first.' });
     }
 
     const groqApiKey = process.env.GROQ_API_KEY;
-    console.log('[AI][BIA] GROQ_API_KEY present:', !!groqApiKey, 'length:', groqApiKey?.length ?? 0);
 
     if (!groqApiKey || groqApiKey.length <= 10) {
       return res.status(400).json({ error: 'Groq API key not configured on server' });
     }
 
+    // Sanitise the metric labels that go into the prompt to letters/numbers/space
+    // only, so DB text cannot carry prompt-injection payloads into the model.
+    const clean = (v: any) => String(v ?? '').replace(/[^a-zA-Z0-9 _-]/g, '').replace(/_/g, ' ').slice(0, 60);
+
     // Create correlation matrix for analysis
     const correlationMatrix = correlations.map((c: any) => ({
-      quality_metric: c.quality_metric.replace(/_/g, ' '),
-      business_kpi: c.business_kpi.replace(/_/g, ' '),
+      quality_metric: clean(c.quality_metric),
+      business_kpi: clean(c.business_kpi),
       correlation: c.pearson_correlation,
       p_value: c.p_value,
-      strength: c.correlation_strength,
+      strength: clean(c.correlation_strength),
       significant: c.is_significant
     }));
 
@@ -2454,7 +2499,7 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
 });
 
 // Get AI insights for company-wide metrics (Exec Dashboard)
-router.post('/company-insights', authenticateToken, async (req: AuthRequest, res) => {
+router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthRequest, res) => {
   try {
     const user = req.user;
     if (!user) {
@@ -2463,7 +2508,7 @@ router.post('/company-insights', authenticateToken, async (req: AuthRequest, res
 
     const { companyId, role } = user;
 
-    if (!['super_admin', 'manager', 'team_lead'].includes(role)) {
+    if (!['super_admin', 'qa_manager', 'team_lead'].includes(role)) {
       return res.status(403).json({ error: 'Executive insights are restricted.' });
     }
 
@@ -2671,10 +2716,17 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
 
     // Team leads can only access their own team
     const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
+    }
+    // Tenant scope: if a team is requested it must belong to the caller's company.
+    if (teamId && !(await getOwnedTeam(req, teamId as string))) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
 
     // Build query
     let sql = `
-      SELECT 
+      SELECT
         dps.developer_id,
         (u.first_name || ' ' || u.last_name) as developer_name,
         dps.snapshot_date,

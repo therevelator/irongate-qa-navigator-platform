@@ -7,6 +7,7 @@ import { fileURLToPath } from 'url';
 import { testConnection } from '../src/lib/db';
 import { setupWebSocket, broadcast } from './websocket';
 import { jobEvents } from './eventBus';
+import { apiLimiter } from './middleware/rateLimit';
 import authRoutes from './routes/auth';
 import teamsRoutes from './routes/teams';
 import metricsRoutes from './routes/metrics';
@@ -21,6 +22,10 @@ import './jobs/analyticsSync'; // Analytics data sync
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Behind the Railway/Netlify proxy: trust one hop so req.ip (used by the rate
+// limiter) reflects the real client, not the proxy.
+app.set('trust proxy', 1);
 
 // Create HTTP server
 const server = http.createServer(app);
@@ -53,7 +58,8 @@ app.use((req, res, next) => {
   const origin = req.headers.origin as string | undefined;
   
   // Check if origin is allowed
-  const isAllowed = !origin || allowedOrigins.some(allowed => allowed && origin.startsWith(allowed));
+  // Exact match — startsWith would let http://localhost:5173.evil.com through.
+  const isAllowed = !origin || allowedOrigins.some(allowed => allowed && origin === allowed);
   
   if (isAllowed && origin) {
     res.header('Access-Control-Allow-Origin', origin);
@@ -82,6 +88,7 @@ app.use((req, res, next) => {
 });
 
 // Routes
+app.use('/api', apiLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/teams', teamsRoutes);
 app.use('/api/metrics', metricsRoutes);
@@ -121,11 +128,12 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Error handling
+// Error handling. Log the detail server-side but never return it to the client.
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Error:', err);
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal server error'
+  const status = err.status || err.statusCode || 500;
+  res.status(status).json({
+    error: status === 400 ? 'Bad request' : 'Internal server error'
   });
 });
 
