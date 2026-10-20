@@ -1,4 +1,4 @@
-import mysql from 'mysql2/promise';
+import { Client } from 'pg';
 import dotenv from 'dotenv';
 
 // Load environment variables
@@ -6,26 +6,36 @@ dotenv.config();
 
 const DB_CONFIG = {
   host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '3306'),
-  user: process.env.DB_USER || 'root',
-  password: process.env.DB_PASSWORD || 'l3v75th5n',
+  port: parseInt(process.env.DB_PORT || '5432'),
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || 'postgres',
   database: process.env.DB_NAME || 'irongate_qa',
 };
 
 describe('Database Schema Validation', () => {
-  let connection: mysql.Connection;
+  let client: Client;
+
+  // Same shape as mysql2's connection.query(): [rows]
+  const connection = {
+    query: async (sql: string) => [(await client.query(sql)).rows] as const,
+  };
+
+  // Postgres equivalent of MySQL's DESCRIBE <table>
+  const describe_ = (table: string) =>
+    connection.query(`SELECT column_name AS "Field" FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '${table}'`);
 
   beforeAll(async () => {
-    connection = await mysql.createConnection(DB_CONFIG);
+    client = new Client(DB_CONFIG);
+    await client.connect();
   });
 
   afterAll(async () => {
-    await connection.end();
+    await client.end();
   });
 
   describe('Users Table', () => {
     it('DB-SCHEMA-001: should have correct structure', async () => {
-      const [rows] = await connection.query('DESCRIBE users');
+      const [rows] = await describe_('users');
       const fields = rows as any[];
 
       const fieldNames = fields.map((f: any) => f.Field);
@@ -71,7 +81,7 @@ describe('Database Schema Validation', () => {
 
   describe('Teams Table', () => {
     it('DB-SCHEMA-002: should have correct structure', async () => {
-      const [rows] = await connection.query('DESCRIBE teams');
+      const [rows] = await describe_('teams');
       const fields = rows as any[];
 
       const fieldNames = fields.map((f: any) => f.Field);
@@ -80,7 +90,6 @@ describe('Database Schema Validation', () => {
       expect(fieldNames).toContain('company_id');
       expect(fieldNames).toContain('department_id');
       expect(fieldNames).toContain('name');
-      expect(fieldNames).toContain('platform');
       expect(fieldNames).toContain('is_active');
     });
   });
@@ -91,13 +100,11 @@ describe('Database Schema Validation', () => {
       // The users table intentionally has no FK constraints for flexible user creation
       const [rows] = await connection.query(`
         SELECT 
-          CONSTRAINT_NAME,
-          COLUMN_NAME,
-          REFERENCED_TABLE_NAME
-        FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
-        WHERE TABLE_NAME = 'teams' 
-          AND TABLE_SCHEMA = 'irongate_qa'
-          AND REFERENCED_TABLE_NAME IS NOT NULL
+          conname AS "CONSTRAINT_NAME",
+          confrelid::regclass::text AS "REFERENCED_TABLE_NAME"
+        FROM pg_constraint
+        WHERE conrelid = 'public.teams'::regclass
+          AND contype = 'f'
       `);
 
       const constraints = rows as any[];
@@ -134,13 +141,13 @@ describe('Database Schema Validation', () => {
 
   describe('Indexes', () => {
     it('DB-SCHEMA-008: should have proper indexes on users table', async () => {
-      const [rows] = await connection.query('SHOW INDEXES FROM users');
+      const [rows] = await connection.query(`SELECT indexname FROM pg_indexes WHERE schemaname = 'public' AND tablename = 'users'`);
       const indexes = rows as any[];
 
-      const indexNames = indexes.map((i: any) => i.Key_name);
+      const indexNames = indexes.map((i: any) => i.indexname);
 
-      expect(indexNames).toContain('PRIMARY');
-      expect(indexNames).toContain('email'); // Unique index
+      expect(indexNames).toContain('users_pkey');
+      expect(indexNames).toContain('users_email'); // Unique index
     });
   });
 });

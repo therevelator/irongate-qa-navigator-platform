@@ -12,12 +12,12 @@ cron.schedule('*/15 * * * *', async () => {
     const teams = await query<any[]>(
       `SELECT id, name, company_id FROM teams 
        WHERE is_active = true 
-       AND (exclude_from_auto_sync = 0 OR exclude_from_auto_sync IS NULL)`
+       AND (exclude_from_auto_sync = FALSE OR exclude_from_auto_sync IS NULL)`
     );
     
     // Also get teams with manually edited snapshots to skip
     const manualTeams = await query<any[]>(
-      `SELECT DISTINCT team_id FROM kpi_snapshots WHERE manually_edited = 1`
+      `SELECT DISTINCT team_id FROM kpi_snapshots WHERE manually_edited = TRUE`
     );
     const manualTeamIds = new Set(manualTeams.map(t => t.team_id));
     
@@ -48,32 +48,32 @@ cron.schedule('*/15 * * * *', async () => {
             blocked_time_hours, automation_coverage, automation_roi,
             change_failure_rate, mtbf_hours, system_availability, infrastructure_failures,
             qa_score, status
-          ) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON DUPLICATE KEY UPDATE
-            test_coverage = VALUES(test_coverage),
-            test_flakiness_rate = VALUES(test_flakiness_rate),
-            defect_density = VALUES(defect_density),
-            defect_escape_rate = VALUES(defect_escape_rate),
-            code_quality_score = VALUES(code_quality_score),
-            avg_build_time_minutes = VALUES(avg_build_time_minutes),
-            test_execution_time_minutes = VALUES(test_execution_time_minutes),
-            deployment_frequency_per_week = VALUES(deployment_frequency_per_week),
-            lead_time_days = VALUES(lead_time_days),
-            mttr_hours = VALUES(mttr_hours),
-            parallel_test_efficiency = VALUES(parallel_test_efficiency),
-            sprint_velocity = VALUES(sprint_velocity),
-            sprint_commitment_rate = VALUES(sprint_commitment_rate),
-            sprint_carryover = VALUES(sprint_carryover),
-            first_time_pass_rate = VALUES(first_time_pass_rate),
-            blocked_time_hours = VALUES(blocked_time_hours),
-            automation_coverage = VALUES(automation_coverage),
-            automation_roi = VALUES(automation_roi),
-            change_failure_rate = VALUES(change_failure_rate),
-            mtbf_hours = VALUES(mtbf_hours),
-            system_availability = VALUES(system_availability),
-            infrastructure_failures = VALUES(infrastructure_failures),
-            qa_score = VALUES(qa_score),
-            status = VALUES(status)`,
+          ) VALUES (?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT (team_id, snapshot_date) DO UPDATE SET
+            test_coverage = EXCLUDED.test_coverage,
+            test_flakiness_rate = EXCLUDED.test_flakiness_rate,
+            defect_density = EXCLUDED.defect_density,
+            defect_escape_rate = EXCLUDED.defect_escape_rate,
+            code_quality_score = EXCLUDED.code_quality_score,
+            avg_build_time_minutes = EXCLUDED.avg_build_time_minutes,
+            test_execution_time_minutes = EXCLUDED.test_execution_time_minutes,
+            deployment_frequency_per_week = EXCLUDED.deployment_frequency_per_week,
+            lead_time_days = EXCLUDED.lead_time_days,
+            mttr_hours = EXCLUDED.mttr_hours,
+            parallel_test_efficiency = EXCLUDED.parallel_test_efficiency,
+            sprint_velocity = EXCLUDED.sprint_velocity,
+            sprint_commitment_rate = EXCLUDED.sprint_commitment_rate,
+            sprint_carryover = EXCLUDED.sprint_carryover,
+            first_time_pass_rate = EXCLUDED.first_time_pass_rate,
+            blocked_time_hours = EXCLUDED.blocked_time_hours,
+            automation_coverage = EXCLUDED.automation_coverage,
+            automation_roi = EXCLUDED.automation_roi,
+            change_failure_rate = EXCLUDED.change_failure_rate,
+            mtbf_hours = EXCLUDED.mtbf_hours,
+            system_availability = EXCLUDED.system_availability,
+            infrastructure_failures = EXCLUDED.infrastructure_failures,
+            qa_score = EXCLUDED.qa_score,
+            status = EXCLUDED.status`,
           [
             team.id,
             kpiData.test_coverage,

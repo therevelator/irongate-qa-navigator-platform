@@ -46,12 +46,12 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
         ter.start_time,
         ter.end_time,
         ter.duration_seconds as duration,
-        CONCAT(u.first_name, ' ', u.last_name) as assigned_to,
+        (u.first_name || ' ' || u.last_name) as assigned_to,
         ter.dependencies
       FROM test_execution_runs ter
       LEFT JOIN users u ON ter.assigned_to = u.id
       WHERE ter.company_id = ?
-        AND ter.start_time >= DATE_SUB(NOW(), INTERVAL ? DAY)
+        AND ter.start_time >= NOW() - CAST(? AS INTEGER) * INTERVAL '1 day'
     `;
     const params: any[] = [companyId, numDays];
 
@@ -73,7 +73,7 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
       end_time: e.end_time || new Date(new Date(e.start_time).getTime() + (e.duration || 0) * 1000).toISOString(),
       duration: e.duration || 0,
       assigned_to: e.assigned_to || 'Unassigned',
-      dependencies: e.dependencies ? JSON.parse(e.dependencies) : []
+      dependencies: typeof e.dependencies === 'string' ? JSON.parse(e.dependencies) : (e.dependencies || [])
     }));
 
     res.json({ executions: result });
@@ -109,7 +109,7 @@ router.get('/test-cases', authenticateToken, async (req: any, res) => {
         tc.execution_count,
         tc.avg_duration,
         tc.effectiveness_score,
-        GROUP_CONCAT(tct.tag) as tags
+        STRING_AGG(tct.tag, ',') as tags
       FROM test_cases tc
       LEFT JOIN test_case_tags tct ON tc.id = tct.test_case_id
       LEFT JOIN teams t ON tc.team_id = t.id
@@ -234,7 +234,7 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
       params.push(teamId, teamId);
     }
 
-    sql += ' ORDER BY ft.flakiness_score DESC LIMIT 50';
+    sql += ' ORDER BY ft.flakiness_score DESC NULLS LAST LIMIT 50';
 
     const flakyTests = await query<any>(sql, params);
 
@@ -407,7 +407,7 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
         pm.recorded_date as timestamp
       FROM performance_metrics pm
       WHERE pm.company_id = ?
-        AND pm.recorded_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        AND pm.recorded_date >= CURRENT_DATE - CAST(? AS INTEGER)
     `;
     const params: any[] = [companyId, numDays];
 
@@ -453,7 +453,7 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
     let sql = `
       SELECT 
         dm.developer_id as developer_id,
-        CONCAT(u.first_name, ' ', u.last_name) as name,
+        (u.first_name || ' ' || u.last_name) as name,
         AVG(dm.code_review_time_avg) as code_review_time_avg,
         AVG(dm.pr_merge_time_avg) as pr_merge_time_avg,
         AVG(dm.happiness_score) as happiness_score,
@@ -471,7 +471,7 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
       params.push(teamId);
     }
 
-    sql += ' GROUP BY dm.developer_id, u.first_name, u.last_name ORDER BY happiness_score DESC';
+    sql += ' GROUP BY dm.developer_id, u.first_name, u.last_name ORDER BY happiness_score DESC NULLS LAST';
 
     const metrics = await query<any>(sql, params);
 
@@ -592,7 +592,7 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
         td.downtime_minutes_monthly,
         td.revenue_impact_percent,
         td.sla_breaches_monthly,
-        CONCAT(u.first_name, ' ', u.last_name) as assigned_to_name
+        (u.first_name || ' ' || u.last_name) as assigned_to_name
       FROM technical_debt td
       LEFT JOIN users u ON td.assigned_to = u.id
       WHERE td.company_id = ?
@@ -609,7 +609,8 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
       params.push(status);
     }
 
-    sql += ' ORDER BY td.priority_score DESC, td.severity DESC LIMIT 100';
+    // Severity was a MySQL ENUM, which sorts by declaration order (critical, high, medium, low)
+    sql += " ORDER BY td.priority_score DESC NULLS LAST, CASE td.severity WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 WHEN 'low' THEN 4 END DESC LIMIT 100";
 
     const debts = await query<any>(sql, params);
 
@@ -816,7 +817,7 @@ router.get('/pipeline-history', authenticateToken, async (req: any, res) => {
         SUM(total_cost) as total_cost
       FROM pipeline_execution_summary
       WHERE company_id = ?
-        AND execution_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        AND execution_date >= CURRENT_DATE - CAST(? AS INTEGER)
       GROUP BY execution_date
       ORDER BY execution_date ASC`,
       [companyId, numDays]
@@ -1021,7 +1022,7 @@ router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
       `INSERT INTO pipeline_stage_history 
        (id, stage_id, company_id, team_id, name, duration_seconds, success_rate,
         cpu_usage, memory_usage, cost_per_run, bottleneck_score)
-       SELECT UUID(), id, company_id, team_id, name, avg_duration_seconds, success_rate,
+       SELECT gen_random_uuid(), id, company_id, team_id, name, avg_duration_seconds, success_rate,
               cpu_usage, memory_usage, cost_per_run, bottleneck_score
        FROM pipeline_stages WHERE id = ?`,
       [id]
@@ -1093,9 +1094,9 @@ router.get('/business-impact', authenticateToken, async (req: any, res) => {
           AVG(correlation_strength) as correlation_strength
         FROM business_impact_metrics
         WHERE company_id = ?
-          AND recorded_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+          AND recorded_date >= CURRENT_DATE - CAST(? AS INTEGER)
         GROUP BY metric_name
-        ORDER BY correlation_strength DESC
+        ORDER BY correlation_strength DESC NULLS LAST
       `, [companyId, numDays]);
 
       if (metrics.length > 0) {
@@ -1310,7 +1311,7 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
     // Fetch cached correlations
     const correlations = await query<any>(
       `SELECT * FROM business_impact_correlations 
-       WHERE team_id = ? ORDER BY ABS(pearson_correlation) DESC`,
+       WHERE team_id = ? ORDER BY ABS(pearson_correlation) DESC NULLS LAST`,
       [teamId]
     );
 
@@ -1369,15 +1370,15 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
         mttr_hours, deployment_frequency, lead_time_days, code_quality_score,
         change_failure_rate, manually_edited, data_source)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'manual')
-       ON DUPLICATE KEY UPDATE
-         test_coverage = COALESCE(VALUES(test_coverage), test_coverage),
-         defect_density = COALESCE(VALUES(defect_density), defect_density),
-         defect_escape_rate = COALESCE(VALUES(defect_escape_rate), defect_escape_rate),
-         mttr_hours = COALESCE(VALUES(mttr_hours), mttr_hours),
-         deployment_frequency = COALESCE(VALUES(deployment_frequency), deployment_frequency),
-         lead_time_days = COALESCE(VALUES(lead_time_days), lead_time_days),
-         code_quality_score = COALESCE(VALUES(code_quality_score), code_quality_score),
-         change_failure_rate = COALESCE(VALUES(change_failure_rate), change_failure_rate),
+       ON CONFLICT (team_id, month_year) DO UPDATE SET
+         test_coverage = COALESCE(EXCLUDED.test_coverage, business_impact_quality_metrics.test_coverage),
+         defect_density = COALESCE(EXCLUDED.defect_density, business_impact_quality_metrics.defect_density),
+         defect_escape_rate = COALESCE(EXCLUDED.defect_escape_rate, business_impact_quality_metrics.defect_escape_rate),
+         mttr_hours = COALESCE(EXCLUDED.mttr_hours, business_impact_quality_metrics.mttr_hours),
+         deployment_frequency = COALESCE(EXCLUDED.deployment_frequency, business_impact_quality_metrics.deployment_frequency),
+         lead_time_days = COALESCE(EXCLUDED.lead_time_days, business_impact_quality_metrics.lead_time_days),
+         code_quality_score = COALESCE(EXCLUDED.code_quality_score, business_impact_quality_metrics.code_quality_score),
+         change_failure_rate = COALESCE(EXCLUDED.change_failure_rate, business_impact_quality_metrics.change_failure_rate),
          manually_edited = TRUE,
          updated_at = CURRENT_TIMESTAMP`,
       [
@@ -1419,17 +1420,17 @@ router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, asyn
         nps_score, csat_score, support_ticket_volume, avg_resolution_time_hours,
         manually_edited, data_source)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE, 'manual')
-       ON DUPLICATE KEY UPDATE
-         monthly_revenue = COALESCE(VALUES(monthly_revenue), monthly_revenue),
-         active_users = COALESCE(VALUES(active_users), active_users),
-         churn_rate = COALESCE(VALUES(churn_rate), churn_rate),
-         feature_adoption_rate = COALESCE(VALUES(feature_adoption_rate), feature_adoption_rate),
-         new_customers = COALESCE(VALUES(new_customers), new_customers),
-         customer_lifetime_value = COALESCE(VALUES(customer_lifetime_value), customer_lifetime_value),
-         nps_score = COALESCE(VALUES(nps_score), nps_score),
-         csat_score = COALESCE(VALUES(csat_score), csat_score),
-         support_ticket_volume = COALESCE(VALUES(support_ticket_volume), support_ticket_volume),
-         avg_resolution_time_hours = COALESCE(VALUES(avg_resolution_time_hours), avg_resolution_time_hours),
+       ON CONFLICT (team_id, month_year) DO UPDATE SET
+         monthly_revenue = COALESCE(EXCLUDED.monthly_revenue, business_impact_business_kpis.monthly_revenue),
+         active_users = COALESCE(EXCLUDED.active_users, business_impact_business_kpis.active_users),
+         churn_rate = COALESCE(EXCLUDED.churn_rate, business_impact_business_kpis.churn_rate),
+         feature_adoption_rate = COALESCE(EXCLUDED.feature_adoption_rate, business_impact_business_kpis.feature_adoption_rate),
+         new_customers = COALESCE(EXCLUDED.new_customers, business_impact_business_kpis.new_customers),
+         customer_lifetime_value = COALESCE(EXCLUDED.customer_lifetime_value, business_impact_business_kpis.customer_lifetime_value),
+         nps_score = COALESCE(EXCLUDED.nps_score, business_impact_business_kpis.nps_score),
+         csat_score = COALESCE(EXCLUDED.csat_score, business_impact_business_kpis.csat_score),
+         support_ticket_volume = COALESCE(EXCLUDED.support_ticket_volume, business_impact_business_kpis.support_ticket_volume),
+         avg_resolution_time_hours = COALESCE(EXCLUDED.avg_resolution_time_hours, business_impact_business_kpis.avg_resolution_time_hours),
          manually_edited = TRUE,
          updated_at = CURRENT_TIMESTAMP`,
       [
@@ -1473,20 +1474,20 @@ router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req
         user_growth_rate, total_user_base, is_holiday_season, marketing_spend,
         major_incident_count, downtime_minutes, notes, manually_edited)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-       ON DUPLICATE KEY UPDATE
-         team_size = COALESCE(VALUES(team_size), team_size),
-         sprint_length_days = COALESCE(VALUES(sprint_length_days), sprint_length_days),
-         working_days = COALESCE(VALUES(working_days), working_days),
-         feature_release_count = COALESCE(VALUES(feature_release_count), feature_release_count),
-         bug_fix_count = COALESCE(VALUES(bug_fix_count), bug_fix_count),
-         tech_debt_items_resolved = COALESCE(VALUES(tech_debt_items_resolved), tech_debt_items_resolved),
-         user_growth_rate = COALESCE(VALUES(user_growth_rate), user_growth_rate),
-         total_user_base = COALESCE(VALUES(total_user_base), total_user_base),
-         is_holiday_season = COALESCE(VALUES(is_holiday_season), is_holiday_season),
-         marketing_spend = COALESCE(VALUES(marketing_spend), marketing_spend),
-         major_incident_count = COALESCE(VALUES(major_incident_count), major_incident_count),
-         downtime_minutes = COALESCE(VALUES(downtime_minutes), downtime_minutes),
-         notes = COALESCE(VALUES(notes), notes),
+       ON CONFLICT (team_id, month_year) DO UPDATE SET
+         team_size = COALESCE(EXCLUDED.team_size, business_impact_context.team_size),
+         sprint_length_days = COALESCE(EXCLUDED.sprint_length_days, business_impact_context.sprint_length_days),
+         working_days = COALESCE(EXCLUDED.working_days, business_impact_context.working_days),
+         feature_release_count = COALESCE(EXCLUDED.feature_release_count, business_impact_context.feature_release_count),
+         bug_fix_count = COALESCE(EXCLUDED.bug_fix_count, business_impact_context.bug_fix_count),
+         tech_debt_items_resolved = COALESCE(EXCLUDED.tech_debt_items_resolved, business_impact_context.tech_debt_items_resolved),
+         user_growth_rate = COALESCE(EXCLUDED.user_growth_rate, business_impact_context.user_growth_rate),
+         total_user_base = COALESCE(EXCLUDED.total_user_base, business_impact_context.total_user_base),
+         is_holiday_season = COALESCE(EXCLUDED.is_holiday_season, business_impact_context.is_holiday_season),
+         marketing_spend = COALESCE(EXCLUDED.marketing_spend, business_impact_context.marketing_spend),
+         major_incident_count = COALESCE(EXCLUDED.major_incident_count, business_impact_context.major_incident_count),
+         downtime_minutes = COALESCE(EXCLUDED.downtime_minutes, business_impact_context.downtime_minutes),
+         notes = COALESCE(EXCLUDED.notes, business_impact_context.notes),
          manually_edited = TRUE,
          updated_at = CURRENT_TIMESTAMP`,
       [
@@ -1607,14 +1608,14 @@ router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateTo
              (id, team_id, quality_metric, business_kpi, pearson_correlation, p_value,
               sample_size, correlation_strength, is_significant, start_month, end_month, calculated_at)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-             ON DUPLICATE KEY UPDATE
-               pearson_correlation = VALUES(pearson_correlation),
-               p_value = VALUES(p_value),
-               sample_size = VALUES(sample_size),
-               correlation_strength = VALUES(correlation_strength),
-               is_significant = VALUES(is_significant),
-               start_month = VALUES(start_month),
-               end_month = VALUES(end_month),
+             ON CONFLICT (team_id, quality_metric, business_kpi) DO UPDATE SET
+               pearson_correlation = EXCLUDED.pearson_correlation,
+               p_value = EXCLUDED.p_value,
+               sample_size = EXCLUDED.sample_size,
+               correlation_strength = EXCLUDED.correlation_strength,
+               is_significant = EXCLUDED.is_significant,
+               start_month = EXCLUDED.start_month,
+               end_month = EXCLUDED.end_month,
                calculated_at = NOW(),
                updated_at = CURRENT_TIMESTAMP`,
             [
@@ -1634,12 +1635,12 @@ router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateTo
        (id, team_id, months_with_quality_data, months_with_kpi_data, months_with_paired_data,
         earliest_month, latest_month, is_correlation_ready, last_validated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, TRUE, NOW())
-       ON DUPLICATE KEY UPDATE
-         months_with_quality_data = VALUES(months_with_quality_data),
-         months_with_kpi_data = VALUES(months_with_kpi_data),
-         months_with_paired_data = VALUES(months_with_paired_data),
-         earliest_month = VALUES(earliest_month),
-         latest_month = VALUES(latest_month),
+       ON CONFLICT (team_id) DO UPDATE SET
+         months_with_quality_data = EXCLUDED.months_with_quality_data,
+         months_with_kpi_data = EXCLUDED.months_with_kpi_data,
+         months_with_paired_data = EXCLUDED.months_with_paired_data,
+         earliest_month = EXCLUDED.earliest_month,
+         latest_month = EXCLUDED.latest_month,
          is_correlation_ready = TRUE,
          last_validated_at = NOW(),
          updated_at = CURRENT_TIMESTAMP`,
@@ -1693,15 +1694,15 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
             mttr_hours, deployment_frequency, lead_time_days, code_quality_score,
             change_failure_rate, manually_edited)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-           ON DUPLICATE KEY UPDATE
-             test_coverage = COALESCE(VALUES(test_coverage), test_coverage),
-             defect_density = COALESCE(VALUES(defect_density), defect_density),
-             defect_escape_rate = COALESCE(VALUES(defect_escape_rate), defect_escape_rate),
-             mttr_hours = COALESCE(VALUES(mttr_hours), mttr_hours),
-             deployment_frequency = COALESCE(VALUES(deployment_frequency), deployment_frequency),
-             lead_time_days = COALESCE(VALUES(lead_time_days), lead_time_days),
-             code_quality_score = COALESCE(VALUES(code_quality_score), code_quality_score),
-             change_failure_rate = COALESCE(VALUES(change_failure_rate), change_failure_rate),
+           ON CONFLICT (team_id, month_year) DO UPDATE SET
+             test_coverage = COALESCE(EXCLUDED.test_coverage, business_impact_quality_metrics.test_coverage),
+             defect_density = COALESCE(EXCLUDED.defect_density, business_impact_quality_metrics.defect_density),
+             defect_escape_rate = COALESCE(EXCLUDED.defect_escape_rate, business_impact_quality_metrics.defect_escape_rate),
+             mttr_hours = COALESCE(EXCLUDED.mttr_hours, business_impact_quality_metrics.mttr_hours),
+             deployment_frequency = COALESCE(EXCLUDED.deployment_frequency, business_impact_quality_metrics.deployment_frequency),
+             lead_time_days = COALESCE(EXCLUDED.lead_time_days, business_impact_quality_metrics.lead_time_days),
+             code_quality_score = COALESCE(EXCLUDED.code_quality_score, business_impact_quality_metrics.code_quality_score),
+             change_failure_rate = COALESCE(EXCLUDED.change_failure_rate, business_impact_quality_metrics.change_failure_rate),
              manually_edited = TRUE,
              updated_at = CURRENT_TIMESTAMP`,
           [
@@ -1721,14 +1722,14 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
            (id, team_id, month_year, monthly_revenue, active_users, churn_rate,
             feature_adoption_rate, nps_score, csat_score, support_ticket_volume, manually_edited)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-           ON DUPLICATE KEY UPDATE
-             monthly_revenue = COALESCE(VALUES(monthly_revenue), monthly_revenue),
-             active_users = COALESCE(VALUES(active_users), active_users),
-             churn_rate = COALESCE(VALUES(churn_rate), churn_rate),
-             feature_adoption_rate = COALESCE(VALUES(feature_adoption_rate), feature_adoption_rate),
-             nps_score = COALESCE(VALUES(nps_score), nps_score),
-             csat_score = COALESCE(VALUES(csat_score), csat_score),
-             support_ticket_volume = COALESCE(VALUES(support_ticket_volume), support_ticket_volume),
+           ON CONFLICT (team_id, month_year) DO UPDATE SET
+             monthly_revenue = COALESCE(EXCLUDED.monthly_revenue, business_impact_business_kpis.monthly_revenue),
+             active_users = COALESCE(EXCLUDED.active_users, business_impact_business_kpis.active_users),
+             churn_rate = COALESCE(EXCLUDED.churn_rate, business_impact_business_kpis.churn_rate),
+             feature_adoption_rate = COALESCE(EXCLUDED.feature_adoption_rate, business_impact_business_kpis.feature_adoption_rate),
+             nps_score = COALESCE(EXCLUDED.nps_score, business_impact_business_kpis.nps_score),
+             csat_score = COALESCE(EXCLUDED.csat_score, business_impact_business_kpis.csat_score),
+             support_ticket_volume = COALESCE(EXCLUDED.support_ticket_volume, business_impact_business_kpis.support_ticket_volume),
              manually_edited = TRUE,
              updated_at = CURRENT_TIMESTAMP`,
           [
@@ -1747,13 +1748,13 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
            (id, team_id, month_year, team_size, feature_release_count, user_growth_rate,
             total_user_base, is_holiday_season, downtime_minutes, manually_edited)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-           ON DUPLICATE KEY UPDATE
-             team_size = COALESCE(VALUES(team_size), team_size),
-             feature_release_count = COALESCE(VALUES(feature_release_count), feature_release_count),
-             user_growth_rate = COALESCE(VALUES(user_growth_rate), user_growth_rate),
-             total_user_base = COALESCE(VALUES(total_user_base), total_user_base),
-             is_holiday_season = COALESCE(VALUES(is_holiday_season), is_holiday_season),
-             downtime_minutes = COALESCE(VALUES(downtime_minutes), downtime_minutes),
+           ON CONFLICT (team_id, month_year) DO UPDATE SET
+             team_size = COALESCE(EXCLUDED.team_size, business_impact_context.team_size),
+             feature_release_count = COALESCE(EXCLUDED.feature_release_count, business_impact_context.feature_release_count),
+             user_growth_rate = COALESCE(EXCLUDED.user_growth_rate, business_impact_context.user_growth_rate),
+             total_user_base = COALESCE(EXCLUDED.total_user_base, business_impact_context.total_user_base),
+             is_holiday_season = COALESCE(EXCLUDED.is_holiday_season, business_impact_context.is_holiday_season),
+             downtime_minutes = COALESCE(EXCLUDED.downtime_minutes, business_impact_context.downtime_minutes),
              manually_edited = TRUE,
              updated_at = CURRENT_TIMESTAMP`,
           [
@@ -2103,8 +2104,8 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
         ks.*
       FROM teams t
       LEFT JOIN kpi_snapshots ks ON t.id = ks.team_id
-      WHERE t.company_id = ? AND t.is_active = 1
-      ORDER BY ks.snapshot_date DESC
+      WHERE t.company_id = ? AND t.is_active = TRUE
+      ORDER BY ks.snapshot_date DESC NULLS LAST
     `, [companyId]);
 
     // Get unique teams with their latest snapshot only (first row per team_id due to DESC ordering)
@@ -2150,8 +2151,8 @@ router.get('/company-summary', authenticateToken, async (req: any, res) => {
       FROM kpi_snapshots ks
       JOIN teams t ON ks.team_id = t.id
       WHERE t.company_id = ?
-        AND ks.snapshot_date >= DATE_SUB(NOW(), INTERVAL 14 DAY)
-        AND ks.snapshot_date < DATE_SUB(NOW(), INTERVAL 7 DAY)
+        AND ks.snapshot_date >= NOW() - INTERVAL '14 days'
+        AND ks.snapshot_date < NOW() - INTERVAL '7 days'
     `, [companyId]);
 
     const prevScore = historicalKpis[0]?.avg_score ? Number(historicalKpis[0].avg_score) : globalQaScore;
@@ -2563,18 +2564,18 @@ router.post('/company-insights', authenticateToken, async (req: AuthRequest, res
     await query(`
       INSERT INTO company_kpi_snapshots 
       (company_id, snapshot_date, engineering_health_score, delivery_performance_score, developer_wellness_index, tech_debt_status_score, pipeline_health_score, avg_qa_score, avg_test_coverage, avg_defect_escape_rate, avg_flakiness_rate, automation_coverage)
-      VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-      engineering_health_score = VALUES(engineering_health_score),
-      delivery_performance_score = VALUES(delivery_performance_score),
-      developer_wellness_index = VALUES(developer_wellness_index),
-      tech_debt_status_score = VALUES(tech_debt_status_score),
-      pipeline_health_score = VALUES(pipeline_health_score),
-      avg_qa_score = VALUES(avg_qa_score),
-      avg_test_coverage = VALUES(avg_test_coverage),
-      avg_defect_escape_rate = VALUES(avg_defect_escape_rate),
-      avg_flakiness_rate = VALUES(avg_flakiness_rate),
-      automation_coverage = VALUES(automation_coverage)
+      VALUES (?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (company_id, snapshot_date) DO UPDATE SET
+      engineering_health_score = EXCLUDED.engineering_health_score,
+      delivery_performance_score = EXCLUDED.delivery_performance_score,
+      developer_wellness_index = EXCLUDED.developer_wellness_index,
+      tech_debt_status_score = EXCLUDED.tech_debt_status_score,
+      pipeline_health_score = EXCLUDED.pipeline_health_score,
+      avg_qa_score = EXCLUDED.avg_qa_score,
+      avg_test_coverage = EXCLUDED.avg_test_coverage,
+      avg_defect_escape_rate = EXCLUDED.avg_defect_escape_rate,
+      avg_flakiness_rate = EXCLUDED.avg_flakiness_rate,
+      automation_coverage = EXCLUDED.automation_coverage
     `, [
       companyId,
       engineeringHealthScore, deliveryPerformanceScore, developerWellnessIndex, techDebtStatusScore, pipelineHealthScore,
@@ -2675,7 +2676,7 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     let sql = `
       SELECT 
         dps.developer_id,
-        CONCAT(u.first_name, ' ', u.last_name) as developer_name,
+        (u.first_name || ' ' || u.last_name) as developer_name,
         dps.snapshot_date,
         dps.ddps_score,
         dps.focus_time_hours,

@@ -30,7 +30,7 @@ router.get('/analytics/history', authenticateToken, async (req: any, res) => {
       JOIN teams t ON k.team_id = t.id
       WHERE t.company_id = ? 
         AND t.is_active = true
-        AND k.snapshot_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+        AND k.snapshot_date >= CURRENT_DATE - CAST(? AS INTEGER)
       GROUP BY k.snapshot_date
       ORDER BY k.snapshot_date ASC
     `;
@@ -82,7 +82,7 @@ router.get('/analytics/teams', authenticateToken, async (req: any, res) => {
       LEFT JOIN kpi_snapshots k ON t.id = k.team_id 
         AND k.snapshot_date = (SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE team_id = t.id)
       WHERE t.company_id = ? AND t.is_active = true
-      ORDER BY k.qa_score DESC
+      ORDER BY k.qa_score DESC NULLS LAST
     `, [companyId]);
 
     res.json({ teams });
@@ -122,7 +122,7 @@ router.get('/teams/:teamId/history', authenticateToken, async (req: AuthRequest,
     const history = await query<any[]>(
       `SELECT * FROM kpi_snapshots 
        WHERE team_id = ? 
-       AND snapshot_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       AND snapshot_date >= CURRENT_DATE - CAST(? AS INTEGER)
        ORDER BY snapshot_date DESC`,
       [req.params.teamId, parseInt(days as string)]
     );
@@ -199,7 +199,7 @@ router.get('/dashboard', async (req: AuthRequest, res) => {
        FROM test_executions te
        JOIN teams t ON te.team_id = t.id
        ${teamFilter}
-       WHERE te.execution_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)`,
+       WHERE te.execution_date >= CURRENT_DATE - 30`,
       params
     );
     const overallPassRate = passRateResult?.avg_pass_rate || 0;
@@ -238,11 +238,11 @@ router.get('/dashboard', async (req: AuthRequest, res) => {
        FROM teams t
        LEFT JOIN departments d ON t.department_id = d.id
        LEFT JOIN test_executions te ON t.id = te.team_id 
-         AND te.execution_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+         AND te.execution_date >= CURRENT_DATE - 30
        ${teamFilter}
        GROUP BY t.id, t.name, t.platform, d.name
        HAVING COUNT(DISTINCT te.id) > 0
-       ORDER BY pass_rate DESC
+       ORDER BY pass_rate DESC NULLS LAST
        LIMIT 5`,
       params
     );
@@ -344,7 +344,7 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     else if (qaScore > 0) status = 'critical';
 
     // Insert or update KPI snapshot for today
-    // Use INSERT ... ON DUPLICATE KEY UPDATE to handle existing entries for the same team/date
+    // Use INSERT ... ON CONFLICT DO UPDATE to handle existing entries for the same team/date
     //this will be the part that inserts into the DB from the aggregator
     await query(
       `INSERT INTO kpi_snapshots (
@@ -376,33 +376,33 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
         infrastructure_failures,
         sizing_accuracy,
         manually_edited
-      ) VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-      ON DUPLICATE KEY UPDATE
-        qa_score = VALUES(qa_score),
-        status = VALUES(status),
-        test_coverage = COALESCE(VALUES(test_coverage), test_coverage),
-        test_flakiness_rate = COALESCE(VALUES(test_flakiness_rate), test_flakiness_rate),
-        defect_density = COALESCE(VALUES(defect_density), defect_density),
-        defect_escape_rate = COALESCE(VALUES(defect_escape_rate), defect_escape_rate),
-        code_quality_score = COALESCE(VALUES(code_quality_score), code_quality_score),
-        avg_build_time_minutes = COALESCE(VALUES(avg_build_time_minutes), avg_build_time_minutes),
-        test_execution_time_minutes = COALESCE(VALUES(test_execution_time_minutes), test_execution_time_minutes),
-        deployment_frequency_per_week = COALESCE(VALUES(deployment_frequency_per_week), deployment_frequency_per_week),
-        lead_time_days = COALESCE(VALUES(lead_time_days), lead_time_days),
-        mttr_hours = COALESCE(VALUES(mttr_hours), mttr_hours),
-        parallel_test_efficiency = COALESCE(VALUES(parallel_test_efficiency), parallel_test_efficiency),
-        sprint_velocity = COALESCE(VALUES(sprint_velocity), sprint_velocity),
-        sprint_commitment_rate = COALESCE(VALUES(sprint_commitment_rate), sprint_commitment_rate),
-        sprint_carryover = COALESCE(VALUES(sprint_carryover), sprint_carryover),
-        first_time_pass_rate = COALESCE(VALUES(first_time_pass_rate), first_time_pass_rate),
-        blocked_time_hours = COALESCE(VALUES(blocked_time_hours), blocked_time_hours),
-        automation_coverage = COALESCE(VALUES(automation_coverage), automation_coverage),
-        automation_roi = COALESCE(VALUES(automation_roi), automation_roi),
-        change_failure_rate = COALESCE(VALUES(change_failure_rate), change_failure_rate),
-        mtbf_hours = COALESCE(VALUES(mtbf_hours), mtbf_hours),
-        system_availability = COALESCE(VALUES(system_availability), system_availability),
-        infrastructure_failures = COALESCE(VALUES(infrastructure_failures), infrastructure_failures),
-        sizing_accuracy = COALESCE(VALUES(sizing_accuracy), sizing_accuracy),
+      ) VALUES (?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+      ON CONFLICT (team_id, snapshot_date) DO UPDATE SET
+        qa_score = EXCLUDED.qa_score,
+        status = EXCLUDED.status,
+        test_coverage = COALESCE(EXCLUDED.test_coverage, kpi_snapshots.test_coverage),
+        test_flakiness_rate = COALESCE(EXCLUDED.test_flakiness_rate, kpi_snapshots.test_flakiness_rate),
+        defect_density = COALESCE(EXCLUDED.defect_density, kpi_snapshots.defect_density),
+        defect_escape_rate = COALESCE(EXCLUDED.defect_escape_rate, kpi_snapshots.defect_escape_rate),
+        code_quality_score = COALESCE(EXCLUDED.code_quality_score, kpi_snapshots.code_quality_score),
+        avg_build_time_minutes = COALESCE(EXCLUDED.avg_build_time_minutes, kpi_snapshots.avg_build_time_minutes),
+        test_execution_time_minutes = COALESCE(EXCLUDED.test_execution_time_minutes, kpi_snapshots.test_execution_time_minutes),
+        deployment_frequency_per_week = COALESCE(EXCLUDED.deployment_frequency_per_week, kpi_snapshots.deployment_frequency_per_week),
+        lead_time_days = COALESCE(EXCLUDED.lead_time_days, kpi_snapshots.lead_time_days),
+        mttr_hours = COALESCE(EXCLUDED.mttr_hours, kpi_snapshots.mttr_hours),
+        parallel_test_efficiency = COALESCE(EXCLUDED.parallel_test_efficiency, kpi_snapshots.parallel_test_efficiency),
+        sprint_velocity = COALESCE(EXCLUDED.sprint_velocity, kpi_snapshots.sprint_velocity),
+        sprint_commitment_rate = COALESCE(EXCLUDED.sprint_commitment_rate, kpi_snapshots.sprint_commitment_rate),
+        sprint_carryover = COALESCE(EXCLUDED.sprint_carryover, kpi_snapshots.sprint_carryover),
+        first_time_pass_rate = COALESCE(EXCLUDED.first_time_pass_rate, kpi_snapshots.first_time_pass_rate),
+        blocked_time_hours = COALESCE(EXCLUDED.blocked_time_hours, kpi_snapshots.blocked_time_hours),
+        automation_coverage = COALESCE(EXCLUDED.automation_coverage, kpi_snapshots.automation_coverage),
+        automation_roi = COALESCE(EXCLUDED.automation_roi, kpi_snapshots.automation_roi),
+        change_failure_rate = COALESCE(EXCLUDED.change_failure_rate, kpi_snapshots.change_failure_rate),
+        mtbf_hours = COALESCE(EXCLUDED.mtbf_hours, kpi_snapshots.mtbf_hours),
+        system_availability = COALESCE(EXCLUDED.system_availability, kpi_snapshots.system_availability),
+        infrastructure_failures = COALESCE(EXCLUDED.infrastructure_failures, kpi_snapshots.infrastructure_failures),
+        sizing_accuracy = COALESCE(EXCLUDED.sizing_accuracy, kpi_snapshots.sizing_accuracy),
         manually_edited = TRUE`,
       [
         teamId,
@@ -479,13 +479,13 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
         context_switches_per_day,
         happiness_score
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        pr_merge_time_avg = VALUES(pr_merge_time_avg),
-        code_review_time_avg = VALUES(code_review_time_avg),
-        focus_time_hours = VALUES(focus_time_hours),
-        meeting_time_hours = VALUES(meeting_time_hours),
-        context_switches_per_day = VALUES(context_switches_per_day),
-        happiness_score = VALUES(happiness_score)` ,
+      ON CONFLICT (team_id, developer_id) DO UPDATE SET
+        pr_merge_time_avg = EXCLUDED.pr_merge_time_avg,
+        code_review_time_avg = EXCLUDED.code_review_time_avg,
+        focus_time_hours = EXCLUDED.focus_time_hours,
+        meeting_time_hours = EXCLUDED.meeting_time_hours,
+        context_switches_per_day = EXCLUDED.context_switches_per_day,
+        happiness_score = EXCLUDED.happiness_score` ,
       [
         teamId,
         developerId,
@@ -539,7 +539,7 @@ router.get('/developer/:userId/history', authenticateToken, async (req: AuthRequ
     const history = await query<any[]>(
       `SELECT * FROM developer_metrics 
        WHERE user_id = ? 
-       AND recorded_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       AND recorded_date >= CURRENT_DATE - CAST(? AS INTEGER)
        ORDER BY recorded_date DESC`,
       [req.params.userId, parseInt(days as string)]
     );
@@ -851,12 +851,12 @@ router.post('/business-impact-config/:teamId', authenticateToken, async (req: Au
          (id, team_id, metric_name, quality_score, revenue_impact, customer_satisfaction,
           feature_adoption_rate, correlation_strength, manually_edited)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-         ON DUPLICATE KEY UPDATE
-           quality_score = VALUES(quality_score),
-           revenue_impact = VALUES(revenue_impact),
-           customer_satisfaction = VALUES(customer_satisfaction),
-           feature_adoption_rate = VALUES(feature_adoption_rate),
-           correlation_strength = VALUES(correlation_strength),
+         ON CONFLICT (team_id, metric_name) DO UPDATE SET
+           quality_score = EXCLUDED.quality_score,
+           revenue_impact = EXCLUDED.revenue_impact,
+           customer_satisfaction = EXCLUDED.customer_satisfaction,
+           feature_adoption_rate = EXCLUDED.feature_adoption_rate,
+           correlation_strength = EXCLUDED.correlation_strength,
            manually_edited = TRUE,
            updated_at = CURRENT_TIMESTAMP`,
         [
@@ -879,11 +879,11 @@ router.post('/business-impact-config/:teamId', authenticateToken, async (req: Au
          (id, team_id, month_year, quality_score, revenue_impact, customer_satisfaction,
           churn_rate, manually_edited)
          VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)
-         ON DUPLICATE KEY UPDATE
-           quality_score = VALUES(quality_score),
-           revenue_impact = VALUES(revenue_impact),
-           customer_satisfaction = VALUES(customer_satisfaction),
-           churn_rate = VALUES(churn_rate),
+         ON CONFLICT (team_id, month_year) DO UPDATE SET
+           quality_score = EXCLUDED.quality_score,
+           revenue_impact = EXCLUDED.revenue_impact,
+           customer_satisfaction = EXCLUDED.customer_satisfaction,
+           churn_rate = EXCLUDED.churn_rate,
            manually_edited = TRUE,
            updated_at = CURRENT_TIMESTAMP`,
         [

@@ -6,23 +6,15 @@
  */
 
 import 'dotenv/config';
-import mysql from 'mysql2/promise';
+import { pool, query as dbQuery } from '../../src/lib/db';
 
-// Database connection
+// Database connection (shared pool from src/lib/db, configured via DATABASE_URL)
 async function getConnection() {
-    const url = new URL(process.env.DATABASE_URL || 'mysql://root:l3v75th5n@localhost:3306/irongate_qa');
-    return mysql.createConnection({
-        host: url.hostname,
-        port: parseInt(url.port || '3306'),
-        user: url.username,
-        password: url.password,
-        database: url.pathname.slice(1),
-    });
+    return { end: () => pool.end() };
 }
 
-async function query(conn: mysql.Connection, sql: string, params?: any[]) {
-    const [rows] = await conn.execute(sql, params);
-    return rows as any[];
+async function query(_conn: unknown, sql: string, params?: any[]) {
+    return dbQuery<any[]>(sql, params);
 }
 
 // Calculate DDPS from raw metrics
@@ -94,12 +86,11 @@ export async function seedProductivitySnapshots() {
         const developers = await query(conn, `
           SELECT id FROM users 
           WHERE role IN ('engineer', 'qa_engineer', 'team_lead')
-          AND is_active = 1
+          AND is_active = TRUE
         `);
 
         if (!developers.length) {
             console.log('No developers found to seed');
-            await conn.end();
             return;
         }
 

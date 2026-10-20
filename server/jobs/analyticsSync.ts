@@ -195,7 +195,7 @@ async function seedFlakyTests(companyId: string, teamIds: string[]): Promise<voi
     SELECT tc.id, tc.team_id 
     FROM test_cases tc
     LEFT JOIN flaky_tests ft ON tc.id = ft.test_case_id
-    WHERE tc.is_flaky = 1 AND tc.team_id IN (?) AND ft.id IS NULL
+    WHERE tc.is_flaky = TRUE AND tc.team_id = ANY(?) AND ft.id IS NULL
   `, [teamIds]);
 
   for (const tc of flakyTestCases) {
@@ -430,11 +430,11 @@ async function updateDailyAnalytics(): Promise<void> {
       await query(`
         UPDATE pipeline_stages 
         SET 
-          avg_duration_seconds = avg_duration_seconds + FLOOR(RAND() * 20) - 10,
-          success_rate = LEAST(99.99, GREATEST(80, success_rate + (RAND() * 4) - 2)),
-          cpu_usage = LEAST(95, GREATEST(10, cpu_usage + (RAND() * 10) - 5)),
-          memory_usage = LEAST(95, GREATEST(10, memory_usage + (RAND() * 10) - 5)),
-          bottleneck_score = LEAST(100, GREATEST(0, bottleneck_score + (RAND() * 10) - 5))
+          avg_duration_seconds = avg_duration_seconds + FLOOR(RANDOM() * 20) - 10,
+          success_rate = LEAST(99.99, GREATEST(80, success_rate + (RANDOM() * 4) - 2)),
+          cpu_usage = LEAST(95, GREATEST(10, cpu_usage + (RANDOM() * 10) - 5)),
+          memory_usage = LEAST(95, GREATEST(10, memory_usage + (RANDOM() * 10) - 5)),
+          bottleneck_score = LEAST(100, GREATEST(0, bottleneck_score + (RANDOM() * 10) - 5))
         WHERE company_id = ?
       `, [companyId]);
 

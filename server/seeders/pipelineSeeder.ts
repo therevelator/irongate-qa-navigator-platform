@@ -290,16 +290,16 @@ async function updateExecutionSummary(companyId: string): Promise<void> {
     FROM pipeline_runs pr
     JOIN pipeline_stages ps ON pr.stage_id = ps.id
     WHERE pr.company_id = ?
-      AND DATE(pr.started_at) >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
+      AND DATE(pr.started_at) >= CURRENT_DATE - 7
     GROUP BY pr.company_id, ps.team_id, pr.stage_id, DATE(pr.started_at)
-    ON DUPLICATE KEY UPDATE
-      total_runs = VALUES(total_runs),
-      successful_runs = VALUES(successful_runs),
-      failed_runs = VALUES(failed_runs),
-      avg_duration_seconds = VALUES(avg_duration_seconds),
-      min_duration_seconds = VALUES(min_duration_seconds),
-      max_duration_seconds = VALUES(max_duration_seconds),
-      total_cost = VALUES(total_cost),
+    ON CONFLICT (company_id, stage_id, execution_date) DO UPDATE SET
+      total_runs = EXCLUDED.total_runs,
+      successful_runs = EXCLUDED.successful_runs,
+      failed_runs = EXCLUDED.failed_runs,
+      avg_duration_seconds = EXCLUDED.avg_duration_seconds,
+      min_duration_seconds = EXCLUDED.min_duration_seconds,
+      max_duration_seconds = EXCLUDED.max_duration_seconds,
+      total_cost = EXCLUDED.total_cost,
       updated_at = CURRENT_TIMESTAMP
   `, [companyId]);
 }

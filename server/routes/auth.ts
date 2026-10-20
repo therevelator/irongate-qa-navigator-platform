@@ -48,7 +48,7 @@ router.post('/register', async (req, res) => {
 
     // Check if user already exists
     const existingUser = await queryOne<any>(
-      'SELECT id FROM users WHERE email = ?',
+      'SELECT id FROM users WHERE LOWER(email) = LOWER(?)',
       [email]
     );
 
@@ -71,7 +71,7 @@ router.post('/register', async (req, res) => {
       // Create new company with human-readable ID
       companyId = generateCompanyId();
       await query(
-        `INSERT INTO companies (id, name, domain, is_active) VALUES (?, ?, ?, 1)`,
+        `INSERT INTO companies (id, name, domain, is_active) VALUES (?, ?, ?, true)`,
         [companyId, companyName, emailDomain]
       );
     } else {
@@ -90,7 +90,7 @@ router.post('/register', async (req, res) => {
       // Create new department tied to company
       departmentId = generateUUID();
       await query(
-        `INSERT INTO departments (id, company_id, name, is_active) VALUES (?, ?, ?, 1)`,
+        `INSERT INTO departments (id, company_id, name, is_active) VALUES (?, ?, ?, true)`,
         [departmentId, companyId, departmentName]
       );
     } else {
@@ -109,7 +109,7 @@ router.post('/register', async (req, res) => {
       // Create new team tied to company and department
       teamId = generateUUID();
       await query(
-        `INSERT INTO teams (id, company_id, department_id, name, is_active) VALUES (?, ?, ?, ?, 1)`,
+        `INSERT INTO teams (id, company_id, department_id, name, is_active) VALUES (?, ?, ?, ?, true)`,
         [teamId, companyId, departmentId, teamName]
       );
     } else {
@@ -192,7 +192,7 @@ router.post('/login', async (req, res) => {
     const user = await queryOne<any>(
       `SELECT id, email, password_hash, first_name, last_name, role, 
               company_id, department_id, primary_team_id, is_active
-       FROM users WHERE email = ?`,
+       FROM users WHERE LOWER(email) = LOWER(?)`,
       [email]
     );
 

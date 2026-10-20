@@ -16,18 +16,18 @@ jobs:
     runs-on: ubuntu-latest
     
     services:
-      mysql:
-        image: mysql:8.0
+      postgres:
+        image: postgres:16
         env:
-          MYSQL_ROOT_PASSWORD: testpassword
-          MYSQL_DATABASE: irongate_qa
+          POSTGRES_PASSWORD: testpassword
+          POSTGRES_DB: irongate_qa
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping"
+          --health-cmd="pg_isready -U postgres"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=3
+          --health-retries=5
 
     steps:
       - name: Checkout code
@@ -47,19 +47,17 @@ jobs:
 
       - name: Setup database
         env:
-          MYSQL_PWD: testpassword
+          PGPASSWORD: testpassword
         run: |
-          mysql -h 127.0.0.1 -u root irongate_qa < schema_updated.sql
-          mysql -h 127.0.0.1 -u root irongate_qa < local_seed_data.sql
-          mysql -h 127.0.0.1 -u root irongate_qa < local_users.sql
-          mysql -h 127.0.0.1 -u root irongate_qa < seed_teams_with_metrics.sql
+          psql -h 127.0.0.1 -U postgres -d irongate_qa -v ON_ERROR_STOP=1 -q -f supabase/migrations/20261020000000_initial_schema.sql
+          psql -h 127.0.0.1 -U postgres -d irongate_qa -v ON_ERROR_STOP=1 -q -f db_snapshots/latest_snapshot.postgres.sql
 
       - name: Create .env file
         run: |
           cat > .env << EOF
           DB_HOST=127.0.0.1
-          DB_PORT=3306
-          DB_USER=root
+          DB_PORT=5432
+          DB_USER=postgres
           DB_PASSWORD=testpassword
           DB_NAME=irongate_qa
           PORT=3000

@@ -28,7 +28,7 @@ async function calculateTestFlakinessFromPipeline(teamId: string, companyId: str
        WHERE ps.company_id = ?
          AND (ps.team_id = ? OR ps.team_id IS NULL)
          AND ps.name IN ('Unit Tests', 'Integration Tests', 'E2E Tests')
-         AND pr.started_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+         AND pr.started_at >= NOW() - INTERVAL '7 days'
        GROUP BY ps.name, pr.status, pr.commit_sha
        ORDER BY ps.name, pr.commit_sha`,
       [companyId, teamId]
@@ -173,7 +173,7 @@ const metricGenerators: Record<string, () => number> = {
 // Ensure today's snapshot exists for a team
 async function ensureTodaySnapshot(teamId: string): Promise<string> {
   const existing = await queryOne<any>(
-    'SELECT id FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURDATE()',
+    'SELECT id FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURRENT_DATE',
     [teamId]
   );
 
@@ -185,7 +185,7 @@ async function ensureTodaySnapshot(teamId: string): Promise<string> {
   const snapshotId = `kpi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
   await query(
     `INSERT INTO kpi_snapshots (id, team_id, snapshot_date, status, system_availability)
-     VALUES (?, ?, CURDATE(), 'warning', 99.9)`,
+     VALUES (?, ?, CURRENT_DATE, 'warning', 99.9)`,
     [snapshotId, teamId]
   );
   return snapshotId;
@@ -214,7 +214,7 @@ async function updateMetrics(teamId: string, metrics: string[]): Promise<number>
     }
 
     await query(
-      `UPDATE kpi_snapshots SET ${metric} = ? WHERE team_id = ? AND snapshot_date = CURDATE()`,
+      `UPDATE kpi_snapshots SET ${metric} = ? WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
       [value, teamId]
     );
     updated++;
@@ -227,7 +227,7 @@ async function recalculateQAScore(teamId: string): Promise<void> {
   const snapshot = await queryOne<any>(
     `SELECT test_coverage, automation_coverage, defect_density, code_quality_score,
             first_time_pass_rate, test_flakiness_rate
-     FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURDATE()`,
+     FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
     [teamId]
   );
 
@@ -245,7 +245,7 @@ async function recalculateQAScore(teamId: string): Promise<void> {
   const status = qaScore >= 85 ? 'good' : qaScore >= 70 ? 'warning' : 'critical';
 
   await query(
-    'UPDATE kpi_snapshots SET qa_score = ?, status = ? WHERE team_id = ? AND snapshot_date = CURDATE()',
+    'UPDATE kpi_snapshots SET qa_score = ?, status = ? WHERE team_id = ? AND snapshot_date = CURRENT_DATE',
     [qaScore, status, teamId]
   );
 }
@@ -256,12 +256,12 @@ async function getActiveTeams(): Promise<{ id: string; name: string }[]> {
   const teams = await query<any>(
     `SELECT id, name FROM teams 
      WHERE is_active = true 
-     AND (exclude_from_auto_sync = 0 OR exclude_from_auto_sync IS NULL)`
+     AND (exclude_from_auto_sync = FALSE OR exclude_from_auto_sync IS NULL)`
   );
 
   // Also check for teams with manually edited snapshots
   const manualTeams = await query<any>(
-    `SELECT DISTINCT team_id FROM kpi_snapshots WHERE manually_edited = 1`
+    `SELECT DISTINCT team_id FROM kpi_snapshots WHERE manually_edited = TRUE`
   );
   const manualTeamIds = new Set(manualTeams.map((t: any) => t.team_id));
 

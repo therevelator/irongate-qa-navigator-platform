@@ -61,9 +61,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
       SELECT t.*, 
              d.name as department,
              c.name as company_name,
-             CONCAT(u.first_name, ' ', u.last_name) as team_lead_name,
+             (u.first_name || ' ' || u.last_name) as team_lead_name,
              (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count,
-             k.qa_score as qaScore,
+             k.qa_score as "qaScore",
              k.status,
              k.test_coverage,
              k.test_flakiness_rate,
@@ -229,7 +229,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT t.*, 
               d.name as department_name,
               c.name as company_name,
-              CONCAT(u.first_name, ' ', u.last_name) as team_lead_name
+              (u.first_name || ' ' || u.last_name) as team_lead_name
        FROM teams t
        JOIN departments d ON t.department_id = d.id
        JOIN companies c ON t.company_id = c.id
@@ -391,7 +391,7 @@ router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) 
         infrastructure_failures,
         qa_score
        FROM kpi_snapshots
-       WHERE team_id = ? AND snapshot_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       WHERE team_id = ? AND snapshot_date >= CURRENT_DATE - CAST(? AS INTEGER)
        ORDER BY snapshot_date ASC`,
       [req.params.id, numDays]
     );
@@ -447,7 +447,7 @@ router.get('/:id/ai-suggestions', authenticateToken, async (req: AuthRequest, re
               t.ai_enabled,
               d.name as department_name,
               c.name as company_name,
-              CONCAT(u.first_name, ' ', u.last_name) as team_lead_name
+              (u.first_name || ' ' || u.last_name) as team_lead_name
        FROM teams t
        JOIN departments d ON t.department_id = d.id
        JOIN companies c ON t.company_id = c.id
@@ -727,7 +727,7 @@ router.get('/:id/developer-ai-suggestions', authenticateToken, async (req: AuthR
     // Get developer metrics for this team (only for users with developer_insights_enabled)
     const developerMetrics = await query<any>(
       `SELECT dm.*, 
-              CONCAT(u.first_name, ' ', u.last_name) as name,
+              (u.first_name || ' ' || u.last_name) as name,
               u.email,
               u.developer_insights_enabled
        FROM developer_metrics dm
@@ -923,13 +923,14 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
 
     const [result] = await query<any>(
       `INSERT INTO teams (company_id, department_id, name, description, platform, lead_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?)
+       RETURNING id`,
       [req.companyId, departmentId, name, description, platform, leadId]
     );
 
     const team = await queryOne<any>(
       'SELECT * FROM teams WHERE id = ?',
-      [result.insertId]
+      [result.id]
     );
 
     res.status(201).json({ team });

@@ -163,7 +163,7 @@ router.post('/users', authenticateToken, async (req: any, res) => {
 
     // Check if user already exists
     const existingUser = await queryOne<any>(
-      'SELECT id FROM users WHERE email = ?',
+      'SELECT id FROM users WHERE LOWER(email) = LOWER(?)',
       [email]
     );
 
@@ -496,7 +496,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
 
     // Check if team with same name exists in this department for this company (including inactive)
     const existingTeam = await queryOne<any>(
-      'SELECT id, is_active FROM teams WHERE company_id = ? AND department_id = ? AND name = ?',
+      'SELECT id, is_active FROM teams WHERE company_id = ? AND department_id = ? AND LOWER(name) = LOWER(?)',
       [companyId, targetDepartmentId, name]
     );
 
@@ -537,7 +537,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
           sprint_carryover, first_time_pass_rate, blocked_time_hours,
           automation_coverage, automation_roi, change_failure_rate,
           mtbf_hours, system_availability, infrastructure_failures
-        ) VALUES (?, CURDATE(), 0, 'warning',
+        ) VALUES (?, CURRENT_DATE, 0, 'warning',
           0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99.9, 0)`,
         [teamId]
       );
@@ -758,7 +758,7 @@ router.post('/departments', authenticateToken, async (req: any, res) => {
 
     // Check for duplicate name
     const existing = await queryOne<any>(
-      'SELECT id FROM departments WHERE name = ? AND company_id = ?',
+      'SELECT id FROM departments WHERE LOWER(name) = LOWER(?) AND company_id = ?',
       [name.trim(), companyId]
     );
 
@@ -818,7 +818,7 @@ router.put('/departments/:id', authenticateToken, async (req: any, res) => {
 
     // Check for duplicate name (excluding current department)
     const existing = await queryOne<any>(
-      'SELECT id FROM departments WHERE name = ? AND company_id = ? AND id != ?',
+      'SELECT id FROM departments WHERE LOWER(name) = LOWER(?) AND company_id = ? AND id != ?',
       [name.trim(), companyId, id]
     );
 
@@ -1035,16 +1035,16 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
         // Delete if empty
         await query(
           `DELETE FROM configs WHERE company_id = ? AND config_key = ? 
-           AND (department_id = ? OR (department_id IS NULL AND ? IS NULL))
-           AND (team_id = ? OR (team_id IS NULL AND ? IS NULL))`,
+           AND (department_id = ? OR (department_id IS NULL AND CAST(? AS TEXT) IS NULL))
+           AND (team_id = ? OR (team_id IS NULL AND CAST(? AS TEXT) IS NULL))`,
           [companyId, key, deptId, deptId, tmId, tmId]
         );
       } else {
         // Check if exists
         const existing = await queryOne<any>(
           `SELECT id FROM configs WHERE company_id = ? AND config_key = ?
-           AND (department_id = ? OR (department_id IS NULL AND ? IS NULL))
-           AND (team_id = ? OR (team_id IS NULL AND ? IS NULL))`,
+           AND (department_id = ? OR (department_id IS NULL AND CAST(? AS TEXT) IS NULL))
+           AND (team_id = ? OR (team_id IS NULL AND CAST(? AS TEXT) IS NULL))`,
           [companyId, key, deptId, deptId, tmId, tmId]
         );
 
@@ -1056,7 +1056,7 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
         } else {
           await query(
             `INSERT INTO configs (id, company_id, department_id, team_id, config_key, config_value)
-             VALUES (UUID(), ?, ?, ?, ?, ?)`,
+             VALUES (gen_random_uuid(), ?, ?, ?, ?, ?)`,
             [companyId, deptId, tmId, key, String(value)]
           );
         }
