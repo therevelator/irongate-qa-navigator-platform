@@ -206,3 +206,34 @@ export function computeDdps(input: DdpsInputs): DdpsResult {
     scheduledHours,
   };
 }
+
+// ============================================================================
+// BURNOUT RISK (developer or team averages)
+// ============================================================================
+
+export type BurnoutRiskLevel = 'low' | 'moderate' | 'high';
+
+export const BURNOUT_DEFINITION =
+  'High when focus time < 3 h/day, meetings > 5 h/day or context switches > 10/day; ' +
+  'moderate when focus time < 4 h/day, meetings > 4 h/day or context switches > 7/day; otherwise low. ' +
+  'Not rated when any of the three inputs is missing.';
+
+/** The one burnout-risk rule (developer values or team averages). Null when any input is missing. */
+export function computeBurnoutRisk(input: {
+  focus_time_hours?: Num;
+  meeting_time_hours?: Num;
+  context_switches_per_day?: Num;
+}): BurnoutRiskLevel | null {
+  const focus = toNum(input.focus_time_hours);
+  const meetings = toNum(input.meeting_time_hours);
+  const switches = toNum(input.context_switches_per_day);
+  if (focus === null || meetings === null || switches === null) return null;
+  if (focus < 3 || meetings > 5 || switches > 10) return 'high';
+  if (focus < 4 || meetings > 4 || switches > 7) return 'moderate';
+  return 'low';
+}
+
+/** Capitalised label used in API responses ('High' | 'Moderate' | 'Low' | 'Unknown'). */
+export function burnoutRiskLabel(level: BurnoutRiskLevel | null): 'High' | 'Moderate' | 'Low' | 'Unknown' {
+  return level === 'high' ? 'High' : level === 'moderate' ? 'Moderate' : level === 'low' ? 'Low' : 'Unknown';
+}

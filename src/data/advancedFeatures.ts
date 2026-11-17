@@ -1,7 +1,8 @@
 // Shared data models for the analytics features, plus the single shared definitions
 // of the developer-level derived metrics (DDPS, burnout risk, workload balance).
 // No mock or random data generators live here: every displayed value must come from the API.
-import { computeDdps } from '../../server/lib/metricFormulas';
+import { computeBurnoutRisk, computeDdps } from '../../server/lib/metricFormulas';
+import type { BurnoutRiskLevel } from '../../server/lib/metricFormulas';
 
 export interface TestCase {
   id: string;
@@ -152,19 +153,15 @@ export const ddpsBand = (score: number | null | undefined): { label: string; ton
   return { label: 'Low', tone: 'bad' };
 };
 
-export type BurnoutRisk = 'low' | 'moderate' | 'high';
+export type BurnoutRisk = BurnoutRiskLevel;
 
-export const BURNOUT_DEFINITION =
-  'Points: meetings >4h/day +30 (>2.5h +15); focus <3h/day +30 (<4h +15); context switches >8/day +25 (>5 +10). High ≥50, moderate ≥25, otherwise low.';
+// The burnout-risk rule lives in server/lib/metricFormulas.ts (shared with the API).
+export { BURNOUT_DEFINITION } from '../../server/lib/metricFormulas';
 
-/** Burnout risk from workload inputs only (does not reuse the derived workload-balance score). */
-export const calculateBurnoutRisk = (d: Pick<DeveloperInputs, 'focus_time_hours' | 'meeting_time_hours' | 'context_switches_per_day'>): BurnoutRisk => {
-  let points = 0;
-  if (d.meeting_time_hours > 4) points += 30; else if (d.meeting_time_hours > 2.5) points += 15;
-  if (d.focus_time_hours < 3) points += 30; else if (d.focus_time_hours < 4) points += 15;
-  if (d.context_switches_per_day > 8) points += 25; else if (d.context_switches_per_day > 5) points += 10;
-  return points >= 50 ? 'high' : points >= 25 ? 'moderate' : 'low';
-};
+/** Burnout risk from workload inputs only — thin wrapper over the shared computeBurnoutRisk(). */
+export const calculateBurnoutRisk = (d: Pick<DeveloperInputs, 'focus_time_hours' | 'meeting_time_hours' | 'context_switches_per_day'>): BurnoutRisk =>
+  // Inputs are finite numbers here, so the shared rule always returns a level.
+  computeBurnoutRisk(d) ?? 'low';
 
 export const burnoutTone = (r: BurnoutRisk): 'good' | 'warn' | 'bad' => (r === 'low' ? 'good' : r === 'moderate' ? 'warn' : 'bad');
 

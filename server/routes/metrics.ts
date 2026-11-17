@@ -4,6 +4,9 @@ import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam } from '../middleware/access';
 import {
+  BURNOUT_DEFINITION,
+  burnoutRiskLabel,
+  computeBurnoutRisk,
   computeQaScore,
   QA_SCORE_FORMULA,
   QA_SCORE_WEIGHTS,
@@ -706,12 +709,9 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
     const focusTime = toNum(devMetrics?.avg_focus_time);
     const meetingTime = toNum(devMetrics?.avg_meeting_time);
     const contextSwitches = toNum(devMetrics?.avg_context_switches);
-    let burnoutRisk = 'Unknown';
-    if (focusTime !== null && meetingTime !== null && contextSwitches !== null) {
-      if (focusTime < 3 || meetingTime > 5 || contextSwitches > 10) burnoutRisk = 'High';
-      else if (focusTime < 4 || meetingTime > 4 || contextSwitches > 7) burnoutRisk = 'Moderate';
-      else burnoutRisk = 'Low';
-    }
+    const burnoutRisk = burnoutRiskLabel(computeBurnoutRisk({
+      focus_time_hours: focusTime, meeting_time_hours: meetingTime, context_switches_per_day: contextSwitches
+    }));
     const pipelineSuccess = toNum(pipelineMetrics?.avg_success_rate);
     const totalDebtItems = Number(debtSummary?.total_items ?? 0);
     const openDebtItems = Number(debtSummary?.open_items ?? 0);
@@ -772,7 +772,7 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
         value: burnoutRisk,
         unit: 'level',
         category: 'composite',
-        formula: 'High: focus<3h OR meetings>5h OR switches>10 | Moderate: focus<4h OR meetings>4h OR switches>7 | Low: otherwise',
+        formula: BURNOUT_DEFINITION,
         components: { avg_focus_time: focusTime, avg_meeting_time: meetingTime, avg_context_switches: contextSwitches },
         source: 'calculated from developer_metrics'
       },

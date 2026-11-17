@@ -6,7 +6,7 @@ import { aiLimiter } from '../middleware/rateLimit';
 import { seedAllAnalyticsData, updateDailyAnalytics } from '../jobs/analyticsSync';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
-import { toNum, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps } from '../lib/metricFormulas';
+import { toNum, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
 
 const router = express.Router();
@@ -359,7 +359,7 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
         pm.response_time_p99_ms as response_time_p99,
         pm.throughput_per_minute as throughput,
         pm.error_rate,
-        pm.recorded_date as timestamp
+        to_char(pm.recorded_date, 'YYYY-MM-DD') as timestamp
       FROM performance_metrics pm
       WHERE pm.company_id = ?
         AND pm.recorded_date >= CURRENT_DATE - CAST(? AS INTEGER)
@@ -384,6 +384,8 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
       response_time_p99: num(m.response_time_p99),
       throughput: num(m.throughput), // requests per MINUTE (column throughput_per_minute)
       error_rate: num(m.error_rate),
+      // Calendar date ('YYYY-MM-DD'), formatted in SQL so no timezone shift can occur.
+      recorded_date: m.timestamp,
       timestamp: m.timestamp
     }));
 
@@ -890,12 +892,20 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    const stageSelect = `
-        SELECT
-          ps.id, ps.name, ps.stage_order,
-          ps.avg_duration_seconds as duration, ps.success_rate,
-          ps.cpu_usage, ps.memory_usage, ps.cost_per_run as cost, ps.bottleneck_score
-        FROM pipeline_stages ps`;
+    // One row per stage name: if duplicates exist for the same company/team/name,
+    // only the most recently updated one is returned.
+    const stageSelect = (where: string) => `
+        SELECT * FROM (
+          SELECT DISTINCT ON (ps.name)
+            ps.id, ps.name, ps.stage_order,
+            ps.avg_duration_seconds as duration, ps.success_rate,
+            ps.cpu_usage, ps.memory_usage, ps.cost_per_run as cost, ps.bottleneck_score,
+            ps.updated_at
+          FROM pipeline_stages ps
+          WHERE ${where}
+          ORDER BY ps.name, ps.updated_at DESC NULLS LAST, ps.created_at DESC NULLS LAST, ps.id
+        ) latest
+        ORDER BY latest.stage_order ASC, latest.name ASC`;
 
     let stages: any[] = [];
     // 'team' = the team's own stages; 'company_default' = the team has none, so the
@@ -903,18 +913,18 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
     let stagesSource: 'team' | 'company_default' = 'company_default';
 
     if (teamId) {
-      stages = await query<any>(`${stageSelect}
-        WHERE ps.company_id = ? AND ps.team_id = ? AND ps.is_active = true
-        ORDER BY ps.stage_order ASC
-      `, [companyId, teamId]);
+      stages = await query<any>(
+        stageSelect('ps.company_id = ? AND ps.team_id = ? AND ps.is_active = true'),
+        [companyId, teamId]
+      );
       if (stages.length > 0) stagesSource = 'team';
     }
 
     if (stages.length === 0) {
-      stages = await query<any>(`${stageSelect}
-        WHERE ps.company_id = ? AND ps.team_id IS NULL AND ps.is_active = true
-        ORDER BY ps.stage_order ASC
-      `, [companyId]);
+      stages = await query<any>(
+        stageSelect('ps.company_id = ? AND ps.team_id IS NULL AND ps.is_active = true'),
+        [companyId]
+      );
     }
 
     // Duration z-score over stages that have a recorded duration
@@ -951,7 +961,8 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
           memory: num(s.memory_usage),
           cost: num(s.cost)
         },
-        bottleneck_score: bottleneck
+        bottleneck_score: bottleneck,
+        updated_at: s.updated_at ?? null
       };
     });
 
@@ -2292,17 +2303,11 @@ async function computeCompanyMetrics(companyId: string) {
   const meetingTime = developerCount > 0 ? num(dev?.avg_meetings) : null;
   const contextSwitches = developerCount > 0 ? num(dev?.avg_switches) : null;
 
-  // Burnout risk: same rule as "Team Burnout Risk" in /metrics/team/:id/all
-  //   High: focus < 3h OR meetings > 5h OR switches > 10
-  //   Moderate: focus < 4h OR meetings > 4h OR switches > 7
-  //   Low: otherwise
-  // Scored High 20 / Moderate 60 / Low 100; null when any input is missing.
-  let burnoutRisk: 'High' | 'Moderate' | 'Low' | 'Unknown' = 'Unknown';
-  if (focusTime !== null && meetingTime !== null && contextSwitches !== null) {
-    if (focusTime < 3 || meetingTime > 5 || contextSwitches > 10) burnoutRisk = 'High';
-    else if (focusTime < 4 || meetingTime > 4 || contextSwitches > 7) burnoutRisk = 'Moderate';
-    else burnoutRisk = 'Low';
-  }
+  // Burnout risk: the shared rule (metricFormulas.computeBurnoutRisk / BURNOUT_DEFINITION),
+  // applied to the company averages. Scored High 20 / Moderate 60 / Low 100; null when any input is missing.
+  const burnoutRisk = burnoutRiskLabel(computeBurnoutRisk({
+    focus_time_hours: focusTime, meeting_time_hours: meetingTime, context_switches_per_day: contextSwitches
+  }));
   const burnoutRiskScore: number | null =
     burnoutRisk === 'High' ? 20 : burnoutRisk === 'Moderate' ? 60 : burnoutRisk === 'Low' ? 100 : null;
   const focusTimeScore = focusTime === null ? null
