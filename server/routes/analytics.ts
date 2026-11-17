@@ -25,6 +25,43 @@ const getTeamIdForRole = (userRole: string, userPrimaryTeamId: string | undefine
 };
 
 // ============================================================================
+// SHARED NUMERIC HELPERS
+// ============================================================================
+
+/** Synthetic/sample-data generators are off unless explicitly enabled. */
+const isSyntheticDataEnabled = () => process.env.ENABLE_SYNTHETIC_DATA === 'true';
+
+/**
+ * Parse a DB/body value to a number, keeping 0 as a real value.
+ * null / undefined / '' / non-finite -> null (missing data is never invented).
+ */
+function num(v: any): number | null {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function roundTo(v: number | null, dp = 1): number | null {
+  if (v === null) return null;
+  const f = Math.pow(10, dp);
+  return Math.round(v * f) / f;
+}
+
+/** Mean of the non-null values; null when there are none (never 0 for "no data"). */
+function meanOf(values: Array<number | null>): number | null {
+  const xs = values.filter((v): v is number => v !== null);
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+}
+
+/** Weighted mean over the components that have data, re-normalising the weights. */
+function weightedMeanOf(parts: Array<{ value: number | null; weight: number }>): number | null {
+  const avail = parts.filter(p => p.value !== null);
+  const totalWeight = avail.reduce((s, p) => s + p.weight, 0);
+  if (!avail.length || totalWeight <= 0) return null;
+  return avail.reduce((s, p) => s + (p.value as number) * p.weight, 0) / totalWeight;
+}
+
+// ============================================================================
 // TEST EXECUTION TIMELINE
 // ============================================================================
 
@@ -72,8 +109,11 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
       test_suite: e.test_suite,
       status: e.status,
       start_time: e.start_time,
-      end_time: e.end_time || new Date(new Date(e.start_time).getTime() + (e.duration || 0) * 1000).toISOString(),
-      duration: e.duration || 0,
+      // Derive the end time from start + duration only when a duration was recorded.
+      end_time: e.end_time || (num(e.duration) !== null
+        ? new Date(new Date(e.start_time).getTime() + (num(e.duration) as number) * 1000).toISOString()
+        : null),
+      duration: num(e.duration),
       assigned_to: e.assigned_to || 'Unassigned',
       dependencies: typeof e.dependencies === 'string' ? JSON.parse(e.dependencies) : (e.dependencies || [])
     }));
@@ -139,10 +179,10 @@ router.get('/test-cases', authenticateToken, async (req: any, res) => {
       requirement_id: tc.requirement_id || '',
       status: tc.status,
       last_executed: tc.last_executed,
-      pass_rate: Number(tc.pass_rate) || 0,
-      execution_count: tc.execution_count || 0,
-      avg_duration: Number(tc.avg_duration) || 0,
-      effectiveness_score: Number(tc.effectiveness_score) || 0,
+      pass_rate: num(tc.pass_rate),
+      execution_count: num(tc.execution_count),
+      avg_duration: num(tc.avg_duration),
+      effectiveness_score: num(tc.effectiveness_score),
       tags: tc.tags ? tc.tags.split(',') : []
     }));
 
@@ -223,6 +263,9 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
         ft.failure_pattern,
         ft.failure_count as occurrences,
         ft.pass_count,
+        ft.total_runs,
+        ft.root_cause,
+        ft.suggested_fix,
         ft.last_flaky_at as last_occurrence,
         ft.created_at as first_detected
       FROM flaky_tests ft
@@ -240,144 +283,55 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
 
     const flakyTests = await query<any>(sql, params);
 
-    // If no flaky tests found, return sample data
-    let result = [];
-    if (flakyTests.length === 0) {
-      // Generate sample flaky test data
-      result = [
-        {
-          id: 'sample-1',
-          test_name: 'Login Form Validation',
-          flakiness_score: 85.3,
-          failure_pattern: 'timing',
-          occurrences: 47,
-          first_detected: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000).toISOString(),
-          last_occurrence: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
-          suggested_fix: 'Add explicit waits or increase timeout thresholds',
-          root_cause: 'timeout keyword detected in error logs',
-          history: Array.from({ length: 20 }, (_, i) => ({
-            date: new Date(Date.now() - (20 - i) * 24 * 60 * 60 * 1000).toISOString(),
-            passed: Math.random() > 0.3 // 70% failure rate for flaky test
-          }))
-        },
-        {
-          id: 'sample-2',
-          test_name: 'API Response Parsing',
-          flakiness_score: 72.1,
-          failure_pattern: 'environment',
-          occurrences: 34,
-          first_detected: new Date(Date.now() - 12 * 24 * 60 * 60 * 1000).toISOString(),
-          last_occurrence: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000).toISOString(),
-          suggested_fix: 'Ensure consistent environment setup with health checks',
-          root_cause: 'environment keyword detected in error logs',
-          history: Array.from({ length: 20 }, (_, i) => ({
-            date: new Date(Date.now() - (20 - i) * 24 * 60 * 60 * 1000).toISOString(),
-            passed: Math.random() > 0.4 // 60% failure rate
-          }))
-        },
-        {
-          id: 'sample-3',
-          test_name: 'Database Connection Test',
-          flakiness_score: 63.8,
-          failure_pattern: 'network',
-          occurrences: 28,
-          first_detected: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
-          last_occurrence: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
-          suggested_fix: 'Mock external APIs or add retry logic',
-          root_cause: 'ECONNREFUSED keyword detected in error logs',
-          history: Array.from({ length: 20 }, (_, i) => ({
-            date: new Date(Date.now() - (20 - i) * 24 * 60 * 60 * 1000).toISOString(),
-            passed: Math.random() > 0.45 // 55% failure rate
-          }))
-        },
-        {
-          id: 'sample-4',
-          test_name: 'User Data Validation',
-          flakiness_score: 58.2,
-          failure_pattern: 'data',
-          occurrences: 19,
-          first_detected: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
-          last_occurrence: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
-          suggested_fix: 'Use isolated fixtures and database transactions per test',
-          root_cause: 'assertion failed keyword detected in error logs',
-          history: Array.from({ length: 20 }, (_, i) => ({
-            date: new Date(Date.now() - (20 - i) * 24 * 60 * 60 * 1000).toISOString(),
-            passed: Math.random() > 0.5 // 50% failure rate
-          }))
-        },
-        {
-          id: 'sample-5',
-          test_name: 'File Upload Integration',
-          flakiness_score: 45.7,
-          failure_pattern: 'unknown',
-          occurrences: 12,
-          first_detected: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
-          last_occurrence: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-          suggested_fix: 'Collect more failure data and analyze patterns',
-          root_cause: 'No matching pattern found',
-          history: Array.from({ length: 20 }, (_, i) => ({
-            date: new Date(Date.now() - (20 - i) * 24 * 60 * 60 * 1000).toISOString(),
-            passed: Math.random() > 0.55 // 45% failure rate
-          }))
-        }
-      ];
-    } else {
-      // Generate history from execution records
-      result = await Promise.all(flakyTests.map(async (ft: any) => {
-        // Get recent execution history
-        const history = await query<any>(`
-          SELECT executed_at as date, status
-          FROM test_executions
-          WHERE test_case_id = ?
-          ORDER BY executed_at DESC
-          LIMIT 20
-        `, [ft.test_case_id || ft.id]);
+    // No rows -> empty list. The UI shows an empty state; nothing is fabricated.
+    // Generic guidance per stored failure_pattern label. This is NOT derived from
+    // error logs (no log classifier runs), so it is always marked unverified.
+    const patternGuidance: Record<string, string> = {
+      timing: 'Typical for timing issues: add explicit waits or review timeout thresholds',
+      environment: 'Typical for environment issues: ensure consistent environment setup with health checks',
+      data: 'Typical for data issues: use isolated fixtures and per-test transactions',
+      network: 'Typical for network issues: mock external APIs or add retry logic',
+      unknown: 'Collect more failure data to identify a pattern'
+    };
 
-        const pattern = ft.failure_pattern || 'unknown';
+    const result = await Promise.all(flakyTests.map(async (ft: any) => {
+      // Last 20 recorded executions (not a calendar window)
+      const history = await query<any>(`
+        SELECT executed_at as date, status
+        FROM test_executions
+        WHERE test_case_id = ?
+        ORDER BY executed_at DESC
+        LIMIT 20
+      `, [ft.test_case_id || ft.id]);
 
-        // Generate failure reason and suggested fix from pattern analysis
-        const patternAnalysis: Record<string, { keyword: string; fix: string }> = {
-          timing: {
-            keyword: 'timeout keyword detected in error logs',
-            fix: 'Add explicit waits or increase timeout thresholds'
-          },
-          environment: {
-            keyword: 'environment keyword detected in error logs',
-            fix: 'Ensure consistent environment setup with health checks'
-          },
-          data: {
-            keyword: 'assertion failed keyword detected in error logs',
-            fix: 'Use isolated fixtures and database transactions per test'
-          },
-          network: {
-            keyword: 'ECONNREFUSED keyword detected in error logs',
-            fix: 'Mock external APIs or add retry logic'
-          },
-          unknown: {
-            keyword: 'No matching pattern found',
-            fix: 'Collect more failure data and analyze patterns'
-          }
-        };
+      const pattern = ft.failure_pattern || 'unknown';
+      // The synthetic seeder (analyticsSync) stores canned "... keyword detected in error
+      // logs" strings although no log is analysed; those are never treated as verified.
+      const rawRootCause = typeof ft.root_cause === 'string' ? ft.root_cause.trim() : '';
+      const isCannedRootCause = /keyword detected in error logs$/i.test(rawRootCause) || rawRootCause === 'No matching pattern found';
+      const storedRootCause = rawRootCause && !isCannedRootCause ? rawRootCause : null;
+      const storedFix = storedRootCause && typeof ft.suggested_fix === 'string' && ft.suggested_fix.trim() ? ft.suggested_fix : null;
 
-        const analysis = patternAnalysis[pattern] || patternAnalysis.unknown;
-
-        return {
-          id: ft.id,
-          test_name: ft.test_name || 'Unknown Test',
-          flakiness_score: Number(ft.flakiness_score) || 0,
-          failure_pattern: pattern,
-          occurrences: ft.occurrences || 0,
-          first_detected: ft.first_detected,
-          last_occurrence: ft.last_occurrence,
-          suggested_fix: analysis.fix,
-          root_cause: analysis.keyword,
-          history: history.map((h: any) => ({
-            date: h.date,
-            passed: h.status === 'passed'
-          }))
-        };
-      }));
-    }
+      return {
+        id: ft.id,
+        test_name: ft.test_name || 'Unknown Test',
+        flakiness_score: num(ft.flakiness_score),
+        failure_pattern: pattern,
+        occurrences: num(ft.occurrences),
+        pass_count: num(ft.pass_count),
+        total_runs: num(ft.total_runs),
+        first_detected: ft.first_detected,
+        last_occurrence: ft.last_occurrence,
+        suggested_fix: storedFix ?? (patternGuidance[pattern] || patternGuidance.unknown),
+        root_cause: storedRootCause ?? `Pattern: ${pattern} (unverified, not derived from error logs)`,
+        // true only when a person/tool stored a root cause for this test
+        root_cause_verified: storedRootCause !== null,
+        history: history.map((h: any) => ({
+          date: h.date,
+          passed: h.status === 'passed'
+        }))
+      };
+    }));
 
     res.json({ flakyTests: result });
   } catch (error) {
@@ -425,12 +379,12 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
     const result = metrics.map((m: any) => ({
       id: m.id,
       endpoint: m.endpoint,
-      method: m.method || 'GET',
-      response_time_p50: Number(m.response_time_p50) || 0,
-      response_time_p95: Number(m.response_time_p95) || 0,
-      response_time_p99: Number(m.response_time_p99) || 0,
-      throughput: Number(m.throughput) || 0,
-      error_rate: Number(m.error_rate) || 0,
+      method: m.method || null,
+      response_time_p50: num(m.response_time_p50),
+      response_time_p95: num(m.response_time_p95),
+      response_time_p99: num(m.response_time_p99),
+      throughput: num(m.throughput), // requests per MINUTE (column throughput_per_minute)
+      error_rate: num(m.error_rate),
       timestamp: m.timestamp
     }));
 
@@ -447,45 +401,71 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
 
 router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
   try {
-    const { companyId } = req.user;
-    const { teamId } = req.query;
+    const { companyId, role, primaryTeamId, id: userId } = req.user;
+    const requestedTeamId = typeof req.query.teamId === 'string' && req.query.teamId ? req.query.teamId : undefined;
 
-    // Note: developer_metrics in the live DB is effectively a current snapshot per developer.
-    // Query simplified to not require team_members join for basic metrics lookup
+    // Individual developer metrics: same gate as /teams/:id/developer-ai-suggestions.
+    // super_admin / qa_manager: any team in the company; team_lead: own team only;
+    // other roles: only their own row.
+    const privileged = ['super_admin', 'qa_manager', 'team_lead'].includes(role);
+    let scopeTeamId: string | undefined = requestedTeamId;
+
+    if (requestedTeamId) {
+      // Tenant check + team-lead/own-team restriction.
+      if (!(await assertTeamRead(req, res, requestedTeamId))) return;
+    } else if (role === 'team_lead') {
+      if (!primaryTeamId) return res.json({ developers: [] });
+      scopeTeamId = primaryTeamId;
+    }
+
+    // One row per (developer, team) recorded in developer_metrics; the team is the
+    // team the metrics were recorded for (dm.team_id), not the user's primary team.
     let sql = `
       SELECT 
         dm.developer_id as developer_id,
+        dm.team_id,
+        t.name as team_name,
         (u.first_name || ' ' || u.last_name) as name,
-        AVG(dm.code_review_time_avg) as code_review_time_avg,
-        AVG(dm.pr_merge_time_avg) as pr_merge_time_avg,
-        AVG(dm.happiness_score) as happiness_score,
-        AVG(dm.context_switches_per_day) as context_switches_per_day,
-        AVG(dm.focus_time_hours) as focus_time_hours,
-        AVG(dm.meeting_time_hours) as meeting_time_hours
+        dm.code_review_time_avg,
+        dm.pr_merge_time_avg,
+        dm.happiness_score,
+        dm.context_switches_per_day,
+        dm.focus_time_hours,
+        dm.meeting_time_hours,
+        dm.updated_at
       FROM developer_metrics dm
       JOIN users u ON dm.developer_id = u.id
-      WHERE u.company_id = ?
+      JOIN teams t ON dm.team_id = t.id
+      WHERE t.company_id = ? AND u.company_id = ? AND t.is_active = TRUE
+        AND (u.developer_insights_enabled = TRUE OR u.id = ?)
     `;
-    const params: any[] = [companyId];
+    const params: any[] = [companyId, companyId, userId];
 
-    if (teamId) {
-      sql += ' AND u.primary_team_id = ?';
-      params.push(teamId);
+    if (scopeTeamId) {
+      sql += ' AND dm.team_id = ?';
+      params.push(scopeTeamId);
+    }
+    if (!privileged) {
+      sql += ' AND dm.developer_id = ?';
+      params.push(userId);
     }
 
-    sql += ' GROUP BY dm.developer_id, u.first_name, u.last_name ORDER BY happiness_score DESC NULLS LAST';
+    sql += ' ORDER BY dm.happiness_score DESC NULLS LAST, u.first_name';
 
     const metrics = await query<any>(sql, params);
 
     const result = metrics.map((m: any) => ({
       developer_id: m.developer_id,
+      team_id: m.team_id,
+      team_name: m.team_name,
       name: m.name,
-      code_review_time_avg: Number(m.code_review_time_avg) || 0,
-      pr_merge_time_avg: Number(m.pr_merge_time_avg) || 0,
-      happiness_score: Number(m.happiness_score) || 0,
-      context_switches_per_day: Number(m.context_switches_per_day) || 0,
-      focus_time_hours: Number(m.focus_time_hours) || 0,
-      meeting_time_hours: Number(m.meeting_time_hours) || 0
+      code_review_time_avg: num(m.code_review_time_avg),
+      pr_merge_time_avg: num(m.pr_merge_time_avg),
+      happiness_score: num(m.happiness_score),
+      context_switches_per_day: num(m.context_switches_per_day),
+      focus_time_hours: num(m.focus_time_hours),
+      meeting_time_hours: num(m.meeting_time_hours),
+      updated_at: m.updated_at
     }));
 
     res.json({ developers: result });
@@ -499,19 +479,22 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
 // TECHNICAL DEBT TRACKER
 // ============================================================================
 
-// Helper to get financial config with inheritance
-async function getFinancialConfig(companyId: string, teamId?: string): Promise<Record<string, number>> {
-  const defaults: Record<string, number> = {
-    developer_hourly_rate: 75,
-    support_ticket_cost: 25,
-    revenue_per_user_monthly: 50,
-    downtime_cost_per_minute: 100,
-    sla_breach_penalty: 1000
-  };
+// Helper to get financial config with inheritance (company -> team; team overrides company).
+// Keys with no configured value keep the built-in default and are listed in `defaultsUsed`.
+const FINANCIAL_DEFAULTS: Record<string, number> = {
+  developer_hourly_rate: 75,
+  support_ticket_cost: 25,
+  revenue_per_user_monthly: 50,
+  downtime_cost_per_minute: 100,
+  sla_breach_penalty: 1000
+};
+
+async function getFinancialConfig(companyId: string, teamId?: string): Promise<{ config: Record<string, number>; defaultsUsed: string[] }> {
+  const config: Record<string, number> = { ...FINANCIAL_DEFAULTS };
+  const configured = new Set<string>();
 
   try {
-    // Fetch configs with inheritance (company → department → team)
-    let sql = `SELECT config_key, config_value FROM configs WHERE company_id = ?`;
+    let sql = `SELECT config_key, config_value, team_id FROM configs WHERE company_id = ?`;
     const params: any[] = [companyId];
 
     if (teamId) {
@@ -520,62 +503,77 @@ async function getFinancialConfig(companyId: string, teamId?: string): Promise<R
     } else {
       sql += ` AND team_id IS NULL`;
     }
-    sql += ` ORDER BY team_id IS NOT NULL DESC`; // Team-specific overrides first
+    // Company-level rows first, team rows last, so the team value is applied last and wins.
+    sql += ` ORDER BY (team_id IS NOT NULL) ASC, updated_at ASC NULLS FIRST`;
 
     const configs = await query<any>(sql, params);
 
     for (const cfg of configs) {
-      if (defaults.hasOwnProperty(cfg.config_key) && !isNaN(parseFloat(cfg.config_value))) {
-        defaults[cfg.config_key] = parseFloat(cfg.config_value);
+      const value = num(cfg.config_value);
+      if (Object.prototype.hasOwnProperty.call(FINANCIAL_DEFAULTS, cfg.config_key) && value !== null) {
+        config[cfg.config_key] = value;
+        configured.add(cfg.config_key);
       }
     }
   } catch (e) {
-    // Use defaults on error
+    console.error('Error loading financial config, using defaults:', e);
   }
 
-  return defaults;
+  return { config, defaultsUsed: Object.keys(FINANCIAL_DEFAULTS).filter(k => !configured.has(k)) };
 }
 
-// Calculate ROI metrics for a debt item
+// Calculate ROI metrics for a debt item.
+// Returns null for values that cannot be computed (no effort estimate / no impact data).
 function calculateROI(
   debt: any,
   config: Record<string, number>
-): { investment: number; monthlyCost: number; annualSavings: number; roi: number; paybackMonths: number } {
-  const effortHours = Number(debt.estimated_effort_hours) || 0;
-  const affectedUsers = Number(debt.affected_users) || 0;
-  const supportTickets = Number(debt.support_tickets_monthly) || 0;
-  const downtimeMinutes = Number(debt.downtime_minutes_monthly) || 0;
-  const revenueImpactPct = Number(debt.revenue_impact_percent) || 0;
-  const slaBreaches = Number(debt.sla_breaches_monthly) || 0;
+): { investment: number | null; monthlyCost: number | null; annualSavings: number | null; roi: number | null; paybackMonths: number | null } {
+  const effortHours = num(debt.estimated_effort_hours);
+  const impacts = [
+    num(debt.affected_users), num(debt.support_tickets_monthly), num(debt.downtime_minutes_monthly),
+    num(debt.revenue_impact_percent), num(debt.sla_breaches_monthly)
+  ];
+  const hasImpactData = impacts.some(v => v !== null);
+  const [affectedUsers, supportTickets, downtimeMinutes, revenueImpactPct, slaBreaches] = impacts.map(v => v ?? 0);
 
-  // Investment = developer hours × hourly rate
-  const investment = effortHours * config.developer_hourly_rate;
+  // Investment = developer hours x hourly rate
+  const investment = effortHours !== null ? effortHours * config.developer_hourly_rate : null;
 
-  // Monthly cost of delay = sum of all impact costs
-  const supportCost = supportTickets * config.support_ticket_cost;
-  const downtimeCost = downtimeMinutes * config.downtime_cost_per_minute;
-  const revenueLoss = affectedUsers * config.revenue_per_user_monthly * (revenueImpactPct / 100);
-  const slaPenalties = slaBreaches * config.sla_breach_penalty;
+  // Monthly cost of delay = sum of all impact costs (only when impact data was entered)
+  const monthlyCost = hasImpactData
+    ? supportTickets * config.support_ticket_cost +
+      downtimeMinutes * config.downtime_cost_per_minute +
+      affectedUsers * config.revenue_per_user_monthly * (revenueImpactPct / 100) +
+      slaBreaches * config.sla_breach_penalty
+    : null;
+  const annualSavings = monthlyCost !== null ? monthlyCost * 12 : null;
 
-  const monthlyCost = supportCost + downtimeCost + revenueLoss + slaPenalties;
-  const annualSavings = monthlyCost * 12;
+  // ROI = ((annual savings - investment) / investment) x 100
+  const roi = investment !== null && investment > 0 && annualSavings !== null
+    ? ((annualSavings - investment) / investment) * 100
+    : null;
 
-  // ROI = ((annual savings - investment) / investment) × 100
-  const roi = investment > 0 ? ((annualSavings - investment) / investment) * 100 : 0;
-
-  // Payback period in months
-  const paybackMonths = monthlyCost > 0 ? investment / monthlyCost : Infinity;
+  // Payback period in months (null when there is no monthly cost to recover)
+  const paybackMonths = investment !== null && monthlyCost !== null && monthlyCost > 0 ? investment / monthlyCost : null;
 
   return { investment, monthlyCost, annualSavings, roi, paybackMonths };
 }
 
 router.get('/technical-debt', authenticateToken, async (req: any, res) => {
   try {
-    const { companyId } = req.user;
-    const { teamId, status } = req.query;
+    const { companyId, role, primaryTeamId } = req.user;
+    const { teamId: requestedTeamId, status } = req.query;
+
+    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
+    }
+    if (teamId && !(await getOwnedTeam(req, teamId as string))) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
 
     // Get financial config for ROI calculations
-    const financialConfig = await getFinancialConfig(companyId, teamId as string);
+    const { config: financialConfig, defaultsUsed } = await getFinancialConfig(companyId, teamId as string);
 
     let sql = `
       SELECT 
@@ -618,6 +616,7 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
 
     const result = debts.map((d: any) => {
       const roi = calculateROI(d, financialConfig);
+      const monthlyCostOfDelay = roi.monthlyCost !== null ? Math.round(roi.monthlyCost) : null;
 
       return {
         id: d.id,
@@ -625,31 +624,35 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
         description: d.description || '',
         category: d.category || 'code_quality',
         severity: d.severity,
-        estimated_effort_hours: Number(d.estimated_effort_hours) || 0,
-        cost_of_delay: Number(d.cost_of_delay) || roi.monthlyCost, // Use calculated if legacy is 0
-        priority_score: Number(d.priority_score) || 0,
+        estimated_effort_hours: num(d.estimated_effort_hours),
+        // Single definition: cost_of_delay is the computed monthly cost of delay (same as
+        // monthly_cost_of_delay). The legacy stored td.cost_of_delay column is not used.
+        cost_of_delay: monthlyCostOfDelay,
+        priority_score: num(d.priority_score),
         status: d.status,
         created_date: d.created_date,
         assigned_to: d.assigned_to_name,
         // Impact metrics
-        affected_users: Number(d.affected_users) || 0,
-        support_tickets_monthly: Number(d.support_tickets_monthly) || 0,
-        downtime_minutes_monthly: Number(d.downtime_minutes_monthly) || 0,
-        revenue_impact_percent: Number(d.revenue_impact_percent) || 0,
-        sla_breaches_monthly: Number(d.sla_breaches_monthly) || 0,
-        // Calculated ROI fields
-        investment_cost: Math.round(roi.investment),
-        monthly_cost_of_delay: Math.round(roi.monthlyCost),
-        annual_savings: Math.round(roi.annualSavings),
-        roi_percentage: Math.round(roi.roi),
-        payback_months: roi.paybackMonths === Infinity ? null : Math.round(roi.paybackMonths * 10) / 10
+        affected_users: num(d.affected_users),
+        support_tickets_monthly: num(d.support_tickets_monthly),
+        downtime_minutes_monthly: num(d.downtime_minutes_monthly),
+        revenue_impact_percent: num(d.revenue_impact_percent),
+        sla_breaches_monthly: num(d.sla_breaches_monthly),
+        // Calculated ROI fields (null when inputs are missing)
+        investment_cost: roi.investment !== null ? Math.round(roi.investment) : null,
+        monthly_cost_of_delay: monthlyCostOfDelay,
+        annual_savings: roi.annualSavings !== null ? Math.round(roi.annualSavings) : null,
+        roi_percentage: roi.roi !== null ? Math.round(roi.roi) : null,
+        payback_months: roi.paybackMonths !== null ? Math.round(roi.paybackMonths * 10) / 10 : null
       };
     });
 
     // Also return the financial config for transparency
     res.json({
       debts: result,
-      financial_config: financialConfig
+      financial_config: financialConfig,
+      // Keys not configured for this company/team; these use built-in defaults.
+      financial_config_defaults_used: defaultsUsed
     });
   } catch (error) {
     console.error('Error fetching technical debt:', error);
@@ -696,12 +699,12 @@ router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res
         updated_at = NOW()
       WHERE id = ?`,
       [
-        affected_users || 0,
-        support_tickets_monthly || 0,
-        downtime_minutes_monthly || 0,
-        revenue_impact_percent || 0,
-        sla_breaches_monthly || 0,
-        estimated_effort_hours || 0,
+        num(affected_users),
+        num(support_tickets_monthly),
+        num(downtime_minutes_monthly),
+        num(revenue_impact_percent),
+        num(sla_breaches_monthly),
+        num(estimated_effort_hours),
         id
       ]
     );
@@ -717,40 +720,30 @@ router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res
 // CI/CD PIPELINE INSIGHTS
 // ============================================================================
 
-// Get pipeline configuration
+// Default savings assumptions used until an admin saves a pipeline config.
+// These are assumptions, not measurements; responses flag them with is_default.
+const PIPELINE_CONFIG_DEFAULTS = { time_savings_percent: 30, cost_savings_percent: 25, cost_per_minute: 0.5 };
+
+function toPipelineConfig(row: any | null) {
+  return {
+    time_savings_percent: num(row?.time_savings_percent) ?? PIPELINE_CONFIG_DEFAULTS.time_savings_percent,
+    cost_savings_percent: num(row?.cost_savings_percent) ?? PIPELINE_CONFIG_DEFAULTS.cost_savings_percent,
+    cost_per_minute: num(row?.cost_per_minute) ?? PIPELINE_CONFIG_DEFAULTS.cost_per_minute,
+    is_default: !row
+  };
+}
+
+// Get pipeline configuration (read-only: a GET never inserts rows)
 router.get('/pipeline-config', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
 
-    let config = await queryOne<any>(
+    const config = await queryOne<any>(
       'SELECT * FROM pipeline_config WHERE company_id = ?',
       [companyId]
     );
 
-    // Create default config if not exists
-    if (!config) {
-      const id = randomUUID();
-      await query(
-        `INSERT INTO pipeline_config (id, company_id, time_savings_percent, cost_savings_percent, cost_per_minute)
-         VALUES (?, ?, 30.00, 25.00, 0.50)`,
-        [id, companyId]
-      );
-      config = {
-        id,
-        company_id: companyId,
-        time_savings_percent: 30.00,
-        cost_savings_percent: 25.00,
-        cost_per_minute: 0.50
-      };
-    }
-
-    res.json({
-      config: {
-        time_savings_percent: Number(config.time_savings_percent) || 30,
-        cost_savings_percent: Number(config.cost_savings_percent) || 25,
-        cost_per_minute: Number(config.cost_per_minute) || 0.50
-      }
-    });
+    res.json({ config: toPipelineConfig(config) });
   } catch (error) {
     console.error('Error fetching pipeline config:', error);
     res.status(500).json({ error: 'Failed to fetch pipeline config' });
@@ -766,10 +759,10 @@ router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
     }
     const { time_savings_percent, cost_savings_percent, cost_per_minute } = req.body;
 
-    // Validate inputs
-    const timeSavings = Math.min(100, Math.max(0, Number(time_savings_percent) || 30));
-    const costSavings = Math.min(100, Math.max(0, Number(cost_savings_percent) || 25));
-    const costPerMin = Math.max(0, Number(cost_per_minute) || 0.50);
+    // Validate inputs (0 is a valid value; only missing values fall back to the default)
+    const timeSavings = Math.min(100, Math.max(0, num(time_savings_percent) ?? PIPELINE_CONFIG_DEFAULTS.time_savings_percent));
+    const costSavings = Math.min(100, Math.max(0, num(cost_savings_percent) ?? PIPELINE_CONFIG_DEFAULTS.cost_savings_percent));
+    const costPerMin = Math.max(0, num(cost_per_minute) ?? PIPELINE_CONFIG_DEFAULTS.cost_per_minute);
 
     // Check if config exists
     const existing = await queryOne<any>(
@@ -799,7 +792,8 @@ router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
       config: {
         time_savings_percent: timeSavings,
         cost_savings_percent: costSavings,
-        cost_per_minute: costPerMin
+        cost_per_minute: costPerMin,
+        is_default: false
       }
     });
   } catch (error) {
@@ -808,67 +802,68 @@ router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Historical pipeline execution trends
+// Historical pipeline execution trends.
+// Units: total_runs / successful_runs / failed_runs count STAGE executions (one row per
+// stage run in pipeline_execution_summary), not end-to-end pipeline runs.
+// avg_duration_seconds is the mean stage-execution duration for the day, weighted by runs.
 router.get('/pipeline-history', authenticateToken, async (req: any, res) => {
   try {
-    const { companyId } = req.user;
-    const { days = '14' } = req.query;
+    const { companyId, role, primaryTeamId } = req.user;
+    const { days = '14', teamId: requestedTeamId } = req.query;
     const numDays = Math.min(Math.max(parseInt(days as string, 10) || 14, 1), 60);
 
-    const history = await query<any>(
-      `SELECT 
-        execution_date,
+    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId as string | undefined);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
+    }
+    if (teamId && !(await getOwnedTeam(req, teamId as string))) {
+      return res.status(404).json({ error: 'Team not found' });
+    }
+
+    let sql = `SELECT 
+        to_char(execution_date, 'YYYY-MM-DD') as execution_date,
         SUM(total_runs) as total_runs,
         SUM(successful_runs) as successful_runs,
         SUM(failed_runs) as failed_runs,
-        AVG(avg_duration_seconds) as avg_duration_seconds,
+        SUM(avg_duration_seconds::numeric * total_runs) / NULLIF(SUM(total_runs), 0) as avg_duration_seconds,
         SUM(total_cost) as total_cost
       FROM pipeline_execution_summary
       WHERE company_id = ?
-        AND execution_date >= CURRENT_DATE - CAST(? AS INTEGER)
-      GROUP BY execution_date
-      ORDER BY execution_date ASC`,
-      [companyId, numDays]
-    );
+        AND execution_date >= CURRENT_DATE - CAST(? AS INTEGER)`;
+    const params: any[] = [companyId, numDays];
+    if (teamId) {
+      sql += ' AND team_id = ?';
+      params.push(teamId);
+    }
+    sql += ' GROUP BY execution_date ORDER BY execution_date ASC';
 
-    // Ensure we always return at least some data (simulate if empty)
-    let results = history.map((row: any) => {
-      const totalRuns = Number(row.total_runs) || 0;
-      const failedRuns = Number(row.failed_runs) || 0;
-      const minFailed = totalRuns > 0 ? Math.max(1, Math.round(totalRuns * 0.01)) : 0;
-      const adjustedFailed = Math.max(failedRuns, minFailed);
-      const successRuns = Math.max(0, totalRuns - adjustedFailed);
+    const history = await query<any>(sql, params);
+
+    // Actual recorded counts only. No minimum failure floor, no simulated history:
+    // an empty result is returned as [] and the UI shows an empty state.
+    const results = history.map((row: any) => {
+      const totalRuns = num(row.total_runs) ?? 0;
+      const failedRuns = num(row.failed_runs);
+      const successRuns = num(row.successful_runs);
       return {
         date: row.execution_date,
         total_runs: totalRuns,
         successful_runs: successRuns,
-        failed_runs: adjustedFailed,
-        failure_rate: totalRuns > 0 ? Number(((adjustedFailed / totalRuns) * 100).toFixed(2)) : 0,
-        avg_duration_seconds: Number(row.avg_duration_seconds) || 0,
-        total_cost: Number(row.total_cost) || 0
+        failed_runs: failedRuns,
+        failure_rate: totalRuns > 0 && failedRuns !== null ? Number(((failedRuns / totalRuns) * 100).toFixed(2)) : null,
+        avg_duration_seconds: roundTo(num(row.avg_duration_seconds), 1),
+        total_cost: num(row.total_cost)
       };
     });
 
-    if (results.length === 0) {
-      const today = new Date();
-      results = Array.from({ length: numDays }).map((_, idx) => {
-        const date = new Date(today);
-        date.setDate(date.getDate() - (numDays - idx - 1));
-        const totalRuns = 100 + Math.floor(Math.random() * 40);
-        const failed = Math.max(1, Math.round(totalRuns * 0.02));
-        return {
-          date: date.toISOString().slice(0, 10),
-          total_runs: totalRuns,
-          successful_runs: totalRuns - failed,
-          failed_runs: failed,
-          failure_rate: Number(((failed / totalRuns) * 100).toFixed(2)),
-          avg_duration_seconds: 180 + Math.floor(Math.random() * 60),
-          total_cost: Number((totalRuns * 0.9).toFixed(2))
-        };
-      });
-    }
-
-    res.json({ history: results });
+    res.json({
+      history: results,
+      units: {
+        runs: 'stage executions',
+        avg_duration_seconds: 'mean stage-execution duration, weighted by executions',
+        failure_rate: 'failed / total stage executions for the day, %'
+      }
+    });
   } catch (error) {
     console.error('Error fetching pipeline history:', error);
     res.status(500).json({ error: 'Failed to fetch pipeline history' });
@@ -877,8 +872,13 @@ router.get('/pipeline-history', authenticateToken, async (req: any, res) => {
 
 router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
   try {
-    const { companyId } = req.user;
-    const { teamId } = req.query;
+    const { companyId, role, primaryTeamId } = req.user;
+    const { teamId: requestedTeamId } = req.query;
+
+    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId as string | undefined);
+    if (!allowed) {
+      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
+    }
 
     // Get pipeline config for this company
     const config = await queryOne<any>(
@@ -886,74 +886,40 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
       [companyId]
     );
 
-    let stages: any[] = [];
-
-    // Reject team ids that are not in the caller's company before any read/write,
-    // so a GET can neither read another team's stages nor seed junk rows for it.
+    // Reject team ids that are not in the caller's company.
     if (teamId && !(await getOwnedTeam(req, teamId as string))) {
       return res.status(404).json({ error: 'Team not found' });
     }
 
-    if (teamId) {
-      // Check if team-specific stages exist
-      stages = await query<any>(`
+    const stageSelect = `
         SELECT
           ps.id, ps.name, ps.stage_order,
           ps.avg_duration_seconds as duration, ps.success_rate,
           ps.cpu_usage, ps.memory_usage, ps.cost_per_run as cost, ps.bottleneck_score
-        FROM pipeline_stages ps
+        FROM pipeline_stages ps`;
+
+    let stages: any[] = [];
+    // 'team' = the team's own stages; 'company_default' = the team has none, so the
+    // company-level stages are shown (read-only GET: nothing is copied or inserted).
+    let stagesSource: 'team' | 'company_default' = 'company_default';
+
+    if (teamId) {
+      stages = await query<any>(`${stageSelect}
         WHERE ps.company_id = ? AND ps.team_id = ? AND ps.is_active = true
         ORDER BY ps.stage_order ASC
       `, [companyId, teamId]);
+      if (stages.length > 0) stagesSource = 'team';
+    }
 
-      // If no team-specific stages, copy from company defaults
-      if (stages.length === 0) {
-        const companyDefaults = await query<any>(`
-          SELECT name, stage_order, avg_duration_seconds, success_rate,
-                 cpu_usage, memory_usage, cost_per_run, bottleneck_score
-          FROM pipeline_stages
-          WHERE company_id = ? AND team_id IS NULL AND is_active = true
-          ORDER BY stage_order ASC
-        `, [companyId]);
-
-        // Create team-specific copies
-        for (const def of companyDefaults) {
-          const newId = randomUUID();
-          await query(`
-            INSERT INTO pipeline_stages 
-            (id, company_id, team_id, name, stage_order, avg_duration_seconds, success_rate,
-             cpu_usage, memory_usage, cost_per_run, bottleneck_score, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true)
-          `, [newId, companyId, teamId, def.name, def.stage_order, def.avg_duration_seconds,
-            def.success_rate, def.cpu_usage, def.memory_usage, def.cost_per_run, def.bottleneck_score]);
-        }
-
-        // Refetch the newly created team stages
-        stages = await query<any>(`
-          SELECT 
-            ps.id, ps.name, ps.stage_order,
-            ps.avg_duration_seconds as duration, ps.success_rate,
-            ps.cpu_usage, ps.memory_usage, ps.cost_per_run as cost, ps.bottleneck_score
-          FROM pipeline_stages ps
-          WHERE ps.company_id = ? AND ps.team_id = ? AND ps.is_active = true
-          ORDER BY ps.stage_order ASC
-        `, [companyId, teamId]);
-      }
-    } else {
-      // No team specified - return company defaults (team_id IS NULL)
-      stages = await query<any>(`
-        SELECT 
-          ps.id, ps.name, ps.stage_order,
-          ps.avg_duration_seconds as duration, ps.success_rate,
-          ps.cpu_usage, ps.memory_usage, ps.cost_per_run as cost, ps.bottleneck_score
-        FROM pipeline_stages ps
+    if (stages.length === 0) {
+      stages = await query<any>(`${stageSelect}
         WHERE ps.company_id = ? AND ps.team_id IS NULL AND ps.is_active = true
         ORDER BY ps.stage_order ASC
       `, [companyId]);
     }
 
-    // Calculate stats for duration z-score
-    const durations = stages.map((s: any) => Number(s.duration) || 0);
+    // Duration z-score over stages that have a recorded duration
+    const durations = stages.map((s: any) => num(s.duration)).filter((d): d is number => d !== null);
     const meanDuration = durations.length
       ? durations.reduce((sum: number, val: number) => sum + val, 0) / durations.length
       : 0;
@@ -962,15 +928,19 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
       : 0;
     const stdDev = Math.sqrt(Math.max(variance, 1e-6));
 
-    // Recalculate bottleneck scores dynamically
+    // Bottleneck score = duration factor (0-60, from z-score) + failure factor (0-40).
+    // Null when duration or success rate is missing.
     const result = stages.map((s: any) => {
-      const duration = Number(s.duration) || 0;
-      const successRate = Number(s.success_rate) || 100;
-      const durationZ = stdDev > 0 ? (duration - meanDuration) / stdDev : 0;
-      const durationFactor = Math.min(60, Math.max(0, ((durationZ + 2) / 4) * 60));
-      const successDecimal = Math.max(0, Math.min(1, successRate / 100));
-      const failureFactor = (1 - successDecimal) * 40;
-      const calculatedBottleneck = Math.min(100, Math.max(0, durationFactor + failureFactor));
+      const duration = num(s.duration);
+      const successRate = num(s.success_rate);
+      let bottleneck: number | null = null;
+      if (duration !== null && successRate !== null) {
+        const durationZ = stdDev > 0 ? (duration - meanDuration) / stdDev : 0;
+        const durationFactor = Math.min(60, Math.max(0, ((durationZ + 2) / 4) * 60));
+        const successDecimal = Math.max(0, Math.min(1, successRate / 100));
+        const failureFactor = (1 - successDecimal) * 40;
+        bottleneck = Math.round(Math.min(100, Math.max(0, durationFactor + failureFactor)) * 10) / 10;
+      }
 
       return {
         id: s.id,
@@ -978,21 +948,18 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
         duration,
         success_rate: successRate,
         resource_usage: {
-          cpu: Number(s.cpu_usage) || 0,
-          memory: Number(s.memory_usage) || 0,
-          cost: Number(s.cost) || 0
+          cpu: num(s.cpu_usage),
+          memory: num(s.memory_usage),
+          cost: num(s.cost)
         },
-        bottleneck_score: Math.round(calculatedBottleneck * 10) / 10
+        bottleneck_score: bottleneck
       };
     });
 
     res.json({
       stages: result,
-      config: {
-        time_savings_percent: Number(config?.time_savings_percent) || 30,
-        cost_savings_percent: Number(config?.cost_savings_percent) || 25,
-        cost_per_minute: Number(config?.cost_per_minute) || 0.50
-      }
+      stages_source: stagesSource,
+      config: toPipelineConfig(config)
     });
   } catch (error) {
     console.error('Error fetching pipeline stages:', error);
@@ -1056,121 +1023,33 @@ router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
 // BUSINESS IMPACT ANALYSIS
 // ============================================================================
 
+// V1 business impact. Returns only values a person entered in business_impact_config
+// (source 'manual_config'). There is no simulated/hard-coded fallback, and the
+// business_impact_metrics table (filled only by the synthetic analytics job) is not served.
 router.get('/business-impact', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    const { days = '30' } = req.query;
-    const numDays = Math.min(parseInt(days as string) || 30, 90);
 
-    // First, try to get configured data for this company
-    // We need to get teams for this company and check for configured data
-    const teams = await query<any>('SELECT id FROM teams WHERE company_id = ?', [companyId]);
+    const configuredMetrics = await query<any>(
+      `SELECT bic.team_id, bic.metric_name, bic.quality_score, bic.revenue_impact, bic.customer_satisfaction,
+              bic.feature_adoption_rate, bic.correlation_strength
+       FROM business_impact_config bic
+       JOIN teams t ON t.id = bic.team_id
+       WHERE t.company_id = ? AND t.is_active = TRUE AND bic.manually_edited = TRUE
+       ORDER BY bic.team_id, bic.metric_name`,
+      [companyId]
+    );
 
-    let configuredMetrics: any[] = [];
-
-    // Check each team for configured business impact data
-    for (const team of teams) {
-      try {
-        const teamConfig = await query<any>(
-          `SELECT metric_name, quality_score, revenue_impact, customer_satisfaction,
-                  feature_adoption_rate, correlation_strength
-           FROM business_impact_config
-           WHERE team_id = ? AND manually_edited = TRUE`,
-          [team.id]
-        );
-        if (teamConfig.length > 0) {
-          configuredMetrics = teamConfig;
-          break; // Use the first team's configured data
-        }
-      } catch (e) {
-        // Continue to next team
-      }
-    }
-
-    let result: any[] = [];
-
-    if (configuredMetrics.length > 0) {
-      // Use configured data
-      result = configuredMetrics.map(m => ({
-        metric_name: m.metric_name,
-        quality_score: Number(m.quality_score) || 0,
-        revenue_impact: Number(m.revenue_impact) || 0,
-        customer_satisfaction: Number(m.customer_satisfaction) || 0,
-        feature_adoption_rate: Number(m.feature_adoption_rate) || 0,
-        correlation_strength: Number(m.correlation_strength) || 0
-      }));
-    } else {
-      // Fall back to database metrics
-      const metrics = await query<any>(`
-        SELECT
-          metric_name,
-          AVG(quality_score) as quality_score,
-          SUM(revenue_impact) as revenue_impact,
-          AVG(customer_satisfaction) as customer_satisfaction,
-          AVG(feature_adoption_rate) as feature_adoption_rate,
-          AVG(correlation_strength) as correlation_strength
-        FROM business_impact_metrics
-        WHERE company_id = ?
-          AND recorded_date >= CURRENT_DATE - CAST(? AS INTEGER)
-        GROUP BY metric_name
-        ORDER BY correlation_strength DESC NULLS LAST
-      `, [companyId, numDays]);
-
-      if (metrics.length > 0) {
-        result = metrics.map((m: any) => ({
-          metric_name: m.metric_name,
-          quality_score: Number(m.quality_score) || 0,
-          revenue_impact: Number(m.revenue_impact) || 0,
-          customer_satisfaction: Number(m.customer_satisfaction) || 0,
-          feature_adoption_rate: Number(m.feature_adoption_rate) || 0,
-          correlation_strength: Number(m.correlation_strength) || 0
-        }));
-      } else {
-        // Fall back to simulated data
-        result = [
-          {
-            metric_name: 'test_coverage',
-            quality_score: 85.5,
-            revenue_impact: 4178000,
-            customer_satisfaction: 82.3,
-            feature_adoption_rate: 73.1,
-            correlation_strength: 0.85
-          },
-          {
-            metric_name: 'defect_escape_rate',
-            quality_score: 12.2,
-            revenue_impact: 2896000,
-            customer_satisfaction: 76.8,
-            feature_adoption_rate: 68.4,
-            correlation_strength: 0.72
-          },
-          {
-            metric_name: 'code_quality_score',
-            quality_score: 78.9,
-            revenue_impact: 3452000,
-            customer_satisfaction: 79.5,
-            feature_adoption_rate: 71.2,
-            correlation_strength: 0.68
-          },
-          {
-            metric_name: 'test_execution_time',
-            quality_score: 156.3,
-            revenue_impact: 1987000,
-            customer_satisfaction: 74.1,
-            feature_adoption_rate: 66.8,
-            correlation_strength: 0.55
-          },
-          {
-            metric_name: 'deployment_frequency',
-            quality_score: 21.4,
-            revenue_impact: 2674000,
-            customer_satisfaction: 77.9,
-            feature_adoption_rate: 69.7,
-            correlation_strength: 0.61
-          }
-        ];
-      }
-    }
+    const result = configuredMetrics.map((m: any) => ({
+      team_id: m.team_id,
+      metric_name: m.metric_name,
+      quality_score: num(m.quality_score),
+      revenue_impact: num(m.revenue_impact),
+      customer_satisfaction: num(m.customer_satisfaction),
+      feature_adoption_rate: num(m.feature_adoption_rate),
+      correlation_strength: num(m.correlation_strength),
+      source: 'manual_config'
+    }));
 
     res.json({ metrics: result });
   } catch (error) {
@@ -1191,6 +1070,9 @@ router.post('/seed-data', authenticateToken, async (req: any, res) => {
     if (role !== 'super_admin') {
       return res.status(403).json({ error: 'Only super admin can seed data' });
     }
+    if (!isSyntheticDataEnabled()) {
+      return res.status(403).json({ error: 'Synthetic data generation is disabled (ENABLE_SYNTHETIC_DATA is not "true").' });
+    }
 
     // Run seed in background
     seedAllAnalyticsData().catch(err => console.error('Seed error:', err));
@@ -1210,6 +1092,10 @@ router.post('/update-daily', authenticateToken, async (req: any, res) => {
     if (role !== 'super_admin') {
       return res.status(403).json({ error: 'Only super admin can trigger updates' });
     }
+    // updateDailyAnalytics applies random drift / random rows: synthetic only.
+    if (!isSyntheticDataEnabled()) {
+      return res.status(403).json({ error: 'Synthetic data generation is disabled (ENABLE_SYNTHETIC_DATA is not "true").' });
+    }
 
     // Run update in background
     updateDailyAnalytics().catch(err => console.error('Update error:', err));
@@ -1225,41 +1111,84 @@ router.post('/update-daily', authenticateToken, async (req: any, res) => {
 // ENHANCED BUSINESS IMPACT CORRELATION API (V2)
 // ============================================================================
 
-// Helper: Error function approximation for normal CDF
-function erf(x: number): number {
-  const sign = x < 0 ? -1 : 1;
-  const absX = Math.abs(x);
+// ---------------------------------------------------------------------------
+// Statistics
+// Pearson r with an exact two-sided Student-t test (df = n - 2), and
+// Benjamini-Hochberg FDR adjustment across all pairs tested for a team.
+// Results are exploratory: monthly series are short and often share trends.
+// ---------------------------------------------------------------------------
 
-  // Abramowitz and Stegun formula 7.1.26
-  const a1 = 0.254829592;
-  const a2 = -0.284496736;
-  const a3 = 1.421413741;
-  const a4 = -1.453152027;
-  const a5 = 1.061405429;
-  const p = 0.3275911;
+const LANCZOS_COEFFS = [
+  0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
+  -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6,
+  1.5056327351493116e-7
+];
 
-  const t = 1 / (1 + p * absX);
-  const y = 1 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t) * Math.exp(-absX * absX);
-
-  return sign * y;
+function logGamma(x: number): number {
+  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
+  x -= 1;
+  let a = LANCZOS_COEFFS[0];
+  const t = x + 7.5;
+  for (let i = 1; i < 9; i++) a += LANCZOS_COEFFS[i] / (x + i);
+  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
 }
 
-function normalCdf(z: number): number {
-  return 0.5 * (1 + erf(z / Math.SQRT2));
+// Continued fraction for the incomplete beta function (Numerical Recipes, betacf)
+function betaContinuedFraction(a: number, b: number, x: number): number {
+  const MAXIT = 300, EPS = 3e-16, FPMIN = 1e-300;
+  const qab = a + b, qap = a + 1, qam = a - 1;
+  let c = 1;
+  let d = 1 - qab * x / qap;
+  if (Math.abs(d) < FPMIN) d = FPMIN;
+  d = 1 / d;
+  let h = d;
+  for (let m = 1; m <= MAXIT; m++) {
+    const m2 = 2 * m;
+    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d;
+    const del = d * c;
+    h *= del;
+    if (Math.abs(del - 1) < EPS) break;
+  }
+  return h;
 }
 
-// Helper: Calculate Pearson correlation coefficient
-function calculatePearsonCorrelation(x: number[], y: number[]): { correlation: number; pValue: number; sampleSize: number } {
+/** Regularized incomplete beta I_x(a, b). */
+function regularizedIncompleteBeta(x: number, a: number, b: number): number {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
+  if (x < (a + 1) / (a + b + 2)) return bt * betaContinuedFraction(a, b, x) / a;
+  return 1 - bt * betaContinuedFraction(b, a, 1 - x) / b;
+}
+
+/** Two-sided p-value of a Student-t statistic: p = I_{df/(df+t^2)}(df/2, 1/2). */
+function studentTTwoSidedP(t: number, df: number): number {
+  if (!Number.isFinite(t)) return 0;
+  return Math.max(0, Math.min(1, regularizedIncompleteBeta(df / (df + t * t), df / 2, 0.5)));
+}
+
+interface PearsonResult { correlation: number | null; pValue: number | null; sampleSize: number }
+
+// Pearson correlation with exact t-test. Edge cases:
+//   n < 3          -> r = null, p = null (not computable; never shown as "no correlation")
+//   zero variance  -> r = null, p = null (undefined)
+//   |r| = 1        -> p = 0
+function calculatePearsonCorrelation(x: number[], y: number[]): PearsonResult {
   const n = Math.min(x.length, y.length);
-  if (n < 3) return { correlation: 0, pValue: 1, sampleSize: n };
+  if (n < 3) return { correlation: null, pValue: null, sampleSize: n };
 
-  const meanX = x.reduce((a, b) => a + b, 0) / n;
-  const meanY = y.reduce((a, b) => a + b, 0) / n;
+  let meanX = 0, meanY = 0;
+  for (let i = 0; i < n; i++) { meanX += x[i]; meanY += y[i]; }
+  meanX /= n; meanY /= n;
 
-  let numerator = 0;
-  let denomX = 0;
-  let denomY = 0;
-
+  let numerator = 0, denomX = 0, denomY = 0;
   for (let i = 0; i < n; i++) {
     const dx = x[i] - meanX;
     const dy = y[i] - meanY;
@@ -1268,28 +1197,143 @@ function calculatePearsonCorrelation(x: number[], y: number[]): { correlation: n
     denomY += dy * dy;
   }
 
-  const denominator = Math.sqrt(denomX * denomY);
-  const correlation = denominator === 0 ? 0 : numerator / denominator;
+  if (denomX === 0 || denomY === 0) return { correlation: null, pValue: null, sampleSize: n };
 
-  // Approximate two-tailed p-value using normal distribution for the t statistic
-  let pValue = 1;
-  if (n >= 6 && correlation > -1 && correlation < 1) {
-    const t = correlation * Math.sqrt((n - 2) / (1 - correlation * correlation));
-    const z = Math.abs(t);
-    const cdf = normalCdf(z);
-    pValue = Math.max(0, Math.min(1, 2 * (1 - cdf)));
+  const r = Math.max(-1, Math.min(1, numerator / Math.sqrt(denomX * denomY)));
+  const df = n - 2;
+  let pValue: number;
+  if (1 - Math.abs(r) < 1e-12) {
+    pValue = 0;
+  } else {
+    const t = r * Math.sqrt(df / (1 - r * r));
+    pValue = studentTTwoSidedP(t, df);
   }
 
-  return { correlation: Math.round(correlation * 1000) / 1000, pValue, sampleSize: n };
+  return { correlation: Math.round(r * 1000) / 1000, pValue, sampleSize: n };
 }
 
-// Helper: Get correlation strength label
+/** Benjamini-Hochberg adjusted q-values (same order as input; null stays null). */
+function benjaminiHochberg(pValues: Array<number | null>): Array<number | null> {
+  const indexed = pValues
+    .map((p, i) => ({ p, i }))
+    .filter((o): o is { p: number; i: number } => o.p !== null)
+    .sort((a, b) => a.p - b.p);
+  const m = indexed.length;
+  const q: Array<number | null> = pValues.map(() => null);
+  let running = 1;
+  for (let k = m - 1; k >= 0; k--) {
+    running = Math.min(running, (indexed[k].p * m) / (k + 1));
+    q[indexed[k].i] = Math.min(1, running);
+  }
+  return q;
+}
+
+// Helper: Get correlation strength label (magnitude only; see is_significant for evidence)
 function getCorrelationStrength(r: number): string {
   const absR = Math.abs(r);
   if (absR >= 0.7) return 'strong';
   if (absR >= 0.5) return 'moderate';
   if (absR >= 0.3) return 'weak';
   return 'none';
+}
+
+const BI_QUALITY_FIELDS = [
+  'test_coverage', 'defect_density', 'defect_escape_rate', 'mttr_hours',
+  'deployment_frequency', 'lead_time_days', 'code_quality_score', 'change_failure_rate'
+];
+const BI_KPI_FIELDS = [
+  'monthly_revenue', 'active_users', 'churn_rate', 'feature_adoption_rate',
+  'nps_score', 'csat_score', 'support_ticket_volume'
+];
+const BI_MIN_PAIRED_MONTHS = 6;
+const BI_FDR_ALPHA = 0.05;
+
+const CORRELATION_METHOD = {
+  coefficient: 'Pearson r',
+  test: 'two-sided Student t-test, df = n - 2 (exact, regularized incomplete beta)',
+  multipleComparison: 'Benjamini-Hochberg FDR across all metric pairs tested for this team',
+  significance: `q < ${BI_FDR_ALPHA}`,
+  minimumPairedMonths: BI_MIN_PAIRED_MONTHS,
+  exploratory: true,
+  caveat: 'Correlation does not show causation. Monthly series that share a trend can correlate without any causal link.'
+};
+
+interface CorrelationRow {
+  quality_metric: string;
+  business_kpi: string;
+  pearson_correlation: number;
+  p_value: number;
+  q_value: number;
+  sample_size: number;
+  correlation_strength: string;
+  is_significant: boolean;
+  start_month: string;
+  end_month: string;
+}
+
+/**
+ * Single definition of the business-impact correlation matrix, used by the GET,
+ * calculate-correlations, ai-analysis and (synthetic) generate endpoints.
+ * Pairs months present in both series, drops nulls pairwise, requires
+ * >= BI_MIN_PAIRED_MONTHS non-null pairs, skips zero-variance pairs, then applies BH-FDR.
+ */
+function computeCorrelationMatrix(qualityRows: any[], kpiRows: any[]): {
+  correlations: CorrelationRow[];
+  pairedMonths: string[];
+  pairsSkippedZeroVariance: number;
+} {
+  const qualityByMonth: Record<string, any> = {};
+  qualityRows.forEach((m: any) => { qualityByMonth[m.month_year] = m; });
+  const kpiByMonth: Record<string, any> = {};
+  kpiRows.forEach((k: any) => { kpiByMonth[k.month_year] = k; });
+  const pairedMonths = Object.keys(qualityByMonth).filter(m => kpiByMonth[m]).sort();
+
+  const tested: Array<Omit<CorrelationRow, 'q_value' | 'is_significant'>> = [];
+  let pairsSkippedZeroVariance = 0;
+
+  for (const qField of BI_QUALITY_FIELDS) {
+    for (const kField of BI_KPI_FIELDS) {
+      const xValues: number[] = [];
+      const yValues: number[] = [];
+      const months: string[] = [];
+      for (const month of pairedMonths) {
+        const qVal = num(qualityByMonth[month][qField]);
+        const kVal = num(kpiByMonth[month][kField]);
+        if (qVal !== null && kVal !== null) {
+          xValues.push(qVal);
+          yValues.push(kVal);
+          months.push(month);
+        }
+      }
+      if (xValues.length < BI_MIN_PAIRED_MONTHS) continue;
+
+      const { correlation, pValue, sampleSize } = calculatePearsonCorrelation(xValues, yValues);
+      if (correlation === null || pValue === null) {
+        pairsSkippedZeroVariance++;
+        continue;
+      }
+      tested.push({
+        quality_metric: qField,
+        business_kpi: kField,
+        pearson_correlation: correlation,
+        p_value: pValue,
+        sample_size: sampleSize,
+        correlation_strength: getCorrelationStrength(correlation),
+        start_month: months[0],
+        end_month: months[months.length - 1]
+      });
+    }
+  }
+
+  const qValues = benjaminiHochberg(tested.map(t => t.p_value));
+  const correlations: CorrelationRow[] = tested.map((t, i) => ({
+    ...t,
+    q_value: qValues[i] as number,
+    is_significant: (qValues[i] as number) < BI_FDR_ALPHA
+  }));
+  correlations.sort((a, b) => Math.abs(b.pearson_correlation) - Math.abs(a.pearson_correlation));
+
+  return { correlations, pairedMonths, pairsSkippedZeroVariance };
 }
 
 // GET: Fetch all correlation data for a team
@@ -1329,12 +1373,18 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
       [teamId]
     );
 
-    // Fetch cached correlations
-    const correlations = await query<any>(
-      `SELECT * FROM business_impact_correlations 
-       WHERE team_id = ? ORDER BY ABS(pearson_correlation) DESC NULLS LAST`,
-      [teamId]
-    );
+    // Correlations are computed from the current monthly data on every request
+    // (single definition: computeCorrelationMatrix). Cached rows in
+    // business_impact_correlations are not served, so they can never be stale or
+    // differ from the data shown next to them.
+    const matrix = computeCorrelationMatrix(qualityMetrics, businessKpis);
+    const calculatedAt = new Date().toISOString();
+    const correlations = matrix.correlations.map(c => ({
+      id: `${c.quality_metric}:${c.business_kpi}`,
+      team_id: teamId,
+      ...c,
+      calculated_at: calculatedAt
+    }));
 
     // Fetch data status
     const dataStatus = await query<any>(
@@ -1361,11 +1411,14 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
         monthsWithQualityData: monthsWithQuality,
         monthsWithKpiData: monthsWithKpis,
         monthsWithPairedData: pairedMonths.length,
-        isCorrelationReady: pairedMonths.length >= 6,
+        isCorrelationReady: correlations.length > 0,
+        correlationsTested: correlations.length,
+        pairsSkippedZeroVariance: matrix.pairsSkippedZeroVariance,
         earliestMonth: qualityMetrics[0]?.month_year || businessKpis[0]?.month_year || null,
         latestMonth: qualityMetrics[qualityMetrics.length - 1]?.month_year ||
           businessKpis[businessKpis.length - 1]?.month_year || null
-      }
+      },
+      correlationMethod: CORRELATION_METHOD
     });
   } catch (error) {
     console.error('Error fetching business impact v2:', error);
@@ -1405,14 +1458,14 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
          updated_at = CURRENT_TIMESTAMP`,
       [
         id, teamId, month_year,
-        metrics.test_coverage || null,
-        metrics.defect_density || null,
-        metrics.defect_escape_rate || null,
-        metrics.mttr_hours || null,
-        metrics.deployment_frequency || null,
-        metrics.lead_time_days || null,
-        metrics.code_quality_score || null,
-        metrics.change_failure_rate || null
+        num(metrics.test_coverage),
+        num(metrics.defect_density),
+        num(metrics.defect_escape_rate),
+        num(metrics.mttr_hours),
+        num(metrics.deployment_frequency),
+        num(metrics.lead_time_days),
+        num(metrics.code_quality_score),
+        num(metrics.change_failure_rate)
       ]
     );
 
@@ -1458,16 +1511,16 @@ router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, asyn
          updated_at = CURRENT_TIMESTAMP`,
       [
         id, teamId, month_year,
-        kpis.monthly_revenue || null,
-        kpis.active_users || null,
-        kpis.churn_rate || null,
-        kpis.feature_adoption_rate || null,
-        kpis.new_customers || null,
-        kpis.customer_lifetime_value || null,
-        kpis.nps_score || null,
-        kpis.csat_score || null,
-        kpis.support_ticket_volume || null,
-        kpis.avg_resolution_time_hours || null
+        num(kpis.monthly_revenue),
+        num(kpis.active_users),
+        num(kpis.churn_rate),
+        num(kpis.feature_adoption_rate),
+        num(kpis.new_customers),
+        num(kpis.customer_lifetime_value),
+        num(kpis.nps_score),
+        num(kpis.csat_score),
+        num(kpis.support_ticket_volume),
+        num(kpis.avg_resolution_time_hours)
       ]
     );
 
@@ -1516,18 +1569,18 @@ router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req
          updated_at = CURRENT_TIMESTAMP`,
       [
         id, teamId, month_year,
-        context.team_size || null,
-        context.sprint_length_days || 14,
-        context.working_days || null,
-        context.feature_release_count || null,
-        context.bug_fix_count || null,
-        context.tech_debt_items_resolved || null,
-        context.user_growth_rate || null,
-        context.total_user_base || null,
-        context.is_holiday_season ? 1 : 0,
-        context.marketing_spend || null,
-        context.major_incident_count || 0,
-        context.downtime_minutes || 0,
+        num(context.team_size),
+        num(context.sprint_length_days),
+        num(context.working_days),
+        num(context.feature_release_count),
+        num(context.bug_fix_count),
+        num(context.tech_debt_items_resolved),
+        num(context.user_growth_rate),
+        num(context.total_user_base),
+        context.is_holiday_season === undefined || context.is_holiday_season === null ? null : (context.is_holiday_season ? 1 : 0),
+        num(context.marketing_spend),
+        num(context.major_incident_count),
+        num(context.downtime_minutes),
         context.notes || null
       ]
     );
@@ -1567,90 +1620,41 @@ router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateTo
       });
     }
 
-    // Create month-indexed maps
-    const qualityByMonth: Record<string, any> = {};
-    qualityMetrics.forEach((m: any) => { qualityByMonth[m.month_year] = m; });
+    const { correlations: correlationResults, pairedMonths, pairsSkippedZeroVariance } =
+      computeCorrelationMatrix(qualityMetrics, businessKpis);
 
-    const kpiByMonth: Record<string, any> = {};
-    businessKpis.forEach((k: any) => { kpiByMonth[k.month_year] = k; });
-
-    // Find paired months
-    const pairedMonths = Object.keys(qualityByMonth).filter(m => kpiByMonth[m]).sort();
-
-    if (pairedMonths.length < 6) {
+    if (pairedMonths.length < BI_MIN_PAIRED_MONTHS) {
       return res.status(400).json({
         error: 'Insufficient paired data. Need at least 6 months where both X and Y data exist.',
         pairedMonths: pairedMonths.length
       });
     }
 
-    // Define metric pairs to correlate
-    const qualityFields = [
-      'test_coverage', 'defect_density', 'defect_escape_rate', 'mttr_hours',
-      'deployment_frequency', 'lead_time_days', 'code_quality_score', 'change_failure_rate'
-    ];
-    const kpiFields = [
-      'monthly_revenue', 'active_users', 'churn_rate', 'feature_adoption_rate',
-      'nps_score', 'csat_score', 'support_ticket_volume'
-    ];
-
-    const correlationResults: any[] = [];
-
-    // Calculate correlation for each pair
-    for (const qField of qualityFields) {
-      for (const kField of kpiFields) {
-        const xValues: number[] = [];
-        const yValues: number[] = [];
-
-        pairedMonths.forEach(month => {
-          const qVal = qualityByMonth[month][qField];
-          const kVal = kpiByMonth[month][kField];
-          if (qVal !== null && kVal !== null) {
-            xValues.push(Number(qVal));
-            yValues.push(Number(kVal));
-          }
-        });
-
-        if (xValues.length >= 6) {
-          const { correlation, pValue, sampleSize } = calculatePearsonCorrelation(xValues, yValues);
-          const strength = getCorrelationStrength(correlation);
-          const isSignificant = pValue < 0.05;
-
-          correlationResults.push({
-            quality_metric: qField,
-            business_kpi: kField,
-            pearson_correlation: correlation,
-            p_value: pValue,
-            sample_size: sampleSize,
-            correlation_strength: strength,
-            is_significant: isSignificant
-          });
-
-          // Save to database
-          const id = randomUUID();
-          await query(
-            `INSERT INTO business_impact_correlations
-             (id, team_id, quality_metric, business_kpi, pearson_correlation, p_value,
-              sample_size, correlation_strength, is_significant, start_month, end_month, calculated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
-             ON CONFLICT (team_id, quality_metric, business_kpi) DO UPDATE SET
-               pearson_correlation = EXCLUDED.pearson_correlation,
-               p_value = EXCLUDED.p_value,
-               sample_size = EXCLUDED.sample_size,
-               correlation_strength = EXCLUDED.correlation_strength,
-               is_significant = EXCLUDED.is_significant,
-               start_month = EXCLUDED.start_month,
-               end_month = EXCLUDED.end_month,
-               calculated_at = NOW(),
-               updated_at = CURRENT_TIMESTAMP`,
-            [
-              id, teamId, qField, kField, correlation, pValue, sampleSize,
-              strength, isSignificant ? 1 : 0,
-              pairedMonths[0], pairedMonths[pairedMonths.length - 1]
-            ]
-          );
-        }
-      }
+    // Cache results. p_value is the exact Student-t p; is_significant uses the
+    // Benjamini-Hochberg q-value (q < 0.05) across all pairs tested for this team.
+    for (const c of correlationResults) {
+      const id = randomUUID();
+      await query(
+        `INSERT INTO business_impact_correlations
+         (id, team_id, quality_metric, business_kpi, pearson_correlation, p_value,
+          sample_size, correlation_strength, is_significant, start_month, end_month, calculated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+         ON CONFLICT (team_id, quality_metric, business_kpi) DO UPDATE SET
+           pearson_correlation = EXCLUDED.pearson_correlation,
+           p_value = EXCLUDED.p_value,
+           sample_size = EXCLUDED.sample_size,
+           correlation_strength = EXCLUDED.correlation_strength,
+           is_significant = EXCLUDED.is_significant,
+           start_month = EXCLUDED.start_month,
+           end_month = EXCLUDED.end_month,
+           calculated_at = NOW(),
+           updated_at = CURRENT_TIMESTAMP`,
+        [
+          id, teamId, c.quality_metric, c.business_kpi, c.pearson_correlation, c.p_value, c.sample_size,
+          c.correlation_strength, c.is_significant,
+          c.start_month, c.end_month
+        ]
+      );
     }
 
     // Update data status
@@ -1675,17 +1679,17 @@ router.post('/business-impact-v2/:teamId/calculate-correlations', authenticateTo
       ]
     );
 
-    // Return top correlations sorted by absolute value
-    const topCorrelations = correlationResults
-      .sort((a, b) => Math.abs(b.pearson_correlation) - Math.abs(a.pearson_correlation))
-      .slice(0, 20);
+    // Return top correlations sorted by absolute value (already sorted)
+    const topCorrelations = correlationResults.slice(0, 20);
 
     res.json({
       success: true,
       correlationsCalculated: correlationResults.length,
+      pairsSkippedZeroVariance,
       pairedMonths: pairedMonths.length,
       dateRange: { start: pairedMonths[0], end: pairedMonths[pairedMonths.length - 1] },
-      topCorrelations
+      topCorrelations,
+      correlationMethod: CORRELATION_METHOD
     });
   } catch (error) {
     console.error('Error calculating correlations:', error);
@@ -1704,6 +1708,20 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
       return res.status(400).json({ error: 'monthlyData must be an array' });
     }
 
+    // Data produced by the "generate sample data" endpoint must never be stored as if a
+    // person entered it. The client marks it with data_source: 'synthetic' (top level or
+    // per month/section); such data is refused unless synthetic data is enabled, and is
+    // then stored with data_source='synthetic' and manually_edited=FALSE.
+    const isSyntheticPayload =
+      req.body.data_source === 'synthetic' || req.body.synthetic === true ||
+      monthlyData.some((m: any) =>
+        m?.data_source === 'synthetic' || m?.quality?.data_source === 'synthetic' || m?.kpis?.data_source === 'synthetic');
+    if (isSyntheticPayload && !isSyntheticDataEnabled()) {
+      return res.status(400).json({ error: 'Sample (synthetic) data cannot be saved.' });
+    }
+    const dataSource = isSyntheticPayload ? 'synthetic' : 'manual';
+    const manuallyEdited = !isSyntheticPayload;
+
     let saved = 0;
 
     for (const month of monthlyData) {
@@ -1718,8 +1736,8 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
           `INSERT INTO business_impact_quality_metrics
            (id, team_id, month_year, test_coverage, defect_density, defect_escape_rate,
             mttr_hours, deployment_frequency, lead_time_days, code_quality_score,
-            change_failure_rate, manually_edited)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+            change_failure_rate, manually_edited, data_source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (team_id, month_year) DO UPDATE SET
              test_coverage = COALESCE(EXCLUDED.test_coverage, business_impact_quality_metrics.test_coverage),
              defect_density = COALESCE(EXCLUDED.defect_density, business_impact_quality_metrics.defect_density),
@@ -1729,13 +1747,15 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
              lead_time_days = COALESCE(EXCLUDED.lead_time_days, business_impact_quality_metrics.lead_time_days),
              code_quality_score = COALESCE(EXCLUDED.code_quality_score, business_impact_quality_metrics.code_quality_score),
              change_failure_rate = COALESCE(EXCLUDED.change_failure_rate, business_impact_quality_metrics.change_failure_rate),
-             manually_edited = TRUE,
+             manually_edited = EXCLUDED.manually_edited,
+             data_source = EXCLUDED.data_source,
              updated_at = CURRENT_TIMESTAMP`,
           [
             qId, teamId, month_year,
-            quality.test_coverage, quality.defect_density, quality.defect_escape_rate,
-            quality.mttr_hours, quality.deployment_frequency, quality.lead_time_days,
-            quality.code_quality_score, quality.change_failure_rate
+            num(quality.test_coverage), num(quality.defect_density), num(quality.defect_escape_rate),
+            num(quality.mttr_hours), num(quality.deployment_frequency), num(quality.lead_time_days),
+            num(quality.code_quality_score), num(quality.change_failure_rate),
+            manuallyEdited, dataSource
           ]
         );
       }
@@ -1746,8 +1766,8 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
         await query(
           `INSERT INTO business_impact_business_kpis
            (id, team_id, month_year, monthly_revenue, active_users, churn_rate,
-            feature_adoption_rate, nps_score, csat_score, support_ticket_volume, manually_edited)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+            feature_adoption_rate, nps_score, csat_score, support_ticket_volume, manually_edited, data_source)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (team_id, month_year) DO UPDATE SET
              monthly_revenue = COALESCE(EXCLUDED.monthly_revenue, business_impact_business_kpis.monthly_revenue),
              active_users = COALESCE(EXCLUDED.active_users, business_impact_business_kpis.active_users),
@@ -1756,12 +1776,14 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
              nps_score = COALESCE(EXCLUDED.nps_score, business_impact_business_kpis.nps_score),
              csat_score = COALESCE(EXCLUDED.csat_score, business_impact_business_kpis.csat_score),
              support_ticket_volume = COALESCE(EXCLUDED.support_ticket_volume, business_impact_business_kpis.support_ticket_volume),
-             manually_edited = TRUE,
+             manually_edited = EXCLUDED.manually_edited,
+             data_source = EXCLUDED.data_source,
              updated_at = CURRENT_TIMESTAMP`,
           [
             kId, teamId, month_year,
-            kpis.monthly_revenue, kpis.active_users, kpis.churn_rate,
-            kpis.feature_adoption_rate, kpis.nps_score, kpis.csat_score, kpis.support_ticket_volume
+            num(kpis.monthly_revenue), num(kpis.active_users), num(kpis.churn_rate),
+            num(kpis.feature_adoption_rate), num(kpis.nps_score), num(kpis.csat_score), num(kpis.support_ticket_volume),
+            manuallyEdited, dataSource
           ]
         );
       }
@@ -1773,7 +1795,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
           `INSERT INTO business_impact_context
            (id, team_id, month_year, team_size, feature_release_count, user_growth_rate,
             total_user_base, is_holiday_season, downtime_minutes, manually_edited)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (team_id, month_year) DO UPDATE SET
              team_size = COALESCE(EXCLUDED.team_size, business_impact_context.team_size),
              feature_release_count = COALESCE(EXCLUDED.feature_release_count, business_impact_context.feature_release_count),
@@ -1781,12 +1803,15 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
              total_user_base = COALESCE(EXCLUDED.total_user_base, business_impact_context.total_user_base),
              is_holiday_season = COALESCE(EXCLUDED.is_holiday_season, business_impact_context.is_holiday_season),
              downtime_minutes = COALESCE(EXCLUDED.downtime_minutes, business_impact_context.downtime_minutes),
-             manually_edited = TRUE,
+             manually_edited = EXCLUDED.manually_edited,
              updated_at = CURRENT_TIMESTAMP`,
           [
             cId, teamId, month_year,
-            context.team_size, context.feature_release_count, context.user_growth_rate,
-            context.total_user_base, context.is_holiday_season ? 1 : 0, context.downtime_minutes
+            num(context.team_size), num(context.feature_release_count), num(context.user_growth_rate),
+            num(context.total_user_base),
+            context.is_holiday_season === undefined || context.is_holiday_season === null ? null : (context.is_holiday_season ? 1 : 0),
+            num(context.downtime_minutes),
+            manuallyEdited
           ]
         );
       }
@@ -1794,17 +1819,21 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
       saved++;
     }
 
-    res.json({ success: true, monthsSaved: saved });
+    res.json({ success: true, monthsSaved: saved, dataSource });
   } catch (error) {
     console.error('Error bulk saving:', error);
     res.status(500).json({ error: 'Failed to bulk save data' });
   }
 });
 
-// POST: Generate realistic correlation data (not persisted)
+// POST: Generate SAMPLE (synthetic) correlation data. Not persisted, not a measurement.
+// Disabled unless ENABLE_SYNTHETIC_DATA === 'true'.
 router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
+    if (!isSyntheticDataEnabled()) {
+      return res.status(403).json({ error: 'Sample data generation is disabled.', disabled: true });
+    }
     if (!(await assertTeamWrite(req, res, teamId))) return;
 
     // Generate 12 months of realistic data
@@ -1869,7 +1898,8 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
         lead_time_days: Math.max(3, qualityBase.lead_time_days - qualityTrend * 4 + randomNoise() * 3),
         code_quality_score: Math.max(50, Math.min(95, qualityBase.code_quality_score + qualityTrend * 20 + randomNoise() * 12)),
         change_failure_rate: Math.max(5, Math.min(35, qualityBase.change_failure_rate - qualityTrend * 10 + randomNoise() * 6)),
-        manually_edited: false
+        manually_edited: false,
+        data_source: 'synthetic'
       };
       qualityMetrics.push(qualityData);
 
@@ -1901,7 +1931,8 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
           qualityScore * correlationStrength * 20 + randomNoise() * 12)),
         support_ticket_volume: Math.max(100, Math.min(1500, kpiBase.support_ticket_volume * (1 - operationalEfficiency * 0.3) * (1 - qualityScore * correlationStrength * 0.4) +
           randomNoise() * 200)),
-        manually_edited: false
+        manually_edited: false,
+        data_source: 'synthetic'
       };
       businessKpis.push(businessData);
 
@@ -1917,101 +1948,39 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
         user_growth_rate: 4 + Math.random() * 8, // 4-12% growth
         downtime_minutes: 150 - i * 10 + Math.floor(Math.random() * 100), // Decreasing downtime
         is_holiday_season: i === 0 ? 1 : 0, // December has holiday season
-        manually_edited: false
+        manually_edited: false,
+        data_source: 'synthetic'
       };
       contextData.push(contextItem);
     }
 
-    // Calculate realistic correlations
-    const correlations = [];
-
-    // Helper function to generate random correlation between 0.3 and 0.8
-    const randomCorrelation = (isNegative: boolean = false) => {
-      const base = 0.3 + Math.random() * 0.5; // Random between 0.3 and 0.8
-      return isNegative ? -base : base;
-    };
-
-    // Define correlation pairs with random realistic strengths (0.3-0.8)
-    const correlationPairs = [
-      { quality: 'test_coverage', kpi: 'monthly_revenue', expectedR: randomCorrelation(false) },
-      { quality: 'test_coverage', kpi: 'active_users', expectedR: randomCorrelation(false) },
-      { quality: 'test_coverage', kpi: 'churn_rate', expectedR: randomCorrelation(true) },
-      { quality: 'test_coverage', kpi: 'feature_adoption_rate', expectedR: randomCorrelation(false) },
-      { quality: 'test_coverage', kpi: 'nps_score', expectedR: randomCorrelation(false) },
-      { quality: 'test_coverage', kpi: 'csat_score', expectedR: randomCorrelation(false) },
-      { quality: 'test_coverage', kpi: 'support_ticket_volume', expectedR: randomCorrelation(true) },
-
-      { quality: 'defect_density', kpi: 'monthly_revenue', expectedR: randomCorrelation(true) },
-      { quality: 'defect_density', kpi: 'active_users', expectedR: randomCorrelation(true) },
-      { quality: 'defect_density', kpi: 'churn_rate', expectedR: randomCorrelation(false) },
-      { quality: 'defect_density', kpi: 'feature_adoption_rate', expectedR: randomCorrelation(true) },
-      { quality: 'defect_density', kpi: 'nps_score', expectedR: randomCorrelation(true) },
-      { quality: 'defect_density', kpi: 'csat_score', expectedR: randomCorrelation(true) },
-      { quality: 'defect_density', kpi: 'support_ticket_volume', expectedR: randomCorrelation(false) },
-
-      { quality: 'defect_escape_rate', kpi: 'monthly_revenue', expectedR: randomCorrelation(true) },
-      { quality: 'defect_escape_rate', kpi: 'active_users', expectedR: randomCorrelation(true) },
-      { quality: 'defect_escape_rate', kpi: 'churn_rate', expectedR: randomCorrelation(false) },
-      { quality: 'defect_escape_rate', kpi: 'feature_adoption_rate', expectedR: randomCorrelation(true) },
-      { quality: 'defect_escape_rate', kpi: 'nps_score', expectedR: randomCorrelation(true) },
-      { quality: 'defect_escape_rate', kpi: 'csat_score', expectedR: randomCorrelation(true) },
-      { quality: 'defect_escape_rate', kpi: 'support_ticket_volume', expectedR: randomCorrelation(false) },
-
-      { quality: 'mttr_hours', kpi: 'monthly_revenue', expectedR: randomCorrelation(true) },
-      { quality: 'mttr_hours', kpi: 'csat_score', expectedR: randomCorrelation(true) },
-      { quality: 'mttr_hours', kpi: 'nps_score', expectedR: randomCorrelation(true) },
-
-      { quality: 'code_quality_score', kpi: 'monthly_revenue', expectedR: randomCorrelation(false) },
-      { quality: 'code_quality_score', kpi: 'active_users', expectedR: randomCorrelation(false) },
-      { quality: 'code_quality_score', kpi: 'churn_rate', expectedR: randomCorrelation(true) },
-
-      { quality: 'deployment_frequency', kpi: 'feature_adoption_rate', expectedR: randomCorrelation(false) },
-      { quality: 'deployment_frequency', kpi: 'active_users', expectedR: randomCorrelation(false) },
-    ];
-
-    for (const pair of correlationPairs) {
-      const qualityValues = qualityMetrics.map((q: any) => Number(q[pair.quality as keyof typeof q]));
-      const kpiValues = businessKpis.map((k: any) => Number(k[pair.kpi as keyof typeof k]));
-
-      const { correlation, pValue, sampleSize } = calculatePearsonCorrelation(qualityValues, kpiValues);
-      const strength = getCorrelationStrength(Math.abs(correlation));
-      const isSignificant = pValue < 0.05;
-
-      correlations.push({
-        quality_metric: pair.quality,
-        business_kpi: pair.kpi,
-        pearson_correlation: correlation,
-        p_value: pValue,
-        sample_size: sampleSize,
-        correlation_strength: strength,
-        is_significant: isSignificant
-      });
-    }
-
-    // Sort by absolute correlation strength
-    correlations.sort((a, b) => Math.abs(b.pearson_correlation) - Math.abs(a.pearson_correlation));
+    // Same statistics as for real data (exact t-test + BH-FDR)
+    const { correlations } = computeCorrelationMatrix(qualityMetrics, businessKpis);
 
     res.json({
       success: true,
       dataGenerated: true,
-      message: 'Realistic business impact data seeded successfully! 12 months of correlated quality metrics and KPIs generated.',
+      synthetic: true,
+      dataSource: 'synthetic',
+      message: 'SAMPLE DATA: 12 months of synthetic, randomly generated values. Not measured and not saved. Do not use for decisions.',
       dateRange: { start: months[0], end: months[11] },
       qualityMetrics,
       businessKpis,
       contextData,
       correlations: correlations.slice(0, 20), // Top 20 correlations
+      correlationMethod: CORRELATION_METHOD,
       summary: {
         monthsWithQualityData: 12,
         monthsWithKpiData: 12,
         monthsWithPairedData: 12,
-        isCorrelationReady: true,
+        isCorrelationReady: correlations.length > 0,
         earliestMonth: months[0],
         latestMonth: months[11]
       }
     });
   } catch (error) {
-    console.error('Error generating realistic data:', error);
-    res.status(500).json({ error: 'Failed to generate realistic data' });
+    console.error('Error generating sample data:', error);
+    res.status(500).json({ error: 'Failed to generate sample data' });
   }
 });
 
@@ -2022,22 +1991,21 @@ router.post('/business-impact-v2/:teamId/ai-analysis', aiLimiter, authenticateTo
     // Tenant + role scope (also limits who can spend Groq budget).
     if (!(await assertTeamRead(req, res, teamId))) return;
 
-    // Rebuild the correlation matrix from the database for THIS team rather than
-    // trusting the request body: the body is attacker-controlled and its strings
-    // were being injected straight into the LLM prompt. This also caps the size.
-    const correlations = await query<any>(
-      `SELECT quality_metric, business_kpi, pearson_correlation, p_value,
-              correlation_strength, is_significant
-       FROM business_impact_correlations
-       WHERE team_id = ?
-       ORDER BY ABS(pearson_correlation) DESC NULLS LAST
-       LIMIT 50`,
-      [teamId]
-    );
+    // Rebuild the correlation matrix from THIS team's stored monthly data (same
+    // computation as the GET endpoint) rather than trusting the request body.
+    const [aiQuality, aiKpis] = await Promise.all([
+      query<any>(`SELECT * FROM business_impact_quality_metrics WHERE team_id = ? ORDER BY month_year ASC`, [teamId]),
+      query<any>(`SELECT * FROM business_impact_business_kpis WHERE team_id = ? ORDER BY month_year ASC`, [teamId])
+    ]);
+    const aiMatrix = computeCorrelationMatrix(aiQuality, aiKpis);
+    const correlations = aiMatrix.correlations.slice(0, 50);
 
     if (!correlations || correlations.length === 0) {
-      return res.status(400).json({ error: 'No correlations available for analysis. Calculate correlations first.' });
+      return res.status(400).json({ error: 'No correlations available for analysis. At least 6 months of paired data are needed.' });
     }
+    const periodStart = aiMatrix.pairedMonths[0];
+    const periodEnd = aiMatrix.pairedMonths[aiMatrix.pairedMonths.length - 1];
+    const testedCount = aiMatrix.correlations.length;
 
     const groqApiKey = process.env.GROQ_API_KEY;
 
@@ -2055,11 +2023,13 @@ router.post('/business-impact-v2/:teamId/ai-analysis', aiLimiter, authenticateTo
       business_kpi: clean(c.business_kpi),
       correlation: c.pearson_correlation,
       p_value: c.p_value,
+      q_value: c.q_value,
+      n: c.sample_size,
       strength: clean(c.correlation_strength),
       significant: c.is_significant
     }));
 
-    const analysisPrompt = `You are a Senior Data Scientist and Business Intelligence expert. Analyze this correlation matrix from a QA dashboard that measures the relationship between software quality metrics and business outcomes over 12 months.
+    const analysisPrompt = `You are a Senior Data Scientist and Business Intelligence expert. Analyze this correlation matrix from a QA dashboard that measures the relationship between software quality metrics and business outcomes over ${aiMatrix.pairedMonths.length} paired months (${periodStart} to ${periodEnd}).
 
 IMPORTANT: Output your response as clean HTML that can be directly rendered. Use these HTML elements:
 - <h2> for section headers
@@ -2071,21 +2041,22 @@ IMPORTANT: Output your response as clean HTML that can be directly rendered. Use
 - <span class="positive"> for positive correlations, <span class="negative"> for negative ones
 
 DATASET CONTEXT:
-- Time Period: 12 consecutive months of data
+- Time Period: ${aiMatrix.pairedMonths.length} months with both quality and business data (${periodStart} to ${periodEnd}); each pair uses only months where both values exist (n shown per row)
 - Quality Metrics (X variables): Software testing and development metrics
 - Business KPIs (Y variables): Revenue, user engagement, satisfaction metrics
-- Statistical Method: Pearson correlation coefficient with p-value significance testing
+- Statistical Method: Pearson r, two-sided Student t-test (df = n-2). ${testedCount} pairs were tested, so p-values are adjusted with Benjamini-Hochberg FDR; "significant" means q < 0.05.
+- These results are exploratory. Correlation does not show causation; small monthly samples and shared time trends can produce strong correlations without any causal link. Do not claim that one metric drives another.
 
 CORRELATION MATRIX DATA:
 ${correlationMatrix.map((c: any) =>
-      `${c.quality_metric} → ${c.business_kpi}: r=${Number(c.correlation).toFixed(3)}, p=${Number(c.p_value) < 0.001 ? '<0.001' : Number(c.p_value).toFixed(4)}, ${c.strength}, ${c.significant ? 'significant' : 'not significant'}`
+      `${c.quality_metric} → ${c.business_kpi}: r=${Number(c.correlation).toFixed(3)}, n=${c.n}, p=${Number(c.p_value) < 0.001 ? '<0.001' : Number(c.p_value).toFixed(4)}, q=${Number(c.q_value) < 0.001 ? '<0.001' : Number(c.q_value).toFixed(4)}, ${c.strength}, ${c.significant ? 'significant after FDR correction' : 'not significant after FDR correction'}`
     ).join('\n')}
 
 ANALYSIS REQUIREMENTS:
 1. Executive Summary: Key findings in 3-5 bullet points
 2. Statistical Assessment: Evaluate data quality and correlation validity
-3. Business Impact Analysis: What do these correlations mean for decision-making?
-4. Strategic Recommendations: Which quality metrics should be prioritized?
+3. Business Impact Analysis: What could these associations mean, and what further evidence (e.g. experiments, controlling for trends) would be needed before acting on them?
+4. Strategic Recommendations: Which relationships are worth investigating further? Do not present correlations as causes.
 5. Risk Assessment: Business risks from quality degradation
 6. Keep the total response under approximately 1500 words and limit any correlation tables to at most 25 rows.
 
@@ -2129,369 +2100,350 @@ Provide actionable insights that a CTO would understand and use to make investme
 });
 
 // ============================================================================
+// COMPANY-WIDE METRICS (single definition shared by company-summary and company-insights)
+// ============================================================================
+
+// QA score thresholds: one set everywhere (same as kpi_snapshots.status).
+const QA_GOOD_THRESHOLD = 85;
+const QA_WARNING_THRESHOLD = 70; // below this = critical
+
+// Per-team KPI targets used for kpiStatus and needsAttention
+const KPI_TARGETS = {
+  coverage: 80,   // test_coverage >= 80%
+  flakiness: 3,   // test_flakiness_rate <= 3%
+  escapeRate: 2,  // defect_escape_rate <= 2%
+  automation: 70  // automation_coverage >= 70%
+};
+
+// DORA performance level per team. Bands are identical to getDORALevel() in
+// server/routes/metrics.ts (DORA State of DevOps bands):
+//   Elite:  deploys >= 7/week AND lead time < 1 day  AND CFR < 5%  AND MTTR < 1 h
+//   High:   deploys >= 1/week AND lead time < 7 days AND CFR < 10% AND MTTR < 24 h
+//   Medium: deploys >= 0.25/week AND lead time < 30 days AND CFR < 15% AND MTTR < 168 h
+//   Low:    otherwise
+// A team missing any of the four inputs is not classified (null), never treated as 0.
+type DoraLevel = 'Elite' | 'High' | 'Medium' | 'Low';
+const DORA_LEVEL_SCORE: Record<DoraLevel, number> = { Elite: 100, High: 80, Medium: 60, Low: 40 };
+
+function classifyDoraLevel(k: any): DoraLevel | null {
+  const deployFreq = num(k.deployment_frequency_per_week);
+  const leadTime = num(k.lead_time_days);
+  const cfr = num(k.change_failure_rate);
+  const mttr = num(k.mttr_hours);
+  if (deployFreq === null || leadTime === null || cfr === null || mttr === null) return null;
+  if (deployFreq >= 7 && leadTime < 1 && cfr < 5 && mttr < 1) return 'Elite';
+  if (deployFreq >= 1 && leadTime < 7 && cfr < 10 && mttr < 24) return 'High';
+  if (deployFreq >= 0.25 && leadTime < 30 && cfr < 15 && mttr < 168) return 'Medium';
+  return 'Low';
+}
+
+const ENGINEERING_HEALTH_WEIGHTS = {
+  deliveryPerformance: 0.35,
+  pipelineHealth: 0.25,
+  techDebtStatus: 0.20,
+  developerHappiness: 0.15,
+  burnoutRisk: 0.05
+};
+
+async function computeCompanyMetrics(companyId: string) {
+  // Active teams and the latest KPI snapshot per active team
+  const activeTeams = await query<any>(
+    'SELECT id, name FROM teams WHERE company_id = ? AND is_active = TRUE',
+    [companyId]
+  );
+  const latestSnapshots = await query<any>(`
+    SELECT DISTINCT ON (ks.team_id)
+      ks.*, t.name, to_char(ks.snapshot_date, 'YYYY-MM-DD') AS snapshot_day
+    FROM kpi_snapshots ks
+    JOIN teams t ON t.id = ks.team_id
+    WHERE t.company_id = ? AND t.is_active = TRUE
+    ORDER BY ks.team_id, ks.snapshot_date DESC, ks.created_at DESC
+  `, [companyId]);
+  const teamsWithData = latestSnapshots.filter((t: any) => num(t.qa_score) !== null);
+
+  const snapshotDays = teamsWithData.map((t: any) => t.snapshot_day as string).sort();
+  const asOf: string | null = snapshotDays.length ? snapshotDays[snapshotDays.length - 1] : null;
+  const oldestSnapshotDate: string | null = snapshotDays.length ? snapshotDays[0] : null;
+
+  // Global QA score: mean of each active team's latest qa_score
+  const globalQaScoreRaw = meanOf(teamsWithData.map((t: any) => num(t.qa_score)));
+  const globalQaScore = globalQaScoreRaw !== null ? Math.round(globalQaScoreRaw) : null;
+
+  // Trend: vs. mean of each active team's latest qa_score dated 7-14 days ago.
+  // Null (not "stable") when that window has no snapshots.
+  const prev = await queryOne<any>(`
+    SELECT AVG(p.qa_score) AS avg_score, COUNT(*) AS n FROM (
+      SELECT DISTINCT ON (ks.team_id) ks.qa_score
+      FROM kpi_snapshots ks
+      JOIN teams t ON t.id = ks.team_id
+      WHERE t.company_id = ? AND t.is_active = TRUE
+        AND ks.qa_score IS NOT NULL
+        AND ks.snapshot_date >= CURRENT_DATE - 14
+        AND ks.snapshot_date < CURRENT_DATE - 7
+      ORDER BY ks.team_id, ks.snapshot_date DESC
+    ) p
+  `, [companyId]);
+  const prevScore = num(prev?.n) ? num(prev?.avg_score) : null;
+  const globalQaScoreTrend = globalQaScoreRaw !== null && prevScore !== null
+    ? Math.round(globalQaScoreRaw - prevScore)
+    : null;
+
+  let riskLevel: 'stable' | 'watch' | 'at-risk' | 'unknown' = 'unknown';
+  if (globalQaScore !== null) {
+    if (globalQaScore < QA_WARNING_THRESHOLD) riskLevel = 'at-risk';
+    else if (globalQaScore < QA_GOOD_THRESHOLD) riskLevel = 'watch';
+    else riskLevel = 'stable';
+  }
+
+  // Averages over teams that have a value (nulls excluded, never counted as 0)
+  const avgField = (field: string) => roundTo(meanOf(teamsWithData.map((t: any) => num(t[field]))), 1);
+  const avgTestCoverage = avgField('test_coverage');
+  const avgDefectEscapeRate = avgField('defect_escape_rate');
+  const automationCoverage = avgField('automation_coverage');
+  const avgFlakinessRate = avgField('test_flakiness_rate');
+
+  // Top teams by current score (not an improvement measure)
+  const sortedByScore = [...teamsWithData].sort((a, b) => (num(b.qa_score) as number) - (num(a.qa_score) as number));
+  const topImproving = sortedByScore.slice(0, 3).map(t => ({ name: t.name, score: Math.round(num(t.qa_score) as number) }));
+
+  // Per-team KPI checks (only KPIs with a recorded value are judged)
+  const kpiIssuesFor = (t: any): string[] => {
+    const issues: string[] = [];
+    const coverage = num(t.test_coverage);
+    const flakiness = num(t.test_flakiness_rate);
+    const escape = num(t.defect_escape_rate);
+    const automation = num(t.automation_coverage);
+    if (coverage !== null && coverage < KPI_TARGETS.coverage) issues.push(`Test coverage ${roundTo(coverage, 1)}% (target ≥${KPI_TARGETS.coverage}%)`);
+    if (flakiness !== null && flakiness > KPI_TARGETS.flakiness) issues.push(`Flakiness ${roundTo(flakiness, 1)}% (target ≤${KPI_TARGETS.flakiness}%)`);
+    if (escape !== null && escape > KPI_TARGETS.escapeRate) issues.push(`Defect escape rate ${roundTo(escape, 1)}% (target ≤${KPI_TARGETS.escapeRate}%)`);
+    if (automation !== null && automation < KPI_TARGETS.automation) issues.push(`Automation ${roundTo(automation, 1)}% (target ≥${KPI_TARGETS.automation}%)`);
+    return issues;
+  };
+
+  // Needs attention: QA score critical (<70) or any KPI off target
+  type AttentionItem = { name: string; score: number; issue: string; issues: string[]; snapshotDate: string };
+  const needsAttention: AttentionItem[] = teamsWithData
+    .map((t: any): AttentionItem => {
+      const score = num(t.qa_score) as number;
+      const issues = kpiIssuesFor(t);
+      if (score < QA_WARNING_THRESHOLD) issues.unshift(`QA score ${Math.round(score)} (critical, <${QA_WARNING_THRESHOLD})`);
+      return { name: t.name, score: Math.round(score), issue: issues.join('; '), issues, snapshotDate: t.snapshot_day };
+    })
+    .filter((t: AttentionItem) => t.issues.length > 0)
+    .sort((a: AttentionItem, b: AttentionItem) => a.score - b.score || b.issues.length - a.issues.length);
+
+  // KPI status: share of recorded KPI targets met (needs >= 2 recorded KPIs)
+  let onTrack = 0, atRisk = 0, offTrack = 0, noData = 0;
+  for (const t of teamsWithData) {
+    const checks = [
+      num(t.test_coverage) === null ? null : (num(t.test_coverage) as number) >= KPI_TARGETS.coverage,
+      num(t.test_flakiness_rate) === null ? null : (num(t.test_flakiness_rate) as number) <= KPI_TARGETS.flakiness,
+      num(t.defect_escape_rate) === null ? null : (num(t.defect_escape_rate) as number) <= KPI_TARGETS.escapeRate,
+      num(t.automation_coverage) === null ? null : (num(t.automation_coverage) as number) >= KPI_TARGETS.automation
+    ].filter((c): c is boolean => c !== null);
+    if (checks.length < 2) { noData++; continue; }
+    const share = checks.filter(Boolean).length / checks.length;
+    if (share >= 0.75) onTrack++;
+    else if (share >= 0.5) atRisk++;
+    else offTrack++;
+  }
+
+  // Technical debt status (active teams only)
+  const techDebtSummary = await queryOne<any>(
+    `SELECT 
+       SUM(CASE 
+             WHEN td.status NOT IN ('resolved','wont_fix') THEN
+               CASE td.severity
+                 WHEN 'critical' THEN 30
+                 WHEN 'high' THEN 20
+                 WHEN 'medium' THEN 10
+                 WHEN 'low' THEN 5
+                 ELSE 0
+               END
+             ELSE 0
+           END) AS total_weight,
+       SUM(CASE WHEN td.status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items,
+       COUNT(*) as total_items
+     FROM technical_debt td
+     JOIN teams t ON td.team_id = t.id
+     WHERE t.company_id = ? AND t.is_active = TRUE`,
+    [companyId]
+  );
+  const techDebtTotalItems = num(techDebtSummary?.total_items) ?? 0;
+  const techDebtOpenItems = num(techDebtSummary?.open_items) ?? 0;
+  // Score = 100 - min(100, open-debt severity weight per active team). Null when no debt is tracked.
+  const techDebtStatusScore = techDebtTotalItems > 0
+    ? roundTo(Math.max(0, 100 - Math.min(100, (num(techDebtSummary?.total_weight) ?? 0) / (activeTeams.length || 1))), 1)
+    : null;
+  const techDebtResolutionRate = techDebtTotalItems > 0
+    ? Math.round(((techDebtTotalItems - techDebtOpenItems) / techDebtTotalItems) * 100)
+    : null;
+
+  // Developer wellness: developer_metrics rows recorded for active teams (dm.team_id),
+  // averaged per developer first so a developer on several teams counts once.
+  const dev = await queryOne<any>(`
+    SELECT COUNT(*) AS developers,
+           AVG(d.h) AS avg_happiness, AVG(d.f) AS avg_focus,
+           AVG(d.m) AS avg_meetings, AVG(d.s) AS avg_switches
+    FROM (
+      SELECT dm.developer_id,
+             AVG(dm.happiness_score) AS h, AVG(dm.focus_time_hours) AS f,
+             AVG(dm.meeting_time_hours) AS m, AVG(dm.context_switches_per_day) AS s
+      FROM developer_metrics dm
+      JOIN teams t ON t.id = dm.team_id
+      JOIN users u ON u.id = dm.developer_id
+      WHERE t.company_id = ? AND t.is_active = TRUE AND u.company_id = ? AND u.is_active = TRUE
+      GROUP BY dm.developer_id
+    ) d
+  `, [companyId, companyId]);
+  const developerCount = num(dev?.developers) ?? 0;
+  const happiness = developerCount > 0 ? num(dev?.avg_happiness) : null;
+  const focusTime = developerCount > 0 ? num(dev?.avg_focus) : null;
+  const meetingTime = developerCount > 0 ? num(dev?.avg_meetings) : null;
+
+  // Burnout risk (categorical -> score): High if happiness < 50 OR meetings > 5h OR focus < 2h
+  let burnoutRiskScore: number | null = null;
+  if (happiness !== null && focusTime !== null && meetingTime !== null) {
+    burnoutRiskScore = 100;
+    if (happiness < 50 || meetingTime > 5 || focusTime < 2) burnoutRiskScore = 20;
+    else if (happiness < 70 || meetingTime > 4 || focusTime < 3) burnoutRiskScore = 60;
+  }
+  const focusTimeScore = focusTime === null ? null
+    : focusTime >= 4 ? 100 : focusTime >= 3 ? 80 : focusTime >= 2 ? 60 : 40;
+  const meetingLoadScore = meetingTime === null ? null
+    : meetingTime <= 2 ? 100 : meetingTime <= 4 ? 80 : meetingTime <= 6 ? 60 : 40;
+  const wellnessRaw = weightedMeanOf([
+    { value: happiness, weight: 0.6 },
+    { value: burnoutRiskScore, weight: 0.2 },
+    { value: focusTimeScore, weight: 0.1 },
+    { value: meetingLoadScore, weight: 0.1 }
+  ]);
+  const developerWellnessIndex = wellnessRaw !== null ? Math.round(wellnessRaw) : null;
+
+  // Delivery performance (DORA): mean of per-team level scores over classified teams
+  const doraLevels: Record<DoraLevel, number> = { Elite: 0, High: 0, Medium: 0, Low: 0 };
+  const doraScores: number[] = [];
+  for (const t of teamsWithData) {
+    const level = classifyDoraLevel(t);
+    if (level) { doraLevels[level]++; doraScores.push(DORA_LEVEL_SCORE[level]); }
+  }
+  const doraMean = meanOf(doraScores);
+  const deliveryPerformanceScore = doraMean !== null ? Math.round(doraMean) : null;
+
+  // Pipeline health: successful / (successful + failed) pipeline runs in the last
+  // 30 days, for company-level pipelines (team_id NULL) and active teams.
+  // Running and cancelled runs are excluded. Null when no completed runs.
+  const pipe = await queryOne<any>(`
+    SELECT COUNT(*) FILTER (WHERE pr.status = 'success') AS successful_runs,
+           COUNT(*) FILTER (WHERE pr.status IN ('success', 'failed')) AS total_runs
+    FROM pipeline_runs pr
+    LEFT JOIN teams t ON t.id = pr.team_id
+    WHERE pr.company_id = ?
+      AND pr.started_at >= NOW() - INTERVAL '30 days'
+      AND (pr.team_id IS NULL OR t.is_active = TRUE)
+  `, [companyId]);
+  const pipelineSuccessfulRuns = num(pipe?.successful_runs) ?? 0;
+  const pipelineTotalRuns = num(pipe?.total_runs) ?? 0;
+  const pipelineHealthScore = pipelineTotalRuns > 0
+    ? roundTo((pipelineSuccessfulRuns / pipelineTotalRuns) * 100, 1)
+    : null;
+
+  // Engineering health: weighted mean over the components that have data
+  const healthParts = {
+    deliveryPerformance: deliveryPerformanceScore,
+    pipelineHealth: pipelineHealthScore,
+    techDebtStatus: techDebtStatusScore,
+    developerHappiness: happiness,
+    burnoutRisk: burnoutRiskScore
+  };
+  const healthRaw = weightedMeanOf(
+    (Object.keys(ENGINEERING_HEALTH_WEIGHTS) as Array<keyof typeof ENGINEERING_HEALTH_WEIGHTS>)
+      .map(k => ({ value: healthParts[k], weight: ENGINEERING_HEALTH_WEIGHTS[k] }))
+  );
+  const engineeringHealthScore = healthRaw !== null ? Math.round(healthRaw) : null;
+  const healthIncluded = (Object.keys(healthParts) as Array<keyof typeof healthParts>).filter(k => healthParts[k] !== null);
+  const healthMissing = (Object.keys(healthParts) as Array<keyof typeof healthParts>).filter(k => healthParts[k] === null);
+
+  // Rule-based summary text (no AI)
+  let aiSummary: string;
+  if (globalQaScore === null) {
+    aiSummary = 'No KPI data available. Add KPI snapshots for active teams to see insights.';
+  } else {
+    if (globalQaScoreTrend === null) aiSummary = 'No QA score trend available (no snapshots 7-14 days ago). ';
+    else if (globalQaScoreTrend > 0) aiSummary = `Quality improved by ${globalQaScoreTrend} points vs. 7-14 days ago. `;
+    else if (globalQaScoreTrend < 0) aiSummary = `Quality declined by ${Math.abs(globalQaScoreTrend)} points vs. 7-14 days ago. `;
+    else aiSummary = 'Quality unchanged vs. 7-14 days ago. ';
+    const teamsLowCoverage = teamsWithData.filter((t: any) => num(t.test_coverage) !== null && (num(t.test_coverage) as number) < KPI_TARGETS.coverage).length;
+    if (teamsLowCoverage > 0) aiSummary += `${teamsLowCoverage} team${teamsLowCoverage > 1 ? 's' : ''} below ${KPI_TARGETS.coverage}% coverage. `;
+    if (automationCoverage !== null) {
+      aiSummary += automationCoverage < KPI_TARGETS.automation
+        ? `Automation at ${automationCoverage}% - below the ${KPI_TARGETS.automation}% target. `
+        : `Automation coverage at ${automationCoverage}%. `;
+    }
+    if (asOf) aiSummary += `Based on KPI snapshots as of ${asOf}.`;
+  }
+
+  return {
+    engineeringHealthScore,
+    deliveryPerformanceScore,
+    developerWellnessIndex,
+    techDebtStatusScore,
+    pipelineHealthScore,
+    techDebtResolutionRate,
+
+    globalQaScore,
+    globalQaScoreTrend,
+    riskLevel,
+    avgTestCoverage,
+    avgDefectEscapeRate,
+    automationCoverage,
+    avgFlakinessRate,
+
+    topImproving,
+    needsAttention,
+    kpiStatus: { onTrack, atRisk, offTrack, noData },
+    aiSummary,
+    teamCount: activeTeams.length,
+    teamsWithKpiData: teamsWithData.length,
+
+    // Staleness / provenance
+    asOf,
+    oldestSnapshotDate,
+    engineeringHealthBasis: {
+      weights: ENGINEERING_HEALTH_WEIGHTS,
+      included: healthIncluded,
+      missing: healthMissing
+    },
+    deliveryPerformanceBasis: {
+      method: 'Mean of per-team DORA level scores (Elite 100, High 80, Medium 60, Low 40); bands as getDORALevel',
+      teamsClassified: doraScores.length,
+      levels: doraLevels
+    },
+    developerWellnessBasis: {
+      developers: developerCount,
+      avgHappiness: roundTo(happiness, 1),
+      avgFocusHours: roundTo(focusTime, 1),
+      avgMeetingHours: roundTo(meetingTime, 1)
+    },
+    pipelineHealthBasis: {
+      definition: 'Successful pipeline runs / (successful + failed) runs, last 30 days',
+      successfulRuns: pipelineSuccessfulRuns,
+      totalRuns: pipelineTotalRuns,
+      windowDays: 30
+    },
+    techDebtBasis: { openItems: techDebtOpenItems, totalItems: techDebtTotalItems }
+  };
+}
+
+// ============================================================================
 // COMPANY-WIDE DASHBOARD SUMMARY (Hero Section)
 // ============================================================================
 
 router.get('/company-summary', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-
-    // ============================================================================
-    // ALL METRICS ARE CALCULATED FROM REAL DATABASE DATA
-    // Source: kpi_snapshots table joined with teams table
-    // ============================================================================
-
-    // 1. Get all teams and their LATEST KPI snapshots for this company
-    const teamsWithKpis = await query<any>(`
-      SELECT 
-        t.id AS team_id,
-        t.name,
-        ks.*
-      FROM teams t
-      LEFT JOIN kpi_snapshots ks ON t.id = ks.team_id
-      WHERE t.company_id = ? AND t.is_active = TRUE
-      ORDER BY ks.snapshot_date DESC NULLS LAST
-    `, [companyId]);
-
-    // Get unique teams with their latest snapshot only (first row per team_id due to DESC ordering)
-    const teamMap = new Map<string, any>();
-    for (const row of teamsWithKpis) {
-      if (!teamMap.has(row.team_id)) {
-        teamMap.set(row.team_id, row);
-      }
-    }
-    const teams = Array.from(teamMap.values());
-    const teamsWithData = teams.filter(t => t.qa_score != null);
-
-    if (teams.length === 0 || teamsWithData.length === 0) {
-      return res.json({
-        globalQaScore: 0,
-        globalQaScoreTrend: 0,
-        riskLevel: 'unknown',
-        avgTestCoverage: 0,
-        avgDefectEscapeRate: 0,
-        automationCoverage: 0,
-        avgFlakinessRate: 0,
-        topImproving: [],
-        needsAttention: [],
-        kpiStatus: { onTrack: 0, atRisk: 0, offTrack: 0 },
-        aiSummary: 'No data available. Add teams and KPI snapshots to see insights.',
-        teamCount: teams.length,
-        teamsWithKpiData: 0
-      });
-    }
-
-    // ============================================================================
-    // METRIC 1: Global QA Score
-    // Source: simple average of team QA scores used on the dashboard
-    // Formula: (sum of all team qa_score) / (number of teams with KPI data)
-    const qaScores = teamsWithData.map(t => Number(t.qa_score) || 0);
-    const globalQaScore = qaScores.length
-      ? Math.round(qaScores.reduce((sum, score) => sum + score, 0) / qaScores.length)
-      : 0;
-
-    // Trend: Compare to historical data (if available)
-    const historicalKpis = await query<any>(`
-      SELECT AVG(ks.qa_score) as avg_score
-      FROM kpi_snapshots ks
-      JOIN teams t ON ks.team_id = t.id
-      WHERE t.company_id = ?
-        AND ks.snapshot_date >= NOW() - INTERVAL '14 days'
-        AND ks.snapshot_date < NOW() - INTERVAL '7 days'
-    `, [companyId]);
-
-    const prevScore = historicalKpis[0]?.avg_score ? Number(historicalKpis[0].avg_score) : globalQaScore;
-    const globalQaScoreTrend = Math.round(globalQaScore - prevScore);
-
-    // Risk Level based on global score
-    let riskLevel: 'stable' | 'watch' | 'at-risk' = 'stable';
-    if (globalQaScore < 60) riskLevel = 'at-risk';
-    else if (globalQaScore < 75) riskLevel = 'watch';
-
-    // ============================================================================
-    // METRIC 2: Average Test Coverage
-    // Source: AVG(kpi_snapshots.test_coverage) across all teams
-    // ============================================================================
-    const avgTestCoverage = Math.round(
-      teamsWithData.reduce((sum, t) => sum + (Number(t.test_coverage) || 0), 0) / teamsWithData.length * 10
-    ) / 10; // One decimal place
-
-    // ============================================================================
-    // METRIC 3: Average Defect Escape Rate
-    // Source: AVG(kpi_snapshots.defect_escape_rate) across all teams
-    // Lower is better - this is % of defects that escaped to production
-    // ============================================================================
-    const avgDefectEscapeRate = Math.round(
-      teamsWithData.reduce((sum, t) => sum + (Number(t.defect_escape_rate) || 0), 0) / teamsWithData.length * 10
-    ) / 10; // One decimal place
-
-    // ============================================================================
-    // METRIC 4: Automation Coverage
-    // Source: AVG(kpi_snapshots.automation_coverage) across all teams
-    // ============================================================================
-    const automationCoverage = Math.round(
-      teamsWithData.reduce((sum, t) => sum + (Number(t.automation_coverage) || 0), 0) / teamsWithData.length * 10
-    ) / 10; // One decimal place
-
-    // ============================================================================
-    // METRIC 5: Average Flakiness Rate
-    // Source: AVG(kpi_snapshots.test_flakiness_rate) across all teams
-    // Lower is better
-    // ============================================================================
-    const avgFlakinessRate = Math.round(
-      teamsWithData.reduce((sum, t) => sum + (Number(t.test_flakiness_rate) || 0), 0) / teamsWithData.length * 10
-    ) / 10; // One decimal place
-
-    // ============================================================================
-    // METRIC 6: Top Performing Teams
-    // Source: Teams sorted by kpi_snapshots.qa_score DESC
-    // ============================================================================
-    const sortedByScore = [...teamsWithData].sort((a, b) => (Number(b.qa_score) || 0) - (Number(a.qa_score) || 0));
-    const topImproving = sortedByScore.slice(0, 3).map(t => ({
-      name: t.name,
-      score: Math.round(Number(t.qa_score) || 0)
-    }));
-
-    // ============================================================================
-    // METRIC 7: Teams Needing Attention
-    // Source: Only teams outside the "good" QA band are considered
-    //         QA status thresholds (mirrors frontend METRICS_CONFIG.qaScore):
-    //           - good:    qa_score >= 85
-    //           - warning: qa_score >= 70
-    //           - critical: qa_score < 70
-    //         We only surface teams in warning/critical (qa_score < 85).
-    // ============================================================================
-    const QA_GOOD_THRESHOLD = 85;
-
-    const needsAttention = [...teamsWithData]
-      // Only teams that are not green
-      .filter(t => (Number(t.qa_score) || 0) < QA_GOOD_THRESHOLD)
-      // Lowest scores first
-      .sort((a, b) => (Number(a.qa_score) || 0) - (Number(b.qa_score) || 0))
-      // Take worst 3
-      .slice(0, 3)
-      .map(t => {
-        const score = Number(t.qa_score) || 0;
-        const escapeRate = Number(t.defect_escape_rate) || 0;
-
-        let issue: string;
-        if (score < 70) issue = 'Critical QA Score';
-        else if (escapeRate > 2) issue = 'High Escape Rate';
-        else issue = 'Below Target';
-
-        return {
-          name: t.name,
-          score: Math.round(score),
-          issue,
-        };
-      });
-
-    // ============================================================================
-    // METRIC 8: KPI Status (teams meeting thresholds)
-    // Source: Count of teams meeting each KPI threshold from kpi_snapshots
-    // ============================================================================
-    const kpiThresholds = {
-      coverage: 80,      // test_coverage >= 80%
-      flakiness: 3,      // test_flakiness_rate <= 3%
-      escapeRate: 2,     // defect_escape_rate <= 2%
-      automation: 70     // automation_coverage >= 70%
-    };
-
-    let onTrack = 0, atRisk = 0, offTrack = 0;
-    for (const t of teamsWithData) {
-      const coverage = Number(t.test_coverage) || 0;
-      const flakiness = Number(t.test_flakiness_rate) || 0;
-      const escapeRate = Number(t.defect_escape_rate) || 0;
-      const automation = Number(t.automation_coverage) || 0;
-
-      // Count how many thresholds this team meets
-      const meetsThresholds = (
-        (coverage >= kpiThresholds.coverage ? 1 : 0) +
-        (flakiness <= kpiThresholds.flakiness ? 1 : 0) +
-        (escapeRate <= kpiThresholds.escapeRate ? 1 : 0) +
-        (automation >= kpiThresholds.automation ? 1 : 0)
-      );
-
-      if (meetsThresholds >= 3) onTrack++;
-      else if (meetsThresholds >= 2) atRisk++;
-      else offTrack++;
-    }
-
-    // ============================================================================
-    // AI Summary - Generated from real metrics
-    // ============================================================================
-    const teamsLowCoverage = teamsWithData.filter(t => (Number(t.test_coverage) || 0) < 80).length;
-
-    let aiSummary = '';
-    if (globalQaScoreTrend > 0) {
-      aiSummary = `Quality improved by ${globalQaScoreTrend} points. `;
-    } else if (globalQaScoreTrend < 0) {
-      aiSummary = `Quality declined by ${Math.abs(globalQaScoreTrend)} points. `;
-    } else {
-      aiSummary = 'Quality metrics stable. ';
-    }
-
-    if (teamsLowCoverage > 0) {
-      aiSummary += `${teamsLowCoverage} team${teamsLowCoverage > 1 ? 's' : ''} below 80% coverage. `;
-    }
-
-    if (automationCoverage < 70) {
-      aiSummary += `Automation at ${automationCoverage}% - consider increasing.`;
-    } else {
-      aiSummary += `Automation coverage at ${automationCoverage}%.`;
-    }
-
-    // Debug: Log what data we're using
-    console.log('Company Summary Debug:', {
-      totalTeams: teams.length,
-      teamsWithKpiData: teamsWithData.length,
-      teamMetrics: teamsWithData.map(t => ({
-        name: t.name,
-        qa_score: t.qa_score,
-        test_coverage: t.test_coverage,
-        automation_coverage: t.automation_coverage,
-        defect_escape_rate: t.defect_escape_rate,
-        test_flakiness_rate: t.test_flakiness_rate
-      }))
-    });
-
-    // ============================================================================
-    // NEW METRICS CALCULATION (Engineering Health, DORA, Wellness, Tech Debt)
-    // ============================================================================
-
-    // 1. Technical Debt Status
-    // Fetch aggregated tech debt for the company
-    const techDebtSummary = await queryOne<any>(
-      `SELECT 
-         SUM(CASE 
-               WHEN status NOT IN ('resolved','wont_fix') THEN
-                 CASE severity
-                   WHEN 'critical' THEN 30
-                   WHEN 'high' THEN 20
-                   WHEN 'medium' THEN 10
-                   WHEN 'low' THEN 5
-                   ELSE 0
-                 END
-               ELSE 0
-             END) AS total_weight,
-         SUM(CASE WHEN status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items,
-         COUNT(*) as total_items
-       FROM technical_debt td
-       JOIN teams t ON td.team_id = t.id
-       WHERE t.company_id = ?`,
-      [companyId]
-    );
-
-    const totalTechDebtScore = Math.min(100, Number(techDebtSummary?.total_weight || 0) / (teams.length || 1)); // Normalized per team roughly
-    const techDebtStatusScore = Math.round(Math.max(0, 100 - totalTechDebtScore) * 10) / 10; // one decimal place
-    const techDebtResolutionRate = techDebtSummary?.total_items > 0
-      ? Math.round(((techDebtSummary.total_items - techDebtSummary.open_items) / techDebtSummary.total_items) * 100)
-      : 100;
-
-    // 2. Developer Wellness Index
-    // Fetch aggregated developer metrics
-    // Note: developer_metrics table is a current snapshot (unique key team_id, developer_id), so no date filter needed
-    const devMetricsSummary = await queryOne<any>(
-      `SELECT 
-         AVG(dm.happiness_score) as avg_happiness,
-         AVG(dm.focus_time_hours) as avg_focus,
-         AVG(dm.meeting_time_hours) as avg_meetings,
-         AVG(dm.context_switches_per_day) as avg_switches
-       FROM developer_metrics dm
-       JOIN users u ON dm.developer_id = u.id
-       JOIN team_members tm ON u.id = tm.user_id
-       JOIN teams t ON tm.team_id = t.id
-       WHERE t.company_id = ?`,
-      [companyId]
-    );
-
-    const happiness = Number(devMetricsSummary?.avg_happiness || 75); // Default to 75 if no data
-    const focusTime = Number(devMetricsSummary?.avg_focus || 4);
-    const meetingTime = Number(devMetricsSummary?.avg_meetings || 3);
-
-    // Calculate Burnout Risk (Categorical -> Score)
-    // Heuristic: High risk if happiness < 50 OR meeting > 5 OR focus < 2
-    let burnoutRiskScore = 100; // Low risk
-    if (happiness < 50 || meetingTime > 5 || focusTime < 2) burnoutRiskScore = 20; // High risk
-    else if (happiness < 70 || meetingTime > 4 || focusTime < 3) burnoutRiskScore = 60; // Moderate risk
-
-    // Focus Time Score
-    let focusTimeScore = 40;
-    if (focusTime >= 4) focusTimeScore = 100;
-    else if (focusTime >= 3) focusTimeScore = 80;
-    else if (focusTime >= 2) focusTimeScore = 60;
-
-    // Meeting Load Score
-    let meetingLoadScore = 40;
-    if (meetingTime <= 2) meetingLoadScore = 100;
-    else if (meetingTime <= 4) meetingLoadScore = 80;
-    else if (meetingTime <= 6) meetingLoadScore = 60;
-
-    const developerWellnessIndex = Math.round(
-      (happiness * 0.6) +
-      (burnoutRiskScore * 0.2) +
-      (focusTimeScore * 0.1) +
-      (meetingLoadScore * 0.1)
-    );
-
-    // 3. Delivery Performance Score (DORA)
-    // Based on averages from kpi_snapshots (teamsWithData)
-    const avgDeployFreq = teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.deployment_frequency_per_week) || 0), 0) / (teamsWithData.length || 1);
-    const avgLeadTime = teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.lead_time_days) || 0), 0) / (teamsWithData.length || 1);
-    const avgFailureRate = teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.change_failure_rate) || 0), 0) / (teamsWithData.length || 1);
-    const avgMttr = teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.mttr_hours) || 0), 0) / (teamsWithData.length || 1);
-
-    let doraLevelScore = 40; // Low
-    if (avgDeployFreq >= 7 && avgLeadTime < 1 && avgFailureRate < 5 && avgMttr < 1) {
-      doraLevelScore = 100; // Elite
-    } else if (avgDeployFreq >= 1 && avgLeadTime < 7 && avgFailureRate < 15 && avgMttr < 24) {
-      doraLevelScore = 80; // High
-    } else if (avgDeployFreq >= 0.25 && avgLeadTime < 30 && avgFailureRate < 30 && avgMttr < 48) {
-      doraLevelScore = 60; // Medium
-    }
-
-    const deliveryPerformanceScore = doraLevelScore;
-
-    // 4. Pipeline Health Score (Constant as requested)
-    const pipelineHealthScore = 96;
-
-    // 5. Engineering Health Score (Overall Composite)
-    const engineeringHealthScore = Math.round(
-      (doraLevelScore * 0.35) +
-      (pipelineHealthScore * 0.25) +
-      (techDebtStatusScore * 0.20) +
-      (happiness * 0.15) +
-      (burnoutRiskScore * 0.05)
-    );
-
-    // ============================================================================
-    // RESPONSE - All values from real database data
-    // ============================================================================
-    res.json({
-      // New Executive Metrics
-      engineeringHealthScore,
-      deliveryPerformanceScore,
-      developerWellnessIndex,
-      techDebtStatusScore,
-      pipelineHealthScore,
-      techDebtResolutionRate,
-
-      // Keep existing metrics for compatibility or drill-downs
-      globalQaScore,
-      globalQaScoreTrend,
-      riskLevel,
-      avgTestCoverage,
-      avgDefectEscapeRate,
-      automationCoverage,
-      avgFlakinessRate,
-
-      topImproving,
-      needsAttention,
-      kpiStatus: { onTrack, atRisk, offTrack },
-      aiSummary,
-      teamCount: teams.length,
-      teamsWithKpiData: teamsWithData.length
-    });
+    const metrics = await computeCompanyMetrics(companyId);
+    res.json(metrics);
   } catch (error) {
     console.error('Error fetching company summary:', error);
     res.status(500).json({ error: 'Failed to fetch company summary' });
@@ -2512,100 +2464,10 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
       return res.status(403).json({ error: 'Executive insights are restricted.' });
     }
 
-    // 1. Calculate Metrics (Same logic as company-summary)
-    const teams = await query<any[]>(
-      'SELECT id, name, company_id FROM teams WHERE company_id = ? AND is_active = true',
-      [companyId]
-    );
+    // 1. Same numbers as company-summary (shared helper)
+    const m = await computeCompanyMetrics(companyId);
 
-    const kpiData = await query<any>(`
-      SELECT ks.*, t.name 
-      FROM kpi_snapshots ks
-      INNER JOIN (
-        SELECT team_id, MAX(snapshot_date) as max_date
-        FROM kpi_snapshots
-        GROUP BY team_id
-      ) latest ON ks.team_id = latest.team_id AND ks.snapshot_date = latest.max_date
-      JOIN teams t ON ks.team_id = t.id
-      WHERE t.company_id = ?
-    `, [companyId]);
-
-    const teamsWithData = kpiData || [];
-
-    // Tech Debt
-    const techDebtSummary = await queryOne<any>(
-      `SELECT 
-         SUM(CASE 
-               WHEN status NOT IN ('resolved','wont_fix') THEN
-                 CASE severity WHEN 'critical' THEN 30 WHEN 'high' THEN 20 WHEN 'medium' THEN 10 WHEN 'low' THEN 5 ELSE 0 END
-               ELSE 0
-             END) AS total_weight,
-         COUNT(*) as total_items
-       FROM technical_debt td
-       JOIN teams t ON td.team_id = t.id
-       WHERE t.company_id = ?`,
-      [companyId]
-    );
-    const totalTechDebtScore = Math.min(100, Number(techDebtSummary?.total_weight || 0) / (teams.length || 1));
-    const techDebtStatusScore = Math.round(Math.max(0, 100 - totalTechDebtScore) * 10) / 10;
-
-    // Dev Wellness
-    const devMetricsSummary = await queryOne<any>(
-      `SELECT 
-         AVG(dm.happiness_score) as avg_happiness,
-         AVG(dm.focus_time_hours) as avg_focus,
-         AVG(dm.meeting_time_hours) as avg_meetings
-       FROM developer_metrics dm
-       JOIN users u ON dm.developer_id = u.id
-       JOIN teams t ON dm.team_id = t.id
-       WHERE t.company_id = ?`,
-      [companyId]
-    );
-    const happiness = Number(devMetricsSummary?.avg_happiness || 75);
-    const focusTime = Number(devMetricsSummary?.avg_focus || 4);
-    const meetingTime = Number(devMetricsSummary?.avg_meetings || 3);
-
-    let burnoutRiskScore = 100;
-    if (happiness < 50 || meetingTime > 5 || focusTime < 2) burnoutRiskScore = 20;
-    else if (happiness < 70 || meetingTime > 4 || focusTime < 3) burnoutRiskScore = 60;
-
-    let focusTimeScore = focusTime >= 4 ? 100 : focusTime >= 3 ? 80 : focusTime >= 2 ? 60 : 40;
-    let meetingLoadScore = meetingTime <= 2 ? 100 : meetingTime <= 4 ? 80 : meetingTime <= 6 ? 60 : 40;
-
-    const developerWellnessIndex = Math.round(
-      (happiness * 0.6) + (burnoutRiskScore * 0.2) + (focusTimeScore * 0.1) + (meetingLoadScore * 0.1)
-    );
-
-    // DORA
-    const avgDeployFreq = teamsWithData.reduce((sum, t) => sum + (Number(t.deployment_frequency_per_week) || 0), 0) / (teamsWithData.length || 1);
-    const avgLeadTime = teamsWithData.reduce((sum, t) => sum + (Number(t.lead_time_days) || 0), 0) / (teamsWithData.length || 1);
-    const avgFailureRate = teamsWithData.reduce((sum, t) => sum + (Number(t.change_failure_rate) || 0), 0) / (teamsWithData.length || 1);
-    const avgMttr = teamsWithData.reduce((sum, t) => sum + (Number(t.mttr_hours) || 0), 0) / (teamsWithData.length || 1);
-
-    let doraLevelScore = 40;
-    if (avgDeployFreq >= 7 && avgLeadTime < 1 && avgFailureRate < 5 && avgMttr < 1) doraLevelScore = 100;
-    else if (avgDeployFreq >= 1 && avgLeadTime < 7 && avgFailureRate < 15 && avgMttr < 24) doraLevelScore = 80;
-    else if (avgDeployFreq >= 0.25 && avgLeadTime < 30 && avgFailureRate < 30 && avgMttr < 48) doraLevelScore = 60;
-
-    const deliveryPerformanceScore = doraLevelScore;
-    const pipelineHealthScore = 96;
-
-    const engineeringHealthScore = Math.round(
-      (doraLevelScore * 0.35) +
-      (pipelineHealthScore * 0.25) +
-      (techDebtStatusScore * 0.20) +
-      (happiness * 0.15) +
-      (burnoutRiskScore * 0.05)
-    );
-
-    // Detailed Aggregates
-    const avgQaScore = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.qa_score) || 0), 0) / (teamsWithData.length || 1));
-    const avgTestCoverage = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.test_coverage) || 0), 0) / (teamsWithData.length || 1));
-    const avgDefectEscape = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.defect_escape_rate) || 0), 0) / (teamsWithData.length || 1));
-    const avgFlakiness = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.test_flakiness_rate) || 0), 0) / (teamsWithData.length || 1));
-    const automationCov = Math.round(teamsWithData.reduce((sum: number, t: any) => sum + (Number(t.automation_coverage) || 0), 0) / (teamsWithData.length || 1));
-
-    // 2. Store Snapshot
+    // 2. Store Snapshot (nulls stay null)
     await query(`
       INSERT INTO company_kpi_snapshots 
       (company_id, snapshot_date, engineering_health_score, delivery_performance_score, developer_wellness_index, tech_debt_status_score, pipeline_health_score, avg_qa_score, avg_test_coverage, avg_defect_escape_rate, avg_flakiness_rate, automation_coverage)
@@ -2623,23 +2485,24 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
       automation_coverage = EXCLUDED.automation_coverage
     `, [
       companyId,
-      engineeringHealthScore, deliveryPerformanceScore, developerWellnessIndex, techDebtStatusScore, pipelineHealthScore,
-      avgQaScore, avgTestCoverage, avgDefectEscape, avgFlakiness, automationCov
+      m.engineeringHealthScore, m.deliveryPerformanceScore, m.developerWellnessIndex, m.techDebtStatusScore, m.pipelineHealthScore,
+      m.globalQaScore, m.avgTestCoverage, m.avgDefectEscapeRate, m.avgFlakinessRate, m.automationCoverage
     ]);
 
-    // 3. Fetch History (Last 30 days)
-    const history = await query<any[]>(`
+    // 3. History: snapshots from the last 30 days
+    const history = await query<any>(`
       SELECT * FROM company_kpi_snapshots 
       WHERE company_id = ? 
-      ORDER BY snapshot_date ASC 
-      LIMIT 30
+        AND snapshot_date >= CURRENT_DATE - 30
+      ORDER BY snapshot_date ASC
     `, [companyId]);
 
     // 4. Generate AI Analysis (retries + smaller-model fallback)
     let aiAnalysis = "AI analysis unavailable.";
+    const fmt = (v: number | null) => (v === null ? 'no data' : `${v}/100`);
 
     if (isGroqConfigured()) {
-      console.log('🤖 Generating Company Insights via Groq AI...');
+      console.log('Generating Company Insights via Groq AI...');
       try {
         const { content, model } = await groqChatCompletion({
           label: 'AI:Company',
@@ -2649,18 +2512,18 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
               role: 'system',
               content: `You are a CTO/VP of Engineering advisor. Analyze these company-wide metrics and trends.
 
-Current Metrics:
-- Engineering Health: ${engineeringHealthScore}/100
-- Delivery (DORA): ${deliveryPerformanceScore}/100
-- Wellness: ${developerWellnessIndex}/100
-- Tech Debt Status: ${techDebtStatusScore}/100
-- Pipeline Health: ${pipelineHealthScore}/100
+Current Metrics (team KPI snapshots as of ${m.asOf ?? 'unknown date'}; "no data" means not measured, do not guess a value):
+- Engineering Health: ${fmt(m.engineeringHealthScore)} (components without data are excluded: ${m.engineeringHealthBasis.missing.join(', ') || 'none'})
+- Delivery (DORA): ${fmt(m.deliveryPerformanceScore)}
+- Wellness: ${fmt(m.developerWellnessIndex)}
+- Tech Debt Status: ${fmt(m.techDebtStatusScore)}
+- Pipeline Health (successful pipeline runs, last 30 days): ${m.pipelineHealthScore === null ? 'no data' : `${m.pipelineHealthScore}%`}
 
-Provide a concise executive summary (3-4 sentences) highlighting the biggest risk and the biggest win. Then provide 3 strategic recommendations.`
+Provide a concise executive summary (3-4 sentences) highlighting the biggest risk and the biggest win. If the data is old, say so. Then provide 3 strategic recommendations.`
             },
             {
               role: 'user',
-              content: `Here is the 30-day trend data: ${JSON.stringify(history.map(h => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
+              content: `Here are the company snapshots from the last 30 days (${history.length} snapshot${history.length === 1 ? '' : 's'}): ${JSON.stringify(history.map((h: any) => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
             }
           ]
         });
@@ -2673,12 +2536,13 @@ Provide a concise executive summary (3-4 sentences) highlighting the biggest ris
 
     res.json({
       metrics: {
-        engineeringHealthScore,
-        deliveryPerformanceScore,
-        developerWellnessIndex,
-        techDebtStatusScore,
-        pipelineHealthScore
+        engineeringHealthScore: m.engineeringHealthScore,
+        deliveryPerformanceScore: m.deliveryPerformanceScore,
+        developerWellnessIndex: m.developerWellnessIndex,
+        techDebtStatusScore: m.techDebtStatusScore,
+        pipelineHealthScore: m.pipelineHealthScore
       },
+      asOf: m.asOf,
       history,
       analysis: aiAnalysis
     });
@@ -2723,6 +2587,9 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     if (teamId && !(await getOwnedTeam(req, teamId as string))) {
       return res.status(404).json({ error: 'Team not found' });
     }
+    // Individual productivity data: roles other than super_admin / qa_manager / team_lead
+    // may only see their own snapshots.
+    const privileged = ['super_admin', 'qa_manager', 'team_lead'].includes(role);
 
     // Build query
     let sql = `
@@ -2749,15 +2616,21 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     const params: any[] = [companyId, startDateStr];
 
     // Filter by specific developer
-    if (developerId && developerId !== 'all') {
+    if (!privileged) {
+      sql += ' AND dps.developer_id = ?';
+      params.push(userId);
+    } else if (developerId && developerId !== 'all') {
       sql += ' AND dps.developer_id = ?';
       params.push(developerId);
     }
 
-    // Filter by team
+    // Filter by team membership (snapshots carry no team id): team members, or users
+    // whose metrics are recorded for the team, or whose primary team it is.
     if (teamId) {
-      sql += ' AND u.primary_team_id = ?';
-      params.push(teamId);
+      sql += ` AND (u.primary_team_id = ?
+        OR EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = u.id AND tm.team_id = ?)
+        OR EXISTS (SELECT 1 FROM developer_metrics dm WHERE dm.developer_id = u.id AND dm.team_id = ?))`;
+      params.push(teamId, teamId, teamId);
     }
 
     sql += ' ORDER BY dps.snapshot_date ASC, dps.developer_id';
@@ -2783,13 +2656,14 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
-    // Calculate overall stats
-    const allDDPS = snapshots.map((s: any) => parseFloat(s.ddps_score));
-    const avgDDPS = allDDPS.length > 0 ? allDDPS.reduce((a, b) => a + b, 0) / allDDPS.length : 0;
-    const minDDPS = allDDPS.length > 0 ? Math.min(...allDDPS) : 0;
-    const maxDDPS = allDDPS.length > 0 ? Math.max(...allDDPS) : 0;
+    // Calculate overall stats (null when there are no snapshots in the range)
+    const allDDPS = snapshots.map((s: any) => parseFloat(s.ddps_score)).filter((v: number) => Number.isFinite(v));
+    const hasData = allDDPS.length > 0;
+    const avgDDPS = hasData ? allDDPS.reduce((a: number, b: number) => a + b, 0) / allDDPS.length : null;
+    const minDDPS = hasData ? Math.min(...allDDPS) : null;
+    const maxDDPS = hasData ? Math.max(...allDDPS) : null;
 
-    // Calculate trend (compare last 7 days vs previous 7 days)
+    // Trend (last 7 days vs previous 7 days); null unless both windows have data
     const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
@@ -2802,62 +2676,66 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     });
 
     const recentAvg = recent.length > 0
-      ? recent.reduce((a, s: any) => a + parseFloat(s.ddps_score), 0) / recent.length
-      : 0;
+      ? recent.reduce((a: number, s: any) => a + parseFloat(s.ddps_score), 0) / recent.length
+      : null;
     const previousAvg = previous.length > 0
-      ? previous.reduce((a, s: any) => a + parseFloat(s.ddps_score), 0) / previous.length
-      : 0;
-    const trend = previousAvg > 0 ? ((recentAvg - previousAvg) / previousAvg) * 100 : 0;
+      ? previous.reduce((a: number, s: any) => a + parseFloat(s.ddps_score), 0) / previous.length
+      : null;
+    const trend = recentAvg !== null && previousAvg !== null && previousAvg > 0
+      ? ((recentAvg - previousAvg) / previousAvg) * 100
+      : null;
 
-    // Generate executive summary
-    const ddpsPercent = Math.round(avgDDPS * 100);
-    let summaryStatus = 'fragmented';
-    if (avgDDPS >= 0.8) summaryStatus = 'exceptional deep-focus';
-    else if (avgDDPS >= 0.6) summaryStatus = 'high productivity';
-    else if (avgDDPS >= 0.4) summaryStatus = 'healthy';
-    else if (avgDDPS >= 0.2) summaryStatus = 'low productivity';
+    // Executive summary: only when there is data. DDPS is a 0-1 composite index of
+    // normalised focus / PR / review / meeting / context-switch inputs; it is not a
+    // measured share of the working day.
+    let executiveSummary: null | { headline: string; status: string; lossDrivers: string; recommendation: string } = null;
+    if (hasData && avgDDPS !== null) {
+      let summaryStatus = 'fragmented';
+      if (avgDDPS >= 0.8) summaryStatus = 'exceptional deep-focus';
+      else if (avgDDPS >= 0.6) summaryStatus = 'high productivity';
+      else if (avgDDPS >= 0.4) summaryStatus = 'healthy';
+      else if (avgDDPS >= 0.2) summaryStatus = 'low productivity';
 
-    // Identify loss drivers
-    const avgMetrics = {
-      meeting: snapshots.length > 0
-        ? snapshots.reduce((a, s: any) => a + parseFloat(s.meeting_time_hours), 0) / snapshots.length
-        : 0,
-      contextSwitches: snapshots.length > 0
-        ? snapshots.reduce((a, s: any) => a + parseFloat(s.context_switches_per_day), 0) / snapshots.length
-        : 0,
-      focusTime: snapshots.length > 0
-        ? snapshots.reduce((a, s: any) => a + parseFloat(s.focus_time_hours), 0) / snapshots.length
-        : 0
-    };
+      const avgOf = (field: string) =>
+        snapshots.reduce((a: number, s: any) => a + parseFloat(s[field]), 0) / snapshots.length;
+      const avgMetrics = {
+        meeting: avgOf('meeting_time_hours'),
+        contextSwitches: avgOf('context_switches_per_day'),
+        focusTime: avgOf('focus_time_hours')
+      };
 
-    const lossDrivers: string[] = [];
-    if (avgMetrics.meeting > 2.5) lossDrivers.push('meetings');
-    if (avgMetrics.contextSwitches > 5) lossDrivers.push('context switching');
-    if (avgMetrics.focusTime < 4) lossDrivers.push('insufficient focus time');
+      const lossDrivers: string[] = [];
+      if (avgMetrics.meeting > 2.5) lossDrivers.push('meetings');
+      if (avgMetrics.contextSwitches > 5) lossDrivers.push('context switching');
+      if (avgMetrics.focusTime < 4) lossDrivers.push('insufficient focus time');
 
-    const executiveSummary = {
-      headline: `Only ~${ddpsPercent}% of the day converted into deep, value-producing work.`,
-      status: summaryStatus,
-      lossDrivers: lossDrivers.length > 0
-        ? `Primary loss drivers: ${lossDrivers.join(' and ')}.`
-        : 'No significant loss drivers identified.',
-      recommendation: avgDDPS < 0.4
-        ? 'Consider reducing meetings and protecting focus time blocks.'
-        : avgDDPS < 0.6
-          ? 'Team is performing well. Look for opportunities to minimize interruptions.'
-          : 'Excellent productivity! Maintain current practices.'
-    };
+      executiveSummary = {
+        headline: `Average DDPS ${avgDDPS.toFixed(2)} (0-1 index) across ${snapshots.length} daily snapshots.`,
+        status: summaryStatus,
+        lossDrivers: lossDrivers.length > 0
+          ? `Possible loss drivers: ${lossDrivers.join(' and ')}.`
+          : 'No significant loss drivers identified.',
+        recommendation: avgDDPS < 0.4
+          ? 'Consider reducing meetings and protecting focus time blocks.'
+          : avgDDPS < 0.6
+            ? 'Look for opportunities to minimize interruptions.'
+            : 'Maintain current practices.'
+      };
+    }
+
+    const r4 = (v: number | null) => (v === null ? null : Math.round(v * 10000) / 10000);
 
     res.json({
       range,
       startDate: startDateStr,
       endDate: now.toISOString().split('T')[0],
       stats: {
-        average: Math.round(avgDDPS * 10000) / 10000,
-        min: Math.round(minDDPS * 10000) / 10000,
-        max: Math.round(maxDDPS * 10000) / 10000,
-        trend: Math.round(trend * 100) / 100,
-        totalSnapshots: snapshots.length
+        average: r4(avgDDPS),
+        min: r4(minDDPS),
+        max: r4(maxDDPS),
+        trend: trend === null ? null : Math.round(trend * 100) / 100,
+        totalSnapshots: snapshots.length,
+        latestSnapshotDate: chartData.length ? chartData[chartData.length - 1].date : null
       },
       executiveSummary,
       chartData,

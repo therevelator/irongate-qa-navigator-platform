@@ -1,42 +1,30 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { Team } from '../data/mockData';
-import { generateDetailedKPIs } from '../data/detailedKPIs';
+import { generateDetailedKPIs, getThreshold, statusFor, toNum } from '../data/detailedKPIs';
+import type { KPIData, KPIStatus, Threshold } from '../data/detailedKPIs';
+import {
+  BURNOUT_DEFINITION,
+  burnoutTone,
+  calculateBurnoutRisk,
+  chartTheme,
+  developerStatusMeta,
+  formatAsOf,
+} from '../data/advancedFeatures';
 import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { getMetricTextColor, getMetricStatus, getMetricBgColor, METRICS_CONFIG } from '../config/metricsConfig';
-
-// Extended Team type with kpiData from API
-interface TeamWithKPI extends Team {
-  kpiData?: {
-    testCoverage?: number;
-    testFlakinessRate?: number;
-    defectDensity?: number;
-    defectEscapeRate?: number;
-    codeQualityScore?: number;
-    avgBuildTimeMinutes?: number;
-    testExecutionTimeMinutes?: number;
-    deploymentFrequencyPerWeek?: number;
-    leadTimeDays?: number;
-    mttrHours?: number;
-    parallelTestEfficiency?: number;
-    sprintVelocity?: number;
-    sprintCommitmentRate?: number;
-    sprintCarryover?: number;
-    firstPassRate?: number;
-    blockedTimeHours?: number;
-    automationCoverage?: number;
-    automationRoi?: number;
-    changeFailureRate?: number;
-    mtbfHours?: number;
-    availability?: number;
-    infraFailures?: number;
-  };
-}
-
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, Shield, Bug, Bot, BarChart3, Clock, GitPullRequest, Zap, Users, Activity, RefreshCcw, Timer, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Users, Info } from 'lucide-react';
 import BatteryIndicator from './BatteryIndicator';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
+import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, cx, toneText } from './ui';
+import type { Tone } from './ui';
+
+// Team as returned by GET /api/teams (NUMERIC columns may arrive as strings; missing values are null)
+interface TeamWithKPI extends Omit<Team, 'qaScore'> {
+  qaScore: number | string | null;
+  kpiData?: KPIData;
+  kpiThresholds?: Partial<Record<string, Partial<Threshold>>>;
+}
 
 // Business-friendly metric explanations for tooltips
 export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: string }> = {
@@ -143,7 +131,7 @@ export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: stri
   // Business Impact
   'qaScore': {
     short: 'Overall quality score for the team',
-    detailed: 'Weighted composite score from test coverage, automation, defect density, code quality, first-pass rate, and flakiness. Higher = healthier team.'
+    detailed: 'Composite 0–100 quality score stored with the team\'s latest KPI snapshot. Higher is better.'
   },
   'technicalDebtScore': {
     short: 'Accumulated code issues needing attention',
@@ -161,7 +149,7 @@ export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: stri
   },
   'focusTime': {
     short: 'Uninterrupted coding hours per day',
-    detailed: 'Hours of concentrated work without meetings or interruptions. Higher focus time correlates with higher productivity and job satisfaction.'
+    detailed: 'Hours of concentrated work without meetings or interruptions. More uninterrupted time generally means more deep work.'
   },
   'meetingTime': {
     short: 'Hours spent in meetings per day',
@@ -172,8 +160,8 @@ export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: stri
     detailed: 'Number of times developers switch between different tasks. Fewer switches = deeper focus = higher quality work.'
   },
   'happinessScore': {
-    short: 'Developer wellbeing and satisfaction',
-    detailed: 'Self-reported measure of job satisfaction and wellbeing. Happy developers are more productive, creative, and less likely to leave.'
+    short: 'Wellbeing score (derived) — not a survey',
+    detailed: 'Derived 0–100 workload-balance score calculated from focus time, meetings, context switches, PR and review time. It is not self-reported satisfaction.'
   }
 };
 
@@ -186,1434 +174,643 @@ interface TeamMember {
   avatar_url?: string;
 }
 
-interface DeveloperMetrics {
-  developer_id: string;
+interface DevMetricRow {
+  developerId?: string;
+  name: string;
+  prMergeTimeHours: number | null;
+  codeReviewTimeHours: number | null;
+  focusTimeHours: number | null;
+  meetingTimeHours: number | null;
+  contextSwitchesPerDay: number | null;
+  happinessScore: number | null;
+}
+
+interface MemberRow {
+  id: string;
   name: string;
   email: string;
-  code_review_time_avg: number;
-  pr_merge_time_avg: number;
-  happiness_score: number;
-  context_switches_per_day: number;
-  focus_time_hours: number;
-  meeting_time_hours: number;
+  metrics: DevMetricRow | null;
 }
 
 interface TeamAISuggestions {
   teamId: string;
   teamName: string;
-  qaScore: number;
+  qaScore: number | null;
   aiEnabled: boolean;
   source?: 'groq' | 'rule-based';
   message?: string;
   strongpoints: string[];
   areasOfImprovement: string[];
-  actionPlan: {
-    priority: string;
-    initiative: string;
-    owner: string;
-    timebox: string;
-    kpi: string;
-  }[];
+  actionPlan: { priority: string; initiative: string; owner: string; timebox: string; kpi: string }[];
 }
 
 interface DeveloperAISuggestion {
   name: string;
-  status: 'healthy' | 'at-risk' | 'needs-attention';
-  summary: string;
-  strengths: string[];
-  concerns: string[];
-  suggestion: string;
+  developerId?: string;
+  status?: string;
+  summary?: string;
+  strengths?: string[];
+  concerns?: string[];
+  suggestion?: string;
 }
 
 interface DeveloperAISuggestions {
   teamId: string;
   aiEnabled: boolean;
   source?: 'groq' | 'rule-based';
-  developers: DeveloperAISuggestion[];
-  teamInsight: string;
-  metrics: {
-    name: string;
-    prMergeTimeHours: number;
-    codeReviewTimeHours: number;
-    focusTimeHours: number;
-    meetingTimeHours: number;
-    contextSwitchesPerDay: number;
-    happinessScore: number;
-  }[];
+  developers?: DeveloperAISuggestion[];
+  teamInsight?: string;
+  metrics?: DevMetricRow[];
   message?: string;
 }
+
+type HistoryPoint = { date: string; value: number };
 
 interface TeamDetailViewProps {
   team: TeamWithKPI;
   onBack: () => void;
 }
 
+const STATUS_BADGE: Record<KPIStatus, { tone: Tone; label: string }> = {
+  good: { tone: 'good', label: 'On target' },
+  warning: { tone: 'warn', label: 'Watch' },
+  critical: { tone: 'bad', label: 'Off target' },
+  neutral: { tone: 'neutral', label: 'Tracked' },
+  'no-data': { tone: 'neutral', label: 'No data' },
+};
+
+const DIGITS: Partial<Record<string, number>> = { defectDensity: 2, systemAvailability: 3, infrastructureFailures: 0, sprintVelocity: 0, deploymentFrequencyPerWeek: 1 };
+
+const statusTone = (s: KPIStatus): Tone => STATUS_BADGE[s].tone;
+
+const fmt = (v: number | null | undefined, digits = 1) => (v == null || Number.isNaN(v) ? '—' : v.toFixed(digits));
+
+const thresholdText = (t: Threshold | null, unit: string) => {
+  if (!t) return null;
+  const u = unit && !unit.startsWith('/') && unit !== '%' ? ` ${unit}` : unit;
+  return t.lowerIsBetter ? `Target ≤ ${t.good}${u} · watch ≤ ${t.warning}${u}` : `Target ≥ ${t.good}${u} · watch ≥ ${t.warning}${u}`;
+};
+
+/** Change between the last two snapshots; tone respects metric polarity. */
+const describeChange = (history: HistoryPoint[], lowerIsBetter: boolean, hasDirection: boolean) => {
+  if (history.length < 2) return null;
+  const last = history[history.length - 1];
+  const prev = history[history.length - 2];
+  const delta = last.value - prev.value;
+  const direction: 'up' | 'down' | 'flat' = Math.abs(delta) < 1e-9 ? 'flat' : delta > 0 ? 'up' : 'down';
+  const improved = direction === 'flat' ? null : lowerIsBetter ? direction === 'down' : direction === 'up';
+  const tone: Tone = !hasDirection || improved === null ? 'neutral' : improved ? 'good' : 'bad';
+  const pct = prev.value !== 0 ? (delta / Math.abs(prev.value)) * 100 : null;
+  return { delta, pct, direction, tone, prevDate: prev.date };
+};
+
+const TrendLine: React.FC<{ change: ReturnType<typeof describeChange>; unit?: string; usePoints?: boolean }> = ({ change, unit = '', usePoints }) => {
+  if (!change) return null;
+  const Icon = change.direction === 'up' ? TrendingUp : change.direction === 'down' ? TrendingDown : Minus;
+  const amount = usePoints || change.pct == null
+    ? `${change.delta > 0 ? '+' : ''}${change.delta.toFixed(1)}${unit}`
+    : `${change.pct > 0 ? '+' : ''}${change.pct.toFixed(1)}%`;
+  return (
+    <span className={cx('inline-flex items-center gap-1 text-xs', toneText(change.tone))}>
+      <Icon size={13} aria-hidden />
+      {amount} vs {formatAsOf(change.prevDate) ?? 'previous snapshot'}
+    </span>
+  );
+};
+
+const InfoTip: React.FC<{ text: string }> = ({ text }) => (
+  <span className="relative group inline-flex">
+    <Info size={13} className="text-slate-400 dark:text-slate-500 cursor-help" aria-label={text} />
+    <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-normal text-slate-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+      {text}
+    </span>
+  </span>
+);
+
 const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
-  // Use useMemo to prevent regenerating KPIs on every render
   const detailedKPIs = useMemo(() => generateDetailedKPIs(team), [team]);
   const { isDark } = useTheme();
   const { user } = useAuth();
+  const ct = chartTheme(isDark);
 
-  // Check if this is the user's own team (normalize IDs to strings to avoid type mismatches)
   const isOwnTeam =
     (user?.primaryTeamId != null && team?.id != null && String(user.primaryTeamId) === String(team.id)) ||
     (Array.isArray(user?.assignedTeams) && team?.id != null && user!.assignedTeams!.some(tid => String(tid) === String(team.id)));
 
-  // Only leads, managers, and admins can see developer stats and AI insights
-  // Team leads can only see these for their own team
+  // Only leads (own team), managers and admins can see developer stats and AI insights
   const canViewDeveloperInsights =
     user?.role === 'super_admin' ||
     user?.role === 'qa_manager' ||
     (user?.role === 'team_lead' && isOwnTeam);
 
-  // Get real values from kpiData or use defaults
-  const kpi = team.kpiData || {};
-  const testCoverage = Number(kpi.testCoverage) || 0;
-  const defectDensity = Number(kpi.defectDensity) || 0;
-  const automationCoverage = Number(kpi.automationCoverage) || 0;
-  const avgBuildTimeMinutes = kpi.avgBuildTimeMinutes === undefined || kpi.avgBuildTimeMinutes === null
-    ? 0
-    : Number(kpi.avgBuildTimeMinutes);
-  const mttrHours = kpi.mttrHours === undefined || kpi.mttrHours === null ? 0 : Number(kpi.mttrHours);
-  const mtbfHours = kpi.mtbfHours === undefined || kpi.mtbfHours === null ? 0 : Number(kpi.mtbfHours);
-  const [developers, setDevelopers] = useState<DeveloperMetrics[]>([]);
-  const [loading, setLoading] = useState(true);
+  const kpi: KPIData = team.kpiData || {};
+  const [snapshotDate, setSnapshotDate] = useState<string | null>(team.snapshotDate ?? kpi.snapshotDate ?? null);
+  const [members, setMembers] = useState<MemberRow[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
   const [aiSuggestions, setAISuggestions] = useState<TeamAISuggestions | null>(null);
   const [aiLoading, setAILoading] = useState(false);
   const [aiError, setAIError] = useState<string | null>(null);
   const [devAISuggestions, setDevAISuggestions] = useState<DeveloperAISuggestions | null>(null);
   const [devAILoading, setDevAILoading] = useState(false);
+  const [devMetricsUnavailable, setDevMetricsUnavailable] = useState<string | null>(null);
   const [metricIntervals, setMetricIntervals] = useState<Record<string, { interval_value: number; interval_unit: string }>>({});
-  const [kpiHistory, setKpiHistory] = useState<Record<string, { date: string; value: number }[]>>({});
+  const [kpiHistory, setKpiHistory] = useState<Record<string, HistoryPoint[]>>({});
 
-  // Map KPI IDs to metric keys for interval lookup
-  const kpiToMetricKey: Record<string, string> = {
-    'test-coverage': 'test_coverage',
-    'test-flakiness': 'test_flakiness_rate',
-    'defect-density': 'defect_density',
-    'defect-escape-rate': 'defect_escape_rate',
-    'code-quality': 'code_quality_score',
-    'build-time': 'avg_build_time_minutes',
-    'test-execution-time': 'test_execution_time_minutes',
-    'deployment-frequency': 'deployment_frequency_per_week',
-    'lead-time': 'lead_time_days',
-    'mttr': 'mttr_hours',
-    'parallel-efficiency': 'parallel_test_efficiency',
-    'sprint-velocity': 'sprint_velocity',
-    'sprint-commitment': 'sprint_commitment_rate',
-    'sprint-carryover': 'sprint_carryover',
-    'first-pass-rate': 'first_time_pass_rate',
-    'blocked-time': 'blocked_time_hours',
-    'automation-coverage': 'automation_coverage',
-    'automation-roi': 'automation_roi',
-    'change-failure-rate': 'change_failure_rate',
-    'mtbf': 'mtbf_hours',
-    'availability': 'system_availability',
-    'infra-failures': 'infrastructure_failures',
-  };
-
-  // Helper to format interval text
-  const getIntervalText = (kpiId: string): string => {
-    const metricKey = kpiToMetricKey[kpiId];
-    if (!metricKey) return 'Trend data available after first update';
-
-    const interval = metricIntervals[metricKey];
-    if (!interval) return 'Trend data available after first update';
-
+  const getIntervalText = (historyKey: string): string => {
+    const interval = metricIntervals[historyKey];
+    if (!interval) return 'No snapshots in the last 90 days';
     const { interval_value, interval_unit } = interval;
-    const unitLabel = interval_value === 1 ? interval_unit.slice(0, -1) : interval_unit;
-    return `Updates every ${interval_value} ${unitLabel}`;
+    const unitLabel = interval_value === 1 ? interval_unit.replace(/s$/, '') : interval_unit;
+    return `No snapshots in the last 90 days · updates every ${interval_value} ${unitLabel}`;
   };
 
-  // Helper to get KPI history from fetched data
-  const getKpiHistoryData = (kpiId: string): { date: string; value: number }[] => {
-    const metricKey = kpiToMetricKey[kpiId];
-    if (!metricKey) return [];
-    return kpiHistory[metricKey] || [];
-  };
-
-  // Calculate change percentage from history
-  const calculateChange = (history: { date: string; value: number }[]): { change: number; trend: 'up' | 'down' | 'neutral' } => {
-    if (history.length < 2) return { change: 0, trend: 'neutral' };
-
-    const latest = history[history.length - 1].value;
-    const previous = history[history.length - 2].value;
-
-    if (previous === 0) return { change: 0, trend: 'neutral' };
-
-    const changePercent = ((latest - previous) / previous) * 100;
-    return {
-      change: Math.round(changePercent * 10) / 10,
-      trend: changePercent > 0 ? 'up' : changePercent < 0 ? 'down' : 'neutral'
-    };
-  };
-
-  // Fetch metric intervals
   useEffect(() => {
-    const fetchMetricIntervals = async () => {
-      try {
-        const response = await fetch(`${API_URL}/settings/metric-intervals`, {
-          credentials: 'include'
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          const intervalMap: Record<string, { interval_value: number; interval_unit: string }> = {};
-          data.intervals?.forEach((i: any) => {
-            intervalMap[i.metric_key] = { interval_value: i.interval_value, interval_unit: i.interval_unit };
-          });
-          setMetricIntervals(intervalMap);
-        }
-      } catch (error) {
-        console.error('Error fetching metric intervals:', error);
-      }
-    };
-
-    fetchMetricIntervals();
+    fetch(`${API_URL}/settings/metric-intervals`, { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (!data) return;
+        const map: Record<string, { interval_value: number; interval_unit: string }> = {};
+        data.intervals?.forEach((i: any) => { map[i.metric_key] = { interval_value: i.interval_value, interval_unit: i.interval_unit }; });
+        setMetricIntervals(map);
+      })
+      .catch(() => undefined);
   }, []);
 
-  // Fetch KPI history for graphs
   useEffect(() => {
-    const fetchKpiHistory = async () => {
-      try {
-        const response = await fetch(`${API_URL}/teams/${team.id}/kpi-history?days=30`, {
-          credentials: 'include'
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setKpiHistory(data.history || {});
-        }
-      } catch (error) {
-        console.error('Error fetching KPI history:', error);
-      }
-    };
-
-    fetchKpiHistory();
+    fetch(`${API_URL}/teams/${team.id}/kpi-history?days=90`, { credentials: 'include' })
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => setKpiHistory(data?.history || {}))
+      .catch(() => setKpiHistory({}));
   }, [team.id]);
 
-  // Fetch team members from database
+  // Team members + their recorded developer metrics (no placeholders for members without a row)
   useEffect(() => {
-    const fetchTeamMembers = async () => {
+    let cancelled = false;
+    const load = async () => {
+      setMembersLoading(true);
       try {
-        console.log(`Fetching members for team: ${team.id} (${team.name})`);
-        const response = await fetch(`${API_URL}/teams/${team.id}`, {
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include'
-        });
+        const response = await fetch(`${API_URL}/teams/${team.id}`, { credentials: 'include' });
+        if (!response.ok) { if (!cancelled) setMembers([]); return; }
+        const data = await response.json();
+        const list: TeamMember[] = data.team?.members || [];
+        const snap = data.team?.kpiData?.snapshotDate ?? data.team?.snapshotDate ?? null;
+        if (!cancelled && snap) setSnapshotDate(snap);
 
-        console.log('Response status:', response.status);
-
-        if (response.ok) {
-          const data = await response.json();
-          console.log('Team data received:', data);
-
-          const members = data.team?.members || [];
-          console.log(`Found ${members.length} members:`, members);
-
-          if (members.length === 0) {
-            console.warn(`⚠️ No members found for team ${team.id} (${team.name}). Check team_members table.`);
-          }
-
-          // Fetch real developer metrics from database
-          const metricsResponse = await fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, {
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include'
-          });
-
-          let dbMetrics: Record<string, any> = {};
+        let byId: Record<string, DevMetricRow> = {};
+        let byName: Record<string, DevMetricRow> = {};
+        if (canViewDeveloperInsights) {
+          const metricsResponse = await fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, { credentials: 'include' });
           if (metricsResponse.ok) {
-            const metricsData = await metricsResponse.json();
-            // Build lookup by developer name
-            if (metricsData.metrics && Array.isArray(metricsData.metrics)) {
-              metricsData.metrics.forEach((m: any) => {
-                if (m.developerId) {
-                  dbMetrics[`id:${m.developerId}`] = m;
-                }
-                if (m.name) {
-                  dbMetrics[`name:${m.name.toLowerCase()}`] = m;
-                }
-              });
-            }
+            const metricsData: DeveloperAISuggestions = await metricsResponse.json();
+            if (!cancelled) setDevAISuggestions(metricsData);
+            (metricsData.metrics || []).forEach((m: any) => {
+              const row = normalizeMetric(m);
+              if (row.developerId) byId[String(row.developerId)] = row;
+              if (row.name) byName[row.name.toLowerCase()] = row;
+            });
+            if (!cancelled) setDevMetricsUnavailable(null);
+          } else if (!cancelled) {
+            setDevMetricsUnavailable(
+              metricsResponse.status === 429
+                ? 'Developer metrics could not be loaded (rate limited). Try again in a minute.'
+                : 'Developer metrics are not available for your role.',
+            );
           }
+        } else if (!cancelled) {
+          setDevMetricsUnavailable('Developer metrics are visible to team leads, managers and admins.');
+        }
 
-          // Map members to metrics (use DB values if available, otherwise generate defaults)
-          const metricsDataFinal = members.map((member: TeamMember) => {
-            const fullName = `${member.first_name} ${member.last_name}`;
-            const idKey = `id:${member.id}`;
-            const nameKey = `name:${fullName.toLowerCase()}`;
-            const dbData = dbMetrics[idKey] || dbMetrics[nameKey];
-
-            // If we have DB data, use it; otherwise generate placeholder values
-            if (dbData) {
-              return {
-                developer_id: member.id,
-                name: fullName,
-                email: member.email,
-                code_review_time_avg: dbData.codeReviewTimeHours,
-                pr_merge_time_avg: dbData.prMergeTimeHours,
-                happiness_score: dbData.happinessScore,
-                context_switches_per_day: dbData.contextSwitchesPerDay,
-                focus_time_hours: dbData.focusTimeHours,
-                meeting_time_hours: dbData.meetingTimeHours
-              };
-            }
-
-            // No DB data - generate placeholder metrics
-            return {
-              developer_id: member.id,
-              name: fullName,
-              email: member.email,
-              code_review_time_avg: Number((Math.random() * 4 + 1).toFixed(1)),
-              pr_merge_time_avg: Number((Math.random() * 24 + 2).toFixed(1)),
-              happiness_score: Math.floor(Math.random() * 30) + 70,
-              context_switches_per_day: Math.floor(Math.random() * 10) + 3,
-              focus_time_hours: Number((Math.random() * 4 + 2).toFixed(1)),
-              meeting_time_hours: Number((Math.random() * 3 + 1).toFixed(1))
-            };
-          });
-
-          console.log('Developer metrics from DB:', metricsDataFinal);
-          setDevelopers(metricsDataFinal);
-        } else {
-          const errorData = await response.json();
-          console.error('Failed to fetch team:', response.status, errorData);
+        if (!cancelled) {
+          setMembers(list.map((m) => {
+            const name = [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || m.email;
+            return { id: String(m.id), name, email: m.email, metrics: byId[String(m.id)] ?? byName[name.toLowerCase()] ?? null };
+          }));
         }
       } catch (error) {
         console.error('Error fetching team members:', error);
+        if (!cancelled) setMembers([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) { setMembersLoading(false); setDevAILoading(false); }
       }
     };
+    if (canViewDeveloperInsights) setDevAILoading(true);
+    load();
+    return () => { cancelled = true; };
+  }, [team.id, canViewDeveloperInsights]);
 
-    fetchTeamMembers();
-  }, [team.id, team.name]);
-
-  // Only fetch AI suggestions for users who can view them (leads, managers, admins)
   useEffect(() => {
     if (!canViewDeveloperInsights) return;
-
-    const fetchAISuggestions = async () => {
-      try {
-        setAILoading(true);
-        setAIError(null);
-
-        const response = await fetch(`${API_URL}/teams/${team.id}/ai-suggestions`, {
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include'
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          setAIError(errorData.error || 'Failed to load AI insights');
-          setAILoading(false);
+    let cancelled = false;
+    setAILoading(true);
+    setAIError(null);
+    fetch(`${API_URL}/teams/${team.id}/ai-suggestions`, { credentials: 'include' })
+      .then(async r => {
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({}));
+          if (!cancelled) setAIError(err.error || 'Failed to load recommendations');
           return;
         }
-
-        const data = await response.json();
-        setAISuggestions(data as TeamAISuggestions);
-      } catch (error) {
-        setAIError('Failed to load AI insights');
-      } finally {
-        setAILoading(false);
-      }
-    };
-
-    fetchAISuggestions();
+        const data = await r.json();
+        if (!cancelled) setAISuggestions(data as TeamAISuggestions);
+      })
+      .catch(() => { if (!cancelled) setAIError('Failed to load recommendations'); })
+      .finally(() => { if (!cancelled) setAILoading(false); });
+    return () => { cancelled = true; };
   }, [team.id, canViewDeveloperInsights]);
 
-  // Fetch developer AI suggestions - only for leads, managers, admins
-  useEffect(() => {
-    if (!canViewDeveloperInsights) return;
+  const asOf = formatAsOf(snapshotDate);
+  const qaScore = toNum(team.qaScore);
+  const qaThreshold = getThreshold('qaScore', team.kpiThresholds);
+  const qaStatus = statusFor(qaScore, qaThreshold);
+  const qaChange = describeChange(kpiHistory.qa_score || [], false, true);
+  const debt = toNum(team.technicalDebtScore);
+  const debtThreshold = getThreshold('technicalDebtScore', team.kpiThresholds);
+  const debtStatus = statusFor(debt, debtThreshold);
+  const sizing = toNum(team.taskSizingAccuracy);
 
-    const fetchDevAISuggestions = async () => {
-      try {
-        setDevAILoading(true);
-
-        const response = await fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, {
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include'
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setDevAISuggestions(data as DeveloperAISuggestions);
-        }
-      } catch (error) {
-        console.error('Error fetching developer AI suggestions:', error);
-      } finally {
-        setDevAILoading(false);
-      }
-    };
-
-    fetchDevAISuggestions();
-  }, [team.id, canViewDeveloperInsights]);
+  const headline: { key: string; label: string }[] = [
+    { key: 'test-coverage', label: 'Test coverage' },
+    { key: 'defect-density', label: 'Defect density' },
+    { key: 'automation-coverage', label: 'Automation coverage' },
+    { key: 'build-time', label: 'Avg build time' },
+    { key: 'mttr', label: 'Mean time to recovery' },
+    { key: 'mtbf', label: 'Mean time between failures' },
+  ];
+  const kpiById = (id: string) => detailedKPIs.find(k => k.id === id)!;
 
   const categories = [
-    { id: 'quality', name: 'Quality & Testing', color: 'blue' },
-    { id: 'speed', name: 'Speed & Efficiency', color: 'purple' },
-    { id: 'agile', name: 'Agile & Process', color: 'green' },
-    { id: 'reliability', name: 'Reliability & Stability', color: 'orange' }
-  ];
+    { id: 'quality', name: 'Quality & testing' },
+    { id: 'speed', name: 'Speed & efficiency' },
+    { id: 'agile', name: 'Agile & process' },
+    { id: 'reliability', name: 'Reliability & stability' },
+  ] as const;
 
-  const getKPIsByCategory = (category: string) => {
-    return detailedKPIs.filter(kpi => kpi.category === category);
-  };
+  // Members visible to this viewer: QA engineers only see themselves
+  const visibleMembers = members.filter(m => (user?.role === 'qa_engineer' ? m.id === String(user.id) : true));
+  const showMembers =
+    canViewDeveloperInsights || (user?.role === 'qa_engineer' && String(team.id) === String(user?.primaryTeamId));
 
-  const scoreColor = team.status === 'good' ? '#10b981' : team.status === 'warning' ? '#f59e0b' : '#ef4444';
-
-  // Track scroll for minimal header
-  const [showMinimalHeader, setShowMinimalHeader] = useState(false);
-  const containerRef = React.useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const handleScroll = () => {
-      // Check both window scroll and parent container scroll
-      const scrollContainer = containerRef.current?.closest('.overflow-auto');
-      const scrollTop = scrollContainer ? scrollContainer.scrollTop : window.scrollY;
-      setShowMinimalHeader(scrollTop > 120);
-    };
-
-    // Listen to window scroll
-    window.addEventListener('scroll', handleScroll);
-
-    // Also listen to the parent overflow container
-    const scrollContainer = containerRef.current?.closest('.overflow-auto');
-    if (scrollContainer) {
-      scrollContainer.addEventListener('scroll', handleScroll);
-    }
-
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      if (scrollContainer) {
-        scrollContainer.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, []);
+  const metricsFor = (dev: DeveloperAISuggestion): DevMetricRow | undefined =>
+    devAISuggestions?.metrics?.map(normalizeMetric).find(m =>
+      (dev.developerId && m.developerId && String(m.developerId) === String(dev.developerId)) || m.name === dev.name,
+    );
 
   return (
-    <div ref={containerRef} className="min-h-screen bg-gray-50 dark:bg-slate-950" data-testid="team-detail">
-      {/* Minimal Sticky Header - appears on scroll */}
-      <div className={`sticky top-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md border-b border-gray-200 dark:border-slate-800 transition-all duration-300 ${showMinimalHeader ? 'opacity-100 h-auto' : 'opacity-0 h-0 overflow-hidden'
-        }`}>
-        <div className="px-4 sm:px-6 py-2 flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <button
-              onClick={onBack}
-              className="flex items-center gap-1.5 text-gray-500 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white transition-colors text-sm"
-            >
-              <ArrowLeft size={16} />
-              <span className="hidden sm:inline">Back to Teams</span>
-            </button>
-            <div className="h-4 w-px bg-gray-300 dark:bg-slate-700"></div>
-            <div>
-              <h2 className="text-sm font-bold text-gray-900 dark:text-white">{team.name}</h2>
-              <p className="text-[10px] text-gray-500 dark:text-slate-500">{team.department}</p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-4 sm:gap-6">
-            {/* Technical Debt - Compact */}
-            {team.technicalDebtScore !== undefined && (
-              <div className="hidden sm:block text-right">
-                <p className="text-[10px] text-gray-400 dark:text-slate-500">Technical Debt</p>
-                <div className={`text-lg font-bold ${getMetricTextColor(team.technicalDebtScore, 'technicalDebtScore', isDark)}`}>
-                  {team.technicalDebtScore}<span className="text-xs text-gray-400">/100</span>
-                </div>
-              </div>
-            )}
-
-            {/* Sizing Accuracy - Compact */}
-            {team.taskSizingAccuracy !== undefined && (
-              <div className="hidden md:block text-right">
-                <p className="text-[10px] text-gray-400 dark:text-slate-500">Sizing Accuracy</p>
-                <div className={`text-lg font-bold ${Math.abs(team.taskSizingAccuracy - 1.0) < 0.15 ? 'text-green-600 dark:text-green-400' :
-                  Math.abs(team.taskSizingAccuracy - 1.0) < 0.3 ? 'text-yellow-600 dark:text-yellow-400' :
-                    'text-red-600 dark:text-red-400'
-                  }`}>
-                  {team.taskSizingAccuracy.toFixed(2)}<span className="text-xs text-gray-400">x</span>
-                </div>
-              </div>
-            )}
-
-            {/* QA Score - Compact with battery */}
-            <div className="flex items-center gap-2">
-              <div className="text-right">
-                <p className="text-[10px] text-gray-400 dark:text-slate-500">Team QA Score</p>
-                <div className="text-lg font-bold text-gray-900 dark:text-white">{team.qaScore}/100</div>
-              </div>
-              <div className="max-[800px]:hidden">
-                <BatteryIndicator
-                  percentage={team.qaScore}
-                  size="sm"
-                  mode="3d"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Header */}
-      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800">
-        <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <button
-            onClick={onBack}
-            className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
-            data-testid="back-to-dashboard"
-          >
-            <ArrowLeft size={20} />
-            <span className="font-medium">Back to Teams</span>
+    <Page className="space-y-6" >
+      <div data-testid="team-detail">
+        <nav className="mb-3 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" aria-label="Breadcrumb">
+          <button onClick={onBack} className="hover:text-slate-900 hover:underline dark:hover:text-white" data-testid="back-to-dashboard">
+            Overview
           </button>
+          <span aria-hidden>/</span>
+          <span className="text-slate-700 dark:text-slate-300">{team.name}</span>
+        </nav>
+        <PageIntro
+          title={team.name}
+          description={
+            <>
+              {team.department}
+              {' · '}
+              {asOf ? <>KPI snapshot as of {asOf}</> : 'No KPI snapshot recorded'}
+            </>
+          }
+        />
 
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{team.name}</h1>
-              <p className="text-gray-500 dark:text-slate-400 mt-1">{team.department} • Detailed Quality Metrics</p>
-            </div>
-
-            <div className="flex flex-wrap items-start justify-start md:justify-end gap-4 md:gap-8">
-              {/* Technical Debt Score */}
-              {team.technicalDebtScore !== undefined && (
-                <div className="text-right">
-                  <p className="text-sm text-gray-500 dark:text-slate-400">Technical Debt</p>
-                  <div className="flex items-baseline space-x-1">
-                    <div className={`text-3xl font-bold ${getMetricTextColor(team.technicalDebtScore, 'technicalDebtScore', isDark)}`}>
-                      {team.technicalDebtScore}
-                    </div>
-                    <span className="text-sm text-gray-500 dark:text-slate-400">{METRICS_CONFIG.technicalDebtScore.unit}</span>
-                  </div>
-                  <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">Lower is better</p>
-                </div>
-              )}
-
-              {/* Task Sizing Accuracy */}
-              {team.taskSizingAccuracy !== undefined && (
-                <div className="text-right">
-                  <p className="text-sm text-gray-500 dark:text-slate-400">Sizing Accuracy</p>
-                  <div className="flex items-baseline space-x-1">
-                    <div className={`text-3xl font-bold ${Math.abs(team.taskSizingAccuracy - 1.0) < 0.15 ? 'text-green-600 dark:text-green-400' :
-                      Math.abs(team.taskSizingAccuracy - 1.0) < 0.3 ? 'text-yellow-600 dark:text-yellow-400' :
-                        'text-red-600 dark:text-red-400'
-                      }`}>
-                      {team.taskSizingAccuracy.toFixed(2)}
-                    </div>
-                    <span className="text-sm text-gray-500 dark:text-slate-400">x</span>
-                  </div>
-                  <p className="text-xs text-gray-400 dark:text-slate-500 mt-1">
-                    {team.taskSizingAccuracy < 0.85 ? 'Overestimated' :
-                      team.taskSizingAccuracy > 1.15 ? 'Underestimated' :
-                        'Well estimated'}
-                  </p>
-                </div>
-              )}
-
-              {/* QA Score */}
-              <div className="text-right">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Team QA Score</p>
-                <div className="text-4xl font-bold text-gray-900 dark:text-white">{team.qaScore}/100</div>
-              </div>
-              <div className="max-[800px]:hidden">
-                <BatteryIndicator
-                  percentage={team.qaScore}
-                  size="lg"
-                  mode="3d"
-                />
+        {/* Headline scores */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" data-testid="team-kpis">
+          <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+            <BatteryIndicator percentage={qaScore} size="md" good={qaThreshold?.good} warn={qaThreshold?.warning} label="QA score" />
+            <div className="min-w-0">
+              <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                QA score <InfoTip text={METRIC_EXPLANATIONS.qaScore.detailed} />
+              </p>
+              <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+                {qaScore == null ? '—' : Math.round(qaScore)}
+                <span className="ml-1 text-sm font-normal text-slate-500 dark:text-slate-400">/100</span>
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <Badge tone={statusTone(qaStatus)}>{STATUS_BADGE[qaStatus].label}</Badge>
+                {qaChange ? <TrendLine change={qaChange} usePoints unit=" pts" /> : (
+                  <span className="text-xs text-slate-500 dark:text-slate-400">No earlier snapshot to compare</span>
+                )}
               </div>
             </div>
           </div>
+          <StatTile
+            label="Technical debt score"
+            value={debt == null ? '—' : Math.round(debt)}
+            unit={debt == null ? undefined : '/100'}
+            tone={statusTone(debtStatus)}
+            caption={debt == null ? 'No data recorded' : `Lower is better · ${STATUS_BADGE[debtStatus].label.toLowerCase()}`}
+          />
+          <StatTile
+            label="Task sizing accuracy"
+            value={sizing == null ? '—' : sizing.toFixed(2)}
+            unit={sizing == null ? undefined : '× estimate'}
+            tone={sizing == null ? 'neutral' : Math.abs(sizing - 1) <= 0.15 ? 'good' : Math.abs(sizing - 1) <= 0.3 ? 'warn' : 'bad'}
+            caption={sizing == null ? 'No data recorded' : sizing < 0.85 ? 'Overestimated (actual < estimate)' : sizing > 1.15 ? 'Underestimated (actual > estimate)' : 'Within ±15% of estimate'}
+          />
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+          {headline.map(h => {
+            const k = kpiById(h.key);
+            return (
+              <StatTile
+                key={h.key}
+                label={h.label}
+                value={k.value == null ? '—' : fmt(k.value, k.key === 'defectDensity' ? 2 : 1)}
+                unit={k.value == null ? undefined : k.unit}
+                tone={statusTone(k.status)}
+                caption={k.value == null ? 'No data recorded' : STATUS_BADGE[k.status].label}
+              />
+            );
+          })}
         </div>
       </div>
 
-      {/* Key Metrics Cards */}
-      <div className="px-8 py-6" data-testid="team-kpis">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {/* Overall Quality Score */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn">
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-blue-100 dark:bg-blue-900 rounded-lg">
-                <BarChart3 className="text-blue-600 dark:text-blue-300" size={24} />
-              </div>
-              <span className="text-sm text-green-600 flex items-center">
-                <TrendingUp size={16} className="mr-1" />
-                +5.2%
-              </span>
-            </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{team.qaScore}%</h3>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Overall Quality Score</p>
-              <div className="relative group">
-                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
-                  {METRIC_EXPLANATIONS.qaScore.short}
-                </div>
-              </div>
-            </div>
+      {/* Team members */}
+      {showMembers && (
+        <Card padded={false}>
+          <div className="flex items-start justify-between gap-4 p-5 pb-0">
+            <CardHeader
+              title="Team members"
+              subtitle={<>Latest recorded developer metrics. Burnout risk: {BURNOUT_DEFINITION}</>}
+            />
+            <span className="shrink-0 text-xs text-slate-500 dark:text-slate-400">
+              {membersLoading ? 'Loading…' : `${visibleMembers.length} ${visibleMembers.length === 1 ? 'member' : 'members'}`}
+            </span>
           </div>
-
-          {/* Test Coverage */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '100ms' }}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-green-100 dark:bg-green-900 rounded-lg">
-                <Shield className="text-green-600 dark:text-green-300" size={24} />
-              </div>
-              <span className={`text-sm flex items-center ${testCoverage >= 80 ? 'text-green-600' : testCoverage >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
-                {testCoverage >= 80 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                {testCoverage >= 80 ? 'Good' : testCoverage >= 70 ? 'Warning' : 'Low'}
-              </span>
-            </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{testCoverage.toFixed(1)}%</h3>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Test Coverage</p>
-              <div className="relative group">
-                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
-                  {METRIC_EXPLANATIONS.testCoverage.short}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Defect Density */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '200ms' }}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-amber-100 dark:bg-amber-900 rounded-lg">
-                <Bug className="text-amber-600 dark:text-amber-300" size={24} />
-              </div>
-              <span className={`text-sm flex items-center ${defectDensity <= 0.5 ? 'text-green-600' : defectDensity <= 1.0 ? 'text-amber-600' : 'text-red-600'}`}>
-                {defectDensity <= 0.5 ? <TrendingDown size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1" />}
-                {defectDensity <= 0.5 ? 'Good' : defectDensity <= 1.0 ? 'Warning' : 'High'}
-              </span>
-            </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{defectDensity.toFixed(2)}</h3>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Defect Density</p>
-              <div className="relative group">
-                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
-                  {METRIC_EXPLANATIONS.defectDensity.short}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Automation Rate */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '300ms' }}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-purple-100 dark:bg-purple-900 rounded-lg">
-                <Bot className="text-purple-600 dark:text-purple-300" size={24} />
-              </div>
-              <span className={`text-sm flex items-center ${automationCoverage >= 70 ? 'text-green-600' : automationCoverage >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
-                {automationCoverage >= 70 ? <TrendingUp size={16} className="mr-1" /> : <TrendingDown size={16} className="mr-1" />}
-                {automationCoverage >= 70 ? 'Good' : automationCoverage >= 50 ? 'Warning' : 'Low'}
-              </span>
-            </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{automationCoverage.toFixed(1)}%</h3>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Automation Rate</p>
-              <div className="relative group">
-                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
-                  {METRIC_EXPLANATIONS.automationCoverage.short}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Avg Build Time */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '400ms' }}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-orange-100 dark:bg-orange-900 rounded-lg">
-                <Timer className="text-orange-600 dark:text-orange-300" size={24} />
-              </div>
-              <span className={`text-sm flex items-center ${avgBuildTimeMinutes <= 12 ? 'text-green-600' : avgBuildTimeMinutes <= 20 ? 'text-amber-600' : 'text-red-600'}`}>
-                {avgBuildTimeMinutes <= 12 ? <TrendingDown size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1" />}
-                {avgBuildTimeMinutes <= 12 ? 'Fast' : avgBuildTimeMinutes <= 20 ? 'Moderate' : 'Slow'}
-              </span>
-            </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{avgBuildTimeMinutes ? avgBuildTimeMinutes.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">min</span></h3>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Avg Build Time</p>
-              <div className="relative group">
-                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
-                  {METRIC_EXPLANATIONS.avgBuildTimeMinutes.short}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Mean Time To Recovery */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '500ms' }}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-emerald-100 dark:bg-emerald-900 rounded-lg">
-                <RefreshCcw className="text-emerald-600 dark:text-emerald-300" size={24} />
-              </div>
-              <span className={`text-sm flex items-center ${mttrHours <= 1 ? 'text-green-600' : mttrHours <= 4 ? 'text-amber-600' : 'text-red-600'}`}>
-                {mttrHours <= 1 ? <TrendingDown size={16} className="mr-1" /> : <TrendingUp size={16} className="mr-1" />}
-                {mttrHours <= 1 ? 'Excellent' : mttrHours <= 4 ? 'Acceptable' : 'High'}
-              </span>
-            </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{mttrHours ? mttrHours.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">h</span></h3>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Mean Time to Recovery</p>
-              <div className="relative group">
-                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
-                  {METRIC_EXPLANATIONS.mttrHours.short}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Mean Time Between Failures */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-6 border border-gray-200 dark:border-slate-800 hover:shadow-lg transition-all hover:scale-105 animate-fadeIn" style={{ animationDelay: '600ms' }}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="p-3 bg-sky-100 dark:bg-sky-900 rounded-lg">
-                <Activity className="text-sky-600 dark:text-sky-300" size={24} />
-              </div>
-              <span className={`text-sm flex items-center ${mtbfHours >= 120 ? 'text-green-600' : mtbfHours >= 72 ? 'text-amber-600' : 'text-red-600'}`}>
-                <TrendingUp size={16} className="mr-1" />
-                {mtbfHours >= 120 ? 'Strong' : mtbfHours >= 72 ? 'Stable' : 'Volatile'}
-              </span>
-            </div>
-            <h3 className="text-3xl font-bold text-gray-900 dark:text-white mb-1">{mtbfHours ? mtbfHours.toFixed(1) : '—'}<span className="text-lg text-gray-500 dark:text-slate-400 ml-1">h</span></h3>
-            <div className="flex items-center gap-2">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Mean Time Between Failures</p>
-              <div className="relative group">
-                <Info size={14} className="text-gray-400 dark:text-slate-500 cursor-help hover:text-blue-500 transition-colors" />
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 dark:bg-slate-700 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity w-48 pointer-events-none z-50 shadow-lg">
-                  {METRIC_EXPLANATIONS.mtbfHours.short}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Developer Productivity Section - Show for admins/managers always, team leads only for own team, QA engineers only for own team (themselves only) */}
-      {(user?.role === 'super_admin' || user?.role === 'qa_manager' ||
-        (user?.role === 'team_lead' && isOwnTeam) ||
-        (user?.role === 'qa_engineer' && team.id === user?.primaryTeamId)) && (
-          <div className="px-8 py-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center">
-                <Users className="mr-3 text-purple-600" size={28} />
-                Team Members
-              </h2>
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                {loading ? 'Loading...' : (() => {
-                  const filteredCount = developers.filter(developer => {
-                    if (user?.role === 'qa_engineer' && team.id === user.primaryTeamId) {
-                      return developer.developer_id === user.id;
-                    }
-                    return true;
-                  }).length;
-                  return `${filteredCount} ${filteredCount === 1 ? 'developer' : 'developers'}`;
-                })()}
-              </span>
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600"></div>
-              </div>
-            ) : (() => {
-              const filteredDevelopers = developers.filter(developer => {
-                if (user?.role === 'qa_engineer' && team.id === user.primaryTeamId) {
-                  return developer.developer_id === user.id;
-                }
-                return true;
-              });
-              return filteredDevelopers.length === 0;
-            })() ? (
-              <div className="bg-gray-50 dark:bg-slate-800 rounded-xl p-8 text-center">
-                <Users className="mx-auto mb-4 text-gray-400" size={48} />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Team Members</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400">This team doesn't have any members assigned yet.</p>
-              </div>
-            ) : (
-              <div className="space-y-4" data-testid="team-members-section">
-                {developers
-                  .filter(developer => {
-                    // For QA Engineers viewing their own team, only show themselves
-                    if (user?.role === 'qa_engineer' && team.id === user.primaryTeamId) {
-                      return developer.developer_id === user.id;
-                    }
-                    // For all others, show all developers
-                    return true;
-                  })
-                  .map((developer) => {
-                    const totalTrackedHours = developer.focus_time_hours + developer.meeting_time_hours;
-                    const workLifeBalance = totalTrackedHours ? ((developer.focus_time_hours / totalTrackedHours) * 100).toFixed(0) : '0';
-                    const happinessEmoji = developer.happiness_score >= 85 ? '😊' : developer.happiness_score >= 70 ? '🙂' : '😐';
-
+          {membersLoading ? (
+            <div className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-400">Loading members…</div>
+          ) : visibleMembers.length === 0 ? (
+            <EmptyState title="No team members" description="This team doesn't have any members assigned yet." icon={<Users size={28} />} />
+          ) : (
+            <div className="overflow-x-auto" data-testid="team-members-section">
+              {devMetricsUnavailable && (
+                <p className="px-5 pb-3 text-xs text-slate-500 dark:text-slate-400">{devMetricsUnavailable}</p>
+              )}
+              <table className="min-w-full text-sm">
+                <thead className="border-y border-slate-200 bg-slate-50 text-left text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                  <tr>
+                    <th className="px-5 py-2.5">Member</th>
+                    <th className="px-3 py-2.5 text-right">PR merge (h)</th>
+                    <th className="px-3 py-2.5 text-right">Review (h)</th>
+                    <th className="px-3 py-2.5 text-right">Focus (h/day)</th>
+                    <th className="px-3 py-2.5 text-right">Meetings (h/day)</th>
+                    <th className="px-3 py-2.5 text-right">Context switches</th>
+                    <th className="px-3 py-2.5 text-right">
+                      <span className="inline-flex items-center gap-1">Wellbeing score (derived) <InfoTip text={METRIC_EXPLANATIONS.happinessScore.detailed} /></span>
+                    </th>
+                    <th className="px-5 py-2.5">Burnout risk</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {visibleMembers.map(m => {
+                    const x = m.metrics;
+                    const risk = x && x.focusTimeHours != null && x.meetingTimeHours != null && x.contextSwitchesPerDay != null
+                      ? calculateBurnoutRisk({ focus_time_hours: x.focusTimeHours, meeting_time_hours: x.meetingTimeHours, context_switches_per_day: x.contextSwitchesPerDay })
+                      : null;
                     return (
-                      <div
-                        key={developer.developer_id}
-                        className="bg-white dark:bg-gradient-to-br dark:from-slate-800 dark:to-slate-900 rounded-xl border border-gray-200 dark:border-slate-700 p-5 hover:shadow-xl transition-all"
-                        data-testid="team-member-card"
-                      >
-                        {/* Developer Header */}
-                        <div className="flex items-center justify-between mb-5">
-                          <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold text-xl shadow-lg">
-                              {developer.name.split(' ').map(n => n[0]).join('')}
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-gray-900 dark:text-white text-lg">{developer.name}</h3>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">Developer ID: {developer.developer_id}</p>
-                            </div>
-                          </div>
-                          <div className="text-right">
-                            <div className="flex items-center gap-2">
-                              <span className="text-3xl">{happinessEmoji}</span>
-                              <span className="text-4xl font-bold text-green-600 dark:text-green-400">{developer.happiness_score}</span>
-                            </div>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">Happiness Score</p>
-                          </div>
-                        </div>
-
-                        {/* Metrics Grid */}
-                        <div className="grid grid-cols-5 gap-3 mb-5">
-                          {/* PR Time */}
-                          <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
-                            <GitPullRequest className="mx-auto mb-2 text-blue-400" size={16} />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">PR Time</p>
-                            <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.pr_merge_time_avg.toFixed(1)}h</p>
-                          </div>
-
-                          {/* Review Time */}
-                          <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
-                            <Clock className="mx-auto mb-2 text-green-400" size={16} />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Review Time</p>
-                            <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.code_review_time_avg.toFixed(1)}h</p>
-                          </div>
-
-                          {/* Focus Time */}
-                          <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
-                            <Zap className="mx-auto mb-2 text-orange-400" size={16} />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Focus Time</p>
-                            <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.focus_time_hours.toFixed(1)}h</p>
-                          </div>
-
-                          {/* Meetings */}
-                          <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
-                            <Users className="mx-auto mb-2 text-purple-400" size={16} />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Meetings</p>
-                            <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.meeting_time_hours.toFixed(1)}h</p>
-                          </div>
-
-                          {/* Context Sw. */}
-                          <div className="bg-gray-100 dark:bg-slate-700/50 rounded-lg p-3 text-center border border-gray-200 dark:border-slate-600/30">
-                            <TrendingUp className="mx-auto mb-2 text-red-400" size={16} />
-                            <p className="text-xs text-gray-500 dark:text-gray-400 mb-1">Context Sw.</p>
-                            <p className="text-xl font-bold text-gray-900 dark:text-white">{developer.context_switches_per_day}</p>
-                          </div>
-                        </div>
-
-                        {/* Work-Life Balance Bar */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Work-Life Balance</span>
-                            <span className="text-sm font-bold text-gray-900 dark:text-white">{workLifeBalance}% Focus Time</span>
-                          </div>
-                          <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-3">
-                            <div
-                              className={`h-3 rounded-full transition-all ${parseInt(workLifeBalance) >= 60 ? 'bg-green-500' :
-                                parseInt(workLifeBalance) >= 40 ? 'bg-yellow-500' :
-                                  'bg-red-500'
-                                }`}
-                              style={{ width: `${workLifeBalance}%` }}
-                            ></div>
-                          </div>
-                          <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400 mt-2">
-                            <span>Focus: {developer.focus_time_hours.toFixed(1)}h</span>
-                            <span>Meetings: {developer.meeting_time_hours.toFixed(1)}h</span>
-                          </div>
-                        </div>
-
-                        {/* Burnout Risk Indicator */}
-                        <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-slate-700">
-                          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Burnout Risk:</span>
-                          <span className={`text-sm font-bold px-3 py-1.5 rounded-full ${developer.happiness_score > 80 && developer.focus_time_hours > 4
-                            ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                            developer.happiness_score > 70
-                              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30' :
-                              'bg-red-500/20 text-red-400 border border-red-500/30'
-                            }`}>
-                            {developer.happiness_score > 80 && developer.focus_time_hours > 4 ? '✅ Low' :
-                              developer.happiness_score > 70 ? '⚠️ Moderate' : '❌ High'}
-                          </span>
-                        </div>
-                      </div>
+                      <tr key={m.id} data-testid="team-member-card" className="text-slate-700 dark:text-slate-300">
+                        <td className="px-5 py-3">
+                          <div className="font-medium text-slate-900 dark:text-white">{m.name}</div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">{m.email}</div>
+                        </td>
+                        {x ? (
+                          <>
+                            <td className="px-3 py-3 text-right tabular-nums">{fmt(x.prMergeTimeHours)}</td>
+                            <td className="px-3 py-3 text-right tabular-nums">{fmt(x.codeReviewTimeHours)}</td>
+                            <td className="px-3 py-3 text-right tabular-nums">{fmt(x.focusTimeHours)}</td>
+                            <td className="px-3 py-3 text-right tabular-nums">{fmt(x.meetingTimeHours)}</td>
+                            <td className="px-3 py-3 text-right tabular-nums">{fmt(x.contextSwitchesPerDay, 0)}</td>
+                            <td className="px-3 py-3 text-right tabular-nums">{x.happinessScore == null ? '—' : `${Math.round(x.happinessScore)}/100`}</td>
+                            <td className="px-5 py-3">
+                              {risk ? <Badge tone={burnoutTone(risk)}>{risk[0].toUpperCase() + risk.slice(1)}</Badge> : <span className="text-slate-400">—</span>}
+                            </td>
+                          </>
+                        ) : (
+                          <td colSpan={7} className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">{devMetricsUnavailable ? 'Not available' : 'No metrics recorded'}</td>
+                        )}
+                      </tr>
                     );
                   })}
-              </div>
-            )}
-          </div>
-        )}
-
-      {/* Content */}
-      <div className="px-8 py-8">
-        {categories.map(category => {
-          const kpis = getKPIsByCategory(category.id);
-          return (
-            <div key={category.id} className="mb-12">
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 flex items-center">
-                <span className={`w-1 h-8 bg-${category.color}-500 rounded-full mr-3`}></span>
-                {category.name}
-              </h2>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {kpis.map(kpi => (
-                  <div key={kpi.id} className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-100 dark:border-slate-800 p-6 hover:shadow-md transition-shadow">
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex-1">
-                        <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-1">{kpi.name}</h3>
-                        <p className="text-xs text-gray-500 dark:text-slate-400">{kpi.description}</p>
-                      </div>
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ml-2 flex-shrink-0 ${kpi.status === 'good' ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
-                        kpi.status === 'warning' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400' :
-                          'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400'
-                        }`}>
-                        {kpi.status}
-                      </span>
-                    </div>
-
-                    {(() => {
-                      const historyData = getKpiHistoryData(kpi.id);
-                      const { change, trend } = calculateChange(historyData);
-                      const hasHistory = historyData.length >= 2;
-
-                      return (
-                        <>
-                          <div className="mb-4">
-                            <div className="text-3xl font-bold text-gray-900 dark:text-white">
-                              {kpi.value}
-                              <span className="text-lg font-normal text-gray-400 dark:text-slate-500 ml-1">{kpi.unit}</span>
-                            </div>
-                            {hasHistory ? (
-                              <div className={`flex items-center text-sm font-medium mt-1 ${trend === 'up' ? 'text-green-600 dark:text-green-400' : trend === 'down' ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-slate-400'
-                                }`}>
-                                {trend === 'up' ? <TrendingUp size={16} className="mr-1" /> :
-                                  trend === 'down' ? <TrendingDown size={16} className="mr-1" /> :
-                                    <Minus size={16} className="mr-1" />}
-                                {Math.abs(change)}% vs last period
-                              </div>
-                            ) : (
-                              <div className="text-sm text-gray-400 dark:text-slate-500 mt-1">
-                                {getIntervalText(kpi.id)}
-                              </div>
-                            )}
-                          </div>
-
-                          {hasHistory ? (
-                            <div className="h-24">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={historyData}>
-                                  <defs>
-                                    <linearGradient id={`gradient-${kpi.id}`} x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor={scoreColor} stopOpacity={0.2} />
-                                      <stop offset="95%" stopColor={scoreColor} stopOpacity={0} />
-                                    </linearGradient>
-                                  </defs>
-                                  <Tooltip
-                                    contentStyle={{
-                                      backgroundColor: '#1f2937',
-                                      color: '#fff',
-                                      borderRadius: '8px',
-                                      border: 'none',
-                                      fontSize: '12px'
-                                    }}
-                                    labelStyle={{ color: '#9ca3af' }}
-                                  />
-                                  <Area
-                                    type="monotone"
-                                    dataKey="value"
-                                    stroke={scoreColor}
-                                    fill={`url(#gradient-${kpi.id})`}
-                                    strokeWidth={2}
-                                  />
-                                </AreaChart>
-                              </ResponsiveContainer>
-                            </div>
-                          ) : (
-                            <div className="h-24 flex items-center justify-center bg-gray-50 dark:bg-slate-800/50 rounded-lg">
-                              <p className="text-sm text-gray-500 dark:text-slate-400 text-center">
-                                {getIntervalText(kpi.id)}
-                              </p>
-                            </div>
-                          )}
-                        </>
-                      );
-                    })()}
-                  </div>
-                ))}
-              </div>
+                </tbody>
+              </table>
             </div>
-          );
-        })}
-      </div>
+          )}
+        </Card>
+      )}
 
-      {/* Metrics Overview and AI Insights Section */}
-      <div className="px-4 sm:px-6 lg:px-8 pb-10">
-        <div className="w-full">
-          {/* Metrics Overview Section */}
-          {team.kpiData && (
-            <div className="mb-8">
-              <div className="mb-4 flex items-center gap-2">
-                <BarChart3 className="text-cyan-500" size={24} />
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Metrics Overview</h2>
-              </div>
-              <p className="text-sm text-slate-400 mb-4">
-                These are the key metrics used to generate AI recommendations. Understanding your current state helps validate the suggestions below.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full">
-                {/* Test Coverage */}
-                <div className={`rounded-lg border p-3 ${testCoverage >= 80 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                  testCoverage >= 60 ? 'border-amber-500/40 bg-amber-500/10' :
-                    'border-red-500/40 bg-red-500/10'
-                  }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-slate-400 uppercase">Test Coverage</span>
-                    <span className={`text-lg font-bold ${testCoverage >= 80 ? 'text-emerald-400' : testCoverage >= 60 ? 'text-amber-400' : 'text-red-400'
-                      }`}>{testCoverage.toFixed(1)}%</span>
+      {/* KPI categories */}
+      {categories.map(category => (
+        <section key={category.id}>
+          <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-white">{category.name}</h3>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {detailedKPIs.filter(k => k.category === category.id).map(k => {
+              const history = kpiHistory[k.historyKey] || [];
+              const change = describeChange(history, k.lowerIsBetter, !!k.threshold);
+              const target = thresholdText(k.threshold, k.unit);
+              return (
+                <Card key={k.id}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h4 className="text-sm font-medium text-slate-900 dark:text-white">{k.name}</h4>
+                      <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{k.description}</p>
+                    </div>
+                    <Badge tone={statusTone(k.status)} className="shrink-0">{STATUS_BADGE[k.status].label}</Badge>
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    {testCoverage >= 80 ? 'Excellent coverage reduces production bugs' :
-                      testCoverage >= 60 ? 'Moderate coverage — aim for 80%+ for stability' :
-                        'Low coverage increases risk of undetected bugs'}
+                  <p className="mt-3 flex items-baseline gap-1">
+                    <span className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+                      {k.value == null ? '—' : fmt(k.value, DIGITS[k.key] ?? 1)}
+                    </span>
+                    {k.value != null && k.unit && <span className="text-sm text-slate-500 dark:text-slate-400">{k.unit}</span>}
                   </p>
-                </div>
-
-                {/* Defect Density */}
-                <div className={`rounded-lg border p-3 ${defectDensity <= 0.5 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                  defectDensity <= 1.0 ? 'border-amber-500/40 bg-amber-500/10' :
-                    'border-red-500/40 bg-red-500/10'
-                  }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-slate-400 uppercase">Defect Density</span>
-                    <span className={`text-lg font-bold ${defectDensity <= 0.5 ? 'text-emerald-400' : defectDensity <= 1.0 ? 'text-amber-400' : 'text-red-400'
-                      }`}>{defectDensity.toFixed(2)}</span>
+                  <div className="mt-1 min-h-[1.25rem]">
+                    {change ? <TrendLine change={change} /> : (
+                      <span className="text-xs text-slate-500 dark:text-slate-400">{target ?? (k.lowerIsBetter ? 'Lower is better' : 'No target set')}</span>
+                    )}
                   </div>
-                  <p className="text-[11px] text-slate-500">
-                    {defectDensity <= 0.5 ? 'Low defect rate indicates quality code' :
-                      defectDensity <= 1.0 ? 'Moderate — review testing practices' :
-                        'High defect rate needs immediate attention'}
-                  </p>
-                </div>
-
-                {/* Automation Coverage */}
-                <div className={`rounded-lg border p-3 ${automationCoverage >= 70 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                  automationCoverage >= 50 ? 'border-amber-500/40 bg-amber-500/10' :
-                    'border-red-500/40 bg-red-500/10'
-                  }`}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-slate-400 uppercase">Automation</span>
-                    <span className={`text-lg font-bold ${automationCoverage >= 70 ? 'text-emerald-400' : automationCoverage >= 50 ? 'text-amber-400' : 'text-red-400'
-                      }`}>{automationCoverage.toFixed(1)}%</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500">
-                    {automationCoverage >= 70 ? 'Strong automation enables fast releases' :
-                      automationCoverage >= 50 ? 'Moderate — automate critical paths first' :
-                        'Low automation slows delivery and increases risk'}
-                  </p>
-                </div>
-
-                {/* Lead Time */}
-                {kpi.leadTimeDays !== undefined && (
-                  <div className={`rounded-lg border p-3 ${Number(kpi.leadTimeDays) <= 3 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    Number(kpi.leadTimeDays) <= 7 ? 'border-amber-500/40 bg-amber-500/10' :
-                      'border-red-500/40 bg-red-500/10'
-                    }`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-400 uppercase">Lead Time</span>
-                      <span className={`text-lg font-bold ${Number(kpi.leadTimeDays) <= 3 ? 'text-emerald-400' : Number(kpi.leadTimeDays) <= 7 ? 'text-amber-400' : 'text-red-400'
-                        }`}>{Number(kpi.leadTimeDays).toFixed(1)}d</span>
+                  {history.length >= 2 ? (
+                    <div className="mt-3 h-20">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={history} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                          <Tooltip
+                            contentStyle={ct.tooltip.contentStyle}
+                            labelStyle={ct.tooltip.labelStyle}
+                            itemStyle={ct.tooltip.itemStyle}
+                            formatter={(v: any) => [`${Number(v).toFixed(2)}${k.unit ? ` ${k.unit}` : ''}`, k.name]}
+                          />
+                          <Area type="monotone" dataKey="value" stroke={ct.series} fill={ct.series} fillOpacity={0.08} strokeWidth={1.5} />
+                        </AreaChart>
+                      </ResponsiveContainer>
                     </div>
-                    <p className="text-[11px] text-slate-500">
-                      {Number(kpi.leadTimeDays) <= 3 ? 'Fast delivery from commit to production' :
-                        Number(kpi.leadTimeDays) <= 7 ? 'Moderate — look for bottlenecks' :
-                          'Slow pipeline needs optimization'}
+                  ) : (
+                    <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
+                      {history.length === 1 ? `1 snapshot in the last 90 days (${formatAsOf(history[0].date)})` : getIntervalText(k.historyKey)}
                     </p>
-                  </div>
-                )}
-
-                {/* MTTR */}
-                {kpi.mttrHours !== undefined && (
-                  <div className={`rounded-lg border p-3 ${Number(kpi.mttrHours) <= 1 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    Number(kpi.mttrHours) <= 4 ? 'border-amber-500/40 bg-amber-500/10' :
-                      'border-red-500/40 bg-red-500/10'
-                    }`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-400 uppercase">MTTR</span>
-                      <span className={`text-lg font-bold ${Number(kpi.mttrHours) <= 1 ? 'text-emerald-400' : Number(kpi.mttrHours) <= 4 ? 'text-amber-400' : 'text-red-400'
-                        }`}>{Number(kpi.mttrHours).toFixed(1)}h</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {Number(kpi.mttrHours) <= 1 ? 'Quick recovery minimizes user impact' :
-                        Number(kpi.mttrHours) <= 4 ? 'Acceptable — improve incident response' :
-                          'Slow recovery hurts reliability'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Sprint Commitment */}
-                {kpi.sprintCommitmentRate !== undefined && (
-                  <div className={`rounded-lg border p-3 ${Number(kpi.sprintCommitmentRate) >= 90 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    Number(kpi.sprintCommitmentRate) >= 75 ? 'border-amber-500/40 bg-amber-500/10' :
-                      'border-red-500/40 bg-red-500/10'
-                    }`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-400 uppercase">Sprint Commit</span>
-                      <span className={`text-lg font-bold ${Number(kpi.sprintCommitmentRate) >= 90 ? 'text-emerald-400' : Number(kpi.sprintCommitmentRate) >= 75 ? 'text-amber-400' : 'text-red-400'
-                        }`}>{Number(kpi.sprintCommitmentRate).toFixed(0)}%</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {Number(kpi.sprintCommitmentRate) >= 90 ? 'Team delivers on commitments reliably' :
-                        Number(kpi.sprintCommitmentRate) >= 75 ? 'Moderate — refine estimation practices' :
-                          'Low commitment rate affects planning'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Change Failure Rate */}
-                {kpi.changeFailureRate !== undefined && (
-                  <div className={`rounded-lg border p-3 ${Number(kpi.changeFailureRate) <= 5 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    Number(kpi.changeFailureRate) <= 15 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                      'border-red-500/40 bg-red-500/10'
-                    }`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-400 uppercase">Change Failure</span>
-                      <span className={`text-lg font-bold ${Number(kpi.changeFailureRate) <= 5 ? 'text-emerald-400' : Number(kpi.changeFailureRate) <= 15 ? 'text-amber-400' : 'text-red-400'
-                        }`}>{Number(kpi.changeFailureRate).toFixed(1)}%</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {Number(kpi.changeFailureRate) <= 5 ? 'Low failure rate shows mature CI/CD' :
-                        Number(kpi.changeFailureRate) <= 15 ? 'Moderate — improve pre-deploy testing' :
-                          'High failure rate needs process review'}
-                    </p>
-                  </div>
-                )}
-
-                {/* Build Time */}
-                {kpi.avgBuildTimeMinutes !== undefined && (
-                  <div className={`rounded-lg border p-3 ${Number(kpi.avgBuildTimeMinutes) <= 10 ? 'border-emerald-500/40 bg-emerald-500/10' :
-                    Number(kpi.avgBuildTimeMinutes) <= 20 ? 'border-amber-500/40 bg-amber-500/10' :
-                      'border-red-500/40 bg-red-500/10'
-                    }`}>
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-xs font-medium text-slate-400 uppercase">Build Time</span>
-                      <span className={`text-lg font-bold ${Number(kpi.avgBuildTimeMinutes) <= 10 ? 'text-emerald-400' : Number(kpi.avgBuildTimeMinutes) <= 20 ? 'text-amber-400' : 'text-red-400'
-                        }`}>{Number(kpi.avgBuildTimeMinutes).toFixed(0)}m</span>
-                    </div>
-                    <p className="text-[11px] text-slate-500">
-                      {Number(kpi.avgBuildTimeMinutes) <= 10 ? 'Fast builds keep developers productive' :
-                        Number(kpi.avgBuildTimeMinutes) <= 20 ? 'Moderate — consider caching/parallelization' :
-                          'Slow builds hurt developer flow'}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* AI Insights Header - Only visible to leads, managers, and admins */}
-          {canViewDeveloperInsights && (
-            <div className="mb-6 flex flex-col gap-3" data-testid="ai-insights-header">
-              <div className="flex items-center gap-3 text-lg font-semibold text-gray-700 dark:text-slate-300">
-                <span className="p-2 bg-gradient-to-r from-purple-500 to-indigo-500 rounded-full text-white">
-                  <Bot size={20} />
-                </span>
-                <div>
-                  <div>AI Insights</div>
-                  <p className="text-sm text-gray-500 dark:text-slate-400">Actionable guidance based on your team metrics</p>
-                </div>
-              </div>
-              {aiLoading && (
-                <span className="text-sm text-gray-500 dark:text-slate-400">Generating recommendations...</span>
-              )}
-            </div>
-          )}
-
-          {canViewDeveloperInsights && aiError && (
-            <div className="mb-4 rounded-lg border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-              {aiError}
-            </div>
-          )}
-
-          {canViewDeveloperInsights && !aiLoading && !aiError && !aiSuggestions && (
-            <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
-              No AI insights available yet for this team. Make sure metrics are recorded.
-            </div>
-          )}
-
-          {/* AI Disabled Message */}
-          {canViewDeveloperInsights && aiSuggestions?.aiEnabled === false && (
-            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-300">
-              <span className="font-medium">AI suggestions are disabled for this team.</span>
-              <span className="ml-1 text-amber-400/80">Enable AI in admin settings to get personalized recommendations.</span>
-            </div>
-          )}
-
-          {/* AI Enabled - Show Suggestions */}
-          {canViewDeveloperInsights && aiSuggestions?.aiEnabled && (
-            <>
-              {/* Source indicator and disclaimer */}
-              {aiSuggestions?.source && (
-                <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0">
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
-                    Powered by: <span className="text-purple-400">{aiSuggestions.source === 'groq' ? 'AI' : 'Rule-based analysis'}</span>
-                  </div>
-                  {aiSuggestions.source === 'groq' && (
-                    <div className="text-[10px] text-slate-500 dark:text-slate-400 italic">
-                      ⚠️ Generated by AI. May contain inaccuracies — please verify before acting.
-                    </div>
                   )}
-                </div>
-              )}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
-                <div className="rounded-2xl border border-gray-200 bg-gradient-to-br from-white to-slate-50 p-4 shadow-sm dark:from-slate-900 dark:to-slate-800 dark:border-slate-700">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-emerald-600">Strongpoints</span>
-                    <span className="text-[10px] text-slate-400">{aiSuggestions?.strongpoints?.length || 0} items</span>
-                  </div>
-                  <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-200">
-                    {(aiSuggestions?.strongpoints?.length || 0) > 0 ? aiSuggestions.strongpoints.map((point, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <span className="mt-0.5 text-emerald-500">•</span>
-                        <span>{point}</span>
-                      </li>
-                    )) : (
-                      <li className="text-slate-500 italic">No strongpoints identified</li>
-                    )}
-                  </ul>
-                </div>
-                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-amber-500">Areas of Improvement</span>
-                    <span className="text-[10px] text-slate-400">{aiSuggestions?.areasOfImprovement?.length || 0} items</span>
-                  </div>
-                  <ul className="space-y-2 text-sm text-gray-700 dark:text-slate-200">
-                    {(aiSuggestions?.areasOfImprovement?.length || 0) > 0 ? aiSuggestions.areasOfImprovement.map((area, idx) => (
-                      <li key={idx} className="flex items-start gap-2">
-                        <span className="mt-0.5 text-amber-500">•</span>
-                        <span>{area}</span>
-                      </li>
-                    )) : (
-                      <li className="text-slate-500 italic">No areas of improvement identified</li>
-                    )}
-                  </ul>
-                </div>
-                <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900/60">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-semibold uppercase tracking-wide text-cyan-500">Action Plan</span>
-                    <span className="text-[10px] text-slate-400">{aiSuggestions?.actionPlan?.length || 0} items</span>
-                  </div>
-                  <div className="space-y-3">
-                    {(aiSuggestions?.actionPlan?.length || 0) > 0 ? aiSuggestions.actionPlan.map((item, idx) => (
-                      <div key={idx} className="rounded-xl border border-gray-200 bg-slate-50 p-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900/60 dark:text-slate-100">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`text-[10px] font-semibold uppercase tracking-wide ${item.priority === 'Urgent' ? 'text-red-500' : item.priority === 'Moderate' ? 'text-amber-500' : 'text-slate-500'
-                            }`}>
-                            {item.priority}
-                          </span>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500">{item.timebox}</span>
-                        </div>
-                        <div className="text-sm font-medium text-gray-900 dark:text-slate-100 mb-1">{item.initiative}</div>
-                        <div className="text-xs text-gray-600 dark:text-slate-400 mb-1">Owner: {item.owner}</div>
-                        <div className="text-xs text-emerald-500">KPI: {item.kpi}</div>
+                  {change && target && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{target}</p>}
+                </Card>
+              );
+            })}
+          </div>
+        </section>
+      ))}
+
+      {/* Team recommendations */}
+      {canViewDeveloperInsights && (
+        <Card>
+          <div data-testid="ai-insights-header">
+            <CardHeader
+              title="Team recommendations"
+              subtitle={
+                aiLoading ? 'Generating recommendations…' :
+                  aiSuggestions?.source === 'groq' ? 'Generated by an AI model from the metrics above. May contain inaccuracies — verify before acting.' :
+                    aiSuggestions?.source === 'rule-based' ? 'Rule-based analysis of the metrics above.' : undefined
+              }
+              action={aiSuggestions?.source ? <Badge tone="neutral">{aiSuggestions.source === 'groq' ? 'AI' : 'Rule-based'}</Badge> : undefined}
+            />
+          </div>
+          {aiError ? (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-300">{aiError}</p>
+          ) : aiLoading ? null : !aiSuggestions ? (
+            <EmptyState title="No recommendations yet" description="Recommendations appear once metrics are recorded for this team." />
+          ) : aiSuggestions.aiEnabled === false ? (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              Recommendations are disabled for this team. Enable them in the admin console.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+              <ListBlock title="Strengths" tone="good" items={aiSuggestions.strongpoints} empty="None identified" />
+              <ListBlock title="Areas to improve" tone="warn" items={aiSuggestions.areasOfImprovement} empty="None identified" />
+              <div>
+                <p className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Action plan ({aiSuggestions.actionPlan?.length ?? 0})</p>
+                <div className="space-y-2">
+                  {(aiSuggestions.actionPlan?.length ?? 0) > 0 ? aiSuggestions.actionPlan.map((item, idx) => (
+                    <div key={idx} className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+                      <div className="mb-1 flex items-center justify-between gap-2">
+                        <Badge tone={item.priority === 'Urgent' ? 'bad' : item.priority === 'Moderate' ? 'warn' : 'neutral'}>{item.priority}</Badge>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{item.timebox}</span>
                       </div>
-                    )) : (
-                      <div className="text-slate-500 italic text-sm">No action items</div>
-                    )}
-                  </div>
+                      <p className="text-sm font-medium text-slate-900 dark:text-white">{item.initiative}</p>
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Owner: {item.owner} · KPI: {item.kpi}</p>
+                    </div>
+                  )) : <p className="text-sm text-slate-500 dark:text-slate-400">No action items</p>}
                 </div>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {/* Developer recommendations */}
+      {canViewDeveloperInsights && (
+        <Card>
+          <CardHeader
+            title="Developer recommendations"
+            subtitle={
+              devAILoading ? 'Analysing developer metrics…' :
+                devAISuggestions?.source === 'groq' ? 'Generated by an AI model. May contain inaccuracies.' :
+                  devAISuggestions?.source === 'rule-based' ? 'Rule-based analysis of recorded developer metrics.' : undefined
+            }
+            action={devAISuggestions?.source ? <Badge tone="neutral">{devAISuggestions.source === 'groq' ? 'AI' : 'Rule-based'}</Badge> : undefined}
+          />
+          {devAILoading ? null : !devAISuggestions ? (
+            <EmptyState title="No developer recommendations" description={devMetricsUnavailable ?? 'Developer recommendations could not be loaded.'} />
+          ) : devAISuggestions.aiEnabled === false ? (
+            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              {devAISuggestions.message || 'Recommendations are disabled for this team.'}
+            </p>
+          ) : !devAISuggestions.developers?.length ? (
+            <EmptyState title="No developer metrics recorded" description={devAISuggestions.message || 'Add developer metrics in Manual metrics.'} />
+          ) : (
+            <>
+              {devAISuggestions.teamInsight && (
+                <p className="mb-4 text-sm text-slate-700 dark:text-slate-300">{devAISuggestions.teamInsight}</p>
+              )}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {devAISuggestions.developers.map((dev, idx) => {
+                  const meta = developerStatusMeta(dev.status);
+                  const m = metricsFor(dev);
+                  return (
+                    <div key={`${dev.name}-${idx}`} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                      <div className="mb-3 flex items-center justify-between gap-2">
+                        <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{dev.name}</h4>
+                        <Badge tone={meta.tone}>{meta.label}</Badge>
+                      </div>
+                      {m && (
+                        <dl className="mb-3 grid grid-cols-5 gap-1 text-center">
+                          {[
+                            ['PR', m.prMergeTimeHours, 'h'],
+                            ['Review', m.codeReviewTimeHours, 'h'],
+                            ['Focus', m.focusTimeHours, 'h'],
+                            ['Mtgs', m.meetingTimeHours, 'h'],
+                            ['Ctx', m.contextSwitchesPerDay, ''],
+                          ].map(([label, v, u]) => (
+                            <div key={label as string} className="rounded bg-slate-50 px-1 py-1.5 dark:bg-slate-800/60">
+                              <dt className="text-[10px] uppercase text-slate-500 dark:text-slate-400">{label as string}</dt>
+                              <dd className="text-xs font-semibold tabular-nums text-slate-900 dark:text-white">
+                                {v == null ? '—' : `${fmt(v as number, u ? 1 : 0)}${u}`}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      )}
+                      {dev.summary && <p className="mb-2 text-sm text-slate-700 dark:text-slate-300">{dev.summary}</p>}
+                      {!!dev.concerns?.length && (
+                        <div className="mb-2 flex flex-wrap gap-1">
+                          {dev.concerns.map((c, i) => <Badge key={i} tone="warn">{c}</Badge>)}
+                        </div>
+                      )}
+                      {!!dev.strengths?.length && (
+                        <div className="mb-2 flex flex-wrap gap-1">
+                          {dev.strengths.map((s, i) => <Badge key={i} tone="good">{s}</Badge>)}
+                        </div>
+                      )}
+                      {dev.suggestion && (
+                        <div className="mt-3 border-t border-slate-200 pt-2 dark:border-slate-800">
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Recommendation</p>
+                          <p className="mt-0.5 text-sm text-slate-700 dark:text-slate-300">{dev.suggestion}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </>
           )}
-        </div>
-      </div>
-
-      {/* Developer AI Insights Section - Only visible to leads, managers, and admins */}
-      {canViewDeveloperInsights && (
-        <>
-          <div className="px-4 sm:px-6 lg:px-8 pb-10">
-            <div className="w-full">
-              <div className="mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                  <Users className="text-indigo-500" size={24} />
-                  Developer Insights
-                </h2>
-                {devAILoading && (
-                  <span className="text-sm text-gray-500 dark:text-slate-400">Analyzing developer metrics...</span>
-                )}
-              </div>
-
-              {/* Team Insight Summary */}
-              {devAISuggestions?.aiEnabled && devAISuggestions?.teamInsight && (
-                <div className="mb-4 rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-3">
-                  <p className="text-sm text-indigo-300">{devAISuggestions.teamInsight}</p>
-                  {devAISuggestions.source && (
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-500">
-                        Powered by: <span className="text-purple-400">{devAISuggestions.source === 'groq' ? 'AI' : 'Rule-based analysis'}</span>
-                      </span>
-                      {devAISuggestions.source === 'groq' && (
-                        <span className="text-[10px] text-slate-500 italic">
-                          ⚠️ Generated by AI. May contain inaccuracies.
-                        </span>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Raw Developer Metrics Table */}
-              {devAISuggestions?.metrics && devAISuggestions.metrics.length > 0 && (
-                <div className="mb-6">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-slate-300 uppercase tracking-wide">Saved Developer Metrics</h3>
-                    <span className="text-xs text-gray-600">
-                      Showing {devAISuggestions.metrics.length} developer{devAISuggestions.metrics.length > 1 ? 's' : ''}
-                    </span>
-                  </div>
-                  <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
-                    <table className="min-w-full text-xs sm:text-sm text-left">
-                      <thead className="bg-gray-50 text-gray-500 uppercase tracking-wide dark:bg-slate-800 dark:text-slate-400">
-                        <tr>
-                          <th className="px-4 py-3 font-medium">Developer</th>
-                          <th className="px-4 py-3 font-medium">PR Time (h)</th>
-                          <th className="px-4 py-3 font-medium">Review (h)</th>
-                          <th className="px-4 py-3 font-medium">Focus (h/day)</th>
-                          <th className="px-4 py-3 font-medium">Meetings (h/day)</th>
-                          <th className="px-4 py-3 font-medium">Context Switches</th>
-                          <th className="px-4 py-3 font-medium">Happiness</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {devAISuggestions.metrics.map((metric) => (
-                          <tr key={metric.name} className="border-t border-gray-100 dark:border-slate-800/70">
-                            <td className="px-4 py-3 text-gray-900 font-medium dark:text-slate-100">{metric.name}</td>
-                            <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.prMergeTimeHours.toFixed(1)}</td>
-                            <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.codeReviewTimeHours.toFixed(1)}</td>
-                            <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.focusTimeHours.toFixed(1)}</td>
-                            <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.meetingTimeHours.toFixed(1)}</td>
-                            <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.contextSwitchesPerDay}</td>
-                            <td className="px-4 py-3 text-gray-700 dark:text-slate-100">{metric.happinessScore.toFixed(0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* No data message */}
-              {!devAILoading && devAISuggestions && devAISuggestions.developers?.length === 0 && (
-                <div className="rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 text-sm text-slate-300">
-                  {devAISuggestions.message || 'No developer metrics available. Add developer metrics in the Manual Metrics Input section.'}
-                </div>
-              )}
-
-              {/* Developer Cards */}
-              {devAISuggestions?.aiEnabled && devAISuggestions?.developers && devAISuggestions.developers.length > 0 && (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {devAISuggestions.developers.map((dev, idx) => {
-                    const metrics = devAISuggestions.metrics?.find(m => m.name === dev.name);
-                    return (
-                      <div
-                        key={idx}
-                        className={`rounded-lg border p-4 text-slate-800 transition-shadow hover:shadow-xl dark:text-slate-100 ${dev.status === 'healthy'
-                          ? 'border-emerald-300 bg-emerald-50/60 dark:border-emerald-400 dark:bg-slate-900/70'
-                          : dev.status === 'at-risk'
-                            ? 'border-amber-300 bg-amber-50/60 dark:border-amber-400 dark:bg-slate-900/70'
-                            : 'border-rose-300 bg-rose-50/60 dark:border-rose-400 dark:bg-slate-900/70'
-                          }`
-                        }
-                      >
-                        {/* Header */}
-                        <div className="flex items-center justify-between mb-3">
-                          <h4 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{dev.name}</h4>
-                          <span className={`text-[10px] font-medium uppercase px-2 py-0.5 rounded-full ${dev.status === 'healthy' ? 'bg-emerald-500/20 text-emerald-400' :
-                            dev.status === 'at-risk' ? 'bg-amber-500/20 text-amber-400' :
-                              'bg-red-500/20 text-red-400'
-                            }`}>
-                            {dev.status.replace('-', ' ')}
-                          </span>
-                        </div>
-
-                        {/* Metrics Row */}
-                        {metrics && (
-                          <div className="grid grid-cols-5 gap-1 mb-3 text-center">
-                            {(
-                              [
-                                { label: 'PR', value: `${metrics.prMergeTimeHours.toFixed(1)}h`, key: 'prMergeTimeHours' },
-                                { label: 'Review', value: `${metrics.codeReviewTimeHours.toFixed(1)}h`, key: 'codeReviewTimeHours' },
-                                { label: 'Focus', value: `${metrics.focusTimeHours.toFixed(1)}h`, key: 'focusTimeHours' },
-                                { label: 'Mtgs', value: `${metrics.meetingTimeHours.toFixed(1)}h`, key: 'meetingTimeHours' },
-                                { label: 'Ctx', value: `${metrics.contextSwitchesPerDay}`, key: 'contextSwitchesPerDay' }
-                              ] as const
-                            ).map((item) => (
-                              <div key={item.label} className="bg-slate-100/60 dark:bg-slate-800/50 rounded p-1.5">
-                                <div className="text-[10px] text-slate-400 uppercase">{item.label}</div>
-                                <div className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                                  {item.value}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Summary */}
-                        <p className="text-sm text-slate-600 mb-2 leading-relaxed">{dev.summary}</p>
-
-                        {/* Strengths */}
-                        {dev.strengths?.length > 0 && (
-                          <div className="mb-2">
-                            <div className="text-[10px] text-emerald-500 uppercase font-medium mb-1">Strengths</div>
-                            <div className="flex flex-wrap gap-1">
-                              {dev.strengths.map((s, i) => (
-                                <span key={i} className="text-[10px] bg-emerald-500/10 text-emerald-700 px-1.5 py-0.5 rounded">
-                                  {s}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Concerns */}
-                        {dev.concerns?.length > 0 && (
-                          <div className="mb-2">
-                            <div className="text-[10px] text-amber-500 uppercase font-medium mb-1">Concerns</div>
-                            <div className="flex flex-wrap gap-1">
-                              {dev.concerns.map((c, i) => (
-                                <span key={i} className="text-[10px] bg-amber-500/10 text-amber-600 px-1.5 py-0.5 rounded">
-                                  {c}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Suggestion */}
-                        <div className="mt-3 pt-2 border-t border-slate-700">
-                          <div className="text-[10px] text-cyan-400 uppercase font-medium mb-1">Recommendation</div>
-                          <p className="text-sm text-slate-600 leading-relaxed">{dev.suggestion}</p>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </>
+        </Card>
       )}
-    </div>
+    </Page>
   );
 };
+
+const ListBlock: React.FC<{ title: string; tone: Tone; items?: string[]; empty: string }> = ({ title, tone, items, empty }) => (
+  <div>
+    <p className={cx('mb-2 text-xs font-medium', toneText(tone))}>{title} ({items?.length ?? 0})</p>
+    {items && items.length > 0 ? (
+      <ul className="space-y-1.5 text-sm text-slate-700 dark:text-slate-300">
+        {items.map((p, i) => (
+          <li key={i} className="flex gap-2"><span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-slate-400" aria-hidden />{p}</li>
+        ))}
+      </ul>
+    ) : <p className="text-sm text-slate-500 dark:text-slate-400">{empty}</p>}
+  </div>
+);
+
+/** Server rows can carry NUMERIC strings or nulls; never coerce missing values to 0. */
+function normalizeMetric(m: any): DevMetricRow {
+  return {
+    developerId: m.developerId ?? m.developer_id,
+    name: m.name ?? '',
+    prMergeTimeHours: toNum(m.prMergeTimeHours),
+    codeReviewTimeHours: toNum(m.codeReviewTimeHours),
+    focusTimeHours: toNum(m.focusTimeHours),
+    meetingTimeHours: toNum(m.meetingTimeHours),
+    contextSwitchesPerDay: toNum(m.contextSwitchesPerDay),
+    happinessScore: toNum(m.happinessScore),
+  };
+}
 
 export default TeamDetailView;

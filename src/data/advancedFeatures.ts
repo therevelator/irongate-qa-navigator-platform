@@ -1,4 +1,7 @@
-// Extended data models for advanced features
+// Shared data models for the analytics features, plus the single shared definitions
+// of the developer-level derived metrics (DDPS, burnout risk, workload balance).
+// No mock or random data generators live here: every displayed value must come from the API.
+import { computeDdps } from '../../server/lib/metricFormulas';
 
 export interface TestCase {
   id: string;
@@ -95,27 +98,6 @@ export interface BusinessImpact {
   correlation_strength: number;
 }
 
-export interface GamificationData {
-  enabled: boolean;
-  leaderboard: {
-    team_id: string;
-    team_name: string;
-    points: number;
-    badges: string[];
-    rank: number;
-    achievements: Achievement[];
-  }[];
-}
-
-export interface Achievement {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  earned_date: string;
-  category: 'quality' | 'speed' | 'collaboration' | 'innovation';
-}
-
 export interface TestExecution {
   id: string;
   test_suite: string;
@@ -127,216 +109,114 @@ export interface TestExecution {
   dependencies: string[];
 }
 
-// Mock data generators for new features
 
-export const generateFlakyTests = (): FlakyTest[] => {
-  const patterns = ['timing', 'environment', 'data', 'network', 'unknown'] as const;
-  const testNames = [
-    'LoginFlowTest',
-    'CheckoutProcessTest',
-    'PaymentGatewayTest',
-    'SearchFunctionalityTest',
-    'UserRegistrationTest'
-  ];
+// ---------------------------------------------------------------------------
+// Developer metric definitions (one definition per metric, shared by
+// TeamDetailView, DeveloperProductivity and ManualMetricsInput).
+// ---------------------------------------------------------------------------
 
-  return testNames.map((name, index) => {
-    const pattern = patterns[index % patterns.length];
-    return {
-      id: `flaky-${index}`,
-      test_name: name,
-      flakiness_score: Number((Math.random() * 100).toFixed(1)),
-      failure_pattern: pattern,
-      occurrences: Math.floor(Math.random() * 50) + 5,
-      first_detected: new Date(Date.now() - Math.random() * 30 * 24 * 60 * 60 * 1000).toISOString(),
-      last_occurrence: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-      suggested_fix: getSuggestedFix(pattern),
-      root_cause: getRootCause(pattern),
-      history: Array.from({ length: 20 }, (_, i) => ({
-        date: new Date(Date.now() - (19 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-        passed: Math.random() > 0.3
-      }))
-    };
-  });
-};
+export interface DeveloperInputs {
+  pr_merge_time_avg: number;       // hours from PR open to merge (elapsed, not effort)
+  code_review_time_avg: number;    // hours per review
+  focus_time_hours: number;        // hours/day
+  meeting_time_hours: number;      // hours/day
+  context_switches_per_day: number;
+}
 
-const getSuggestedFix = (pattern: string): string => {
-  const fixes: Record<string, string> = {
-    timing: 'Add explicit waits or increase timeout values',
-    environment: 'Ensure consistent test environment setup',
-    data: 'Use data factories or fixtures for consistent test data',
-    network: 'Mock external APIs or add retry logic',
-    unknown: 'Add detailed logging to identify root cause'
-  };
-  return fixes[pattern] || 'Investigate test implementation';
-};
+// The DDPS definition lives in server/lib/metricFormulas.ts (shared with the API).
+export { DDPS_FORMULA, DDPS_RAW_MAX as DDPS_MAX_RAW, QA_SCORE_FORMULA } from '../../server/lib/metricFormulas';
 
-const getRootCause = (pattern: string): string => {
-  const causes: Record<string, string> = {
-    timing: 'timeout keyword detected in error logs',
-    environment: 'environment keyword detected in error logs',
-    data: 'assertion failed keyword detected in error logs',
-    network: 'ECONNREFUSED keyword detected in error logs',
-    unknown: 'No matching pattern found'
-  };
-  return causes[pattern] || 'Pattern analysis pending';
-};
-
-export const generatePipelineStages = (): PipelineStage[] => {
-  const stages = ['Build', 'Unit Tests', 'Integration Tests', 'Security Scan', 'Deploy to Staging', 'E2E Tests', 'Deploy to Prod'];
-  
-  return stages.map((name, index) => ({
-    id: `stage-${index}`,
-    name,
-    duration: Math.floor(Math.random() * 300) + 60,
-    success_rate: Number((85 + Math.random() * 15).toFixed(1)),
-    resource_usage: {
-      cpu: Number((Math.random() * 80 + 20).toFixed(1)),
-      memory: Number((Math.random() * 70 + 30).toFixed(1)),
-      cost: Number((Math.random() * 5 + 0.5).toFixed(2))
-    },
-    bottleneck_score: Number((Math.random() * 100).toFixed(1))
-  }));
-};
-
-export const generatePerformanceMetrics = (): PerformanceMetric[] => {
-  const endpoints = ['/api/users', '/api/products', '/api/checkout', '/api/search', '/api/orders'];
-  
-  return endpoints.map((endpoint, index) => ({
-    id: `perf-${index}`,
-    endpoint,
-    response_time_p50: Math.floor(Math.random() * 200) + 50,
-    response_time_p95: Math.floor(Math.random() * 500) + 200,
-    response_time_p99: Math.floor(Math.random() * 1000) + 500,
-    throughput: Math.floor(Math.random() * 1000) + 100,
-    error_rate: Number((Math.random() * 2).toFixed(2)),
-    timestamp: new Date().toISOString()
-  }));
-};
-
-export const generateDeveloperMetrics = (): DeveloperMetric[] => {
-  const names = ['Alice Johnson', 'Bob Smith', 'Carol Davis', 'David Lee', 'Emma Wilson'];
-  
-  return names.map((name, index) => ({
-    developer_id: `dev-${index}`,
-    name,
-    code_review_time_avg: Number((Math.random() * 4 + 1).toFixed(1)),
-    pr_merge_time_avg: Number((Math.random() * 24 + 2).toFixed(1)),
-    happiness_score: Math.floor(Math.random() * 30) + 70,
-    context_switches_per_day: Math.floor(Math.random() * 10) + 3,
-    focus_time_hours: Number((Math.random() * 4 + 2).toFixed(1)),
-    meeting_time_hours: Number((Math.random() * 3 + 1).toFixed(1))
-  }));
-};
-
-export const generateTechnicalDebt = (): TechnicalDebt[] => {
-  const categories = ['code_quality', 'architecture', 'testing', 'documentation', 'security'] as const;
-  const severities = ['low', 'medium', 'high', 'critical'] as const;
-  
-  return Array.from({ length: 10 }, (_, index) => ({
-    id: `debt-${index}`,
-    title: `Technical Debt Item ${index + 1}`,
-    description: 'Legacy code needs refactoring to improve maintainability',
-    category: categories[Math.floor(Math.random() * categories.length)],
-    severity: severities[Math.floor(Math.random() * severities.length)],
-    estimated_effort_hours: Math.floor(Math.random() * 40) + 8,
-    cost_of_delay: Math.floor(Math.random() * 10000) + 1000,
-    priority_score: Number((Math.random() * 100).toFixed(1)),
-    created_date: new Date(Date.now() - Math.random() * 90 * 24 * 60 * 60 * 1000).toISOString(),
-    status: ['open', 'in_progress', 'resolved'][Math.floor(Math.random() * 3)] as any
-  }));
-};
-
-export const generateBusinessImpact = (): BusinessImpact[] => {
-  const metrics = ['Test Coverage', 'Defect Density', 'MTTR', 'Deployment Frequency', 'Change Failure Rate'];
-  
-  return metrics.map(metric => ({
-    metric_name: metric,
-    quality_score: Number((Math.random() * 40 + 60).toFixed(1)),
-    revenue_impact: Math.floor(Math.random() * 500000) + 100000,
-    customer_satisfaction: Number((Math.random() * 20 + 75).toFixed(1)),
-    feature_adoption_rate: Number((Math.random() * 30 + 60).toFixed(1)),
-    correlation_strength: Number((Math.random() * 0.5 + 0.5).toFixed(2))
-  }));
-};
-
-export const generateTestExecutions = (): TestExecution[] => {
-  const suites = ['Smoke Tests', 'Regression Suite', 'API Tests', 'UI Tests', 'Performance Tests'];
-  const statuses = ['running', 'passed', 'failed', 'blocked'] as const;
-  
-  return Array.from({ length: 15 }, (_, index) => {
-    const start = new Date(Date.now() - Math.random() * 2 * 60 * 60 * 1000);
-    const duration = Math.floor(Math.random() * 3600) + 300;
-    
-    return {
-      id: `exec-${index}`,
-      test_suite: suites[Math.floor(Math.random() * suites.length)],
-      start_time: start.toISOString(),
-      end_time: new Date(start.getTime() + duration * 1000).toISOString(),
-      duration,
-      status: statuses[Math.floor(Math.random() * statuses.length)],
-      assigned_to: `Tester ${Math.floor(Math.random() * 5) + 1}`,
-      dependencies: []
-    };
-  });
-};
-
-export const generateGamificationData = (): GamificationData => {
-  const teams = ['Checkout Service', 'User Auth', 'Inventory Core', 'Payment Gateway', 'Mobile App'];
-  
+/**
+ * Daily Developer Productivity Score, 0–100 — thin wrapper over the shared computeDdps().
+ * Scheduled hours = focus + meetings (PR merge / review times are elapsed time, not effort).
+ */
+export const calculateDDPS = (d: DeveloperInputs) => {
+  const r = computeDdps(d);
+  const scheduled = r.scheduledHours ?? d.focus_time_hours + d.meeting_time_hours;
+  const overtime = Math.max(0, scheduled - 8);
   return {
-    enabled: true,
-    leaderboard: teams.map((name, index) => ({
-      team_id: `team-${index}`,
-      team_name: name,
-      points: Math.floor(Math.random() * 5000) + 1000,
-      badges: ['🏆', '⭐', '🎯'].slice(0, Math.floor(Math.random() * 3) + 1),
-      rank: index + 1,
-      achievements: [
-        {
-          id: `ach-${index}-1`,
-          name: 'Quality Champion',
-          description: 'Maintained 95%+ test coverage for 3 sprints',
-          icon: '🏆',
-          earned_date: new Date().toISOString(),
-          category: 'quality'
-        }
-      ]
-    }))
+    score: r.score ?? 0,
+    hasScore: r.score != null,
+    estimatedHours: Math.round(scheduled * 10) / 10,
+    overtimeHours: Math.round(overtime * 10) / 10,
+    isOvertime: scheduled > 8,
   };
 };
 
-export const generateTestCases = (): TestCase[] => {
-  const testNames = [
-    'User Login Flow',
-    'Product Search Functionality',
-    'Checkout Process',
-    'Payment Gateway Integration',
-    'User Registration',
-    'Password Reset',
-    'Shopping Cart Operations',
-    'Order History Display',
-    'Product Filtering',
-    'User Profile Update',
-    'Email Notifications',
-    'API Authentication',
-    'Database Connection',
-    'File Upload',
-    'Data Validation'
-  ];
-  
-  const statuses = ['active', 'obsolete', 'redundant'] as const;
-  const tags = [['smoke', 'critical'], ['regression', 'api'], ['ui', 'e2e'], ['integration'], ['performance']];
-  
-  return testNames.map((name, index) => ({
-    id: `test-${index}`,
-    name,
-    requirement_id: `REQ-${1000 + index}`,
-    status: statuses[Math.floor(Math.random() * statuses.length)],
-    last_executed: new Date(Date.now() - Math.random() * 60 * 24 * 60 * 60 * 1000).toISOString(),
-    pass_rate: Number((Math.random() * 30 + 70).toFixed(1)),
-    execution_count: Math.floor(Math.random() * 200) + 10,
-    avg_duration: Number((Math.random() * 20 + 2).toFixed(1)),
-    effectiveness_score: Number((Math.random() * 40 + 60).toFixed(1)),
-    tags: tags[Math.floor(Math.random() * tags.length)]
-  }));
+/** DDPS band labels on the 0–100 scale. */
+export const ddpsBand = (score: number | null | undefined): { label: string; tone: 'good' | 'warn' | 'bad' | 'neutral' } => {
+  if (score == null || Number.isNaN(score)) return { label: 'No data', tone: 'neutral' };
+  if (score >= 80) return { label: 'Exceptional', tone: 'good' };
+  if (score >= 60) return { label: 'High', tone: 'good' };
+  if (score >= 40) return { label: 'Moderate', tone: 'warn' };
+  return { label: 'Low', tone: 'bad' };
+};
+
+export type BurnoutRisk = 'low' | 'moderate' | 'high';
+
+export const BURNOUT_DEFINITION =
+  'Points: meetings >4h/day +30 (>2.5h +15); focus <3h/day +30 (<4h +15); context switches >8/day +25 (>5 +10). High ≥50, moderate ≥25, otherwise low.';
+
+/** Burnout risk from workload inputs only (does not reuse the derived workload-balance score). */
+export const calculateBurnoutRisk = (d: Pick<DeveloperInputs, 'focus_time_hours' | 'meeting_time_hours' | 'context_switches_per_day'>): BurnoutRisk => {
+  let points = 0;
+  if (d.meeting_time_hours > 4) points += 30; else if (d.meeting_time_hours > 2.5) points += 15;
+  if (d.focus_time_hours < 3) points += 30; else if (d.focus_time_hours < 4) points += 15;
+  if (d.context_switches_per_day > 8) points += 25; else if (d.context_switches_per_day > 5) points += 10;
+  return points >= 50 ? 'high' : points >= 25 ? 'moderate' : 'low';
+};
+
+export const burnoutTone = (r: BurnoutRisk): 'good' | 'warn' | 'bad' => (r === 'low' ? 'good' : r === 'moderate' ? 'warn' : 'bad');
+
+export const WORKLOAD_BALANCE_FORMULA =
+  '40% × focus ÷ (focus + meetings) + 30% × (10 − context switches) ÷ 10 + 15% × (4 − meeting h) ÷ 4 + 7.5% × (24 − PR h) ÷ 24 + 7.5% × (8 − review h) ÷ 8, each term floored at 0, scaled to 0–100';
+
+/**
+ * Workload balance score (0–100), derived from the workload inputs — not a survey.
+ * This is the value stored in developer_metrics.happiness_score.
+ */
+export const calculateWorkloadBalance = (d: DeveloperInputs): number => {
+  const tracked = d.focus_time_hours + d.meeting_time_hours;
+  const focusRatio = tracked > 0 ? d.focus_time_hours / tracked : 0;
+  const focusScore = Math.min(focusRatio * 100, 100) * 0.4;
+  const contextScore = Math.max(0, ((10 - d.context_switches_per_day) / 10) * 100) * 0.3;
+  const meetingScore = Math.max(0, ((4 - d.meeting_time_hours) / 4) * 100) * 0.15;
+  const prScore = Math.max(0, ((24 - d.pr_merge_time_avg) / 24) * 100) * 0.075;
+  const reviewScore = Math.max(0, ((8 - d.code_review_time_avg) / 8) * 100) * 0.075;
+  return Math.min(100, Math.max(0, focusScore + contextScore + meetingScore + prScore + reviewScore));
+};
+
+/** Developer recommendation status, as produced by the server (healthy < needs-attention < at-risk). */
+export const developerStatusMeta = (status: unknown): { label: string; tone: 'good' | 'warn' | 'bad' | 'neutral' } => {
+  if (status === 'healthy') return { label: 'Healthy', tone: 'good' };
+  if (status === 'needs-attention') return { label: 'Needs attention', tone: 'warn' };
+  if (status === 'at-risk') return { label: 'At risk', tone: 'bad' };
+  return { label: typeof status === 'string' && status ? status.replace(/-/g, ' ') : 'Unrated', tone: 'neutral' };
+};
+
+/** Theme-aware colours for recharts (axis, grid, tooltip, series). */
+export const chartTheme = (isDark: boolean) => ({
+  axis: isDark ? '#94a3b8' : '#64748b',       // slate-400 / slate-500
+  grid: isDark ? '#1e293b' : '#e2e8f0',       // slate-800 / slate-200
+  series: isDark ? '#7aa2d6' : '#2d5b94',     // brand-400 / brand-600 (approx.)
+  series2: isDark ? '#cbd5e1' : '#475569',    // slate-300 / slate-600
+  tooltip: {
+    contentStyle: {
+      backgroundColor: isDark ? '#0f172a' : '#ffffff',
+      border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+      borderRadius: 6,
+      color: isDark ? '#f1f5f9' : '#0f172a',
+      fontSize: 12,
+    },
+    labelStyle: { color: isDark ? '#94a3b8' : '#64748b' },
+    itemStyle: { color: isDark ? '#f1f5f9' : '#0f172a' },
+  },
+});
+
+/** "17 Nov 2026" style date, or null when the input is missing/invalid. */
+export const formatAsOf = (d: string | null | undefined): string | null => {
+  if (!d) return null;
+  const date = new Date(d);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
 };

@@ -1,297 +1,210 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Trophy, Star, Target, Award, TrendingUp, Zap, Crown, Medal } from 'lucide-react';
-import { generateGamificationData } from '../data/advancedFeatures';
-import type { GamificationData } from '../data/advancedFeatures';
+import React, { useEffect, useMemo, useState } from 'react';
+import { API_URL } from '../config/api';
+import { Page, PageIntro, Card, Badge, EmptyState, SegmentedControl, cx } from './ui';
+import type { Tone } from './ui';
+import { getThreshold, statusFor, toNum } from '../data/detailedKPIs';
+import type { KPIKey, KPIStatus } from '../data/detailedKPIs';
+import { formatAsOf } from '../data/advancedFeatures';
 
-interface TeamGamificationProps {
-  onBack: () => void;
+/**
+ * Team rankings — built only from real data returned by GET /api/teams.
+ * Teams are ranked by their latest recorded QA score; teams without a score are
+ * listed after the ranked ones. No points, badges or achievements are invented.
+ */
+
+interface TeamRankingsProps {
+  onBack?: () => void;
 }
 
-const TeamGamification: React.FC<TeamGamificationProps> = ({ onBack }) => {
-  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
-  const gamificationData = generateGamificationData();
-
-  if (!gamificationData.enabled) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <Trophy className="mx-auto text-gray-400 mb-4" size={64} />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Gamification Disabled</h2>
-          <p className="text-gray-600 mb-6">Contact your administrator to enable team gamification features.</p>
-          <button
-            onClick={onBack}
-            className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Back to Features
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  const leaderboard = gamificationData.leaderboard.sort((a, b) => b.points - a.points);
-  const topTeam = leaderboard[0];
-  const avgPoints = leaderboard.length ? Math.round(leaderboard.reduce((acc, t) => acc + t.points, 0) / leaderboard.length).toLocaleString() : '--';
-
-  return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white">
-        <div className="px-8 py-6">
-          <button 
-            onClick={onBack}
-            className="flex items-center space-x-2 text-white/80 hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            <span className="font-medium">Back to Features</span>
-          </button>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold flex items-center">
-                <Trophy className="mr-3" size={32} />
-                Team Gamification
-              </h1>
-              <p className="text-white/80 mt-1">Compete, achieve, and celebrate quality excellence!</p>
-            </div>
-            
-            <div className="flex items-center space-x-6">
-              <div className="text-center bg-white/10 rounded-lg px-6 py-3">
-                <p className="text-sm text-white/80">Top Team</p>
-                <div className="text-2xl font-bold">{topTeam.team_name}</div>
-              </div>
-              <div className="text-center bg-white/10 rounded-lg px-6 py-3">
-                <p className="text-sm text-white/80">Top Score</p>
-                <div className="text-2xl font-bold">{topTeam.points.toLocaleString()}</div>
-              </div>
-              <div className="text-center bg-white/10 rounded-lg px-6 py-3">
-                <p className="text-sm text-white/80">Avg Points</p>
-                <div className="text-2xl font-bold">{avgPoints}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="px-8 py-8">
-        {/* Podium */}
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6 text-center">🏆 Top 3 Teams 🏆</h2>
-          <div className="flex items-end justify-center space-x-8">
-            {/* 2nd Place */}
-            {leaderboard[1] && (
-              <div className="flex flex-col items-center">
-                <div className="bg-gradient-to-br from-gray-300 to-gray-400 rounded-full w-24 h-24 flex items-center justify-center mb-3 shadow-lg">
-                  <Medal className="text-white" size={48} />
-                </div>
-                <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg p-6 w-64 text-center border-4 border-gray-300 dark:border-slate-700">
-                  <div className="text-4xl font-bold text-gray-600 mb-2">2nd</div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{leaderboard[1].team_name}</h3>
-                  <div className="text-2xl font-bold text-gray-700 mb-2">{leaderboard[1].points.toLocaleString()}</div>
-                  <div className="flex justify-center space-x-1 text-2xl">
-                    {leaderboard[1].badges.map((badge, i) => (
-                      <span key={i}>{badge}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 1st Place */}
-            {leaderboard[0] && (
-              <div className="flex flex-col items-center -mt-8">
-                <div className="bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-full w-32 h-32 flex items-center justify-center mb-3 shadow-2xl animate-pulse">
-                  <Crown className="text-white" size={64} />
-                </div>
-                <div className="bg-white dark:bg-slate-900 rounded-xl shadow-2xl p-8 w-72 text-center border-4 border-yellow-400">
-                  <div className="text-5xl font-bold text-yellow-600 mb-2">1st</div>
-                  <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">{leaderboard[0].team_name}</h3>
-                  <div className="text-3xl font-bold text-yellow-600 mb-3">{leaderboard[0].points.toLocaleString()}</div>
-                  <div className="flex justify-center space-x-1 text-3xl">
-                    {leaderboard[0].badges.map((badge, i) => (
-                      <span key={i}>{badge}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 3rd Place */}
-            {leaderboard[2] && (
-              <div className="flex flex-col items-center">
-                <div className="bg-gradient-to-br from-orange-400 to-orange-600 rounded-full w-24 h-24 flex items-center justify-center mb-3 shadow-lg">
-                  <Award className="text-white" size={48} />
-                </div>
-                <div className="bg-white dark:bg-slate-900 rounded-xl shadow-lg p-6 w-64 text-center border-4 border-orange-400">
-                  <div className="text-4xl font-bold text-orange-600 dark:text-orange-400 mb-2">3rd</div>
-                  <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-2">{leaderboard[2].team_name}</h3>
-                  <div className="text-2xl font-bold text-orange-700 mb-2">{leaderboard[2].points.toLocaleString()}</div>
-                  <div className="flex justify-center space-x-1 text-2xl">
-                    {leaderboard[2].badges.map((badge, i) => (
-                      <span key={i}>{badge}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Full Leaderboard */}
-        <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6 mb-8">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Full Leaderboard</h2>
-          <div className="space-y-3">
-            {leaderboard.map((team, index) => (
-              <LeaderboardRow
-                key={team.team_id}
-                team={team}
-                rank={index + 1}
-                isSelected={selectedTeam === team.team_id}
-                onSelect={() => setSelectedTeam(selectedTeam === team.team_id ? null : team.team_id)}
-              />
-            ))}
-          </div>
-        </div>
-
-        {/* Achievement Categories */}
-        <div className="grid grid-cols-3 gap-6">
-          <AchievementCategory
-            icon={<Trophy className="text-yellow-500" size={32} />}
-            title="Quality Champions"
-            description="Teams maintaining 95%+ test coverage"
-            count={3}
-          />
-          <AchievementCategory
-            icon={<Zap className="text-blue-500" size={32} />}
-            title="Speed Demons"
-            description="Fastest CI/CD pipeline execution"
-            count={2}
-          />
-          <AchievementCategory
-            icon={<Target className="text-green-500" size={32} />}
-            title="Bug Hunters"
-            description="Most bugs caught in testing"
-            count={4}
-          />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface LeaderboardRowProps {
-  team: GamificationData['leaderboard'][0];
-  rank: number;
-  isSelected: boolean;
-  onSelect: () => void;
+interface RankedTeam {
+  id: string;
+  name: string;
+  department: string;
+  qaScore: number | null;
+  coverage: number | null;
+  flakiness: number | null;
+  escapeRate: number | null;
+  automation: number | null;
+  asOf: string | null;
 }
 
-const LeaderboardRow: React.FC<LeaderboardRowProps> = ({ team, rank, isSelected, onSelect }) => {
-  const getRankColor = (rank: number) => {
-    if (rank === 1) return 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700 text-yellow-900 dark:text-yellow-200';
-    if (rank === 2) return 'bg-gray-100 dark:bg-slate-800 border-gray-300 dark:border-slate-700 text-gray-900 dark:text-white';
-    if (rank === 3) return 'bg-orange-100 dark:bg-orange-900/20 border-orange-300 dark:border-orange-700 text-orange-900 dark:text-orange-200';
-    return 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800 text-gray-900 dark:text-white';
-  };
+type SortKey = 'qaScore' | 'coverage' | 'flakiness' | 'escapeRate' | 'automation';
 
-  const getRankIcon = (rank: number) => {
-    if (rank === 1) return '👑';
-    if (rank === 2) return '🥈';
-    if (rank === 3) return '🥉';
-    return `#${rank}`;
-  };
+const COLUMNS: { key: SortKey; label: string; short: string; metric: KPIKey; unit: string; digits: number }[] = [
+  { key: 'qaScore', label: 'QA score', short: 'QA score', metric: 'qaScore', unit: '/100', digits: 0 },
+  { key: 'coverage', label: 'Test coverage', short: 'Coverage', metric: 'testCoverage', unit: '%', digits: 1 },
+  { key: 'flakiness', label: 'Flakiness', short: 'Flakiness', metric: 'testFlakinessRate', unit: '%', digits: 1 },
+  { key: 'escapeRate', label: 'Defect escape rate', short: 'Escape rate', metric: 'defectEscapeRate', unit: '%', digits: 2 },
+  { key: 'automation', label: 'Automation coverage', short: 'Automation', metric: 'automationCoverage', unit: '%', digits: 1 },
+];
+
+const toneFor = (s: KPIStatus): Tone => (s === 'good' ? 'good' : s === 'warning' ? 'warn' : s === 'critical' ? 'bad' : 'neutral');
+
+const TeamGamification: React.FC<TeamRankingsProps> = () => {
+  const [teams, setTeams] = useState<RankedTeam[]>([]);
+  const [thresholds, setThresholds] = useState<Partial<Record<string, any>> | undefined>(undefined);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>('qaScore');
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch(`${API_URL}/teams`, { credentials: 'include' });
+        if (!res.ok) throw new Error(`Failed to load teams (${res.status})`);
+        const data = await res.json();
+        const rows: RankedTeam[] = (data.teams || []).map((t: any) => {
+          const k = t.kpiData || {};
+          return {
+            id: String(t.id),
+            name: t.name || 'Unnamed team',
+            department: t.department || '—',
+            qaScore: toNum(t.qaScore),
+            coverage: toNum(k.testCoverage),
+            flakiness: toNum(k.testFlakinessRate),
+            escapeRate: toNum(k.defectEscapeRate),
+            automation: toNum(k.automationCoverage),
+            asOf: t.snapshotDate ?? t.asOf ?? k.snapshotDate ?? null,
+          };
+        });
+
+        // The list endpoint may not carry the snapshot date; fall back to the team detail endpoint.
+        const missing = rows.filter(r => !r.asOf);
+        if (missing.length) {
+          const dates = await Promise.all(
+            missing.map(r =>
+              fetch(`${API_URL}/teams/${r.id}`, { credentials: 'include' })
+                .then(x => (x.ok ? x.json() : null))
+                .then(d => d?.team?.kpiData?.snapshotDate ?? d?.team?.snapshotDate ?? null)
+                .catch(() => null),
+            ),
+          );
+          missing.forEach((r, i) => { r.asOf = dates[i]; });
+        }
+        if (!cancelled) {
+          setTeams(rows);
+          setThresholds(data.kpiThresholds);
+        }
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message || 'Failed to load teams');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  const column = COLUMNS.find(c => c.key === sortKey)!;
+  const lowerIsBetter = getThreshold(column.metric, thresholds)?.lowerIsBetter ?? false;
+
+  const ranked = useMemo(() => {
+    const withValue = teams.filter(t => t[sortKey] != null);
+    const without = teams.filter(t => t[sortKey] == null).sort((a, b) => a.name.localeCompare(b.name));
+    withValue.sort((a, b) => {
+      const d = (a[sortKey] as number) - (b[sortKey] as number);
+      return (lowerIsBetter ? d : -d) || a.name.localeCompare(b.name);
+    });
+    // Competition ranking: equal values share a rank
+    let lastVal: number | null = null;
+    let lastRank = 0;
+    const rankedRows = withValue.map((t, i) => {
+      const v = t[sortKey] as number;
+      const rank = lastVal !== null && v === lastVal ? lastRank : i + 1;
+      lastVal = v; lastRank = rank;
+      return { team: t, rank: rank as number | null };
+    });
+    return [...rankedRows, ...without.map(t => ({ team: t, rank: null as number | null }))];
+  }, [teams, sortKey, lowerIsBetter]);
+
+  const dates = teams.map(t => t.asOf).filter(Boolean).map(d => new Date(d as string).getTime()).filter(n => !Number.isNaN(n));
+  const oldest = dates.length ? formatAsOf(new Date(Math.min(...dates)).toISOString()) : null;
+  const newest = dates.length ? formatAsOf(new Date(Math.max(...dates)).toISOString()) : null;
+  const scored = teams.filter(t => t.qaScore != null).length;
 
   return (
-    <div className={`rounded-lg border-2 p-4 transition-all ${getRankColor(rank)} ${isSelected ? 'ring-2 ring-blue-500' : ''}`}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-4 flex-1">
-          <div className="text-3xl font-bold w-16 text-center">
-            {getRankIcon(rank)}
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-bold">{team.team_name}</h3>
-            <div className="flex items-center space-x-4 text-sm mt-1">
-              <span className="flex items-center">
-                <Star className="text-yellow-500 mr-1" size={14} />
-                {team.points.toLocaleString()} points
-              </span>
-              <span className="flex items-center space-x-1">
-                {team.badges.map((badge, i) => (
-                  <span key={i} className="text-lg">{badge}</span>
+    <Page>
+      <PageIntro
+        title="Team rankings"
+        description={
+          <>
+            Active teams ranked by their latest recorded KPI snapshot.
+            {newest && <> Snapshots dated {oldest === newest ? newest : `${oldest} – ${newest}`}.</>}
+            {' '}{scored} of {teams.length} teams have a QA score.
+          </>
+        }
+        actions={
+          <SegmentedControl
+            value={sortKey}
+            onChange={setSortKey}
+            options={COLUMNS.map(c => ({ value: c.key, label: c.short }))}
+          />
+        }
+      />
+
+      <Card padded={false}>
+        {loading ? (
+          <p className="p-5 text-sm text-slate-500 dark:text-slate-400">Loading teams…</p>
+        ) : error ? (
+          <EmptyState title="Could not load teams" description={error} />
+        ) : teams.length === 0 ? (
+          <EmptyState title="No teams" description="No active teams are recorded for your company." />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium text-slate-500 dark:border-slate-800 dark:bg-slate-900/60 dark:text-slate-400">
+                <tr>
+                  <th className="w-14 px-5 py-2.5">Rank</th>
+                  <th className="px-3 py-2.5">Team</th>
+                  {COLUMNS.map(c => (
+                    <th key={c.key} className={cx('px-3 py-2.5 text-right', c.key === sortKey && 'text-slate-900 dark:text-white')}>
+                      {c.label}
+                    </th>
+                  ))}
+                  <th className="px-5 py-2.5 text-right">As of</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {ranked.map(({ team, rank }) => (
+                  <tr key={team.id} className="text-slate-700 dark:text-slate-300">
+                    <td className="px-5 py-3 tabular-nums font-medium text-slate-900 dark:text-white">{rank ?? '—'}</td>
+                    <td className="px-3 py-3">
+                      <div className="font-medium text-slate-900 dark:text-white">{team.name}</div>
+                      <div className="text-xs text-slate-500 dark:text-slate-400">{team.department}</div>
+                    </td>
+                    {COLUMNS.map(c => {
+                      const v = team[c.key];
+                      const status = statusFor(v, getThreshold(c.metric, thresholds));
+                      return (
+                        <td key={c.key} className="px-3 py-3 text-right tabular-nums">
+                          {v == null ? (
+                            <span className="text-slate-400 dark:text-slate-500">—</span>
+                          ) : c.key === 'qaScore' ? (
+                            <Badge tone={toneFor(status)}>{v.toFixed(c.digits)}{c.unit}</Badge>
+                          ) : (
+                            <span className={cx(status === 'critical' && 'text-red-700 dark:text-red-400', status === 'warning' && 'text-amber-700 dark:text-amber-400')}>
+                              {v.toFixed(c.digits)}{c.unit}
+                            </span>
+                          )}
+                        </td>
+                      );
+                    })}
+                    <td className="whitespace-nowrap px-5 py-3 text-right text-xs text-slate-500 dark:text-slate-400">
+                      {formatAsOf(team.asOf) ?? '—'}
+                    </td>
+                  </tr>
                 ))}
-              </span>
-            </div>
+              </tbody>
+            </table>
           </div>
-        </div>
-
-        <button
-          onClick={onSelect}
-          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm font-medium"
-        >
-          {isSelected ? 'Hide Details' : 'View Achievements'}
-        </button>
-      </div>
-
-      {isSelected && (
-        <div className="mt-4 pt-4 border-t border-gray-300 dark:border-slate-700">
-          <h4 className="font-semibold mb-3">🏆 Achievements</h4>
-          <div className="space-y-2">
-            {team.achievements.map(achievement => (
-              <div key={achievement.id} className="bg-white/50 dark:bg-slate-800/50 rounded-lg p-3 flex items-start space-x-3">
-                <div className="text-3xl">{achievement.icon}</div>
-                <div className="flex-1">
-                  <h5 className="font-semibold text-gray-900 dark:text-white">{achievement.name}</h5>
-                  <p className="text-sm text-gray-600 dark:text-slate-400">{achievement.description}</p>
-                  <p className="text-xs text-gray-500 mt-1 dark:text-slate-400">
-                    Earned: {new Date(achievement.earned_date).toLocaleDateString()}
-                  </p>
-                </div>
-                <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">
-                  {achievement.category}
-                </span>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 bg-blue-50 rounded-lg p-4">
-            <h5 className="font-semibold text-blue-900 mb-2">💡 How to Earn More Points</h5>
-            <ul className="text-sm text-blue-800 space-y-1">
-              <li>• Maintain 95%+ test coverage: <strong>+500 points</strong></li>
-              <li>• Zero production bugs for a sprint: <strong>+1000 points</strong></li>
-              <li>• Fastest CI/CD pipeline: <strong>+300 points</strong></li>
-              <li>• Improve code quality score by 10%: <strong>+400 points</strong></li>
-              <li>• Complete all tests on time: <strong>+200 points</strong></li>
-            </ul>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-interface AchievementCategoryProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-  count: number;
-}
-
-const AchievementCategory: React.FC<AchievementCategoryProps> = ({ icon, title, description, count }) => {
-  return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-      <div className="flex items-start space-x-4">
-        <div className="flex-shrink-0">{icon}</div>
-        <div className="flex-1">
-          <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-1">{title}</h3>
-          <p className="text-sm text-gray-600 mb-3">{description}</p>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">{count} teams qualified</span>
-            <TrendingUp className="text-green-500" size={20} />
-          </div>
-        </div>
-      </div>
-    </div>
+        )}
+      </Card>
+      <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
+        Ranking uses the selected column ({lowerIsBetter ? 'lower is better' : 'higher is better'}); teams with no recorded value are listed last without a rank.
+        Colours use the platform thresholds in metrics configuration. Snapshots of different dates are not directly comparable.
+      </p>
+    </Page>
   );
 };
 

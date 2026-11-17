@@ -1,428 +1,139 @@
-import type { Team } from '../data/mockData';
+import { METRICS_CONFIG } from '../config/metricsConfig';
+import type { MetricsConfig } from '../config/metricsConfig';
+
+/**
+ * Per-KPI view model for the team detail page.
+ *
+ * Values come only from the team's latest KPI snapshot (GET /api/teams → kpiData).
+ * A missing value stays `null` with status 'no-data' — nothing is generated or
+ * filled in. Trends/history come from GET /api/teams/:id/kpi-history (see historyKey).
+ * Thresholds come from one place: server-provided thresholds when present,
+ * otherwise METRICS_CONFIG (src/config/metricsConfig.ts).
+ */
+
+export type KPIStatus = 'good' | 'warning' | 'critical' | 'neutral' | 'no-data';
+export type KPIKey = keyof MetricsConfig | 'automationRoi';
+
+const cfg = (key: KPIKey) => (METRICS_CONFIG as Partial<Record<KPIKey, MetricsConfig[keyof MetricsConfig]>>)[key];
+
+export interface Threshold {
+  good: number;
+  warning: number;
+  lowerIsBetter: boolean;
+}
 
 export interface DetailedKPI {
   id: string;
+  key: KPIKey;
+  /** metric key in the /kpi-history response */
+  historyKey: string;
   name: string;
-  value: number | string;
-  unit?: string;
-  change: number;
-  trend: 'up' | 'down' | 'neutral';
-  status: 'good' | 'warning' | 'critical';
+  value: number | null;
+  unit: string;
+  status: KPIStatus;
+  lowerIsBetter: boolean;
+  threshold: Threshold | null;
   category: 'quality' | 'speed' | 'agile' | 'reliability';
   description: string;
-  history: { date: string; value: number }[];
 }
 
-// Extended Team type that includes kpiData from the API
-interface TeamWithKPI extends Team {
-  kpiData?: {
-    testCoverage?: number;
-    testFlakinessRate?: number;
-    defectDensity?: number;
-    defectEscapeRate?: number;
-    codeQualityScore?: number;
-    avgBuildTimeMinutes?: number;
-    testExecutionTimeMinutes?: number;
-    deploymentFrequencyPerWeek?: number;
-    leadTimeDays?: number;
-    mttrHours?: number;
-    parallelTestEfficiency?: number;
-    sprintVelocity?: number;
-    sprintCommitmentRate?: number;
-    sprintCarryover?: number;
-    firstTimePassRate?: number;
-    blockedTimeHours?: number;
-    automationCoverage?: number;
-    automationRoi?: number;
-    changeFailureRate?: number;
-    mtbfHours?: number;
-    systemAvailability?: number;
-    infrastructureFailures?: number;
-  };
+export type KPIData = Partial<Record<KPIKey, number | string | null>> & { snapshotDate?: string | null };
+
+interface TeamWithKPI {
+  kpiData?: KPIData;
+  kpiThresholds?: Partial<Record<string, Partial<Threshold>>>;
 }
 
-// Helper to determine status based on value and thresholds
-const getStatus = (value: number | null | undefined, goodThreshold: number, warningThreshold: number, lowerIsBetter = false): 'good' | 'warning' | 'critical' => {
-  if (value === null || value === undefined) return 'warning';
-  if (lowerIsBetter) {
-    if (value <= goodThreshold) return 'good';
-    if (value <= warningThreshold) return 'warning';
-    return 'critical';
-  } else {
-    if (value >= goodThreshold) return 'good';
-    if (value >= warningThreshold) return 'warning';
-    return 'critical';
-  }
+/** Parse a value from the API (NUMERIC columns arrive as strings). null/''/NaN → null. */
+export const toNum = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
 };
 
+/** The one threshold set for a metric: server override if provided, else METRICS_CONFIG. */
+export const getThreshold = (
+  key: KPIKey,
+  overrides?: Partial<Record<string, Partial<Threshold>>>,
+): Threshold | null => {
+  const base = cfg(key);
+  const o = overrides?.[key];
+  if (!base && !o) return null;
+  const good = toNum(o?.good) ?? base?.good;
+  const warning = toNum(o?.warning) ?? base?.warning;
+  if (good == null || warning == null) return null;
+  return { good, warning, lowerIsBetter: o?.lowerIsBetter ?? base?.lowerIsBetter ?? false };
+};
+
+export const statusFor = (value: number | null, t: Threshold | null): KPIStatus => {
+  if (value === null) return 'no-data';
+  if (!t) return 'neutral';
+  if (t.lowerIsBetter) return value <= t.good ? 'good' : value <= t.warning ? 'warning' : 'critical';
+  return value >= t.good ? 'good' : value >= t.warning ? 'warning' : 'critical';
+};
+
+type Def = {
+  id: string;
+  key: KPIKey;
+  historyKey: string;
+  name: string;
+  category: DetailedKPI['category'];
+  description: string;
+  /** metrics with no good/bad direction (e.g. velocity) */
+  noThreshold?: boolean;
+};
+
+const DEFS: Def[] = [
+  // Quality & testing
+  { id: 'test-coverage', key: 'testCoverage', historyKey: 'test_coverage', name: 'Test coverage', category: 'quality', description: 'Share of code executed by automated tests' },
+  { id: 'flakiness-rate', key: 'testFlakinessRate', historyKey: 'test_flakiness_rate', name: 'Test flakiness rate', category: 'quality', description: 'Tests that fail intermittently without code changes' },
+  { id: 'defect-density', key: 'defectDensity', historyKey: 'defect_density', name: 'Defect density', category: 'quality', description: 'Defects per thousand lines of code' },
+  { id: 'defect-escape-rate', key: 'defectEscapeRate', historyKey: 'defect_escape_rate', name: 'Defect escape rate', category: 'quality', description: 'Bugs found in production vs. caught in testing' },
+  { id: 'code-quality-score', key: 'codeQualityScore', historyKey: 'code_quality_score', name: 'Code quality score', category: 'quality', description: 'Static analysis score' },
+
+  // Speed & efficiency
+  { id: 'build-time', key: 'avgBuildTimeMinutes', historyKey: 'avg_build_time_minutes', name: 'Avg build time', category: 'speed', description: 'Average time to complete a CI build' },
+  { id: 'test-execution-time', key: 'testExecutionTimeMinutes', historyKey: 'test_execution_time_minutes', name: 'Test execution time', category: 'speed', description: 'Time to run the automated test suite' },
+  { id: 'deployment-frequency', key: 'deploymentFrequencyPerWeek', historyKey: 'deployment_frequency_per_week', name: 'Deployment frequency', category: 'speed', description: 'Production deployments per week' },
+  { id: 'lead-time', key: 'leadTimeDays', historyKey: 'lead_time_days', name: 'Lead time for changes', category: 'speed', description: 'Average time from commit to production' },
+  { id: 'mttr', key: 'mttrHours', historyKey: 'mttr_hours', name: 'Mean time to recovery', category: 'speed', description: 'Average time to restore service after a failure' },
+  { id: 'parallel-efficiency', key: 'parallelTestEfficiency', historyKey: 'parallel_test_efficiency', name: 'Parallel test efficiency', category: 'speed', description: 'Efficiency of parallel test execution' },
+
+  // Agile & process
+  { id: 'sprint-velocity', key: 'sprintVelocity', historyKey: 'sprint_velocity', name: 'Sprint velocity', category: 'agile', description: 'Story points completed per sprint (compare with the team’s own history)', noThreshold: true },
+  { id: 'sprint-commitment', key: 'sprintCommitmentRate', historyKey: 'sprint_commitment_rate', name: 'Sprint commitment rate', category: 'agile', description: 'Share of committed work completed' },
+  { id: 'sprint-carryover', key: 'sprintCarryover', historyKey: 'sprint_carryover', name: 'Sprint carryover', category: 'agile', description: 'Committed work moved to the next sprint' },
+  { id: 'first-time-pass', key: 'firstTimePassRate', historyKey: 'first_time_pass_rate', name: 'First-time pass rate', category: 'agile', description: 'Stories passing QA on the first attempt' },
+  { id: 'blocked-time', key: 'blockedTimeHours', historyKey: 'blocked_time_hours', name: 'Blocked time', category: 'agile', description: 'Hours tickets spent blocked' },
+  { id: 'automation-coverage', key: 'automationCoverage', historyKey: 'automation_coverage', name: 'Test automation coverage', category: 'agile', description: 'Share of test cases that are automated' },
+  { id: 'automation-roi', key: 'automationRoi', historyKey: 'automation_roi', name: 'Automation ROI', category: 'agile', description: 'Return on investment for test automation', noThreshold: true },
+
+  // Reliability
+  { id: 'change-failure-rate', key: 'changeFailureRate', historyKey: 'change_failure_rate', name: 'Change failure rate', category: 'reliability', description: 'Deployments causing failures or rollbacks' },
+  { id: 'mtbf', key: 'mtbfHours', historyKey: 'mtbf_hours', name: 'Mean time between failures', category: 'reliability', description: 'Average time between production failures' },
+  { id: 'availability', key: 'systemAvailability', historyKey: 'system_availability', name: 'System availability', category: 'reliability', description: 'Uptime percentage' },
+  { id: 'infra-failures', key: 'infrastructureFailures', historyKey: 'infrastructure_failures', name: 'Infrastructure failures', category: 'reliability', description: 'Test failures caused by infrastructure' },
+];
+
+const UNIT_OVERRIDES: Partial<Record<KPIKey, string>> = { automationRoi: '%', sprintVelocity: 'pts', infrastructureFailures: '' };
+
 export const generateDetailedKPIs = (team: TeamWithKPI): DetailedKPI[] => {
-  const kpi = team.kpiData || {};
-  
-  // Check if we have real KPI data (any real metric value)
-  const hasRealData = Object.values(kpi).some(val => val !== null && val !== undefined);
-  
-  const generateHistory = (base: number, variance: number) => {
-    // If we have real data, only generate today's data point (day 1)
-    // If no real data (mock mode), generate 30 days of history
-    const days = hasRealData ? 1 : 30;
-    const dates = Array.from({ length: days }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (days - 1 - i));
-      return d.toISOString().split('T')[0];
-    });
-    return dates.map(date => ({
-      date,
-      value: Number((base + (Math.random() * variance * 2 - variance)).toFixed(2))
-    }));
-  };
-
-  // Use real data from kpiData if available, otherwise generate mock data
-  const getValue = (realValue: number | null | undefined, mockMin: number, mockMax: number): number => {
-    if (realValue !== null && realValue !== undefined) {
-      return Number(realValue);
-    }
-    return Number((mockMin + Math.random() * (mockMax - mockMin)).toFixed(2));
-  };
-
-  // Generate change value - 0 for day 1 (real data), random for mock data
-  const getChange = (mockChange: number): number => {
-    return hasRealData ? 0 : mockChange;
-  };
-
-  // Generate trend - neutral for day 1 (real data), random for mock data
-  const getTrend = (mockTrend: 'up' | 'down' | 'neutral'): 'up' | 'down' | 'neutral' => {
-    return hasRealData ? 'neutral' : mockTrend;
-  };
-
-  return [
-    // Quality & Reliability
-    
-    // TEST COVERAGE - Target: >80% for critical paths, >70% overall
-    {
-      id: 'test-coverage',
-      name: 'Test Coverage',
-      value: getValue(kpi.testCoverage, 60, 95),
-      unit: '%',
-      change: getChange(Number((Math.random() * 5 - 2).toFixed(1))),
-      trend: getTrend('up'),
-      status: getStatus(kpi.testCoverage, 80, 70),
-      category: 'quality',
-      description: 'Percentage of code covered by automated tests',
-      history: generateHistory(getValue(kpi.testCoverage, 75, 75), 5)
-    },
-    
-    // TEST FLAKINESS RATE - Target: <2% (lower is better)
-    {
-      id: 'flakiness-rate',
-      name: 'Test Flakiness Rate',
-      value: getValue(kpi.testFlakinessRate, 0, 5),
-      unit: '%',
-      change: getChange(Number((Math.random() * 2 - 1).toFixed(1))),
-      trend: getTrend('down'),
-      status: getStatus(kpi.testFlakinessRate, 2, 5, true),
-      category: 'quality',
-      description: 'Tests that fail intermittently without code changes',
-      history: generateHistory(getValue(kpi.testFlakinessRate, 2.5, 2.5), 1)
-    },
-    
-    // DEFECT DENSITY - Target: <0.5 defects per 1k LOC
-    {
-      id: 'defect-density',
-      name: 'Defect Density',
-      value: getValue(kpi.defectDensity, 0, 1.5),
-      unit: '/1k LOC',
-      change: getChange(-0.1),
-      trend: getTrend('down'),
-      status: getStatus(kpi.defectDensity, 0.5, 1.0, true),
-      category: 'quality',
-      description: 'Number of defects per thousand lines of code',
-      history: generateHistory(getValue(kpi.defectDensity, 0.8, 0.8), 0.2)
-    },
-    
-    // DEFECT ESCAPE RATE - Target: <5%
-    {
-      id: 'defect-escape-rate',
-      name: 'Defect Escape Rate',
-      value: getValue(kpi.defectEscapeRate, 0, 8),
-      unit: '%',
-      change: getChange(-0.5),
-      trend: getTrend('down'),
-      status: getStatus(kpi.defectEscapeRate, 5, 10, true),
-      category: 'quality',
-      description: 'Bugs found in production vs. caught in testing',
-      history: generateHistory(getValue(kpi.defectEscapeRate, 4, 4), 1)
-    },
-    
-    // CODE QUALITY SCORE - Target: >85/100
-    {
-      id: 'code-quality-score',
-      name: 'Code Quality Score',
-      value: getValue(kpi.codeQualityScore, 70, 95),
-      unit: '/100',
-      change: getChange(2),
-      trend: getTrend('up'),
-      status: getStatus(kpi.codeQualityScore, 85, 70),
-      category: 'quality',
-      description: 'SonarQube or similar static analysis score',
-      history: generateHistory(getValue(kpi.codeQualityScore, 85, 85), 5)
-    },
-
-    // Speed & Efficiency
-    
-    // AVERAGE BUILD TIME - Target: <10 minutes
-    {
-      id: 'build-time',
-      name: 'Avg Build Time',
-      value: getValue(kpi.avgBuildTimeMinutes, 5, 20),
-      unit: 'min',
-      change: getChange(-1.5),
-      trend: getTrend('down'),
-      status: getStatus(kpi.avgBuildTimeMinutes, 10, 15, true),
-      category: 'speed',
-      description: 'Average time to complete CI/CD build',
-      history: generateHistory(getValue(kpi.avgBuildTimeMinutes, 12, 12), 3)
-    },
-    
-    // TEST EXECUTION TIME - Target: <30 minutes
-    {
-      id: 'test-execution-time',
-      name: 'Test Execution Time',
-      value: getValue(kpi.testExecutionTimeMinutes, 20, 60),
-      unit: 'min',
-      change: getChange(-2),
-      trend: getTrend('down'),
-      status: getStatus(kpi.testExecutionTimeMinutes, 30, 45, true),
-      category: 'speed',
-      description: 'Total time to run all automated tests',
-      history: generateHistory(getValue(kpi.testExecutionTimeMinutes, 45, 45), 8)
-    },
-    
-    // DEPLOYMENT FREQUENCY - Target: >5 per week
-    {
-      id: 'deployment-frequency',
-      name: 'Deployment Frequency',
-      value: getValue(kpi.deploymentFrequencyPerWeek, 5, 20),
-      unit: '/week',
-      change: getChange(3),
-      trend: getTrend('up'),
-      status: getStatus(kpi.deploymentFrequencyPerWeek, 5, 2),
-      category: 'speed',
-      description: 'Number of deployments to production per week',
-      history: generateHistory(getValue(kpi.deploymentFrequencyPerWeek, 8, 8), 2)
-    },
-    
-    // LEAD TIME FOR CHANGES - Target: <1 day (elite), <7 days (high)
-    {
-      id: 'lead-time',
-      name: 'Lead Time for Changes',
-      value: getValue(kpi.leadTimeDays, 1, 5),
-      unit: 'days',
-      change: getChange(-0.3),
-      trend: getTrend('down'),
-      status: getStatus(kpi.leadTimeDays, 1, 7, true),
-      category: 'speed',
-      description: 'Time from commit to production deployment',
-      history: generateHistory(getValue(kpi.leadTimeDays, 2.5, 2.5), 0.5)
-    },
-    
-    // MEAN TIME TO REPAIR - Target: <1 hour (elite), <24 hours (high)
-    {
-      id: 'mttr',
-      name: 'Mean Time to Repair',
-      value: getValue(kpi.mttrHours, 2, 10),
-      unit: 'hours',
-      change: getChange(-1),
-      trend: getTrend('down'),
-      status: getStatus(kpi.mttrHours, 1, 24, true),
-      category: 'speed',
-      description: 'Average time to diagnose and fix failures',
-      history: generateHistory(getValue(kpi.mttrHours, 5, 5), 2)
-    },
-    
-    // PARALLEL TEST EFFICIENCY - Target: >80%
-    {
-      id: 'parallel-efficiency',
-      name: 'Parallel Test Efficiency',
-      value: getValue(kpi.parallelTestEfficiency, 70, 95),
-      unit: '%',
-      change: getChange(2),
-      trend: getTrend('up'),
-      status: getStatus(kpi.parallelTestEfficiency, 80, 60),
-      category: 'speed',
-      description: 'Efficiency of parallel test execution',
-      history: generateHistory(getValue(kpi.parallelTestEfficiency, 82, 82), 5)
-    },
-
-    // Agile & Process
-    
-    // SPRINT VELOCITY - Target: Stable velocity (±10%)
-    {
-      id: 'sprint-velocity',
-      name: 'Sprint Velocity',
-      value: getValue(kpi.sprintVelocity, 30, 60),
-      unit: 'pts',
-      change: getChange(5),
-      trend: getTrend('up'),
-      status: 'good', // Velocity doesn't have good/bad, just consistency
-      category: 'agile',
-      description: 'Story points completed per sprint',
-      history: generateHistory(getValue(kpi.sprintVelocity, 45, 45), 8)
-    },
-    
-    // SPRINT COMMITMENT RATE - Target: >85%
-    {
-      id: 'sprint-commitment',
-      name: 'Sprint Commitment Rate',
-      value: getValue(kpi.sprintCommitmentRate, 75, 95),
-      unit: '%',
-      change: getChange(-2),
-      trend: getTrend('down'),
-      status: getStatus(kpi.sprintCommitmentRate, 85, 70),
-      category: 'agile',
-      description: 'Percentage of committed work completed',
-      history: generateHistory(getValue(kpi.sprintCommitmentRate, 88, 88), 5)
-    },
-    
-    // SPRINT CARRYOVER - Target: <10%
-    {
-      id: 'sprint-carryover',
-      name: 'Sprint Carryover',
-      value: getValue(kpi.sprintCarryover, 5, 25),
-      unit: '%',
-      change: getChange(3),
-      trend: getTrend('up'),
-      status: getStatus(kpi.sprintCarryover, 10, 20, true),
-      category: 'agile',
-      description: 'Work not completed and moved to next sprint',
-      history: generateHistory(getValue(kpi.sprintCarryover, 12, 12), 4)
-    },
-    
-    // FIRST-TIME PASS RATE - Target: >75%
-    {
-      id: 'first-time-pass',
-      name: 'First-Time Pass Rate',
-      value: getValue(kpi.firstTimePassRate, 60, 90),
-      unit: '%',
-      change: getChange(2),
-      trend: getTrend('up'),
-      status: getStatus(kpi.firstTimePassRate, 75, 60),
-      category: 'agile',
-      description: 'Stories passing QA on first attempt',
-      history: generateHistory(getValue(kpi.firstTimePassRate, 70, 70), 8)
-    },
-    
-    // BLOCKED TIME - Target: <15 hours per sprint
-    {
-      id: 'blocked-time',
-      name: 'Blocked Time',
-      value: getValue(kpi.blockedTimeHours, 10, 30),
-      unit: 'hrs',
-      change: getChange(-4),
-      trend: getTrend('down'),
-      status: getStatus(kpi.blockedTimeHours, 15, 25, true),
-      category: 'agile',
-      description: 'Total hours tickets spent blocked per sprint',
-      history: generateHistory(getValue(kpi.blockedTimeHours, 18, 18), 5)
-    },
-    
-    // TEST AUTOMATION COVERAGE - Target: >70%
-    {
-      id: 'automation-coverage',
-      name: 'Test Automation Coverage',
-      value: getValue(kpi.automationCoverage, 60, 95),
-      unit: '%',
-      change: getChange(3),
-      trend: getTrend('up'),
-      status: getStatus(kpi.automationCoverage, 70, 50),
-      category: 'agile',
-      description: 'Percentage of test cases automated',
-      history: generateHistory(getValue(kpi.automationCoverage, 75, 75), 5)
-    },
-    
-    // AUTOMATION ROI - Target: >200%
-    {
-      id: 'automation-roi',
-      name: 'Automation ROI',
-      value: getValue(kpi.automationRoi, 200, 400),
-      unit: '%',
-      change: getChange(15),
-      trend: getTrend('up'),
-      status: getStatus(kpi.automationRoi, 200, 100),
-      category: 'agile',
-      description: 'Return on investment for test automation',
-      history: generateHistory(getValue(kpi.automationRoi, 280, 280), 30)
-    },
-
-    // Reliability
-    
-    // CHANGE FAILURE RATE - Target: <5% (elite), <15% (high)
-    {
-      id: 'change-failure-rate',
-      name: 'Change Failure Rate',
-      value: getValue(kpi.changeFailureRate, 0, 10),
-      unit: '%',
-      change: getChange(0.5),
-      trend: getTrend('up'),
-      status: getStatus(kpi.changeFailureRate, 5, 15, true),
-      category: 'reliability',
-      description: 'Deployments causing failures or rollbacks',
-      history: generateHistory(getValue(kpi.changeFailureRate, 5, 5), 2)
-    },
-    
-    // MEAN TIME BETWEEN FAILURES - Target: >100 hours
-    {
-      id: 'mtbf',
-      name: 'Mean Time Between Failures',
-      value: getValue(kpi.mtbfHours, 80, 160),
-      unit: 'hours',
-      change: getChange(10),
-      trend: getTrend('up'),
-      status: getStatus(kpi.mtbfHours, 100, 50),
-      category: 'reliability',
-      description: 'Average time between system failures',
-      history: generateHistory(getValue(kpi.mtbfHours, 120, 120), 20)
-    },
-    
-    // SYSTEM AVAILABILITY - Target: >99.9%
-    {
-      id: 'availability',
-      name: 'System Availability',
-      value: getValue(kpi.systemAvailability, 99, 100),
-      unit: '%',
-      change: getChange(0.1),
-      trend: getTrend('up'),
-      status: getStatus(kpi.systemAvailability, 99.9, 99),
-      category: 'reliability',
-      description: 'Uptime percentage',
-      history: generateHistory(getValue(kpi.systemAvailability, 99.5, 99.5), 0.3)
-    },
-    
-    // INFRASTRUCTURE FAILURES - Target: <5 per sprint
-    {
-      id: 'infra-failures',
-      name: 'Infrastructure Failures',
-      value: getValue(kpi.infrastructureFailures, 0, 8),
-      unit: 'count',
-      change: getChange(-1),
-      trend: getTrend('down'),
-      status: getStatus(kpi.infrastructureFailures, 5, 10, true),
-      category: 'reliability',
-      description: 'Test failures due to infrastructure issues',
-      history: generateHistory(getValue(kpi.infrastructureFailures, 3, 3), 2)
-    },
-    
-    // ENVIRONMENT STARTUP TIME - Target: <5 minutes (fast), <10 minutes (ok)
-    {
-      id: 'env-startup-time',
-      name: 'Environment Startup Time',
-      value: Math.floor(5 + Math.random() * 15), // No kpiData field for this yet
-      unit: 'min',
-      change: getChange(1),
-      trend: getTrend('up'),
-      status: 'warning',
-      category: 'reliability',
-      description: 'Time to provision test environments',
-      history: generateHistory(10, 3)
-    }
-  ];
+  const kpi: KPIData = team.kpiData || {};
+  return DEFS.map((d) => {
+    const value = toNum(kpi[d.key]);
+    const threshold = d.noThreshold ? null : getThreshold(d.key, team.kpiThresholds);
+    return {
+      id: d.id,
+      key: d.key,
+      historyKey: d.historyKey,
+      name: d.name,
+      value,
+      unit: UNIT_OVERRIDES[d.key] ?? cfg(d.key)?.unit ?? '',
+      status: statusFor(value, threshold),
+      lowerIsBetter: threshold?.lowerIsBetter ?? cfg(d.key)?.lowerIsBetter ?? false,
+      threshold,
+      category: d.category,
+      description: d.description,
+    };
+  });
 };

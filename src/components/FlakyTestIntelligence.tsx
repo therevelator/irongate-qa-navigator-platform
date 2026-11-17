@@ -1,30 +1,76 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { ArrowLeft, AlertTriangle, TrendingDown, Clock, Zap, Loader2 } from 'lucide-react';
+import { Loader2, ChevronDown, ChevronRight } from 'lucide-react';
 import type { FlakyTest } from '../data/advancedFeatures';
 import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { API_URL } from '../config/api';
+import { useTheme } from '../contexts/ThemeContext';
+import { Page, PageIntro, Card, Badge, StatTile, EmptyState, SegmentedControl, cx } from './ui';
 
 interface FlakyTestIntelligenceProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
-const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack }) => {
-  const [selectedPattern, setSelectedPattern] = useState<string>('all');
-  const [flakyTests, setFlakyTests] = useState<FlakyTest[]>([]);
+/** API row; total_runs / pass_count / root_cause_verified are optional until the server provides them. */
+type FlakyTestRow = Omit<FlakyTest, 'root_cause' | 'suggested_fix'> & {
+  root_cause?: string | null;
+  suggested_fix?: string | null;
+  total_runs?: number | null;
+  pass_count?: number | null;
+  root_cause_verified?: boolean;
+};
+
+// Canned strings the API maps from failure_pattern; no error log is actually analysed for these.
+const CANNED_ROOT_CAUSES = new Set([
+  'timeout keyword detected in error logs',
+  'environment keyword detected in error logs',
+  'assertion failed keyword detected in error logs',
+  'ECONNREFUSED keyword detected in error logs',
+  'No matching pattern found',
+]);
+
+const verifiedRootCause = (t: FlakyTestRow): string | null => {
+  if (!t.root_cause) return null;
+  // The API flags whether a root cause was actually stored for the test.
+  if (typeof t.root_cause_verified === 'boolean') return t.root_cause_verified ? t.root_cause : null;
+  return CANNED_ROOT_CAUSES.has(t.root_cause) ? null : t.root_cause;
+};
+
+const totalRunsOf = (t: FlakyTestRow): number | null => {
+  if (t.total_runs != null) return Number(t.total_runs);
+  if (t.pass_count != null && t.occurrences != null) return Number(t.pass_count) + Number(t.occurrences);
+  return null;
+};
+
+type PatternFilter = 'all' | 'timing' | 'environment' | 'data' | 'network' | 'unknown';
+const PATTERNS: { value: PatternFilter; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'timing', label: 'Timing' },
+  { value: 'environment', label: 'Environment' },
+  { value: 'data', label: 'Data' },
+  { value: 'network', label: 'Network' },
+  { value: 'unknown', label: 'Unknown' },
+];
+
+const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = () => {
+  const [selectedPattern, setSelectedPattern] = useState<PatternFilter>('all');
+  const [flakyTests, setFlakyTests] = useState<FlakyTestRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchFlakyTests = async () => {
       try {
-        const response = await fetch(`${API_URL}/analytics/flaky-tests`, {
-          credentials: 'include'
-        });
+        const response = await fetch(`${API_URL}/analytics/flaky-tests`, { credentials: 'include' });
         if (response.ok) {
           const data = await response.json();
-          setFlakyTests(data.flakyTests || []);
+          // Server-side placeholder rows (id 'sample-*') are not real detections.
+          setFlakyTests((data.flakyTests || []).filter((t: FlakyTestRow) => !String(t.id).startsWith('sample-')));
+        } else {
+          setError('Could not load flaky tests.');
         }
-      } catch (error) {
-        console.error('Error fetching flaky tests:', error);
+      } catch (err) {
+        console.error('Error fetching flaky tests:', err);
+        setError('Could not load flaky tests.');
       } finally {
         setLoading(false);
       }
@@ -32,137 +78,64 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ onBack })
     fetchFlakyTests();
   }, []);
 
-  const filteredTests = selectedPattern === 'all' 
-    ? flakyTests 
-    : flakyTests.filter(t => t.failure_pattern === selectedPattern);
-
-  const patterns = [
-    { id: 'all', name: 'All Patterns', color: 'gray', icon: '🔍' },
-    { id: 'timing', name: 'Timing Issues', color: 'blue', icon: '⏱️' },
-    { id: 'environment', name: 'Environment', color: 'green', icon: '🌍' },
-    { id: 'data', name: 'Data Issues', color: 'purple', icon: '📊' },
-    { id: 'network', name: 'Network', color: 'orange', icon: '🌐' },
-    { id: 'unknown', name: 'Unknown', color: 'red', icon: '❓' }
-  ];
-
-  const getPatternColor = (pattern: string) => {
-    const colors: Record<string, string> = {
-      timing: 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border-blue-300 dark:border-blue-700',
-      environment: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 border-green-300 dark:border-green-700',
-      data: 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-200 border-purple-300 dark:border-purple-700',
-      network: 'bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-200 border-orange-300 dark:border-orange-700',
-      unknown: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 border-red-300 dark:border-red-700'
-    };
-    return colors[pattern] || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700';
-  };
+  const filteredTests = selectedPattern === 'all' ? flakyTests : flakyTests.filter(t => t.failure_pattern === selectedPattern);
 
   const totalFlaky = flakyTests.length;
-  const avgFlakiness = totalFlaky > 0 ? (flakyTests.reduce((acc, t) => acc + t.flakiness_score, 0) / totalFlaky).toFixed(1) : '0.0';
-  const criticalTests = flakyTests.filter(t => t.flakiness_score > 70).length;
+  const scored = flakyTests.filter(t => t.flakiness_score != null && !Number.isNaN(Number(t.flakiness_score)));
+  const avgFlakiness = scored.length > 0 ? (scored.reduce((acc, t) => acc + Number(t.flakiness_score), 0) / scored.length).toFixed(1) : null;
+  const criticalTests = flakyTests.filter(t => Number(t.flakiness_score) > 70).length;
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-10">
-        <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6">
-          <button 
-            onClick={onBack}
-            className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            <span className="font-medium">Back to Dashboard</span>
-          </button>
-          
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-                <Zap className="mr-2 sm:mr-3 text-yellow-500" size={24} />
-                Flaky Test Intelligence
-              </h1>
-              <p className="text-gray-500 dark:text-slate-400 mt-1 text-sm sm:text-base">Identify, analyze, and fix unstable tests</p>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-4 sm:gap-6">
-              <div className="text-center">
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Total Flaky</p>
-                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 dark:text-white">{totalFlaky}</div>
-              </div>
-              <div className="text-center">
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Avg Flakiness</p>
-                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-yellow-600 dark:text-yellow-400">{avgFlakiness}%</div>
-              </div>
-              <div className="text-center">
-                <p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400">Critical</p>
-                <div className="text-xl sm:text-2xl lg:text-3xl font-bold text-red-600 dark:text-red-400">{criticalTests}</div>
-              </div>
-            </div>
-          </div>
-        </div>
+    <Page>
+      <PageIntro
+        title="Flaky tests"
+        description="Tests recorded as flaky, with their most recent executions. Failure patterns are stored classifications and have not been verified against logs."
+      />
+
+      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <StatTile label="Flaky tests tracked" value={loading ? '—' : totalFlaky} />
+        <StatTile label="Mean flakiness score" value={avgFlakiness ?? '—'} caption="Stored score (0–100) per test" />
+        <StatTile label="Score above 70" value={loading ? '—' : criticalTests} tone={criticalTests > 0 ? 'bad' : 'neutral'} />
       </div>
 
-      {/* Pattern Filter */}
-      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 bg-white dark:bg-slate-900 border-b dark:border-slate-800">
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-          <span className="text-sm font-semibold text-gray-700 dark:text-slate-300 whitespace-nowrap">Filter by Pattern:</span>
-          <div className="flex flex-wrap gap-2">
-            {patterns.map(pattern => (
-              <button
-                key={pattern.id}
-                onClick={() => setSelectedPattern(pattern.id)}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-                  selectedPattern === pattern.id
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 hover:bg-gray-200 dark:hover:bg-slate-700'
-                }`}
-              >
-                <span className="mr-1 sm:mr-2">{pattern.icon}</span>
-                <span className="hidden sm:inline">{pattern.name}</span>
-                <span className="sm:hidden">{pattern.name.split(' ')[0]}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <span className="text-sm text-slate-500 dark:text-slate-400">Pattern</span>
+        <SegmentedControl value={selectedPattern} onChange={setSelectedPattern} options={PATTERNS} />
       </div>
 
-      {/* Flaky Tests List */}
-      <div className="px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-blue-500 animate-spin mb-4" />
-            <p className="text-gray-500 dark:text-slate-400">Analyzing flaky tests...</p>
+      {loading ? (
+        <Card>
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500 dark:text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading flaky tests…
           </div>
-        ) : totalFlaky === 0 ? (
-          <div className="text-center py-12">
-            <AlertTriangle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No Flaky Tests Detected</h3>
-            <p className="text-gray-500 dark:text-slate-400 mb-4">
-              Great news! No flaky tests were found in your recent test executions.
-            </p>
-            <p className="text-sm text-gray-400 dark:text-slate-500">
-              Flaky tests will appear here when they are automatically detected by the system.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4 sm:space-y-6">
-            {filteredTests.map(test => (
-              <FlakyTestCard key={test.id} test={test} getPatternColor={getPatternColor} />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+        </Card>
+      ) : error ? (
+        <Card><EmptyState title={error} description="Try reloading the page." /></Card>
+      ) : totalFlaky === 0 ? (
+        <Card>
+          <EmptyState
+            title="No flaky tests recorded"
+            description="No tests have been recorded as flaky for this scope. Tests appear here once flaky results are recorded."
+          />
+        </Card>
+      ) : filteredTests.length === 0 ? (
+        <Card><EmptyState title="No tests with this pattern" /></Card>
+      ) : (
+        <div className="space-y-4">
+          {filteredTests.map(test => (
+            <FlakyTestCard key={test.id} test={test} />
+          ))}
+        </div>
+      )}
+    </Page>
   );
 };
 
-interface FlakyTestCardProps {
-  test: FlakyTest;
-  getPatternColor: (pattern: string) => string;
-}
-
-const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) => {
+const FlakyTestCard: React.FC<{ test: FlakyTestRow }> = ({ test }) => {
+  const { isDark } = useTheme();
   const historyData = useMemo(() => {
     const seen = new Set<string>();
-    return [...test.history]
+    return [...(test.history || [])]
       .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .filter(entry => {
         const key = `${new Date(entry.date).getTime()}-${entry.passed}`;
@@ -173,215 +146,159 @@ const FlakyTestCard: React.FC<FlakyTestCardProps> = ({ test, getPatternColor }) 
   }, [test.history]);
 
   const [expanded, setExpanded] = useState(false);
-  
-  const passRate = test.history.length > 0 ? ((test.history.filter(h => h.passed).length / test.history.length) * 100).toFixed(1) : '0.0';
-  const daysSinceFirst = Math.floor((Date.now() - new Date(test.first_detected).getTime()) / (1000 * 60 * 60 * 24));
+
+  const historyCount = historyData.length;
+  const passRateNum = historyCount > 0 ? (historyData.filter(h => h.passed).length / historyCount) * 100 : null;
+  const daysSinceFirst = test.first_detected ? Math.floor((Date.now() - new Date(test.first_detected).getTime()) / 86400000) : null;
+  const totalRuns = totalRunsOf(test);
+  const rootCause = verifiedRootCause(test);
+  const score = test.flakiness_score != null ? Number(test.flakiness_score) : null;
+  const scoreTone = score == null ? 'neutral' : score > 70 ? 'bad' : score > 40 ? 'warn' : 'neutral';
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 overflow-hidden hover:shadow-md transition-shadow">
-      <div className="p-4 sm:p-6">
-        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
-          <div className="flex-1 min-w-0">
-            <div className="flex flex-wrap items-center gap-2 mb-2">
-              <h3 className="text-base sm:text-lg font-bold text-gray-900 dark:text-white truncate">{test.test_name}</h3>
-              <span className={`px-2 sm:px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap ${getPatternColor(test.failure_pattern)}`}>
-                {test.failure_pattern.toUpperCase()}
-              </span>
+    <Card padded={false}>
+      <div className="p-5">
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <div className="mb-2 flex flex-wrap items-center gap-2">
+              <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{test.test_name}</h3>
+              <Badge tone="neutral">Pattern: {test.failure_pattern || 'unknown'} (unverified)</Badge>
             </div>
-            <div className="flex flex-wrap items-center gap-3 sm:gap-6 text-xs sm:text-sm text-gray-600 dark:text-slate-400">
-              <span className="flex items-center">
-                <AlertTriangle size={14} className="mr-1 text-yellow-500" />
-                {test.occurrences} failures
-              </span>
-              <span className="flex items-center">
-                <Clock size={14} className="mr-1 text-blue-500" />
-                {daysSinceFirst} days old
-              </span>
-              <span className="flex items-center">
-                <TrendingDown size={14} className="mr-1 text-green-500" />
-                {passRate}% pass rate
+            <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+              <span>{test.occurrences ?? '—'} recorded failures</span>
+              <span>{daysSinceFirst != null ? `First detected ${daysSinceFirst} days ago` : 'First detected —'}</span>
+              <span>
+                {passRateNum != null ? `${passRateNum.toFixed(1)}% passed in last ${historyCount} runs` : 'No executions recorded'}
               </span>
             </div>
           </div>
-          
-          <div className="flex sm:flex-col items-center sm:items-end gap-2 sm:gap-0 sm:text-right">
-            <div className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">{test.flakiness_score.toFixed(1)}</div>
-            <div className="text-xs text-gray-500 dark:text-slate-400 hidden sm:block">Flakiness Score</div>
-            <div className={`sm:mt-2 px-2 sm:px-3 py-1 rounded-full text-xs font-semibold ${
-              test.flakiness_score > 70 ? 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200' :
-              test.flakiness_score > 40 ? 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-200' :
-              'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200'
-            }`}>
-              {test.flakiness_score > 70 ? 'CRITICAL' : test.flakiness_score > 40 ? 'WARNING' : 'MODERATE'}
-            </div>
+
+          <div className="flex items-center gap-3 sm:flex-col sm:items-end sm:gap-1">
+            <div className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">{score != null ? score.toFixed(1) : '—'}</div>
+            <div className="text-xs text-slate-500 dark:text-slate-400">Flakiness score</div>
+            {score != null && <Badge tone={scoreTone}>{score > 70 ? 'High' : score > 40 ? 'Medium' : 'Low'}</Badge>}
           </div>
         </div>
 
-        {/* Suggested Fix */}
-        <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4 mb-4">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center">
-                <span className="text-white text-sm">💡</span>
-              </div>
-            </div>
-            <div className="ml-3 flex-1">
-              <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-1">Suggested Fix</h4>
-              <p className="text-sm text-blue-800 dark:text-blue-300">{test.suggested_fix}</p>
-            </div>
-          </div>
-        </div>
-
-        {/* History Chart */}
         <div className="mb-4">
-          <h4 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">20-Day History</h4>
-          <div className="h-24">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={historyData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
-                <XAxis dataKey="date" hide />
-                <YAxis hide domain={[0, 1]} />
-                <Tooltip 
-                  content={({ payload }) => {
-                    if (payload && payload.length) {
+          <h4 className="mb-2 text-xs font-medium text-slate-500 dark:text-slate-400">Last {historyCount} runs</h4>
+          {historyCount === 0 ? (
+            <p className="text-sm text-slate-500 dark:text-slate-400">No executions recorded for this test.</p>
+          ) : (
+            <div className="h-20">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={historyData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                  <XAxis dataKey="date" hide />
+                  <YAxis hide domain={[0, 1]} />
+                  <Tooltip
+                    content={({ payload }) => {
+                      if (payload && payload.length) {
+                        const p = payload[0].payload as { date: string; passed: boolean };
+                        return (
+                          <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                            <p>{new Date(p.date).toLocaleString()}</p>
+                            <p className="font-medium">{p.passed ? 'Passed' : 'Failed'}</p>
+                          </div>
+                        );
+                      }
+                      return null;
+                    }}
+                  />
+                  <Line
+                    type="linear"
+                    dataKey={(entry: { passed: boolean }) => (entry.passed ? 1 : 0)}
+                    stroke={isDark ? '#475569' : '#cbd5e1'}
+                    strokeWidth={1.5}
+                    isAnimationActive={false}
+                    dot={(props: any) => {
+                      const { cx: x, cy: y, payload, index } = props;
                       return (
-                        <div className="bg-gray-900 text-white px-3 py-2 rounded-lg text-xs">
-                          <p>{payload[0].payload.date}</p>
-                          <p className="font-bold">{payload[0].payload.passed ? '✅ Passed' : '❌ Failed'}</p>
-                        </div>
+                        <circle key={index} cx={x} cy={y} r={4} fill={payload.passed ? '#16a34a' : '#dc2626'} stroke="none" />
                       );
-                    }
-                    return null;
-                  }}
-                />
-                <Line 
-                  type="linear" 
-                  dataKey={(entry) => entry.passed ? 1 : 0}
-                  stroke="#9ca3af"
-                  strokeWidth={2}
-                  dot={(props: any) => {
-                    const { cx, cy, payload } = props;
-                    return (
-                      <circle
-                        cx={cx}
-                        cy={cy}
-                        r={5}
-                        fill={payload.passed ? '#22c55e' : '#ef4444'}
-                        stroke={payload.passed ? '#16a34a' : '#dc2626'}
-                        strokeWidth={2}
-                      />
-                    );
-                  }}
-                  activeDot={{ r: 7 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+                    }}
+                    activeDot={{ r: 6 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </div>
 
-        {/* Expand Button */}
         <button
           onClick={() => setExpanded(!expanded)}
-          className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
+          className="inline-flex items-center gap-1 text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300 dark:hover:text-brand-200"
         >
-          {expanded ? '▼ Show Less' : '▶ Show More Details'}
+          {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {expanded ? 'Hide details' : 'Show details'}
         </button>
 
-        {/* Expanded Details */}
         {expanded && (
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-700 space-y-3">
-            {/* Failure Reason / Detection */}
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-700 rounded-lg p-4">
-              <div className="flex items-start">
-                <div className="flex-shrink-0">
-                  <div className="w-8 h-8 bg-red-500 rounded-full flex items-center justify-center">
-                    <span className="text-white text-sm">🔍</span>
-                  </div>
-                </div>
-                <div className="ml-3 flex-1">
-                  <h4 className="text-sm font-semibold text-red-900 dark:text-red-200 mb-1">Most Common Failure Reason</h4>
-                  <p className="text-sm text-red-800 dark:text-red-300">{test.root_cause || 'Pattern analysis pending'}</p>
-                </div>
-              </div>
+          <div className="mt-4 space-y-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+              <h4 className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">Root cause</h4>
+              <p className="text-sm text-slate-800 dark:text-slate-200">
+                {rootCause ?? `Not determined. The "${test.failure_pattern || 'unknown'}" pattern is a stored classification; no error logs have been analysed.`}
+              </p>
+              {test.suggested_fix && (
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">General guidance for this pattern: {test.suggested_fix}</p>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 text-sm text-gray-900 dark:text-white">
-              <div>
-                <span className="text-gray-500 dark:text-slate-400">First Detected:</span>
-                <span className="ml-2 font-medium">{new Date(test.first_detected).toLocaleDateString()}</span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-slate-400">Last Occurrence:</span>
-                <span className="ml-2 font-medium">{new Date(test.last_occurrence).toLocaleDateString()}</span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-slate-400">Total Runs:</span>
-                <span className="ml-2 font-medium">{test.history.length}</span>
-              </div>
-              <div>
-                <span className="text-gray-500 dark:text-slate-400">Failure Rate:</span>
-                <span className="ml-2 font-medium">{test.history.length > 0 ? (100 - parseFloat(passRate)).toFixed(1) : '0.0'}%</span>
-              </div>
-            </div>
-            
-            <div className="bg-gray-50 dark:bg-slate-800 rounded-lg p-4">
-              <h5 className="text-sm font-semibold text-gray-700 dark:text-slate-300 mb-2">Recommended Actions</h5>
-              <ul className="text-sm text-gray-600 dark:text-slate-400 space-y-1 list-disc list-inside">
-                <li>Review test logs for common failure patterns</li>
-                <li>Verify test environment consistency</li>
-                <li>Consider quarantining if flakiness persists</li>
-              </ul>
-            </div>
+            <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              {[
+                ['First detected', test.first_detected ? new Date(test.first_detected).toLocaleDateString() : '—'],
+                ['Last occurrence', test.last_occurrence ? new Date(test.last_occurrence).toLocaleDateString() : '—'],
+                ['Total runs', totalRuns != null ? totalRuns.toLocaleString() : '—'],
+                ['Failure rate (last runs)', passRateNum != null ? `${(100 - passRateNum).toFixed(1)}% of ${historyCount}` : '—'],
+              ].map(([k, v]) => (
+                <div key={k} className="flex gap-2">
+                  <dt className="text-slate-500 dark:text-slate-400">{k}:</dt>
+                  <dd className="font-medium text-slate-900 dark:text-white">{v}</dd>
+                </div>
+              ))}
+            </dl>
 
-            <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-700">
-              <div className="p-4 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between">
-                <h5 className="text-sm font-semibold text-gray-900 dark:text-white">Recent Runs</h5>
-                <span className="text-xs text-gray-500 dark:text-slate-400">Last {historyData.length} events</span>
+            {historyCount > 0 && (
+              <div className="rounded-md border border-slate-200 dark:border-slate-800">
+                <div className="flex items-center justify-between border-b border-slate-200 p-3 dark:border-slate-800">
+                  <h5 className="text-sm font-semibold text-slate-900 dark:text-white">Recent runs</h5>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">Last {historyCount} runs</span>
+                </div>
+                <div className="max-h-60 overflow-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-800/50 dark:text-slate-400">
+                        <th className="px-4 py-2 text-left font-medium">Date</th>
+                        <th className="px-4 py-2 text-left font-medium">Time</th>
+                        <th className="px-4 py-2 text-left font-medium">Result</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...historyData].reverse().map((run, idx) => {
+                        const runDate = new Date(run.date);
+                        return (
+                          <tr key={`${run.date}-${idx}`} className="border-t border-slate-100 dark:border-slate-800">
+                            <td className="px-4 py-2 text-slate-800 dark:text-slate-200">
+                              {runDate.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' })}
+                            </td>
+                            <td className="px-4 py-2 text-slate-500 dark:text-slate-400">
+                              {runDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                            </td>
+                            <td className={cx('px-4 py-2')}>
+                              <Badge tone={run.passed ? 'good' : 'bad'}>{run.passed ? 'Passed' : 'Failed'}</Badge>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
-              <div className="max-h-60 overflow-x-auto overflow-y-auto">
-                <table className="min-w-full text-xs sm:text-sm">
-                  <thead>
-                    <tr className="bg-gray-50 dark:bg-slate-800 text-gray-500 dark:text-slate-400">
-                      <th className="px-4 py-2 text-left font-semibold">Date</th>
-                      <th className="px-4 py-2 text-left font-semibold">Time</th>
-                      <th className="px-4 py-2 text-left font-semibold">Result</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {historyData.map((run, idx) => {
-                      const runDate = new Date(run.date);
-                      return (
-                        <tr key={`${run.date}-${idx}`} className="border-t border-gray-100 dark:border-slate-800">
-                          <td className="px-4 py-2 text-gray-800 dark:text-slate-200">
-                            {runDate.toLocaleDateString(undefined, {
-                              weekday: 'short',
-                              day: '2-digit',
-                              month: 'short',
-                              year: 'numeric'
-                            })}
-                          </td>
-                          <td className="px-4 py-2 text-gray-600 dark:text-slate-400">
-                            {runDate.toLocaleTimeString(undefined, {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              second: '2-digit'
-                            })}
-                          </td>
-                          <td className="px-4 py-2">
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${run.passed ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300'}`}>
-                              {run.passed ? 'Passed' : 'Failed'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            )}
           </div>
         )}
       </div>
-    </div>
+    </Card>
   );
 };
 
