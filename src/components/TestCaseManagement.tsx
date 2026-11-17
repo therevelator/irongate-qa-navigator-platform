@@ -1,26 +1,51 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, TestTube, Link, CheckCircle, XCircle, AlertTriangle, TrendingUp, Filter, Search, Loader2 } from 'lucide-react';
-import type { TestCase } from '../data/advancedFeatures';
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ScatterChart, Scatter, ZAxis } from 'recharts';
+import { Search, Loader2, ChevronDown, ChevronRight } from 'lucide-react';
+import { XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ScatterChart, Scatter } from 'recharts';
 import { API_URL } from '../config/api';
+import { useTheme } from '../contexts/ThemeContext';
+import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, ProgressBar, inputClass, cx } from './ui';
+import type { Tone } from './ui';
 
 interface TestCaseManagementProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
-const TestCaseManagement: React.FC<TestCaseManagementProps> = ({ onBack }) => {
-  const [selectedStatus, setSelectedStatus] = useState<string>('all');
+/** Row from GET /analytics/test-cases; numeric fields are null when not recorded. */
+interface TestCaseRow {
+  id: string;
+  name: string;
+  requirement_id: string;
+  status: 'active' | 'obsolete' | 'redundant' | string;
+  last_executed: string | null;
+  pass_rate: number | null;
+  execution_count: number | null;
+  avg_duration: number | null; // seconds
+  effectiveness_score: number | null;
+  tags: string[];
+}
+
+type StatusFilter = 'all' | 'active' | 'obsolete' | 'redundant';
+const STATUS_TONE: Record<string, Tone> = { active: 'good', obsolete: 'bad', redundant: 'warn' };
+
+const num = (v: unknown): number | null => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+const mean = (vals: Array<number | null>) => {
+  const xs = vals.filter((v): v is number => v != null);
+  return xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null;
+};
+const fmt = (v: number | null, d = 1, suffix = '') => (v == null ? '—' : `${v.toFixed(d)}${suffix}`);
+
+const TestCaseManagement: React.FC<TestCaseManagementProps> = () => {
+  const { isDark } = useTheme();
+  const [selectedStatus, setSelectedStatus] = useState<StatusFilter>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTestCase, setSelectedTestCase] = useState<string | null>(null);
-  const [testCases, setTestCases] = useState<TestCase[]>([]);
+  const [testCases, setTestCases] = useState<TestCaseRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchTestCases = async () => {
+    (async () => {
       try {
-        const response = await fetch(`${API_URL}/analytics/test-cases`, {
-          credentials: 'include'
-        });
+        const response = await fetch(`${API_URL}/analytics/test-cases`, { credentials: 'include' });
         if (response.ok) {
           const data = await response.json();
           setTestCases(data.testCases || []);
@@ -30,482 +55,188 @@ const TestCaseManagement: React.FC<TestCaseManagementProps> = ({ onBack }) => {
       } finally {
         setLoading(false);
       }
-    };
-    fetchTestCases();
+    })();
   }, []);
 
-  // Calculate statistics
   const activeTests = testCases.filter(t => t.status === 'active').length;
   const obsoleteTests = testCases.filter(t => t.status === 'obsolete').length;
   const redundantTests = testCases.filter(t => t.status === 'redundant').length;
-  const avgPassRate = (testCases.reduce((acc, t) => acc + t.pass_rate, 0) / testCases.length).toFixed(1);
-  const avgEffectiveness = (testCases.reduce((acc, t) => acc + t.effectiveness_score, 0) / testCases.length).toFixed(1);
+  // Unweighted mean across test cases that have a recorded value.
+  const avgPassRate = mean(testCases.map(t => num(t.pass_rate)));
+  const avgEffectiveness = mean(testCases.map(t => num(t.effectiveness_score)));
 
-  // Filter test cases
   const filteredTests = testCases.filter(test => {
     const statusMatch = selectedStatus === 'all' || test.status === selectedStatus;
-    const searchMatch = searchTerm === '' || 
-      test.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      test.requirement_id.toLowerCase().includes(searchTerm.toLowerCase());
+    const q = searchTerm.toLowerCase();
+    const searchMatch = q === '' || test.name.toLowerCase().includes(q) || (test.requirement_id || '').toLowerCase().includes(q);
     return statusMatch && searchMatch;
   });
 
-  // Prepare data for status distribution
-  const statusData = [
-    { name: 'Active', value: activeTests, color: '#10b981' },
-    { name: 'Obsolete', value: obsoleteTests, color: '#ef4444' },
-    { name: 'Redundant', value: redundantTests, color: '#f59e0b' }
-  ];
+  const effectivenessData = testCases
+    .filter(t => num(t.effectiveness_score) != null && num(t.execution_count) != null)
+    .map(t => ({ name: t.name, effectiveness: num(t.effectiveness_score) as number, executions: num(t.execution_count) as number, passRate: num(t.pass_rate) }));
 
-  const statusDataDisplay = statusData.filter(item => item.value > 0);
-
-  const totalTests = testCases.length;
-
-  // Prepare data for effectiveness vs execution
-  const effectivenessData = testCases.map(t => ({
-    name: t.name.substring(0, 20),
-    effectiveness: t.effectiveness_score,
-    executions: t.execution_count,
-    passRate: t.pass_rate
-  }));
+  const c = {
+    grid: isDark ? '#1e293b' : '#e2e8f0',
+    axis: isDark ? '#94a3b8' : '#64748b',
+    dot: isDark ? '#79a4dc' : '#3567a5',
+  };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border-b dark:border-slate-800 sticky top-0 z-10">
-        <div className="px-8 py-6">
-          <button 
-            onClick={onBack}
-            className="flex items-center space-x-2 text-gray-600 dark:text-slate-400 hover:text-gray-900 dark:hover:text-white mb-4 transition-colors"
-          >
-            <ArrowLeft size={20} />
-            <span className="font-medium">Back to Features</span>
-          </button>
-          
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center">
-                <TestTube className="mr-3 text-green-500" size={32} />
-                Test Case Management
-              </h1>
-              <p className="text-gray-500 mt-1 dark:text-slate-400">Optimize test suites and track test effectiveness</p>
-            </div>
-            
-            <div className="flex items-center space-x-6">
-              <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Total Tests</p>
-                <div className="text-3xl font-bold text-gray-900 dark:text-white dark:text-white">{testCases.length}</div>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Active</p>
-                <div className="text-3xl font-bold text-green-600 dark:text-green-400">{activeTests}</div>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Avg Pass Rate</p>
-                <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">{avgPassRate}%</div>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-gray-500 dark:text-slate-400 dark:text-slate-400">Effectiveness</p>
-                <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">{avgEffectiveness}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+    <Page>
+      <PageIntro title="Test cases" description="Recorded test cases with pass rate, execution count and stored effectiveness score." />
 
-      {/* Filters and Search */}
-      <div className="px-8 py-4 bg-white dark:bg-slate-900 border-b dark:border-slate-800">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <Filter size={20} className="text-gray-500" />
-            <span className="text-sm font-semibold text-gray-700 dark:text-slate-300 dark:text-slate-300">Status:</span>
-            {['all', 'active', 'obsolete', 'redundant'].map(status => (
-              <button
-                key={status}
-                onClick={() => setSelectedStatus(status)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  selectedStatus === status
-                    ? 'bg-blue-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {status.charAt(0).toUpperCase() + status.slice(1)}
-              </button>
-            ))}
+      {loading ? (
+        <Card>
+          <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500 dark:text-slate-400">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading test cases…
+          </div>
+        </Card>
+      ) : testCases.length === 0 ? (
+        <Card><EmptyState title="No test cases recorded" description="Test cases appear here once they are recorded for your company or team." /></Card>
+      ) : (
+        <>
+          <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+            <StatTile label="Test cases" value={testCases.length} caption={`${activeTests} active, ${obsoleteTests} obsolete, ${redundantTests} redundant`} />
+            <StatTile label="Mean pass rate" value={fmt(avgPassRate, 1)} unit={avgPassRate != null ? '%' : undefined} caption="Unweighted mean across test cases" />
+            <StatTile label="Mean effectiveness score" value={fmt(avgEffectiveness, 1)} caption="Stored score per test case" />
+            <StatTile label="Obsolete or redundant" value={obsoleteTests + redundantTests} tone={obsoleteTests + redundantTests > 0 ? 'warn' : 'neutral'} />
           </div>
 
-          <div className="flex items-center space-x-3">
+          <Card className="mb-6">
+            <CardHeader title="Effectiveness vs execution count" subtitle={`${effectivenessData.length} test cases with both values`} />
+            {effectivenessData.length === 0 ? (
+              <EmptyState title="Not enough data to plot" />
+            ) : (
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ScatterChart margin={{ top: 10, right: 16, bottom: 30, left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={c.grid} />
+                    <XAxis type="number" dataKey="executions" name="Executions" tick={{ fontSize: 11, fill: c.axis }} stroke={c.grid}
+                      label={{ value: 'Executions', position: 'bottom', offset: 12, fontSize: 11, fill: c.axis }} />
+                    <YAxis type="number" dataKey="effectiveness" name="Effectiveness" tick={{ fontSize: 11, fill: c.axis }} stroke={c.grid}
+                      label={{ value: 'Effectiveness score', angle: -90, position: 'left', offset: 6, fontSize: 11, fill: c.axis }} />
+                    <Tooltip
+                      cursor={{ strokeDasharray: '3 3', stroke: c.grid }}
+                      content={({ payload }) => {
+                        if (payload && payload.length) {
+                          const d = payload[0].payload as { name: string; effectiveness: number; executions: number; passRate: number | null };
+                          return (
+                            <div className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs text-slate-900 shadow-sm dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
+                              <p className="mb-1 font-medium">{d.name}</p>
+                              <p>Effectiveness: {d.effectiveness.toFixed(1)}</p>
+                              <p>Executions: {d.executions}</p>
+                              <p>Pass rate: {fmt(d.passRate, 1, '%')}</p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Scatter data={effectivenessData} fill={c.dot} isAnimationActive={false} />
+                  </ScatterChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </Card>
+
+          <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <SegmentedControl
+              value={selectedStatus}
+              onChange={setSelectedStatus}
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'active', label: 'Active' },
+                { value: 'obsolete', label: 'Obsolete' },
+                { value: 'redundant', label: 'Redundant' },
+              ]}
+            />
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search tests or requirements..."
+                placeholder="Search tests or requirements"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-80"
+                className={cx(inputClass, 'w-full pl-9 sm:w-80')}
               />
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* Alerts */}
-      {(obsoleteTests > 0 || redundantTests > 0) && (
-        <div className="px-8 py-4 bg-yellow-50 border-b border-yellow-200 dark:border-yellow-700">
-          <div className="flex items-start">
-            <AlertTriangle className="text-yellow-600 mr-3 flex-shrink-0 mt-1" size={20} />
-            <div>
-              <h3 className="text-sm font-semibold text-yellow-900 dark:text-yellow-200">Test Suite Optimization Needed</h3>
-              <p className="text-sm text-yellow-800 mt-1">
-                Found {obsoleteTests} obsolete and {redundantTests} redundant test cases. 
-                Consider removing or updating these tests to improve suite efficiency.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Main Content */}
-      <div className="px-8 py-8">
-        {/* Overview Charts */}
-        <div className="grid grid-cols-2 gap-8 mb-8">
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Test Status Distribution</h2>
-            <div className="h-80">
-              {statusDataDisplay.length > 0 ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={statusDataDisplay}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name}: ${((percent || 0) * 100).toFixed(0)}%`}
-                      outerRadius={100}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {statusDataDisplay.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-full flex items-center justify-center text-gray-500 dark:text-slate-400">
-                  No test cases available to display
-                </div>
-              )}
-            </div>
-            <div className="mt-4 space-y-2">
-              {statusDataDisplay.map((entry) => (
-                <div className="flex items-center justify-between text-sm" key={entry.name}>
-                  <span className="flex items-center">
-                    <div className="w-3 h-3 rounded-full mr-2" style={{ backgroundColor: entry.color }}></div>
-                    {entry.name} Tests
-                  </span>
-                  <span className="font-bold">
-                    {entry.value}
-                    {totalTests > 0 ? ` (${((entry.value / totalTests) * 100).toFixed(0)}%)` : ''}
-                  </span>
-                </div>
+          {filteredTests.length === 0 ? (
+            <Card><EmptyState title="No test cases match these filters" /></Card>
+          ) : (
+            <div className="space-y-3">
+              {filteredTests.map(test => (
+                <TestCaseCard
+                  key={test.id}
+                  testCase={test}
+                  isSelected={selectedTestCase === test.id}
+                  onSelect={() => setSelectedTestCase(selectedTestCase === test.id ? null : test.id)}
+                />
               ))}
             </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 dark:border-slate-800 p-6">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Effectiveness vs Execution Count</h2>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 20, right: 20, bottom: 60, left: 60 }}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis 
-                    type="number" 
-                    dataKey="executions" 
-                    name="Executions"
-                    label={{ value: 'Execution Count', position: 'bottom', offset: 40 }}
-                  />
-                  <YAxis 
-                    type="number" 
-                    dataKey="effectiveness" 
-                    name="Effectiveness"
-                    label={{ value: 'Effectiveness Score', angle: -90, position: 'left', offset: 40 }}
-                  />
-                  <ZAxis type="number" dataKey="passRate" range={[50, 400]} />
-                  <Tooltip 
-                    cursor={{ strokeDasharray: '3 3' }}
-                    content={({ payload }) => {
-                      if (payload && payload.length) {
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-gray-900 text-white px-4 py-3 rounded-lg shadow-lg">
-                            <p className="font-bold mb-1">{data.name}</p>
-                            <p className="text-sm">Effectiveness: {data.effectiveness.toFixed(1)}</p>
-                            <p className="text-sm">Executions: {data.executions}</p>
-                            <p className="text-sm">Pass Rate: {data.passRate.toFixed(1)}%</p>
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                  <Scatter data={effectivenessData} fill="#3b82f6" />
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </div>
-
-        {/* Test Cases List */}
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white dark:text-white">
-              Test Cases ({filteredTests.length})
-            </h2>
-            {filteredTests.length !== testCases.length && (
-              <button
-                onClick={() => { setSelectedStatus('all'); setSearchTerm(''); }}
-                className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-              >
-                Clear Filters
-              </button>
-            )}
-          </div>
-          
-          {filteredTests.map(test => (
-            <TestCaseCard 
-              key={test.id}
-              testCase={test}
-              isSelected={selectedTestCase === test.id}
-              onSelect={() => setSelectedTestCase(selectedTestCase === test.id ? null : test.id)}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
+          )}
+        </>
+      )}
+    </Page>
   );
 };
 
-interface TestCaseCardProps {
-  testCase: TestCase;
-  isSelected: boolean;
-  onSelect: () => void;
-}
-
-const TestCaseCard: React.FC<TestCaseCardProps> = ({ testCase, isSelected, onSelect }) => {
-  const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      active: 'bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200 border-green-300 dark:border-green-700',
-      obsolete: 'bg-red-100 dark:bg-red-900 text-red-700 dark:text-red-200 border-red-300 dark:border-red-700',
-      redundant: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700'
-    };
-    return colors[status] || 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-700';
-  };
-
-  const getStatusIcon = (status: string) => {
-    if (status === 'active') return <CheckCircle className="text-green-600" size={24} />;
-    if (status === 'obsolete') return <XCircle className="text-red-600" size={24} />;
-    return <AlertTriangle className="text-yellow-600" size={24} />;
-  };
-
-  const daysSinceExecution = Math.floor((Date.now() - new Date(testCase.last_executed).getTime()) / (1000 * 60 * 60 * 24));
+const TestCaseCard: React.FC<{ testCase: TestCaseRow; isSelected: boolean; onSelect: () => void }> = ({ testCase, isSelected, onSelect }) => {
+  const daysSinceExecution = testCase.last_executed ? Math.floor((Date.now() - new Date(testCase.last_executed).getTime()) / 86400000) : null;
+  const passRate = num(testCase.pass_rate);
+  const effectiveness = num(testCase.effectiveness_score);
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-gray-200 overflow-hidden hover:shadow-md transition-shadow">
-      <div className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center space-x-4 flex-1">
-            <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${
-              testCase.status === 'active' ? 'bg-green-100 dark:bg-green-900/30' : 
-              testCase.status === 'obsolete' ? 'bg-red-100 dark:bg-red-900/30' : 'bg-yellow-100 dark:bg-yellow-900/30'
-            }`}>
-              {getStatusIcon(testCase.status)}
-            </div>
-            <div className="flex-1">
-              <div className="flex items-center space-x-3 mb-1">
-                <h3 className="text-lg font-bold text-gray-900 dark:text-white dark:text-white">{testCase.name}</h3>
-                <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(testCase.status)}`}>
-                  {testCase.status.toUpperCase()}
-                </span>
-              </div>
-              <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-slate-400">
-                <span className="flex items-center">
-                  <Link size={14} className="mr-1" />
-                  Req: {testCase.requirement_id}
-                </span>
-                <span>Last run: {daysSinceExecution} days ago</span>
-                <span>Executions: {testCase.execution_count}</span>
-              </div>
-            </div>
+    <Card>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            <h4 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{testCase.name}</h4>
+            <Badge tone={STATUS_TONE[testCase.status] ?? 'neutral'}>{testCase.status}</Badge>
           </div>
-
-          <div className="text-right ml-6">
-            <div className="text-3xl font-bold text-gray-900 dark:text-white dark:text-white">{testCase.effectiveness_score.toFixed(0)}</div>
-            <div className="text-xs text-gray-500 dark:text-slate-400">Effectiveness</div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+            <span>Requirement: {testCase.requirement_id || '—'}</span>
+            <span>Last run: {daysSinceExecution != null ? `${daysSinceExecution} days ago` : '—'}</span>
           </div>
         </div>
-
-        {/* Metrics Grid */}
-        <div className="grid grid-cols-4 gap-4 mb-4">
-          <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
-            <div className="flex items-center text-blue-600 mb-1">
-              <TrendingUp size={14} className="mr-1" />
-              <span className="text-xs font-semibold">Pass Rate</span>
+        <dl className="grid grid-cols-4 gap-x-6 text-sm">
+          {[
+            ['Pass rate', fmt(passRate, 1, '%')],
+            ['Executions', testCase.execution_count != null ? String(testCase.execution_count) : '—'],
+            ['Avg duration', fmt(num(testCase.avg_duration), 1, ' s')],
+            ['Effectiveness', fmt(effectiveness, 0)],
+          ].map(([k, v]) => (
+            <div key={k}>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">{k}</dt>
+              <dd className="font-medium tabular-nums text-slate-900 dark:text-white">{v}</dd>
             </div>
-            <div className="text-xl font-bold text-blue-900 dark:text-blue-200">{testCase.pass_rate.toFixed(1)}%</div>
-          </div>
-
-          <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3">
-            <div className="flex items-center text-green-600 mb-1">
-              <CheckCircle size={14} className="mr-1" />
-              <span className="text-xs font-semibold">Executions</span>
-            </div>
-            <div className="text-xl font-bold text-green-900 dark:text-green-200">{testCase.execution_count}</div>
-          </div>
-
-          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-3">
-            <div className="flex items-center text-purple-600 dark:text-purple-400 mb-1">
-              <TestTube size={14} className="mr-1" />
-              <span className="text-xs font-semibold">Avg Duration</span>
-            </div>
-            <div className="text-xl font-bold text-purple-900 dark:text-purple-200">{testCase.avg_duration.toFixed(1)}s</div>
-          </div>
-
-          <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-3">
-            <div className="flex items-center text-orange-600 dark:text-orange-400 mb-1">
-              <TrendingUp size={14} className="mr-1" />
-              <span className="text-xs font-semibold">Score</span>
-            </div>
-            <div className="text-xl font-bold text-orange-900 dark:text-orange-200">{testCase.effectiveness_score.toFixed(0)}</div>
-          </div>
-        </div>
-
-        {/* Tags */}
-        <div className="flex items-center space-x-2 mb-4">
-          <span className="text-xs font-semibold text-gray-500 dark:text-slate-400">Tags:</span>
-          {testCase.tags.map(tag => (
-            <span key={tag} className="px-2 py-1 bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-300 rounded text-xs">
-              {tag}
-            </span>
           ))}
-        </div>
-
-        <button
-          onClick={onSelect}
-          className="text-sm text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 font-medium"
-        >
-          {isSelected ? '▼ Hide Details' : '▶ Show Detailed Analysis'}
-        </button>
-
-        {isSelected && (
-          <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-700 space-y-4">
-            {/* Effectiveness Analysis */}
-            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-blue-900 dark:text-blue-200 mb-3">📊 Effectiveness Analysis</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm text-blue-800 dark:text-blue-300">
-                <div>
-                  <p className="font-medium mb-1">Test Value:</p>
-                  <p>
-                    {testCase.effectiveness_score > 80 ? '✅ High - Critical test case' :
-                     testCase.effectiveness_score > 60 ? '⚠️ Moderate - Useful but could improve' :
-                     '❌ Low - Consider reviewing or removing'}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium mb-1">Execution Frequency:</p>
-                  <p>
-                    {testCase.execution_count > 100 ? '✅ High - Frequently validated' :
-                     testCase.execution_count > 50 ? '⚠️ Moderate - Regular execution' :
-                     '❌ Low - Rarely executed'}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium mb-1">Reliability:</p>
-                  <p>
-                    {testCase.pass_rate > 95 ? '✅ Excellent - Very stable' :
-                     testCase.pass_rate > 80 ? '⚠️ Good - Mostly stable' :
-                     '❌ Poor - Needs investigation'}
-                  </p>
-                </div>
-                <div>
-                  <p className="font-medium mb-1">Performance:</p>
-                  <p>
-                    {testCase.avg_duration < 5 ? '✅ Fast - Efficient test' :
-                     testCase.avg_duration < 15 ? '⚠️ Moderate - Acceptable' :
-                     '❌ Slow - Consider optimization'}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Recommendations */}
-            <div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-green-900 dark:text-green-200 mb-3">💡 Recommendations</h4>
-              <ul className="text-sm text-green-800 dark:text-green-300 space-y-2">
-                {testCase.status === 'obsolete' && (
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span><strong>Remove Test:</strong> This test is obsolete and should be removed from the suite</span>
-                  </li>
-                )}
-                {testCase.status === 'redundant' && (
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span><strong>Consolidate:</strong> This test is redundant - merge with similar tests</span>
-                  </li>
-                )}
-                {testCase.pass_rate < 90 && testCase.status === 'active' && (
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span><strong>Stabilize:</strong> Pass rate is {testCase.pass_rate.toFixed(1)}% - investigate failures</span>
-                  </li>
-                )}
-                {testCase.avg_duration > 10 && (
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span><strong>Optimize:</strong> Test takes {testCase.avg_duration.toFixed(1)}s - consider performance improvements</span>
-                  </li>
-                )}
-                {daysSinceExecution > 30 && (
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span><strong>Review:</strong> Not executed in {daysSinceExecution} days - verify if still needed</span>
-                  </li>
-                )}
-                {testCase.effectiveness_score > 80 && testCase.status === 'active' && (
-                  <li className="flex items-start">
-                    <span className="mr-2">•</span>
-                    <span><strong>Maintain:</strong> High-value test - keep in suite and monitor regularly</span>
-                  </li>
-                )}
-              </ul>
-            </div>
-
-            {/* Coverage Matrix */}
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
-              <h4 className="text-sm font-semibold text-purple-900 dark:text-purple-200 mb-3">🎯 Coverage Information</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">Requirement Coverage:</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
-                    {testCase.requirement_id}
-                  </p>
-                  <p className="text-xs text-purple-600 dark:text-purple-400">Linked requirement ID</p>
-                </div>
-                <div>
-                  <p className="text-xs text-purple-700 dark:text-purple-300 mb-1">Test Category:</p>
-                  <p className="text-lg font-bold text-purple-900 dark:text-purple-200">
-                    {testCase.tags[0] || 'Uncategorized'}
-                  </p>
-                  <p className="text-xs text-purple-600 dark:text-purple-400">Primary classification</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
+        </dl>
       </div>
-    </div>
+      {passRate != null && <ProgressBar value={passRate} tone={passRate >= 95 ? 'good' : passRate >= 80 ? 'warn' : 'bad'} className="mt-3 max-w-xs" />}
+
+      <button onClick={onSelect} className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300 dark:hover:text-brand-200">
+        {isSelected ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+        {isSelected ? 'Hide details' : 'Details'}
+      </button>
+
+      {isSelected && (
+        <div className="mt-3 space-y-2 border-t border-slate-200 pt-3 text-sm dark:border-slate-800">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-slate-500 dark:text-slate-400">Tags:</span>
+            {testCase.tags.length ? testCase.tags.map(tag => <Badge key={tag}>{tag}</Badge>) : <span className="text-xs text-slate-500 dark:text-slate-400">None</span>}
+          </div>
+          <ul className="list-inside list-disc space-y-1 text-xs text-slate-600 dark:text-slate-300">
+            {testCase.status === 'obsolete' && <li>Marked obsolete: review whether it can be removed.</li>}
+            {testCase.status === 'redundant' && <li>Marked redundant: review whether it overlaps with other tests.</li>}
+            {passRate != null && passRate < 90 && testCase.status === 'active' && <li>Pass rate {passRate.toFixed(1)}%: investigate failures.</li>}
+            {daysSinceExecution != null && daysSinceExecution > 30 && <li>Not executed in {daysSinceExecution} days.</li>}
+          </ul>
+        </div>
+      )}
+    </Card>
   );
 };
 

@@ -20,8 +20,10 @@ const API_ROW_LIMIT = 100;
 const formatDuration = (seconds: number | null | undefined): string => {
   if (seconds == null || Number.isNaN(Number(seconds))) return '—';
   const total = Math.max(0, Math.round(Number(seconds)));
-  const m = Math.floor(total / 60);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
   const s = total % 60;
+  if (h > 0) return `${h}h ${m}m`;
   if (m === 0) return `${s}s`;
   return `${m}m ${s}s`;
 };
@@ -76,7 +78,11 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = () => {
   const passedTests = executions.filter(e => e.status === 'passed').length;
   const failedTests = executions.filter(e => e.status === 'failed').length;
   const blockedTests = executions.filter(e => e.status === 'blocked').length;
-  const avgDurationSec = executions.length ? executions.reduce((acc, e) => acc + Number(e.duration || 0), 0) / executions.length : null;
+  const meanDuration = (list: TestExecution[]) => {
+    const ds = list.map(e => e.duration).filter((d): d is number => d != null && !Number.isNaN(Number(d))).map(Number);
+    return ds.length ? ds.reduce((a, b) => a + b, 0) / ds.length : null;
+  };
+  const avgDurationSec = meanDuration(executions);
 
   const filteredExecutions = statusSort === 'all' ? executions : executions.filter(e => e.status === statusSort);
   const statusOrder: Array<TestExecution['status']> = ['running', 'passed', 'failed', 'blocked'];
@@ -123,7 +129,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = () => {
     const date = new Date(e.start_time);
     return {
       label: chartPeriod === '7d' ? date.toLocaleDateString() : date.toLocaleTimeString(),
-      durationMin: Number((Number(e.duration || 0) / 60).toFixed(2)),
+      durationMin: e.duration != null ? Number((Number(e.duration) / 60).toFixed(2)) : null,
       status: e.status,
     };
   });
@@ -182,7 +188,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = () => {
     ]);
 
     const pdfSource = timelineExecutionsSource;
-    const pdfSummary = `Running: ${pdfSource.filter(e => e.status === 'running').length}  |  Passed: ${pdfSource.filter(e => e.status === 'passed').length}  |  Failed: ${pdfSource.filter(e => e.status === 'failed').length}  |  Blocked: ${pdfSource.filter(e => e.status === 'blocked').length}  |  Mean duration: ${formatDuration(pdfSource.reduce((a, e) => a + Number(e.duration || 0), 0) / pdfSource.length)}`;
+    const pdfSummary = `Running: ${pdfSource.filter(e => e.status === 'running').length}  |  Passed: ${pdfSource.filter(e => e.status === 'passed').length}  |  Failed: ${pdfSource.filter(e => e.status === 'failed').length}  |  Blocked: ${pdfSource.filter(e => e.status === 'blocked').length}  |  Mean duration: ${formatDuration(meanDuration(pdfSource))}`;
 
     autoTable(doc, {
       startY: 40,
