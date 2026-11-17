@@ -11,20 +11,48 @@ import { isSyntheticDataEnabled } from '../lib/syntheticData';
 
 const router = express.Router();
 
-// Helper to check if team lead can access a specific team
-// Returns the teamId to use (for team leads, always their own team)
-const getTeamIdForRole = (userRole: string, userPrimaryTeamId: string | undefined, requestedTeamId: string | undefined): { allowed: boolean; teamId: string | undefined } => {
-  if (userRole !== 'team_lead') {
-    // Non-team leads can access any team or all teams
-    return { allowed: true, teamId: requestedTeamId };
+/** Roles that may use the Analytics modules (same list as the UI: Layout ANALYTICS_ROLES / App.hasPermission). */
+const ANALYTICS_ROLES = ['super_admin', 'qa_manager', 'team_lead'];
+
+/**
+ * Resolve which team an Analytics request may read.
+ * - qa_engineer / viewer: 403 (the UI does not offer Analytics to them).
+ * - team_lead: only their own primary team; with no teamId the request is scoped to it.
+ * - super_admin / qa_manager: any team in their company (assertTeamRead), or company-wide
+ *   when no teamId is given.
+ * Writes the error response and returns null when access is denied.
+ */
+async function resolveAnalyticsTeam(req: any, res: any, requestedTeamId: unknown): Promise<{ teamId: string | undefined } | null> {
+  const role = req.user?.role;
+  if (!ANALYTICS_ROLES.includes(role)) {
+    res.status(403).json({ error: 'Analytics is not available for your role.' });
+    return null;
   }
-  // Team leads can only access their own team
-  if (requestedTeamId && requestedTeamId !== userPrimaryTeamId) {
-    return { allowed: false, teamId: undefined };
+  const requested = typeof requestedTeamId === 'string' && requestedTeamId && requestedTeamId !== 'all' ? requestedTeamId : undefined;
+  if (role === 'team_lead') {
+    const own = req.user?.primaryTeamId as string | undefined;
+    if (requested && requested !== own) {
+      res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
+      return null;
+    }
+    if (!own) {
+      res.status(403).json({ error: 'You are not assigned to a team.' });
+      return null;
+    }
+    return (await assertTeamRead(req, res, own)) ? { teamId: own } : null;
   }
-  // If no teamId specified or it's their own team, use their own team
-  return { allowed: true, teamId: userPrimaryTeamId || requestedTeamId };
-};
+  if (requested) {
+    return (await assertTeamRead(req, res, requested)) ? { teamId: requested } : null;
+  }
+  return { teamId: undefined };
+}
+
+/** Role gate for Analytics endpoints that are not team-scoped. */
+function assertAnalyticsRole(req: any, res: any): boolean {
+  if (ANALYTICS_ROLES.includes(req.user?.role)) return true;
+  res.status(403).json({ error: 'Analytics is not available for your role.' });
+  return false;
+}
 
 // ============================================================================
 // SHARED NUMERIC HELPERS
@@ -70,11 +98,9 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
     const { teamId: requestedTeamId, days = '7' } = req.query;
     const numDays = Math.min(parseInt(days as string) || 7, 30);
 
-    // Team leads can only access their own team
-    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
-    }
+    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
 
     let sql = `
       SELECT 
@@ -133,11 +159,9 @@ router.get('/test-cases', authenticateToken, async (req: any, res) => {
     const { companyId, role, primaryTeamId } = req.user;
     const { teamId: requestedTeamId, status } = req.query;
 
-    // Team leads can only access their own team
-    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
-    }
+    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
 
     let sql = `
       SELECT 
@@ -247,11 +271,9 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
     const { companyId, role, primaryTeamId } = req.user;
     const { teamId: requestedTeamId } = req.query;
 
-    // Team leads can only access their own team
-    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
-    }
+    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
 
     let sql = `
       SELECT 
@@ -346,8 +368,11 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
 router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    const { teamId, days = '30' } = req.query;
+    const { days = '30' } = req.query;
     const numDays = Math.min(parseInt(days as string) || 30, 90);
+    const scope = await resolveAnalyticsTeam(req, res, req.query.teamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
 
     let sql = `
       SELECT 
@@ -408,6 +433,7 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
     // Individual developer metrics: same gate as /teams/:id/developer-ai-suggestions.
     // super_admin / qa_manager: any team in the company; team_lead: own team only;
     // other roles: only their own row.
+    if (!assertAnalyticsRole(req, res)) return;
     const privileged = ['super_admin', 'qa_manager', 'team_lead'].includes(role);
     let scopeTeamId: string | undefined = requestedTeamId;
 
@@ -565,10 +591,9 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
     const { companyId, role, primaryTeamId } = req.user;
     const { teamId: requestedTeamId, status } = req.query;
 
-    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
-    }
+    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
     if (teamId && !(await getOwnedTeam(req, teamId as string))) {
       return res.status(404).json({ error: 'Team not found' });
     }
@@ -737,6 +762,7 @@ function toPipelineConfig(row: any | null) {
 // Get pipeline configuration (read-only: a GET never inserts rows)
 router.get('/pipeline-config', authenticateToken, async (req: any, res) => {
   try {
+    if (!assertAnalyticsRole(req, res)) return;
     const { companyId } = req.user;
 
     const config = await queryOne<any>(
@@ -813,10 +839,9 @@ router.get('/pipeline-history', authenticateToken, async (req: any, res) => {
     const { days = '14', teamId: requestedTeamId } = req.query;
     const numDays = Math.min(Math.max(parseInt(days as string, 10) || 14, 1), 60);
 
-    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId as string | undefined);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
-    }
+    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
     if (teamId && !(await getOwnedTeam(req, teamId as string))) {
       return res.status(404).json({ error: 'Team not found' });
     }
@@ -876,10 +901,9 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
     const { companyId, role, primaryTeamId } = req.user;
     const { teamId: requestedTeamId } = req.query;
 
-    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId as string | undefined);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
-    }
+    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
 
     // Get pipeline config for this company
     const config = await queryOne<any>(
@@ -1038,6 +1062,7 @@ router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
 // business_impact_metrics table (filled only by the synthetic analytics job) is not served.
 router.get('/business-impact', authenticateToken, async (req: any, res) => {
   try {
+    if (!assertAnalyticsRole(req, res)) return;
     const { companyId } = req.user;
 
     const configuredMetrics = await query<any>(
@@ -1352,11 +1377,9 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
     const { teamId: requestedTeamId } = req.params;
     const { role, primaryTeamId } = req.user;
 
-    // Team leads can only access their own team
-    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
-    }
+    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
     // Tenant scope: the team must belong to the caller's company.
     if (!(await getOwnedTeam(req, teamId))) {
       return res.status(404).json({ error: 'Team not found' });
@@ -2583,11 +2606,9 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     }
     const startDateStr = startDate.toISOString().split('T')[0];
 
-    // Team leads can only access their own team
-    const { allowed, teamId } = getTeamIdForRole(role, primaryTeamId, requestedTeamId);
-    if (!allowed) {
-      return res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
-    }
+    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
+    if (!scope) return;
+    const teamId = scope.teamId;
     // Tenant scope: if a team is requested it must belong to the caller's company.
     if (teamId && !(await getOwnedTeam(req, teamId as string))) {
       return res.status(404).json({ error: 'Team not found' });
@@ -2617,8 +2638,11 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
       JOIN users u ON dps.developer_id = u.id
       WHERE u.company_id = ?
         AND dps.snapshot_date >= ?
+        AND (u.developer_insights_enabled = TRUE OR u.id = ?)
     `;
-    const params: any[] = [companyId, startDateStr];
+    // Same opt-out rule as /developer-metrics: individual data only for people who
+    // enabled developer insights (everyone may see their own).
+    const params: any[] = [companyId, startDateStr, userId];
 
     // Filter by specific developer
     if (!privileged) {

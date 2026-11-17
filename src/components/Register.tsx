@@ -80,7 +80,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
         <div className="rounded-lg border border-slate-200 bg-white p-6 sm:p-8 dark:border-slate-800 dark:bg-slate-900">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Create your organisation</h1>
           <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
-            You will be the administrator. You can invite colleagues and add teams afterwards.
+            This creates a new organisation and you will be its administrator. To join an existing organisation, ask its administrator to create an account for you.
           </p>
 
           {error && (

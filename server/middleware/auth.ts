@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { queryOne } from '../../src/lib/db';
 
 // Resolve the signing secret once. In production a secret MUST be provided;
 // we fail closed (throw on startup) rather than fall back to a public default,
@@ -23,50 +24,59 @@ export interface AuthRequest extends Request {
   companyId?: string;
 }
 
-export function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
-  // Debug: Log incoming cookies
-  console.log('[Auth] Cookies received:', Object.keys(req.cookies || {}));
-  console.log('[Auth] Cookie irongate_token exists:', !!req.cookies?.irongate_token);
-  
-  // Check cookie first, then header
+/**
+ * Verify the session token, then load the caller's CURRENT role, company, department,
+ * primary team and active flag from the database. The JWT only proves identity
+ * (userId); authorisation always uses the live row, so a deactivated user or one whose
+ * role/team changed loses the old rights on their next request — the same state
+ * /auth/me shows the UI.
+ */
+export async function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
   let token = req.cookies?.irongate_token;
-
   if (!token) {
     const authHeader = req.headers['authorization'];
-    console.log('[Auth] No cookie, checking header. Auth header:', authHeader ? 'present' : 'missing');
     token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
   }
-
   if (!token) {
-    console.log('[Auth] No token found in cookies or Authorization header');
     return res.status(401).json({ error: 'Access token required' });
   }
 
-  console.log('[Auth] Token found, length:', token.length, 'starts with:', token.substring(0, 20) + '...');
-
+  let decoded: any;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    
-    // Set user object for new routes
-    req.user = {
-      id: decoded.userId,
-      role: decoded.role,
-      companyId: decoded.companyId,
-      primaryTeamId: decoded.primaryTeamId,
-      departmentId: decoded.departmentId
-    };
-    
-    // Keep backward compatibility
-    req.userId = decoded.userId;
-    req.userRole = decoded.role;
-    req.companyId = decoded.companyId;
-    
-    console.log(`[Auth] User authenticated: ${decoded.userId} (${decoded.role})`);
-    next();
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch (error: any) {
-    console.error('[Auth] Token verification failed:', error.message);
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
+
+  let row: { id: string; role: string; company_id: string; department_id: string | null; primary_team_id: string | null; is_active: boolean } | null;
+  try {
+    row = await queryOne(
+      'SELECT id, role, company_id, department_id, primary_team_id, is_active FROM users WHERE id = ?',
+      [decoded?.userId]
+    );
+  } catch (error) {
+    console.error('[Auth] Failed to load user:', error);
+    return res.status(500).json({ error: 'Authentication failed' });
+  }
+  if (!row) {
+    return res.status(401).json({ error: 'User not found' });
+  }
+  if (!row.is_active) {
+    return res.status(401).json({ error: 'Your account has been deactivated. Please contact your administrator.' });
+  }
+
+  req.user = {
+    id: row.id,
+    role: row.role,
+    companyId: row.company_id,
+    primaryTeamId: row.primary_team_id ?? undefined,
+    departmentId: row.department_id ?? undefined
+  };
+  // Backward-compatible fields used by older handlers.
+  req.userId = row.id;
+  req.userRole = row.role;
+  req.companyId = row.company_id;
+  next();
 }
 
 export function requireRole(...roles: string[]) {

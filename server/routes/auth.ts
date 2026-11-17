@@ -39,7 +39,8 @@ const generateUUID = (): string => {
 router.post('/register', authLimiter, async (req, res) => {
   try {
     const { email, password, firstName, lastName, companyName, departmentName, teamName } = req.body;
-    // First registered user is always super_admin - additional users created via Admin Panel
+    // The registering user creates a new organisation and becomes its super_admin.
+    // Additional users are created by an admin in Users.
     const role = 'super_admin';
 
     // Validate required fields
@@ -64,62 +65,37 @@ router.post('/register', authLimiter, async (req, res) => {
     // Extract domain from email for company
     const emailDomain = email.split('@')[1] || 'unknown.com';
 
-    // Check if company exists by name (case-insensitive)
-    let company = await queryOne<any>(
+    // Registration only ever creates a NEW organisation, and its first user becomes
+    // that organisation's super_admin. Joining an existing organisation is by invite
+    // (an admin creates the account in Users), never by typing its name here —
+    // otherwise anyone could make themselves super_admin of an existing tenant.
+    const existingCompany = await queryOne<any>(
       'SELECT id FROM companies WHERE LOWER(name) = LOWER(?)',
       [companyName]
     );
-
-    let companyId: string;
-
-    if (!company) {
-      // Create new company with human-readable ID
-      companyId = generateCompanyId();
-      await query(
-        `INSERT INTO companies (id, name, domain, is_active) VALUES (?, ?, ?, true)`,
-        [companyId, companyName, emailDomain]
-      );
-    } else {
-      companyId = company.id;
+    if (existingCompany) {
+      return res.status(409).json({
+        error: 'An organisation with this name already exists. Ask its administrator to create an account for you.'
+      });
     }
 
-    // Check if department exists for this company (case-insensitive)
-    let department = await queryOne<any>(
-      'SELECT id FROM departments WHERE company_id = ? AND LOWER(name) = LOWER(?)',
-      [companyId, departmentName]
+    const companyId = generateCompanyId();
+    await query(
+      `INSERT INTO companies (id, name, domain, is_active) VALUES (?, ?, ?, true)`,
+      [companyId, companyName, emailDomain]
     );
 
-    let departmentId: string;
-
-    if (!department) {
-      // Create new department tied to company
-      departmentId = generateUUID();
-      await query(
-        `INSERT INTO departments (id, company_id, name, is_active) VALUES (?, ?, ?, true)`,
-        [departmentId, companyId, departmentName]
-      );
-    } else {
-      departmentId = department.id;
-    }
-
-    // Check if team exists for this department (case-insensitive)
-    let team = await queryOne<any>(
-      'SELECT id FROM teams WHERE department_id = ? AND LOWER(name) = LOWER(?)',
-      [departmentId, teamName]
+    const departmentId = generateUUID();
+    await query(
+      `INSERT INTO departments (id, company_id, name, is_active) VALUES (?, ?, ?, true)`,
+      [departmentId, companyId, departmentName]
     );
 
-    let teamId: string;
-
-    if (!team) {
-      // Create new team tied to company and department
-      teamId = generateUUID();
-      await query(
-        `INSERT INTO teams (id, company_id, department_id, name, is_active) VALUES (?, ?, ?, ?, true)`,
-        [teamId, companyId, departmentId, teamName]
-      );
-    } else {
-      teamId = team.id;
-    }
+    const teamId = generateUUID();
+    await query(
+      `INSERT INTO teams (id, company_id, department_id, name, is_active) VALUES (?, ?, ?, ?, true)`,
+      [teamId, companyId, departmentId, teamName]
+    );
 
     // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
