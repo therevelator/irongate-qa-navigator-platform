@@ -312,6 +312,35 @@ const response = await fetch(`${JIRA_URL}/rest/agile/1.0/sprint/${sprintId}`, {
 
 See [DATA_INTEGRATION.md](DATA_INTEGRATION.md) for complete integration guide.
 
+### KPI ingestion API
+
+External systems (CI, issue tracker, code analysis) push team KPIs to `POST /api/ingest/kpis`.
+Manual entry in the app uses the same server path (`server/lib/kpiIngest.ts`), so both behave identically:
+
+- **Auth:** `Authorization: Bearer igk_…`. A super admin creates keys in **Admin console → API keys**. The key is shown once; only its SHA-256 hash is stored. A key belongs to one company and can write any team in it. Revoked keys get `401`; a team from another company gets `403`.
+- **Body:** `{ "teamId", "source", "recordedAt"?, "metrics": { column: number } }`, or an array of up to 100 such items. The whole array is validated first and then written in one transaction (all or nothing).
+  - `source` is a label such as `jenkins`, `jira` or `sonarqube` (`manual` is reserved for the app).
+  - `recordedAt` is an ISO 8601 timestamp that defaults to now and cannot be in the future.
+  - `metrics` keys are `kpi_snapshots` columns from the whitelist in `KPI_COLUMNS` (`server/lib/kpiIngest.ts`), for example `test_coverage`, `defect_escape_rate`, `change_failure_rate`, `code_quality_score`, `deployment_frequency_per_week`, `lead_time_days` or `mttr_hours`. Values are range-checked, and integer columns are rounded to whole numbers. `null` means "not provided" and does not clear a stored value.
+- **Behaviour:** values go into the team's snapshot for today. If today's snapshot is new, every other KPI is carried forward from the team's previous snapshot, so a partial update never wipes the other metrics.
+- **Provenance:** each field's `{source, recorded_at}` is stored in `kpi_snapshots.field_sources`. Carried-forward fields keep their original source and date. The team page shows this as "source · as of date".
+- **QA score:** `qa_score` and `status` cannot be supplied. A database trigger computes them from the stored inputs using the same rules as `computeQaScore` in `server/lib/metricFormulas.ts`.
+- **Rate limit:** 60 requests per minute per key. Open dashboards refresh automatically after each write.
+
+```bash
+curl -X POST https://<host>/api/ingest/kpis \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+        "teamId": "<team id>",
+        "source": "sonarqube",
+        "recordedAt": "2026-11-17T08:00:00Z",
+        "metrics": { "code_quality_score": 82, "test_coverage": 78.4 }
+      }'
+# → {"result":{"teamId":"…","snapshotDate":"2026-11-17","qaScore":<0–100 or null>,"status":"good|warning|critical|null",
+#     "updated":["code_quality_score","test_coverage"],"carriedForward":["defect_escape_rate", …]}}
+```
+
 ---
 
 ## 📊 Business Value

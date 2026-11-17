@@ -51,7 +51,7 @@ const COLUMNS: Array<{ label: string; key: string; digits: number; suffix: strin
   { label: 'Defect escape', key: 'defectEscapeRate', digits: 2, suffix: '%' },
   { label: 'Change failure', key: 'changeFailureRate', digits: 2, suffix: '%' },
   { label: 'Flakiness', key: 'testFlakinessRate', digits: 2, suffix: '%' },
-  { label: 'Deploys / wk', key: 'deploymentFrequencyPerWeek', digits: 0, suffix: '' },
+  { label: 'Deploys / wk', key: 'deploymentFrequencyPerWeek', digits: 1, suffix: '' },
   { label: 'MTTR (h)', key: 'mttrHours', digits: 2, suffix: '' },
 ];
 const cellValue = (t: TeamRow, key: string) => (key === 'qaScore' ? t.qaScore : t.kpiData?.[key] ?? null);

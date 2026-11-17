@@ -353,7 +353,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                         <td className="px-3 py-3 text-right tabular-nums">{fmt(r.flakiness, 1, '%')}</td>
                         <td className="px-3 py-3 text-right tabular-nums">{fmt(r.defects, 2)}</td>
                         <td className="px-3 py-3 text-right tabular-nums">{fmt(r.automation, 1, '%')}</td>
-                        <td className="px-3 py-3 text-right tabular-nums">{fmt(r.deploys)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{fmt(r.deploys, 1)}</td>
                       </tr>
                     );
                   })}
