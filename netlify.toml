@@ -22,7 +22,7 @@
 
 [functions]
   node_bundler = "esbuild"
-  external_node_modules = ["pg"]
+  external_node_modules = ["pg", "bcrypt"]
 
 # Redirect API calls to serverless functions
 [[redirects]]
