@@ -18,7 +18,7 @@ export interface Team {
   name: string;
   department: string;
   qaScore: number;               // 0–100; may be null at runtime when the team has no KPI snapshot
-  status: 'good' | 'warning' | 'critical';
+  status: 'good' | 'warning' | 'critical' | 'no-data';
   velocity: { sprint: string; committed: number; delivered: number }[];
   metrics: KPIMetric[];
   technicalDebtScore?: number | null;  // Lower is better (0-100 scale)

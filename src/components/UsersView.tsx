@@ -670,7 +670,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                               <div className="bg-white dark:bg-slate-900 rounded-md p-2.5 text-center border border-slate-200 dark:border-slate-700">
                                 <Users className="mx-auto mb-1 text-slate-400" size={14} />
-                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Wellbeing (derived)</p>
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Workload balance (derived)</p>
                                 <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{metrics.happiness_score == null ? '—' : `${Math.round(metrics.happiness_score)} / 100`}</p>
                               </div>
                               <div className="bg-white dark:bg-slate-900 rounded-md p-2.5 text-center border border-slate-200 dark:border-slate-700">
@@ -770,15 +770,15 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
         )}
       </div>
 
-      {/* Engineer wellbeing overview - managers only. Ordered by status (most at risk first), not a leaderboard. */}
+      {/* Engineer workload overview - managers only. Ordered by status (most at risk first), not a leaderboard. */}
       {
         (user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && Object.values(userMetrics).some(Boolean) && (
           <div className="max-w-7xl mx-auto mt-8 mb-6">
             <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5">
               <div className="mb-4">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Engineer wellbeing overview</h3>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Engineer workload overview</h3>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                  Engineers who opted in to developer insights, most at risk first. Wellbeing is a derived score (0–100), not a survey result.
+                  Engineers who opted in to developer insights, most at risk first. Workload balance is a derived score (0–100) from focus, meeting, context-switch, PR and review times; it is not a survey result.
                 </p>
               </div>
               <div className="divide-y divide-slate-100 dark:divide-slate-800">

@@ -42,7 +42,7 @@ type DevRow = DeveloperInputs & {
 type AIInsights = {
   aiEnabled: boolean;
   teamInsight?: string;
-  developers?: Array<{ name: string; status?: string; summary?: string; strengths?: string[]; concerns?: string[]; suggestion?: string }>;
+  developers?: Array<{ name: string; status?: string; summary?: string; strengths?: string[]; concerns?: string[]; suggestion?: string; notMeasured?: string[]; dataQualityWarnings?: string[] }>;
   message?: string;
   source?: string;
 };
@@ -318,7 +318,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
                   <th className="px-3 py-2.5 text-right">Meetings (h/day)</th>
                   <th className="px-3 py-2.5 text-right">Context switches</th>
                   <th className="px-3 py-2.5 text-right">Focus + meetings (h/day)</th>
-                  <th className="px-3 py-2.5 text-right">Wellbeing score (derived)</th>
+                  <th className="px-3 py-2.5 text-right">Workload balance (derived)</th>
                   <th className="px-5 py-2.5">Burnout risk</th>
                 </tr>
               </thead>
@@ -377,6 +377,14 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
                         <Badge tone={meta.tone}>{meta.label}</Badge>
                       </div>
                       {dev.summary && <p className="mb-2 text-sm text-slate-700 dark:text-slate-300">{dev.summary}</p>}
+                      {!!dev.notMeasured?.length && (
+                        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Not measured: {dev.notMeasured.join(', ')}</p>
+                      )}
+                      {!!dev.dataQualityWarnings?.length && (
+                        <ul className="mb-2 space-y-1 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                          {dev.dataQualityWarnings.map((w, i) => <li key={i}>Data quality: {w}</li>)}
+                        </ul>
+                      )}
                       {!!dev.concerns?.length && <div className="mb-2 flex flex-wrap gap-1">{dev.concerns.map((c, i) => <Badge key={i} tone="warn">{c}</Badge>)}</div>}
                       {!!dev.strengths?.length && <div className="mb-2 flex flex-wrap gap-1">{dev.strengths.map((s, i) => <Badge key={i} tone="good">{s}</Badge>)}</div>}
                       {dev.suggestion && (
@@ -401,7 +409,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         </p>
         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
           Bands: 80–100 exceptional, 60–79 high, 40–59 moderate, 0–39 low. The maximum raw total is {DDPS_MAX_RAW} points, which maps to 100.
-          Wellbeing score (derived) is the stored workload-balance value calculated from the same inputs — it is not a survey result.
+          Workload balance (derived) is the stored workload-balance value calculated from the same inputs — it is not a survey result.
         </p>
       </Card>
     </Page>

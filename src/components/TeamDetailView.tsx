@@ -9,6 +9,7 @@ import {
   chartTheme,
   developerStatusMeta,
   formatAsOf,
+  QA_SCORE_FORMULA,
 } from '../data/advancedFeatures';
 import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
@@ -131,7 +132,7 @@ export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: stri
   // Business Impact
   'qaScore': {
     short: 'Overall quality score for the team',
-    detailed: 'Composite 0–100 quality score stored with the team\'s latest KPI snapshot. Higher is better.'
+    detailed: QA_SCORE_FORMULA
   },
   'technicalDebtScore': {
     short: 'Accumulated code issues needing attention',
@@ -160,7 +161,7 @@ export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: stri
     detailed: 'Number of times developers switch between different tasks. Fewer switches = deeper focus = higher quality work.'
   },
   'happinessScore': {
-    short: 'Wellbeing score (derived) — not a survey',
+    short: 'Workload balance (derived) — not a survey',
     detailed: 'Derived 0–100 workload-balance score calculated from focus time, meetings, context switches, PR and review time. It is not self-reported satisfaction.'
   }
 };
@@ -212,6 +213,8 @@ interface DeveloperAISuggestion {
   strengths?: string[];
   concerns?: string[];
   suggestion?: string;
+  notMeasured?: string[];
+  dataQualityWarnings?: string[];
 }
 
 interface DeveloperAISuggestions {
@@ -560,7 +563,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                     <th className="px-3 py-2.5 text-right">Meetings (h/day)</th>
                     <th className="px-3 py-2.5 text-right">Context switches</th>
                     <th className="px-3 py-2.5 text-right">
-                      <span className="inline-flex items-center gap-1">Wellbeing score (derived) <InfoTip text={METRIC_EXPLANATIONS.happinessScore.detailed} /></span>
+                      <span className="inline-flex items-center gap-1">Workload balance (derived) <InfoTip text={METRIC_EXPLANATIONS.happinessScore.detailed} /></span>
                     </th>
                     <th className="px-5 py-2.5">Burnout risk</th>
                   </tr>
@@ -758,6 +761,14 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                         </dl>
                       )}
                       {dev.summary && <p className="mb-2 text-sm text-slate-700 dark:text-slate-300">{dev.summary}</p>}
+                      {!!dev.notMeasured?.length && (
+                        <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">Not measured: {dev.notMeasured.join(', ')}</p>
+                      )}
+                      {!!dev.dataQualityWarnings?.length && (
+                        <ul className="mb-2 space-y-1 rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+                          {dev.dataQualityWarnings.map((w, i) => <li key={i}>Data quality: {w}</li>)}
+                        </ul>
+                      )}
                       {!!dev.concerns?.length && (
                         <div className="mb-2 flex flex-wrap gap-1">
                           {dev.concerns.map((c, i) => <Badge key={i} tone="warn">{c}</Badge>)}

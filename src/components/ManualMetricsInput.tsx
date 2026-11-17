@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Calculator, Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap, Wrench, DollarSign, TrendingUp, Headphones, GitBranch, Code, X } from 'lucide-react';
+import { Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap, Wrench, DollarSign, TrendingUp, Headphones, GitBranch, Code, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
@@ -11,6 +11,8 @@ import {
   burnoutTone,
   calculateBurnoutRisk as calculateBurnoutRiskShared,
   calculateWorkloadBalance,
+  QA_SCORE_FORMULA,
+  formatAsOf,
 } from '../data/advancedFeatures';
 import type { BurnoutRisk, DeveloperInputs } from '../data/advancedFeatures';
 
@@ -41,7 +43,7 @@ const METRIC_DB_MAPPING: Record<string, string> = {
 };
 
 interface ExistingMetrics {
-  qaScore?: number;
+  qaScore?: number | null;
   snapshotDate?: string;
   testCoverage?: number;
   testFlakinessRate?: number;
@@ -518,10 +520,10 @@ const METRICS: MetricDefinition[] = [
 ];
 
 const CATEGORY_INFO = {
-  quality: { name: 'Quality & Reliability', icon: '✅', color: 'from-emerald-500 to-green-600' },
-  speed: { name: 'Speed & Efficiency', icon: '⚡', color: 'from-cyan-500 to-blue-600' },
-  agile: { name: 'Agile & Process', icon: '🔄', color: 'from-violet-500 to-purple-600' },
-  reliability: { name: 'Reliability & Stability', icon: '🛡️', color: 'from-amber-500 to-orange-600' }
+  quality: { name: 'Quality & Reliability', short: 'Q' },
+  speed: { name: 'Speed & Efficiency', short: 'S' },
+  agile: { name: 'Agile & Process', short: 'A' },
+  reliability: { name: 'Reliability & Stability', short: 'R' }
 };
 
 // Quality level definitions for random data generation
@@ -596,26 +598,6 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   });
   const [loadingBusinessImpact, setLoadingBusinessImpact] = useState(false);
   const [savingBusinessImpact, setSavingBusinessImpact] = useState(false);
-
-  // Check if user has access (super_admin, manager, or team_lead)
-  const allowedRoles = ['super_admin', 'manager', 'team_lead'];
-  if (!user || !allowedRoles.includes(user.role)) {
-    return (
-      <div className="min-h-screen bg-slate-900 p-8 flex items-center justify-center">
-        <div className="bg-slate-800 rounded-xl p-8 text-center max-w-md">
-          <AlertCircle className="w-16 h-16 text-red-400 mx-auto mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Access Denied</h2>
-          <p className="text-slate-400">This page is only accessible to Super Admins, Managers, and Team Leads.</p>
-          <button
-            onClick={onBack}
-            className="mt-6 px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
-          >
-            Go Back
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   useEffect(() => {
     fetchTeams();
@@ -1352,7 +1334,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         Swal.fire({
           icon: 'success',
           title: 'Team Metrics Saved',
-          html: `<p><strong>${selectedTeam?.name || 'Team'}</strong> metrics saved successfully!</p><p>QA Score: <strong>${result.qaScore}/100</strong> (${result.status})</p>`,
+          html: `<p><strong>${selectedTeam?.name || 'Team'}</strong> metrics saved successfully!</p><p>QA Score: <strong>${result.qaScore == null ? '—' : `${result.qaScore}/100`}</strong> (${result.status === 'insufficient-data' ? 'insufficient data' : result.status})</p>${result.qaScore == null && Array.isArray(result.qaScoreMissingInputs) && result.qaScoreMissingInputs.length ? `<p>Missing inputs: ${result.qaScoreMissingInputs.join(', ')}</p>` : ''}`,
           confirmButtonColor: '#3b82f6',
         });
         
@@ -1385,7 +1367,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
   const getStatusColor = (metricId: string, value: number): string => {
     const metric = METRICS.find(m => m.id === metricId);
-    if (!metric) return 'text-slate-400';
+    if (!metric) return 'text-slate-500 dark:text-slate-400';
 
     // Parse target to determine good/bad thresholds
     const target = metric.target.toLowerCase();
@@ -1394,21 +1376,21 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       // For metrics where lower is better
       if (target.includes('<')) {
         const threshold = parseFloat(target.match(/[\d.]+/)?.[0] || '0');
-        if (value <= threshold) return 'text-emerald-400';
-        if (value <= threshold * 1.5) return 'text-amber-400';
-        return 'text-red-400';
+        if (value <= threshold) return 'text-green-700 dark:text-green-400';
+        if (value <= threshold * 1.5) return 'text-amber-700 dark:text-amber-400';
+        return 'text-red-700 dark:text-red-400';
       }
     } else {
       // For metrics where higher is better
       if (target.includes('>')) {
         const threshold = parseFloat(target.match(/[\d.]+/)?.[0] || '0');
-        if (value >= threshold) return 'text-emerald-400';
-        if (value >= threshold * 0.7) return 'text-amber-400';
-        return 'text-red-400';
+        if (value >= threshold) return 'text-green-700 dark:text-green-400';
+        if (value >= threshold * 0.7) return 'text-amber-700 dark:text-amber-400';
+        return 'text-red-700 dark:text-red-400';
       }
     }
     
-    return 'text-cyan-400';
+    return 'text-brand-700 dark:text-brand-300';
   };
 
   const groupedMetrics = METRICS.reduce((acc, metric) => {
@@ -1417,64 +1399,69 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     return acc;
   }, {} as Record<string, MetricDefinition[]>);
 
+  // Check if user has access (super_admin, manager, or team_lead)
+  const allowedRoles = ['super_admin', 'manager', 'team_lead'];
+  if (!user || !allowedRoles.includes(user.role)) {
+    return (
+      <Page>
+        <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
+          <AlertCircle className="w-10 h-10 text-red-600 dark:text-red-400 mx-auto mb-4" />
+          <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">Access denied</h2>
+          <p className="text-sm text-slate-500 dark:text-slate-400">This page is only accessible to Super Admins, Managers, and Team Leads.</p>
+          <button
+            onClick={onBack}
+            className={cx(buttonClass.secondary, 'mt-6')}
+          >
+            Go back
+          </button>
+        </div>
+      </Page>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-900 p-8 flex items-center justify-center">
-        <div className="text-slate-400">Loading...</div>
-      </div>
+      <Page>
+        <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+      </Page>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-900 p-8 relative">
-      <div ref={topRef} className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+    <Page className="relative">
+      <div ref={topRef} className="space-y-6">
+        <PageIntro
+          title="Manual metrics"
+          description="Enter raw data to calculate and save team, developer, technical-debt and pipeline metrics. Values saved here are recorded as manually entered."
+          actions={
             <button
-              onClick={onBack}
-              className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+              onClick={handleSaveMetrics}
+              disabled={saving || Object.keys(calculatedValues).length === 0}
+              className={cx(buttonClass.primary, 'whitespace-nowrap')}
             >
-              <ArrowLeft className="w-5 h-5 text-slate-400" />
+              <Save className="w-4 h-4" />
+              {saving ? 'Saving…' : 'Save team metrics'}
             </button>
-            <div>
-              <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-                <Calculator className="w-7 h-7 text-cyan-400" />
-                Manual Metrics Input
-              </h1>
-              <p className="text-slate-400 text-sm mt-1">
-                Enter raw data to calculate and save team metrics manually
-              </p>
-            </div>
-          </div>
-          
-          <button
-            onClick={handleSaveMetrics}
-            disabled={saving || Object.keys(calculatedValues).length === 0}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-lg hover:from-cyan-600 hover:to-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed font-medium"
-          >
-            <Save className="w-5 h-5" />
-            {saving ? 'Saving...' : 'Save All Metrics'}
-          </button>
-        </div>
+          }
+        />
 
         {/* Info Banner */}
-        <div className="bg-slate-800/50 border border-cyan-500/30 rounded-xl p-4 flex items-start gap-3">
-          <Info className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-slate-300">
-            <p className="font-medium text-cyan-400 mb-1">Why Manual Input?</p>
+        <div className="bg-slate-50 dark:bg-slate-800/50 border border-brand-200 dark:border-brand-900 rounded-lg p-4 flex items-start gap-3">
+          <Info className="w-5 h-5 text-brand-700 dark:text-brand-300 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-slate-700 dark:text-slate-300">
+            <p className="font-medium text-brand-700 dark:text-brand-300 mb-1">Why Manual Input?</p>
             <p>While the aggregator is being set up, you can manually enter metrics data. 
             Enter the raw values for each formula, and the system will calculate and display the results on the dashboard automatically.</p>
           </div>
         </div>
 
         {/* Team Selector */}
-        <div className="bg-slate-800 rounded-xl p-6">
-          <label className="block text-sm font-medium text-slate-300 mb-2">Select Team</label>
+        <div className="bg-white dark:bg-slate-900 rounded-lg p-6">
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Select Team</label>
           <select
             value={selectedTeamId}
             onChange={(e) => setSelectedTeamId(e.target.value)}
-            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-3 text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-3 text-slate-900 dark:text-white focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600"
           >
             <option value="">-- Select a team --</option>
             {teams.map(team => (
@@ -1487,40 +1474,41 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
         {/* Existing Metrics History */}
         {selectedTeamId && (
-          <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl p-6 border border-slate-700">
+          <div className="bg-white dark:bg-slate-900 rounded-lg p-6 border border-slate-200 dark:border-slate-800">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                <History className="w-5 h-5 text-purple-400" />
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white flex items-center gap-2">
+                <History className="w-5 h-5 text-brand-700 dark:text-brand-300" />
                 Current Metrics for {teams.find(t => t.id === selectedTeamId)?.name}
               </h3>
               {existingMetrics?.snapshotDate && (
-                <div className="flex items-center gap-2 text-sm text-slate-400">
+                <div className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
                   <Calendar className="w-4 h-4" />
-                  Last updated: {new Date(existingMetrics.snapshotDate).toLocaleDateString()}
+                  Snapshot as of {formatAsOf(existingMetrics.snapshotDate) ?? '—'}
                 </div>
               )}
             </div>
             
             {loadingMetrics ? (
               <div className="flex items-center justify-center py-8">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-400"></div>
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
               </div>
             ) : existingMetrics ? (
               <>
                 {/* QA Score Header */}
                 {existingMetrics.qaScore !== undefined && (
-                  <div className="mb-4 p-4 bg-slate-700/50 rounded-lg">
+                  <div className="mb-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
                     <div className="flex items-center justify-between mb-3">
-                      <span className="text-slate-300 font-medium">Overall QA Score</span>
+                      <span className="text-slate-700 dark:text-slate-300 font-medium">Overall QA Score</span>
                       <span className={`text-2xl font-bold ${
-                        existingMetrics.qaScore >= 85 ? 'text-emerald-400' :
-                        existingMetrics.qaScore >= 70 ? 'text-amber-400' : 'text-red-400'
+                        existingMetrics.qaScore == null ? 'text-slate-500' :
+                        Number(existingMetrics.qaScore) >= 85 ? 'text-green-700 dark:text-green-400' :
+                        Number(existingMetrics.qaScore) >= 70 ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'
                       }`}>
-                        {existingMetrics.qaScore}/100
+                        {existingMetrics.qaScore == null ? '—' : `${Math.round(Number(existingMetrics.qaScore))}/100`}
                       </span>
                     </div>
-                    <div className="text-xs text-slate-400 bg-slate-800/50 rounded px-3 py-2 font-mono">
-                      <span className="text-cyan-400">Formula:</span> Test Coverage × 0.30 + (100 - Defect Escape Rate) × 0.25 + (100 - Change Failure Rate) × 0.25 + Code Quality × 0.20
+                    <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded px-3 py-2 font-mono">
+                      <span className="text-brand-700 dark:text-brand-300">Formula:</span> {QA_SCORE_FORMULA}
                     </div>
                   </div>
                 )}
@@ -1536,9 +1524,9 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       <div 
                         key={metric.id} 
                         onClick={() => scrollToMetric(metric.id)}
-                        className="bg-slate-700/30 rounded-lg p-3 border border-slate-600/50 cursor-pointer hover:bg-slate-600/50 hover:border-cyan-500/50 transition-all"
+                        className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-3 border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-700 hover:border-brand-300 dark:hover:border-brand-700 transition-all"
                       >
-                        <div className="text-xs text-slate-400 truncate mb-1">{metric.name}</div>
+                        <div className="text-xs text-slate-500 dark:text-slate-400 truncate mb-1">{metric.name}</div>
                         <div className={`text-lg font-bold ${getStatusColor(metric.id, Number(value))}`}>
                           {typeof value === 'number' ? value.toFixed(2) : value}{metric.unit}
                         </div>
@@ -1552,14 +1540,14 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                   const dbField = METRIC_DB_MAPPING[m.id] as keyof ExistingMetrics;
                   return existingMetrics[dbField] !== null && existingMetrics[dbField] !== undefined;
                 }) && (
-                  <div className="text-center py-6 text-slate-400">
+                  <div className="text-center py-6 text-slate-500 dark:text-slate-400">
                     <p>No metrics have been recorded for this team yet.</p>
                     <p className="text-sm mt-1">Use the form below to add metrics.</p>
                   </div>
                 )}
               </>
             ) : (
-              <div className="text-center py-6 text-slate-400">
+              <div className="text-center py-6 text-slate-500 dark:text-slate-400">
                 <p>No metrics history available for this team.</p>
                 <p className="text-sm mt-1">Use the form below to add the first metrics.</p>
               </div>
@@ -1569,9 +1557,9 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
         {/* Calculated Summary */}
         {Object.keys(calculatedValues).length > 0 && (
-          <div className="bg-slate-800 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-              <CheckCircle className="w-5 h-5 text-emerald-400" />
+          <div className="bg-white dark:bg-slate-900 rounded-lg p-6">
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-4 flex items-center gap-2">
+              <CheckCircle className="w-5 h-5 text-green-700 dark:text-green-400" />
               Calculated Metrics ({Object.keys(calculatedValues).length})
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
@@ -1579,8 +1567,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                 const metric = METRICS.find(m => m.id === metricId);
                 if (!metric) return null;
                 return (
-                  <div key={metricId} className="bg-slate-700/50 rounded-lg p-3">
-                    <div className="text-xs text-slate-400 truncate">{metric.name}</div>
+                  <div key={metricId} className="bg-slate-50 dark:bg-slate-800/50 rounded-lg p-3">
+                    <div className="text-xs text-slate-500 dark:text-slate-400 truncate">{metric.name}</div>
                     <div className={`text-lg font-bold ${getStatusColor(metricId, value)}`}>
                       {value.toFixed(2)}{metric.unit}
                     </div>
@@ -1597,25 +1585,22 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
           const isExpanded = expandedCategories.has(category);
           
           return (
-            <div key={category} className="bg-slate-800 rounded-xl overflow-hidden">
+            <div key={category} className="bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
               {/* Category Header */}
               <button
                 onClick={() => toggleCategory(category)}
-                className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+                className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
               >
                 <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${categoryInfo.color} flex items-center justify-center text-xl`}>
-                    {categoryInfo.icon}
-                  </div>
                   <div className="text-left">
-                    <h2 className="text-lg font-semibold text-white">{categoryInfo.name}</h2>
-                    <p className="text-sm text-slate-400">{metrics.length} metrics</p>
+                    <h2 className="text-lg font-semibold text-slate-900 dark:text-white">{categoryInfo.name}</h2>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{metrics.length} metrics</p>
                   </div>
                 </div>
                 {isExpanded ? (
-                  <ChevronDown className="w-5 h-5 text-slate-400" />
+                  <ChevronDown className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                 ) : (
-                  <ChevronRight className="w-5 h-5 text-slate-400" />
+                  <ChevronRight className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                 )}
               </button>
 
@@ -1626,12 +1611,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     <div 
                       key={metric.id} 
                       ref={(el) => { metricRefs.current[metric.id] = el; }}
-                      className="bg-slate-700/30 rounded-xl p-5 transition-all"
+                      className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-5 transition-all"
                     >
                       <div className="flex items-start justify-between mb-4">
                         <div>
-                          <h3 className="text-white font-medium">{metric.name}</h3>
-                          <p className="text-sm text-slate-400 mt-1">{metric.description}</p>
+                          <h3 className="text-slate-900 dark:text-white font-medium">{metric.name}</h3>
+                          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">{metric.description}</p>
                         </div>
                         {calculatedValues[metric.id] !== undefined && (
                           <div className="text-right">
@@ -1644,16 +1629,16 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       </div>
 
                       {/* Formula Display */}
-                      <div className="bg-slate-800/50 rounded-lg px-4 py-2 mb-4">
+                      <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg px-4 py-2 mb-4">
                         <span className="text-xs text-slate-500">Formula: </span>
-                        <span className="text-sm text-cyan-400 font-mono">{metric.formula}</span>
+                        <span className="text-sm text-brand-700 dark:text-brand-300 font-mono">{metric.formula}</span>
                       </div>
 
                       {/* Input Fields */}
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                         {metric.inputs.map(input => (
                           <div key={input.id}>
-                            <label className="block text-xs text-slate-400 mb-1">{input.label}</label>
+                            <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">{input.label}</label>
                             <input
                               type="number"
                               placeholder={input.placeholder}
@@ -1662,7 +1647,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                               step={input.step || 1}
                               value={metricInputs[metric.id]?.[input.id] ?? ''}
                               onChange={(e) => handleInputChange(metric.id, input.id, e.target.value)}
-                              className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                              className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600"
                             />
                           </div>
                         ))}
@@ -1670,7 +1655,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
                       {/* Target */}
                       <div className="mt-3 text-xs text-slate-500">
-                        Target: <span className="text-emerald-400">{metric.target}</span>
+                        Target: <span className="text-green-700 dark:text-green-400">{metric.target}</span>
                       </div>
                     </div>
                   ))}
@@ -1682,35 +1667,35 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
         {/* Developer Metrics Section */}
         {selectedTeamId && teamMembers.length > 0 && (
-          <div className="bg-slate-800 rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
             {/* Section Header */}
             <button
               onClick={() => setExpandedDevelopers(!expandedDevelopers)}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center">
-                  <Users className="w-5 h-5 text-white" />
+                <div className="bg-slate-100 dark:bg-slate-800 w-10 h-10 rounded-lg flex items-center justify-center">
+                  <Users className="w-5 h-5 text-slate-900 dark:text-white" />
                 </div>
                 <div className="text-left">
-                  <h2 className="text-lg font-semibold text-white">Developer Productivity Metrics</h2>
-                  <p className="text-sm text-slate-400">{teamMembers.length} team members</p>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Developer Productivity Metrics</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{teamMembers.length} team members</p>
                 </div>
               </div>
               {expandedDevelopers ? (
-                <ChevronDown className="w-5 h-5 text-slate-400" />
+                <ChevronDown className="w-5 h-5 text-slate-500 dark:text-slate-400" />
               ) : (
-                <ChevronRight className="w-5 h-5 text-slate-400" />
+                <ChevronRight className="w-5 h-5 text-slate-500 dark:text-slate-400" />
               )}
             </button>
 
             {/* Developer Metrics List */}
             {expandedDevelopers && (
               <div className="px-6 pb-6 space-y-4">
-                <div className="bg-slate-700/30 rounded-lg p-4 mb-4">
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-4 mb-4">
                   <div className="flex items-start gap-2">
-                    <Info className="w-4 h-4 text-pink-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-slate-300">
+                    <Info className="w-4 h-4 text-brand-700 dark:text-brand-300 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
                       Enter productivity metrics for each developer. <strong>Workload balance (derived)</strong> and <strong>Burnout risk</strong> are calculated from these inputs — they are not survey results. Workload balance = {WORKLOAD_BALANCE_FORMULA}. Burnout risk: {BURNOUT_DEFINITION}
                     </p>
                   </div>
@@ -1721,15 +1706,15 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                   const calculated = developerCalculated[member.id];
                   
                   return (
-                    <div key={member.id} className="bg-slate-700/30 rounded-xl p-5">
+                    <div key={member.id} className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-5">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
-                            <UserCircle className="w-6 h-6 text-slate-300" />
+                          <div className="bg-slate-100 dark:bg-slate-800 w-10 h-10 rounded-full flex items-center justify-center">
+                            <UserCircle className="w-6 h-6 text-slate-700 dark:text-slate-300" />
                           </div>
                           <div>
-                            <h3 className="text-white font-medium">{member.first_name} {member.last_name}</h3>
-                            <p className="text-xs text-slate-400">{member.email}</p>
+                            <h3 className="text-slate-900 dark:text-white font-medium">{member.first_name} {member.last_name}</h3>
+                            <p className="text-xs text-slate-500 dark:text-slate-400">{member.email}</p>
                           </div>
                         </div>
                         
@@ -1737,24 +1722,16 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         {calculated && (
                           <div className="flex items-center gap-4">
                             <div className="text-right">
-                              <div className="text-xs text-slate-500">Happiness</div>
-                              <div className={`text-xl font-bold ${
-                                calculated.happinessScore >= 80 ? 'text-emerald-400' :
-                                calculated.happinessScore >= 60 ? 'text-amber-400' : 'text-red-400'
-                              }`}>
-                                {calculated.happinessScore.toFixed(0)}
+                              <div className="text-xs text-slate-500">Workload balance (derived)</div>
+                              <div className="text-xl font-semibold tabular-nums text-slate-900 dark:text-white">
+                                {calculated.happinessScore.toFixed(0)}<span className="text-xs font-normal text-slate-500">/100</span>
                               </div>
                             </div>
                             <div className="text-right">
                               <div className="text-xs text-slate-500">Burnout Risk</div>
-                              <div className={`text-sm font-bold px-2 py-1 rounded ${
-                                calculated.burnoutRisk === 'low' ? 'bg-emerald-500/20 text-emerald-400' :
-                                calculated.burnoutRisk === 'moderate' ? 'bg-amber-500/20 text-amber-400' : 
-                                'bg-red-500/20 text-red-400'
-                              }`}>
-                                {calculated.burnoutRisk === 'low' ? '✅ Low' :
-                                 calculated.burnoutRisk === 'moderate' ? '⚠️ Moderate' : '❌ High'}
-                              </div>
+                              <Badge tone={burnoutTone(calculated.burnoutRisk)}>
+                                {calculated.burnoutRisk === 'low' ? 'Low' : calculated.burnoutRisk === 'moderate' ? 'Moderate' : 'High'}
+                              </Badge>
                             </div>
                           </div>
                         )}
@@ -1763,7 +1740,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       {/* Input Fields */}
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">PR Time (hours)</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">PR Time (hours)</label>
                           <input
                             type="number"
                             placeholder="e.g., 8"
@@ -1771,11 +1748,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={0.5}
                             value={metrics.prMergeTimeAvg ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'prMergeTimeAvg', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Review Time (hours)</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Review Time (hours)</label>
                           <input
                             type="number"
                             placeholder="e.g., 2"
@@ -1783,11 +1760,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={0.5}
                             value={metrics.codeReviewTimeAvg ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'codeReviewTimeAvg', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Focus Time (hrs/day)</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Focus Time (hrs/day)</label>
                           <input
                             type="number"
                             placeholder="e.g., 5"
@@ -1796,11 +1773,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={0.5}
                             value={metrics.focusTimeHours ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'focusTimeHours', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Meetings (hrs/day)</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Meetings (hrs/day)</label>
                           <input
                             type="number"
                             placeholder="e.g., 2"
@@ -1809,11 +1786,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={0.5}
                             value={metrics.meetingTimeHours ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'meetingTimeHours', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Context Switches</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Context Switches</label>
                           <input
                             type="number"
                             placeholder="e.g., 5"
@@ -1822,7 +1799,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={1}
                             value={metrics.contextSwitchesPerDay ?? ''}
                             onChange={(e) => handleDeveloperMetricChange(member.id, 'contextSwitchesPerDay', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-pink-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                       </div>
@@ -1835,7 +1812,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                   <button
                     onClick={handleSaveDeveloperMetrics}
                     disabled={savingDeveloperMetrics}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-600 text-white rounded-lg hover:from-pink-600 hover:to-rose-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-brand-700 hover:bg-brand-800 flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4" />
                     {savingDeveloperMetrics ? 'Saving...' : 'Save Developer Metrics'}
@@ -1848,35 +1825,35 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
         {/* Technical Debt Impact Section */}
         {selectedTeamId && technicalDebtItems.length > 0 && (
-          <div className="bg-slate-800 rounded-xl overflow-hidden">
+          <div className="bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
             {/* Section Header */}
             <button
               onClick={() => setExpandedTechnicalDebt(!expandedTechnicalDebt)}
-              className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-700/50 transition-colors"
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
-                  <Wrench className="w-5 h-5 text-white" />
+                <div className="bg-slate-100 dark:bg-slate-800 w-10 h-10 rounded-lg flex items-center justify-center">
+                  <Wrench className="w-5 h-5 text-slate-900 dark:text-white" />
                 </div>
                 <div className="text-left">
-                  <h2 className="text-lg font-semibold text-white">Technical Debt ROI Impact</h2>
-                  <p className="text-sm text-slate-400">{technicalDebtItems.length} debt items</p>
+                  <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Technical Debt ROI Impact</h2>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{technicalDebtItems.length} debt items</p>
                 </div>
               </div>
               {expandedTechnicalDebt ? (
-                <ChevronDown className="w-5 h-5 text-slate-400" />
+                <ChevronDown className="w-5 h-5 text-slate-500 dark:text-slate-400" />
               ) : (
-                <ChevronRight className="w-5 h-5 text-slate-400" />
+                <ChevronRight className="w-5 h-5 text-slate-500 dark:text-slate-400" />
               )}
             </button>
 
             {/* Technical Debt Items List */}
             {expandedTechnicalDebt && (
               <div className="px-6 pb-6 space-y-4">
-                <div className="bg-slate-700/30 rounded-lg p-4 mb-4">
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-4 mb-4">
                   <div className="flex items-start gap-2">
-                    <Info className="w-4 h-4 text-orange-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-slate-300">
+                    <Info className="w-4 h-4 text-amber-700 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
                       Configure business impact metrics for each technical debt item. <strong>ROI</strong>, <strong>Annual Savings</strong>, and <strong>Payback Period</strong> are calculated automatically based on financial settings.
                     </p>
                   </div>
@@ -1884,21 +1861,21 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
                 {technicalDebtItems.map(item => {
                   const severityColors: Record<string, string> = {
-                    critical: 'bg-red-500/20 text-red-400 border-red-500/30',
-                    high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-                    medium: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-                    low: 'bg-green-500/20 text-green-400 border-green-500/30'
+                    critical: 'bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-400 border-red-500/30',
+                    high: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-orange-500/30',
+                    medium: 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border-amber-500/30',
+                    low: 'bg-green-50 dark:bg-green-950/40 text-green-700 dark:text-green-400 border-green-500/30'
                   };
                   
                   return (
-                    <div key={item.id} className="bg-slate-700/30 rounded-xl p-5">
+                    <div key={item.id} className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-5">
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-600 to-slate-700 flex items-center justify-center">
-                            <Wrench className="w-5 h-5 text-orange-400" />
+                          <div className="bg-slate-100 dark:bg-slate-800 w-10 h-10 rounded-full flex items-center justify-center">
+                            <Wrench className="w-5 h-5 text-amber-700 dark:text-amber-400" />
                           </div>
                           <div>
-                            <h3 className="text-white font-medium">{item.title}</h3>
+                            <h3 className="text-slate-900 dark:text-white font-medium">{item.title}</h3>
                             <span className={`text-xs px-2 py-0.5 rounded border ${severityColors[item.severity]}`}>
                               {item.severity.toUpperCase()}
                             </span>
@@ -1910,28 +1887,28 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           <div className="flex items-center gap-3 flex-wrap">
                             <div className="text-right">
                               <div className="text-xs text-slate-500">Investment</div>
-                              <div className="text-sm font-bold text-blue-400">
+                              <div className="text-sm font-bold text-brand-700 dark:text-brand-300">
                                 ${(item.investment_cost || 0).toLocaleString()}
                               </div>
                             </div>
                             <div className="text-right">
                               <div className="text-xs text-slate-500">Monthly Loss</div>
-                              <div className="text-sm font-bold text-red-400">
+                              <div className="text-sm font-bold text-red-700 dark:text-red-400">
                                 ${(item.monthly_cost_of_delay || 0).toLocaleString()}
                               </div>
                             </div>
                             <div className="text-right">
                               <div className="text-xs text-slate-500">Annual Savings</div>
-                              <div className="text-sm font-bold text-green-400">
+                              <div className="text-sm font-bold text-green-700 dark:text-green-400">
                                 ${(item.annual_savings || 0).toLocaleString()}
                               </div>
                             </div>
                             <div className="text-right">
                               <div className="text-xs text-slate-500">ROI</div>
                               <div className={`text-lg font-bold ${
-                                (item.roi_percentage || 0) > 200 ? 'text-emerald-400' :
-                                (item.roi_percentage || 0) > 100 ? 'text-green-400' :
-                                (item.roi_percentage || 0) > 0 ? 'text-amber-400' : 'text-red-400'
+                                (item.roi_percentage || 0) > 200 ? 'text-green-700 dark:text-green-400' :
+                                (item.roi_percentage || 0) > 100 ? 'text-green-700 dark:text-green-400' :
+                                (item.roi_percentage || 0) > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-red-700 dark:text-red-400'
                               }`}>
                                 {Math.round(item.roi_percentage || 0).toLocaleString()}%
                               </div>
@@ -1943,7 +1920,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       {/* Input Fields Grid */}
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Effort (hours)</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Effort (hours)</label>
                           <input
                             type="number"
                             placeholder="e.g., 40"
@@ -1951,11 +1928,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={1}
                             value={item.estimated_effort_hours || ''}
                             onChange={(e) => handleDebtImpactChange(item.id, 'estimated_effort_hours', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Affected Users</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Affected Users</label>
                           <input
                             type="number"
                             placeholder="e.g., 500"
@@ -1963,11 +1940,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={1}
                             value={item.affected_users || ''}
                             onChange={(e) => handleDebtImpactChange(item.id, 'affected_users', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Support Tickets/mo</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Support Tickets/mo</label>
                           <input
                             type="number"
                             placeholder="e.g., 25"
@@ -1975,11 +1952,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={1}
                             value={item.support_tickets_monthly || ''}
                             onChange={(e) => handleDebtImpactChange(item.id, 'support_tickets_monthly', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Downtime min/mo</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Downtime min/mo</label>
                           <input
                             type="number"
                             placeholder="e.g., 30"
@@ -1987,11 +1964,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={1}
                             value={item.downtime_minutes_monthly || ''}
                             onChange={(e) => handleDebtImpactChange(item.id, 'downtime_minutes_monthly', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">Revenue Impact %</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Revenue Impact %</label>
                           <input
                             type="number"
                             placeholder="e.g., 2.5"
@@ -2000,11 +1977,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={0.1}
                             value={item.revenue_impact_percent || ''}
                             onChange={(e) => handleDebtImpactChange(item.id, 'revenue_impact_percent', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-xs text-slate-400 mb-1">SLA Breaches/mo</label>
+                          <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">SLA Breaches/mo</label>
                           <input
                             type="number"
                             placeholder="e.g., 3"
@@ -2012,16 +1989,16 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                             step={1}
                             value={item.sla_breaches_monthly || ''}
                             onChange={(e) => handleDebtImpactChange(item.id, 'sla_breaches_monthly', e.target.value)}
-                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                            className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                           />
                         </div>
                       </div>
 
                       {/* Payback indicator */}
                       {item.payback_months && (
-                        <div className="mt-3 text-xs text-slate-400">
+                        <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
                           <TrendingUp className="w-3 h-3 inline mr-1" />
-                          Payback period: <span className="text-green-400 font-medium">{(item.payback_months ?? 0).toFixed(1)} months</span>
+                          Payback period: <span className="text-green-700 dark:text-green-400 font-medium">{(item.payback_months ?? 0).toFixed(1)} months</span>
                         </div>
                       )}
                     </div>
@@ -2033,7 +2010,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                   <button
                     onClick={handleSaveTechnicalDebt}
                     disabled={savingTechnicalDebt}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-red-600 text-white rounded-lg hover:from-orange-600 hover:to-red-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-brand-700 hover:bg-brand-800 flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4" />
                     {savingTechnicalDebt ? 'Saving...' : 'Save Technical Debt Impact'}
@@ -2048,44 +2025,44 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         {/* PIPELINE STAGES SECTION */}
         {/* ============================================ */}
         {pipelineStages.length > 0 && (
-          <div className="bg-slate-800/50 rounded-2xl overflow-hidden border border-slate-700/50 backdrop-blur-sm">
+          <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 backdrop-blur-sm">
             <button 
               onClick={() => setExpandedPipeline(!expandedPipeline)}
-              className="w-full flex items-center justify-between p-6 hover:bg-slate-700/30 transition-colors"
+              className="w-full flex items-center justify-between p-6 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
             >
               <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-indigo-600 flex items-center justify-center">
-                  <GitBranch className="w-6 h-6 text-white" />
+                <div className="bg-slate-100 dark:bg-slate-800 w-12 h-12 rounded-lg flex items-center justify-center">
+                  <GitBranch className="w-6 h-6 text-slate-900 dark:text-white" />
                 </div>
                 <div className="text-left">
-                  <h2 className="text-xl font-bold text-white">CI/CD Pipeline Stages</h2>
-                  <p className="text-slate-400 text-sm">{pipelineStages.length} stages • Bottleneck score calculated from duration & success rate</p>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">CI/CD Pipeline Stages</h2>
+                  <p className="text-slate-500 dark:text-slate-400 text-sm">{pipelineStages.length} stages • Bottleneck score calculated from duration & success rate</p>
                 </div>
               </div>
-              <ChevronDown className={`w-6 h-6 text-slate-400 transition-transform ${expandedPipeline ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-6 h-6 text-slate-500 dark:text-slate-400 transition-transform ${expandedPipeline ? 'rotate-180' : ''}`} />
             </button>
 
             {expandedPipeline && (
               <div className="px-6 pb-6 space-y-4">
-                <div className="bg-slate-700/30 rounded-lg p-4 mb-4">
+                <div className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-4 mb-4">
                   <div className="flex items-start gap-2">
-                    <Info className="w-4 h-4 text-purple-400 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-slate-300">
+                    <Info className="w-4 h-4 text-brand-700 dark:text-brand-300 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
                       Configure pipeline stage metrics. <strong>Bottleneck Score</strong> is calculated automatically: 
-                      <code className="text-xs bg-slate-800 px-1 rounded ml-1">min(60, max(0, (z + 2) ÷ 4 × 60)) + (1 − success_rate ÷ 100) × 40</code>, where z = (duration − mean stage duration) ÷ standard deviation; capped at 100
+                      <code className="text-xs bg-white dark:bg-slate-900 px-1 rounded ml-1">min(60, max(0, (z + 2) ÷ 4 × 60)) + (1 − success_rate ÷ 100) × 40</code>, where z = (duration − mean stage duration) ÷ standard deviation; capped at 100
                     </p>
                   </div>
                 </div>
 
                 {/* Pipeline Configuration */}
-                <div className="bg-gradient-to-r from-purple-900/30 to-indigo-900/30 rounded-xl p-5 mb-4 border border-purple-500/30">
-                  <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
-                    <DollarSign className="w-5 h-5 text-purple-400" />
+                <div className="bg-brand-50 dark:bg-brand-950/40 rounded-lg p-5 mb-4 border border-brand-200 dark:border-brand-900">
+                  <h3 className="text-slate-900 dark:text-white font-semibold mb-4 flex items-center gap-2">
+                    <DollarSign className="w-5 h-5 text-brand-700 dark:text-brand-300" />
                     Pipeline Metrics Configuration
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Time Savings % (optimization potential)</label>
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Time Savings % (optimization potential)</label>
                       <input
                         type="number"
                         placeholder="30"
@@ -2094,12 +2071,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         step={1}
                         value={pipelineConfig.time_savings_percent || ''}
                         onChange={(e) => setPipelineConfig(prev => ({ ...prev, time_savings_percent: parseFloat(e.target.value) || 0 }))}
-                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                       />
                       <p className="text-xs text-slate-500 mt-1">Expected time reduction with optimizations</p>
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Cost Savings % (optimization potential)</label>
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Cost Savings % (optimization potential)</label>
                       <input
                         type="number"
                         placeholder="25"
@@ -2108,12 +2085,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         step={1}
                         value={pipelineConfig.cost_savings_percent || ''}
                         onChange={(e) => setPipelineConfig(prev => ({ ...prev, cost_savings_percent: parseFloat(e.target.value) || 0 }))}
-                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                       />
                       <p className="text-xs text-slate-500 mt-1">Expected cost reduction with optimizations</p>
                     </div>
                     <div>
-                      <label className="block text-xs text-slate-400 mb-1">Cost per Minute ($)</label>
+                      <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Cost per Minute ($)</label>
                       <input
                         type="number"
                         placeholder="0.50"
@@ -2121,7 +2098,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         step={0.01}
                         value={pipelineConfig.cost_per_minute || ''}
                         onChange={(e) => setPipelineConfig(prev => ({ ...prev, cost_per_minute: parseFloat(e.target.value) || 0 }))}
-                        className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                        className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                       />
                       <p className="text-xs text-slate-500 mt-1">Pipeline execution cost per minute</p>
                     </div>
@@ -2130,7 +2107,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     <button
                       onClick={handleSavePipelineConfig}
                       disabled={savingPipelineConfig}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 px-3 py-1.5 bg-brand-700 text-white text-sm rounded-lg hover:bg-brand-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Save className="w-3 h-3" />
                       {savingPipelineConfig ? 'Saving...' : 'Save Config'}
@@ -2139,15 +2116,15 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                 </div>
 
                 {pipelineStages.map(stage => (
-                  <div key={stage.id} className="bg-slate-700/30 rounded-xl p-5">
+                  <div key={stage.id} className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center">
-                          <span className="text-white font-bold text-sm">{stage.stage_order}</span>
+                        <div className="bg-slate-100 dark:bg-slate-800 w-10 h-10 rounded-full flex items-center justify-center">
+                          <span className="text-slate-900 dark:text-white font-bold text-sm">{stage.stage_order}</span>
                         </div>
                         <div>
-                          <h3 className="text-white font-medium">{stage.name}</h3>
-                          <span className="text-xs text-slate-400">Stage {stage.stage_order}</span>
+                          <h3 className="text-slate-900 dark:text-white font-medium">{stage.name}</h3>
+                          <span className="text-xs text-slate-500 dark:text-slate-400">Stage {stage.stage_order}</span>
                         </div>
                       </div>
                       
@@ -2156,13 +2133,13 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         <div className="text-right">
                           <div className="text-xs text-slate-500">Bottleneck Score</div>
                           <div className={`text-lg font-bold ${
-                            (stage.bottleneck_score || 0) > 70 ? 'text-red-400' :
-                            (stage.bottleneck_score || 0) > 40 ? 'text-amber-400' : 'text-green-400'
+                            (stage.bottleneck_score || 0) > 70 ? 'text-red-700 dark:text-red-400' :
+                            (stage.bottleneck_score || 0) > 40 ? 'text-amber-700 dark:text-amber-400' : 'text-green-700 dark:text-green-400'
                           }`}>
                             {(stage.bottleneck_score || 0).toFixed(1)}
                           </div>
                         </div>
-                        <div className="w-20 h-2 bg-slate-600 rounded-full overflow-hidden">
+                        <div className="w-20 h-2 bg-white dark:bg-slate-800 rounded-full overflow-hidden">
                           <div 
                             className={`h-full ${
                               (stage.bottleneck_score || 0) > 70 ? 'bg-red-500' :
@@ -2177,7 +2154,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     {/* Input Fields Grid */}
                     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">Duration (sec)</label>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Duration (sec)</label>
                         <input
                           type="number"
                           placeholder="e.g., 120"
@@ -2185,11 +2162,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={1}
                           value={stage.duration || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'duration', e.target.value)}
-                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">Success Rate %</label>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Success Rate %</label>
                         <input
                           type="number"
                           placeholder="e.g., 95"
@@ -2198,11 +2175,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={0.1}
                           value={stage.success_rate || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'success_rate', e.target.value)}
-                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">CPU Usage %</label>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">CPU Usage %</label>
                         <input
                           type="number"
                           placeholder="e.g., 60"
@@ -2211,11 +2188,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={1}
                           value={stage.cpu_usage || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'cpu_usage', e.target.value)}
-                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">Memory %</label>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Memory %</label>
                         <input
                           type="number"
                           placeholder="e.g., 50"
@@ -2224,11 +2201,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={1}
                           value={stage.memory_usage || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'memory_usage', e.target.value)}
-                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
                       <div>
-                        <label className="block text-xs text-slate-400 mb-1">Cost/Run $</label>
+                        <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Cost/Run $</label>
                         <input
                           type="number"
                           placeholder="e.g., 0.15"
@@ -2236,7 +2213,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={0.01}
                           value={stage.cost_per_run || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'cost_per_run', e.target.value)}
-                          className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-500 focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
+                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
                     </div>
@@ -2248,7 +2225,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                   <button
                     onClick={handleSavePipeline}
                     disabled={savingPipeline}
-                    className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 text-white rounded-lg hover:from-purple-600 hover:to-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-brand-700 hover:bg-brand-800 flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4" />
                     {savingPipeline ? 'Saving...' : 'Save Pipeline Stages'}
@@ -2261,21 +2238,21 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       </div>
 
       {/* Business Impact Configuration Section */}
-      <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-700">
+      <div className="bg-white dark:bg-slate-900 rounded-lg p-6 shadow-lg border border-slate-200 dark:border-slate-800">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-green-500/20 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-green-400" />
+            <div className="p-2 bg-green-50 dark:bg-green-950/40 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-green-700 dark:text-green-400" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">Business Impact Demo Configuration</h2>
-              <p className="text-sm text-slate-400">Configure your company's business impact correlations for demo purposes</p>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Business Impact Demo Configuration</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Configure your company's business impact correlations for demo purposes</p>
             </div>
           </div>
           <button
             onClick={fetchBusinessImpactConfig}
             disabled={loadingBusinessImpact || !selectedTeamId}
-            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 bg-brand-700 text-white rounded-lg hover:bg-brand-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {loadingBusinessImpact ? (
               <>
@@ -2293,47 +2270,47 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
         {/* Business Impact Metrics Configuration */}
         <div className="space-y-4 mb-6">
-          <h3 className="text-md font-semibold text-white">Impact Correlations</h3>
+          <h3 className="text-md font-semibold text-slate-900 dark:text-white">Impact Correlations</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Test Coverage */}
-            <div className="bg-slate-700 rounded-lg p-4">
-              <label className="block text-sm font-medium text-white mb-2">Test Coverage</label>
+            <div className="bg-white dark:bg-slate-900 rounded-lg p-4">
+              <label className="block text-sm font-medium text-slate-900 dark:text-white mb-2">Test Coverage</label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Quality Score %</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Quality Score %</label>
                   <input
                     type="number"
                     step="0.1"
                     placeholder="85.5"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'test_coverage')?.quality_score || ''}
                     onChange={(e) => updateBusinessImpactMetric('test_coverage', 'quality_score', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Revenue Impact $</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Revenue Impact $</label>
                   <input
                     type="number"
                     step="1000"
                     placeholder="4178000"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'test_coverage')?.revenue_impact || ''}
                     onChange={(e) => updateBusinessImpactMetric('test_coverage', 'revenue_impact', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">NPS Score</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">NPS Score</label>
                   <input
                     type="number"
                     step="0.1"
                     placeholder="82.3"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'test_coverage')?.customer_satisfaction || ''}
                     onChange={(e) => updateBusinessImpactMetric('test_coverage', 'customer_satisfaction', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Correlation</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Correlation</label>
                   <input
                     type="number"
                     step="0.01"
@@ -2342,51 +2319,51 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     placeholder="0.85"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'test_coverage')?.correlation_strength || ''}
                     onChange={(e) => updateBusinessImpactMetric('test_coverage', 'correlation_strength', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
               </div>
             </div>
 
             {/* Defect Escape Rate */}
-            <div className="bg-slate-700 rounded-lg p-4">
-              <label className="block text-sm font-medium text-white mb-2">Defect Escape Rate</label>
+            <div className="bg-white dark:bg-slate-900 rounded-lg p-4">
+              <label className="block text-sm font-medium text-slate-900 dark:text-white mb-2">Defect Escape Rate</label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Quality Score %</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Quality Score %</label>
                   <input
                     type="number"
                     step="0.1"
                     placeholder="12.2"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'defect_escape_rate')?.quality_score || ''}
                     onChange={(e) => updateBusinessImpactMetric('defect_escape_rate', 'quality_score', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Revenue Impact $</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Revenue Impact $</label>
                   <input
                     type="number"
                     step="1000"
                     placeholder="2896000"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'defect_escape_rate')?.revenue_impact || ''}
                     onChange={(e) => updateBusinessImpactMetric('defect_escape_rate', 'revenue_impact', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">NPS Score</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">NPS Score</label>
                   <input
                     type="number"
                     step="0.1"
                     placeholder="76.8"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'defect_escape_rate')?.customer_satisfaction || ''}
                     onChange={(e) => updateBusinessImpactMetric('defect_escape_rate', 'customer_satisfaction', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Correlation</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Correlation</label>
                   <input
                     type="number"
                     step="0.01"
@@ -2395,51 +2372,51 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     placeholder="0.72"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'defect_escape_rate')?.correlation_strength || ''}
                     onChange={(e) => updateBusinessImpactMetric('defect_escape_rate', 'correlation_strength', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
               </div>
             </div>
 
             {/* Code Quality Score */}
-            <div className="bg-slate-700 rounded-lg p-4">
-              <label className="block text-sm font-medium text-white mb-2">Code Quality Score</label>
+            <div className="bg-white dark:bg-slate-900 rounded-lg p-4">
+              <label className="block text-sm font-medium text-slate-900 dark:text-white mb-2">Code Quality Score</label>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Quality Score %</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Quality Score %</label>
                   <input
                     type="number"
                     step="0.1"
                     placeholder="78.9"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'code_quality_score')?.quality_score || ''}
                     onChange={(e) => updateBusinessImpactMetric('code_quality_score', 'quality_score', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Revenue Impact $</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Revenue Impact $</label>
                   <input
                     type="number"
                     step="1000"
                     placeholder="3452000"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'code_quality_score')?.revenue_impact || ''}
                     onChange={(e) => updateBusinessImpactMetric('code_quality_score', 'revenue_impact', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">NPS Score</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">NPS Score</label>
                   <input
                     type="number"
                     step="0.1"
                     placeholder="79.5"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'code_quality_score')?.customer_satisfaction || ''}
                     onChange={(e) => updateBusinessImpactMetric('code_quality_score', 'customer_satisfaction', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Correlation</label>
+                  <label className="block text-xs text-slate-500 dark:text-slate-400 mb-1">Correlation</label>
                   <input
                     type="number"
                     step="0.01"
@@ -2448,7 +2425,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     placeholder="0.68"
                     value={businessImpactConfig.impactConfigs.find(c => c.metric_name === 'code_quality_score')?.correlation_strength || ''}
                     onChange={(e) => updateBusinessImpactMetric('code_quality_score', 'correlation_strength', e.target.value)}
-                    className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                    className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                   />
                 </div>
               </div>
@@ -2458,22 +2435,22 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
         {/* Historical Trends Configuration */}
         <div className="space-y-4 mb-6">
-          <h3 className="text-md font-semibold text-white">Historical Trends (12 Months)</h3>
+          <h3 className="text-md font-semibold text-slate-900 dark:text-white">Historical Trends (12 Months)</h3>
           <div className="overflow-x-auto">
-            <table className="w-full bg-slate-700 rounded-lg overflow-hidden">
+            <table className="w-full bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
               <thead>
-                <tr className="bg-slate-600">
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">Month</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">Quality Score</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">Revenue ($K)</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">NPS</th>
-                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-300">Churn %</th>
+                <tr className="bg-white dark:bg-slate-800">
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300">Month</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300">Quality Score</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300">Revenue ($K)</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300">NPS</th>
+                  <th className="px-3 py-2 text-left text-xs font-medium text-slate-700 dark:text-slate-300">Churn %</th>
                 </tr>
               </thead>
               <tbody>
                 {businessImpactConfig.historicalConfigs.map((month, index) => (
-                  <tr key={month.month_year} className="border-t border-slate-600">
-                    <td className="px-3 py-2 text-sm text-white font-medium">
+                  <tr key={month.month_year} className="border-t border-slate-300 dark:border-slate-700">
+                    <td className="px-3 py-2 text-sm text-slate-900 dark:text-white font-medium">
                       {new Date(month.month_year + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
                     </td>
                     <td className="px-3 py-2">
@@ -2483,7 +2460,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         placeholder="70.0"
                         value={month.quality_score || ''}
                         onChange={(e) => updateHistoricalMetric(month.month_year, 'quality_score', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -2493,7 +2470,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         placeholder="200"
                         value={month.revenue_impact || ''}
                         onChange={(e) => updateHistoricalMetric(month.month_year, 'revenue_impact', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -2503,7 +2480,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         placeholder="75.0"
                         value={month.customer_satisfaction || ''}
                         onChange={(e) => updateHistoricalMetric(month.month_year, 'customer_satisfaction', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                       />
                     </td>
                     <td className="px-3 py-2">
@@ -2513,7 +2490,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         placeholder="3.0"
                         value={month.churn_rate || ''}
                         onChange={(e) => updateHistoricalMetric(month.month_year, 'churn_rate', e.target.value)}
-                        className="w-full bg-slate-600 border border-slate-500 rounded px-2 py-1 text-white text-sm"
+                        className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded px-2 py-1 text-slate-900 dark:text-white text-sm"
                       />
                     </td>
                   </tr>
@@ -2528,28 +2505,28 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
           <button
             onClick={saveBusinessImpactConfig}
             disabled={savingBusinessImpact || !selectedTeamId}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg hover:from-green-600 hover:to-emerald-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="bg-brand-700 hover:bg-brand-800 flex items-center gap-2 px-6 py-3 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Save className="w-4 h-4" />
             {savingBusinessImpact ? 'Saving...' : 'Save Business Impact Config'}
           </button>
         </div>
       </div>
-      <div className="bg-slate-800 rounded-xl p-6 shadow-lg border border-slate-700">
+      <div className="bg-white dark:bg-slate-900 rounded-lg p-6 shadow-lg border border-slate-200 dark:border-slate-800">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-purple-500/20 rounded-lg">
-              <Code className="w-5 h-5 text-purple-400" />
+            <div className="p-2 bg-brand-50 dark:bg-brand-950/40 rounded-lg">
+              <Code className="w-5 h-5 text-brand-700 dark:text-brand-300" />
             </div>
             <div>
-              <h2 className="text-lg font-semibold text-white">All Team Metrics (JSON)</h2>
-              <p className="text-sm text-slate-400">View all primary and composite metrics with formulas</p>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">All Team Metrics (JSON)</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">View all primary and composite metrics with formulas</p>
             </div>
           </div>
           <button
             onClick={fetchAllMetrics}
             disabled={loadingAllMetrics || !selectedTeamId}
-            className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 bg-brand-700 text-white rounded-lg hover:bg-brand-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {loadingAllMetrics ? (
               <>
@@ -2568,57 +2545,57 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         {/* Metrics JSON Display Modal */}
         {showMetricsViewer && allMetricsData && (
           <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-            <div className="bg-slate-800 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-              <div className="flex items-center justify-between p-4 border-b border-slate-700">
+            <div className="bg-white dark:bg-slate-900 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-slate-200 dark:border-slate-800">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Team Metrics - {selectedTeamId}</h3>
-                  <p className="text-sm text-slate-400">Snapshot: {allMetricsData.snapshotDate} | Status: {allMetricsData.status}</p>
+                  <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Team Metrics - {selectedTeamId}</h3>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">Snapshot: {allMetricsData.snapshotDate} | Status: {allMetricsData.status}</p>
                 </div>
                 <button
                   onClick={() => setShowMetricsViewer(false)}
-                  className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+                  className="p-2 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
                 >
-                  <X className="w-5 h-5 text-slate-400" />
+                  <X className="w-5 h-5 text-slate-500 dark:text-slate-400" />
                 </button>
               </div>
               
               <div className="overflow-auto flex-1 p-4">
                 {/* Primary Metrics */}
                 <div className="mb-6">
-                  <h4 className="text-md font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                  <h4 className="text-md font-semibold text-green-700 dark:text-green-400 mb-3 flex items-center gap-2">
                     <span className="w-3 h-3 bg-emerald-400 rounded-full"></span>
                     Primary Metrics ({allMetricsData.primaryMetrics?.length || 0})
                   </h4>
-                  <pre className="bg-slate-900 rounded-lg p-4 text-sm text-slate-300 overflow-x-auto">
+                  <pre className="bg-slate-50 dark:bg-slate-950 rounded-lg p-4 text-sm text-slate-700 dark:text-slate-300 overflow-x-auto">
                     {JSON.stringify(allMetricsData.primaryMetrics, null, 2)}
                   </pre>
                 </div>
 
                 {/* Composite Metrics */}
                 <div>
-                  <h4 className="text-md font-semibold text-amber-400 mb-3 flex items-center gap-2">
+                  <h4 className="text-md font-semibold text-amber-700 dark:text-amber-400 mb-3 flex items-center gap-2">
                     <span className="w-3 h-3 bg-amber-400 rounded-full"></span>
                     Composite Metrics ({allMetricsData.compositeMetrics?.length || 0}) - Calculated with Formulas
                   </h4>
-                  <pre className="bg-slate-900 rounded-lg p-4 text-sm text-slate-300 overflow-x-auto">
+                  <pre className="bg-slate-50 dark:bg-slate-950 rounded-lg p-4 text-sm text-slate-700 dark:text-slate-300 overflow-x-auto">
                     {JSON.stringify(allMetricsData.compositeMetrics, null, 2)}
                   </pre>
                 </div>
               </div>
 
-              <div className="p-4 border-t border-slate-700 flex justify-end gap-3">
+              <div className="p-4 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-3">
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(JSON.stringify(allMetricsData, null, 2));
                     toast.success('Copied to clipboard!');
                   }}
-                  className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+                  className="px-4 py-2 bg-white dark:bg-slate-900 text-slate-900 dark:text-white rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
                 >
                   Copy JSON
                 </button>
                 <button
                   onClick={() => setShowMetricsViewer(false)}
-                  className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                  className="px-4 py-2 bg-brand-700 text-white rounded-lg hover:bg-brand-800 transition-colors"
                 >
                   Close
                 </button>
@@ -2634,7 +2611,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         <button
           onClick={handleSaveMetrics}
           disabled={saving || Object.keys(calculatedValues).length === 0}
-          className="p-3 bg-gradient-to-r from-emerald-500 to-green-600 text-white rounded-full shadow-lg hover:from-emerald-600 hover:to-green-700 transition-all hover:scale-110 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+          className="bg-brand-700 hover:bg-brand-800 p-3 text-white rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed "
           title={Object.keys(calculatedValues).length === 0 ? "Enter metrics to save" : "Save All Metrics"}
         >
           <Save className="w-5 h-5" />
@@ -2643,13 +2620,13 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         {/* Back to Top Button */}
         <button
           onClick={scrollToTop}
-          className="p-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white rounded-full shadow-lg hover:from-cyan-600 hover:to-blue-700 transition-all hover:scale-110"
+          className="bg-brand-700 hover:bg-brand-800 p-3 text-white rounded-full transition-all "
           title="Back to Top"
         >
           <ArrowUp className="w-5 h-5" />
         </button>
       </div>
-    </div>
+    </Page>
   );
 };
 
