@@ -5,7 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import Modal from './Modal';
 import { confirmDelete, showAlert } from '../utils/alerts';
-import BatteryIndicator from './BatteryIndicator';
+import { assessDeveloper, statusRank, type DeveloperStatus } from '../../server/lib/developerHealth';
+import { Badge } from './ui';
 import { METRIC_EXPLANATIONS } from './TeamDetailView';
 
 interface User {
@@ -23,13 +24,51 @@ interface User {
 }
 
 interface DeveloperMetrics {
-  pr_merge_time_avg: number;
-  code_review_time_avg: number;
-  focus_time_hours: number;
-  meeting_time_hours: number;
-  context_switches_per_day: number;
-  happiness_score: number;
+  pr_merge_time_avg: number | null;
+  code_review_time_avg: number | null;
+  focus_time_hours: number | null;
+  meeting_time_hours: number | null;
+  context_switches_per_day: number | null;
+  happiness_score: number | null;
+  updated_at?: string | null;
 }
+
+const toNumOrNull = (v: unknown): number | null => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
+const toDevMetrics = (d: any): DeveloperMetrics => ({
+  pr_merge_time_avg: toNumOrNull(d.pr_merge_time_avg),
+  code_review_time_avg: toNumOrNull(d.code_review_time_avg),
+  focus_time_hours: toNumOrNull(d.focus_time_hours),
+  meeting_time_hours: toNumOrNull(d.meeting_time_hours),
+  context_switches_per_day: toNumOrNull(d.context_switches_per_day),
+  happiness_score: toNumOrNull(d.happiness_score),
+  updated_at: d.updated_at ?? null,
+});
+/** The API returns one row per developer per team; keep the most recently updated row. */
+const latestPerDeveloper = (rows: any[]): Record<string, DeveloperMetrics> => {
+  const out: Record<string, DeveloperMetrics> = {};
+  for (const r of rows) {
+    const m = toDevMetrics(r);
+    const prev = out[r.developer_id];
+    if (!prev || String(m.updated_at ?? '') > String(prev.updated_at ?? '')) out[r.developer_id] = m;
+  }
+  return out;
+};
+const assess = (m: DeveloperMetrics, name = '') =>
+  assessDeveloper({
+    name,
+    prMergeTimeHours: m.pr_merge_time_avg,
+    codeReviewTimeHours: m.code_review_time_avg,
+    focusTimeHours: m.focus_time_hours,
+    meetingTimeHours: m.meeting_time_hours,
+    contextSwitchesPerDay: m.context_switches_per_day,
+    happinessScore: m.happiness_score,
+  });
+const STATUS_META: Record<DeveloperStatus, { label: string; tone: 'good' | 'warn' | 'bad' }> = {
+  healthy: { label: 'Healthy', tone: 'good' },
+  'needs-attention': { label: 'Needs attention', tone: 'warn' },
+  'at-risk': { label: 'At risk', tone: 'bad' },
+};
+const fmtH = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}h`);
 
 import API_URL from '../config/api';
 
@@ -144,19 +183,9 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
       const data = await response.json();
       const developers = data.developers || [];
 
-      // Find the specific user in the results
-      const developerMetrics = developers.find((d: any) => d.developer_id === userId);
-
-      if (developerMetrics) {
-        const metrics: DeveloperMetrics = {
-          pr_merge_time_avg: Number(developerMetrics.pr_merge_time_avg) || 0,
-          code_review_time_avg: Number(developerMetrics.code_review_time_avg) || 0,
-          focus_time_hours: Number(developerMetrics.focus_time_hours) || 0,
-          meeting_time_hours: Number(developerMetrics.meeting_time_hours) || 0,
-          context_switches_per_day: Number(developerMetrics.context_switches_per_day) || 0,
-          happiness_score: Number(developerMetrics.happiness_score) || 0
-        };
-        setUserMetrics(prev => ({ ...prev, [userId]: metrics }));
+      const latest = latestPerDeveloper(developers.filter((d: any) => d.developer_id === userId));
+      if (latest[userId]) {
+        setUserMetrics(prev => ({ ...prev, [userId]: latest[userId] }));
       } else {
         // User has no metrics in DB - mark as null to show "No metrics available"
         setUserMetrics(prev => ({ ...prev, [userId]: null as any }));
@@ -187,18 +216,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
       const idsWithMetrics = new Set<string>(developers.map((d: any) => d.developer_id));
       setUsersWithMetricsIds(idsWithMetrics);
 
-      // Also populate userMetrics for the happiness ranking
-      const metricsMap: Record<string, DeveloperMetrics> = {};
-      developers.forEach((d: any) => {
-        metricsMap[d.developer_id] = {
-          pr_merge_time_avg: Number(d.pr_merge_time_avg) || 0,
-          code_review_time_avg: Number(d.code_review_time_avg) || 0,
-          focus_time_hours: Number(d.focus_time_hours) || 0,
-          meeting_time_hours: Number(d.meeting_time_hours) || 0,
-          context_switches_per_day: Number(d.context_switches_per_day) || 0,
-          happiness_score: Number(d.happiness_score) || 0
-        };
-      });
+      const metricsMap = latestPerDeveloper(developers);
       setUserMetrics(prev => ({ ...prev, ...metricsMap }));
     } catch (error) {
       console.error('Error fetching users with metrics:', error);
@@ -632,87 +650,62 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                       <div className="border-t border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/50 p-4">
                         {metrics ? (
                           <>
-                            {/* Happiness Score with BatteryIndicator */}
-                            <div className="flex items-center justify-center mb-4">
-                              <div className="text-center">
-                                <p className="text-xs text-gray-500 dark:text-slate-400 mb-2">Happiness Score</p>
-                                <BatteryIndicator
-                                  percentage={metrics.happiness_score}
-                                  size="md"
-                                  mode={is3DMode ? '3d' : 'flat'}
-                                />
-                              </div>
-                            </div>
+                            {(() => {
+                              const a = assess(metrics, `${u.first_name} ${u.last_name}`);
+                              const meta = STATUS_META[a.status];
+                              return (
+                                <div className="mb-4 space-y-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-xs font-medium text-slate-600 dark:text-slate-300">Status</span>
+                                    <Badge tone={meta.tone}>{meta.label}</Badge>
+                                  </div>
+                                  <p className="text-xs text-slate-600 dark:text-slate-300">{a.summary}</p>
+                                  {a.status !== 'healthy' && a.suggestion && (
+                                    <p className="text-xs text-slate-500 dark:text-slate-400"><span className="font-medium text-slate-700 dark:text-slate-200">Suggested action: </span>{a.suggestion}</p>
+                                  )}
+                                </div>
+                              );
+                            })()}
 
-                            {/* Metrics Grid */}
                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                              <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
-                                <GitPullRequest className="mx-auto mb-1 text-blue-400" size={14} />
-                                <p className="text-[10px] text-gray-500 dark:text-gray-400">PR Time</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.pr_merge_time_avg.toFixed(1)}h</p>
+                              <div className="bg-white dark:bg-slate-900 rounded-md p-2.5 text-center border border-slate-200 dark:border-slate-700">
+                                <Users className="mx-auto mb-1 text-slate-400" size={14} />
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Wellbeing (derived)</p>
+                                <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{metrics.happiness_score == null ? '—' : `${Math.round(metrics.happiness_score)} / 100`}</p>
                               </div>
-                              <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
-                                <Clock className="mx-auto mb-1 text-green-400" size={14} />
-                                <p className="text-[10px] text-gray-500 dark:text-gray-400">Review</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.code_review_time_avg.toFixed(1)}h</p>
+                              <div className="bg-white dark:bg-slate-900 rounded-md p-2.5 text-center border border-slate-200 dark:border-slate-700">
+                                <GitPullRequest className="mx-auto mb-1 text-slate-400" size={14} />
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">PR merge time</p>
+                                <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{fmtH(metrics.pr_merge_time_avg)}</p>
                               </div>
-                              <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
-                                <Zap className="mx-auto mb-1 text-orange-400" size={14} />
-                                <p className="text-[10px] text-gray-500 dark:text-gray-400">Focus</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.focus_time_hours.toFixed(1)}h</p>
+                              <div className="bg-white dark:bg-slate-900 rounded-md p-2.5 text-center border border-slate-200 dark:border-slate-700">
+                                <Clock className="mx-auto mb-1 text-slate-400" size={14} />
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Review time</p>
+                                <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{fmtH(metrics.code_review_time_avg)}</p>
                               </div>
-                              <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
-                                <Users className="mx-auto mb-1 text-purple-400" size={14} />
-                                <p className="text-[10px] text-gray-500 dark:text-gray-400">Meetings</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{metrics.meeting_time_hours.toFixed(1)}h</p>
+                              <div className="bg-white dark:bg-slate-900 rounded-md p-2.5 text-center border border-slate-200 dark:border-slate-700">
+                                <Zap className="mx-auto mb-1 text-slate-400" size={14} />
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Focus / day</p>
+                                <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{fmtH(metrics.focus_time_hours)}</p>
                               </div>
-                              <div className="bg-white dark:bg-slate-700/50 rounded-lg p-2.5 text-center border border-gray-200 dark:border-slate-600/30">
-                                <TrendingUp className="mx-auto mb-1 text-red-400" size={14} />
-                                <p className="text-[10px] text-gray-500 dark:text-gray-400">Ctx Switch</p>
-                                <p className="text-sm font-bold text-gray-900 dark:text-white">{Math.round(metrics.context_switches_per_day)}</p>
+                              <div className="bg-white dark:bg-slate-900 rounded-md p-2.5 text-center border border-slate-200 dark:border-slate-700">
+                                <Users className="mx-auto mb-1 text-slate-400" size={14} />
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Meetings / day</p>
+                                <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{fmtH(metrics.meeting_time_hours)}</p>
                               </div>
-                            </div>
-
-                            {/* Work-Life Balance Bar */}
-                            <div className="mt-4">
-                              <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Work-Life Balance</span>
-                                <span className="text-xs font-bold text-gray-900 dark:text-white">
-                                  {(metrics.focus_time_hours + metrics.meeting_time_hours) ? ((metrics.focus_time_hours / (metrics.focus_time_hours + metrics.meeting_time_hours)) * 100).toFixed(0) : '--'}% Focus
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
-                                <div
-                                  className={`h-2 rounded-full transition-all ${(() => {
-                                    const total = metrics.focus_time_hours + metrics.meeting_time_hours;
-                                    const pct = total ? (metrics.focus_time_hours / total) * 100 : 0;
-                                    return pct >= 60 ? 'bg-green-500' : pct >= 40 ? 'bg-yellow-500' : 'bg-red-500';
-                                  })()}`}
-                                  style={{ width: `${(() => {
-                                    const total = metrics.focus_time_hours + metrics.meeting_time_hours;
-                                    return total ? (metrics.focus_time_hours / total) * 100 : 0;
-                                  })()}%` }}
-                                />
+                              <div className="bg-white dark:bg-slate-900 rounded-md p-2.5 text-center border border-slate-200 dark:border-slate-700">
+                                <TrendingUp className="mx-auto mb-1 text-slate-400" size={14} />
+                                <p className="text-[11px] text-slate-500 dark:text-slate-400">Context switches</p>
+                                <p className="text-sm font-semibold tabular-nums text-slate-900 dark:text-white">{metrics.context_switches_per_day == null ? '—' : Math.round(metrics.context_switches_per_day)}</p>
                               </div>
                             </div>
-
-                            {/* Burnout Risk */}
-                            <div className="mt-3 flex items-center justify-between">
-                              <span className="text-xs font-medium text-gray-600 dark:text-gray-300">Burnout Risk:</span>
-                              <span className={`text-xs font-bold px-2 py-1 rounded-full ${metrics.happiness_score > 80 && metrics.focus_time_hours > 4
-                                ? 'bg-green-500/20 text-green-600 dark:text-green-400 border border-green-500/30'
-                                : metrics.happiness_score > 70
-                                  ? 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border border-yellow-500/30'
-                                  : 'bg-red-500/20 text-red-600 dark:text-red-400 border border-red-500/30'
-                                }`}>
-                                {metrics.happiness_score > 80 && metrics.focus_time_hours > 4 ? '✅ Low' :
-                                  metrics.happiness_score > 70 ? '⚠️ Moderate' : '❌ High'}
-                              </span>
-                            </div>
+                            {metrics.updated_at && (
+                              <p className="mt-3 text-[11px] text-slate-400">Last updated {new Date(metrics.updated_at).toLocaleDateString()}</p>
+                            )}
                           </>
                         ) : userMetrics[u.id] === null ? (
                           <div className="flex flex-col items-center justify-center py-6 text-center">
-                            <p className="text-gray-500 dark:text-slate-400 text-sm">📊 No metrics available</p>
+                            <p className="text-slate-500 dark:text-slate-400 text-sm">No metrics recorded</p>
                             <p className="text-gray-400 dark:text-slate-500 text-xs mt-1">This engineer has no recorded metrics in the database</p>
                           </div>
                         ) : (
@@ -777,75 +770,45 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
         )}
       </div>
 
-      {/* Happiness Ranking Section - Only show for managers */}
+      {/* Engineer wellbeing overview - managers only. Ordered by status (most at risk first), not a leaderboard. */}
       {
-        (user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && Object.entries(userMetrics).filter(([, m]) => m !== null).length > 0 && (
+        (user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && Object.values(userMetrics).some(Boolean) && (
           <div className="max-w-7xl mx-auto mt-8 mb-6">
-            <div className={`bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-6 ${is3DMode ? 'shadow-lg' : ''}`}>
-              <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                📊 Engineer Happiness Ranking
-                <span className="text-sm font-normal text-gray-500 dark:text-slate-400">
-                  ({Object.entries(userMetrics).filter(([, m]) => m !== null).length} engineers with metrics)
-                </span>
-              </h3>
-              <div className="space-y-2">
-                {Object.entries(userMetrics)
-                  .filter(([, m]) => m !== null)
-                  .sort(([, a], [, b]) => (b?.happiness_score || 0) - (a?.happiness_score || 0))
-                  .map(([userId, metrics], index, arr) => {
-                    const userInfo = users.find(u => u.id === userId);
-                    if (!userInfo || !metrics) return null;
-
-                    const isTop = index < 3;
-                    const isBottom = index >= arr.length - 3 && arr.length > 3;
-
-                    return (
-                      <div
-                        key={userId}
-                        className={`flex items-center justify-between p-3 rounded-lg transition-all ${isTop ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' :
-                          isBottom ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' :
-                            'bg-gray-50 dark:bg-slate-700/50'
-                          }`}
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold ${index === 0 ? 'bg-yellow-400 text-yellow-900' :
-                            index === 1 ? 'bg-gray-300 text-gray-700' :
-                              index === 2 ? 'bg-amber-600 text-white' :
-                                'bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-slate-300'
-                            }`}>
-                            {index + 1}
-                          </span>
-                          <div>
-                            <p className="font-medium text-gray-900 dark:text-white">
-                              {userInfo.first_name} {userInfo.last_name}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-slate-400">{userInfo.team_name || 'No team'}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-xs text-gray-500 dark:text-slate-400">Focus Time</p>
-                            <p className="font-medium text-gray-900 dark:text-white">{metrics.focus_time_hours.toFixed(1)}h</p>
-                          </div>
-                          <div className={`text-2xl font-bold ${metrics.happiness_score >= 80 ? 'text-green-600 dark:text-green-400' :
-                            metrics.happiness_score >= 70 ? 'text-yellow-600 dark:text-yellow-400' :
-                              'text-red-600 dark:text-red-400'
-                            }`}>
-                            {Math.round(metrics.happiness_score)}%
-                            <span className="ml-1">
-                              {metrics.happiness_score >= 80 ? '😊' : metrics.happiness_score >= 70 ? '🙂' : '😟'}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-              {Object.keys(userMetrics).length === 0 && (
-                <p className="text-center text-gray-500 dark:text-slate-400 py-4">
-                  Click "Metrics" on engineer cards above to load their data
+            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5">
+              <div className="mb-4">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Engineer wellbeing overview</h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  Engineers who opted in to developer insights, most at risk first. Wellbeing is a derived score (0–100), not a survey result.
                 </p>
-              )}
+              </div>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {Object.entries(userMetrics)
+                  .filter(([id, m]) => m && users.some(u => u.id === id))
+                  .map(([id, m]) => {
+                    const info = users.find(u => u.id === id)!;
+                    return { id, m: m!, info, a: assess(m!, `${info.first_name} ${info.last_name}`) };
+                  })
+                  .sort((x, y) => statusRank(y.a.status) - statusRank(x.a.status) || (x.m.happiness_score ?? 101) - (y.m.happiness_score ?? 101))
+                  .map(({ id, m, info, a }) => (
+                    <div key={id} className="flex items-center justify-between gap-4 py-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 dark:text-white">{info.first_name} {info.last_name}</p>
+                        <p className="truncate text-xs text-slate-500 dark:text-slate-400">{info.team_name || 'No team'} · {a.summary}</p>
+                      </div>
+                      <div className="flex flex-shrink-0 items-center gap-4">
+                        <div className="text-right">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Focus / day</p>
+                          <p className="text-sm font-medium tabular-nums text-slate-900 dark:text-white">{fmtH(m.focus_time_hours)}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Wellbeing</p>
+                          <p className="text-sm font-medium tabular-nums text-slate-900 dark:text-white">{m.happiness_score == null ? '—' : Math.round(m.happiness_score)}</p>
+                        </div>
+                        <Badge tone={STATUS_META[a.status].tone}>{STATUS_META[a.status].label}</Badge>
+                      </div>
+                    </div>
+                  ))}
+              </div>
             </div>
           </div>
         )

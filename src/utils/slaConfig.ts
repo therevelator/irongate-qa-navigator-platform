@@ -43,11 +43,13 @@ export const fetchSLAConfig = async (teamId?: string): Promise<SLAConfig> => {
     }
 
     const { configs } = await response.json();
+    // A configured 0 is a valid value; only fall back when the setting is absent or not numeric.
+    const configNumber = (v: unknown, fallback: number) => (v == null || v === '' || !Number.isFinite(Number(v)) ? fallback : Number(v));
     
     const result: SLAConfig = {
-      responseTimeMs: Number(configs.sla_response_time_ms?.value) || DEFAULT_SLA_CONFIG.responseTimeMs,
-      errorRatePercent: Number(configs.sla_error_rate_percent?.value) || DEFAULT_SLA_CONFIG.errorRatePercent,
-      uptimePercent: Number(configs.sla_uptime_percent?.value) || DEFAULT_SLA_CONFIG.uptimePercent
+      responseTimeMs: configNumber(configs.sla_response_time_ms?.value, DEFAULT_SLA_CONFIG.responseTimeMs),
+      errorRatePercent: configNumber(configs.sla_error_rate_percent?.value, DEFAULT_SLA_CONFIG.errorRatePercent),
+      uptimePercent: configNumber(configs.sla_uptime_percent?.value, DEFAULT_SLA_CONFIG.uptimePercent)
     };
 
     cachedConfig = result;
