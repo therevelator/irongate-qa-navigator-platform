@@ -81,7 +81,7 @@ const TEAM_BENCHMARKS: TeamBenchmark[] = [
     action: { initiative: 'Limit work in progress and review carried-over items at each planning', owner: 'Scrum Master', timebox: '1 sprint', kpi: 'Sprint carryover' } },
   { key: 'blockedTimeHours', label: 'Blocked time', unit: ' h', digits: 1, lowerIsBetter: true,
     action: { initiative: 'Surface blockers daily and agree a same-day escalation path', owner: 'Scrum Master', timebox: '1 week', kpi: 'Blocked time' } },
-  { key: 'systemAvailability', label: 'System availability', unit: '%', digits: 2, lowerIsBetter: false,
+  { key: 'systemAvailability', label: 'System availability', unit: '%', digits: 3, lowerIsBetter: false,
     action: { initiative: 'Review recent outages and add alerting/redundancy for the weakest components', owner: 'DevOps', timebox: '4 weeks', kpi: 'System availability' } },
   { key: 'technicalDebtScore', label: 'Technical debt score', unit: '/100', digits: 0, lowerIsBetter: true,
     action: { initiative: 'Reserve sprint capacity for the critical and high-severity debt items', owner: 'Tech Lead', timebox: '1 sprint', kpi: 'Technical debt score' } }
