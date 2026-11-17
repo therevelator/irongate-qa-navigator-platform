@@ -2,7 +2,6 @@ import cron from 'node-cron';
 import { query, queryOne } from '../../src/lib/db';
 import { runPipelineSeederForAllCompanies } from '../seeders/pipelineSeeder';
 import { emitJobNotification } from '../eventBus';
-import { computeQaScore } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
 
 // NOTE: every KPI value this job writes comes from the random generators below or
@@ -169,10 +168,10 @@ async function ensureTodaySnapshot(teamId: string): Promise<string> {
 
   // Create new snapshot for today
   const snapshotId = `kpi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  // No placeholder values: qa_score/status stay NULL until computed from real inputs.
+  // No placeholder values: qa_score/status are computed by the DB trigger from real inputs.
   await query(
-    `INSERT INTO kpi_snapshots (id, team_id, snapshot_date, qa_score, status)
-     VALUES (?, ?, CURRENT_DATE, NULL, NULL)`,
+    `INSERT INTO kpi_snapshots (id, team_id, snapshot_date)
+     VALUES (?, ?, CURRENT_DATE)`,
     [snapshotId, teamId]
   );
   return snapshotId;
@@ -210,23 +209,8 @@ async function updateMetrics(teamId: string, metrics: string[]): Promise<number>
   return updated;
 }
 
-// Recalculate QA score after updates — the shared formula (server/lib/metricFormulas.ts),
-// identical to manual entry.
-async function recalculateQAScore(teamId: string): Promise<void> {
-  const snapshot = await queryOne<any>(
-    `SELECT test_coverage, defect_escape_rate, change_failure_rate, code_quality_score
-     FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
-    [teamId]
-  );
-
-  if (!snapshot) return;
-
-  const qa = computeQaScore(snapshot);
-  await query(
-    'UPDATE kpi_snapshots SET qa_score = ?, status = ? WHERE team_id = ? AND snapshot_date = CURRENT_DATE',
-    [qa.score, qa.status, teamId]
-  );
-}
+// qa_score / status are computed by the database trigger kpi_snapshots_qa_score
+// (same rules as computeQaScore), so no app-side recalculation is needed.
 
 // Get all active teams that are NOT excluded from auto-sync (manually edited data)
 async function getActiveTeams(): Promise<{ id: string; name: string }[]> {
@@ -273,7 +257,6 @@ async function runHourlySync(): Promise<void> {
     for (const team of teams) {
       const count = await updateMetrics(team.id, HOURLY_METRICS);
       if (count > 0) {
-        await recalculateQAScore(team.id);
         totalUpdates += count;
       }
     }
@@ -307,7 +290,6 @@ async function runDailySync(): Promise<void> {
     for (const team of teams) {
       const count = await updateMetrics(team.id, DAILY_METRICS);
       if (count > 0) {
-        await recalculateQAScore(team.id);
         totalUpdates += count;
       }
     }
@@ -341,7 +323,6 @@ async function runWeeklySync(): Promise<void> {
     for (const team of teams) {
       const count = await updateMetrics(team.id, WEEKLY_METRICS);
       if (count > 0) {
-        await recalculateQAScore(team.id);
         totalUpdates += count;
       }
     }
@@ -375,7 +356,6 @@ async function runMonthlySync(): Promise<void> {
     for (const team of teams) {
       const count = await updateMetrics(team.id, MONTHLY_METRICS);
       if (count > 0) {
-        await recalculateQAScore(team.id);
         totalUpdates += count;
       }
     }

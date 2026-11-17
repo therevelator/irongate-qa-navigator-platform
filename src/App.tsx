@@ -176,6 +176,37 @@ function App() {
     }
   };
 
+  // Live refresh: when team KPIs change (manual entry or API ingestion) the server
+  // broadcasts JOB_NOTIFICATION with source 'metrics' over /ws; refetch the teams so
+  // open dashboards (and an open team detail view) show the new scores.
+  useEffect(() => {
+    if (!user?.id) return;
+    const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsHost = isLocal ? 'localhost:3000' : window.location.host;
+    let ws: WebSocket | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      ws = new WebSocket(`${protocol}://${wsHost}/ws`);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'JOB_NOTIFICATION' && data.source === 'metrics') {
+            clearTimeout(timer);
+            timer = setTimeout(() => { fetchDepartmentsAndTeams(); }, 500);
+          }
+        } catch { /* ignore malformed messages */ }
+      };
+      ws.onerror = () => { /* no live channel (e.g. serverless) — ignore */ };
+    } catch { /* WebSocket unsupported in this deployment */ }
+    return () => { clearTimeout(timer); ws?.close(); };
+  }, [user?.id]);
+
+  // Keep an open team detail view in sync with refreshed team data.
+  useEffect(() => {
+    setSelectedTeam(prev => (prev ? (teams.find(t => t.id === prev.id) ?? prev) : prev));
+  }, [teams]);
+
   // Use API teams if available, otherwise fall back to mock teams
   const apiTeams = userTeams.length > 0 ? userTeams : teams;
 

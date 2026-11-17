@@ -25,7 +25,17 @@ interface TeamWithKPI extends Omit<Team, 'qaScore'> {
   qaScore: number | string | null;
   kpiData?: KPIData;
   kpiThresholds?: Partial<Record<string, Partial<Threshold>>>;
+  /** Per-field provenance from GET /api/teams: { column: { source, recorded_at } }. */
+  kpiFieldSources?: Record<string, { source?: string; recorded_at?: string; carried_forward?: boolean } | undefined>;
 }
+
+/** "manual · as of 17 Nov 2026" caption for a KPI, or null when no provenance is recorded. */
+const sourceCaption = (fs?: { source?: string; recorded_at?: string }): string | null => {
+  if (!fs?.source) return null;
+  const label = fs.source === 'manual' ? 'Manual entry' : fs.source === 'unknown' ? 'Source not recorded' : fs.source;
+  const asOf = formatAsOf(fs.recorded_at);
+  return asOf ? `${label} · as of ${asOf}` : label;
+};
 
 // Business-friendly metric explanations for tooltips
 export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: string }> = {
@@ -629,6 +639,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                     </span>
                     {k.value != null && k.unit && <span className="text-sm text-slate-500 dark:text-slate-400">{k.unit}</span>}
                   </p>
+                  {k.value != null && sourceCaption(team.kpiFieldSources?.[k.historyKey]) && (
+                    <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400" data-testid={`kpi-source-${k.historyKey}`}>
+                      {sourceCaption(team.kpiFieldSources?.[k.historyKey])}
+                    </p>
+                  )}
                   <div className="mt-1 min-h-[1.25rem]">
                     {change ? <TrendLine change={change} /> : (
                       <span className="text-xs text-slate-500 dark:text-slate-400">{target ?? (k.lowerIsBetter ? 'Lower is better' : 'No target set')}</span>

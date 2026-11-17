@@ -16,6 +16,7 @@ import departmentsRoutes from './routes/departments';
 import adminRoutes from './routes/admin';
 import settingsRoutes from './routes/settings';
 import analyticsRoutes from './routes/analytics';
+import ingestRoutes from './routes/ingest';
 // import './jobs/syncMetrics'; // Start cron jobs (disabled temporarily)
 import './jobs/intervalSync'; // Interval-based metric sync
 import './jobs/analyticsSync'; // Analytics data sync
@@ -97,6 +98,7 @@ app.use('/api/departments', departmentsRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/analytics', analyticsRoutes);
+app.use('/api/ingest', ingestRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

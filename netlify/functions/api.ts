@@ -13,6 +13,7 @@ import departmentsRoutes from '../../server/routes/departments';
 import adminRoutes from '../../server/routes/admin';
 import analyticsRoutes from '../../server/routes/analytics';
 import settingsRoutes from '../../server/routes/settings';
+import ingestRoutes from '../../server/routes/ingest';
 
 const app = express();
 
@@ -76,6 +77,7 @@ router.use('/departments', departmentsRoutes);
 router.use('/admin', adminRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/settings', settingsRoutes);
+router.use('/ingest', ingestRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix

@@ -1,5 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'crypto';
+import { KpiValidationError, recordKpiValues } from '../lib/kpiIngest';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam } from '../middleware/access';
@@ -285,32 +286,7 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Access denied. Requires Super Admin, QA Manager, or Team Lead role.' });
     }
 
-    const {
-      teamId,
-      test_coverage,
-      test_flakiness_rate,
-      defect_density,
-      defect_escape_rate,
-      code_quality_score,
-      avg_build_time_minutes,
-      test_execution_time_minutes,
-      deployment_frequency_per_week,
-      lead_time_days,
-      mttr_hours,
-      parallel_test_efficiency,
-      sprint_velocity,
-      sprint_commitment_rate,
-      sprint_carryover,
-      first_time_pass_rate,
-      blocked_time_hours,
-      automation_coverage,
-      automation_roi,
-      change_failure_rate,
-      mtbf_hours,
-      system_availability,
-      infrastructure_failures,
-      sizing_accuracy
-    } = req.body;
+    const { teamId, ...metricValues } = req.body ?? {};
 
     if (!teamId) {
       return res.status(400).json({ error: 'Team ID is required' });
@@ -320,116 +296,34 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     // caller must be allowed to write it (team_lead -> own team only).
     if (!(await assertTeamWrite(req, res, teamId))) return;
 
-    // Insert or update KPI snapshot for today
-    // Use INSERT ... ON CONFLICT DO UPDATE to handle existing entries for the same team/date
-    //this will be the part that inserts into the DB from the aggregator
-    await query(
-      `INSERT INTO kpi_snapshots (
-        team_id,
-        snapshot_date,
-        qa_score,
-        status,
-        test_coverage,
-        test_flakiness_rate,
-        defect_density,
-        defect_escape_rate,
-        code_quality_score,
-        avg_build_time_minutes,
-        test_execution_time_minutes,
-        deployment_frequency_per_week,
-        lead_time_days,
-        mttr_hours,
-        parallel_test_efficiency,
-        sprint_velocity,
-        sprint_commitment_rate,
-        sprint_carryover,
-        first_time_pass_rate,
-        blocked_time_hours,
-        automation_coverage,
-        automation_roi,
-        change_failure_rate,
-        mtbf_hours,
-        system_availability,
-        infrastructure_failures,
-        sizing_accuracy,
-        manually_edited
-      ) VALUES (?, CURRENT_DATE, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
-      ON CONFLICT (team_id, snapshot_date) DO UPDATE SET
-        test_coverage = COALESCE(EXCLUDED.test_coverage, kpi_snapshots.test_coverage),
-        test_flakiness_rate = COALESCE(EXCLUDED.test_flakiness_rate, kpi_snapshots.test_flakiness_rate),
-        defect_density = COALESCE(EXCLUDED.defect_density, kpi_snapshots.defect_density),
-        defect_escape_rate = COALESCE(EXCLUDED.defect_escape_rate, kpi_snapshots.defect_escape_rate),
-        code_quality_score = COALESCE(EXCLUDED.code_quality_score, kpi_snapshots.code_quality_score),
-        avg_build_time_minutes = COALESCE(EXCLUDED.avg_build_time_minutes, kpi_snapshots.avg_build_time_minutes),
-        test_execution_time_minutes = COALESCE(EXCLUDED.test_execution_time_minutes, kpi_snapshots.test_execution_time_minutes),
-        deployment_frequency_per_week = COALESCE(EXCLUDED.deployment_frequency_per_week, kpi_snapshots.deployment_frequency_per_week),
-        lead_time_days = COALESCE(EXCLUDED.lead_time_days, kpi_snapshots.lead_time_days),
-        mttr_hours = COALESCE(EXCLUDED.mttr_hours, kpi_snapshots.mttr_hours),
-        parallel_test_efficiency = COALESCE(EXCLUDED.parallel_test_efficiency, kpi_snapshots.parallel_test_efficiency),
-        sprint_velocity = COALESCE(EXCLUDED.sprint_velocity, kpi_snapshots.sprint_velocity),
-        sprint_commitment_rate = COALESCE(EXCLUDED.sprint_commitment_rate, kpi_snapshots.sprint_commitment_rate),
-        sprint_carryover = COALESCE(EXCLUDED.sprint_carryover, kpi_snapshots.sprint_carryover),
-        first_time_pass_rate = COALESCE(EXCLUDED.first_time_pass_rate, kpi_snapshots.first_time_pass_rate),
-        blocked_time_hours = COALESCE(EXCLUDED.blocked_time_hours, kpi_snapshots.blocked_time_hours),
-        automation_coverage = COALESCE(EXCLUDED.automation_coverage, kpi_snapshots.automation_coverage),
-        automation_roi = COALESCE(EXCLUDED.automation_roi, kpi_snapshots.automation_roi),
-        change_failure_rate = COALESCE(EXCLUDED.change_failure_rate, kpi_snapshots.change_failure_rate),
-        mtbf_hours = COALESCE(EXCLUDED.mtbf_hours, kpi_snapshots.mtbf_hours),
-        system_availability = COALESCE(EXCLUDED.system_availability, kpi_snapshots.system_availability),
-        infrastructure_failures = COALESCE(EXCLUDED.infrastructure_failures, kpi_snapshots.infrastructure_failures),
-        sizing_accuracy = COALESCE(EXCLUDED.sizing_accuracy, kpi_snapshots.sizing_accuracy),
-        manually_edited = TRUE`,
-      [
-        teamId,
-        test_coverage ?? null,
-        test_flakiness_rate ?? null,
-        defect_density ?? null,
-        defect_escape_rate ?? null,
-        code_quality_score ?? null,
-        avg_build_time_minutes ?? null,
-        test_execution_time_minutes ?? null,
-        deployment_frequency_per_week ?? null,
-        lead_time_days ?? null,
-        mttr_hours ?? null,
-        parallel_test_efficiency ?? null,
-        sprint_velocity ?? null,
-        sprint_commitment_rate ?? null,
-        sprint_carryover ?? null,
-        first_time_pass_rate ?? null,
-        blocked_time_hours ?? null,
-        automation_coverage ?? null,
-        automation_roi ?? null,
-        change_failure_rate ?? null,
-        mtbf_hours ?? null,
-        system_availability ?? null,
-        infrastructure_failures ?? null,
-        sizing_accuracy ?? null
-      ]
-    );
-
-    // QA score is computed from the MERGED row (submitted values + values kept by
-    // COALESCE), with the shared formula, so it always matches the stored inputs.
-    const merged = await queryOne<any>(
+    // The shared ingestion path: validates against the KPI whitelist, upserts today's
+    // snapshot, carries other KPIs forward from the previous snapshot, records
+    // provenance (source 'manual') and notifies open dashboards. qa_score/status are
+    // computed by the database trigger from the stored inputs.
+    const result = await recordKpiValues(teamId, metricValues, {
+      source: 'manual',
+      actorId: req.userId ?? null,
+    });
+    const qa = await queryOne<any>(
       `SELECT test_coverage, defect_escape_rate, change_failure_rate, code_quality_score
-         FROM kpi_snapshots
-        WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
+         FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
       [teamId]
-    );
-    const qa = computeQaScore(merged);
-    await query(
-      `UPDATE kpi_snapshots SET qa_score = ?, status = ?
-        WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
-      [qa.score, qa.status, teamId]
     );
 
     res.json({
       message: 'Metrics saved successfully',
-      qaScore: qa.score,
-      status: qa.status ?? 'insufficient-data',
+      qaScore: result.qaScore,
+      status: result.status ?? 'insufficient-data',
       qaScoreFormula: QA_SCORE_FORMULA,
-      qaScoreMissingInputs: qa.missingInputs
+      qaScoreMissingInputs: computeQaScore(qa).missingInputs,
+      snapshotDate: result.snapshotDate,
+      updated: result.updated,
+      carriedForward: result.carriedForward
     });
   } catch (error) {
+    if (error instanceof KpiValidationError) {
+      return res.status(400).json({ error: error.message, details: error.errors });
+    }
     console.error('Manual metrics error:', error);
     res.status(500).json({ error: 'Failed to save metrics' });
   }
@@ -465,18 +359,11 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid developer ID' });
     }
 
-    // happiness_score is a 0–100 wellbeing score. NOTE: the column is numeric(3,1), so it
-    // cannot store values ≥ 99.95 until it is migrated to numeric(4,1); reject those
-    // explicitly instead of failing with a database overflow error.
+    // happiness_score is a 0–100 wellbeing score (column numeric(4,1)).
     if (happinessScore !== undefined && happinessScore !== null && happinessScore !== '') {
       const h = Number(happinessScore);
       if (!Number.isFinite(h) || h < 0 || h > 100) {
         return res.status(400).json({ error: 'Happiness score must be between 0 and 100' });
-      }
-      if (h >= 99.95) {
-        return res.status(400).json({
-          error: 'Happiness scores of 100 cannot be stored yet (database column limit 99.9). Please enter 99.9 or lower.'
-        });
       }
     }
 

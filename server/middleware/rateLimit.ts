@@ -1,4 +1,5 @@
 import rateLimit from 'express-rate-limit';
+import { createHash } from 'crypto';
 
 /**
  * Rate limiters. Note: the default store is per-process in memory, so on
@@ -33,4 +34,19 @@ export const aiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'AI request limit reached, please wait a moment.' },
+});
+
+// KPI ingestion (POST /api/ingest/kpis): counted per API key (the hash of the bearer
+// token, never the token itself), falling back to the client IP when no key is sent.
+export const ingestLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const header = req.headers['authorization'];
+    const token = typeof header === 'string' && header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+    return token ? `key:${createHash('sha256').update(token).digest('hex')}` : `ip:${req.ip}`;
+  },
+  message: { error: 'Ingestion rate limit reached (60 requests per minute per key). Batch several teams into one request.' },
 });

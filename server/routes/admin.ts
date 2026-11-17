@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcrypt';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
+import { generateApiKey } from '../middleware/apiKey';
 
 const router = express.Router();
 
@@ -1064,6 +1065,76 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error saving configs:', error);
     res.status(500).json({ error: 'Failed to save configs' });
+  }
+});
+
+// ============================================================================
+// API KEYS (KPI ingestion) — super_admin only, scoped to the caller's company.
+// The plaintext key is returned once, on creation; only its sha256 hash is stored.
+// ============================================================================
+
+const apiKeyRow = (k: any) => ({
+  id: k.id,
+  name: k.name,
+  keyPrefix: k.key_prefix,
+  createdAt: k.created_at,
+  createdBy: k.created_by_name ?? null,
+  lastUsedAt: k.last_used_at ?? null,
+  revokedAt: k.revoked_at ?? null
+});
+
+router.get('/api-keys', authenticateToken, async (req: any, res) => {
+  try {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super admin access required' });
+    const keys = await query<any>(
+      `SELECT k.id, k.name, k.key_prefix, k.created_at, k.last_used_at, k.revoked_at,
+              NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS created_by_name
+         FROM api_keys k
+         LEFT JOIN users u ON u.id = k.created_by
+        WHERE k.company_id = ?
+        ORDER BY k.revoked_at IS NOT NULL, k.created_at DESC`,
+      [req.user.companyId]
+    );
+    res.json({ keys: keys.map(apiKeyRow) });
+  } catch (error) {
+    console.error('List API keys error:', error);
+    res.status(500).json({ error: 'Failed to list API keys' });
+  }
+});
+
+router.post('/api-keys', authenticateToken, async (req: any, res) => {
+  try {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super admin access required' });
+    const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
+    if (!name || name.length > 100) return res.status(400).json({ error: 'Name is required (max 100 characters)' });
+    const { key, prefix, hash } = generateApiKey();
+    const row = await queryOne<any>(
+      `INSERT INTO api_keys (company_id, name, key_prefix, key_hash, created_by)
+       VALUES (?, ?, ?, ?, ?)
+       RETURNING id, name, key_prefix, created_at, last_used_at, revoked_at`,
+      [req.user.companyId, name, prefix, hash, req.user.id]
+    );
+    res.status(201).json({ key: apiKeyRow(row), plaintextKey: key });
+  } catch (error) {
+    console.error('Create API key error:', error);
+    res.status(500).json({ error: 'Failed to create API key' });
+  }
+});
+
+router.post('/api-keys/:id/revoke', authenticateToken, async (req: any, res) => {
+  try {
+    if (req.user.role !== 'super_admin') return res.status(403).json({ error: 'Super admin access required' });
+    const row = await queryOne<any>(
+      `UPDATE api_keys SET revoked_at = COALESCE(revoked_at, now())
+        WHERE id = ? AND company_id = ?
+        RETURNING id, name, key_prefix, created_at, last_used_at, revoked_at`,
+      [req.params.id, req.user.companyId]
+    );
+    if (!row) return res.status(404).json({ error: 'API key not found' });
+    res.json({ key: apiKeyRow(row) });
+  } catch (error) {
+    console.error('Revoke API key error:', error);
+    res.status(500).json({ error: 'Failed to revoke API key' });
   }
 });
 

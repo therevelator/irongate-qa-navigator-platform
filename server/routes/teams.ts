@@ -162,6 +162,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
              k.system_availability,
              k.infrastructure_failures,
              k.sizing_accuracy,
+             k.field_sources,
              k.snapshot_date
       FROM teams t
       LEFT JOIN departments d ON t.department_id = d.id
@@ -303,7 +304,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
           mtbfHours: team.mtbf_hours,
           systemAvailability: team.system_availability,
           infrastructureFailures: team.infrastructure_failures
-        }
+        },
+        // Per-field provenance of the latest snapshot: { column: { source, recorded_at, ... } }.
+        kpiFieldSources: team.field_sources ?? {}
       };
     }));
     
@@ -378,6 +381,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
         systemAvailability: kpiSnapshot.system_availability,
         infrastructureFailures: kpiSnapshot.infrastructure_failures
       };
+      team.kpiFieldSources = kpiSnapshot.field_sources ?? {};
     }
 
     team.technicalDebtScore = technicalDebtScore;
