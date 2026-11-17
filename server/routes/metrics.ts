@@ -62,7 +62,7 @@ router.get('/analytics/history', authenticateToken, async (req: any, res) => {
     // Transform to chart-friendly format
     // pg returns NUMERIC/AVG as strings; convert before rounding. Missing averages stay null.
     const chartData = history.map((row: any) => ({
-      date: new Date(row.snapshot_date).toISOString().split('T')[0],
+      date: String(row.snapshot_date), // DATE → 'YYYY-MM-DD' (db.ts type parser)
       testCoverage: roundOrNull(row.avg_test_coverage, 2),
       defectDensity: roundOrNull(row.avg_defect_density, 3),
       automationCoverage: roundOrNull(row.avg_automation_coverage, 2),

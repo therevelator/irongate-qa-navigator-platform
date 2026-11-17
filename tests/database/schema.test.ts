@@ -97,7 +97,7 @@ describe('Database Schema Validation', () => {
   describe('Foreign Keys', () => {
     it('DB-SCHEMA-004: should have foreign key constraints on teams table', async () => {
       // The teams table has FK constraints to companies, departments, and users (lead_id)
-      // The users table intentionally has no FK constraints for flexible user creation
+      // (The users table also has FK constraints: company, department and primary team.)
       const [rows] = await connection.query(`
         SELECT 
           conname AS "CONSTRAINT_NAME",

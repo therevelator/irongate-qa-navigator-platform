@@ -7,6 +7,10 @@ import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
 // NOTE: every KPI value this job writes comes from the random generators below or
 // from simulated pipeline runs. The whole sync therefore only runs when
 // ENABLE_SYNTHETIC_DATA=true (see server/lib/syntheticData.ts).
+// The hourly/daily/weekly/monthly buckets below are fixed sample-data buckets. They do NOT
+// read the "Expected update frequency" settings (metric_update_intervals); those settings
+// only drive the staleness flag on Team detail. Real metrics are pushed through
+// POST /api/ingest/kpis or Manual metrics.
 
 // Only log in non-serverless environments
 if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {

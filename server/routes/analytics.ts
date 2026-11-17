@@ -2589,7 +2589,7 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     // Aggregate data by date for chart
     const dailyAverages: Record<string, { count: number; totalDDPS: number; date: string }> = {};
     snapshots.forEach((s: any) => {
-      const dateStr = new Date(s.snapshot_date).toISOString().split('T')[0];
+      const dateStr = String(s.snapshot_date); // DATE → 'YYYY-MM-DD' (db.ts type parser)
       if (!dailyAverages[dateStr]) {
         dailyAverages[dateStr] = { count: 0, totalDDPS: 0, date: dateStr };
       }
@@ -2617,10 +2617,10 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
     const recent = snapshots.filter((s: any) =>
-      new Date(s.snapshot_date).toISOString().split('T')[0] >= sevenDaysAgo
+      String(s.snapshot_date) >= sevenDaysAgo
     );
     const previous = snapshots.filter((s: any) => {
-      const dateStr = new Date(s.snapshot_date).toISOString().split('T')[0];
+      const dateStr = String(s.snapshot_date); // DATE → 'YYYY-MM-DD' (db.ts type parser)
       return dateStr >= fourteenDaysAgo && dateStr < sevenDaysAgo;
     });
 

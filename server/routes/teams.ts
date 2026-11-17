@@ -511,7 +511,7 @@ router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) 
     }
 
     for (const row of history) {
-      const date = new Date(row.snapshot_date).toISOString().split('T')[0];
+      const date = String(row.snapshot_date); // DATE → 'YYYY-MM-DD' (db.ts type parser)
       for (const key of metricKeys) {
         if (row[key] !== null && row[key] !== undefined) {
           metricHistory[key].push({ date, value: Number(row[key]) });

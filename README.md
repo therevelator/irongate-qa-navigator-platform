@@ -1,318 +1,56 @@
-# IronGate QA Navigator - Quality Assurance Intelligence Platform
+# IronGate QE Navigator
 
-<div align="center">
+Quality-engineering metrics for engineering organisations: team KPIs, a company dashboard,
+analytics modules and user / team administration.
 
-![IronGate Logo](https://via.placeholder.com/150x150?text=IronGate)
+Every number shown comes from the database. Missing data is shown as "—" or "No data
+recorded", never as an invented value. Sample-data generators exist for demos but are off
+unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 
-**Enterprise-grade quality metrics and intelligence for Agile teams**
+## Stack
 
-[![License: Proprietary](https://img.shields.io/badge/License-Proprietary-red.svg)](LICENSE)
-[![React](https://img.shields.io/badge/React-19.2-blue.svg)](https://reactjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.9-blue.svg)](https://www.typescriptlang.org/)
-[![Vite](https://img.shields.io/badge/Vite-7.2-purple.svg)](https://vitejs.dev/)
+- Frontend: React 19, TypeScript, Vite, Tailwind CSS 4, Recharts (`src/`)
+- API: Express 5 on Node, PostgreSQL via `pg` (`server/`; DB helper `src/lib/db.ts`)
+- Deployment: a single Node service (Railway, `npm run server:prod` serves `dist/`) or
+  Netlify (static site + `netlify/functions/api.ts`; no cron jobs or WebSocket there)
+- Schema: `supabase/migrations/` (apply in timestamp order)
 
-</div>
-
----
-
-## 📊 Overview
-
-# IronGate QA Navigator
-
-A comprehensive, enterprise-grade Quality Assurance intelligence platform that provides real-time insights, advanced analytics, and strategic decision-making tools for modern software organizations.
-
-## 🎉 **100% COMPLETE - ALL 9 ADVANCED FEATURES IMPLEMENTED!**
-
-**Total Business Value**: $610K annual savings | **ROI**: 142% | **Payback**: 8.5 months
-
-## Core Features
-
-- **Multi-Platform Support**: Track QA metrics across Web, Mobile, API, Backend, and Payment systems
-- **Real-Time Metrics**: Monitor test coverage, pass rates, defect density, and more
-- **Team Performance**: View detailed metrics for each QA team with 22 KPIs
-- **Interactive Dashboard**: Filter and sort data with an intuitive interface
-- **Detailed Analytics**: Drill down into specific team metrics and trends
-
-## 🚀 Advanced Features (All Implemented!)
-
-### 1. **Flaky Test Intelligence** 
-- Pattern categorization and detection
-- AI-powered fix suggestions
-- Historical trend analysis
-- **Value**: $75K annual savings
-
-### 2. **Technical Debt Tracker** 
-- Priority matrix visualization
-- ROI calculations
-- Cost of delay tracking
-- **Value**: $60K annual savings
-
-### 3. **CI/CD Pipeline Visualization** 
-- Interactive pipeline flow
-- Bottleneck detection
-- Resource optimization
-- **Value**: $80K annual savings
-
-### 4. **Business Impact Correlation** 
-- Quality-to-revenue mapping
-- Executive dashboards
-- Strategic recommendations
-- **Value**: $200K+ annual savings
-
-### 5. **Performance Testing Metrics** 
-- P50/P95/P99 tracking
-- Load test analysis
-- SLA compliance monitoring
-- **Value**: $40K annual savings
-
-### 6. **Developer Productivity** 
-- Happiness score tracking
-- PR efficiency metrics
-- Work-life balance monitoring
-- **Value**: $45K annual savings
-
-### 7. **Test Case Management** 
-- Effectiveness scoring
-- Redundancy detection
-- Requirement traceability
-- **Value**: $50K annual savings
-
-### 8. **Test Execution Timeline** 
-- Gantt chart visualization
-- Bottleneck identification
-- Resource allocation
-- **Value**: $35K annual savings
-
-### 9. **Team Gamification** 
-- Leaderboards and rankings
-- Badges and achievements
-- Points system
-- **Value**: $25K annual savings
-
-## Tech Stack
-
-- **React 19** with TypeScript
-- **Vite 7.2** for fast development
-- **TailwindCSS 4** for styling
-- **Recharts 3.4** for visualizations
-- **Lucide React** for icons
-
----
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js v20.19+ or v22.12+
-- npm v10.0+
-
-### Installation
+## Getting started
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-org/qa-dashboard.git
-cd qa-dashboard
-
-# Install dependencies
 npm install
-
-# Start development server
-npm run dev
+cp .env.example .env          # set DATABASE_URL and JWT_SECRET
+npm run server                # API on http://localhost:3000
+npm run dev                   # app on http://localhost:5173
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser.
+Registering creates a **new** organisation and makes you its super admin. People join an
+existing organisation only when one of its admins creates their account (Users page).
 
----
+## Where metrics come from
 
-## 📸 Screenshots
+- **KPI ingestion API** (below): the supported way to feed metrics from CI, issue trackers,
+  code analysis and other tools. There are no built-in Jenkins / Jira / SonarQube connectors.
+- **Manual metrics** page: the same server path, for values entered by hand.
+- **Expected update frequency** (Administration): how often each metric should receive a
+  value. It schedules nothing; Team detail marks a metric as stale when its last recorded
+  value (`field_sources.recorded_at`) is older than the interval.
 
-### Main Dashboard
-![Dashboard Overview](https://via.placeholder.com/800x400?text=Dashboard+Overview)
+## Definitions
 
-### Team Detail View
-![Team Details](https://via.placeholder.com/800x400?text=Team+Details)
+One definition per metric, shared by server and UI:
 
----
+- QA score, technical-debt score, DDPS, burnout risk: `server/lib/metricFormulas.ts`
+- KPI thresholds and dashboard targets: `src/config/metricsConfig.ts` (`METRICS_CONFIG`,
+  `KPI_TARGETS`, `teamAttentionIssues`); QA score bands come from `QA_SCORE_THRESHOLDS`
+- Developer health rules: `server/lib/developerHealth.ts`. "Workload balance (derived)"
+  (`developer_metrics.happiness_score`) is calculated from focus, meetings, context switches,
+  PR and review times; it is not a survey score and is not counted twice.
+- Config inheritance (team, then department, then company): `server/lib/configResolver.ts`
+- Team membership (primary team or `team_members`): `server/lib/teamMembership.ts`
+- Who may do what: `server/lib/userPolicy.ts` (see [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md))
 
-## 📋 KPI Categories
-
-### Quality & Testing (5 KPIs)
-- Test Coverage
-- Test Flakiness Rate
-- Defect Density
-- Defect Escape Rate
-- Code Quality Score
-
-### Speed & Efficiency (6 KPIs)
-- Average Build Time
-- Test Execution Time
-- Deployment Frequency
-- Lead Time for Changes
-- Mean Time to Repair (MTTR)
-- Parallel Test Efficiency
-
-### Agile & Process (7 KPIs)
-- Sprint Velocity
-- Sprint Commitment Rate
-- Sprint Carryover
-- First-Time Pass Rate
-- Blocked Time
-- Test Automation Coverage
-- Automation ROI
-
-### Reliability & Stability (4 KPIs)
-- Change Failure Rate
-- Mean Time Between Failures (MTBF)
-- System Availability
-- Infrastructure Failures
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Jenkins   │────▶│             │     │             │
-├─────────────┤     │   Backend   │────▶│  Database   │
-│    Jira     │────▶│ Aggregator  │     │ PostgreSQL  │
-├─────────────┤     │             │     │             │
-│  SonarQube  │────▶│             │     └─────────────┘
-├─────────────┤     └─────────────┘            │
-│   Datadog   │────▶       │                   │
-└─────────────┘            │                   ▼
-                           │            ┌─────────────┐
-                           └───────────▶│  Frontend   │
-                                        │  Dashboard  │
-                                        └─────────────┘
-```
-
----
-
-## 🛠️ Tech Stack
-
-### Frontend
-- **React 19** - UI framework
-- **TypeScript** - Type safety
-- **Vite 7** - Build tool
-- **TailwindCSS 4** - Styling
-- **Recharts** - Data visualization
-- **Lucide React** - Icons
-
-### Backend (Optional - for real data)
-- **Node.js** - Runtime
-- **Express** - API framework
-- **PostgreSQL** - Database
-- **Node-Cron** - Scheduled jobs
-
-### Integrations
-- Jenkins REST API
-- Jira REST API v3
-- SonarQube Web API
-- Datadog API
-- GitHub/GitLab API
-
----
-
-## 📚 Documentation
-
-- **[Installation Guide](INSTALLATION_GUIDE.md)** - Detailed setup instructions
-- **[User Guide](USER_GUIDE.md)** - How to use the dashboard
-- **[Data Integration](DATA_INTEGRATION.md)** - Connect to real data sources
-- **[Business Proposal](BUSINESS_PROPOSAL.md)** - ROI and business case
-
----
-
-## 🔧 Development
-
-### Available Scripts
-
-```bash
-# Start development server
-npm run dev
-
-# Build for production
-npm run build
-
-# Preview production build
-npm run preview
-
-# Run linter
-npm run lint
-```
-
-### Project Structure
-
-```
-qa-dashboard/
-├── src/
-│   ├── components/
-│   │   ├── TeamRow.tsx           # Team list item
-│   │   ├── TeamDetailView.tsx    # Detailed team page
-│   │   └── MetricCard.tsx        # KPI card component
-│   ├── data/
-│   │   ├── mockData.ts           # Sample data generator
-│   │   └── detailedKPIs.ts       # Detailed metrics
-│   ├── App.tsx                   # Main application
-│   └── main.tsx                  # Entry point
-├── public/                       # Static assets
-├── INSTALLATION_GUIDE.md
-├── USER_GUIDE.md
-├── DATA_INTEGRATION.md
-├── BUSINESS_PROPOSAL.md
-└── README.md
-```
-
----
-
-## 🌐 Deployment
-
-### Netlify (Recommended)
-
-```bash
-npm install -g netlify-cli
-netlify login
-netlify deploy --prod
-```
-
-### Vercel
-
-```bash
-npm install -g vercel
-vercel --prod
-```
-
-### Docker
-
-```bash
-docker build -t qa-dashboard .
-docker run -p 8080:80 qa-dashboard
-```
-
-See [INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md) for more deployment options.
-
----
-
-## 🔌 Data Integration
-
-Connect to real data sources:
-
-### Jenkins
-```typescript
-const response = await fetch(`${JENKINS_URL}/job/${jobName}/api/json`, {
-  headers: { 'Authorization': `Basic ${token}` }
-});
-```
-
-### Jira
-```typescript
-const response = await fetch(`${JIRA_URL}/rest/agile/1.0/sprint/${sprintId}`, {
-  headers: { 'Authorization': `Basic ${token}` }
-});
-```
-
-See [DATA_INTEGRATION.md](DATA_INTEGRATION.md) for complete integration guide.
-
-### KPI ingestion API
+## KPI ingestion API
 
 External systems (CI, issue tracker, code analysis) push team KPIs to `POST /api/ingest/kpis`.
 Manual entry in the app uses the same server path (`server/lib/kpiIngest.ts`), so both behave identically:
@@ -341,90 +79,16 @@ curl -X POST https://<host>/api/ingest/kpis \
 #     "updated":["code_quality_score","test_coverage"],"carriedForward":["defect_escape_rate", …]}}
 ```
 
----
 
-## 📊 Business Value
+## Tests
 
-### ROI Highlights
-- **$345,000** annual savings
-- **50%** faster issue resolution
-- **47%** reduction in production bugs
-- **20-30 hours/week** saved on manual reporting
+```bash
+npx tsc --noEmit -p tsconfig.app.json      # frontend types
+npx tsc --noEmit -p tsconfig.server.json   # API types
+npm run test:api                           # API tests (need the API running on :3000)
+npm run test:e2e                           # Playwright role tests (need API + app running)
+```
 
-See [BUSINESS_PROPOSAL.md](BUSINESS_PROPOSAL.md) for detailed ROI analysis.
+## Licence
 
----
-
-## 🔒 Proprietary Software
-
-**This is proprietary software owned by IronGate Software LTD.**
-
-⚠️ **IMPORTANT NOTICE**:
-- This software is **NOT open source**
-- Copying, modification, or distribution is **strictly prohibited**
-- Use is restricted to authorized parties only
-- See [LICENSE](LICENSE) file for complete terms
-
-For licensing inquiries, contact: legal@irongate.com
-
----
-
-## 📝 License
-
-This project is proprietary software. **All rights reserved.**
-
-Copyright (c) 2025 IronGate Software LTD.
-
-**Unauthorized copying, modification, distribution, or use is strictly prohibited.**
-
-See the [LICENSE](LICENSE) file for complete terms and conditions.
-
----
-
-## 🙏 Acknowledgments
-
-- Built with [React](https://reactjs.org/)
-- Styled with [TailwindCSS](https://tailwindcss.com/)
-- Charts powered by [Recharts](https://recharts.org/)
-- Icons from [Lucide](https://lucide.dev/)
-
----
-
-## 📞 Support
-
-- **Email**: qa-pulse-support@company.com
-- **Documentation**: [Full Docs](https://docs.qa-pulse.company.com)
-- **Issues**: [GitHub Issues](https://github.com/your-org/qa-dashboard/issues)
-
----
-
-## 🗺️ Roadmap
-
-### v1.1 (Q1 2026)
-- [ ] Real-time alerts (Slack/Email)
-- [ ] Custom report builder
-- [ ] Export to PDF/CSV
-- [ ] Mobile app
-
-### v1.2 (Q2 2026)
-- [ ] AI-powered insights
-- [ ] Predictive analytics
-- [ ] Custom KPI builder
-- [ ] Multi-language support
-
-### v2.0 (Q3 2026)
-- [ ] Advanced filtering
-- [ ] Team comparisons
-- [ ] Historical data analysis
-- [ ] API for third-party integrations
-
----
-
-<div align="center">
-
-**Made with ❤️ by the QA Team**
-
-[⬆ Back to Top](#qa-pulse---quality-assurance-intelligence-dashboard)
-
-</div>
-
+Proprietary software of IronGate Software LTD. All rights reserved. See [LICENSE](LICENSE).

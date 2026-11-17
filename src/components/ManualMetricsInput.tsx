@@ -2428,7 +2428,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                 {businessImpactConfig.historicalConfigs.map((month, index) => (
                   <tr key={month.month_year} className="border-t border-slate-300 dark:border-slate-700">
                     <td className="px-3 py-2 text-sm text-slate-900 dark:text-white font-medium">
-                      {new Date(month.month_year + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit' })}
+                      {new Date(month.month_year + '-01').toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'UTC' })}
                     </td>
                     <td className="px-3 py-2">
                       <input

@@ -1,233 +1,73 @@
-# Role-Based Permissions - QA Navigator Dashboard
+# Role permissions
 
-## Role Hierarchy
+This is what the server enforces. The UI offers the same actions because both use the same
+rules: `server/lib/userPolicy.ts` (users and teams), `server/middleware/access.ts`
+(team data), and `resolveAnalyticsTeam` in `server/routes/analytics.ts`. Every rule is also
+limited to the caller's own company. Role, department, team and active status are read from
+the database on every request, so a change applies immediately.
 
-```
-Super Admin (Highest)
-    ↓
-Manager (QA Manager)
-    ↓
-Team Lead
-    ↓
-QA Engineer
-    ↓
-Viewer (Lowest)
-```
+Roles from highest to lowest: `super_admin`, `qa_manager`, `team_lead`, `qa_engineer`, `viewer`.
 
-## Navigation & View Access
+## Viewing
 
-### Access to admin features
-- **Access**: All roles
-- **View**:
-  - **Super Admin**: All teams across all departments
-  - **Manager**: All teams in their department
-  - **Team Lead**: All teams in their department
-  - **QA Engineer**: Only their own team
-  - **Viewer**: Only their own team
+| Area | super_admin | qa_manager | team_lead | qa_engineer | viewer |
+|---|---|---|---|---|---|
+| Dashboard (company summary, all teams' latest KPIs) | yes | yes | yes | yes | yes |
+| Team detail and team KPI history | any team | any team | any team | any team | any team |
+| Developer-level metrics and recommendations on a team | any team | any team | own team | no | no |
+| Analytics modules | any team or company-wide | any team or company-wide | own team only | no | no |
+| Users page | whole company | own department + self | own team + self | no | no |
+| Teams page | all teams | own department | own team | no | no |
+| Departments page | yes | no | no | no | no |
+| Admin console, Update frequency, Parameters | yes | yes | no | no | no |
+| API keys (KPI ingestion) | yes | no | no | no | no |
 
-### Access to dashboard:
-anyone can view any team from any department:
+People who turned developer insights off are left out of individual developer data for
+everyone except themselves.
 
-- the team details: the viewer can only view team's details, metrics, without the developers and the ai insights
-- team details: the engineer can only see himself in the team details, no other developers and no ai insights
-- the team lead can view his team's developers, not other teams developers and only his team's ai insights
-- the manager can view all teams developers and ai insights
-- the super admin can view all teams developers and ai insights
+## Managing users
 
-### Users View
-- **Access**: Super Admin, Manager, Team Lead
-- **Restricted**: QA Engineer, Viewer (no access)
-- **Permissions**:
-  - **Super Admin**: View/Create/Edit/Delete all users
-  - **Manager**: View/Create/Edit/Delete users in their department
-  - **Team Lead**: View users, limited edit capabilities
+"Can manage" a user means:
 
-### Teams View
-- **Access**: Super Admin, Manager, Team Lead
-- **Restricted**: QA Engineer, Viewer (no access)
-- **Permissions**:
-  - **Super Admin**: View/Create/Edit/Delete all teams
-  - **Manager**: View/Create/Edit/Delete teams in their department
-  - **Team Lead**: View teams in their department
+- super_admin: any user in the company (not themselves);
+- qa_manager: users in their department whose role is below qa_manager;
+- team_lead: users on their primary team whose role is below team_lead.
 
-### Departments View
-- **Access**: Super Admin only
-- **Restricted**: All other roles
-- **Permissions**:
-  - **Super Admin**: View/Create/Edit/Delete all departments
+| Action | Rule |
+|---|---|
+| Create a user | super_admin: qa_manager and below; qa_manager: team_lead and below, in their department; team_lead: qa_engineer or viewer, on their own team. A primary team is required except for viewer and qa_manager. |
+| Edit another user (name, email, role, department, team) | super_admin and qa_manager, for users they can manage. A new role must be one they may create. Only a super_admin moves a user to another department. |
+| Edit yourself | Name and email only. Nobody can change their own role, department or team. |
+| Activate / deactivate, developer-insights toggle | Users you can manage. |
+| Delete | super_admin and qa_manager, for users they can manage. Delete deactivates the account and keeps its history. |
+| Reset a password | Yourself, or a user you can manage. |
 
-### Analytics
-- **Access**: All roles
-- **View**: Based on team access (same as Dashboard)
+`/api/users` only lets a person read and edit their own profile; all user administration
+goes through `/api/admin/users`.
 
-### Admin Panel
-- **Access**: Super Admin, Manager
-- **Restricted**: Team Lead, QA Engineer, Viewer
-- **Permissions**:
-  - **Super Admin**: Full access to all admin features
-  - **Manager**: Limited admin features for their department
+## Teams and team data
 
-## CRUD Permissions by Role
+| Action | super_admin | qa_manager | team_lead |
+|---|---|---|---|
+| Create, rename, delete a team | any | own department | no |
+| Turn AI suggestions on or off | any | own department | own team |
+| Enter team KPIs and developer metrics (Manual metrics) | any | own department | own team |
+| Technical-debt impact and pipeline settings | yes | yes | no |
 
-### User Management
+qa_engineer and viewer cannot write team data.
 
-| Action | Super Admin | Manager | Team Lead | QA Engineer | Viewer |
-|--------|-------------|---------|-----------|-------------|--------|
-| View Users | ✅ All | ✅ Department | ✅ Department | ❌ | ❌ |
-| Create User | ✅ | ✅ In dept | ❌ | ❌ | ❌ |
-| Edit User | ✅ | ✅ In dept | ⚠️ Limited | ❌ | ❌ |
-| Delete User | ✅ | ✅ In dept | ❌ | ❌ | ❌ |
-| Reset Password | ✅ | ✅ In dept | ⚠️ Limited | ❌ | ❌ |
+## Settings
 
-### Team Management
+| Setting | Read | Write |
+|---|---|---|
+| Parameters (SLA, financial) | super_admin, qa_manager; team_lead for their own team (resolved values) | super_admin, qa_manager |
+| Expected update frequency | everyone (used for staleness) | super_admin, qa_manager |
 
-| Action | Super Admin | Manager | Team Lead | QA Engineer | Viewer |
-|--------|-------------|---------|-----------|-------------|--------|
-| View Teams | ✅ All | ✅ Department | ✅ Department | ❌ | ❌ |
-| Create Team | ✅ | ✅ In dept | ❌ | ❌ | ❌ |
-| Edit Team | ✅ | ✅ In dept | ❌ | ❌ | ❌ |
-| Delete Team | ✅ | ✅ In dept | ❌ | ❌ | ❌ |
+Configuration values whose key looks like a credential (password, token, secret, api key)
+are never returned by the API.
 
-### Department Management
+## Registration
 
-| Action | Super Admin | Manager | Team Lead | QA Engineer | Viewer |
-|--------|-------------|---------|-----------|-------------|--------|
-| View Departments | ✅ All | ❌ | ❌ | ❌ | ❌ |
-| Create Department | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Edit Department | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Delete Department | ✅ | ❌ | ❌ | ❌ | ❌ |
-
-## Dashboard Personalization
-
-### Super Admin
-- **Title**: "Quality Assurance Dashboard"
-- **Section**: "Team Performance"
-- **Teams Shown**: All teams across all departments
-- **Metrics**: Calculated from all teams
-
-### Manager
-- **Title**: "Quality Assurance Dashboard"
-- **Section**: "Team Performance"
-- **Teams Shown**: All teams in their department
-- **Metrics**: Calculated from department teams
-
-### Team Lead
-- **Title**: "Quality Assurance Dashboard"
-- **Section**: "Team Performance"
-- **Teams Shown**: All teams in their department
-- **Metrics**: Calculated from department teams
-
-### QA Engineer
-- **Title**: "[Team Name] Dashboard"
-- **Section**: "My Team Performance"
-- **Teams Shown**: Only their primary team
-- **Metrics**: Calculated from their team only
-
-### Viewer
-- **Title**: "[Team Name] Dashboard"
-- **Section**: "My Team Performance"
-- **Teams Shown**: Only their primary team
-- **Metrics**: Calculated from their team only (read-only)
-
-## Navigation Visibility by Role
-
-### Super Admin
-- ✅ Dashboard
-- ✅ Users
-- ✅ Teams
-- ✅ Departments
-- ✅ Analytics
-- ✅ Admin Panel
-
-### Manager
-- ✅ Dashboard
-- ✅ Users
-- ✅ Teams
-- ❌ Departments
-- ✅ Analytics
-- ✅ Admin Panel
-
-### Team Lead
-- ✅ Dashboard
-- ✅ Users
-- ✅ Teams
-- ❌ Departments
-- ✅ Analytics
-- ❌ Admin Panel
-
-### QA Engineer
-- ✅ Dashboard (own team only)
-- ❌ Users
-- ❌ Teams
-- ❌ Departments
-- ✅ Analytics (own team only)
-- ❌ Admin Panel
-
-### Viewer
-- ✅ Dashboard (own team only)
-- ❌ Users
-- ❌ Teams
-- ❌ Departments
-- ✅ Analytics (own team only)
-- ❌ Admin Panel
-
-## Data Filtering Rules
-
-### Team Data
-- **Super Admin**: Sees all teams in the company
-- **Manager**: Sees teams in their department only
-- **Team Lead**: Sees teams in their department only
-- **QA Engineer**: Sees only their `primaryTeamId`
-- **Viewer**: Sees only their `primaryTeamId`
-
-### User Data
-- **Super Admin**: Sees all users in the company
-- **Manager**: Sees users in their department only
-- **Team Lead**: Sees users in their department only
-- **QA Engineer**: No access
-- **Viewer**: No access
-
-### Department Data
-- **Super Admin**: Sees all departments
-- **All Others**: No access to department management
-
-## Special Restrictions
-
-### Self-Management
-- Users **cannot delete themselves**
-- Users can view their own profile
-- Users can change their own password
-
-### Creation Hierarchy
-- **Super Admin**: Can create any role
-- **Manager**: Can create Manager, Team Lead, QA Engineer, Viewer (in their department)
-- **Team Lead**: Can create QA Engineer, Viewer (in their team)
-- **QA Engineer**: Cannot create users
-- **Viewer**: Cannot create users
-
-### Department Restrictions
-- Managers can only manage users/teams in **their assigned department**
-- Team Leads can only manage users in **their assigned department**
-- Cross-department operations require Super Admin privileges
-
-## Implementation Files
-
-- **Layout.tsx**: Navigation visibility and role checks
-- **NewDashboard.tsx**: Team filtering and personalization
-- **UsersView.tsx**: User CRUD with role permissions
-- **TeamsView.tsx**: Team CRUD with role permissions
-- **DepartmentsView.tsx**: Department CRUD (Super Admin only)
-- **AdminPanel.tsx**: Legacy admin interface (Super Admin, Manager)
-
-## Security Notes
-
-1. All API endpoints enforce role-based permissions on the backend
-2. Frontend permissions are for UX only - backend validates all operations
-3. JWT tokens contain user role and department information
-4. Unauthorized access attempts are logged and rejected
-5. Role hierarchy is enforced at the database level
-
----
-
-**Last Updated**: November 24, 2025
-**Status**: ✅ Fully Implemented
+Registering creates a new organisation; the person registering becomes its super_admin. An
+organisation name that already exists is refused. To join an existing organisation, an
+admin creates the account.

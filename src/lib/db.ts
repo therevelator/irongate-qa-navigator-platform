@@ -5,6 +5,10 @@ const { Pool, types } = pg;
 // COUNT(*) and SUM(int) come back as int8; return numbers instead of strings.
 // NUMERIC/DECIMAL stays a string, the same as mysql2 returned it.
 types.setTypeParser(types.builtins.INT8, (value: string) => parseInt(value, 10));
+// DATE columns come back as the plain 'YYYY-MM-DD' string. The default parser builds a JS
+// Date at LOCAL midnight, which shifts the day when the server's TZ is not UTC
+// (e.g. TZ=Europe/Berlin turned 2025-12-07 into 2025-12-06T23:00Z).
+types.setTypeParser(types.builtins.DATE, (value: string) => value);
 
 // Parse DATABASE_URL or use individual env vars
 function getDatabaseConfig(): pg.PoolConfig {

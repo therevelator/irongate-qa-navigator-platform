@@ -191,7 +191,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
   const historyData = (history?.chartData || [])
     .map(p => ({ date: p.date, ddps: toNum(p.ddps), developers: p.developers }))
     .filter((p): p is { date: string; ddps: number; developers: number } => p.ddps != null)
-    .map(p => ({ ...p, ddps: Math.round(p.ddps * 100) })); // stored 0–1 → 0–100
+    .map(p => ({ ...p, ddps: Math.round(p.ddps * 100) })); // API returns DDPS as a 0–1 fraction → 0–100
 
   useEffect(() => {
     if (selectedTeam === 'all') { setAiInsights(null); return; }
@@ -267,7 +267,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         <Card>
           <CardHeader
             title="Recorded DDPS snapshots"
-            subtitle="Daily average of stored productivity snapshots over the last 6 months (stored 0–1 values × 100). Snapshots are written by the snapshot job, not by this page."
+            subtitle="Daily average DDPS over the last 6 months, recalculated by the API from each stored snapshot's inputs (0–100). Snapshots are only present where they were recorded (currently by a seed script); no job creates them."
           />
           {historyLoading ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>

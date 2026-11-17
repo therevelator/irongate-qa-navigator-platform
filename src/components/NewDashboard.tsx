@@ -169,7 +169,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           title={`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, ${user?.firstName ?? ''}`.trim()}
           description={
             summary
-              ? `Engineering quality across ${summary.teamCount} teams · ${summary.teamsWithKpiData} reporting KPI data${summary.asOf ? ` · latest data ${new Date(summary.asOf).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`
+              ? `Engineering quality across ${summary.teamCount} teams · ${summary.teamsWithKpiData} reporting KPI data${summary.asOf ? ` · latest data ${new Date(summary.asOf).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}` : ''}`
               : 'Engineering quality across your organisation'
           }
           actions={canBrief && (
