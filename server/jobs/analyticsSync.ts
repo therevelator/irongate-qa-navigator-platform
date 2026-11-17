@@ -1,6 +1,10 @@
 import cron from 'node-cron';
 import { query } from '../../src/lib/db';
 import { emitJobNotification } from '../eventBus';
+import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+
+// SYNTHETIC DATA: every generator in this file writes random sample data. The seed
+// functions and the daily update only run when ENABLE_SYNTHETIC_DATA=true.
 
 // Only log in non-serverless environments
 if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -27,6 +31,10 @@ const generateId = (prefix: string): string =>
 
 // Seed pipeline stages for a company
 async function seedPipelineStages(companyId: string): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('analyticsSync.seedPipelineStages');
+    return;
+  }
   const stages = [
     { name: 'Checkout', order: 0 },
     { name: 'Install Dependencies', order: 1 },
@@ -68,6 +76,10 @@ async function seedPipelineStages(companyId: string): Promise<void> {
 
 // Seed business impact metrics with historical data
 async function seedBusinessImpactHistory(companyId: string, days: number = 30): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('analyticsSync.seedBusinessImpactHistory');
+    return;
+  }
   const metrics = ['Test Coverage', 'Code Quality', 'Deployment Frequency', 'MTTR', 'Change Failure Rate'];
   
   for (const metricName of metrics) {
@@ -104,6 +116,10 @@ async function seedBusinessImpactHistory(companyId: string, days: number = 30): 
 
 // Seed test cases for Test Case Management
 async function seedTestCases(companyId: string, teamIds: string[], count: number = 30): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('analyticsSync.seedTestCases');
+    return;
+  }
   const testNames = [
     'Login with valid credentials',
     'Login with invalid password',
@@ -181,6 +197,10 @@ async function seedTestCases(companyId: string, teamIds: string[], count: number
 
 // Seed flaky tests for Flaky Test Intelligence (links to test_cases marked as flaky)
 async function seedFlakyTests(companyId: string, teamIds: string[]): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('analyticsSync.seedFlakyTests');
+    return;
+  }
   const rootCauses = ['timing_issue', 'race_condition', 'external_dependency', 'data_pollution', 'environment_specific'];
   const fixes = [
     'Add explicit waits or increase timeout values',
@@ -223,6 +243,10 @@ async function seedFlakyTests(companyId: string, teamIds: string[]): Promise<voi
 
 // Seed test execution runs with historical data
 async function seedTestExecutionHistory(companyId: string, teamIds: string[], count: number = 100): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('analyticsSync.seedTestExecutionHistory');
+    return;
+  }
   const testSuites = [
     'Authentication Suite',
     'User Management Tests',
@@ -261,6 +285,10 @@ async function seedTestExecutionHistory(companyId: string, teamIds: string[], co
 
 // Seed performance metrics with historical data
 async function seedPerformanceHistory(companyId: string, teamIds: string[], days: number = 30): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('analyticsSync.seedPerformanceHistory');
+    return;
+  }
   const endpoints = [
     '/api/auth/login',
     '/api/users',
@@ -310,6 +338,10 @@ async function seedPerformanceHistory(companyId: string, teamIds: string[], days
 
 // Seed technical debt items
 async function seedTechnicalDebt(companyId: string, teamIds: string[], count: number = 20): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('analyticsSync.seedTechnicalDebt');
+    return;
+  }
   const titles = [
     'Refactor authentication module',
     'Update deprecated dependencies',
@@ -364,8 +396,14 @@ async function seedTechnicalDebt(companyId: string, teamIds: string[], count: nu
   console.log(`  ✓ Technical debt items seeded (${count} items)`);
 }
 
-// Seed developer metrics history
+// Seed developer metrics history.
+// NOTE: non-functional — developer_metrics has no user_id/recorded_date columns (it is keyed by
+// team_id + developer_id with one row per developer). Kept only for reference; not called anywhere.
 async function seedDeveloperMetricsHistory(companyId: string, days: number = 30): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('analyticsSync.seedDeveloperMetricsHistory');
+    return;
+  }
   // Get all developers in the company
   const developers = await query<any>(`
     SELECT DISTINCT u.id 
@@ -397,7 +435,7 @@ async function seedDeveloperMetricsHistory(companyId: string, days: number = 30)
           randomBetween(3, 7, 2),
           randomBetween(1, 4, 2),
           randomBetween(3, 15),
-          randomBetween(5, 10, 1),
+          randomBetween(40, 95, 1), // happiness_score is on a 0–100 scale
           dateStr
         ]);
       }
@@ -411,6 +449,10 @@ async function seedDeveloperMetricsHistory(companyId: string, days: number = 30)
 // ============================================================================
 
 async function updateDailyAnalytics(): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('Daily analytics update (random drift and sample rows)');
+    return;
+  }
   console.log('📊 [DAILY ANALYTICS] Starting update...', new Date().toISOString());
 
   try {
@@ -430,12 +472,13 @@ async function updateDailyAnalytics(): Promise<void> {
       await query(`
         UPDATE pipeline_stages 
         SET 
-          avg_duration_seconds = avg_duration_seconds + FLOOR(RANDOM() * 20) - 10,
+          avg_duration_seconds = GREATEST(1, avg_duration_seconds + FLOOR(RANDOM() * 20) - 10),
           success_rate = LEAST(99.99, GREATEST(80, success_rate + (RANDOM() * 4) - 2)),
           cpu_usage = LEAST(95, GREATEST(10, cpu_usage + (RANDOM() * 10) - 5)),
           memory_usage = LEAST(95, GREATEST(10, memory_usage + (RANDOM() * 10) - 5)),
           bottleneck_score = LEAST(100, GREATEST(0, bottleneck_score + (RANDOM() * 10) - 5))
         WHERE company_id = ?
+          AND NOT COALESCE(manually_edited, FALSE)
       `, [companyId]);
 
       // 2. Add today's business impact metrics
@@ -538,6 +581,10 @@ async function updateDailyAnalytics(): Promise<void> {
 // ============================================================================
 
 export async function seedAllAnalyticsData(): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('Analytics seed (seedAllAnalyticsData)');
+    return;
+  }
   console.log('📊 Seeding all analytics data...');
 
   try {

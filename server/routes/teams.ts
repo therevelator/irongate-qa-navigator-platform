@@ -4,51 +4,123 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, getOwnedTeam, canManageCompanyData } from '../middleware/access';
 import { aiLimiter } from '../middleware/rateLimit';
 import { groqChatCompletion, parseGroqJson, isGroqConfigured } from '../lib/groq';
+import {
+  TECH_DEBT_OPEN_WEIGHT_SQL,
+  techDebtScoreFromWeight,
+  toNum,
+  qaStatusFromScore
+} from '../lib/metricFormulas';
+import {
+  assessDeveloper,
+  developerMetricsFromRow,
+  normaliseDeveloperStatus,
+  summariseTeamDevelopers,
+  DEVELOPER_RULES_TEXT,
+  type DeveloperAssessment
+} from '../lib/developerHealth';
+import { METRICS_CONFIG, type MetricsConfig } from '../../src/config/metricsConfig';
 
 const router = express.Router();
 
-const TECH_DEBT_SEVERITY_WEIGHTS: Record<string, number> = {
-  critical: 30,
-  high: 20,
-  medium: 10,
-  low: 5
-};
-
 async function getTechnicalDebtScore(teamId: string): Promise<number> {
   const summary = await queryOne<any>(
-    `SELECT 
-        SUM(CASE 
-              WHEN status NOT IN ('resolved','wont_fix') THEN
-                CASE severity
-                  WHEN 'critical' THEN ?
-                  WHEN 'high' THEN ?
-                  WHEN 'medium' THEN ?
-                  WHEN 'low' THEN ?
-                  ELSE 0
-                END
-              ELSE 0
-            END) AS open_weight,
-        SUM(CASE WHEN status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items
-      FROM technical_debt
+    `SELECT ${TECH_DEBT_OPEN_WEIGHT_SQL} AS open_weight
+       FROM technical_debt
       WHERE team_id = ?`,
-    [
-      TECH_DEBT_SEVERITY_WEIGHTS.critical,
-      TECH_DEBT_SEVERITY_WEIGHTS.high,
-      TECH_DEBT_SEVERITY_WEIGHTS.medium,
-      TECH_DEBT_SEVERITY_WEIGHTS.low,
-      teamId
-    ]
+    [teamId]
   );
+  // Shared formula (server/lib/metricFormulas.ts): MIN(100, Σ open severity weights).
+  return techDebtScoreFromWeight(summary?.open_weight);
+}
 
-  const openWeight = Number(summary?.open_weight ?? 0);
-  const openItems = Number(summary?.open_items ?? 0);
+// ---------------------------------------------------------------------------
+// Rule-based team suggestions: benchmark thresholds from METRICS_CONFIG
+// (src/config/metricsConfig.ts, the same thresholds the UI colours use).
+//   value within "good"     -> strongpoint
+//   between good and warning -> area of improvement, Moderate action
+//   beyond "warning"         -> area of improvement, Urgent action
+//   null                     -> not measured (neither good nor bad)
+// ---------------------------------------------------------------------------
+interface TeamBenchmark {
+  key: keyof MetricsConfig;
+  label: string;
+  unit: string;
+  digits: number;
+  lowerIsBetter: boolean;
+  action: { initiative: string; owner: string; timebox: string; kpi: string };
+}
 
-  if (!openItems || openWeight <= 0) {
-    return 0;
+const TEAM_BENCHMARKS: TeamBenchmark[] = [
+  { key: 'defectEscapeRate', label: 'Defect escape rate', unit: '%', digits: 1, lowerIsBetter: true,
+    action: { initiative: 'Run a post-mortem on escaped defects and add regression tests for each root cause', owner: 'QA Lead', timebox: '2 weeks', kpi: 'Defect escape rate' } },
+  { key: 'changeFailureRate', label: 'Change failure rate', unit: '%', digits: 1, lowerIsBetter: true,
+    action: { initiative: 'Review failed changes; add pre-merge checks and staged rollouts for risky changes', owner: 'Release Lead', timebox: '2 weeks', kpi: 'Change failure rate' } },
+  { key: 'mttrHours', label: 'Mean time to recovery', unit: ' h', digits: 1, lowerIsBetter: true,
+    action: { initiative: 'Write runbooks for the most common incidents and practise one-click rollback', owner: 'DevOps', timebox: '3 weeks', kpi: 'MTTR' } },
+  { key: 'testCoverage', label: 'Test coverage', unit: '%', digits: 1, lowerIsBetter: false,
+    action: { initiative: 'Add tests for the least-covered critical modules and enforce coverage on new code', owner: 'QA Lead', timebox: '1 sprint', kpi: 'Test coverage' } },
+  { key: 'defectDensity', label: 'Defect density', unit: ' /KLOC', digits: 3, lowerIsBetter: true,
+    action: { initiative: 'Identify the modules with the most defects and schedule focused review/refactoring', owner: 'Tech Lead', timebox: '1 sprint', kpi: 'Defect density' } },
+  { key: 'testFlakinessRate', label: 'Test flakiness', unit: '%', digits: 1, lowerIsBetter: true,
+    action: { initiative: 'Quarantine flaky tests, fix the top offenders and track flakiness per test', owner: 'QA Lead', timebox: '3 weeks', kpi: 'Test flakiness rate' } },
+  { key: 'automationCoverage', label: 'Automation coverage', unit: '%', digits: 1, lowerIsBetter: false,
+    action: { initiative: 'Automate the highest-value manual regression cases', owner: 'QA Lead', timebox: '1 sprint', kpi: 'Automation coverage' } },
+  { key: 'codeQualityScore', label: 'Code quality score', unit: '/100', digits: 0, lowerIsBetter: false,
+    action: { initiative: 'Fix the top static-analysis findings and add a quality gate to CI', owner: 'Tech Lead', timebox: '2 weeks', kpi: 'Code quality score' } },
+  { key: 'avgBuildTimeMinutes', label: 'Build time', unit: ' min', digits: 1, lowerIsBetter: true,
+    action: { initiative: 'Profile the build; add caching and parallelise slow steps', owner: 'DevOps', timebox: '4 weeks', kpi: 'Average build time' } },
+  { key: 'leadTimeDays', label: 'Lead time for changes', unit: ' days', digits: 1, lowerIsBetter: true,
+    action: { initiative: 'Shrink batch size and remove waiting steps between merge and deploy', owner: 'Tech Lead', timebox: '1 sprint', kpi: 'Lead time' } },
+  { key: 'deploymentFrequencyPerWeek', label: 'Deployment frequency', unit: '/week', digits: 1, lowerIsBetter: false,
+    action: { initiative: 'Automate the release pipeline so small changes can ship independently', owner: 'DevOps', timebox: '1 sprint', kpi: 'Deployment frequency' } },
+  { key: 'firstTimePassRate', label: 'First-time pass rate', unit: '%', digits: 1, lowerIsBetter: false,
+    action: { initiative: 'Run the fast test suite locally/pre-push and clarify acceptance criteria before development', owner: 'QA Lead', timebox: '2 weeks', kpi: 'First-time pass rate' } },
+  { key: 'sprintCommitmentRate', label: 'Sprint commitment rate', unit: '%', digits: 1, lowerIsBetter: false,
+    action: { initiative: 'Plan to measured capacity and split stories that do not fit a sprint', owner: 'Scrum Master', timebox: '1 sprint', kpi: 'Sprint commitment rate' } },
+  { key: 'sprintCarryover', label: 'Sprint carryover', unit: '%', digits: 1, lowerIsBetter: true,
+    action: { initiative: 'Limit work in progress and review carried-over items at each planning', owner: 'Scrum Master', timebox: '1 sprint', kpi: 'Sprint carryover' } },
+  { key: 'blockedTimeHours', label: 'Blocked time', unit: ' h', digits: 1, lowerIsBetter: true,
+    action: { initiative: 'Surface blockers daily and agree a same-day escalation path', owner: 'Scrum Master', timebox: '1 week', kpi: 'Blocked time' } },
+  { key: 'systemAvailability', label: 'System availability', unit: '%', digits: 2, lowerIsBetter: false,
+    action: { initiative: 'Review recent outages and add alerting/redundancy for the weakest components', owner: 'DevOps', timebox: '4 weeks', kpi: 'System availability' } },
+  { key: 'technicalDebtScore', label: 'Technical debt score', unit: '/100', digits: 0, lowerIsBetter: true,
+    action: { initiative: 'Reserve sprint capacity for the critical and high-severity debt items', owner: 'Tech Lead', timebox: '1 sprint', kpi: 'Technical debt score' } }
+];
+
+function buildTeamRuleBasedSuggestions(metrics: Record<string, number | null | string>) {
+  const strongpoints: string[] = [];
+  const areas: Array<{ text: string; urgent: boolean; action: TeamBenchmark['action'] }> = [];
+  const notMeasured: string[] = [];
+
+  for (const b of TEAM_BENCHMARKS) {
+    const value = metrics[b.key];
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      notMeasured.push(b.label);
+      continue;
+    }
+    const cfg = METRICS_CONFIG[b.key];
+    const isGood = cfg.lowerIsBetter ? value <= cfg.good : value >= cfg.good;
+    const isAcceptable = cfg.lowerIsBetter ? value <= cfg.warning : value >= cfg.warning;
+    const shown = `${value.toFixed(b.digits)}${b.unit}`;
+    const target = `target ${cfg.lowerIsBetter ? '≤' : '≥'} ${cfg.good}${b.unit}`;
+    if (isGood) {
+      strongpoints.push(`${b.label}: ${shown} (${target})`);
+    } else {
+      areas.push({ text: `${b.label}: ${shown} (${target})`, urgent: !isAcceptable, action: b.action });
+    }
   }
 
-  // Cap to 100 to keep the score within expected bounds
-  return Math.min(100, Math.round(openWeight));
+  // Urgent (beyond the warning threshold) first; order within a group follows TEAM_BENCHMARKS.
+  areas.sort((a, b) => Number(b.urgent) - Number(a.urgent));
+  const actionPlan = areas.slice(0, 5).map((a) => ({
+    priority: a.urgent ? 'Urgent' : 'Moderate',
+    initiative: a.action.initiative,
+    owner: a.action.owner,
+    timebox: a.action.timebox,
+    kpi: `${a.action.kpi} (currently ${a.text.split(': ')[1]})`
+  }));
+
+  return { strongpoints, areasOfImprovement: areas.map((a) => a.text), actionPlan, notMeasured };
 }
 
 // Get all teams (with filters and latest metrics)
@@ -89,6 +161,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
              k.mtbf_hours,
              k.system_availability,
              k.infrastructure_failures,
+             k.sizing_accuracy,
              k.snapshot_date
       FROM teams t
       LEFT JOIN departments d ON t.department_id = d.id
@@ -125,8 +198,27 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     const teams = await query<any[]>(sql, params);
     
     // Transform teams to match frontend format
+    // Status of a single headline metric against METRICS_CONFIG; null when not recorded.
+    const metricStatus = (value: number | null, key: keyof MetricsConfig) => {
+      if (value === null) return null;
+      const cfg = METRICS_CONFIG[key];
+      if (cfg.lowerIsBetter) return value <= cfg.good ? 'good' : value <= cfg.warning ? 'warning' : 'critical';
+      return value >= cfg.good ? 'good' : value >= cfg.warning ? 'warning' : 'critical';
+    };
+
     const transformedTeams = await Promise.all(teams.map(async team => {
       const technicalDebtScore = await getTechnicalDebtScore(team.id);
+      const qaScore = toNum(team.qaScore);
+      // A team with no snapshot (or no QA score) has no score — never 0/critical.
+      const storedStatus = team.status === 'good' || team.status === 'warning' || team.status === 'critical'
+        ? team.status
+        : null;
+      const status = qaScore === null ? 'no-data' : (storedStatus ?? qaStatusFromScore(qaScore));
+
+      const coverage = toNum(team.test_coverage);
+      const density = toNum(team.defect_density);
+      const automation = toNum(team.automation_coverage);
+      const deploys = toNum(team.deployment_frequency_per_week);
 
       return {
         id: team.id,
@@ -135,61 +227,59 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
         department_id: team.department_id,
         platform: team.platform,
         description: team.description,
-        qaScore: team.qaScore || 0,
-        status: (team.status === 'good' || team.status === 'warning' || team.status === 'critical') 
-          ? team.status 
-          : (team.qaScore >= 85 ? 'good' : team.qaScore >= 70 ? 'warning' : 'critical'),
+        qaScore,
+        status,
+        snapshotDate: team.snapshot_date ?? null,
         memberCount: team.member_count || 0,
         teamLead: team.team_lead_name,
-        velocity: Array.from({ length: 5 }, (_, i) => ({
-          sprint: `S${10 + i}`,
-          committed: Math.floor(40 + Math.random() * 20),
-          delivered: Math.floor(35 + Math.random() * 20)
-        })),
+        // No sprint history is computed here; the previous random values were removed.
+        velocity: [],
+        // change/trend are not computed (there is no comparison period here) and are null.
         metrics: [
           {
             id: 'test-coverage',
             name: 'Test Coverage',
-            value: team.test_coverage || 0,
+            value: coverage,
             unit: '%',
-            change: 2.5,
-            trend: 'up' as const,
-            status: (team.test_coverage || 0) >= 80 ? 'good' : (team.test_coverage || 0) >= 70 ? 'warning' : 'critical',
+            change: null,
+            trend: null,
+            status: metricStatus(coverage, 'testCoverage'),
             history: []
           },
           {
             id: 'defect-density',
             name: 'Defect Density',
-            value: team.defect_density || 0,
+            value: density,
             unit: '/1k',
-            change: -0.1,
-            trend: 'down' as const,
-            status: (team.defect_density || 0) <= 0.5 ? 'good' : (team.defect_density || 0) <= 1.0 ? 'warning' : 'critical',
+            change: null,
+            trend: null,
+            status: metricStatus(density, 'defectDensity'),
             history: []
           },
           {
             id: 'automation-coverage',
             name: 'Automation',
-            value: team.automation_coverage || 0,
+            value: automation,
             unit: '%',
-            change: 3,
-            trend: 'up' as const,
-            status: (team.automation_coverage || 0) >= 70 ? 'good' : (team.automation_coverage || 0) >= 50 ? 'warning' : 'critical',
+            change: null,
+            trend: null,
+            status: metricStatus(automation, 'automationCoverage'),
             history: []
           },
           {
             id: 'deployment-frequency',
             name: 'Deployments/Week',
-            value: team.deployment_frequency_per_week || 0,
+            value: deploys,
             unit: '',
-            change: 1,
-            trend: 'up' as const,
-            status: (team.deployment_frequency_per_week || 0) >= 5 ? 'good' : (team.deployment_frequency_per_week || 0) >= 2 ? 'warning' : 'critical',
+            change: null,
+            trend: null,
+            status: metricStatus(deploys, 'deploymentFrequencyPerWeek'),
             history: []
           }
         ],
         technicalDebtScore,
-        taskSizingAccuracy: 0.85 + Math.random() * 0.3,
+        // Estimation accuracy ratio (actual ÷ estimate) from the latest snapshot; null when not recorded.
+        taskSizingAccuracy: toNum(team.sizing_accuracy),
         kpiData: {
           testCoverage: team.test_coverage,
           testFlakinessRate: team.test_flakiness_rate,
@@ -256,9 +346,13 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
     );
 
     // Add KPI data to team response
+    team.qaScore = toNum(kpiSnapshot?.qa_score);
+    team.status = team.qaScore === null
+      ? 'no-data'
+      : (['good', 'warning', 'critical'].includes(kpiSnapshot?.status) ? kpiSnapshot.status : qaStatusFromScore(team.qaScore));
+    team.snapshotDate = kpiSnapshot?.snapshot_date ?? null;
+    team.taskSizingAccuracy = toNum(kpiSnapshot?.sizing_accuracy);
     if (kpiSnapshot) {
-      team.qaScore = kpiSnapshot.qa_score;
-      team.status = kpiSnapshot.status;
       team.kpiData = {
         snapshotDate: kpiSnapshot.snapshot_date,
         testCoverage: kpiSnapshot.test_coverage,
@@ -494,46 +588,47 @@ router.get('/:id/ai-suggestions', aiLimiter, authenticateToken, async (req: Auth
 
     const technicalDebtScore = await getTechnicalDebtScore(team.id);
 
-    // Build team metrics payload for AI - ensure all values are numbers
-    const teamMetrics = {
+    // Build team metrics payload. Missing values stay null ("not recorded") — never 0.
+    const teamMetrics: Record<string, any> = {
       teamName: team.name,
       department: team.department_name,
-      qaScore: Number(kpiSnapshot.qa_score) || 0,
-      testCoverage: Number(kpiSnapshot.test_coverage) || 0,
-      defectDensity: Number(kpiSnapshot.defect_density) || 0,
-      defectEscapeRate: Number(kpiSnapshot.defect_escape_rate) || 0,
-      codeQualityScore: Number(kpiSnapshot.code_quality_score) || 0,
-      automationCoverage: Number(kpiSnapshot.automation_coverage) || 0,
-      deploymentFrequencyPerWeek: Number(kpiSnapshot.deployment_frequency_per_week) || 0,
-      leadTimeDays: Number(kpiSnapshot.lead_time_days) || 0,
-      mttrHours: Number(kpiSnapshot.mttr_hours) || 0,
-      changeFailureRate: Number(kpiSnapshot.change_failure_rate) || 0,
-      blockedTimeHours: Number(kpiSnapshot.blocked_time_hours) || 0,
-      testFlakinessRate: Number(kpiSnapshot.test_flakiness_rate) || 0,
-      sprintCarryover: Number(kpiSnapshot.sprint_carryover) || 0,
-      sprintVelocity: Number(kpiSnapshot.sprint_velocity) || 0,
-      sprintCommitmentRate: Number(kpiSnapshot.sprint_commitment_rate) || 0,
-      firstTimePassRate: Number(kpiSnapshot.first_time_pass_rate) || 0,
-      mtbfHours: Number(kpiSnapshot.mtbf_hours) || 0,
-      systemAvailability: Number(kpiSnapshot.system_availability) || 0,
-      parallelTestEfficiency: Number(kpiSnapshot.parallel_test_efficiency) || 0,
-      infrastructureFailures: Number(kpiSnapshot.infrastructure_failures) || 0,
-      avgBuildTimeMinutes: Number(kpiSnapshot.avg_build_time_minutes) || 0,
+      snapshotDate: kpiSnapshot.snapshot_date,
+      qaScore: toNum(kpiSnapshot.qa_score),
+      testCoverage: toNum(kpiSnapshot.test_coverage),
+      defectDensity: toNum(kpiSnapshot.defect_density),
+      defectEscapeRate: toNum(kpiSnapshot.defect_escape_rate),
+      codeQualityScore: toNum(kpiSnapshot.code_quality_score),
+      automationCoverage: toNum(kpiSnapshot.automation_coverage),
+      deploymentFrequencyPerWeek: toNum(kpiSnapshot.deployment_frequency_per_week),
+      leadTimeDays: toNum(kpiSnapshot.lead_time_days),
+      mttrHours: toNum(kpiSnapshot.mttr_hours),
+      changeFailureRate: toNum(kpiSnapshot.change_failure_rate),
+      blockedTimeHours: toNum(kpiSnapshot.blocked_time_hours),
+      testFlakinessRate: toNum(kpiSnapshot.test_flakiness_rate),
+      sprintCarryover: toNum(kpiSnapshot.sprint_carryover),
+      sprintVelocity: toNum(kpiSnapshot.sprint_velocity),
+      sprintCommitmentRate: toNum(kpiSnapshot.sprint_commitment_rate),
+      firstTimePassRate: toNum(kpiSnapshot.first_time_pass_rate),
+      mtbfHours: toNum(kpiSnapshot.mtbf_hours),
+      systemAvailability: toNum(kpiSnapshot.system_availability),
+      parallelTestEfficiency: toNum(kpiSnapshot.parallel_test_efficiency),
+      infrastructureFailures: toNum(kpiSnapshot.infrastructure_failures),
+      avgBuildTimeMinutes: toNum(kpiSnapshot.avg_build_time_minutes),
       technicalDebtScore
     };
 
-    console.log('[AI][Team]', {
-      teamId: team.id,
-      teamName: team.name,
-      metrics: teamMetrics
-    });
+    const ruleBased = buildTeamRuleBasedSuggestions(teamMetrics);
 
     // Try Groq (retries on the primary model, then a smaller model, then rule-based)
     if (isGroqConfigured()) {
       try {
         console.log('[AI:Team] Calling Groq API for team suggestions...');
+        const benchmarkText = TEAM_BENCHMARKS
+          .map((b) => `- ${b.key}: ${b.lowerIsBetter ? '≤' : '≥'}${METRICS_CONFIG[b.key].good} good, ${b.lowerIsBetter ? '≤' : '≥'}${METRICS_CONFIG[b.key].warning} acceptable, otherwise poor`)
+          .join('\n');
         const { content, model } = await groqChatCompletion({
           label: 'AI:Team',
+          temperature: 0.2,
           maxTokens: 2000,
           messages: [
             {
@@ -542,8 +637,8 @@ router.get('/:id/ai-suggestions', aiLimiter, authenticateToken, async (req: Auth
 
 Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
 {
-  "strongpoints": ["string array of 3-7 team strengths based on metrics"],
-  "areasOfImprovement": ["string array of 3-10 areas needing improvement"],
+  "strongpoints": ["string array of up to 7 team strengths based on metrics"],
+  "areasOfImprovement": ["string array of up to 10 areas needing improvement"],
   "actionPlan": [
     {
       "priority": "Urgent" or "Moderate" or "Low",
@@ -555,12 +650,13 @@ Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
   ]
 }
 
-Focus on:
-- Test coverage, defect rates, automation
-- Sprint velocity and commitment
-- Build times, deployment frequency
-- MTTR, system availability
-- Technical debt and code quality`
+Rules:
+- A value of null means the metric was NOT RECORDED. Do not treat it as good or bad; you may suggest recording it.
+- Only call a metric a problem when it is outside the "good" benchmark below. A value of 0 for a lower-is-better metric is good.
+- Every action plan item must address a metric that is outside its "good" benchmark.
+
+Benchmarks:
+${benchmarkText}`
             },
             {
               role: 'user',
@@ -572,15 +668,28 @@ Focus on:
         const aiResult = parseGroqJson(content);
         console.log('[AI:Team] Groq responded via', model);
 
+        const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+        const actionPlan = (Array.isArray(aiResult?.actionPlan) ? aiResult.actionPlan : [])
+          .filter((a: any) => a && typeof a.initiative === 'string')
+          .map((a: any) => ({
+            priority: ['Urgent', 'Moderate', 'Low'].includes(a.priority) ? a.priority : 'Moderate',
+            initiative: a.initiative,
+            owner: typeof a.owner === 'string' ? a.owner : '',
+            timebox: typeof a.timebox === 'string' ? a.timebox : '',
+            kpi: typeof a.kpi === 'string' ? a.kpi : ''
+          }));
+
         return res.json({
           teamId: team.id,
           teamName: team.name,
           qaScore: teamMetrics.qaScore,
+          snapshotDate: kpiSnapshot.snapshot_date,
           aiEnabled: true,
           source: 'groq',
-          strongpoints: aiResult.strongpoints || [],
-          areasOfImprovement: aiResult.areasOfImprovement || [],
-          actionPlan: aiResult.actionPlan || []
+          strongpoints: strings(aiResult?.strongpoints),
+          areasOfImprovement: strings(aiResult?.areasOfImprovement),
+          actionPlan,
+          notMeasured: ruleBased.notMeasured
         });
       } catch (groqError: any) {
         console.error('[AI:Team] Groq unavailable, using rule-based:', groqError.message);
@@ -590,108 +699,17 @@ Focus on:
       console.log('[AI:Team] Skipping Groq (no or short key), using rule-based suggestions');
     }
 
-    // Rule-based fallback if Groq is not available or fails
-    const strongpoints: string[] = [];
-    const areasOfImprovement: string[] = [];
-
-    if (teamMetrics.testCoverage >= 80) {
-      strongpoints.push(`High Test Coverage (${teamMetrics.testCoverage.toFixed(1)}%)`);
-    } else if (teamMetrics.testCoverage > 0) {
-      areasOfImprovement.push(`Test coverage is at ${teamMetrics.testCoverage.toFixed(1)}%`);
-    }
-
-    if (teamMetrics.defectDensity <= 0.5 && teamMetrics.defectDensity > 0) {
-      strongpoints.push(`Low Defect Density (${teamMetrics.defectDensity.toFixed(2)})`);
-    } else if (teamMetrics.defectDensity > 0.5) {
-      areasOfImprovement.push(`Defect density is ${teamMetrics.defectDensity.toFixed(2)}`);
-    }
-
-    if (teamMetrics.automationCoverage >= 70 && teamMetrics.deploymentFrequencyPerWeek >= 5) {
-      strongpoints.push(`Robust Automation (${teamMetrics.automationCoverage.toFixed(1)}%) with ${teamMetrics.deploymentFrequencyPerWeek} deployments/week`);
-    } else {
-      if (teamMetrics.automationCoverage > 0 && teamMetrics.automationCoverage < 70) {
-        areasOfImprovement.push(`Automation coverage is ${teamMetrics.automationCoverage.toFixed(1)}%`);
-      }
-    }
-
-    if (teamMetrics.sprintCommitmentRate >= 90 && teamMetrics.sprintVelocity > 0) {
-      strongpoints.push(`Excellent Sprint Commitment (${teamMetrics.sprintCommitmentRate.toFixed(1)}%)`);
-    }
-
-    if (teamMetrics.firstTimePassRate >= 85) {
-      strongpoints.push(`First-Time Pass Rate ${teamMetrics.firstTimePassRate.toFixed(1)}%`);
-    }
-
-    if (teamMetrics.leadTimeDays > 0 && teamMetrics.leadTimeDays <= 3.5) {
-      strongpoints.push(`Fast Lead Time (${teamMetrics.leadTimeDays.toFixed(1)} days)`);
-    } else if (teamMetrics.leadTimeDays > 3.5) {
-      areasOfImprovement.push(`Lead time is ${teamMetrics.leadTimeDays.toFixed(1)} days`);
-    }
-
-    if (teamMetrics.defectEscapeRate > 0) {
-      areasOfImprovement.push(`Defect-escape rate (${teamMetrics.defectEscapeRate.toFixed(1)}%)`);
-    }
-
-    if (teamMetrics.changeFailureRate > 0) {
-      areasOfImprovement.push(`Change-failure rate (${teamMetrics.changeFailureRate.toFixed(1)}%)`);
-    }
-
-    if (teamMetrics.blockedTimeHours > 0) {
-      areasOfImprovement.push(`Blocked time (${teamMetrics.blockedTimeHours.toFixed(1)} hrs)`);
-    }
-
-    if (teamMetrics.testFlakinessRate > 0) {
-      areasOfImprovement.push(`Test flakiness (${teamMetrics.testFlakinessRate.toFixed(1)}%)`);
-    }
-
-    if (teamMetrics.avgBuildTimeMinutes > 15) {
-      areasOfImprovement.push(`Build time (${teamMetrics.avgBuildTimeMinutes.toFixed(1)} min)`);
-    }
-
-    if (teamMetrics.mttrHours > 0) {
-      areasOfImprovement.push(`Mean Time to Recovery (${teamMetrics.mttrHours.toFixed(1)} hrs)`);
-    }
-
-    const actionPlan = [
-      {
-        priority: 'Urgent',
-        initiative: 'Post-mortem board for defect & change escapes',
-        owner: 'Release Lead',
-        timebox: '2 weeks',
-        kpi: 'Defect-escape rate should go down'
-      },
-      {
-        priority: 'Urgent',
-        initiative: 'Urgent ticket to surface & resolve blockers in < 1 day',
-        owner: 'Scrum Master',
-        timebox: '1 week',
-        kpi: 'Blocked time should go down'
-      },
-      {
-        priority: 'Moderate',
-        initiative: 'Automate flaky-test isolation & monitoring',
-        owner: 'QA Lead',
-        timebox: '3 weeks',
-        kpi: 'Test flakiness should go down'
-      },
-      {
-        priority: 'Moderate',
-        initiative: 'Parallel test & build pipeline tuning',
-        owner: 'DevOps',
-        timebox: '4 weeks',
-        kpi: 'Build time should go down'
-      }
-    ];
-
     res.json({
       teamId: team.id,
       teamName: team.name,
       qaScore: teamMetrics.qaScore,
+      snapshotDate: kpiSnapshot.snapshot_date,
       aiEnabled: true,
       source: 'rule-based',
-      strongpoints,
-      areasOfImprovement,
-      actionPlan
+      strongpoints: ruleBased.strongpoints,
+      areasOfImprovement: ruleBased.areasOfImprovement,
+      actionPlan: ruleBased.actionPlan,
+      notMeasured: ruleBased.notMeasured
     });
   } catch (error) {
     console.error('AI suggestions error:', error);
@@ -758,22 +776,12 @@ router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async 
       });
     }
 
-    // Build developer metrics payload for AI
-    const devMetricsPayload = developerMetrics.map((dev: any) => ({
-      developerId: dev.developer_id,
-      name: dev.name,
-      prMergeTimeHours: Number(dev.pr_merge_time_avg) || 0,
-      codeReviewTimeHours: Number(dev.code_review_time_avg) || 0,
-      focusTimeHours: Number(dev.focus_time_hours) || 0,
-      meetingTimeHours: Number(dev.meeting_time_hours) || 0,
-      contextSwitchesPerDay: Number(dev.context_switches_per_day) || 0,
-      happinessScore: Number(dev.happiness_score) || 0
-    }));
+    // Metrics payload: null = not measured (never coerced to 0).
+    const devMetricsPayload = developerMetrics.map((row: any) => developerMetricsFromRow(row));
 
-    console.log('[AI][Developers]', {
-      teamId: team.id,
-      metrics: devMetricsPayload
-    });
+    // Rule-based assessment is always computed: it is the authoritative status
+    // and the fallback for any developer the LLM omits or mislabels.
+    const ruleAssessments: DeveloperAssessment[] = devMetricsPayload.map(assessDeveloper);
 
     // Try Groq (retries on the primary model, then a smaller model, then rule-based)
     if (isGroqConfigured()) {
@@ -781,6 +789,7 @@ router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async 
         console.log('[AI:Developers] Calling Groq API for developer suggestions...');
         const { content, model } = await groqChatCompletion({
           label: 'AI:Developers',
+          temperature: 0.2,
           maxTokens: 2000,
           timeoutMs: 15000, // allow longer for multiple devs
           messages: [
@@ -792,24 +801,29 @@ For each developer, analyze their metrics and provide insights. Return ONLY vali
 {
   "developers": [
     {
+      "developerId": "the developerId from the input",
       "name": "Developer Name",
-      "status": "healthy" or "at-risk" or "needs-attention",
+      "status": "healthy" or "needs-attention" or "at-risk",
       "summary": "One sentence summary of their productivity state",
-      "strengths": ["1-3 strengths based on metrics"],
-      "concerns": ["1-3 concerns if any"],
-      "suggestion": "One actionable recommendation"
+      "strengths": ["0-3 strengths based on metrics"],
+      "concerns": ["0-4 concerns if any"],
+      "suggestion": "One or two concrete, actionable recommendations that address the concerns"
     }
   ],
   "teamInsight": "One sentence about overall team developer health"
 }
 
-Metric benchmarks:
-- PR Merge Time: <4h excellent, 4-8h good, 8-24h moderate, >24h slow
-- Code Review Time: <2h excellent, 2-4h good, >4h slow
-- Focus Time: >5h excellent, 3-5h good, <3h concerning
-- Meeting Time: <2h ideal, 2-4h acceptable, >4h too high
-- Context Switches: <3 excellent, 3-6 acceptable, >6 disruptive
-- Happiness Score: >7 great, 5-7 okay, <5 concerning`
+Metric benchmarks (per day unless noted):
+- PR Merge Time: <4h excellent, 4-24h acceptable, >24h slow (concern, weight 1)
+- Code Review Time: <2h excellent, 2-4h good, >4h slow (concern, weight 1)
+- Focus Time: >=5h excellent, 3-5h good, <3h concerning (concern, weight 2)
+- Meeting Time: <=2h ideal, 2-4h acceptable, >4h too high (concern, weight 2)
+- Context Switches: <=3 excellent, 3-6 acceptable, >6 disruptive (concern, weight 2)
+- happinessScore is a 0-100 wellbeing score: >=70 good, 50-69 okay, <50 concerning (concern, weight 2)
+
+Status rules: "at-risk" if the summed concern weight is 3 or more, or happinessScore < 50; "needs-attention" if the summed weight is 1 or 2; "healthy" only when there are no concerns.
+A null value means the metric was NOT MEASURED: never treat it as good, and mention that it is missing.
+Only give praise (e.g. "keep up the good work") when there are no concerns. When there are concerns, the suggestion must address them (e.g. protect 2-3h focus blocks and batch meetings; set a review SLA or reviewer rotation).`
             },
             {
               role: 'user',
@@ -821,101 +835,53 @@ Metric benchmarks:
         const aiResult = parseGroqJson(content);
         console.log('[AI:Developers] Groq responded via', model);
 
+        const aiDevs: any[] = Array.isArray(aiResult?.developers) ? aiResult.developers : [];
+        const strings = (v: unknown) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+        const praise = /keep up|good work|great job|well done/i;
+
+        // Merge: status and concerns always come from the rules. The LLM wording is used
+        // only when its (normalised) status agrees with the rules and it does not praise a
+        // developer who has concerns; otherwise the rule-based entry is used as-is.
+        const developers = ruleAssessments.map((rule) => {
+          const ai = aiDevs.find((d) => d && (d.developerId === rule.developerId || d.name === rule.name));
+          const aiStatus = normaliseDeveloperStatus(ai?.status);
+          const aiSuggestion = typeof ai?.suggestion === 'string' ? ai.suggestion.trim() : '';
+          const aiSummary = typeof ai?.summary === 'string' ? ai.summary.trim() : '';
+          const usable = ai && aiStatus === rule.status && aiSuggestion && aiSummary &&
+            !(rule.concerns.length > 0 && praise.test(aiSuggestion));
+          if (!usable) return { ...rule, source: 'rule-based' as const };
+          return {
+            ...rule,
+            summary: aiSummary,
+            strengths: strings(ai.strengths).slice(0, 3),
+            suggestion: aiSuggestion,
+            source: 'groq' as const
+          };
+        });
+
         return res.json({
           teamId: team.id,
           aiEnabled: true,
           source: 'groq',
-          developers: aiResult.developers || [],
-          teamInsight: aiResult.teamInsight || '',
+          developers,
+          teamInsight: summariseTeamDevelopers(ruleAssessments),
+          rules: DEVELOPER_RULES_TEXT,
           metrics: devMetricsPayload
         });
       } catch (groqError: any) {
         console.error('[AI:Developers] Groq unavailable, using rule-based:', groqError.message);
       }
     } else {
-      console.log('[AI:Developers] Skipping Groq (no or short key), returning metrics-only / non-AI response');
+      console.log('[AI:Developers] Skipping Groq (no or short key), using rule-based assessment');
     }
-
-    // Rule-based fallback for developers
-    const developerSuggestions = devMetricsPayload.map((dev: any) => {
-      const strengths: string[] = [];
-      const concerns: string[] = [];
-      let status = 'healthy';
-
-      // PR Merge Time
-      if (dev.prMergeTimeHours <= 4) {
-        strengths.push('Fast PR turnaround');
-      } else if (dev.prMergeTimeHours > 24) {
-        concerns.push('PRs taking too long to merge');
-        status = 'needs-attention';
-      }
-
-      // Code Review Time
-      if (dev.codeReviewTimeHours <= 2) {
-        strengths.push('Quick code reviews');
-      } else if (dev.codeReviewTimeHours > 4) {
-        concerns.push('Code reviews are slow');
-      }
-
-      // Focus Time
-      if (dev.focusTimeHours >= 5) {
-        strengths.push('Good focus time');
-      } else if (dev.focusTimeHours < 3) {
-        concerns.push('Low focus time');
-        status = status === 'healthy' ? 'at-risk' : status;
-      }
-
-      // Meeting Time
-      if (dev.meetingTimeHours > 4) {
-        concerns.push('Too many meetings');
-        status = status === 'healthy' ? 'at-risk' : status;
-      }
-
-      // Context Switches
-      if (dev.contextSwitchesPerDay <= 3) {
-        strengths.push('Minimal context switching');
-      } else if (dev.contextSwitchesPerDay > 6) {
-        concerns.push('High context switching');
-        status = status === 'healthy' ? 'at-risk' : status;
-      }
-
-      // Happiness
-      if (dev.happinessScore >= 7) {
-        strengths.push('High satisfaction');
-      } else if (dev.happinessScore < 5) {
-        concerns.push('Low happiness score');
-        status = 'needs-attention';
-      }
-
-      let suggestion = 'Keep up the good work!';
-      if (concerns.length > 0) {
-        if (concerns.includes('Too many meetings')) {
-          suggestion = 'Consider reducing meeting load to increase focus time';
-        } else if (concerns.includes('High context switching')) {
-          suggestion = 'Try time-blocking to reduce interruptions';
-        } else if (concerns.includes('PRs taking too long to merge')) {
-          suggestion = 'Review PR workflow for bottlenecks';
-        } else if (concerns.includes('Low happiness score')) {
-          suggestion = 'Schedule a 1:1 to discuss workload and satisfaction';
-        }
-      }
-
-      return {
-        name: dev.name,
-        status,
-        summary: concerns.length === 0 ? 'Performing well across all metrics' : `${concerns.length} area(s) need attention`,
-        strengths: strengths.length > 0 ? strengths : ['Metrics within acceptable range'],
-        concerns,
-        suggestion
-      };
-    });
 
     res.json({
       teamId: team.id,
       aiEnabled: true,
       source: 'rule-based',
-      developers: developerSuggestions,
-      teamInsight: `${developerSuggestions.filter((d: any) => d.status === 'healthy').length} of ${developerSuggestions.length} developers are in healthy state`,
+      developers: ruleAssessments.map((a) => ({ ...a, source: 'rule-based' as const })),
+      teamInsight: summariseTeamDevelopers(ruleAssessments),
+      rules: DEVELOPER_RULES_TEXT,
       metrics: devMetricsPayload
     });
   } catch (error) {

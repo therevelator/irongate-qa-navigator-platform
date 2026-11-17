@@ -2,6 +2,12 @@ import cron from 'node-cron';
 import { query, queryOne } from '../../src/lib/db';
 import { runPipelineSeederForAllCompanies } from '../seeders/pipelineSeeder';
 import { emitJobNotification } from '../eventBus';
+import { computeQaScore } from '../lib/metricFormulas';
+import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+
+// NOTE: every KPI value this job writes comes from the random generators below or
+// from simulated pipeline runs. The whole sync therefore only runs when
+// ENABLE_SYNTHETIC_DATA=true (see server/lib/syntheticData.ts).
 
 // Only log in non-serverless environments
 if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
@@ -12,11 +18,13 @@ if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
 // CALCULATE TEST FLAKINESS FROM PIPELINE DATA
 // ============================================================================
 
-// Calculate test flakiness rate from pipeline runs for a specific team
-// Flakiness = percentage of test runs that failed intermittently
-async function calculateTestFlakinessFromPipeline(teamId: string, companyId: string): Promise<number> {
+// Calculate test flakiness rate from pipeline runs for a specific team.
+// Definition: a test-stage run is "flaky" when it failed on a commit for which the
+// same stage also passed (pass and fail on the same code). Rate = flaky failed runs
+// ÷ all test-stage runs in the last 7 days × 100. Plain failures (no pass on that
+// commit) are genuine failures, not flakiness. Returns null when there are no runs.
+async function calculateTestFlakinessFromPipeline(teamId: string, companyId: string): Promise<number | null> {
   try {
-    // Get test stage runs for this team from the last 7 days
     const testRuns = await query<any>(
       `SELECT 
         ps.name as stage_name,
@@ -34,53 +42,30 @@ async function calculateTestFlakinessFromPipeline(teamId: string, companyId: str
       [companyId, teamId]
     );
 
-    if (!testRuns || testRuns.length === 0) {
-      // No pipeline data, return a realistic default
-      return Number((1 + Math.random() * 3).toFixed(2)); // 1-4% default
-    }
+    if (!testRuns || testRuns.length === 0) return null;
 
-    // Calculate flakiness: tests that sometimes pass and sometimes fail for same commit
     let totalTestRuns = 0;
-    let failedTestRuns = 0;
-
-    // Group by commit to detect flaky behavior
+    let flakyFailedRuns = 0;
     const commitStats: Record<string, { passed: number; failed: number }> = {};
 
     for (const run of testRuns) {
       const key = `${run.stage_name}-${run.commit_sha}`;
-      if (!commitStats[key]) {
-        commitStats[key] = { passed: 0, failed: 0 };
-      }
-
-      if (run.status === 'success') {
-        commitStats[key].passed += run.run_count;
-      } else {
-        commitStats[key].failed += run.run_count;
-      }
-      totalTestRuns += run.run_count;
+      if (!commitStats[key]) commitStats[key] = { passed: 0, failed: 0 };
+      const count = Number(run.run_count) || 0;
+      if (run.status === 'success') commitStats[key].passed += count;
+      else commitStats[key].failed += count;
+      totalTestRuns += count;
     }
 
-    // Count flaky tests (commits with both passes and failures)
     for (const stats of Object.values(commitStats)) {
-      if (stats.passed > 0 && stats.failed > 0) {
-        // This is a flaky test - count the failures
-        failedTestRuns += stats.failed;
-      } else if (stats.failed > 0) {
-        // Pure failures also contribute to flakiness score
-        failedTestRuns += stats.failed * 0.5; // Weight lower since might be legit failure
-      }
+      if (stats.passed > 0 && stats.failed > 0) flakyFailedRuns += stats.failed;
     }
 
-    if (totalTestRuns === 0) {
-      return Number((1 + Math.random() * 3).toFixed(2));
-    }
-
-    // Calculate flakiness percentage (capped at 15%)
-    const flakinessRate = Math.min(15, (failedTestRuns / totalTestRuns) * 100);
-    return Number(flakinessRate.toFixed(2));
+    if (totalTestRuns === 0) return null;
+    return Number(((flakyFailedRuns / totalTestRuns) * 100).toFixed(2));
   } catch (error) {
     console.error(`Error calculating flakiness for team ${teamId}:`, error);
-    return Number((1 + Math.random() * 3).toFixed(2)); // Fallback
+    return null;
   }
 }
 
@@ -130,7 +115,8 @@ const MONTHLY_METRICS = [
 ];
 
 // ============================================================================
-// METRIC VALUE GENERATORS (Mock data - replace with real API calls)
+// METRIC VALUE GENERATORS — SYNTHETIC (random) sample data.
+// Used only when ENABLE_SYNTHETIC_DATA=true. Replace with real integrations.
 // ============================================================================
 
 const metricGenerators: Record<string, () => number> = {
@@ -183,9 +169,10 @@ async function ensureTodaySnapshot(teamId: string): Promise<string> {
 
   // Create new snapshot for today
   const snapshotId = `kpi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  // No placeholder values: qa_score/status stay NULL until computed from real inputs.
   await query(
-    `INSERT INTO kpi_snapshots (id, team_id, snapshot_date, status, system_availability)
-     VALUES (?, ?, CURRENT_DATE, 'warning', 99.9)`,
+    `INSERT INTO kpi_snapshots (id, team_id, snapshot_date, qa_score, status)
+     VALUES (?, ?, CURRENT_DATE, NULL, NULL)`,
     [snapshotId, teamId]
   );
   return snapshotId;
@@ -193,20 +180,21 @@ async function ensureTodaySnapshot(teamId: string): Promise<string> {
 
 // Update specific metrics for a team
 async function updateMetrics(teamId: string, metrics: string[]): Promise<number> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('KPI sync (intervalSync generators)');
+    return 0;
+  }
   await ensureTodaySnapshot(teamId);
 
   let updated = 0;
   for (const metric of metrics) {
-    let value: number;
+    let value: number | null;
 
     // Special handling for test_flakiness_rate - calculate from pipeline data
     if (metric === 'test_flakiness_rate') {
       const companyId = await getCompanyIdForTeam(teamId);
-      if (companyId) {
-        value = await calculateTestFlakinessFromPipeline(teamId, companyId);
-      } else {
-        value = metricGenerators[metric]();
-      }
+      value = companyId ? await calculateTestFlakinessFromPipeline(teamId, companyId) : null;
+      if (value === null) continue; // no pipeline runs: leave the value unset
     } else {
       const generator = metricGenerators[metric];
       if (!generator) continue;
@@ -222,31 +210,21 @@ async function updateMetrics(teamId: string, metrics: string[]): Promise<number>
   return updated;
 }
 
-// Recalculate QA score after updates
+// Recalculate QA score after updates — the shared formula (server/lib/metricFormulas.ts),
+// identical to manual entry.
 async function recalculateQAScore(teamId: string): Promise<void> {
   const snapshot = await queryOne<any>(
-    `SELECT test_coverage, automation_coverage, defect_density, code_quality_score,
-            first_time_pass_rate, test_flakiness_rate
+    `SELECT test_coverage, defect_escape_rate, change_failure_rate, code_quality_score
      FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
     [teamId]
   );
 
   if (!snapshot) return;
 
-  const qaScore = Math.round(
-    (snapshot.test_coverage || 0) * 0.20 +
-    (snapshot.automation_coverage || 0) * 0.15 +
-    Math.max(0, 100 - (snapshot.defect_density || 0) * 50) * 0.20 +
-    (snapshot.code_quality_score || 0) * 0.15 +
-    (snapshot.first_time_pass_rate || 0) * 0.15 +
-    Math.max(0, 100 - (snapshot.test_flakiness_rate || 0) * 10) * 0.15
-  );
-
-  const status = qaScore >= 85 ? 'good' : qaScore >= 70 ? 'warning' : 'critical';
-
+  const qa = computeQaScore(snapshot);
   await query(
     'UPDATE kpi_snapshots SET qa_score = ?, status = ? WHERE team_id = ? AND snapshot_date = CURRENT_DATE',
-    [qaScore, status, teamId]
+    [qa.score, qa.status, teamId]
   );
 }
 
@@ -281,6 +259,10 @@ async function getActiveTeams(): Promise<{ id: string; name: string }[]> {
 
 // HOURLY JOB - Build times, test execution times
 async function runHourlySync(): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('KPI sync (intervalSync generators)');
+    return;
+  }
   const timestamp = new Date().toISOString();
   console.log(`⏰ [HOURLY] Starting metrics sync... ${timestamp}`);
 
@@ -311,6 +293,10 @@ async function runHourlySync(): Promise<void> {
 
 // DAILY JOB - Coverage, quality scores, pass rates
 async function runDailySync(): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('KPI sync (intervalSync generators)');
+    return;
+  }
   const timestamp = new Date().toISOString();
   console.log(`📅 [DAILY] Starting metrics sync... ${timestamp}`);
 
@@ -341,6 +327,10 @@ async function runDailySync(): Promise<void> {
 
 // WEEKLY JOB - Defects, deployments, sprint metrics
 async function runWeeklySync(): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('KPI sync (intervalSync generators)');
+    return;
+  }
   const timestamp = new Date().toISOString();
   console.log(`📆 [WEEKLY] Starting metrics sync... ${timestamp}`);
 
@@ -371,6 +361,10 @@ async function runWeeklySync(): Promise<void> {
 
 // MONTHLY JOB - ROI calculations
 async function runMonthlySync(): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('KPI sync (intervalSync generators)');
+    return;
+  }
   const timestamp = new Date().toISOString();
   console.log(`🗓️ [MONTHLY] Starting metrics sync... ${timestamp}`);
 
@@ -401,6 +395,10 @@ async function runMonthlySync(): Promise<void> {
 
 // Full sync - all metrics at once (for manual trigger or hourly combined sync)
 async function runIntervalSync(): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('KPI sync (intervalSync generators)');
+    return;
+  }
   const timestamp = new Date().toISOString();
   const allMetrics = [...HOURLY_METRICS, ...DAILY_METRICS, ...WEEKLY_METRICS, ...MONTHLY_METRICS];
 
@@ -430,6 +428,10 @@ async function runIntervalSync(): Promise<void> {
 if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   // Every 5 minutes: Pipeline stages seeder
   cron.schedule('*/5 * * * *', async () => {
+    if (!isSyntheticDataEnabled()) {
+      logSyntheticSkip('Pipeline seeder (5-minute job)');
+      return;
+    }
     console.log('🔄 [PIPELINE] Running pipeline seeder...');
     try {
       await runPipelineSeederForAllCompanies();
@@ -457,6 +459,10 @@ if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
 
   // RUN FULL SYNC AT STARTUP (after a short delay to ensure DB connection)
   setTimeout(async () => {
+    if (!isSyntheticDataEnabled()) {
+      logSyntheticSkip('Startup synthetic sync (pipeline seeder + KPI generators)');
+      return;
+    }
     console.log('🚀 [STARTUP] Running initial full metrics sync...');
     try {
       await runPipelineSeederForAllCompanies();

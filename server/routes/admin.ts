@@ -535,22 +535,9 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
         [teamId, companyId, targetDepartmentId, name, description || '']
       );
 
-      // Create initial KPI snapshot with default values (id is auto-increment)
-      // 26 columns: team_id, snapshot_date, qa_score, status + 22 metric columns
-      await query<any>(
-        `INSERT INTO kpi_snapshots (
-          team_id, snapshot_date, qa_score, status,
-          test_coverage, test_flakiness_rate, defect_density, defect_escape_rate,
-          code_quality_score, avg_build_time_minutes, test_execution_time_minutes,
-          deployment_frequency_per_week, lead_time_days, mttr_hours,
-          parallel_test_efficiency, sprint_velocity, sprint_commitment_rate,
-          sprint_carryover, first_time_pass_rate, blocked_time_hours,
-          automation_coverage, automation_roi, change_failure_rate,
-          mtbf_hours, system_availability, infrastructure_failures
-        ) VALUES (?, CURRENT_DATE, 0, 'warning',
-          0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99.9, 0)`,
-        [teamId]
-      );
+      // No initial KPI snapshot: a placeholder row of zeros (0% coverage, 0% CFR,
+      // 99.9% availability, QA 0) would be shown as real measurements. The first
+      // snapshot is created when metrics are entered.
 
       newTeam = await queryOne<any>('SELECT * FROM teams WHERE id = ?', [teamId]);
     }

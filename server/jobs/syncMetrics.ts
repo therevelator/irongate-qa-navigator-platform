@@ -1,10 +1,19 @@
 import cron from 'node-cron';
 import { query } from '../../src/lib/db';
+import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+import { computeQaScore } from '../lib/metricFormulas';
+
+// SYNTHETIC DATA (currently not imported by server/index.ts). Writes mock KPIs, so it
+// only runs when ENABLE_SYNTHETIC_DATA=true.
 
 console.log('📅 Metrics sync job initialized');
 
 // Run every 15 minutes: */15 * * * *
 cron.schedule('*/15 * * * *', async () => {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('syncMetrics mock KPI job');
+    return;
+  }
   console.log('🔄 Starting metrics sync...', new Date().toISOString());
   
   try {
@@ -117,9 +126,7 @@ cron.schedule('*/15 * * * *', async () => {
 
 // Generate mock KPI data (replace with real API calls in production)
 function generateMockKPIs(teamId: string) {
-  const baseScore = 70 + Math.random() * 25;
-  
-  return {
+  const kpis = {
     test_coverage: Number((60 + Math.random() * 35).toFixed(2)),
     test_flakiness_rate: Number((Math.random() * 5).toFixed(2)),
     defect_density: Number((Math.random() * 1.5).toFixed(3)),
@@ -142,9 +149,10 @@ function generateMockKPIs(teamId: string) {
     mtbf_hours: Math.floor(80 + Math.random() * 80),
     system_availability: Number((99 + Math.random()).toFixed(3)),
     infrastructure_failures: Math.floor(Math.random() * 8),
-    qa_score: Math.floor(baseScore),
-    status: baseScore > 85 ? 'good' : baseScore > 70 ? 'warning' : 'critical'
   };
+  // QA score/status from the shared formula, not an independent random number.
+  const qa = computeQaScore(kpis);
+  return { ...kpis, qa_score: qa.score, status: qa.status };
 }
 
 console.log('✅ Cron job scheduled: Every 15 minutes');

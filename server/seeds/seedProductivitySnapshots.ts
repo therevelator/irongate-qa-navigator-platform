@@ -7,6 +7,11 @@
 
 import 'dotenv/config';
 import { pool, query as dbQuery } from '../../src/lib/db';
+import { computeDdps } from '../lib/metricFormulas';
+import { isSyntheticDataEnabled } from '../lib/syntheticData';
+
+// SYNTHETIC DATA: this script fills developer_productivity_snapshots with random
+// sample values. It refuses to run unless ENABLE_SYNTHETIC_DATA=true.
 
 // Database connection (shared pool from src/lib/db, configured via DATABASE_URL)
 async function getConnection() {
@@ -17,7 +22,9 @@ async function query(_conn: unknown, sql: string, params?: any[]) {
     return dbQuery<any[]>(sql, params);
 }
 
-// Calculate DDPS from raw metrics
+// Calculate DDPS with the shared formula (server/lib/metricFormulas.ts, 0–100).
+// developer_productivity_snapshots.ddps_score is numeric(5,4) and is read as a 0–1
+// fraction by /api/analytics/ddps-history, so the 0–100 score is stored ÷ 100.
 function calculateDDPS(
     focusTime: number,
     prTime: number,
@@ -25,20 +32,23 @@ function calculateDDPS(
     meetingTime: number,
     contextSwitches: number
 ): { ddps: number; norms: { ft: number; prt: number; rt: number; mt: number; cs: number } } {
-    // Normalize to 8-hour workday
-    const ft_n = focusTime / 8;
-    const prt_n = prTime / 8;
+    const { score } = computeDdps({
+        focus_time_hours: focusTime,
+        pr_merge_time_avg: prTime,
+        code_review_time_avg: reviewTime,
+        meeting_time_hours: meetingTime,
+        context_switches_per_day: contextSwitches
+    });
+
+    // Normalised inputs (display only), same definitions as the frontend
+    const ft_n = Math.min(focusTime / 8, 1);
+    const prt_n = Math.min(prTime / 24, 1);
     const rt_n = reviewTime / 8;
     const mt_n = meetingTime / 8;
     const cs_n = Math.min(contextSwitches / 5, 1);
 
-    // DDPS formula
-    const numerator = 1.0 * ft_n + 0.8 * prt_n;
-    const denominator = 1 + 0.5 * rt_n + 0.7 * mt_n + 1.2 * cs_n;
-    const ddps = numerator / denominator;
-
     return {
-        ddps: Math.round(ddps * 10000) / 10000,
+        ddps: Math.round((score ?? 0) * 100) / 10000,
         norms: {
             ft: Math.round(ft_n * 10000) / 10000,
             prt: Math.round(prt_n * 10000) / 10000,
@@ -78,7 +88,11 @@ function generateDailyMetrics(dayOffset: number, developerSeed: number) {
 }
 
 export async function seedProductivitySnapshots() {
-    console.log('Seeding developer productivity snapshots...');
+    if (!isSyntheticDataEnabled()) {
+        console.log('seedProductivitySnapshots skipped: generates random sample data; set ENABLE_SYNTHETIC_DATA=true to run it.');
+        return;
+    }
+    console.log('Seeding developer productivity snapshots (SYNTHETIC sample data)...');
     const conn = await getConnection();
 
     try {

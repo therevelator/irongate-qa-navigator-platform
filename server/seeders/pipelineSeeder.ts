@@ -1,4 +1,8 @@
 import { query } from '../../src/lib/db';
+import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+
+// SYNTHETIC DATA: everything in this file generates simulated pipeline stages and
+// runs with Math.random(). It only writes when ENABLE_SYNTHETIC_DATA=true.
 
 // Pipeline stage definitions with realistic base values
 const PIPELINE_STAGES = [
@@ -38,6 +42,10 @@ function calculateBottleneck(duration: number, successRate: number, mean: number
 
 // Seed or update pipeline stages for a company (and optionally per team)
 export async function seedPipelineStages(companyId: string, teamId?: string): Promise<number> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('Pipeline seeder (stages)');
+    return 0;
+  }
   let recordsAffected = 0;
   
   try {
@@ -212,6 +220,10 @@ export async function seedPipelineStages(companyId: string, teamId?: string): Pr
 
 // Seed pipeline runs (simulated execution history)
 export async function seedPipelineRuns(companyId: string, count: number = 10): Promise<number> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('Pipeline seeder (runs)');
+    return 0;
+  }
   let recordsAffected = 0;
 
   try {
@@ -306,6 +318,10 @@ async function updateExecutionSummary(companyId: string): Promise<void> {
 
 // Seed pipeline stages for all teams in a company
 export async function seedPipelineStagesForAllTeams(companyId: string): Promise<number> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('Pipeline seeder (team stages)');
+    return 0;
+  }
   let totalAffected = 0;
   
   try {
@@ -331,6 +347,10 @@ export async function seedPipelineStagesForAllTeams(companyId: string): Promise<
 
 // Run seeder for all companies
 export async function runPipelineSeederForAllCompanies(): Promise<void> {
+  if (!isSyntheticDataEnabled()) {
+    logSyntheticSkip('Pipeline seeder (5-minute job)');
+    return;
+  }
   try {
     const companies = await query<any>('SELECT id FROM companies WHERE is_active = true');
     

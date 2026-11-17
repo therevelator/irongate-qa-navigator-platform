@@ -3,6 +3,22 @@ import { randomUUID } from 'crypto';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam } from '../middleware/access';
+import {
+  computeQaScore,
+  QA_SCORE_FORMULA,
+  QA_SCORE_WEIGHTS,
+  TECH_DEBT_SEVERITY_WEIGHTS,
+  TECH_DEBT_OPEN_WEIGHT_SQL,
+  TECH_DEBT_SCORE_FORMULA,
+  techDebtScoreFromWeight,
+  toNum
+} from '../lib/metricFormulas';
+
+/** Round a DB numeric (often a string) to `digits` decimals; null stays null. */
+function roundOrNull(value: unknown, digits: number): number | null {
+  const n = toNum(value as any);
+  return n === null ? null : Number(n.toFixed(digits));
+}
 
 const router = express.Router();
 
@@ -40,20 +56,21 @@ router.get('/analytics/history', authenticateToken, async (req: any, res) => {
     const history = await query<any>(sql, [companyId, numDays]);
 
     // Transform to chart-friendly format
+    // pg returns NUMERIC/AVG as strings; convert before rounding. Missing averages stay null.
     const chartData = history.map((row: any) => ({
       date: new Date(row.snapshot_date).toISOString().split('T')[0],
-      testCoverage: Number(row.avg_test_coverage?.toFixed(2)) || 0,
-      defectDensity: Number(row.avg_defect_density?.toFixed(3)) || 0,
-      automationCoverage: Number(row.avg_automation_coverage?.toFixed(2)) || 0,
-      codeQuality: Number(row.avg_code_quality_score?.toFixed(2)) || 0,
-      qaScore: Number(row.avg_qa_score?.toFixed(2)) || 0,
-      deploymentFrequency: Number(row.avg_deployment_frequency?.toFixed(2)) || 0,
-      mttr: Number(row.avg_mttr?.toFixed(2)) || 0,
-      leadTime: Number(row.avg_lead_time?.toFixed(2)) || 0,
-      changeFailureRate: Number(row.avg_change_failure_rate?.toFixed(2)) || 0,
-      sprintVelocity: Number(row.avg_sprint_velocity?.toFixed(2)) || 0,
-      firstTimePassRate: Number(row.avg_first_time_pass_rate?.toFixed(2)) || 0,
-      teamCount: row.team_count
+      testCoverage: roundOrNull(row.avg_test_coverage, 2),
+      defectDensity: roundOrNull(row.avg_defect_density, 3),
+      automationCoverage: roundOrNull(row.avg_automation_coverage, 2),
+      codeQuality: roundOrNull(row.avg_code_quality_score, 2),
+      qaScore: roundOrNull(row.avg_qa_score, 2),
+      deploymentFrequency: roundOrNull(row.avg_deployment_frequency, 2),
+      mttr: roundOrNull(row.avg_mttr, 2),
+      leadTime: roundOrNull(row.avg_lead_time, 2),
+      changeFailureRate: roundOrNull(row.avg_change_failure_rate, 2),
+      sprintVelocity: roundOrNull(row.avg_sprint_velocity, 2),
+      firstTimePassRate: roundOrNull(row.avg_first_time_pass_rate, 2),
+      teamCount: Number(row.team_count)
     }));
 
     res.json({ history: chartData, days: numDays });
@@ -182,14 +199,15 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
        WHERE t.company_id = ? AND t.is_active = true`,
       [companyId]
     );
-    const overallPassRate = Number(passRateResult?.avg_pass_rate) || 0;
+    // Average QA score (latest snapshot per active team); null when no team has a score.
+    const overallPassRate = toNum(passRateResult?.avg_pass_rate);
 
     // Open / critical technical-debt items act as the "defects" signal.
     const openDefectsResult = await queryOne<any>(
       `SELECT COUNT(*) as count
        FROM technical_debt td
        JOIN teams t ON td.team_id = t.id
-       WHERE t.company_id = ? AND td.status IN ('open', 'in_progress')`,
+       WHERE t.company_id = ? AND t.is_active = true AND td.status IN ('open', 'in_progress')`,
       [companyId]
     );
     const openDefects = Number(openDefectsResult?.count) || 0;
@@ -198,7 +216,7 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT COUNT(*) as count
        FROM technical_debt td
        JOIN teams t ON td.team_id = t.id
-       WHERE t.company_id = ? AND td.severity = 'critical' AND td.status IN ('open', 'in_progress')`,
+       WHERE t.company_id = ? AND t.is_active = true AND td.severity = 'critical' AND td.status IN ('open', 'in_progress')`,
       [companyId]
     );
     const criticalDefects = Number(criticalDefectsResult?.count) || 0;
@@ -223,7 +241,7 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
     res.json({
       stats: {
         totalTeams,
-        overallPassRate: parseFloat(overallPassRate.toFixed(1)),
+        overallPassRate: overallPassRate === null ? null : parseFloat(overallPassRate.toFixed(1)),
         openDefects,
         criticalDefects
       },
@@ -231,7 +249,7 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
         id: team.id,
         name: team.name,
         department_name: team.department_name,
-        passRate: parseFloat((Number(team.pass_rate) || 0).toFixed(1))
+        passRate: roundOrNull(team.pass_rate, 1)
       }))
     });
   } catch (error) {
@@ -299,25 +317,6 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     // caller must be allowed to write it (team_lead -> own team only).
     if (!(await assertTeamWrite(req, res, teamId))) return;
 
-    // Calculate QA Score based on the formula:
-    // QA_Score = Test_Coverage × 0.30 + (100 - Defect_Escape_Rate) × 0.25 + (100 - Change_Failure_Rate) × 0.25 + Code_Quality_Score × 0.20
-    const testCov = Number(test_coverage) || 0;
-    const defectEscape = Number(defect_escape_rate) || 0;
-    const changeFailure = Number(change_failure_rate) || 0;
-    const codeQuality = Number(code_quality_score) || 0;
-    
-    const qaScore = 
-      testCov * 0.30 +
-      (100 - defectEscape) * 0.25 +
-      (100 - changeFailure) * 0.25 +
-      codeQuality * 0.20;
-
-    // Determine status based on QA Score
-    let status = 'unknown';
-    if (qaScore >= 85) status = 'good';
-    else if (qaScore >= 70) status = 'warning';
-    else if (qaScore > 0) status = 'critical';
-
     // Insert or update KPI snapshot for today
     // Use INSERT ... ON CONFLICT DO UPDATE to handle existing entries for the same team/date
     //this will be the part that inserts into the DB from the aggregator
@@ -351,10 +350,8 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
         infrastructure_failures,
         sizing_accuracy,
         manually_edited
-      ) VALUES (?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
+      ) VALUES (?, CURRENT_DATE, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
       ON CONFLICT (team_id, snapshot_date) DO UPDATE SET
-        qa_score = EXCLUDED.qa_score,
-        status = EXCLUDED.status,
         test_coverage = COALESCE(EXCLUDED.test_coverage, kpi_snapshots.test_coverage),
         test_flakiness_rate = COALESCE(EXCLUDED.test_flakiness_rate, kpi_snapshots.test_flakiness_rate),
         defect_density = COALESCE(EXCLUDED.defect_density, kpi_snapshots.defect_density),
@@ -381,8 +378,6 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
         manually_edited = TRUE`,
       [
         teamId,
-        qaScore,
-        status,
         test_coverage ?? null,
         test_flakiness_rate ?? null,
         defect_density ?? null,
@@ -409,10 +404,27 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
       ]
     );
 
-    res.json({ 
+    // QA score is computed from the MERGED row (submitted values + values kept by
+    // COALESCE), with the shared formula, so it always matches the stored inputs.
+    const merged = await queryOne<any>(
+      `SELECT test_coverage, defect_escape_rate, change_failure_rate, code_quality_score
+         FROM kpi_snapshots
+        WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
+      [teamId]
+    );
+    const qa = computeQaScore(merged);
+    await query(
+      `UPDATE kpi_snapshots SET qa_score = ?, status = ?
+        WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
+      [qa.score, qa.status, teamId]
+    );
+
+    res.json({
       message: 'Metrics saved successfully',
-      qaScore: qaScore.toFixed(2),
-      status
+      qaScore: qa.score,
+      status: qa.status ?? 'insufficient-data',
+      qaScoreFormula: QA_SCORE_FORMULA,
+      qaScoreMissingInputs: qa.missingInputs
     });
   } catch (error) {
     console.error('Manual metrics error:', error);
@@ -448,6 +460,21 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
     // The developer must belong to the same company (prevents cross-tenant ids).
     if (!(await developerInCompany(req, developerId))) {
       return res.status(400).json({ error: 'Invalid developer ID' });
+    }
+
+    // happiness_score is a 0–100 wellbeing score. NOTE: the column is numeric(3,1), so it
+    // cannot store values ≥ 99.95 until it is migrated to numeric(4,1); reject those
+    // explicitly instead of failing with a database overflow error.
+    if (happinessScore !== undefined && happinessScore !== null && happinessScore !== '') {
+      const h = Number(happinessScore);
+      if (!Number.isFinite(h) || h < 0 || h > 100) {
+        return res.status(400).json({ error: 'Happiness score must be between 0 and 100' });
+      }
+      if (h >= 99.95) {
+        return res.status(400).json({
+          error: 'Happiness scores of 100 cannot be stored yet (database column limit 99.9). Please enter 99.9 or lower.'
+        });
+      }
     }
 
     await query(
@@ -562,21 +589,10 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       [teamId]
     );
 
-    // Get technical debt summary
-    const SEVERITY_WEIGHTS = { critical: 20, high: 10, medium: 5, low: 2 };
+    // Get technical debt summary (shared weights: server/lib/metricFormulas.ts)
     const debtSummary = await queryOne<any>(
-      `SELECT 
-        SUM(CASE 
-          WHEN status NOT IN ('resolved','wont_fix') THEN
-            CASE severity
-              WHEN 'critical' THEN 20
-              WHEN 'high' THEN 10
-              WHEN 'medium' THEN 5
-              WHEN 'low' THEN 2
-              ELSE 0
-            END
-          ELSE 0
-        END) AS open_weight,
+      `SELECT
+        ${TECH_DEBT_OPEN_WEIGHT_SQL} AS open_weight,
         SUM(CASE WHEN status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items,
         COUNT(*) as total_items
       FROM technical_debt WHERE team_id = ?`,
@@ -592,7 +608,8 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
         AVG(meeting_time_hours) as avg_meeting_time,
         AVG(context_switches_per_day) as avg_context_switches,
         AVG(happiness_score) as avg_happiness_score,
-        COUNT(DISTINCT developer_id) as developer_count
+        COUNT(DISTINCT developer_id) as developer_count,
+        COUNT(DISTINCT CASE WHEN COALESCE(updated_at, created_at) >= NOW() - INTERVAL '30 days' THEN developer_id END) as developer_count_30d
       FROM developer_metrics
       WHERE team_id = ?`,
       [teamId]
@@ -620,7 +637,7 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       [teamId]
     );
 
-    const technicalDebtScore = Math.min(100, Math.round(Number(debtSummary?.open_weight ?? 0)));
+    const technicalDebtScore = techDebtScoreFromWeight(debtSummary?.open_weight);
 
     // Primary metrics (directly stored/input) - show ALL even if null
     const primaryMetrics = [
@@ -656,16 +673,16 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       { id: 'infrastructure_failures', name: 'Infrastructure Failures', value: kpi?.infrastructure_failures, unit: 'count', category: 'reliability', source: 'kpi_snapshots' },
       
       // Developer Metrics (team averages)
-      { id: 'avg_pr_merge_time', name: 'Avg PR Merge Time', value: devMetrics?.avg_pr_merge_time ? Number(devMetrics.avg_pr_merge_time).toFixed(2) : null, unit: 'hours', category: 'developer', source: 'developer_metrics' },
-      { id: 'avg_code_review_time', name: 'Avg Code Review Time', value: devMetrics?.avg_code_review_time ? Number(devMetrics.avg_code_review_time).toFixed(2) : null, unit: 'hours', category: 'developer', source: 'developer_metrics' },
-      { id: 'avg_focus_time', name: 'Avg Focus Time', value: devMetrics?.avg_focus_time ? Number(devMetrics.avg_focus_time).toFixed(2) : null, unit: 'hours/day', category: 'developer', source: 'developer_metrics' },
-      { id: 'avg_meeting_time', name: 'Avg Meeting Time', value: devMetrics?.avg_meeting_time ? Number(devMetrics.avg_meeting_time).toFixed(2) : null, unit: 'hours/day', category: 'developer', source: 'developer_metrics' },
-      { id: 'avg_context_switches', name: 'Avg Context Switches', value: devMetrics?.avg_context_switches ? Number(devMetrics.avg_context_switches).toFixed(1) : null, unit: '/day', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_pr_merge_time', name: 'Avg PR Merge Time', value: roundOrNull(devMetrics?.avg_pr_merge_time, 2), unit: 'hours', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_code_review_time', name: 'Avg Code Review Time', value: roundOrNull(devMetrics?.avg_code_review_time, 2), unit: 'hours', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_focus_time', name: 'Avg Focus Time', value: roundOrNull(devMetrics?.avg_focus_time, 2), unit: 'hours/day', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_meeting_time', name: 'Avg Meeting Time', value: roundOrNull(devMetrics?.avg_meeting_time, 2), unit: 'hours/day', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_context_switches', name: 'Avg Context Switches', value: roundOrNull(devMetrics?.avg_context_switches, 1), unit: '/day', category: 'developer', source: 'developer_metrics' },
       
       // Pipeline Metrics
       { id: 'pipeline_stages_count', name: 'Pipeline Stages', value: pipelineMetrics?.total_stages, unit: 'count', category: 'pipeline', source: 'pipeline_stages' },
-      { id: 'avg_stage_duration', name: 'Avg Stage Duration', value: pipelineMetrics?.avg_duration ? Number(pipelineMetrics.avg_duration).toFixed(2) : null, unit: 'min', category: 'pipeline', source: 'pipeline_stages' },
-      { id: 'avg_stage_success_rate', name: 'Avg Stage Success Rate', value: pipelineMetrics?.avg_success_rate ? Number(pipelineMetrics.avg_success_rate).toFixed(2) : null, unit: '%', category: 'pipeline', source: 'pipeline_stages' },
+      { id: 'avg_stage_duration', name: 'Avg Stage Duration', value: roundOrNull(pipelineMetrics?.avg_duration, 2), unit: 'min', category: 'pipeline', source: 'pipeline_stages' },
+      { id: 'avg_stage_success_rate', name: 'Avg Stage Success Rate', value: roundOrNull(pipelineMetrics?.avg_success_rate, 2), unit: '%', category: 'pipeline', source: 'pipeline_stages' },
       { id: 'pipeline_bottlenecks', name: 'Pipeline Bottlenecks', value: pipelineMetrics?.bottleneck_count, unit: 'count', category: 'pipeline', source: 'pipeline_stages' },
       
       // Technical Debt Items
@@ -674,44 +691,49 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       
       // Team Info
       { id: 'team_member_count', name: 'Team Members', value: team?.member_count, unit: 'count', category: 'team', source: 'team_members' },
-      { id: 'developer_count', name: 'Active Developers (30d)', value: devMetrics?.developer_count, unit: 'count', category: 'team', source: 'developer_metrics' }
+      { id: 'developer_count', name: 'Active Developers (30d)', value: devMetrics?.developer_count_30d ?? 0, unit: 'count', category: 'team', source: 'developer_metrics (rows updated in the last 30 days)' }
     ];
 
     // Composite metrics (calculated from primary metrics)
-    const testCov = Number(kpi?.test_coverage) || 0;
-    const defectEscape = Number(kpi?.defect_escape_rate) || 0;
-    const changeFailure = Number(kpi?.change_failure_rate) || 0;
-    const codeQuality = Number(kpi?.code_quality_score) || 0;
-    
-    const calculatedQaScore = 
-      testCov * 0.30 +
-      (100 - defectEscape) * 0.25 +
-      (100 - changeFailure) * 0.25 +
-      codeQuality * 0.20;
+    // QA score: shared formula; the value shown is computed from the inputs shown,
+    // and the stored snapshot value is returned alongside for transparency.
+    const qa = computeQaScore(kpi);
 
-    // Developer happiness average
-    const avgHappiness = devMetrics?.avg_happiness_score ? Number(devMetrics.avg_happiness_score) : null;
-    
-    // Burnout risk calculation
-    const focusTime = Number(devMetrics?.avg_focus_time) || 0;
-    const meetingTime = Number(devMetrics?.avg_meeting_time) || 0;
-    const contextSwitches = Number(devMetrics?.avg_context_switches) || 0;
+    // Developer happiness (wellbeing) average, 0–100; null when nobody has a value
+    const avgHappiness = toNum(devMetrics?.avg_happiness_score);
+
+    // Burnout risk calculation (requires all three team averages)
+    const focusTime = toNum(devMetrics?.avg_focus_time);
+    const meetingTime = toNum(devMetrics?.avg_meeting_time);
+    const contextSwitches = toNum(devMetrics?.avg_context_switches);
     let burnoutRisk = 'Unknown';
-    if (devMetrics?.avg_focus_time) {
+    if (focusTime !== null && meetingTime !== null && contextSwitches !== null) {
       if (focusTime < 3 || meetingTime > 5 || contextSwitches > 10) burnoutRisk = 'High';
       else if (focusTime < 4 || meetingTime > 4 || contextSwitches > 7) burnoutRisk = 'Moderate';
       else burnoutRisk = 'Low';
     }
+    const pipelineSuccess = toNum(pipelineMetrics?.avg_success_rate);
+    const totalDebtItems = Number(debtSummary?.total_items ?? 0);
+    const openDebtItems = Number(debtSummary?.open_items ?? 0);
 
     const compositeMetrics = [
       {
         id: 'qa_score',
         name: 'Overall QA Score',
-        value: kpi?.qa_score ?? Math.round(calculatedQaScore),
+        value: qa.score,
+        storedValue: toNum(kpi?.qa_score),
         unit: '/100',
         category: 'composite',
-        formula: 'Test_Coverage × 0.30 + (100 - Defect_Escape_Rate) × 0.25 + (100 - Change_Failure_Rate) × 0.25 + Code_Quality_Score × 0.20',
-        components: { test_coverage: testCov, defect_escape_rate: defectEscape, change_failure_rate: changeFailure, code_quality_score: codeQuality },
+        formula: QA_SCORE_FORMULA,
+        components: {
+          test_coverage: toNum(kpi?.test_coverage),
+          defect_escape_rate: toNum(kpi?.defect_escape_rate),
+          change_failure_rate: toNum(kpi?.change_failure_rate),
+          code_quality_score: toNum(kpi?.code_quality_score),
+          weights: QA_SCORE_WEIGHTS,
+          weight_coverage: qa.weightCoverage,
+          missing_inputs: qa.missingInputs
+        },
         source: 'calculated from kpi_snapshots'
       },
       {
@@ -720,8 +742,8 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
         value: technicalDebtScore,
         unit: '/100',
         category: 'composite',
-        formula: 'MIN(100, SUM(open_items × severity_weight)) where critical=20, high=10, medium=5, low=2',
-        components: { open_items: Number(debtSummary?.open_items ?? 0), weighted_sum: Number(debtSummary?.open_weight ?? 0), severity_weights: SEVERITY_WEIGHTS },
+        formula: TECH_DEBT_SCORE_FORMULA,
+        components: { open_items: openDebtItems, weighted_sum: Number(debtSummary?.open_weight ?? 0), severity_weights: TECH_DEBT_SEVERITY_WEIGHTS },
         source: 'calculated from technical_debt'
       },
       {
@@ -730,18 +752,18 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
         value: getDORALevel(kpi),
         unit: 'level',
         category: 'composite',
-        formula: 'Elite: deploy ≥7/wk + lead<1d + CFR<5% + MTTR<1h | High: deploy ≥1/wk + lead<7d + CFR<10% + MTTR<24h | Medium: deploy ≥0.25/wk + lead<30d + CFR<15% + MTTR<168h | Low: otherwise',
+        formula: 'Elite: deploy ≥7/wk + lead<1d + CFR<5% + MTTR<1h | High: deploy ≥1/wk + lead<7d + CFR<10% + MTTR<24h | Medium: deploy ≥0.25/wk + lead<30d + CFR<15% + MTTR<168h | Low: otherwise | Unknown: any of the four inputs not recorded',
         components: { deployment_frequency: kpi?.deployment_frequency_per_week, lead_time_days: kpi?.lead_time_days, change_failure_rate: kpi?.change_failure_rate, mttr_hours: kpi?.mttr_hours },
         source: 'calculated from kpi_snapshots'
       },
       {
         id: 'avg_developer_happiness',
         name: 'Avg Developer Happiness',
-        value: avgHappiness ? avgHappiness.toFixed(1) : null,
+        value: avgHappiness === null ? null : Number(avgHappiness.toFixed(1)),
         unit: '/100',
         category: 'composite',
-        formula: '100 - (meeting_burden × 5) - (context_switch_penalty × 3) + (focus_time_bonus × 5) where meeting_burden = max(0, meeting_hours - 2), context_switch_penalty = max(0, switches - 5), focus_bonus = max(0, focus_hours - 4)',
-        components: { avg_focus_time: focusTime, avg_meeting_time: meetingTime, avg_context_switches: contextSwitches },
+        formula: 'AVG(happiness_score) over the team’s developers with a recorded value (0–100 scale)',
+        components: { avg_happiness_score: avgHappiness, developer_count: Number(devMetrics?.developer_count ?? 0) },
         source: 'calculated from developer_metrics'
       },
       {
@@ -757,7 +779,7 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       {
         id: 'pipeline_health',
         name: 'Pipeline Health Score',
-        value: pipelineMetrics?.avg_success_rate ? Math.round(Number(pipelineMetrics.avg_success_rate)) : null,
+        value: pipelineSuccess === null ? null : Math.round(pipelineSuccess),
         unit: '/100',
         category: 'composite',
         formula: 'AVG(success_rate) across all pipeline stages',
@@ -767,11 +789,11 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       {
         id: 'tech_debt_ratio',
         name: 'Tech Debt Resolution Rate',
-        value: debtSummary?.total_items > 0 ? Math.round(((Number(debtSummary.total_items) - Number(debtSummary.open_items)) / Number(debtSummary.total_items)) * 100) : null,
+        value: totalDebtItems > 0 ? Math.round(((totalDebtItems - openDebtItems) / totalDebtItems) * 100) : null,
         unit: '%',
         category: 'composite',
         formula: '(total_items - open_items) / total_items × 100',
-        components: { total_items: debtSummary?.total_items, open_items: debtSummary?.open_items, resolved_items: Number(debtSummary?.total_items ?? 0) - Number(debtSummary?.open_items ?? 0) },
+        components: { total_items: totalDebtItems, open_items: openDebtItems, resolved_items: totalDebtItems - openDebtItems },
         source: 'calculated from technical_debt'
       }
     ];
@@ -909,10 +931,12 @@ router.post('/business-impact-config/:teamId', authenticateToken, async (req: Au
 function getDORALevel(kpi: any): string {
   if (!kpi) return 'Unknown';
 
-  const deployFreq = Number(kpi.deployment_frequency_per_week) || 0;
-  const leadTime = Number(kpi.lead_time_days) || 999;
-  const changeFailure = Number(kpi.change_failure_rate) || 100;
-  const mttr = Number(kpi.mttr_hours) || 999;
+  // A recorded 0 is a real value (e.g. 0% CFR); only null/missing is unknown.
+  const deployFreq = toNum(kpi.deployment_frequency_per_week);
+  const leadTime = toNum(kpi.lead_time_days);
+  const changeFailure = toNum(kpi.change_failure_rate);
+  const mttr = toNum(kpi.mttr_hours);
+  if (deployFreq === null || leadTime === null || changeFailure === null || mttr === null) return 'Unknown';
 
   // Elite: Deploy multiple times/day, lead time <1 day, CFR <5%, MTTR <1hr
   if (deployFreq >= 7 && leadTime < 1 && changeFailure < 5 && mttr < 1) return 'Elite';
