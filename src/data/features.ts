@@ -39,7 +39,7 @@ export const advancedFeatures: FeatureModule[] = [
   {
     id: 'developer-productivity',
     name: 'Developer Productivity',
-    description: 'Code review time, PR metrics, and happiness scores',
+    description: 'Code review time, PR metrics, focus time and workload balance (derived)',
     icon: 'Code',
     enabled: true,
     route: '/developer-metrics',

@@ -26,7 +26,7 @@ const MODULES: { group: string; items: { id: string; title: string; description:
     group: 'Delivery',
     items: [
       { id: 'pipeline-visualization', title: 'CI/CD pipeline', description: 'Stage durations, success rates, cost and bottlenecks.', icon: GitBranch },
-      { id: 'developer-productivity', title: 'Developer productivity', description: 'Review and merge times, focus time and wellbeing signals.', icon: Activity },
+      { id: 'developer-productivity', title: 'Developer productivity', description: 'Review and merge times, focus time, meetings and workload balance.', icon: Activity },
       { id: 'business-impact', title: 'Business impact', description: 'Statistical correlation between quality metrics and business KPIs.', icon: TrendingUp },
       { id: 'team-gamification', title: 'Team rankings', description: 'Comparative team standings across quality measures.', icon: Trophy },
       { id: 'pdf-report-generator', title: 'Reports', description: 'Export a PDF quality report for stakeholders.', icon: FileText },

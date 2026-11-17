@@ -2,43 +2,49 @@
  * Developer health assessment — one weighted list of concerns per developer,
  * from which the status, summary and suggestion are all derived.
  *
- * Rules (thresholds per day unless noted; wellbeing = happiness_score on 0–100):
- *   weight 2: focus time < 3 h, meetings > 4 h, context switches > 6, wellbeing < 50
+ * Rules (thresholds per day unless noted; the warning/good bands of METRICS_CONFIG):
+ *   weight 2: focus time < 3 h, meetings > 4 h, context switches > 6
  *   weight 1: PR merge time > 24 h, code review turnaround > 4 h
- *   status:   'at-risk'          if total weight ≥ 3 OR wellbeing < 50
+ *   status:   'at-risk'          if total weight ≥ 3
  *             'needs-attention'  if total weight ≥ 1
  *             'healthy'          otherwise (no concerns in the measured metrics)
  *   A developer with no metric recorded at all is 'needs-attention' ("No metrics recorded").
  *   Severity is monotonic: adding a concern or raising its weight never lowers the status.
  *   Missing inputs are reported as "not measured" and never count as good.
  *   Praise is only given when there are zero concerns AND every input was measured.
+ *
+ * happiness_score is NOT assessed here: it is "workload balance (derived)", calculated from
+ * the same focus / meeting / context-switch / PR / review inputs, so weighting it as a
+ * separate concern would count those inputs twice.
  */
 
 import { toNum } from './metricFormulas';
+import { METRICS_CONFIG } from '../../src/config/metricsConfig';
 
 export type DeveloperStatus = 'healthy' | 'needs-attention' | 'at-risk';
 export const DEVELOPER_STATUSES: readonly DeveloperStatus[] = ['healthy', 'needs-attention', 'at-risk'];
 const STATUS_RANK: Record<DeveloperStatus, number> = { healthy: 0, 'needs-attention': 1, 'at-risk': 2 };
 
+// One set of thresholds: METRICS_CONFIG (also used for Team detail colours).
 export const DEVELOPER_THRESHOLDS = {
-  focusLowHours: 3,          // concern below
-  focusGoodHours: 5,         // strength at/above
-  meetingsHighHours: 4,      // concern above
-  meetingsGoodHours: 2,      // strength at/below
-  contextSwitchesHigh: 6,    // concern above
-  contextSwitchesGood: 3,    // strength at/below
-  wellbeingLow: 50,          // concern below (0–100 scale)
-  wellbeingGood: 70,         // strength at/above (0–100 scale)
-  prMergeSlowHours: 24,      // concern above
-  prMergeFastHours: 4,       // strength at/below
-  reviewSlowHours: 4,        // concern above
-  reviewFastHours: 2,        // strength at/below
+  focusLowHours: METRICS_CONFIG.focusTimeHours.warning,            // concern below
+  focusGoodHours: METRICS_CONFIG.focusTimeHours.good,              // strength at/above
+  meetingsHighHours: METRICS_CONFIG.meetingTimeHours.warning,      // concern above
+  meetingsGoodHours: METRICS_CONFIG.meetingTimeHours.good,         // strength at/below
+  contextSwitchesHigh: METRICS_CONFIG.contextSwitchesPerDay.warning, // concern above
+  contextSwitchesGood: METRICS_CONFIG.contextSwitchesPerDay.good,  // strength at/below
+  prMergeSlowHours: METRICS_CONFIG.prMergeTimeHours.warning,       // concern above
+  prMergeFastHours: METRICS_CONFIG.prMergeTimeHours.good,          // strength at/below
+  reviewSlowHours: METRICS_CONFIG.codeReviewTimeHours.warning,     // concern above
+  reviewFastHours: METRICS_CONFIG.codeReviewTimeHours.good,        // strength at/below
 } as const;
 
+const TH = DEVELOPER_THRESHOLDS;
 export const DEVELOPER_RULES_TEXT =
-  'Concerns — weight 2: focus < 3 h/day, meetings > 4 h/day, context switches > 6/day, wellbeing (happiness score, 0–100) < 50; ' +
-  'weight 1: PR merge time > 24 h, code review turnaround > 4 h. ' +
-  'Status: at-risk if total weight ≥ 3 or wellbeing < 50; needs-attention if total weight ≥ 1; otherwise healthy. ' +
+  `Concerns — weight 2: focus < ${TH.focusLowHours} h/day, meetings > ${TH.meetingsHighHours} h/day, context switches > ${TH.contextSwitchesHigh}/day; ` +
+  `weight 1: PR merge time > ${TH.prMergeSlowHours} h, code review turnaround > ${TH.reviewSlowHours} h. ` +
+  'Status: at-risk if total weight ≥ 3; needs-attention if total weight ≥ 1; otherwise healthy. ' +
+  'Workload balance (derived) is calculated from these same inputs, so it is shown but not counted again. ' +
   'Missing values are shown as not measured and never count as good.';
 
 export interface DeveloperMetricsInput {
@@ -52,7 +58,7 @@ export interface DeveloperMetricsInput {
   happinessScore: number | null;
 }
 
-type ConcernKey = 'wellbeing' | 'focus' | 'meetings' | 'contextSwitches' | 'prMerge' | 'review';
+type ConcernKey = 'focus' | 'meetings' | 'contextSwitches' | 'prMerge' | 'review';
 
 interface Concern {
   key: ConcernKey;
@@ -78,11 +84,9 @@ export interface DeveloperAssessment {
 }
 
 // Fixed priority used to break ties between concerns of equal weight.
-const PRIORITY: ConcernKey[] = ['wellbeing', 'focus', 'meetings', 'contextSwitches', 'prMerge', 'review'];
+const PRIORITY: ConcernKey[] = ['focus', 'meetings', 'contextSwitches', 'prMerge', 'review'];
 
 const SUGGESTIONS: Record<ConcernKey, string> = {
-  wellbeing:
-    'Hold a 1:1 this week about workload and wellbeing, and agree one concrete change (for example dropping a recurring meeting or rebalancing on-call).',
   focus:
     'Protect 2–3 hours of no-meeting focus time each day (calendar focus blocks) and batch meetings into one part of the day.',
   meetings:
@@ -95,13 +99,13 @@ const SUGGESTIONS: Record<ConcernKey, string> = {
     'Set a code-review SLA (first response within 4 hours) and a reviewer rotation so reviews do not queue.',
 };
 
-const INPUT_LABELS: Record<Exclude<keyof DeveloperMetricsInput, 'developerId' | 'name'>, string> = {
+// Measured inputs (happinessScore is derived from these, so it is not listed).
+const INPUT_LABELS: Record<Exclude<keyof DeveloperMetricsInput, 'developerId' | 'name' | 'happinessScore'>, string> = {
   prMergeTimeHours: 'PR merge time',
   codeReviewTimeHours: 'code review time',
   focusTimeHours: 'focus time',
   meetingTimeHours: 'meeting time',
   contextSwitchesPerDay: 'context switches',
-  happinessScore: 'wellbeing score',
 };
 
 const fmt = (n: number, digits = 1) => (Number.isInteger(n) ? String(n) : n.toFixed(digits));
@@ -136,16 +140,8 @@ export function assessDeveloper(dev: DeveloperMetricsInput): DeveloperAssessment
   const strengths: string[] = [];
 
   const { focusTimeHours: focus, meetingTimeHours: meetings, contextSwitchesPerDay: cs,
-    happinessScore: wellbeing, prMergeTimeHours: pr, codeReviewTimeHours: review } = dev;
+    prMergeTimeHours: pr, codeReviewTimeHours: review } = dev;
 
-  // Wellbeing (0–100)
-  if (wellbeing !== null) {
-    if (wellbeing < T.wellbeingLow) {
-      concerns.push({ key: 'wellbeing', weight: 2, label: `Low wellbeing score (${fmt(wellbeing, 0)}/100)`, suggestion: SUGGESTIONS.wellbeing });
-    } else if (wellbeing >= T.wellbeingGood) {
-      strengths.push(`Good wellbeing score (${fmt(wellbeing, 0)}/100)`);
-    }
-  }
   // Focus
   if (focus !== null) {
     if (focus < T.focusLowHours) {
@@ -195,10 +191,8 @@ export function assessDeveloper(dev: DeveloperMetricsInput): DeveloperAssessment
   // Order concerns by weight (desc), then fixed priority.
   concerns.sort((a, b) => b.weight - a.weight || PRIORITY.indexOf(a.key) - PRIORITY.indexOf(b.key));
   const concernWeight = concerns.reduce((s, c) => s + c.weight, 0);
-  const hasWellbeingConcern = concerns.some((c) => c.key === 'wellbeing');
-
   let status: DeveloperStatus;
-  if (concernWeight >= 3 || hasWellbeingConcern) status = 'at-risk';
+  if (concernWeight >= 3) status = 'at-risk';
   else if (concernWeight >= 1) status = 'needs-attention';
   else if (nothingMeasured) status = 'needs-attention';
   else status = 'healthy';

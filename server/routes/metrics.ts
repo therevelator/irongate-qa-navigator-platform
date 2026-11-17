@@ -359,7 +359,7 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Invalid developer ID' });
     }
 
-    // happiness_score is a 0–100 wellbeing score (column numeric(4,1)).
+    // happiness_score is workload balance (derived), 0–100, from focus/meeting/context-switch/PR/review inputs (column numeric(4,1)).
     if (happinessScore !== undefined && happinessScore !== null && happinessScore !== '') {
       const h = Number(happinessScore);
       if (!Number.isFinite(h) || h < 0 || h > 100) {
@@ -589,7 +589,7 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
     // and the stored snapshot value is returned alongside for transparency.
     const qa = computeQaScore(kpi);
 
-    // Developer happiness (wellbeing) average, 0–100; null when nobody has a value
+    // Workload balance (derived) average, 0–100; null when nobody has a value
     const avgHappiness = toNum(devMetrics?.avg_happiness_score);
 
     // Burnout risk calculation (requires all three team averages)
@@ -645,11 +645,11 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       },
       {
         id: 'avg_developer_happiness',
-        name: 'Avg Developer Happiness',
+        name: 'Workload balance (derived), team average',
         value: avgHappiness === null ? null : Number(avgHappiness.toFixed(1)),
         unit: '/100',
         category: 'composite',
-        formula: 'AVG(happiness_score) over the team’s developers with a recorded value (0–100 scale)',
+        formula: 'AVG(happiness_score) over the team’s developers with a recorded value (0–100). happiness_score = workload balance calculated from focus, meetings, context switches, PR and review times; not a survey score',
         components: { avg_happiness_score: avgHappiness, developer_count: Number(devMetrics?.developer_count ?? 0) },
         source: 'calculated from developer_metrics'
       },

@@ -823,9 +823,9 @@ Metric benchmarks (per day unless noted):
 - Focus Time: >=5h excellent, 3-5h good, <3h concerning (concern, weight 2)
 - Meeting Time: <=2h ideal, 2-4h acceptable, >4h too high (concern, weight 2)
 - Context Switches: <=3 excellent, 3-6 acceptable, >6 disruptive (concern, weight 2)
-- happinessScore is a 0-100 wellbeing score: >=70 good, 50-69 okay, <50 concerning (concern, weight 2)
+- happinessScore is "workload balance (derived)", 0-100, calculated from the five inputs above. It is NOT a survey or wellbeing score and is NOT a separate concern (that would count the same inputs twice); you may mention it, but do not weight it.
 
-Status rules: "at-risk" if the summed concern weight is 3 or more, or happinessScore < 50; "needs-attention" if the summed weight is 1 or 2; "healthy" only when there are no concerns.
+Status rules: "at-risk" if the summed concern weight is 3 or more; "needs-attention" if the summed weight is 1 or 2; "healthy" only when there are no concerns.
 A null value means the metric was NOT MEASURED: never treat it as good, and mention that it is missing.
 Only give praise (e.g. "keep up the good work") when there are no concerns. When there are concerns, the suggestion must address them (e.g. protect 2-3h focus blocks and batch meetings; set a review SLA or reviewer rotation).`
             },

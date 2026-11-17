@@ -801,7 +801,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                           <p className="text-sm font-medium tabular-nums text-slate-900 dark:text-white">{fmtH(m.focus_time_hours)}</p>
                         </div>
                         <div className="text-right">
-                          <p className="text-[11px] text-slate-500 dark:text-slate-400">Wellbeing</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400" title="Derived from focus, meetings, context switches, PR and review times">Workload balance</p>
                           <p className="text-sm font-medium tabular-nums text-slate-900 dark:text-white">{m.happiness_score == null ? '—' : Math.round(m.happiness_score)}</p>
                         </div>
                         <Badge tone={STATUS_META[a.status].tone}>{STATUS_META[a.status].label}</Badge>

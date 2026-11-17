@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, Sparkles, X, Loader2 } from 'lucide-react';
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
+import { KPI_TARGETS, teamAttentionIssues } from '../config/metricsConfig';
+import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
 import { useAuth } from '../contexts/AuthContext';
 import {
   Page, PageIntro, Card, CardHeader, StatTile, Badge, ProgressBar, SegmentedControl, EmptyState,
@@ -66,8 +68,12 @@ interface Row {
   flakiness: number | null;
   defects: number | null;
   automation: number | null;
+  escapeRate: number | null;
   deploys: number | null;
 }
+
+const QA_GOOD = QA_SCORE_THRESHOLDS.good;
+const QA_WARN = QA_SCORE_THRESHOLDS.warning;
 
 const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
   const { user } = useAuth();
@@ -106,6 +112,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
       flakiness: num(k.testFlakinessRate),
       defects: num(k.defectDensity),
       automation: num(k.automationCoverage),
+      escapeRate: num(k.defectEscapeRate),
       deploys: num(k.deploymentFrequencyPerWeek),
     };
   }), [teams]);
@@ -119,8 +126,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
     const q = search.trim().toLowerCase();
     const filtered = rows.filter((r) => {
       if (department !== 'all' && r.department !== department) return false;
-      if (filter === 'high' && !(r.qa != null && r.qa >= 85)) return false;
-      if (filter === 'attention' && !(r.qa != null && r.qa < 70)) return false;
+      if (filter === 'high' && !(r.qa != null && r.qa >= QA_GOOD)) return false;
+      // Same rule as the "Needs attention" card (server company-summary uses teamAttentionIssues too).
+      if (filter === 'attention' && !(r.qa != null && teamAttentionIssues({ qaScore: r.qa, testCoverage: r.coverage, testFlakinessRate: r.flakiness, defectEscapeRate: r.escapeRate, automationCoverage: r.automation }).length > 0)) return false;
       return !q || r.name.toLowerCase().includes(q);
     });
     const dir = sort.dir === 'asc' ? 1 : -1;
@@ -185,12 +193,12 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 {summary?.globalQaScore != null ? Math.round(summary.globalQaScore) : '—'}
                 <span className="ml-1 text-sm font-normal text-slate-500">/ 100</span>
               </p>
-              {summary?.globalQaScore != null && <ProgressBar value={summary.globalQaScore} tone={scoreTone(summary.globalQaScore, 85, 70)} className="mt-3" />}
+              {summary?.globalQaScore != null && <ProgressBar value={summary.globalQaScore} tone={scoreTone(summary.globalQaScore, QA_GOOD, QA_WARN)} className="mt-3" />}
             </div>
             {[
               { label: 'Engineering health', v: summary?.engineeringHealthScore, caption: 'Composite quality index' },
               { label: 'Delivery (DORA)', v: summary?.deliveryPerformanceScore, caption: 'Deploy frequency, lead time, CFR, MTTR' },
-              { label: 'Developer wellness', v: summary?.developerWellnessIndex, caption: 'Focus, meetings, satisfaction' },
+              { label: 'Workload balance (derived)', v: summary?.developerWellnessIndex, caption: 'From focus, meetings, context switches, PR and review times' },
               { label: 'Debt health', v: summary?.techDebtStatusScore, caption: '100 = no open debt items' },
               { label: 'Pipeline health', v: summary?.pipelineHealthScore, caption: 'Successful pipeline runs, 30 days' },
             ].map((t) => {
@@ -216,11 +224,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
             <CardHeader title="Quality indicators" subtitle="Average of each team's latest snapshot" />
             <dl className="space-y-3.5">
               {[
-                { label: 'Test coverage', v: summary?.avgTestCoverage, target: 80, higherBetter: true },
-                { label: 'Automation coverage', v: summary?.automationCoverage, target: 70, higherBetter: true },
-                // Targets match the server's KPI-status thresholds (analytics.ts company-summary)
-                { label: 'Test flakiness', v: summary?.avgFlakinessRate, target: 3, higherBetter: false },
-                { label: 'Defect escape rate', v: summary?.avgDefectEscapeRate, target: 2, higherBetter: false },
+                // One set of targets (KPI_TARGETS in metricsConfig), shared with the server's KPI status
+                { label: 'Test coverage', v: summary?.avgTestCoverage, target: KPI_TARGETS.coverage, higherBetter: true },
+                { label: 'Automation coverage', v: summary?.automationCoverage, target: KPI_TARGETS.automation, higherBetter: true },
+                { label: 'Test flakiness', v: summary?.avgFlakinessRate, target: KPI_TARGETS.flakiness, higherBetter: false },
+                { label: 'Defect escape rate', v: summary?.avgDefectEscapeRate, target: KPI_TARGETS.escapeRate, higherBetter: false },
               ].map((m) => {
                 const v = num(m.v);
                 const ok = v == null ? null : m.higherBetter ? v >= m.target : v <= m.target;
@@ -269,7 +277,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           </Card>
 
           <Card>
-            <CardHeader title="Needs attention" subtitle="Lowest-scoring teams and their main issue" />
+            <CardHeader title="Needs attention" subtitle={`QA score below ${QA_WARN} or a KPI off target`} />
             {summary?.needsAttention?.length ? (
               <ul className="divide-y divide-slate-100 dark:divide-slate-800 -my-2">
                 {summary.needsAttention.map((t) => (
@@ -278,7 +286,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                       <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{t.name}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{t.issue}</p>
                     </div>
-                    <span className={cx('text-sm font-semibold tabular-nums', scoreTone(t.score, 85, 70) === 'bad' ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400')}>{t.score}</span>
+                    <span className={cx('text-sm font-semibold tabular-nums', scoreTone(t.score, QA_GOOD, QA_WARN) === 'bad' ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400')}>{t.score}</span>
                   </li>
                 ))}
               </ul>
@@ -333,7 +341,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {visible.map((r) => {
-                    const tone = scoreTone(r.qa, 85, 70);
+                    const tone = scoreTone(r.qa, QA_GOOD, QA_WARN);
                     return (
                       <tr
                         key={r.team.id}

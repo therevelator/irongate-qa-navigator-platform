@@ -15,6 +15,8 @@
  *   - Values < warning threshold = red
  */
 
+import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
+
 export interface MetricThreshold {
   good: number;
   warning: number;
@@ -255,9 +257,10 @@ export const METRICS_CONFIG: MetricsConfig = {
   // COMBINED/CALCULATED METRICS
   // ============================================
   
+  // Same thresholds as the server's QA status (metricFormulas.QA_SCORE_THRESHOLDS).
   qaScore: {
-    good: 85,
-    warning: 70,
+    good: QA_SCORE_THRESHOLDS.good,
+    warning: QA_SCORE_THRESHOLDS.warning,
     lowerIsBetter: false,
     unit: '/100',
     description: 'Overall QA health score'
@@ -320,9 +323,58 @@ export const METRICS_CONFIG: MetricsConfig = {
     warning: 50,
     lowerIsBetter: false,
     unit: '/100',
-    description: 'Developer satisfaction score'
+    // happiness_score is calculateWorkloadBalance() of focus, meetings, context switches,
+    // PR and review times — a derived score, not a survey of satisfaction.
+    description: 'Workload balance (derived from focus, meetings, context switches, PR and review times)'
   }
 };
+
+/**
+ * KPI targets used by the dashboard (company summary "on track", "needs attention",
+ * quality indicators) and anywhere else a single pass/fail target is shown.
+ * The target is the metric's "good" threshold, so the dashboard, Team detail colours and
+ * team suggestions agree on what "on target" means.
+ */
+export const KPI_TARGETS = {
+  coverage: METRICS_CONFIG.testCoverage.good,          // test_coverage >= target (%)
+  automation: METRICS_CONFIG.automationCoverage.good,  // automation_coverage >= target (%)
+  flakiness: METRICS_CONFIG.testFlakinessRate.good,    // test_flakiness_rate <= target (%)
+  escapeRate: METRICS_CONFIG.defectEscapeRate.good,    // defect_escape_rate <= target (%)
+} as const;
+
+export interface TeamKpiValues {
+  qaScore: number | null;
+  testCoverage: number | null;
+  testFlakinessRate: number | null;
+  defectEscapeRate: number | null;
+  automationCoverage: number | null;
+}
+
+const r1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * One definition of "needs attention", used by the company summary card and the dashboard
+ * table filter: QA score below the warning threshold, or any recorded KPI off its target.
+ * Returns the reasons; an empty list means the team does not need attention.
+ */
+export function teamAttentionIssues(t: TeamKpiValues): string[] {
+  const issues: string[] = [];
+  if (t.qaScore !== null && t.qaScore < QA_SCORE_THRESHOLDS.warning) {
+    issues.push(`QA score ${Math.round(t.qaScore)} (critical, <${QA_SCORE_THRESHOLDS.warning})`);
+  }
+  if (t.testCoverage !== null && t.testCoverage < KPI_TARGETS.coverage) issues.push(`Test coverage ${r1(t.testCoverage)}% (target ≥${KPI_TARGETS.coverage}%)`);
+  if (t.testFlakinessRate !== null && t.testFlakinessRate > KPI_TARGETS.flakiness) issues.push(`Flakiness ${r1(t.testFlakinessRate)}% (target ≤${KPI_TARGETS.flakiness}%)`);
+  if (t.defectEscapeRate !== null && t.defectEscapeRate > KPI_TARGETS.escapeRate) issues.push(`Defect escape rate ${r1(t.defectEscapeRate)}% (target ≤${KPI_TARGETS.escapeRate}%)`);
+  if (t.automationCoverage !== null && t.automationCoverage < KPI_TARGETS.automation) issues.push(`Automation ${r1(t.automationCoverage)}% (target ≥${KPI_TARGETS.automation}%)`);
+  return issues;
+}
+
+/** Short target text for a metric, e.g. "≥ 80%" or "≤ 4 hours". */
+export function metricTargetText(metricKey: keyof MetricsConfig): string {
+  const c = METRICS_CONFIG[metricKey];
+  const unit = c.unit ? (c.unit.startsWith('%') || c.unit.startsWith('/') ? c.unit : ` ${c.unit}`) : '';
+  return `${c.lowerIsBetter ? '≤' : '≥'} ${c.good}${unit}`;
+}
 
 /**
  * Get the status color class for a metric value

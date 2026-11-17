@@ -48,8 +48,8 @@ export const KPI_COLUMNS = {
   automation_roi: { label: 'Automation ROI', min: -9999.99, max: 9999.99, unit: '%' },
   change_failure_rate: { label: 'Change failure rate', min: 0, max: 100, unit: '%' },
   mtbf_hours: { label: 'Mean time between failures', min: 0, max: 1000000, integer: true, unit: 'h' },
-  // numeric(5,3): 100.000 does not fit the column, so the upper bound is 99.999.
-  system_availability: { label: 'System availability', min: 0, max: 99.999, unit: '%' },
+  // numeric(6,3) since migration 20261118000000, so 100.000 % is stored as sent.
+  system_availability: { label: 'System availability', min: 0, max: 100, unit: '%' },
   infrastructure_failures: { label: 'Infrastructure failures', min: 0, max: 100000, integer: true },
   sizing_accuracy: { label: 'Sizing accuracy', min: 0, max: 99.99, unit: 'ratio' },
 } as const satisfies Record<string, KpiColumnSpec>;

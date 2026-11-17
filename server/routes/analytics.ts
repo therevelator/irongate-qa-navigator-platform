@@ -6,7 +6,8 @@ import { aiLimiter } from '../middleware/rateLimit';
 import { seedAllAnalyticsData, updateDailyAnalytics } from '../jobs/analyticsSync';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
-import { toNum, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel } from '../lib/metricFormulas';
+import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues } from '../../src/config/metricsConfig';
+import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
 
 const router = express.Router();
@@ -2137,16 +2138,11 @@ Provide actionable insights that a CTO would understand and use to make investme
 // ============================================================================
 
 // QA score thresholds: one set everywhere (same as kpi_snapshots.status).
-const QA_GOOD_THRESHOLD = 85;
-const QA_WARNING_THRESHOLD = 70; // below this = critical
+const QA_GOOD_THRESHOLD = QA_SCORE_THRESHOLDS.good;
+const QA_WARNING_THRESHOLD = QA_SCORE_THRESHOLDS.warning; // below this = critical
 
-// Per-team KPI targets used for kpiStatus and needsAttention
-const KPI_TARGETS = {
-  coverage: 80,   // test_coverage >= 80%
-  flakiness: 3,   // test_flakiness_rate <= 3%
-  escapeRate: 2,  // defect_escape_rate <= 2%
-  automation: 70  // automation_coverage >= 70%
-};
+// Per-team KPI targets (kpiStatus, needsAttention): KPI_TARGETS from src/config/metricsConfig,
+// the same thresholds Team detail and team suggestions use.
 
 // DORA performance level per team. Bands are identical to getDORALevel() in
 // server/routes/metrics.ts (DORA State of DevOps bands):
@@ -2175,8 +2171,9 @@ const ENGINEERING_HEALTH_WEIGHTS = {
   deliveryPerformance: 0.35,
   pipelineHealth: 0.25,
   techDebtStatus: 0.20,
-  developerHappiness: 0.15,
-  burnoutRisk: 0.05
+  // Workload balance (derived) already contains focus, meetings and context switches, so the
+  // burnout rule (built from the same inputs) is not weighted separately.
+  workloadBalance: 0.20
 };
 
 async function computeCompanyMetrics(companyId: string) {
@@ -2240,27 +2237,19 @@ async function computeCompanyMetrics(companyId: string) {
   const sortedByScore = [...teamsWithData].sort((a, b) => (num(b.qa_score) as number) - (num(a.qa_score) as number));
   const topImproving = sortedByScore.slice(0, 3).map(t => ({ name: t.name, score: Math.round(num(t.qa_score) as number) }));
 
-  // Per-team KPI checks (only KPIs with a recorded value are judged)
-  const kpiIssuesFor = (t: any): string[] => {
-    const issues: string[] = [];
-    const coverage = num(t.test_coverage);
-    const flakiness = num(t.test_flakiness_rate);
-    const escape = num(t.defect_escape_rate);
-    const automation = num(t.automation_coverage);
-    if (coverage !== null && coverage < KPI_TARGETS.coverage) issues.push(`Test coverage ${roundTo(coverage, 1)}% (target ≥${KPI_TARGETS.coverage}%)`);
-    if (flakiness !== null && flakiness > KPI_TARGETS.flakiness) issues.push(`Flakiness ${roundTo(flakiness, 1)}% (target ≤${KPI_TARGETS.flakiness}%)`);
-    if (escape !== null && escape > KPI_TARGETS.escapeRate) issues.push(`Defect escape rate ${roundTo(escape, 1)}% (target ≤${KPI_TARGETS.escapeRate}%)`);
-    if (automation !== null && automation < KPI_TARGETS.automation) issues.push(`Automation ${roundTo(automation, 1)}% (target ≥${KPI_TARGETS.automation}%)`);
-    return issues;
-  };
-
-  // Needs attention: QA score critical (<70) or any KPI off target
+  // Needs attention: QA score critical or any recorded KPI off target. Same rule as the
+  // dashboard table's "Needs attention" filter (teamAttentionIssues in metricsConfig).
   type AttentionItem = { name: string; score: number; issue: string; issues: string[]; snapshotDate: string };
   const needsAttention: AttentionItem[] = teamsWithData
     .map((t: any): AttentionItem => {
       const score = num(t.qa_score) as number;
-      const issues = kpiIssuesFor(t);
-      if (score < QA_WARNING_THRESHOLD) issues.unshift(`QA score ${Math.round(score)} (critical, <${QA_WARNING_THRESHOLD})`);
+      const issues = teamAttentionIssues({
+        qaScore: score,
+        testCoverage: num(t.test_coverage),
+        testFlakinessRate: num(t.test_flakiness_rate),
+        defectEscapeRate: num(t.defect_escape_rate),
+        automationCoverage: num(t.automation_coverage),
+      });
       return { name: t.name, score: Math.round(score), issue: issues.join('; '), issues, snapshotDate: t.snapshot_day };
     })
     .filter((t: AttentionItem) => t.issues.length > 0)
@@ -2327,22 +2316,15 @@ async function computeCompanyMetrics(companyId: string) {
   const contextSwitches = developerCount > 0 ? num(dev?.avg_switches) : null;
 
   // Burnout risk: the shared rule (metricFormulas.computeBurnoutRisk / BURNOUT_DEFINITION),
-  // applied to the company averages. Scored High 20 / Moderate 60 / Low 100; null when any input is missing.
+  // applied to the company averages; reported in developerWellnessBasis, not scored.
   const burnoutRisk = burnoutRiskLabel(computeBurnoutRisk({
     focus_time_hours: focusTime, meeting_time_hours: meetingTime, context_switches_per_day: contextSwitches
   }));
-  const burnoutRiskScore: number | null =
-    burnoutRisk === 'High' ? 20 : burnoutRisk === 'Moderate' ? 60 : burnoutRisk === 'Low' ? 100 : null;
-  const focusTimeScore = focusTime === null ? null
-    : focusTime >= 4 ? 100 : focusTime >= 3 ? 80 : focusTime >= 2 ? 60 : 40;
-  const meetingLoadScore = meetingTime === null ? null
-    : meetingTime <= 2 ? 100 : meetingTime <= 4 ? 80 : meetingTime <= 6 ? 60 : 40;
-  const wellnessRaw = weightedMeanOf([
-    { value: happiness, weight: 0.6 },
-    { value: burnoutRiskScore, weight: 0.2 },
-    { value: focusTimeScore, weight: 0.1 },
-    { value: meetingLoadScore, weight: 0.1 }
-  ]);
+  // Workload balance (derived): the mean of each developer's stored happiness_score, which
+  // is calculateWorkloadBalance() of focus, meetings, context switches, PR and review times.
+  // It is used on its own: adding burnout risk or separate focus/meeting bands on top would
+  // count the same inputs twice. (Field name kept as developerWellnessIndex for the API.)
+  const wellnessRaw = happiness;
   const developerWellnessIndex = wellnessRaw !== null ? Math.round(wellnessRaw) : null;
 
   // Delivery performance (DORA): mean of per-team level scores over classified teams
@@ -2379,8 +2361,7 @@ async function computeCompanyMetrics(companyId: string) {
     deliveryPerformance: deliveryPerformanceScore,
     pipelineHealth: pipelineHealthScore,
     techDebtStatus: techDebtStatusScore,
-    developerHappiness: happiness,
-    burnoutRisk: burnoutRiskScore
+    workloadBalance: happiness
   };
   const healthRaw = weightedMeanOf(
     (Object.keys(ENGINEERING_HEALTH_WEIGHTS) as Array<keyof typeof ENGINEERING_HEALTH_WEIGHTS>)
@@ -2446,6 +2427,7 @@ async function computeCompanyMetrics(companyId: string) {
       levels: doraLevels
     },
     developerWellnessBasis: {
+      method: 'Workload balance (derived): mean of developer_metrics.happiness_score per developer, which is calculated from focus, meetings, context switches, PR and review times. Not a survey score.',
       developers: developerCount,
       avgHappiness: roundTo(happiness, 1),
       avgFocusHours: roundTo(focusTime, 1),
@@ -2543,7 +2525,7 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
 Current Metrics (team KPI snapshots as of ${m.asOf ?? 'unknown date'}; "no data" means not measured, do not guess a value):
 - Engineering Health: ${fmt(m.engineeringHealthScore)} (components without data are excluded: ${m.engineeringHealthBasis.missing.join(', ') || 'none'})
 - Delivery (DORA): ${fmt(m.deliveryPerformanceScore)}
-- Wellness: ${fmt(m.developerWellnessIndex)}
+- Workload balance (derived from focus/meeting/context-switch/PR/review inputs): ${fmt(m.developerWellnessIndex)}
 - Tech Debt Status: ${fmt(m.techDebtStatusScore)}
 - Pipeline Health (successful pipeline runs, last 30 days): ${m.pipelineHealthScore === null ? 'no data' : `${m.pipelineHealthScore}%`}
 
@@ -2744,9 +2726,10 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
       };
 
       const lossDrivers: string[] = [];
-      if (avgMetrics.meeting > 2.5) lossDrivers.push('meetings');
-      if (avgMetrics.contextSwitches > 5) lossDrivers.push('context switching');
-      if (avgMetrics.focusTime < 4) lossDrivers.push('insufficient focus time');
+      // Same bands as developer health and Team detail (METRICS_CONFIG "good" thresholds).
+      if (avgMetrics.meeting > METRICS_CONFIG.meetingTimeHours.good) lossDrivers.push(`meetings above ${METRICS_CONFIG.meetingTimeHours.good} h/day`);
+      if (avgMetrics.contextSwitches > METRICS_CONFIG.contextSwitchesPerDay.good) lossDrivers.push(`context switching above ${METRICS_CONFIG.contextSwitchesPerDay.good}/day`);
+      if (avgMetrics.focusTime < METRICS_CONFIG.focusTimeHours.good) lossDrivers.push(`focus time below ${METRICS_CONFIG.focusTimeHours.good} h/day`);
 
       executiveSummary = {
         headline: `Average DDPS ${Math.round(avgDDPS * 100)}/100 across ${snapshots.length} daily snapshots.`,

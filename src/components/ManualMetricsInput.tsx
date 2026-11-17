@@ -4,6 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import API_URL from '../config/api';
+import { METRICS_CONFIG, getMetricStatus, metricTargetText } from '../config/metricsConfig';
+import type { MetricsConfig } from '../config/metricsConfig';
 import { Page, PageIntro, Badge, buttonClass, cx } from './ui';
 import {
   BURNOUT_DEFINITION,
@@ -162,7 +164,8 @@ interface ManualMetricsInputProps {
   onBack: () => void;
 }
 
-// All 22 metrics with their formulas and input fields
+// Team KPIs with their formulas and input fields. Targets come from METRICS_CONFIG
+// (src/config/metricsConfig.ts), the same thresholds Team detail and the dashboard use.
 const METRICS: MetricDefinition[] = [
   // Quality Metrics
   {
@@ -177,7 +180,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.totalLOC > 0 ? (inputs.linesExecuted / inputs.totalLOC) * 100 : 0,
     unit: '%',
-    target: '>80% critical, >70% overall'
+    target: metricTargetText('testCoverage')
   },
   {
     id: 'flakiness-rate',
@@ -191,7 +194,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.totalRuns > 0 ? (inputs.flakyRuns / inputs.totalRuns) * 100 : 0,
     unit: '%',
-    target: '<2%',
+    target: metricTargetText('testFlakinessRate'),
     lowerIsBetter: true
   },
   {
@@ -206,7 +209,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.linesOfCode > 0 ? inputs.totalBugs / inputs.linesOfCode : 0,
     unit: '/1k LOC',
-    target: '<0.5 per 1k LOC',
+    target: metricTargetText('defectDensity'),
     lowerIsBetter: true
   },
   {
@@ -221,7 +224,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.totalBugs > 0 ? (inputs.productionBugs / inputs.totalBugs) * 100 : 0,
     unit: '%',
-    target: '<5%',
+    target: metricTargetText('defectEscapeRate'),
     lowerIsBetter: true
   },
   {
@@ -237,7 +240,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => (inputs.maintainability * 0.4) + (inputs.reliability * 0.35) + (inputs.security * 0.25),
     unit: '/100',
-    target: '>85 (A rating)'
+    target: metricTargetText('codeQualityScore')
   },
 
   // Speed Metrics
@@ -253,7 +256,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.buildCount > 0 ? inputs.totalBuildTime / inputs.buildCount : 0,
     unit: 'min',
-    target: '<10 minutes',
+    target: metricTargetText('avgBuildTimeMinutes'),
     lowerIsBetter: true
   },
   {
@@ -267,7 +270,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.executionTime || 0,
     unit: 'min',
-    target: '<30 min full, <5 min critical',
+    target: metricTargetText('testExecutionTimeMinutes'),
     lowerIsBetter: true
   },
   {
@@ -282,7 +285,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.weeks > 0 ? inputs.successfulDeploys / inputs.weeks : 0,
     unit: '/week',
-    target: '>5/week (daily for elite)'
+    target: metricTargetText('deploymentFrequencyPerWeek')
   },
   {
     id: 'lead-time',
@@ -295,7 +298,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.leadTimeDays || 0,
     unit: 'days',
-    target: '<1 day elite, <1 week high',
+    target: metricTargetText('leadTimeDays'),
     lowerIsBetter: true
   },
   {
@@ -310,7 +313,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.incidentCount > 0 ? inputs.totalRepairTime / inputs.incidentCount : 0,
     unit: 'hours',
-    target: '<1 hour elite, <1 day high',
+    target: metricTargetText('mttrHours'),
     lowerIsBetter: true
   },
   {
@@ -328,22 +331,9 @@ const METRICS: MetricDefinition[] = [
       ? ((inputs.sequentialTime / inputs.parallelTime) / inputs.workers) * 100 
       : 0,
     unit: '%',
-    target: '>80% (near-linear)'
+    target: metricTargetText('parallelTestEfficiency')
   },
-  {
-    id: 'env-startup-time',
-    name: 'Environment Startup Time',
-    category: 'speed',
-    description: 'Time to provision test environments',
-    formula: 'Avg(ready_time - request_time)',
-    inputs: [
-      { id: 'startupTime', label: 'Average Startup Time (minutes)', type: 'number', placeholder: 'e.g., 8', min: 0 }
-    ],
-    calculate: (inputs) => inputs.startupTime || 0,
-    unit: 'min',
-    target: '<5 min fast, <10 min ok',
-    lowerIsBetter: true
-  },
+
 
   // Agile Metrics
   {
@@ -357,7 +347,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.completedPoints || 0,
     unit: 'pts',
-    target: 'Stable ±10% over 3-4 sprints'
+    target: metricTargetText('sprintVelocity')
   },
   {
     id: 'sprint-commitment',
@@ -371,7 +361,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.committedPoints > 0 ? (inputs.completedPoints / inputs.committedPoints) * 100 : 0,
     unit: '%',
-    target: '>85%'
+    target: metricTargetText('sprintCommitmentRate')
   },
   {
     id: 'sprint-carryover',
@@ -385,7 +375,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.committedPoints > 0 ? (inputs.incompletePoints / inputs.committedPoints) * 100 : 0,
     unit: '%',
-    target: '<10%',
+    target: metricTargetText('sprintCarryover'),
     lowerIsBetter: true
   },
   {
@@ -400,7 +390,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.totalStories > 0 ? (inputs.passedFirstTime / inputs.totalStories) * 100 : 0,
     unit: '%',
-    target: '>75%'
+    target: metricTargetText('firstTimePassRate')
   },
   {
     id: 'blocked-time',
@@ -413,7 +403,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.blockedHours || 0,
     unit: 'hrs',
-    target: '<15 hours/sprint',
+    target: metricTargetText('blockedTimeHours'),
     lowerIsBetter: true
   },
   {
@@ -428,7 +418,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.totalTests > 0 ? (inputs.automatedTests / inputs.totalTests) * 100 : 0,
     unit: '%',
-    target: '>70% regression, >50% overall'
+    target: metricTargetText('automationCoverage')
   },
   {
     id: 'automation-roi',
@@ -472,7 +462,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.totalDeploys > 0 ? (inputs.failedDeploys / inputs.totalDeploys) * 100 : 0,
     unit: '%',
-    target: '<5% elite, <15% high',
+    target: metricTargetText('changeFailureRate'),
     lowerIsBetter: true
   },
   {
@@ -487,7 +477,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.failures > 0 ? inputs.operationalHours / inputs.failures : inputs.operationalHours,
     unit: 'hours',
-    target: '>100 hours'
+    target: metricTargetText('mtbfHours')
   },
   {
     id: 'availability',
@@ -501,7 +491,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.totalTime > 0 ? ((inputs.totalTime - inputs.downtime) / inputs.totalTime) * 100 : 0,
     unit: '%',
-    target: '>99.9% (three nines)'
+    target: metricTargetText('systemAvailability')
   },
   {
     id: 'infra-failures',
@@ -514,7 +504,7 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.infraFailures || 0,
     unit: 'count',
-    target: '<5 per sprint',
+    target: metricTargetText('infrastructureFailures'),
     lowerIsBetter: true
   }
 ];
@@ -1366,31 +1356,15 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   };
 
   const getStatusColor = (metricId: string, value: number): string => {
-    const metric = METRICS.find(m => m.id === metricId);
-    if (!metric) return 'text-slate-500 dark:text-slate-400';
-
-    // Parse target to determine good/bad thresholds
-    const target = metric.target.toLowerCase();
-    
-    if (metric.lowerIsBetter) {
-      // For metrics where lower is better
-      if (target.includes('<')) {
-        const threshold = parseFloat(target.match(/[\d.]+/)?.[0] || '0');
-        if (value <= threshold) return 'text-green-700 dark:text-green-400';
-        if (value <= threshold * 1.5) return 'text-amber-700 dark:text-amber-400';
-        return 'text-red-700 dark:text-red-400';
-      }
-    } else {
-      // For metrics where higher is better
-      if (target.includes('>')) {
-        const threshold = parseFloat(target.match(/[\d.]+/)?.[0] || '0');
-        if (value >= threshold) return 'text-green-700 dark:text-green-400';
-        if (value >= threshold * 0.7) return 'text-amber-700 dark:text-amber-400';
-        return 'text-red-700 dark:text-red-400';
-      }
+    const key = METRIC_DB_MAPPING[metricId];
+    // Same good / warning thresholds as Team detail (METRICS_CONFIG).
+    if (key && key in METRICS_CONFIG) {
+      const status = getMetricStatus(value, key as keyof MetricsConfig);
+      return status === 'good' ? 'text-green-700 dark:text-green-400'
+        : status === 'warning' ? 'text-amber-700 dark:text-amber-400'
+        : 'text-red-700 dark:text-red-400';
     }
-    
-    return 'text-brand-700 dark:text-brand-300';
+    return 'text-slate-700 dark:text-slate-300';
   };
 
   const groupedMetrics = METRICS.reduce((acc, metric) => {
