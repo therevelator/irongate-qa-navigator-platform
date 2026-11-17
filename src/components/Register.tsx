@@ -1,470 +1,191 @@
 import React, { useState } from 'react';
-import { Shield, Mail, Lock, Eye, EyeOff, User, CheckCircle, Building2, Users } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { UserRole } from '../types/auth';
-import Swal from 'sweetalert2';
-// Department and team will be created during registration
 
 interface RegisterProps {
   onSwitchToLogin: () => void;
 }
 
+const validateName = (name: string) => /^[\p{L}\s'-]+$/u.test(name) && !/\d/.test(name);
+const validateCompanyName = (name: string) => /^[\p{L}\d\s'&.-]+$/u.test(name);
+const passwordScore = (pw: string) =>
+  [pw.length >= 8, /[a-z]/.test(pw), /[A-Z]/.test(pw), /[0-9]/.test(pw), /[^a-zA-Z0-9]/.test(pw)].filter(Boolean).length;
+
+const STRENGTH = [
+  { label: 'Weak', bar: 'bg-red-600' },
+  { label: 'Weak', bar: 'bg-red-600' },
+  { label: 'Weak', bar: 'bg-red-600' },
+  { label: 'Fair', bar: 'bg-amber-500' },
+  { label: 'Good', bar: 'bg-green-600' },
+  { label: 'Strong', bar: 'bg-green-700' },
+];
+
+const inputClass =
+  'w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm text-slate-900 placeholder-slate-400 ' +
+  'focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 disabled:opacity-60 ' +
+  'dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100';
+const labelClass = 'block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5';
+
 const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
-  const { register, error: authError, isLoading } = useAuth();
-  const [formData, setFormData] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    password: '',
-    confirmPassword: '',
-    role: 'super_admin' as UserRole,
-    companyName: '',
-    departmentName: '',
-    teamName: '',
+  const { register, isLoading } = useAuth();
+  const [form, setForm] = useState({
+    firstName: '', lastName: '', email: '', password: '', confirmPassword: '',
+    companyName: '', departmentName: '', teamName: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const [passwordStrength, setPasswordStrength] = useState(0);
-
-  const validatePassword = (password: string): number => {
-    let strength = 0;
-    if (password.length >= 8) strength++;
-    if (/[a-z]/.test(password)) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/[0-9]/.test(password)) strength++;
-    if (/[^a-zA-Z0-9]/.test(password)) strength++;
-    return strength;
-  };
-
-  // Validate name: letters (including accented), spaces, hyphens, apostrophes only - no numbers or special chars
-  const validateName = (name: string): boolean => {
-    // Allow Unicode letters, spaces, hyphens, and apostrophes
-    const nameRegex = /^[\p{L}\s'-]+$/u;
-    return nameRegex.test(name) && !/\d/.test(name);
-  };
-
-  // Validate company name: letters, numbers, spaces, hyphens, apostrophes, ampersand, periods
-  const validateCompanyName = (name: string): boolean => {
-    const companyRegex = /^[\p{L}\d\s'&.-]+$/u;
-    return companyRegex.test(name);
-  };
-
-  const handlePasswordChange = (password: string) => {
-    setFormData({ ...formData, password });
-    setPasswordStrength(validatePassword(password));
-  };
+  const score = passwordScore(form.password);
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
-    // Validation - Required fields
-    if (!formData.firstName || !formData.lastName || !formData.email || !formData.password || !formData.companyName) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Missing Information',
-        text: 'Please fill in all required fields',
-        confirmButtonColor: '#3b82f6',
-      });
-      return;
+    if (!form.firstName || !form.lastName || !form.email || !form.password || !form.companyName || !form.departmentName || !form.teamName) {
+      return setError('Please complete all fields.');
     }
-
-    // Validate first name
-    if (!validateName(formData.firstName)) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Invalid First Name',
-        text: 'First name can only contain letters, spaces, hyphens, and apostrophes. No numbers or special characters allowed.',
-        confirmButtonColor: '#3b82f6',
-      });
-      return;
+    if (!validateName(form.firstName) || !validateName(form.lastName)) {
+      return setError('Names may contain letters, spaces, hyphens and apostrophes only.');
     }
-
-    // Validate last name
-    if (!validateName(formData.lastName)) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Invalid Last Name',
-        text: 'Last name can only contain letters, spaces, hyphens, and apostrophes. No numbers or special characters allowed.',
-        confirmButtonColor: '#3b82f6',
-      });
-      return;
+    if (!validateCompanyName(form.companyName)) {
+      return setError('Organisation name may contain letters, numbers, spaces and the characters - \' & .');
     }
-
-    // Validate company name
-    if (!validateCompanyName(formData.companyName)) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Invalid Company Name',
-        text: 'Company name can only contain letters, numbers, spaces, hyphens, apostrophes, ampersands, and periods.',
-        confirmButtonColor: '#3b82f6',
-      });
-      return;
-    }
-
-    if (!formData.departmentName || !formData.teamName) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Missing Information',
-        text: 'Please enter your department and team names',
-        confirmButtonColor: '#3b82f6',
-      });
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      Swal.fire({
-        icon: 'error',
-        title: 'Password Mismatch',
-        text: 'Passwords do not match',
-        confirmButtonColor: '#3b82f6',
-      });
-      return;
-    }
-
-    if (passwordStrength < 3) {
-      Swal.fire({
-        icon: 'warning',
-        title: 'Weak Password',
-        text: 'Password is too weak. Please use a stronger password with uppercase, numbers, and special characters.',
-        confirmButtonColor: '#3b82f6',
-      });
-      return;
-    }
+    if (form.password !== form.confirmPassword) return setError('The passwords do not match.');
+    if (score < 3) return setError('Choose a stronger password: at least 8 characters with upper-case letters, numbers or symbols.');
 
     try {
       await register({
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        email: formData.email,
-        password: formData.password,
-        role: formData.role,
-        companyName: formData.companyName,
-        departmentName: formData.departmentName,
-        teamName: formData.teamName,
+        firstName: form.firstName, lastName: form.lastName, email: form.email, password: form.password,
+        role: 'super_admin' as UserRole,
+        companyName: form.companyName, departmentName: form.departmentName, teamName: form.teamName,
       });
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Registration failed';
-      Swal.fire({
-        icon: 'error',
-        title: 'Registration Failed',
-        text: errorMessage,
-        confirmButtonColor: '#3b82f6',
-      });
-      setError(errorMessage);
+      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
     }
   };
 
-  const getPasswordStrengthColor = () => {
-    if (passwordStrength <= 2) return 'bg-red-500';
-    if (passwordStrength === 3) return 'bg-yellow-500';
-    if (passwordStrength === 4) return 'bg-green-500';
-    return 'bg-green-600';
-  };
-
-  const getPasswordStrengthText = () => {
-    if (passwordStrength <= 2) return 'Weak';
-    if (passwordStrength === 3) return 'Fair';
-    if (passwordStrength === 4) return 'Good';
-    return 'Strong';
-  };
-
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl">
-        {/* Logo & Header */}
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center mb-4">
-            <img 
-              src="/irongate-logo.png" 
-              alt="IronGate" 
-              className="w-20 h-20 rounded-xl" 
-              onError={(e) => { 
-                e.currentTarget.style.display = 'none';
-                e.currentTarget.nextElementSibling?.classList.remove('hidden');
-              }} 
-            />
-            <div className="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-xl flex items-center justify-center hidden">
-              <Shield className="text-white" size={40} />
-            </div>
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 sm:p-8">
+      <div className="w-full max-w-xl">
+        <div className="mb-8 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-md bg-brand-800 flex items-center justify-center">
+            <span className="text-sm font-semibold text-white">IG</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 dark:text-white mb-2">IronGate</h1>
-          <p className="text-gray-600 dark:text-gray-400">QA Navigator Platform</p>
+          <div className="leading-tight">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">QE Navigator</p>
+          </div>
         </div>
 
-        {/* Register Card */}
-        <div className="bg-gray-100 dark:bg-slate-800 rounded-2xl shadow-2xl p-8">
-          <h2 className="text-2xl font-bold text-gray-700 dark:text-gray-300 mb-2">Create Account</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">Join IronGate QA Navigator today</p>
+        <div className="rounded-lg border border-slate-200 bg-white p-6 sm:p-8 dark:border-slate-800 dark:bg-slate-900">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Create your organisation</h1>
+          <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">
+            You will be the administrator. You can invite colleagues and add teams afterwards.
+          </p>
 
-          {/* Register Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Name Fields */}
-            <div className="grid grid-cols-2 gap-4">
+          {error && (
+            <div role="alert" className="mt-6 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+              <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} className="mt-6 space-y-6" noValidate>
+            <fieldset className="space-y-4">
+              <legend className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-3">Your details</legend>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="firstName" className={labelClass}>First name</label>
+                  <input id="firstName" autoComplete="given-name" value={form.firstName} onChange={set('firstName')} className={inputClass} disabled={isLoading} />
+                </div>
+                <div>
+                  <label htmlFor="lastName" className={labelClass}>Last name</label>
+                  <input id="lastName" autoComplete="family-name" value={form.lastName} onChange={set('lastName')} className={inputClass} disabled={isLoading} />
+                </div>
+              </div>
               <div>
-                <label htmlFor="firstName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  First Name *
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                <label htmlFor="email" className={labelClass}>Work email</label>
+                <input id="email" type="email" autoComplete="email" value={form.email} onChange={set('email')} className={inputClass} placeholder="name@company.com" disabled={isLoading} />
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-4 border-t border-slate-200 pt-6 dark:border-slate-800">
+              <legend className="sr-only">Organisation</legend>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Organisation</p>
+              <div>
+                <label htmlFor="companyName" className={labelClass}>Organisation name</label>
+                <input id="companyName" autoComplete="organization" value={form.companyName} onChange={set('companyName')} className={inputClass} disabled={isLoading} />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="departmentName" className={labelClass}>First department</label>
+                  <input id="departmentName" value={form.departmentName} onChange={set('departmentName')} className={inputClass} placeholder="e.g. Engineering" disabled={isLoading} />
+                </div>
+                <div>
+                  <label htmlFor="teamName" className={labelClass}>First team</label>
+                  <input id="teamName" value={form.teamName} onChange={set('teamName')} className={inputClass} placeholder="e.g. Payments QA" disabled={isLoading} />
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset className="space-y-4 border-t border-slate-200 pt-6 dark:border-slate-800">
+              <legend className="sr-only">Password</legend>
+              <p className="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Password</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="password" className={labelClass}>Password</label>
+                  <div className="relative">
+                    <input
+                      id="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password"
+                      value={form.password} onChange={set('password')} className={`${inputClass} pr-10`} disabled={isLoading}
+                    />
+                    <button
+                      type="button" onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="confirmPassword" className={labelClass}>Confirm password</label>
                   <input
-                    id="firstName"
-                    type="text"
-                    value={formData.firstName}
-                    onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
-                    className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
-                    placeholder="John"
-                    disabled={isLoading}
+                    id="confirmPassword" type={showPassword ? 'text' : 'password'} autoComplete="new-password"
+                    value={form.confirmPassword} onChange={set('confirmPassword')} className={inputClass} disabled={isLoading}
                   />
                 </div>
               </div>
-
-              <div>
-                <label htmlFor="lastName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Last Name *
-                </label>
-                <input
-                  id="lastName"
-                  type="text"
-                  value={formData.lastName}
-                  onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
-                  placeholder="Doe"
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-
-            {/* Email Field */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Email Address *
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
-                  placeholder="you@company.com"
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-
-            {/* Company */}
-            <div>
-              <label htmlFor="company" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Company Name *
-              </label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  id="company"
-                  type="text"
-                  value={formData.companyName}
-                  onChange={(e) => setFormData({ ...formData, companyName: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
-                  placeholder="Your company name"
-                  disabled={isLoading}
-                />
-              </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Enter your company name. A unique company ID will be created for data isolation.
-              </p>
-            </div>
-
-            {/* Department Name */}
-            <div>
-              <label htmlFor="department" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Department / Program Name *
-              </label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  id="department"
-                  type="text"
-                  value={formData.departmentName}
-                  onChange={(e) => setFormData({ ...formData, departmentName: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
-                  placeholder="e.g., Engineering, QA, Product"
-                  disabled={isLoading}
-                />
-              </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Your first department. More can be added from the Admin Panel after registration.
-              </p>
-            </div>
-
-            {/* Team Name */}
-            <div>
-              <label htmlFor="team" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Team Name *
-              </label>
-              <div className="relative">
-                <Users className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  id="team"
-                  type="text"
-                  value={formData.teamName}
-                  onChange={(e) => setFormData({ ...formData, teamName: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
-                  placeholder="e.g., Alpha Team, Platform Squad"
-                  disabled={isLoading}
-                />
-              </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                Your first team. More teams can be added from the Admin Panel after registration.
-              </p>
-            </div>
-
-            {/* Role Display (Locked to Super Admin) */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Account Role
-              </label>
-              <div className="w-full px-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-50 dark:bg-slate-700 text-gray-700 dark:text-gray-300 flex items-center">
-                <span className="mr-2">👑</span>
-                <span className="font-medium">Super Admin</span>
-                <span className="ml-2 text-gray-500 dark:text-gray-400">- Full system control</span>
-              </div>
-              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                As the first user, you will be the Super Admin. Additional users with different roles can be created from the Admin Panel after registration.
-              </p>
-            </div>
-
-            {/* Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Password *
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  id="password"
-                  type={showPassword ? 'text' : 'password'}
-                  value={formData.password}
-                  onChange={(e) => handlePasswordChange(e.target.value)}
-                  className="w-full pl-11 pr-12 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
-                  placeholder="••••••••"
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:text-gray-400"
-                >
-                  {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
-                </button>
-              </div>
-              
-              {/* Password Strength Indicator */}
-              {formData.password && (
-                <div className="mt-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-600 dark:text-gray-400">Password Strength:</span>
-                    <span className={`text-xs font-semibold ${
-                      passwordStrength <= 2 ? 'text-red-600' :
-                      passwordStrength === 3 ? 'text-yellow-600' :
-                      'text-green-600'
-                    }`}>
-                      {getPasswordStrengthText()}
-                    </span>
+              {form.password && (
+                <div className="flex items-center gap-3">
+                  <div className="flex flex-1 gap-1">
+                    {[1, 2, 3, 4, 5].map((i) => (
+                      <div key={i} className={`h-1 flex-1 rounded-full ${i <= score ? STRENGTH[score].bar : 'bg-slate-200 dark:bg-slate-700'}`} />
+                    ))}
                   </div>
-                  <div className="w-full bg-gray-200 rounded-full h-2">
-                    <div
-                      className={`h-2 rounded-full transition-all duration-300 ${getPasswordStrengthColor()}`}
-                      style={{ width: `${(passwordStrength / 5) * 100}%` }}
-                    />
-                  </div>
-                  <div className="mt-2 space-y-1">
-                    <PasswordRequirement met={formData.password.length >= 8} text="At least 8 characters" />
-                    <PasswordRequirement met={/[A-Z]/.test(formData.password)} text="One uppercase letter" />
-                    <PasswordRequirement met={/[0-9]/.test(formData.password)} text="One number" />
-                    <PasswordRequirement met={/[^a-zA-Z0-9]/.test(formData.password)} text="One special character" />
-                  </div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400 w-12 text-right">{STRENGTH[score].label}</span>
                 </div>
               )}
-            </div>
+            </fieldset>
 
-            {/* Confirm Password Field */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Confirm Password *
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                <input
-                  id="confirmPassword"
-                  type="password"
-                  value={formData.confirmPassword}
-                  onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                  className="w-full pl-11 pr-4 py-3 border border-gray-300 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-slate-800 text-gray-700 dark:text-gray-300"
-                  placeholder="••••••••"
-                  disabled={isLoading}
-                />
-              </div>
-              {formData.confirmPassword && formData.password !== formData.confirmPassword && (
-                <p className="mt-1 text-xs text-red-600">Passwords do not match</p>
-              )}
-            </div>
-
-            {/* Submit Button */}
             <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full text-white py-3 rounded-lg font-semibold shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: '#bf0000' }}
+              type="submit" disabled={isLoading}
+              className="w-full h-11 inline-flex items-center justify-center gap-2 rounded-md bg-brand-700 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
-              {isLoading ? (
-                <span className="flex items-center justify-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Creating Account...
-                </span>
-              ) : (
-                'Create Account'
-              )}
+              {isLoading ? 'Creating account…' : (<>Create account <ArrowRight size={16} /></>)}
             </button>
           </form>
-
-          {/* Login Link */}
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Already have an account?{' '}
-              <button
-                onClick={onSwitchToLogin}
-                className="text-blue-600 hover:text-blue-800 font-semibold"
-              >
-                Sign In
-              </button>
-            </p>
-          </div>
         </div>
 
-        {/* Footer */}
-        <div className="text-center mt-8 text-sm text-blue-200">
-          <p>© {new Date().getFullYear()} IronGate Software LTD. All rights reserved.</p>
-        </div>
+        <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
+          Already have an account?{' '}
+          <button onClick={onSwitchToLogin} className="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300">
+            Sign in
+          </button>
+        </p>
       </div>
     </div>
   );
 };
-
-// Helper component for password requirements
-const PasswordRequirement: React.FC<{ met: boolean; text: string }> = ({ met, text }) => (
-  <div className="flex items-center text-xs">
-    {met ? (
-      <CheckCircle className="text-green-600 mr-2" size={14} />
-    ) : (
-      <div className="w-3.5 h-3.5 rounded-full border-2 border-gray-300 mr-2" />
-    )}
-    <span className={met ? 'text-green-600' : 'text-gray-500 dark:text-gray-400'}>{text}</span>
-  </div>
-);
 
 export default Register;

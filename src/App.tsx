@@ -62,7 +62,7 @@ function App() {
   const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(1);
   const [userTeams, setUserTeams] = useState<any[]>([]);
   const [analyticsTeamId, setAnalyticsTeamId] = useState<string | undefined>(undefined);
-  const [is3DMode, setIs3DMode] = useState(true);
+  const [is3DMode, setIs3DMode] = useState(false);
 
   // Handle URL routing on mount and popstate
   useEffect(() => {

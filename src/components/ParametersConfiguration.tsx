@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Save, Info, Shield, Database, Key, Gauge, Globe, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Save, Info, Shield, Database, Key, Gauge, Globe, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
 import { API_URL } from '../config/api';
 import Swal from 'sweetalert2';
 
@@ -249,31 +249,13 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = ({ onBac
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
-      {/* Header */}
-      <div className="bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-800">
-        <div className="px-6 py-5 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-slate-400">
-              <span>Admin</span>
-              <span>•</span>
-              <span>Parameters Configuration</span>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white mt-1">System Configuration</h1>
-          </div>
-          {onBack && (
-            <button
-              onClick={onBack}
-              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 border border-gray-300 dark:border-slate-600 rounded-lg hover:bg-gray-50 dark:hover:bg-slate-800"
-            >
-              <ArrowLeft size={16} />
-              Back to Admin
-            </button>
-          )}
-        </div>
+    <div>
+      <div className="px-4 sm:px-8 pt-6 sm:pt-8 max-w-5xl mx-auto">
+        <h2 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">System configuration</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">SLA targets, integrations and thresholds. Team settings override department settings, which override company defaults.</p>
       </div>
 
-      <div className="px-6 py-8 max-w-5xl mx-auto space-y-6">
+      <div className="px-4 sm:px-8 py-6 max-w-5xl mx-auto space-y-6">
         {/* Scope Selector */}
         <div className="bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-xl p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Set Configuration For:</h2>

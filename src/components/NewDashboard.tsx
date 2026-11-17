@@ -17,14 +17,15 @@ interface NewDashboardProps {
 }
 
 interface CompanySummary {
-  globalQaScore: number;
-  globalQaScoreTrend: number;
+  globalQaScore: number | null;
+  asOf?: string | null;
+  globalQaScoreTrend: number | null;
   riskLevel: 'stable' | 'watch' | 'at-risk' | 'unknown';
-  engineeringHealthScore: number;
-  deliveryPerformanceScore: number;
-  developerWellnessIndex: number;
-  techDebtStatusScore: number;
-  pipelineHealthScore: number;
+  engineeringHealthScore: number | null;
+  deliveryPerformanceScore: number | null;
+  developerWellnessIndex: number | null;
+  techDebtStatusScore: number | null;
+  pipelineHealthScore: number | null;
   avgTestCoverage: number | null;
   avgDefectEscapeRate: number | null;
   automationCoverage: number | null;
@@ -119,7 +120,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
     const filtered = rows.filter((r) => {
       if (department !== 'all' && r.department !== department) return false;
       if (filter === 'high' && !(r.qa != null && r.qa >= 85)) return false;
-      if (filter === 'attention' && !(r.qa != null && r.qa < 75)) return false;
+      if (filter === 'attention' && !(r.qa != null && r.qa < 70)) return false;
       return !q || r.name.toLowerCase().includes(q);
     });
     const dir = sort.dir === 'asc' ? 1 : -1;
@@ -160,7 +161,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           title={`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, ${user?.firstName ?? ''}`.trim()}
           description={
             summary
-              ? `Engineering quality across ${summary.teamCount} teams · ${summary.teamsWithKpiData} reporting KPI data`
+              ? `Engineering quality across ${summary.teamCount} teams · ${summary.teamsWithKpiData} reporting KPI data${summary.asOf ? ` · latest data ${new Date(summary.asOf).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}`
               : 'Engineering quality across your organisation'
           }
           actions={canBrief && (
@@ -181,17 +182,17 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 {summary && <Badge tone={risk.tone}>{risk.label}</Badge>}
               </div>
               <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white tabular-nums">
-                {summary ? Math.round(summary.globalQaScore) : '—'}
+                {summary?.globalQaScore != null ? Math.round(summary.globalQaScore) : '—'}
                 <span className="ml-1 text-sm font-normal text-slate-500">/ 100</span>
               </p>
-              {summary && <ProgressBar value={summary.globalQaScore} tone={scoreTone(summary.globalQaScore)} className="mt-3" />}
+              {summary?.globalQaScore != null && <ProgressBar value={summary.globalQaScore} tone={scoreTone(summary.globalQaScore, 85, 70)} className="mt-3" />}
             </div>
             {[
               { label: 'Engineering health', v: summary?.engineeringHealthScore, caption: 'Composite quality index' },
               { label: 'Delivery (DORA)', v: summary?.deliveryPerformanceScore, caption: 'Deploy frequency, lead time, CFR, MTTR' },
               { label: 'Developer wellness', v: summary?.developerWellnessIndex, caption: 'Focus, meetings, satisfaction' },
-              { label: 'Technical debt', v: summary?.techDebtStatusScore, caption: 'Higher is healthier' },
-              { label: 'Pipeline health', v: summary?.pipelineHealthScore, caption: 'CI/CD stability' },
+              { label: 'Debt health', v: summary?.techDebtStatusScore, caption: '100 = no open debt items' },
+              { label: 'Pipeline health', v: summary?.pipelineHealthScore, caption: 'Successful pipeline runs, 30 days' },
             ].map((t) => {
               const v = num(t.v);
               return (
@@ -277,7 +278,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                       <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{t.name}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">{t.issue}</p>
                     </div>
-                    <span className={cx('text-sm font-semibold tabular-nums', scoreTone(t.score) === 'bad' ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400')}>{t.score}</span>
+                    <span className={cx('text-sm font-semibold tabular-nums', scoreTone(t.score, 85, 70) === 'bad' ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400')}>{t.score}</span>
                   </li>
                 ))}
               </ul>
@@ -332,7 +333,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {visible.map((r) => {
-                    const tone = scoreTone(r.qa, 85, 75);
+                    const tone = scoreTone(r.qa, 85, 70);
                     return (
                       <tr
                         key={r.team.id}

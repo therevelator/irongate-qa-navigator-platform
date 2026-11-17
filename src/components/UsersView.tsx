@@ -303,11 +303,11 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-xl ${is3DMode ? 'bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/30' : 'bg-cyan-600'}`}>
-              <Users className="w-6 h-6 text-white" />
+            <div className={`p-2.5 rounded-md ${'bg-brand-50 text-brand-700 dark:bg-slate-800 dark:text-brand-300'}`}>
+              <Users className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Users</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Users</h1>
               <p className="text-sm text-gray-500 dark:text-slate-400">{filteredUsers.length} users total</p>
             </div>
           </div>

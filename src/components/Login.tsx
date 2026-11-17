@@ -45,10 +45,11 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
 
   const inputClass =
     'w-full h-11 pl-10 pr-3 rounded-md border border-slate-300 bg-white text-sm text-slate-900 placeholder-slate-400 ' +
-    'focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 disabled:bg-slate-50';
+    'focus:outline-none focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 disabled:bg-slate-50 ' +
+    'dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800';
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] bg-white">
+    <div className="min-h-screen grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] bg-white dark:bg-slate-950">
       {/* Brand panel */}
       <aside className="hidden lg:flex flex-col justify-between bg-brand-900 text-white p-12">
         <div className="flex items-center gap-3">
@@ -96,16 +97,16 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
               <span className="text-sm font-semibold text-white">IG</span>
             </div>
             <div className="leading-tight">
-              <p className="text-sm font-semibold text-slate-900">IronGate</p>
-              <p className="text-xs text-slate-500">QE Navigator</p>
+              <p className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">QE Navigator</p>
             </div>
           </div>
 
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Sign in</h1>
-          <p className="mt-1.5 text-sm text-slate-500">Use your work account to continue.</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Sign in</h1>
+          <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">Use your work account to continue.</p>
 
           {error && (
-            <div role="alert" className="mt-6 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800">
+            <div role="alert" className="mt-6 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
               <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
               <span>{error}</span>
             </div>
@@ -113,7 +114,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
 
           <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-1.5">Email address</label>
+              <label htmlFor="email" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Email address</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
@@ -125,7 +126,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-1.5">Password</label>
+              <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input
@@ -143,7 +144,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-600">
+            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
                 className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500" disabled={isLoading}
@@ -159,24 +160,24 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
             </button>
           </form>
 
-          <p className="mt-6 text-sm text-slate-500">
+          <p className="mt-6 text-sm text-slate-500 dark:text-slate-400">
             New organisation?{' '}
-            <button onClick={onSwitchToRegister} className="font-medium text-brand-700 hover:text-brand-800">
+            <button onClick={onSwitchToRegister} className="font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300">
               Create an account
             </button>
           </p>
 
-          <div className="mt-10 border-t border-slate-200 pt-6">
-            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">Demo accounts</p>
-            <p className="mt-1 text-xs text-slate-500">Select a role to fill in its credentials.</p>
+          <div className="mt-10 border-t border-slate-200 pt-6 dark:border-slate-800">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400">Demo accounts</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Select a role to fill in its credentials.</p>
             <div className="mt-3 flex flex-wrap gap-2">
               {DEMO_ACCOUNTS.map((a) => (
                 <button
                   key={a.email} type="button" onClick={() => fillDemo(a.email)}
                   className={`px-2.5 py-1 rounded-md border text-xs transition-colors ${
                     email === a.email
-                      ? 'border-brand-600 bg-brand-50 text-brand-800'
-                      : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      ? 'border-brand-600 bg-brand-50 text-brand-800 dark:bg-brand-950/40 dark:text-brand-200'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800'
                   }`}
                 >
                   {a.role}

@@ -640,7 +640,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
           <div className="flex items-center gap-3">
             <Shield className="w-8 h-8 text-gray-600 dark:text-slate-400" />
             <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Admin Control Panel</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Admin console</h1>
               <p className="text-sm text-gray-500 dark:text-slate-400">Manage users and teams</p>
             </div>
           </div>

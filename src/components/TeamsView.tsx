@@ -154,11 +154,11 @@ const TeamsView: React.FC<TeamsViewProps> = ({ is3DMode = true }) => {
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-xl ${is3DMode ? 'bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/30' : 'bg-cyan-600'}`}>
-              <Building2 className="w-6 h-6 text-white" />
+            <div className={`p-2.5 rounded-md ${'bg-brand-50 text-brand-700 dark:bg-slate-800 dark:text-brand-300'}`}>
+              <Building2 className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Teams</h1>
+              <h1 className="text-xl font-semibold tracking-tight text-gray-900 dark:text-white">Teams</h1>
               <p className="text-sm text-gray-500 dark:text-slate-400">{filteredTeams.length} team{filteredTeams.length !== 1 ? 's' : ''}</p>
             </div>
           </div>
@@ -218,7 +218,7 @@ const TeamsView: React.FC<TeamsViewProps> = ({ is3DMode = true }) => {
                     <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                       {/* Avatar + Info */}
                       <div className="flex items-center gap-4 flex-1 min-w-0">
-                        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex-shrink-0 flex items-center justify-center text-white font-bold text-base sm:text-lg ${is3DMode ? `bg-gradient-to-br ${getTeamGradient(team.id)} shadow-lg` : 'bg-cyan-600'}`}>
+                        <div className={`w-12 h-12 sm:w-14 sm:h-14 rounded-xl flex-shrink-0 flex items-center justify-center text-white font-bold text-base sm:text-lg ${is3DMode ? `bg-gradient-to-br ${getTeamGradient(team.id)} shadow-lg` : 'bg-brand-700'}`}>
                           {team.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div className="min-w-0 flex-1">
@@ -349,7 +349,7 @@ const TeamsView: React.FC<TeamsViewProps> = ({ is3DMode = true }) => {
                             {getTeamUsers(team.id).map((m: any) => (
                               <div key={m.id} className="flex items-center justify-between p-2 bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700">
                                 <div className="flex items-center gap-3">
-                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ${is3DMode ? 'bg-gradient-to-br from-cyan-500 to-blue-600' : 'bg-cyan-600'}`}>
+                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-medium ${is3DMode ? 'bg-gradient-to-br from-cyan-500 to-blue-600' : 'bg-brand-700'}`}>
                                     {m.first_name?.charAt(0)}{m.last_name?.charAt(0)}
                                   </div>
                                   <div>
