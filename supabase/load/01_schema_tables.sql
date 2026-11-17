@@ -318,7 +318,7 @@ CREATE TABLE "kpi_snapshots" (
   "automation_roi" numeric(6,2),
   "change_failure_rate" numeric(5,2),
   "mtbf_hours" integer,
-  "system_availability" numeric(5,3),
+  "system_availability" numeric(6,3),
   "infrastructure_failures" integer,
   "qa_score" integer,
   "status" text CHECK ("status" IN ('good', 'warning', 'critical')),
