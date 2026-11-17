@@ -1,883 +1,427 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { TrendingUp, TrendingDown, Shield, Bug, Bot, BarChart3, Building2, Target, Calendar } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, Sparkles, X, Loader2 } from 'lucide-react';
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
 import { useAuth } from '../contexts/AuthContext';
-import { useTheme } from '../contexts/ThemeContext';
-import CompanyHeroSection from './CompanyHeroSection';
-import BatteryIndicator from './BatteryIndicator';
-
-type GridColumns = 1 | 2 | 3;
-
-interface Department {
-  id: string;
-  name: string;
-}
+import {
+  Page, PageIntro, Card, CardHeader, StatTile, Badge, ProgressBar, SegmentedControl, EmptyState,
+  buttonClass, inputClass, scoreTone, cx, type Tone,
+} from './ui';
 
 interface NewDashboardProps {
   teams: Team[];
   onTeamClick?: (team: Team) => void;
-  gridColumns?: GridColumns;
+  // Accepted for compatibility with App; the table layout replaces grid/3D modes.
+  gridColumns?: 1 | 2 | 3;
   is3DMode?: boolean;
 }
 
-const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick, gridColumns = 1, is3DMode = true }) => {
+interface CompanySummary {
+  globalQaScore: number;
+  globalQaScoreTrend: number;
+  riskLevel: 'stable' | 'watch' | 'at-risk' | 'unknown';
+  engineeringHealthScore: number;
+  deliveryPerformanceScore: number;
+  developerWellnessIndex: number;
+  techDebtStatusScore: number;
+  pipelineHealthScore: number;
+  avgTestCoverage: number | null;
+  avgDefectEscapeRate: number | null;
+  automationCoverage: number | null;
+  avgFlakinessRate: number | null;
+  topImproving: { name: string; score: number }[];
+  needsAttention: { name: string; score: number; issue: string }[];
+  kpiStatus: { onTrack: number; atRisk: number; offTrack: number };
+  aiSummary?: string;
+  teamCount: number;
+  teamsWithKpiData: number;
+}
+
+type Filter = 'all' | 'high' | 'attention';
+type SortKey = 'name' | 'department' | 'qa' | 'coverage' | 'flakiness' | 'defects' | 'automation' | 'deploys';
+
+const num = (v: unknown): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+};
+
+const fmt = (v: number | null, digits = 0, suffix = '') =>
+  v == null ? '—' : `${v.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits })}${suffix}`;
+
+const RISK: Record<CompanySummary['riskLevel'], { label: string; tone: Tone }> = {
+  stable: { label: 'Stable', tone: 'good' },
+  watch: { label: 'Watch', tone: 'warn' },
+  'at-risk': { label: 'At risk', tone: 'bad' },
+  unknown: { label: 'Insufficient data', tone: 'neutral' },
+};
+
+interface Row {
+  team: Team;
+  name: string;
+  department: string;
+  qa: number | null;
+  coverage: number | null;
+  flakiness: number | null;
+  defects: number | null;
+  automation: number | null;
+  deploys: number | null;
+}
+
+const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
   const { user } = useAuth();
-  const { themeName, isDark } = useTheme();
-  const [filter, setFilter] = useState<'all' | 'high' | 'needs-attention'>('all');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
-  const [teamsWithMetrics, setTeamsWithMetrics] = useState<Team[]>(teams);
-  const [showMetricsNotification, setShowMetricsNotification] = useState(false);
+  const [summary, setSummary] = useState<CompanySummary | null>(null);
+  const [summaryState, setSummaryState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [filter, setFilter] = useState<Filter>('all');
+  const [search, setSearch] = useState('');
+  const [department, setDepartment] = useState('all');
+  const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'qa', dir: 'desc' });
+  const [briefingOpen, setBriefingOpen] = useState(false);
 
-  const fetchTeamsWithMetrics = useCallback(async () => {
-    try {
-      // Fetch metrics for each team
-      const teamsWithData = await Promise.all(
-        teams.map(async (team) => {
-          try {
-            const response = await fetch(`${API_URL}/teams/${team.id}`, {
-              credentials: 'include'
-            });
-
-            if (response.ok) {
-              const data = await response.json();
-              const teamData = data.team || {};
-              
-              // Map KPI data to metrics for display
-              const metrics = [
-                {
-                  id: 'coverage',
-                  name: 'Test Coverage',
-                  value: teamData.kpiData?.testCoverage ? Math.round(teamData.kpiData.testCoverage) : 0,
-                  unit: '%',
-                  change: 0,
-                  trend: 'up' as const,
-                  status: ((teamData.kpiData?.testCoverage || 0) >= 80 ? 'good' : 'warning') as 'good' | 'warning' | 'critical',
-                  history: []
-                },
-                {
-                  id: 'flakiness',
-                  name: 'Flakiness',
-                  value: teamData.kpiData?.testFlakinessRate != null ? Number(teamData.kpiData.testFlakinessRate).toFixed(1) : '0',
-                  unit: '%',
-                  change: 0,
-                  trend: 'down' as const,
-                  status: (Number(teamData.kpiData?.testFlakinessRate || 0) <= 2 ? 'good' : 'warning') as 'good' | 'warning' | 'critical',
-                  history: []
-                },
-                {
-                  id: 'defect-density',
-                  name: 'Defect Density',
-                  value: teamData.kpiData?.defectDensity != null ? Number(teamData.kpiData.defectDensity).toFixed(2) : '0',
-                  unit: '/1k',
-                  change: 0,
-                  trend: 'down' as const,
-                  status: (Number(teamData.kpiData?.defectDensity || 0) <= 0.5 ? 'good' : 'warning') as 'good' | 'warning' | 'critical',
-                  history: []
-                },
-                {
-                  id: 'automation',
-                  name: 'Automation',
-                  value: teamData.kpiData?.automationCoverage ? Math.round(teamData.kpiData.automationCoverage) : 0,
-                  unit: '%',
-                  change: 0,
-                  trend: 'up' as const,
-                  status: ((teamData.kpiData?.automationCoverage || 0) >= 70 ? 'good' : 'warning') as 'good' | 'warning' | 'critical',
-                  history: []
-                }
-              ];
-
-              return {
-                ...team,
-                qaScore: teamData.qaScore || team.qaScore,
-                metrics: metrics.filter(m => m.value !== 0 || teamData.kpiData)
-              };
-            }
-          } catch (error) {
-            console.error(`Error fetching metrics for team ${team.id}:`, error);
-          }
-          return team;
-        })
-      );
-
-      setTeamsWithMetrics(teamsWithData);
-
-      // Only show notification when we actually loaded metrics for at least one team
-      if (teamsWithData.length > 0) {
-        // Show green notification
-        setShowMetricsNotification(true);
-
-        // Auto-dismiss after 3 seconds
-        setTimeout(() => {
-          setShowMetricsNotification(false);
-        }, 3000);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/analytics/company-summary`, { credentials: 'include' });
+        if (!res.ok) throw new Error(String(res.status));
+        const data = await res.json();
+        if (!cancelled) { setSummary(data); setSummaryState('ready'); }
+      } catch {
+        if (!cancelled) setSummaryState('error');
       }
-    } catch (error) {
-      console.error('Error fetching teams with metrics:', error);
-      setTeamsWithMetrics(teams);
-    }
-  }, [teams]);
-
-  const fetchDepartments = useCallback(async () => {
-    try {
-      const response = await fetch(`${API_URL}/admin/departments`, {
-        credentials: 'include'
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setDepartments(Array.isArray(data) ? data : []);
-      }
-    } catch (error) {
-      console.error('Error fetching departments:', error);
-    }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  // Fetch departments for admin users
-  useEffect(() => {
-    if (user?.role === 'super_admin' || user?.role === 'qa_manager') {
-      fetchDepartments();
-    }
-  }, [user?.role, fetchDepartments]);
+  // /api/teams already returns each team's latest KPI snapshot — no per-team requests needed.
+  const rows: Row[] = useMemo(() => teams.map((t: any) => {
+    const k = t.kpiData || {};
+    return {
+      team: t,
+      name: t.name,
+      department: t.department || '—',
+      qa: num(t.qaScore),
+      coverage: num(k.testCoverage),
+      flakiness: num(k.testFlakinessRate),
+      defects: num(k.defectDensity),
+      automation: num(k.automationCoverage),
+      deploys: num(k.deploymentFrequencyPerWeek),
+    };
+  }), [teams]);
 
-  // Fetch real metrics for all teams
-  useEffect(() => {
-    fetchTeamsWithMetrics();
-  }, [fetchTeamsWithMetrics]);
-  
-  // Theme detection
-  const isOcean = themeName === 'ocean';
-  const isAurora = themeName === 'aurora';
-  const isMinimal = themeName === 'minimal';
-  
-  // Theme-specific configurations
-  const themeConfig = {
-    ocean: {
-      heroGradient: isDark 
-        ? 'from-slate-950 via-cyan-950/40 to-slate-900' 
-        : 'from-sky-50 via-cyan-50 to-blue-50',
-      blob1: isDark ? 'bg-cyan-500/30' : 'bg-cyan-300/50',
-      blob2: isDark ? 'bg-blue-500/30' : 'bg-blue-300/50',
-      accentColor: isDark ? 'text-cyan-400' : 'text-cyan-600',
-      btnActive: 'filter-btn-active',
-    },
-    aurora: {
-      heroGradient: isDark 
-        ? 'from-neutral-950 via-neutral-900 to-neutral-950' 
-        : 'from-white via-neutral-50 to-white',
-      blob1: 'bg-transparent',
-      blob2: 'bg-transparent',
-      accentColor: isDark ? 'text-neutral-300' : 'text-neutral-700',
-      btnActive: 'filter-btn-active',
-    },
-    minimal: {
-      heroGradient: isDark ? 'from-gray-900 to-gray-900' : 'from-gray-50 to-gray-50',
-      blob1: 'bg-transparent',
-      blob2: 'bg-transparent',
-      accentColor: isDark ? 'text-gray-300' : 'text-gray-700',
-      btnActive: isDark ? 'bg-gray-700' : 'bg-gray-800',
-    }
-  };
-  
-  const config = themeConfig[themeName] || themeConfig.ocean;
-
-  // Filter teams based on user role
-  // All roles now see all teams (no filtering)
-  const userTeams = teamsWithMetrics;
-
-  // Filter teams by department (for admins) and performance filter
-  const filteredTeams = userTeams.filter((team) => {
-    // Department filter (admin only)
-    if (selectedDepartment !== 'all' && team.department !== selectedDepartment) {
-      return false;
-    }
-    // Performance filter
-    if (filter === 'all') return true;
-    if (filter === 'high') return team.qaScore >= 85;
-    if (filter === 'needs-attention') return team.qaScore < 75;
-    return true;
-  });
-
-  // Apply live search by team name (case-insensitive). As the user types into
-  // the search bar, the set of visible team cards narrows accordingly.
-  const visibleTeams = filteredTeams.filter((team) =>
-    team.name.toLowerCase().includes(searchTerm.trim().toLowerCase())
+  const departments = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.department).filter((d) => d && d !== '—'))).sort(),
+    [rows],
   );
 
-  const gridClassMap: Record<GridColumns, string> = {
-    1: 'grid-cols-1',
-    2: 'grid-cols-1 md:grid-cols-2',
-    3: 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const filtered = rows.filter((r) => {
+      if (department !== 'all' && r.department !== department) return false;
+      if (filter === 'high' && !(r.qa != null && r.qa >= 85)) return false;
+      if (filter === 'attention' && !(r.qa != null && r.qa < 75)) return false;
+      return !q || r.name.toLowerCase().includes(q);
+    });
+    const dir = sort.dir === 'asc' ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const av = a[sort.key] as any, bv = b[sort.key] as any;
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1; // missing data always last
+      if (bv == null) return -1;
+      return (typeof av === 'string' ? av.localeCompare(bv) : av - bv) * dir;
+    });
+  }, [rows, search, department, filter, sort]);
+
+  const toggleSort = (key: SortKey) =>
+    setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'name' || key === 'department' ? 'asc' : 'desc' }));
+
+  const SortHeader: React.FC<{ k: SortKey; label: string; align?: 'left' | 'right' }> = ({ k, label, align = 'right' }) => {
+    const active = sort.key === k;
+    const Icon = !active ? ArrowUpDown : sort.dir === 'asc' ? ArrowUp : ArrowDown;
+    return (
+      <th className={cx('px-3 py-2.5 text-xs font-medium text-slate-500 dark:text-slate-400 whitespace-nowrap', align === 'right' ? 'text-right' : 'text-left')}>
+        <button onClick={() => toggleSort(k)} className={cx('inline-flex items-center gap-1 hover:text-slate-900 dark:hover:text-white', active && 'text-slate-900 dark:text-white')}>
+          {label}
+          <Icon size={12} className={active ? '' : 'opacity-40'} />
+        </button>
+      </th>
+    );
   };
 
-  // Compute Focus for This Week based on actual team data
-  const computeFocusRecommendation = () => {
-    if (teamsWithMetrics.length === 0) {
-      return {
-        title: 'No data available',
-        description: 'Add teams to see focus recommendations',
-        currentValue: '-',
-        targetValue: '-',
-        affectedTeams: 0,
-        affectedTeamNames: [] as string[],
-        effort: 'N/A'
-      };
+  const kpi = summary?.kpiStatus;
+  const kpiTotal = kpi ? kpi.onTrack + kpi.atRisk + kpi.offTrack : 0;
+  const risk = summary ? RISK[summary.riskLevel] ?? RISK.unknown : RISK.unknown;
+  const canBrief = user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead';
+
+  return (
+    <Page>
+      <div data-testid="dashboard">
+        <PageIntro
+          title={`Good ${new Date().getHours() < 12 ? 'morning' : new Date().getHours() < 18 ? 'afternoon' : 'evening'}, ${user?.firstName ?? ''}`.trim()}
+          description={
+            summary
+              ? `Engineering quality across ${summary.teamCount} teams · ${summary.teamsWithKpiData} reporting KPI data`
+              : 'Engineering quality across your organisation'
+          }
+          actions={canBrief && (
+            <button className={buttonClass.secondary} onClick={() => setBriefingOpen(true)}>
+              <Sparkles size={15} /> Executive briefing
+            </button>
+          )}
+        />
+
+        {/* Executive KPIs */}
+        {summaryState === 'error' ? (
+          <Card className="mb-6"><EmptyState title="Company summary unavailable" description="The organisation-wide metrics could not be loaded. Team data below is unaffected." /></Card>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+            <div className="col-span-2 md:col-span-1 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Global QA score</p>
+                {summary && <Badge tone={risk.tone}>{risk.label}</Badge>}
+              </div>
+              <p className="mt-2 text-3xl font-semibold tracking-tight text-slate-900 dark:text-white tabular-nums">
+                {summary ? Math.round(summary.globalQaScore) : '—'}
+                <span className="ml-1 text-sm font-normal text-slate-500">/ 100</span>
+              </p>
+              {summary && <ProgressBar value={summary.globalQaScore} tone={scoreTone(summary.globalQaScore)} className="mt-3" />}
+            </div>
+            {[
+              { label: 'Engineering health', v: summary?.engineeringHealthScore, caption: 'Composite quality index' },
+              { label: 'Delivery (DORA)', v: summary?.deliveryPerformanceScore, caption: 'Deploy frequency, lead time, CFR, MTTR' },
+              { label: 'Developer wellness', v: summary?.developerWellnessIndex, caption: 'Focus, meetings, satisfaction' },
+              { label: 'Technical debt', v: summary?.techDebtStatusScore, caption: 'Higher is healthier' },
+              { label: 'Pipeline health', v: summary?.pipelineHealthScore, caption: 'CI/CD stability' },
+            ].map((t) => {
+              const v = num(t.v);
+              return (
+                <StatTile
+                  key={t.label}
+                  label={t.label}
+                  value={v == null ? '—' : Math.round(v)}
+                  unit={v == null ? undefined : '/ 100'}
+                  progress={v ?? undefined}
+                  tone={scoreTone(v)}
+                  caption={<span className="text-slate-500 dark:text-slate-400">{t.caption}</span>}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* Indicators, status, attention */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <Card>
+            <CardHeader title="Quality indicators" subtitle="Average of each team's latest snapshot" />
+            <dl className="space-y-3.5">
+              {[
+                { label: 'Test coverage', v: summary?.avgTestCoverage, target: 80, higherBetter: true },
+                { label: 'Automation coverage', v: summary?.automationCoverage, target: 70, higherBetter: true },
+                // Targets match the server's KPI-status thresholds (analytics.ts company-summary)
+                { label: 'Test flakiness', v: summary?.avgFlakinessRate, target: 3, higherBetter: false },
+                { label: 'Defect escape rate', v: summary?.avgDefectEscapeRate, target: 2, higherBetter: false },
+              ].map((m) => {
+                const v = num(m.v);
+                const ok = v == null ? null : m.higherBetter ? v >= m.target : v <= m.target;
+                return (
+                  <div key={m.label} className="flex items-center justify-between gap-3 text-sm">
+                    <dt className="text-slate-600 dark:text-slate-300">{m.label}</dt>
+                    <dd className="flex items-center gap-2">
+                      <span className="font-medium tabular-nums text-slate-900 dark:text-white">{fmt(v, 1, '%')}</span>
+                      <span className="text-xs text-slate-400 w-20 text-right whitespace-nowrap">target {m.higherBetter ? '≥' : '≤'} {m.target}%</span>
+                      <span className={cx('h-2 w-2 rounded-full', ok == null ? 'bg-slate-300' : ok ? 'bg-green-600' : 'bg-amber-500')} />
+                    </dd>
+                  </div>
+                );
+              })}
+            </dl>
+          </Card>
+
+          <Card>
+            <CardHeader title="KPI status" subtitle="Teams against their quality targets" />
+            {kpi && kpiTotal > 0 ? (
+              <>
+                <div className="flex h-2.5 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+                  <div className="bg-green-600" style={{ width: `${(kpi.onTrack / kpiTotal) * 100}%` }} />
+                  <div className="bg-amber-500" style={{ width: `${(kpi.atRisk / kpiTotal) * 100}%` }} />
+                  <div className="bg-red-600" style={{ width: `${(kpi.offTrack / kpiTotal) * 100}%` }} />
+                </div>
+                <dl className="mt-4 grid grid-cols-3 gap-3">
+                  {[
+                    { l: 'On track', v: kpi.onTrack, c: 'bg-green-600' },
+                    { l: 'At risk', v: kpi.atRisk, c: 'bg-amber-500' },
+                    { l: 'Off track', v: kpi.offTrack, c: 'bg-red-600' },
+                  ].map((s) => (
+                    <div key={s.l}>
+                      <dt className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"><span className={cx('h-2 w-2 rounded-full', s.c)} />{s.l}</dt>
+                      <dd className="mt-1 text-xl font-semibold tabular-nums text-slate-900 dark:text-white">{s.v}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">No KPI data yet.</p>
+            )}
+            {summary?.aiSummary && (
+              <p className="mt-5 border-t border-slate-100 pt-4 text-sm text-slate-600 dark:border-slate-800 dark:text-slate-300">{summary.aiSummary}</p>
+            )}
+          </Card>
+
+          <Card>
+            <CardHeader title="Needs attention" subtitle="Lowest-scoring teams and their main issue" />
+            {summary?.needsAttention?.length ? (
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800 -my-2">
+                {summary.needsAttention.map((t) => (
+                  <li key={t.name} className="flex items-center justify-between gap-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{t.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{t.issue}</p>
+                    </div>
+                    <span className={cx('text-sm font-semibold tabular-nums', scoreTone(t.score) === 'bad' ? 'text-red-700 dark:text-red-400' : 'text-amber-700 dark:text-amber-400')}>{t.score}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-slate-500">No teams flagged.</p>
+            )}
+          </Card>
+        </div>
+
+        {/* Teams table */}
+        <Card padded={false}>
+          <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 dark:border-slate-800 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Team performance</h3>
+              <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Latest KPI snapshot per team · select a team for detail</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <SegmentedControl<Filter>
+                value={filter}
+                onChange={setFilter}
+                options={[{ value: 'all', label: 'All' }, { value: 'high', label: 'High performing' }, { value: 'attention', label: 'Needs attention' }]}
+              />
+              {departments.length > 1 && (
+                <select value={department} onChange={(e) => setDepartment(e.target.value)} className={cx(inputClass, 'pr-8')} aria-label="Department">
+                  <option value="all">All departments</option>
+                  {departments.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
+              )}
+              <div className="relative">
+                <Search size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search teams" className={cx(inputClass, 'pl-8 w-full sm:w-56')} />
+              </div>
+            </div>
+          </div>
+
+          {visible.length === 0 ? (
+            <EmptyState title="No teams match" description="Adjust the filters or search term." />
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800">
+                  <tr>
+                    <SortHeader k="name" label="Team" align="left" />
+                    <SortHeader k="department" label="Department" align="left" />
+                    <SortHeader k="qa" label="QA score" align="left" />
+                    <SortHeader k="coverage" label="Coverage" />
+                    <SortHeader k="flakiness" label="Flakiness" />
+                    <SortHeader k="defects" label="Defects / KLOC" />
+                    <SortHeader k="automation" label="Automation" />
+                    <SortHeader k="deploys" label="Deploys / wk" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {visible.map((r) => {
+                    const tone = scoreTone(r.qa, 85, 75);
+                    return (
+                      <tr
+                        key={r.team.id}
+                        data-testid="team-card"
+                        onClick={() => onTeamClick?.(r.team)}
+                        className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                      >
+                        <td className="px-3 py-3 font-medium text-slate-900 dark:text-white whitespace-nowrap max-w-[18rem] truncate">{r.name}</td>
+                        <td className="px-3 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">{r.department}</td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-2.5 min-w-[7.5rem]">
+                            <span className="w-8 tabular-nums font-semibold text-slate-900 dark:text-white">{fmt(r.qa)}</span>
+                            <ProgressBar value={r.qa ?? 0} tone={tone} className="w-16" />
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-right tabular-nums">{fmt(r.coverage, 1, '%')}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{fmt(r.flakiness, 1, '%')}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{fmt(r.defects, 2)}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{fmt(r.automation, 1, '%')}</td>
+                        <td className="px-3 py-3 text-right tabular-nums">{fmt(r.deploys)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {briefingOpen && <BriefingDrawer onClose={() => setBriefingOpen(false)} />}
+    </Page>
+  );
+};
+
+/** AI-generated executive briefing, clearly labelled as such. */
+const BriefingDrawer: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [analysis, setAnalysis] = useState('');
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API_URL}/analytics/company-insights`, { method: 'POST', credentials: 'include' });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        setAnalysis(String(data.analysis || ''));
+        setState('ready');
+      } catch {
+        setState('error');
+      }
+    })();
+  }, []);
+
+  const renderLine = (line: string, i: number) => {
+    const t = line.trim();
+    if (!t) return null;
+    const clean = t.replace(/\*\*/g, '');
+    if (t.startsWith('#') || (t.startsWith('**') && t.endsWith('**'))) {
+      return <h4 key={i} className="mt-5 first:mt-0 mb-1.5 text-sm font-semibold text-slate-900 dark:text-white">{clean.replace(/^#+\s*/, '')}</h4>;
     }
-
-    // Find teams with low QA scores (needs attention)
-    const lowScoreTeams = teamsWithMetrics.filter(t => t.qaScore < 75);
-    const avgScore = teamsWithMetrics.reduce((sum, t) => sum + t.qaScore, 0) / teamsWithMetrics.length;
-
-    // Analyze metrics across all teams
-    
-    // Check flakiness (lower is better)
-    const teamsWithFlakiness = teamsWithMetrics.filter(t => {
-      const flaky = t.metrics?.find(m => m.name?.toLowerCase().includes('flak'));
-      return flaky && parseFloat(String(flaky.value)) > 3;
-    });
-    
-    // Check test coverage (higher is better)
-    const teamsWithLowCoverage = teamsWithMetrics.filter(t => {
-      const coverage = t.metrics?.find(m => m.name?.toLowerCase().includes('coverage'));
-      return coverage && parseFloat(String(coverage.value)) < 80;
-    });
-
-    // Check defect density (lower is better)
-    const teamsWithHighDefects = teamsWithMetrics.filter(t => {
-      const defects = t.metrics?.find(m => m.name?.toLowerCase().includes('defect'));
-      return defects && parseFloat(String(defects.value)) > 1;
-    });
-
-    // Determine primary focus
-    if (teamsWithLowCoverage.length > 0) {
-      const avgCoverage = teamsWithLowCoverage.reduce((sum, t) => {
-        const cov = t.metrics?.find(m => m.name?.toLowerCase().includes('coverage'));
-        return sum + (cov ? parseFloat(String(cov.value)) : 0);
-      }, 0) / teamsWithLowCoverage.length;
-      
-      return {
-        title: 'Improve test coverage across teams',
-        description: 'Low test coverage increases risk of undetected bugs',
-        currentValue: `${Math.round(avgCoverage)}%`,
-        targetValue: '80%',
-        affectedTeams: teamsWithLowCoverage.length,
-        affectedTeamNames: teamsWithLowCoverage.map(t => t.name),
-        effort: teamsWithLowCoverage.length > 2 ? '1-2 weeks' : '3-5 days'
-      };
+    if (/^(\d+\.|[-•])\s/.test(t)) {
+      return <li key={i} className="ml-4 list-disc text-sm text-slate-700 dark:text-slate-300 mb-1">{clean.replace(/^(\d+\.|[-•])\s*/, '')}</li>;
     }
-
-    if (teamsWithFlakiness.length > 0) {
-      return {
-        title: 'Reduce test flakiness in critical paths',
-        description: 'Flaky tests slow down CI/CD and reduce confidence',
-        currentValue: '4.5%',
-        targetValue: '2%',
-        affectedTeams: teamsWithFlakiness.length,
-        affectedTeamNames: teamsWithFlakiness.map(t => t.name),
-        effort: teamsWithFlakiness.length > 2 ? '1 week' : '2-3 days'
-      };
-    }
-
-    if (teamsWithHighDefects.length > 0) {
-      return {
-        title: 'Reduce defect density',
-        description: 'High defect density impacts customer satisfaction',
-        currentValue: '>1/KLOC',
-        targetValue: '<0.5/KLOC',
-        affectedTeams: teamsWithHighDefects.length,
-        affectedTeamNames: teamsWithHighDefects.map(t => t.name),
-        effort: '1-2 weeks'
-      };
-    }
-
-    if (lowScoreTeams.length > 0) {
-      return {
-        title: `Improve QA score for ${lowScoreTeams[0].name}`,
-        description: 'Team needs attention to meet quality standards',
-        currentValue: `${lowScoreTeams[0].qaScore}`,
-        targetValue: '75+',
-        affectedTeams: lowScoreTeams.length,
-        affectedTeamNames: lowScoreTeams.map(t => t.name),
-        effort: '1 week'
-      };
-    }
-
-    // All teams doing well
-    return {
-      title: 'Maintain quality standards',
-      description: 'All teams meeting targets - focus on continuous improvement',
-      currentValue: `${Math.round(avgScore)}`,
-      targetValue: '90+',
-      affectedTeams: teamsWithMetrics.length,
-      affectedTeamNames: teamsWithMetrics.map(t => t.name),
-      effort: 'Ongoing'
-    };
-  };
-
-  const focusRecommendation = computeFocusRecommendation();
-
-  // Main background based on theme
-  const mainBg = isAurora
-    ? isDark 
-      ? 'bg-neutral-950'
-      : 'bg-neutral-50'
-    : isOcean
-      ? isDark
-        ? 'bg-gradient-to-b from-slate-950 to-cyan-950'
-        : 'bg-gradient-to-b from-sky-50 to-cyan-50'
-      : 'bg-gray-50 dark:bg-slate-950';
-
-  // Handle click to dismiss notification
-  const handleDashboardClick = () => {
-    if (showMetricsNotification) {
-      setShowMetricsNotification(false);
-    }
+    return <p key={i} className="text-sm text-slate-700 dark:text-slate-300 mb-2 leading-relaxed">{clean}</p>;
   };
 
   return (
-    <div className={`flex flex-col h-full overflow-auto ${mainBg}`} onClick={handleDashboardClick}>
-      {/* Company-Wide Hero Section with Real Data */}
-      <CompanyHeroSection />
-
-      {/* Metrics Updated Notification */}
-      {showMetricsNotification && (
-        <div className="fixed top-20 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform transition-transform duration-500 ease-in-out animate-slide-in-right">
-          <p className="font-medium">Metrics Updated</p>
-        </div>
-      )}
-
-
-      {/* Teams Overview */}
-      <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-[15px]" data-testid="dashboard">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-4 sm:mb-6">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">
-            Team Performance
-          </h2>
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-end gap-3 w-full lg:w-auto">
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={() => setFilter('all')}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
-                  filter === 'all'
-                    ? `${config.btnActive} text-white shadow-lg scale-105`
-                    : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-                }`}
-              >
-                All Teams
-              </button>
-              <button
-                onClick={() => setFilter('high')}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
-                  filter === 'high'
-                    ? `${config.btnActive} text-white shadow-lg scale-105`
-                    : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-                }`}
-              >
-                High Performing
-              </button>
-              <button
-                onClick={() => setFilter('needs-attention')}
-                className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all duration-200 ${
-                  filter === 'needs-attention'
-                    ? `${config.btnActive} text-white shadow-lg scale-105`
-                    : 'bg-white dark:bg-slate-800 text-gray-600 dark:text-gray-300 border border-gray-200 dark:border-slate-700 hover:bg-gray-50 dark:hover:bg-slate-700'
-                }`}
-              >
-                Needs Attention
-              </button>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3 items-stretch sm:items-center w-full sm:w-auto">
-              {/* Department Selector - Admin only */}
-              {(user?.role === 'super_admin' || user?.role === 'qa_manager') && departments.length > 0 && (
-                <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-lg px-3 py-2 shadow-sm">
-                  <Building2 size={16} className="text-gray-500 dark:text-slate-400" />
-                  <select
-                    value={selectedDepartment}
-                    onChange={(e) => setSelectedDepartment(e.target.value)}
-                    className="text-xs font-medium bg-transparent border-none outline-none text-gray-700 dark:text-slate-300 cursor-pointer pr-6"
-                  >
-                    <option value="all">All Departments</option>
-                    {departments.map((dept) => (
-                      <option key={dept.id} value={dept.name}>{dept.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Team search bar */}
-              <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-full px-3 py-1.5 shadow-sm w-full sm:w-60">
-                <svg
-                  className="w-4 h-4 text-gray-400 dark:text-slate-500"
-                  xmlns="http://www.w3.org/2000/svg"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 100-15 7.5 7.5 0 000 15z"
-                  />
-                </svg>
-                <input
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search teams..."
-                  className="flex-1 bg-transparent text-xs sm:text-sm text-gray-700 dark:text-slate-200 placeholder-gray-400 dark:placeholder-slate-500 outline-none border-none"
-                />
-              </div>
-            </div>
+    <div className="fixed inset-0 z-50 flex justify-end">
+      <div className="absolute inset-0 bg-slate-900/30" onClick={onClose} />
+      <aside className="relative w-full max-w-xl h-full bg-white dark:bg-slate-900 border-l border-slate-200 dark:border-slate-800 shadow-xl flex flex-col">
+        <div className="flex items-center justify-between px-6 h-16 border-b border-slate-200 dark:border-slate-800">
+          <div>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Executive briefing</h2>
+            <p className="text-xs text-slate-500">Generated from organisation-wide metrics</p>
           </div>
+          <button onClick={onClose} className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close"><X size={18} /></button>
         </div>
-
-        {/* Teams as Rows - Theme-specific card styles */}
-        <div className={`grid ${gridClassMap[gridColumns]} gap-3`}>
-          {visibleTeams.map((team: Team, index: number) => {
-            const isPrimaryTeam =
-              user?.primaryTeamId != null &&
-              team?.id != null &&
-              String(user.primaryTeamId) === String(team.id);
-
-            return (
-            <div
-              key={team.id}
-              onClick={() => onTeamClick?.(team)}
-              className={`team-card cursor-pointer relative overflow-hidden group h-full p-1.5 sm:p-2 rounded-xl border transition-all duration-300 ease-out transform-gpu ${
-                isMinimal
-                  ? isDark
-                    ? 'border-gray-700 hover:border-gray-600 shadow-lg hover:shadow-xl hover:shadow-gray-900/20'
-                    : 'border-gray-200 hover:border-gray-300 hover:shadow-lg hover:shadow-gray-900/10'
-                  : isDark
-                    ? 'border-slate-700/50 hover:border-slate-600 shadow-lg hover:shadow-xl hover:shadow-slate-900/30'
-                    : 'border-gray-200/80 hover:border-gray-300 hover:shadow-xl hover:shadow-gray-900/15'
-              } ${is3DMode ? 'hover:-translate-y-1 hover:scale-[1.02]' : 'hover:scale-[1.01]'} ${
-                is3DMode && isDark ? 'hover:shadow-slate-900/40' : is3DMode ? 'hover:shadow-gray-900/20' : ''
-              }`}
-              style={{
-                animationDelay: `${index * 50}ms`,
-                // Match BatteryIndicator thresholds using CSS variables
-                // Colors are defined in src/index.css as --qa-*-bg so they can be edited with a color picker
-                backgroundColor:
-                  team.qaScore >= 80
-                    ? 'var(--qa-high-bg)'
-                    : team.qaScore >= 60
-                      ? 'var(--qa-mid-bg)'
-                      : team.qaScore >= 40
-                        ? 'var(--qa-low-bg)'
-                        : 'var(--qa-bad-bg)'
-              }}
-              data-testid="team-card"
-              data-team-id={team.id}
-              data-team-name={team.name}
-              data-primary-team={isPrimaryTeam ? 'true' : 'false'}
-            >
-              {/* Soft theme-aware hover overlay (not on minimal) */}
-              {!isMinimal && (
-                <div
-                  className={`absolute inset-0 pointer-events-none rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${
-                    isAurora
-                      ? 'bg-neutral-500/5'
-                      : 'bg-cyan-500/5'
-                  }`}
-                />
-              )}
-
-              {/* 3D Depth Effects */}
-              {is3DMode && (
-                <>
-                  {/* Outer shadow ring */}
-                  <div
-                    className="absolute -inset-1 rounded-xl opacity-20 blur-sm group-hover:opacity-40 transition-opacity duration-300 team-card-outer-ring"
-                    style={{
-                      // Match BatteryIndicator thresholds for rim glow
-                      background: isDark
-                        ? team.qaScore >= 80
-                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.32), rgba(5, 150, 105, 0.46))'
-                          : team.qaScore >= 60
-                            ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.30), rgba(217, 119, 6, 0.44))'
-                            : team.qaScore >= 40
-                              ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.30), rgba(234, 88, 12, 0.44))'
-                              : 'linear-gradient(135deg, rgba(239, 68, 68, 0.32), rgba(220, 38, 38, 0.46))'
-                        : team.qaScore >= 80
-                          ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.26), rgba(5, 150, 105, 0.36))'
-                          : team.qaScore >= 60
-                            ? 'linear-gradient(135deg, rgba(234, 179, 8, 0.26), rgba(217, 119, 6, 0.36))'
-                            : team.qaScore >= 40
-                              ? 'linear-gradient(135deg, rgba(249, 115, 22, 0.26), rgba(234, 88, 12, 0.36))'
-                              : 'linear-gradient(135deg, rgba(239, 68, 68, 0.28), rgba(220, 38, 38, 0.38))'
-                    }}
-                  />
-
-                  {/* Inner highlight for 3D effect - covers full card */}
-                  <div
-                    className="absolute inset-0 rounded-xl team-card-3d-layer"
-                    style={{
-                      // Stronger top light, soft fade to subtle shadow at bottom
-                      background:
-                        'linear-gradient(180deg, rgba(255,255,255,0.65) 0%, rgba(255,255,255,0.32) 28%, rgba(255,255,255,0.10) 60%, rgba(0,0,0,0.12) 100%)',
-                    }}
-                  />
-                </>
-              )}
-              
-              {/* Card Layout - Adapts based on grid columns */}
-              {gridColumns === 1 ? (
-                /* Single Column: Horizontal Row Layout */
-                <div className="relative flex flex-col md:flex-row md:items-center gap-2 lg:gap-2.5">
-                  {/* Team Info */}
-                  <div className="flex items-start md:items-center gap-2 flex-shrink-0 md:w-40 lg:w-48">
-                    <div className="flex-1 min-w-0">
-                      <h3 className={`text-xs lg:text-sm font-semibold text-gray-900 dark:text-white mb-0 transition-colors truncate ${
-                        isMinimal
-                          ? 'group-hover:text-gray-700 dark:group-hover:text-gray-200'
-                          : themeName === 'ocean' 
-                            ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
-                            : 'group-hover:text-neutral-700 dark:group-hover:text-neutral-300'
-                      }`} data-testid="team-name">
-                        {team.name}
-                      </h3>
-                      <p className="text-[11px] lg:text-xs text-gray-500 dark:text-gray-400 truncate">{team.department || 'Unknown Department'}</p>
-                    </div>
-                    {/* QA Score - Mobile only in row 1 */}
-                    <div className="flex-shrink-0 md:hidden mt-0.5">
-                      <BatteryIndicator
-                        percentage={team.qaScore}
-                        size="sm"
-                        mode={is3DMode ? "3d" : "flat"}
-                        className="group-hover:scale-110 transition-transform duration-300"
-                        animationDelay={index * 150}
-                      />
-                    </div>
-                  </div>
-
-                  {/* QA Score - Desktop */}
-                  <div className="hidden md:block flex-shrink-0">
-                    <BatteryIndicator
-                      percentage={team.qaScore}
-                      size="lg"
-                      mode={is3DMode ? "3d" : "flat"}
-                      className="group-hover:scale-110 transition-transform duration-300"
-                      animationDelay={index * 150}
-                    />
-                  </div>
-
-                  {/* Inline Metrics */}
-                  <div className="flex-1 grid grid-cols-2 md:grid-cols-4 gap-1 lg:gap-1.5">
-                    {team.metrics && team.metrics.length > 0 ? (
-                      team.metrics.slice(0, 4).map((metric, idx) => (
-                        <div key={idx} className="relative group/metric">
-                          <div className="flex items-center gap-1.5 lg:gap-2 mb-0.5">
-                            <div className={`p-1 lg:p-1.5 rounded ${
-                              idx === 0 ? 'bg-green-100 dark:bg-green-900' :
-                              idx === 1 ? 'bg-amber-100 dark:bg-amber-900' :
-                              idx === 2 ? 'bg-purple-100 dark:bg-purple-900' :
-                              'bg-blue-100 dark:bg-blue-900'
-                            }`}>
-                              {idx === 0 ? <Shield className="text-green-600 dark:text-green-300" size={12} /> :
-                               idx === 1 ? <Bug className="text-amber-600 dark:text-amber-300" size={12} /> :
-                               idx === 2 ? <Bot className="text-purple-600 dark:text-purple-300" size={12} /> :
-                               <BarChart3 className="text-blue-600 dark:text-blue-300" size={12} />}
-                            </div>
-                            <span className="text-[10px] lg:text-xs text-gray-500 dark:text-gray-400 truncate">{metric.name}</span>
-                          </div>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-sm lg:text-base font-semibold text-gray-900 dark:text-white">{metric.value}</span>
-                            {metric.unit && <span className="text-[11px] lg:text-xs text-gray-500">{metric.unit}</span>}
-                            {metric.trend === 'up' && <TrendingUp size={12} className="text-green-600 ml-1 hidden lg:block" />}
-                            {metric.trend === 'down' && <TrendingDown size={12} className="text-green-600 ml-1 hidden lg:block" />}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="col-span-4 text-center text-gray-500">No metrics available</div>
-                    )}
-                  </div>
-
-                  {/* Arrow indicator */}
-                  <div className={`hidden lg:block flex-shrink-0 text-gray-400 group-hover:translate-x-1 transition-all ${
-                    isMinimal
-                      ? 'group-hover:text-gray-600'
-                      : themeName === 'ocean' 
-                        ? 'group-hover:text-cyan-600' 
-                        : 'group-hover:text-neutral-700'
-                  }`}>
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-              ) : (
-                /* Multi-Column: Card Layout */
-                <div className="relative flex flex-col h-full">
-                  {/* Header: Team Name + Score */}
-                  <div className="flex items-start justify-between mb-2">
-                    <div className="flex-1 min-w-0 pr-1.5">
-                      <h3 className={`text-xs font-semibold text-gray-900 dark:text-white mb-0 transition-colors truncate ${
-                        isMinimal
-                          ? 'group-hover:text-gray-700 dark:group-hover:text-gray-200'
-                          : themeName === 'ocean' 
-                            ? 'group-hover:text-cyan-600 dark:group-hover:text-cyan-400' 
-                            : 'group-hover:text-neutral-700 dark:group-hover:text-neutral-300'
-                      }`} data-testid="team-name">
-                        {team.name}
-                      </h3>
-                      <p className="text-[11px] text-gray-500 dark:text-gray-400">{team.department || 'Unknown Department'}</p>
-                    </div>
-                    
-                    {/* QA Score Circle */}
-                    <div className="flex-shrink-0">
-                      <BatteryIndicator
-                        percentage={team.qaScore}
-                        size="md"
-                        mode={is3DMode ? "3d" : "flat"}
-                        className="group-hover:scale-110 transition-transform duration-300"
-                        animationDelay={index * 150}
-                      />
-                    </div>
-                  </div>
-                  
-                  {/* Metrics Grid */}
-                  <div className="grid grid-cols-2 gap-1.5 flex-1">
-                    {team.metrics && team.metrics.length > 0 ? (
-                      team.metrics.slice(0, 4).map((metric, idx) => (
-                        <div key={idx} className="relative rounded-lg p-2 border border-gray-400 dark:border-slate-500">
-                          <div className="flex items-center gap-1.5 mb-0.5">
-                            <div className={`p-1 rounded ${
-                              idx === 0 ? 'bg-green-100 dark:bg-green-900' :
-                              idx === 1 ? 'bg-amber-100 dark:bg-amber-900' :
-                              idx === 2 ? 'bg-purple-100 dark:bg-purple-900' :
-                              'bg-blue-100 dark:bg-blue-900'
-                            }`}>
-                              {idx === 0 ? <Shield className="text-green-600 dark:text-green-300" size={12} /> :
-                               idx === 1 ? <Bug className="text-amber-600 dark:text-amber-300" size={12} /> :
-                               idx === 2 ? <Bot className="text-purple-600 dark:text-purple-300" size={12} /> :
-                               <BarChart3 className="text-blue-600 dark:text-blue-300" size={12} />}
-                            </div>
-                            <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate">{metric.name}</span>
-                          </div>
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-base font-bold text-gray-900 dark:text-white">{metric.value}</span>
-                            {metric.unit && <span className="text-xs text-gray-500">{metric.unit}</span>}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="col-span-2 rounded-lg p-3 text-center border border-gray-400 dark:border-slate-500">
-                        <span className="text-xs text-gray-500">No metrics available</span>
-                      </div>
-                    )}
-                  </div>
-                  
-                  {/* View Details Link */}
-                  <div className={`mt-3 pt-3 border-t border-gray-100 dark:border-slate-800 flex items-center justify-between text-xs font-medium ${
-                    isMinimal
-                      ? 'text-gray-500 group-hover:text-gray-700'
-                      : themeName === 'ocean' 
-                        ? 'text-cyan-600 dark:text-cyan-400' 
-                        : 'text-neutral-600 dark:text-neutral-400'
-                  }`}>
-                    <span>View Details</span>
-                    <svg className="w-4 h-4 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                </div>
-              )}
-            </div>
-          )})}
+        <div className="flex-1 overflow-y-auto px-6 py-5">
+          {state === 'loading' && (
+            <div className="flex items-center gap-2 text-sm text-slate-500"><Loader2 size={16} className="animate-spin" /> Preparing briefing…</div>
+          )}
+          {state === 'error' && <p className="text-sm text-slate-500">The briefing could not be generated right now. Please try again later.</p>}
+          {state === 'ready' && <div>{analysis.split('\n').map(renderLine)}</div>}
         </div>
-
-        {visibleTeams.length === 0 && (
-          <div className="bg-white dark:bg-slate-900 rounded-lg border border-gray-200 dark:border-slate-800 p-8 sm:p-12 text-center">
-            <div className="text-gray-400 dark:text-slate-500 mb-4">
-              <svg className="w-12 h-12 sm:w-16 sm:h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-            </div>
-            <h3 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white mb-2">No Teams Found</h3>
-            <p className="text-sm text-gray-500 dark:text-slate-400">No teams match the selected filter.</p>
-          </div>
-        )}
-      </div>
-
-      {/* Strategic Overview Cards */}
-      <div className="px-4 sm:px-6 pb-4 sm:pb-6 pt-[15px]">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 mb-6 sm:mb-8">
-          {/* Focus of the Week Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow duration-200">
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className={`p-2 rounded-lg ${
-                  isMinimal ? 'bg-gray-100 dark:bg-slate-800' :
-                  isOcean ? 'bg-cyan-100 dark:bg-cyan-900' :
-                  'bg-neutral-100 dark:bg-neutral-800'
-                }`}>
-                  <Target className={`w-5 h-5 ${
-                    isMinimal ? 'text-gray-600 dark:text-slate-400' :
-                    isOcean ? 'text-cyan-600 dark:text-cyan-400' :
-                    'text-neutral-600 dark:text-neutral-400'
-                  }`} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Focus of the Week</h3>
-                  <p className="text-sm text-gray-500 dark:text-slate-400">Priority improvement areas</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 rounded-lg border border-blue-200 dark:border-blue-800">
-                  <div className="flex items-start justify-between mb-2">
-                    <h4 className="font-semibold text-gray-900 dark:text-white">{focusRecommendation.title}</h4>
-                    <span className="text-xs font-medium px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300">
-                      {focusRecommendation.effort}
-                    </span>
-                  </div>
-                  <p className="text-sm text-gray-600 dark:text-slate-400 mb-3">{focusRecommendation.description}</p>
-                  <div className="flex items-center justify-between text-sm">
-                    <div className="flex items-center gap-4">
-                      <span className="text-gray-500 dark:text-slate-500">Current:</span>
-                      <span className="font-semibold text-gray-900 dark:text-white">{focusRecommendation.currentValue}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <TrendingUp size={14} className="text-green-600" />
-                      <span className="text-green-600 font-medium">Target: {focusRecommendation.targetValue}</span>
-                    </div>
-                  </div>
-                  {focusRecommendation.affectedTeams > 0 && (
-                    <div className="mt-3 pt-3 border-t border-gray-200 dark:border-slate-700">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-500 dark:text-slate-500">
-                          {focusRecommendation.affectedTeams} team{focusRecommendation.affectedTeams > 1 ? 's' : ''} affected
-                        </span>
-                        <div className="flex flex-wrap gap-1">
-                          {focusRecommendation.affectedTeamNames.slice(0, 2).map((name, idx) => (
-                            <span key={idx} className="text-xs px-2 py-1 bg-gray-100 dark:bg-slate-800 rounded-full text-gray-700 dark:text-slate-300">
-                              {name}
-                            </span>
-                          ))}
-                          {focusRecommendation.affectedTeamNames.length > 2 && (
-                            <span className="text-xs px-2 py-1 bg-gray-100 dark:bg-slate-800 rounded-full text-gray-700 dark:text-slate-300">
-                              +{focusRecommendation.affectedTeamNames.length - 2}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* QA SLAs Card */}
-          <div className="bg-white dark:bg-slate-900 rounded-xl border border-gray-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-shadow duration-200">
-            <div className="p-4 sm:p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <div className={`p-2 rounded-lg ${
-                  isMinimal ? 'bg-gray-100 dark:bg-slate-800' :
-                  isOcean ? 'bg-cyan-100 dark:bg-cyan-900' :
-                  'bg-neutral-100 dark:bg-neutral-800'
-                }`}>
-                  <Calendar className={`w-5 h-5 ${
-                    isMinimal ? 'text-gray-600 dark:text-slate-400' :
-                    isOcean ? 'text-cyan-600 dark:text-cyan-400' :
-                    'text-neutral-600 dark:text-neutral-400'
-                  }`} />
-                </div>
-                <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">QA SLAs</h3>
-                  <p className="text-sm text-gray-500 dark:text-slate-400">Release compliance status</p>
-                </div>
-              </div>
-
-              <div className="space-y-4">
-                {/* On Target Releases */}
-                <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-950/30 dark:to-emerald-950/30 rounded-lg border border-green-200 dark:border-green-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                      <span className="font-semibold text-gray-900 dark:text-white">On Target</span>
-                    </div>
-                    <span className="text-sm font-medium px-2 py-1 rounded-full bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-300">
-                      8 releases
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600 dark:text-slate-400">Payment Gateway v2.1.0</span>
-                      <span className="text-green-600 font-medium">Released</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600 dark:text-slate-400">Auth Service v1.8.2</span>
-                      <span className="text-green-600 font-medium">Released</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600 dark:text-slate-400">User Portal v3.0.1</span>
-                      <span className="text-green-600 font-medium">In Testing</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Warning Release */}
-                <div className="p-4 bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-950/30 dark:to-amber-950/30 rounded-lg border border-yellow-200 dark:border-yellow-800">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
-                      <span className="font-semibold text-gray-900 dark:text-white">Warning</span>
-                    </div>
-                    <span className="text-sm font-medium px-2 py-1 rounded-full bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300">
-                      1 release
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-600 dark:text-slate-400">Mobile App v4.2.0</span>
-                      <span className="text-yellow-600 font-medium">Delayed</span>
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-slate-500 mt-2">
-                      Critical bug found in production environment. Release delayed by 2 days.
-                    </div>
-                    <div className="flex items-center gap-4 mt-2">
-                      <div className="text-xs">
-                        <span className="text-gray-500 dark:text-slate-500">Due:</span>
-                        <span className="font-medium text-gray-900 dark:text-white ml-1">Dec 5</span>
-                      </div>
-                      <div className="text-xs">
-                        <span className="text-gray-500 dark:text-slate-500">Status:</span>
-                        <span className="font-medium text-yellow-600 ml-1">85% Complete</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* SLA Summary */}
-                <div className="pt-3 border-t border-gray-200 dark:border-slate-700">
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <div className="text-lg font-bold text-green-600">89%</div>
-                      <div className="text-xs text-gray-500 dark:text-slate-500">On Time</div>
-                    </div>
-                    <div>
-                      <div className="text-lg font-bold text-yellow-600">8%</div>
-                      <div className="text-xs text-gray-500 dark:text-slate-500">Delayed</div>
-                    </div>
-                    <div>
-                      <div className="text-lg font-bold text-red-600">3%</div>
-                      <div className="text-xs text-gray-500 dark:text-slate-500">Missed</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        </div>
-
+        <p className="px-6 py-3 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500">
+          AI-generated summary. Verify figures against the underlying metrics before sharing externally.
+        </p>
+      </aside>
     </div>
   );
 };

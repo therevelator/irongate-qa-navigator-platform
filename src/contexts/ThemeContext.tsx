@@ -83,8 +83,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Initialize from localStorage, IGNORE system preferences
   const [isDark, setIsDark] = useState<boolean>(() => {
     const saved = localStorage.getItem('irongate_theme_mode');
-    // Default to dark if no preference saved
-    return saved === null ? true : saved === 'dark';
+    // Default to light if no preference saved
+    return saved === 'dark';
   });
 
   const [themeName, setThemeNameState] = useState<ThemeName>(() => {

@@ -1,710 +1,374 @@
 @import "tailwindcss";
 
-/* Tailwind v4: Enable class-based dark mode - applies when .dark class is on html */
+/* Class-based dark mode (applies when .dark is on <html>) */
 @variant dark (&:where(.dark, .dark *));
 
-/* Theme CSS Variables */
+/* =====================================================================
+   IronGate design system
+   One restrained brand colour (navy) plus muted semantic families.
+   Tailwind's bright palettes are remapped here so every component
+   inherits the calmer look without per-file colour edits.
+   ===================================================================== */
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Tighter, more corporate radii */
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 0.875rem;
+
+  /* Soft, neutral elevation — no coloured glows */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow: 0 1px 3px 0 rgb(15 23 42 / 0.07), 0 1px 2px -1px rgb(15 23 42 / 0.06);
+  --shadow-md: 0 2px 6px -1px rgb(15 23 42 / 0.08), 0 1px 3px -1px rgb(15 23 42 / 0.05);
+  --shadow-lg: 0 6px 16px -4px rgb(15 23 42 / 0.10), 0 2px 6px -2px rgb(15 23 42 / 0.05);
+  --shadow-xl: 0 12px 24px -8px rgb(15 23 42 / 0.12), 0 4px 8px -4px rgb(15 23 42 / 0.05);
+  --shadow-2xl: 0 18px 36px -12px rgb(15 23 42 / 0.16);
+
+  --color-blue-50: oklch(0.975 0.014 255);
+  --color-blue-100: oklch(0.945 0.025 255);
+  --color-blue-200: oklch(0.895 0.046 255);
+  --color-blue-300: oklch(0.82 0.069 255);
+  --color-blue-400: oklch(0.71 0.094 255);
+  --color-blue-500: oklch(0.6 0.115 255);
+  --color-blue-600: oklch(0.51 0.113 255);
+  --color-blue-700: oklch(0.44 0.104 255);
+  --color-blue-800: oklch(0.37 0.090 255);
+  --color-blue-900: oklch(0.31 0.071 255);
+  --color-blue-950: oklch(0.23 0.052 255);
+  --color-indigo-50: oklch(0.975 0.010 290);
+  --color-indigo-100: oklch(0.945 0.019 290);
+  --color-indigo-200: oklch(0.895 0.034 290);
+  --color-indigo-300: oklch(0.82 0.051 290);
+  --color-indigo-400: oklch(0.71 0.070 290);
+  --color-indigo-500: oklch(0.6 0.085 290);
+  --color-indigo-600: oklch(0.51 0.083 290);
+  --color-indigo-700: oklch(0.44 0.077 290);
+  --color-indigo-800: oklch(0.37 0.066 290);
+  --color-indigo-900: oklch(0.31 0.053 290);
+  --color-indigo-950: oklch(0.23 0.038 290);
+  --color-violet-50: oklch(0.975 0.010 290);
+  --color-violet-100: oklch(0.945 0.019 290);
+  --color-violet-200: oklch(0.895 0.034 290);
+  --color-violet-300: oklch(0.82 0.051 290);
+  --color-violet-400: oklch(0.71 0.070 290);
+  --color-violet-500: oklch(0.6 0.085 290);
+  --color-violet-600: oklch(0.51 0.083 290);
+  --color-violet-700: oklch(0.44 0.077 290);
+  --color-violet-800: oklch(0.37 0.066 290);
+  --color-violet-900: oklch(0.31 0.053 290);
+  --color-violet-950: oklch(0.23 0.038 290);
+  --color-purple-50: oklch(0.975 0.010 290);
+  --color-purple-100: oklch(0.945 0.019 290);
+  --color-purple-200: oklch(0.895 0.034 290);
+  --color-purple-300: oklch(0.82 0.051 290);
+  --color-purple-400: oklch(0.71 0.070 290);
+  --color-purple-500: oklch(0.6 0.085 290);
+  --color-purple-600: oklch(0.51 0.083 290);
+  --color-purple-700: oklch(0.44 0.077 290);
+  --color-purple-800: oklch(0.37 0.066 290);
+  --color-purple-900: oklch(0.31 0.053 290);
+  --color-purple-950: oklch(0.23 0.038 290);
+  --color-fuchsia-50: oklch(0.975 0.011 8);
+  --color-fuchsia-100: oklch(0.945 0.021 8);
+  --color-fuchsia-200: oklch(0.895 0.038 8);
+  --color-fuchsia-300: oklch(0.82 0.057 8);
+  --color-fuchsia-400: oklch(0.71 0.078 8);
+  --color-fuchsia-500: oklch(0.6 0.095 8);
+  --color-fuchsia-600: oklch(0.51 0.093 8);
+  --color-fuchsia-700: oklch(0.44 0.086 8);
+  --color-fuchsia-800: oklch(0.37 0.074 8);
+  --color-fuchsia-900: oklch(0.31 0.059 8);
+  --color-fuchsia-950: oklch(0.23 0.043 8);
+  --color-pink-50: oklch(0.975 0.011 8);
+  --color-pink-100: oklch(0.945 0.021 8);
+  --color-pink-200: oklch(0.895 0.038 8);
+  --color-pink-300: oklch(0.82 0.057 8);
+  --color-pink-400: oklch(0.71 0.078 8);
+  --color-pink-500: oklch(0.6 0.095 8);
+  --color-pink-600: oklch(0.51 0.093 8);
+  --color-pink-700: oklch(0.44 0.086 8);
+  --color-pink-800: oklch(0.37 0.074 8);
+  --color-pink-900: oklch(0.31 0.059 8);
+  --color-pink-950: oklch(0.23 0.043 8);
+  --color-rose-50: oklch(0.975 0.011 8);
+  --color-rose-100: oklch(0.945 0.021 8);
+  --color-rose-200: oklch(0.895 0.038 8);
+  --color-rose-300: oklch(0.82 0.057 8);
+  --color-rose-400: oklch(0.71 0.078 8);
+  --color-rose-500: oklch(0.6 0.095 8);
+  --color-rose-600: oklch(0.51 0.093 8);
+  --color-rose-700: oklch(0.44 0.086 8);
+  --color-rose-800: oklch(0.37 0.074 8);
+  --color-rose-900: oklch(0.31 0.059 8);
+  --color-rose-950: oklch(0.23 0.043 8);
+  --color-cyan-50: oklch(0.975 0.009 222);
+  --color-cyan-100: oklch(0.945 0.017 222);
+  --color-cyan-200: oklch(0.895 0.030 222);
+  --color-cyan-300: oklch(0.82 0.045 222);
+  --color-cyan-400: oklch(0.71 0.061 222);
+  --color-cyan-500: oklch(0.6 0.075 222);
+  --color-cyan-600: oklch(0.51 0.073 222);
+  --color-cyan-700: oklch(0.44 0.068 222);
+  --color-cyan-800: oklch(0.37 0.058 222);
+  --color-cyan-900: oklch(0.31 0.046 222);
+  --color-cyan-950: oklch(0.23 0.034 222);
+  --color-sky-50: oklch(0.975 0.009 222);
+  --color-sky-100: oklch(0.945 0.017 222);
+  --color-sky-200: oklch(0.895 0.030 222);
+  --color-sky-300: oklch(0.82 0.045 222);
+  --color-sky-400: oklch(0.71 0.061 222);
+  --color-sky-500: oklch(0.6 0.075 222);
+  --color-sky-600: oklch(0.51 0.073 222);
+  --color-sky-700: oklch(0.44 0.068 222);
+  --color-sky-800: oklch(0.37 0.058 222);
+  --color-sky-900: oklch(0.31 0.046 222);
+  --color-sky-950: oklch(0.23 0.034 222);
+  --color-teal-50: oklch(0.975 0.009 222);
+  --color-teal-100: oklch(0.945 0.017 222);
+  --color-teal-200: oklch(0.895 0.030 222);
+  --color-teal-300: oklch(0.82 0.045 222);
+  --color-teal-400: oklch(0.71 0.061 222);
+  --color-teal-500: oklch(0.6 0.075 222);
+  --color-teal-600: oklch(0.51 0.073 222);
+  --color-teal-700: oklch(0.44 0.068 222);
+  --color-teal-800: oklch(0.37 0.058 222);
+  --color-teal-900: oklch(0.31 0.046 222);
+  --color-teal-950: oklch(0.23 0.034 222);
+  --color-emerald-50: oklch(0.975 0.013 155);
+  --color-emerald-100: oklch(0.945 0.023 155);
+  --color-emerald-200: oklch(0.895 0.042 155);
+  --color-emerald-300: oklch(0.82 0.063 155);
+  --color-emerald-400: oklch(0.71 0.086 155);
+  --color-emerald-500: oklch(0.6 0.105 155);
+  --color-emerald-600: oklch(0.51 0.103 155);
+  --color-emerald-700: oklch(0.44 0.095 155);
+  --color-emerald-800: oklch(0.37 0.082 155);
+  --color-emerald-900: oklch(0.31 0.065 155);
+  --color-emerald-950: oklch(0.23 0.047 155);
+  --color-green-50: oklch(0.975 0.013 155);
+  --color-green-100: oklch(0.945 0.023 155);
+  --color-green-200: oklch(0.895 0.042 155);
+  --color-green-300: oklch(0.82 0.063 155);
+  --color-green-400: oklch(0.71 0.086 155);
+  --color-green-500: oklch(0.6 0.105 155);
+  --color-green-600: oklch(0.51 0.103 155);
+  --color-green-700: oklch(0.44 0.095 155);
+  --color-green-800: oklch(0.37 0.082 155);
+  --color-green-900: oklch(0.31 0.065 155);
+  --color-green-950: oklch(0.23 0.047 155);
+  --color-lime-50: oklch(0.975 0.013 155);
+  --color-lime-100: oklch(0.945 0.023 155);
+  --color-lime-200: oklch(0.895 0.042 155);
+  --color-lime-300: oklch(0.82 0.063 155);
+  --color-lime-400: oklch(0.71 0.086 155);
+  --color-lime-500: oklch(0.6 0.105 155);
+  --color-lime-600: oklch(0.51 0.103 155);
+  --color-lime-700: oklch(0.44 0.095 155);
+  --color-lime-800: oklch(0.37 0.082 155);
+  --color-lime-900: oklch(0.31 0.065 155);
+  --color-lime-950: oklch(0.23 0.047 155);
+  --color-amber-50: oklch(0.975 0.015 72);
+  --color-amber-100: oklch(0.945 0.028 72);
+  --color-amber-200: oklch(0.895 0.050 72);
+  --color-amber-300: oklch(0.82 0.075 72);
+  --color-amber-400: oklch(0.71 0.102 72);
+  --color-amber-500: oklch(0.6 0.125 72);
+  --color-amber-600: oklch(0.51 0.122 72);
+  --color-amber-700: oklch(0.44 0.113 72);
+  --color-amber-800: oklch(0.37 0.098 72);
+  --color-amber-900: oklch(0.31 0.077 72);
+  --color-amber-950: oklch(0.23 0.056 72);
+  --color-yellow-50: oklch(0.975 0.015 72);
+  --color-yellow-100: oklch(0.945 0.028 72);
+  --color-yellow-200: oklch(0.895 0.050 72);
+  --color-yellow-300: oklch(0.82 0.075 72);
+  --color-yellow-400: oklch(0.71 0.102 72);
+  --color-yellow-500: oklch(0.6 0.125 72);
+  --color-yellow-600: oklch(0.51 0.122 72);
+  --color-yellow-700: oklch(0.44 0.113 72);
+  --color-yellow-800: oklch(0.37 0.098 72);
+  --color-yellow-900: oklch(0.31 0.077 72);
+  --color-yellow-950: oklch(0.23 0.056 72);
+  --color-orange-50: oklch(0.975 0.015 72);
+  --color-orange-100: oklch(0.945 0.028 72);
+  --color-orange-200: oklch(0.895 0.050 72);
+  --color-orange-300: oklch(0.82 0.075 72);
+  --color-orange-400: oklch(0.71 0.102 72);
+  --color-orange-500: oklch(0.6 0.125 72);
+  --color-orange-600: oklch(0.51 0.122 72);
+  --color-orange-700: oklch(0.44 0.113 72);
+  --color-orange-800: oklch(0.37 0.098 72);
+  --color-orange-900: oklch(0.31 0.077 72);
+  --color-orange-950: oklch(0.23 0.056 72);
+  --color-red-50: oklch(0.975 0.019 25);
+  --color-red-100: oklch(0.945 0.034 25);
+  --color-red-200: oklch(0.895 0.062 25);
+  --color-red-300: oklch(0.82 0.093 25);
+  --color-red-400: oklch(0.71 0.127 25);
+  --color-red-500: oklch(0.6 0.155 25);
+  --color-red-600: oklch(0.51 0.152 25);
+  --color-red-700: oklch(0.44 0.140 25);
+  --color-red-800: oklch(0.37 0.121 25);
+  --color-red-900: oklch(0.31 0.096 25);
+  --color-red-950: oklch(0.23 0.070 25);
+  --color-brand-50: oklch(0.975 0.014 255);
+  --color-brand-100: oklch(0.945 0.025 255);
+  --color-brand-200: oklch(0.895 0.046 255);
+  --color-brand-300: oklch(0.82 0.069 255);
+  --color-brand-400: oklch(0.71 0.094 255);
+  --color-brand-500: oklch(0.6 0.115 255);
+  --color-brand-600: oklch(0.51 0.113 255);
+  --color-brand-700: oklch(0.44 0.104 255);
+  --color-brand-800: oklch(0.37 0.090 255);
+  --color-brand-900: oklch(0.31 0.071 255);
+  --color-brand-950: oklch(0.23 0.052 255);
+  --color-steel-50: oklch(0.975 0.009 222);
+  --color-steel-100: oklch(0.945 0.017 222);
+  --color-steel-200: oklch(0.895 0.030 222);
+  --color-steel-300: oklch(0.82 0.045 222);
+  --color-steel-400: oklch(0.71 0.061 222);
+  --color-steel-500: oklch(0.6 0.075 222);
+  --color-steel-600: oklch(0.51 0.073 222);
+  --color-steel-700: oklch(0.44 0.068 222);
+  --color-steel-800: oklch(0.37 0.058 222);
+  --color-steel-900: oklch(0.31 0.046 222);
+  --color-steel-950: oklch(0.23 0.034 222);
+  --color-plum-50: oklch(0.975 0.010 290);
+  --color-plum-100: oklch(0.945 0.019 290);
+  --color-plum-200: oklch(0.895 0.034 290);
+  --color-plum-300: oklch(0.82 0.051 290);
+  --color-plum-400: oklch(0.71 0.070 290);
+  --color-plum-500: oklch(0.6 0.085 290);
+  --color-plum-600: oklch(0.51 0.083 290);
+  --color-plum-700: oklch(0.44 0.077 290);
+  --color-plum-800: oklch(0.37 0.066 290);
+  --color-plum-900: oklch(0.31 0.053 290);
+  --color-plum-950: oklch(0.23 0.038 290);
+  --color-rose-50: oklch(0.975 0.011 8);
+  --color-rose-100: oklch(0.945 0.021 8);
+  --color-rose-200: oklch(0.895 0.038 8);
+  --color-rose-300: oklch(0.82 0.057 8);
+  --color-rose-400: oklch(0.71 0.078 8);
+  --color-rose-500: oklch(0.6 0.095 8);
+  --color-rose-600: oklch(0.51 0.093 8);
+  --color-rose-700: oklch(0.44 0.086 8);
+  --color-rose-800: oklch(0.37 0.074 8);
+  --color-rose-900: oklch(0.31 0.059 8);
+  --color-rose-950: oklch(0.23 0.043 8);
+  --color-green-50: oklch(0.975 0.013 155);
+  --color-green-100: oklch(0.945 0.023 155);
+  --color-green-200: oklch(0.895 0.042 155);
+  --color-green-300: oklch(0.82 0.063 155);
+  --color-green-400: oklch(0.71 0.086 155);
+  --color-green-500: oklch(0.6 0.105 155);
+  --color-green-600: oklch(0.51 0.103 155);
+  --color-green-700: oklch(0.44 0.095 155);
+  --color-green-800: oklch(0.37 0.082 155);
+  --color-green-900: oklch(0.31 0.065 155);
+  --color-green-950: oklch(0.23 0.047 155);
+  --color-ochre-50: oklch(0.975 0.015 72);
+  --color-ochre-100: oklch(0.945 0.028 72);
+  --color-ochre-200: oklch(0.895 0.050 72);
+  --color-ochre-300: oklch(0.82 0.075 72);
+  --color-ochre-400: oklch(0.71 0.102 72);
+  --color-ochre-500: oklch(0.6 0.125 72);
+  --color-ochre-600: oklch(0.51 0.122 72);
+  --color-ochre-700: oklch(0.44 0.113 72);
+  --color-ochre-800: oklch(0.37 0.098 72);
+  --color-ochre-900: oklch(0.31 0.077 72);
+  --color-ochre-950: oklch(0.23 0.056 72);
+  --color-crimson-50: oklch(0.975 0.019 25);
+  --color-crimson-100: oklch(0.945 0.034 25);
+  --color-crimson-200: oklch(0.895 0.062 25);
+  --color-crimson-300: oklch(0.82 0.093 25);
+  --color-crimson-400: oklch(0.71 0.127 25);
+  --color-crimson-500: oklch(0.6 0.155 25);
+  --color-crimson-600: oklch(0.51 0.152 25);
+  --color-crimson-700: oklch(0.44 0.140 25);
+  --color-crimson-800: oklch(0.37 0.121 25);
+  --color-crimson-900: oklch(0.31 0.096 25);
+  --color-crimson-950: oklch(0.23 0.070 25);
+}
+
+/* ---------------------------------------------------------------------
+   Base
+   --------------------------------------------------------------------- */
 :root {
-  --theme-primary: 6 182 212;
-  --theme-accent: 59 130 246;
-  --theme-primary-rgb: 6, 182, 212;
-  --cache-bust: "20251205";
-
-  /* QA score-based team card backgrounds (light mode defaults) */
-  --qa-high-bg: rgba(17, 180, 30, 0.69);
-  --qa-mid-bg: rgba(255, 243, 75, 0.629);
-  --qa-low-bg: rgba(249, 116, 22, 0.574);
-  --qa-bad-bg: rgba(217, 20, 20, 0.725);
+  /* QA score tints used by score chips (kept subtle) */
+  --qa-high-bg: transparent;
+  --qa-mid-bg: transparent;
+  --qa-low-bg: transparent;
+  --qa-bad-bg: transparent;
+  color-scheme: light;
 }
+.dark { color-scheme: dark; }
 
-/* Dark mode overrides for QA score backgrounds */
-.dark {
-  --qa-high-bg: rgba(19, 140, 31, 0);
-  --qa-mid-bg: rgba(193, 154, 0, 0);
-  --qa-low-bg: rgba(249, 116, 22, 0);
-  --qa-bad-bg: rgba(239, 68, 68, 0);
-}
-
-/* Smooth transitions for theme changes */
 html {
-  transition: background-color 0.3s ease, color 0.3s ease;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
-/* ============================================
-   OCEAN THEME - Gradient Border, Deep & Premium
-   ============================================ */
-
-/* Ocean Light Mode */
-.theme-ocean {
-  --gradient-hero: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 50%, #f0fdfa 100%);
-  --glow-color: rgba(6, 182, 212, 0.4);
-  --sidebar-bg: #ffffff;
-  --card-bg: #ffffff;
-  --card-border: rgba(6, 182, 212, 0.15);
-  --card-shadow: 0 4px 20px rgba(6, 182, 212, 0.08);
-  --ocean-gradient: linear-gradient(135deg, #06b6d4, #3b82f6, #8b5cf6, #06b6d4);
-}
-
-/* Ocean Dark Mode */
-.theme-ocean.dark {
-  --gradient-hero: linear-gradient(135deg, #020617 0%, #0c4a6e 30%, #020617 100%);
-  --glow-color: rgba(34, 211, 238, 0.35);
-  --sidebar-bg: #020617;
-  --card-bg: #0f172a;
-  --card-border: rgba(34, 211, 238, 0.2);
-  --card-shadow: 0 4px 30px rgba(6, 182, 212, 0.15);
-  --ocean-gradient: linear-gradient(135deg, #22d3ee, #3b82f6, #a78bfa, #22d3ee);
-}
-
-/* Ocean team cards with animated gradient border */
-.theme-ocean .team-card {
-  position: relative;
-  background: var(--card-bg);
-  border-radius: 16px;
-  overflow: hidden;
-}
-
-.theme-ocean .team-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  padding: 2px;
-  border-radius: inherit;
-  background: var(--ocean-gradient);
-  background-size: 300% 300%;
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  opacity: 0.5;
-  transition: opacity 0.4s ease, filter 0.4s ease;
-  animation: oceanFlow 6s ease infinite paused;
-}
-
-.theme-ocean .team-card:hover::before {
-  opacity: 1;
-  animation-play-state: running;
-  filter: brightness(1.2);
-}
-
-/* Removed ::after overlay - using inline background colors instead */
-
-.theme-ocean .team-card > * {
-  position: relative;
-  z-index: 1;
-}
-
-.theme-ocean .team-card .team-card-outer-ring,
-.theme-ocean .team-card .team-card-3d-layer {
-  position: absolute;
-  z-index: 0;
-  pointer-events: none;
-}
-
-.theme-ocean .team-card:hover {
-  box-shadow: 
-    0 0 40px rgba(6, 182, 212, 0.25),
-    0 20px 50px rgba(59, 130, 246, 0.15);
-}
-
-.theme-ocean.dark .team-card:hover {
-  box-shadow: 
-    0 0 60px rgba(34, 211, 238, 0.3),
-    0 20px 60px rgba(59, 130, 246, 0.2);
-}
-
-@keyframes oceanFlow {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-/* Ocean score bar (horizontal) */
-.theme-ocean .score-bar {
-  height: 8px;
-  background: linear-gradient(90deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15));
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.theme-ocean .score-bar-fill {
-  height: 100%;
-  background: var(--ocean-gradient);
-  background-size: 200% 100%;
-  border-radius: 4px;
-  animation: oceanBarShimmer 3s ease infinite;
-}
-
-@keyframes oceanBarShimmer {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-/* Ocean metric pills */
-.theme-ocean .metric-pill {
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.08), rgba(59, 130, 246, 0.08));
-  border: 1px solid rgba(6, 182, 212, 0.2);
-  border-radius: 12px;
-  transition: all 0.3s ease;
-}
-
-.theme-ocean .metric-pill:hover {
-  background: linear-gradient(135deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15));
-  border-color: rgba(6, 182, 212, 0.4);
-  transform: translateY(-2px);
-}
-
-.theme-ocean.dark .metric-pill {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.1), rgba(59, 130, 246, 0.1));
-  border: 1px solid rgba(34, 211, 238, 0.25);
-}
-
-.theme-ocean.dark .metric-pill:hover {
-  background: linear-gradient(135deg, rgba(34, 211, 238, 0.2), rgba(59, 130, 246, 0.2));
-  border-color: rgba(34, 211, 238, 0.5);
-}
-
-/* Ocean buttons */
-.theme-ocean .filter-btn-active {
-  background: linear-gradient(135deg, #06b6d4, #3b82f6) !important;
-  box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
-}
-
-/* Ocean scrollbar */
-.theme-ocean::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #06b6d4, #3b82f6);
-  border-radius: 4px;
-}
-
-/* ============================================
-   AURORA THEME - Glassmorphism, Ethereal & Soft
-   ============================================ */
-
-/* Aurora Light Mode */
-.theme-aurora {
-  --gradient-hero: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 30%, #a7f3d0 60%, #6ee7b7 100%);
-  --glow-color: rgba(16, 185, 129, 0.4);
-  --sidebar-bg: rgba(255, 255, 255, 0.7);
-  --card-bg: rgba(255, 255, 255, 0.6);
-  --card-border: rgba(16, 185, 129, 0.2);
-  --card-shadow: 0 8px 32px rgba(16, 185, 129, 0.12);
-  --aurora-accent: #10b981;
-}
-
-/* Aurora Dark Mode */
-.theme-aurora.dark {
-  --gradient-hero: linear-gradient(135deg, #022c22 0%, #064e3b 25%, #065f46 50%, #022c22 100%);
-  --glow-color: rgba(52, 211, 153, 0.5);
-  --sidebar-bg: rgba(2, 44, 34, 0.85);
-  --card-bg: rgba(6, 78, 59, 0.4);
-  --card-border: rgba(52, 211, 153, 0.3);
-  --card-shadow: 0 8px 40px rgba(16, 185, 129, 0.2);
-  --aurora-accent: #34d399;
-}
-
-/* Aurora glassmorphism cards */
-.theme-aurora .team-card {
-  background: var(--card-bg);
-  backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
-  border: 1px solid var(--card-border);
-  border-radius: 20px;
-  box-shadow: 
-    var(--card-shadow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.theme-aurora.dark .team-card {
-  box-shadow: 
-    var(--card-shadow),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
-}
-
-.theme-aurora .team-card:hover {
-  background: rgba(255, 255, 255, 0.75);
-  border-color: rgba(16, 185, 129, 0.4);
-  box-shadow: 
-    0 12px 48px rgba(16, 185, 129, 0.2),
-    0 0 80px rgba(16, 185, 129, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.6);
-  transform: translateY(-4px);
-}
-
-.theme-aurora.dark .team-card:hover {
-  background: rgba(6, 78, 59, 0.6);
-  border-color: rgba(52, 211, 153, 0.5);
-  box-shadow: 
-    0 12px 60px rgba(16, 185, 129, 0.35),
-    0 0 100px rgba(52, 211, 153, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.12);
-}
-
-/* Aurora floating orbs on cards */
-.theme-aurora .team-card::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  right: -30%;
-  width: 200px;
-  height: 200px;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.15) 0%, transparent 70%);
-  border-radius: 50%;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.5s ease;
-}
-
-.theme-aurora .team-card:hover::before {
-  opacity: 1;
-}
-
-/* Aurora score circle with glow */
-.theme-aurora .score-circle-wrapper {
-  filter: drop-shadow(0 0 12px var(--glow-color));
-}
-
-.theme-aurora.dark .score-circle-wrapper {
-  filter: drop-shadow(0 0 20px var(--glow-color));
-}
-
-/* Aurora glass metric pills */
-.theme-aurora .metric-pill {
-  background: rgba(255, 255, 255, 0.5);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  border: 1px solid rgba(16, 185, 129, 0.15);
-  border-radius: 16px;
-  transition: all 0.3s ease;
-}
-
-.theme-aurora .metric-pill:hover {
-  background: rgba(255, 255, 255, 0.7);
-  border-color: rgba(16, 185, 129, 0.35);
-  box-shadow: 0 4px 20px rgba(16, 185, 129, 0.15);
-}
-
-.theme-aurora.dark .metric-pill {
-  background: rgba(6, 78, 59, 0.5);
-  border: 1px solid rgba(52, 211, 153, 0.2);
-}
-
-.theme-aurora.dark .metric-pill:hover {
-  background: rgba(6, 78, 59, 0.7);
-  border-color: rgba(52, 211, 153, 0.4);
-  box-shadow: 0 4px 24px rgba(16, 185, 129, 0.25);
-}
-
-/* Aurora buttons with glow */
-.theme-aurora .filter-btn-active {
-  background: linear-gradient(135deg, #10b981, #14b8a6) !important;
-  box-shadow: 0 0 30px rgba(16, 185, 129, 0.5);
-}
-
-/* Aurora sidebar */
-.theme-aurora aside {
-  background: var(--sidebar-bg) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-}
-
-.theme-aurora.dark aside {
-  border-right-color: rgba(52, 211, 153, 0.2) !important;
-}
-
-/* Aurora text glow */
-.theme-aurora.dark h1,
-.theme-aurora.dark h2 {
-  text-shadow: 0 0 40px rgba(52, 211, 153, 0.5);
-}
-
-/* Aurora input focus */
-.theme-aurora input:focus,
-.theme-aurora select:focus,
-.theme-aurora textarea:focus {
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25), 0 0 30px rgba(16, 185, 129, 0.15);
-  border-color: var(--aurora-accent) !important;
-}
-
-/* Aurora scrollbar */
-.theme-aurora::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #10b981, #14b8a6);
-  border-radius: 4px;
-}
-
-.theme-aurora.dark::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #34d399, #2dd4bf);
-}
-
-/* Circuit Board Animations */
-@keyframes electric-flow {
-  0% {
-    transform: translateX(-100%);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(100vw);
-    opacity: 0;
-  }
-}
-
-@keyframes data-flow {
-  0% {
-    transform: translateX(-10px);
-    opacity: 0;
-  }
-  10% {
-    opacity: 1;
-  }
-  90% {
-    opacity: 1;
-  }
-  100% {
-    transform: translateX(calc(100vw + 10px));
-    opacity: 0;
-  }
-}
-
-.animate-electric-flow-1 {
-  animation: electric-flow 3s linear infinite;
-}
-
-.animate-electric-flow-2 {
-  animation: electric-flow 4s linear infinite;
-  animation-delay: 1s;
+body {
+  font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  background: var(--color-slate-50);
+  color: var(--color-slate-800);
 }
-
-.animate-electric-flow-3 {
-  animation: electric-flow 3.5s linear infinite;
-  animation-delay: 2s;
-}
-
-.animate-data-flow-1 {
-  animation: data-flow 2.5s ease-in-out infinite;
-}
-
-.animate-data-flow-2 {
-  animation: data-flow 3s ease-in-out infinite;
-  animation-delay: 0.8s;
-}
-
-.animate-data-flow-3 {
-  animation: data-flow 3.2s ease-in-out infinite;
-  animation-delay: 1.6s;
-}
-
-/* Minimal Light Mode */
-.theme-minimal {
-  --gradient-hero: #f9fafb;
-  --glow-color: transparent;
-  --sidebar-bg: #ffffff;
-  --card-bg: #ffffff;
-  --card-border: rgba(0, 0, 0, 0.06);
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-}
-
-/* Minimal Dark Mode */
-.theme-minimal.dark {
-  --gradient-hero: #111827;
-  --glow-color: transparent;
-  --sidebar-bg: #111827;
-  --card-bg: #1f2937;
-  --card-border: rgba(255, 255, 255, 0.06);
-  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
-}
-
-/* Minimal team cards - simple, flat */
-.theme-minimal .team-card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  box-shadow: var(--card-shadow);
-  transition: all 0.2s ease;
-}
-
-.theme-minimal .team-card:hover {
-  border-color: rgba(107, 114, 128, 0.3);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
-.theme-minimal.dark .team-card:hover {
-  border-color: rgba(156, 163, 175, 0.2);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-/* Minimal removes all glows */
-.theme-minimal .card-glow,
-.theme-minimal.dark .card-glow {
-  box-shadow: var(--card-shadow) !important;
-}
-
-.theme-minimal .card-glow:hover,
-.theme-minimal.dark .card-glow:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08) !important;
-  transform: none !important;
-}
-
-.theme-minimal.dark .card-glow:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
-}
-
-/* Minimal removes text shadows */
-.theme-minimal h1,
-.theme-minimal h2,
-.theme-minimal.dark h1,
-.theme-minimal.dark h2 {
-  text-shadow: none !important;
-}
-
-/* Minimal metric pills */
-.theme-minimal .metric-pill {
-  background: rgba(107, 114, 128, 0.06);
-  border: 1px solid rgba(107, 114, 128, 0.1);
-  border-radius: 8px;
-}
-
-.theme-minimal.dark .metric-pill {
-  background: rgba(156, 163, 175, 0.08);
-  border: 1px solid rgba(156, 163, 175, 0.12);
-}
-
-/* Minimal filter buttons */
-.theme-minimal .filter-btn-active {
-  background: #374151 !important;
-  box-shadow: none;
-}
-
-.theme-minimal.dark .filter-btn-active {
-  background: #4b5563 !important;
-}
-
-/* Minimal input focus */
-.theme-minimal input:focus,
-.theme-minimal select:focus,
-.theme-minimal textarea:focus {
-  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.2);
-  border-color: #9ca3af !important;
-}
-
-/* Primary Button Styles */
-.btn-primary {
-  background: rgb(var(--theme-primary));
-  transition: all 0.2s ease;
-}
-
-.btn-primary:hover {
-  filter: brightness(1.1);
-  box-shadow: 0 4px 20px var(--glow-color);
-}
-
-/* Card Glow Effect */
-.card-glow {
-  box-shadow: 0 0 0 1px rgba(var(--theme-primary-rgb), 0.1);
-  transition: all 0.3s ease;
-}
-
-.card-glow:hover {
-  box-shadow: 0 0 30px var(--glow-color), 0 0 0 1px rgba(var(--theme-primary-rgb), 0.2);
-  transform: translateY(-2px);
-}
-
-/* Glassmorphism Effect */
-.glass {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-}
-
-.dark .glass {
-  background: rgba(15, 23, 42, 0.7);
-}
-
-/* Animated Gradient Background */
-.animated-gradient {
-  background: var(--gradient-hero);
-  background-size: 400% 400%;
-  animation: gradientShift 15s ease infinite;
-}
-
-@keyframes gradientShift {
-  0%, 100% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-}
-
-/* Floating Animation */
-@keyframes float {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-10px); }
-}
-
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-/* Pulse Glow Animation */
-@keyframes pulseGlow {
-  0%, 100% { box-shadow: 0 0 20px var(--glow-color); }
-  50% { box-shadow: 0 0 40px var(--glow-color); }
-}
-
-.animate-pulse-glow {
-  animation: pulseGlow 3s ease-in-out infinite;
-}
-
-/* Score Circle Animations */
-@keyframes scoreReveal {
-  from {
-    stroke-dashoffset: 282.7;
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-.score-circle {
-  animation: scoreReveal 1s ease-out forwards;
-}
-
-/* Stat Card Hover */
-.stat-card {
-  position: relative;
-  overflow: hidden;
-}
-
-.stat-card::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(var(--theme-primary-rgb), 0.1), transparent);
-  transition: left 0.5s ease;
-}
-
-.stat-card:hover::before {
-  left: 100%;
-}
-
-/* Theme Toggle Switch */
-.theme-toggle {
-  position: relative;
-  width: 64px;
-  height: 32px;
-  border-radius: 16px;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.theme-toggle-dark {
-  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-}
-
-.theme-toggle-light {
-  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-}
-
-.theme-toggle-knob {
-  position: absolute;
-  top: 2px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  transition: all 0.3s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.theme-toggle-knob-dark {
-  left: 34px;
-  background: #334155;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-}
-
-.theme-toggle-knob-light {
-  left: 2px;
-  background: #ffffff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-}
-
-/* Scrollbar Styling */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgba(var(--theme-primary-rgb), 0.3);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--theme-primary-rgb), 0.5);
+.dark body {
+  background: var(--color-slate-950);
+  color: var(--color-slate-200);
 }
 
-.dark ::-webkit-scrollbar-thumb {
-  background: rgba(var(--theme-primary-rgb), 0.2);
+/* Numbers line up in tables and KPI tiles */
+.tabular-nums, table, [class*="text-2xl"], [class*="text-3xl"], [class*="text-4xl"] {
+  font-variant-numeric: tabular-nums;
 }
 
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: rgba(var(--theme-primary-rgb), 0.4);
+/* Gradient-filled headline text reads as gimmicky: render it as solid ink */
+.bg-clip-text.text-transparent {
+  background-image: none !important;
+  -webkit-text-fill-color: currentColor;
+  color: var(--color-slate-900);
 }
+.dark .bg-clip-text.text-transparent { color: var(--color-slate-100); }
 
-/* Focus Ring */
-*:focus-visible {
-  outline: 2px solid rgb(var(--theme-primary));
+/* Focus ring in brand colour for keyboard users */
+:focus-visible {
+  outline: 2px solid var(--color-brand-500);
   outline-offset: 2px;
 }
 
-/* Selection */
-::selection {
-  background: rgba(var(--theme-primary-rgb), 0.3);
-}
+/* ---------------------------------------------------------------------
+   Theme toggle (sober)
+   --------------------------------------------------------------------- */
+.theme-toggle { position: relative; width: 44px; height: 24px; border-radius: 12px; cursor: pointer; transition: background-color .2s ease; }
+.theme-toggle-dark { background: var(--color-slate-700); }
+.theme-toggle-light { background: var(--color-slate-200); }
+.theme-toggle-knob { position: absolute; top: 2px; width: 20px; height: 20px; border-radius: 50%; transition: left .2s ease; display: flex; align-items: center; justify-content: center; background: #fff; box-shadow: var(--shadow-sm); }
+.theme-toggle-knob-dark { left: 22px; background: var(--color-slate-300); }
+.theme-toggle-knob-light { left: 2px; }
 
-/* Number Animation */
-@keyframes countUp {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.animate-count-up {
-  animation: countUp 0.5s ease-out forwards;
-}
-
-/* Notification Animation */
+/* ---------------------------------------------------------------------
+   Motion — only functional transitions remain
+   --------------------------------------------------------------------- */
 @keyframes slideInRight {
-  from {
-    transform: translateX(100%);
-    opacity: 0;
-  }
-  to {
-    transform: translateX(0);
-    opacity: 1;
-  }
+  from { transform: translateX(16px); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+.animate-slide-in-right { animation: slideInRight .25s ease-out forwards; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
 
-.animate-slide-in-right {
-  animation: slideInRight 0.5s ease-out forwards;
-}
-
-/* Battery Charging Animation */
-@keyframes batteryCharge {
-  0% { opacity: 0.8; transform: scale(0.95); }
-  50% { opacity: 1; transform: scale(1.05); }
-  100% { opacity: 1; transform: scale(1); }
-}
-
-.animate-battery-charge {
-  animation: batteryCharge 0.6s ease-out forwards;
-}
+/* ---------------------------------------------------------------------
+   Scrollbars
+   --------------------------------------------------------------------- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--color-slate-300); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+.dark ::-webkit-scrollbar-thumb { background: var(--color-slate-700); background-clip: content-box; }

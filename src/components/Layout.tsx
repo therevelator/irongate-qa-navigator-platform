@@ -1,16 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, Users as TeamsIcon, Building2, Menu, X, Palette, Calculator, Clock, SlidersHorizontal } from 'lucide-react';
+import {
+  LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
+  Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity,
+  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight,
+} from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getRoleBadgeColor } from '../types/auth';
-import ThemeToggle from './ThemeToggle';
 import { Toaster } from 'react-hot-toast';
-
-interface Department {
-  id: string;
-  name: string;
-  company_id: string;
-}
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -19,399 +15,291 @@ interface LayoutProps {
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   hideSidebar?: boolean;
+  // Kept for API compatibility with callers; no longer rendered.
   gridColumns?: 1 | 2 | 3;
   onGridChange?: (cols: 1 | 2 | 3) => void;
   is3DMode?: boolean;
   on3DModeChange?: (is3D: boolean) => void;
 }
 
-import API_URL from '../config/api';
+type Role = 'super_admin' | 'qa_manager' | 'team_lead' | 'qa_engineer' | 'viewer';
 
-const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, activeTab = 'all', onTabChange, hideSidebar, gridColumns = 3, onGridChange, is3DMode = true, on3DModeChange }) => {
+interface NavItem {
+  view: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  roles?: Role[]; // undefined = everyone
+}
+
+const ANALYTICS_ROLES: Role[] = ['super_admin', 'qa_manager', 'team_lead'];
+const ADMIN_ROLES: Role[] = ['super_admin', 'qa_manager'];
+
+const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
+  {
+    items: [
+      { view: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+      { view: 'features', label: 'Analytics', icon: BarChart3, roles: ANALYTICS_ROLES },
+    ],
+  },
+  {
+    title: 'Quality',
+    items: [
+      { view: 'flaky-test-intelligence', label: 'Flaky tests', icon: Bug, roles: ANALYTICS_ROLES },
+      { view: 'test-execution-timeline', label: 'Test execution', icon: CalendarClock, roles: ANALYTICS_ROLES },
+      { view: 'technical-debt', label: 'Technical debt', icon: Wrench, roles: ANALYTICS_ROLES },
+      { view: 'performance-metrics', label: 'Performance', icon: Gauge, roles: ANALYTICS_ROLES },
+    ],
+  },
+  {
+    title: 'Delivery',
+    items: [
+      { view: 'pipeline-visualization', label: 'CI/CD pipeline', icon: GitBranch, roles: ANALYTICS_ROLES },
+      { view: 'developer-productivity', label: 'Developer productivity', icon: Activity, roles: ANALYTICS_ROLES },
+      { view: 'business-impact', label: 'Business impact', icon: TrendingUp, roles: ANALYTICS_ROLES },
+      { view: 'team-gamification', label: 'Team rankings', icon: Trophy, roles: ANALYTICS_ROLES },
+      { view: 'pdf-report-generator', label: 'Reports', icon: FileText, roles: ANALYTICS_ROLES },
+    ],
+  },
+  {
+    title: 'Organisation',
+    items: [
+      { view: 'users', label: 'Users', icon: UsersIcon, roles: ['super_admin', 'qa_manager', 'team_lead'] },
+      { view: 'teams', label: 'Teams', icon: UsersRound, roles: ['super_admin', 'qa_manager', 'team_lead'] },
+      { view: 'departments', label: 'Departments', icon: Building2, roles: ['super_admin'] },
+    ],
+  },
+  {
+    title: 'Administration',
+    items: [
+      { view: 'admin-panel', label: 'Admin console', icon: Shield, roles: ADMIN_ROLES },
+      { view: 'manual-metrics', label: 'Manual metrics', icon: Calculator, roles: ['super_admin'] },
+      { view: 'metric-intervals', label: 'Metric intervals', icon: Clock, roles: ADMIN_ROLES },
+      { view: 'parameters-config', label: 'Parameters', icon: SlidersHorizontal, roles: ADMIN_ROLES },
+    ],
+  },
+];
+
+// Page title + breadcrumb parent for the top bar
+const PAGE_META: Record<string, { title: string; parent?: string }> = {
+  dashboard: { title: 'Overview' },
+  features: { title: 'Analytics' },
+  'flaky-test-intelligence': { title: 'Flaky tests', parent: 'Quality' },
+  'test-execution-timeline': { title: 'Test execution', parent: 'Quality' },
+  'technical-debt': { title: 'Technical debt', parent: 'Quality' },
+  'performance-metrics': { title: 'Performance', parent: 'Quality' },
+  'pipeline-visualization': { title: 'CI/CD pipeline', parent: 'Delivery' },
+  'developer-productivity': { title: 'Developer productivity', parent: 'Delivery' },
+  'business-impact': { title: 'Business impact', parent: 'Delivery' },
+  'team-gamification': { title: 'Team rankings', parent: 'Delivery' },
+  'pdf-report-generator': { title: 'Reports', parent: 'Delivery' },
+  users: { title: 'Users', parent: 'Organisation' },
+  teams: { title: 'Teams', parent: 'Organisation' },
+  departments: { title: 'Departments', parent: 'Organisation' },
+  'manage-teams': { title: 'Manage teams', parent: 'Organisation' },
+  'admin-panel': { title: 'Admin console', parent: 'Administration' },
+  'manual-metrics': { title: 'Manual metrics', parent: 'Administration' },
+  'metric-intervals': { title: 'Metric intervals', parent: 'Administration' },
+  'parameters-config': { title: 'Parameters', parent: 'Administration' },
+};
+
+const ROLE_LABEL: Record<string, string> = {
+  super_admin: 'Administrator',
+  qa_manager: 'QA manager',
+  team_lead: 'Team lead',
+  qa_engineer: 'QA engineer',
+  viewer: 'Viewer',
+};
+
+const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, onTabChange }) => {
   const { user, logout } = useAuth();
-  const { isDark } = useTheme();
-  const [departments, setDepartments] = useState<Department[]>([]);
+  const { isDark, toggleMode } = useTheme();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [sidebarVisible, setSidebarVisible] = useState(false);
   const [jobNotification, setJobNotification] = useState<{ message: string; timestamp?: string } | null>(null);
-
-  useEffect(() => {
-    if (user?.id) {
-      fetchDepartments();
-    }
-  }, [user?.id]);
 
   // Scroll to top when view changes
   useEffect(() => {
-    setTimeout(() => {
-      const scrollContainer = document.querySelector('.flex-1.overflow-auto') as HTMLElement;
-      if (scrollContainer) {
-        scrollContainer.scrollTop = 0;
-      }
-    }, 0);
+    document.getElementById('main-scroll')?.scrollTo({ top: 0 });
   }, [currentView]);
 
+  // Background job notifications pushed over the WebSocket (long-running server only)
   useEffect(() => {
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const wsHost = isLocal ? 'localhost:3000' : window.location.host;
-    const ws = new WebSocket(`${protocol}://${wsHost}/ws`);
-
-    ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.type === 'JOB_NOTIFICATION' && data.message) {
-          setJobNotification({
-            message: data.message,
-            timestamp: data.timestamp,
-          });
-
-          setTimeout(() => {
-            setJobNotification(null);
-          }, 5000);
+    let ws: WebSocket | null = null;
+    try {
+      ws = new WebSocket(`${protocol}://${wsHost}/ws`);
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'JOB_NOTIFICATION' && data.message) {
+            setJobNotification({ message: data.message, timestamp: data.timestamp });
+            setTimeout(() => setJobNotification(null), 5000);
+          }
+        } catch (error) {
+          console.error('Error handling job notification message', error);
         }
-      } catch (error) {
-        console.error('Error handling job notification message', error);
-      }
-    };
-
-    return () => {
-      ws.close();
-    };
+      };
+      ws.onerror = () => { /* no live channel available — ignore */ };
+    } catch { /* WebSocket unsupported in this deployment */ }
+    return () => { ws?.close(); };
   }, []);
 
-  const fetchDepartments = async () => {
-    try {
-      const response = await fetch(`${API_URL}/admin/departments`, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      });
+  const role = (user?.role || 'viewer') as Role;
+  const canSee = (item: NavItem) => !item.roles || item.roles.includes(role);
 
-      if (response.ok) {
-        const data = await response.json();
-        setDepartments(Array.isArray(data) ? data : []);
-      }
-    } catch (error) {
-      console.error('Error fetching departments:', error);
-    }
-  };
-
-  const handleDepartmentClick = (deptId: string) => {
-    if (onTabChange) {
-      onTabChange(deptId);
-    }
-    onViewChange('dashboard');
-  };
-
-  const handleAllClick = () => {
-    if (onTabChange) {
-      onTabChange('all');
-    }
-    onViewChange('dashboard');
-    setIsMobileMenuOpen(false);
-  };
-
-  const handleNavClick = (view: string) => {
+  const go = (view: string) => {
+    if (view === 'dashboard') onTabChange?.('all');
     onViewChange(view);
     setIsMobileMenuOpen(false);
   };
 
-  // Background classes
-  const mainBgClass = 'bg-gray-50 dark:bg-slate-950';
-  const sidebarBgClass = 'bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800';
-
-  const sidebarHidden = hideSidebar || !sidebarVisible;
+  const meta = PAGE_META[currentView] || { title: 'Overview' };
+  const initials = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase() || 'U';
 
   return (
-    <div className={`flex h-screen ${mainBgClass}`}>
-      {/* Menu Overlay - Mobile only */}
+    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
+      {/* Mobile overlay */}
       {isMobileMenuOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black bg-opacity-50 lg:hidden"
-          onClick={() => setIsMobileMenuOpen(false)}
-        />
+        <div className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />
       )}
 
-      {/* Sidebar Navigation - Push content on desktop, overlay on mobile */}
-      <aside className={`
-        fixed lg:relative inset-y-0 left-0 z-50 lg:z-auto
-        w-64 flex-shrink-0 flex flex-col border-r
-        transform transition-all duration-300 ease-in-out
-        ${sidebarBgClass}
-        ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full'}
-        ${isMobileMenuOpen ? 'lg:w-64' : 'lg:w-0 lg:border-r-0'}
-        overflow-hidden
-      `}>
-        {/* Logo */}
-        <div className="px-6 py-6 sm:py-8 border-b border-gray-200 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src="/irongate-logo.png"
-              alt="IronGate"
-              className="h-8 w-auto object-contain"
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-            <div>
-              <h1 className="text-base sm:text-lg font-semibold text-gray-900 dark:text-white">QE Navigator</h1>
-              <p className="text-xs text-gray-500 dark:text-gray-400">IronGate Platform</p>
-            </div>
-          </div>
-          <button
-            onClick={() => setIsMobileMenuOpen(false)}
-            className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-slate-800"
-          >
-            <X size={20} className="text-gray-600 dark:text-gray-400" />
-          </button>
-        </div>
-
-        {/* Navigation */}
-        <nav className="flex-1 py-6 px-4" data-testid="sidebar-nav">
-          <div className="space-y-0.5">
-            {/* Dashboard */}
-            <button
-              onClick={handleAllClick}
-              className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'dashboard'
-                ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                }`}
-              data-testid="nav-dashboard"
-            >
-              <LayoutDashboard size={20} />
-              <span>Dashboard</span>
+      <aside
+          className={`fixed lg:static inset-y-0 left-0 z-50 w-64 flex-shrink-0 flex flex-col
+            bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800
+            transition-transform duration-200 ease-out
+            ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+        >
+          {/* Brand */}
+          <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
+            <button onClick={() => go('dashboard')} className="flex items-center gap-3 text-left">
+              <div className="h-8 w-8 rounded-md bg-brand-700 dark:bg-brand-500 flex items-center justify-center">
+                <span className="text-[13px] font-semibold tracking-tight text-white">IG</span>
+              </div>
+              <div className="leading-tight">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">QE Navigator</p>
+              </div>
             </button>
-
-            {/* Users - Super Admin, QA Manager, Team Lead only */}
-            {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
-              <button
-                onClick={() => handleNavClick('users')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'users'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                  }`}
-                data-testid="nav-users"
-              >
-                <UsersIcon size={20} />
-                <span>Users</span>
-              </button>
-            )}
-
-            {/* Teams - Super Admin, QA Manager, Team Lead only */}
-            {(user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && (
-              <button
-                onClick={() => handleNavClick('teams')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'teams'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                  }`}
-                data-testid="nav-teams"
-              >
-                <TeamsIcon size={20} />
-                <span>Teams</span>
-              </button>
-            )}
-
-            {/* Departments - Super Admin only */}
-            {user?.role === 'super_admin' && (
-              <button
-                onClick={() => handleNavClick('departments')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'departments'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                  }`}
-                data-testid="nav-departments"
-              >
-                <Building2 size={20} />
-                <span>Departments</span>
-              </button>
-            )}
-
-            {/* Analytics - Everyone except qa_engineer and viewer */}
-            {(user?.role !== 'qa_engineer' && user?.role !== 'viewer') && (
-              <button
-                onClick={() => handleNavClick('features')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'features'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800/50 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-                data-testid="nav-analytics"
-              >
-                <BarChart3 size={20} />
-                <span>Analytics</span>
-              </button>
-            )}
-
-            {/* Admin Panel - Admin only */}
-            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
-              <button
-                onClick={() => handleNavClick('admin-panel')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'admin-panel'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                  }`}
-                data-testid="nav-admin"
-              >
-                <Shield size={20} />
-                <span>Admin</span>
-              </button>
-            )}
-
-            {/* Manual Metrics - Super Admin only */}
-            {user?.role === 'super_admin' && (
-              <button
-                onClick={() => handleNavClick('manual-metrics')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'manual-metrics'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                  }`}
-                data-testid="nav-manual-metrics"
-              >
-                <Calculator size={20} />
-                <span>Manual Metrics</span>
-              </button>
-            )}
-
-            {/* Metric Intervals - Admin and Manager only */}
-            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
-              <button
-                onClick={() => handleNavClick('metric-intervals')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'metric-intervals'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                  }`}
-                data-testid="nav-metric-intervals"
-              >
-                <Clock size={20} />
-                <span>Metric Intervals</span>
-              </button>
-            )}
-
-            {/* Parameters Configuration */}
-            {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
-              <button
-                onClick={() => handleNavClick('parameters-config')}
-                className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors ${currentView === 'parameters-config'
-                  ? 'bg-gray-100 dark:bg-slate-800 text-gray-900 dark:text-white'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800'
-                  }`}
-                data-testid="nav-parameters-config"
-              >
-                <SlidersHorizontal size={20} />
-                <span>Parameters Config</span>
-              </button>
-            )}
-          </div>
-        </nav>
-
-        {/* Sign Out */}
-        <div className="p-4 border-t border-gray-200 dark:border-slate-800">
-          <button
-            onClick={logout}
-            className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-md transition-colors text-gray-600 dark:text-slate-400 hover:bg-gray-50 dark:hover:bg-slate-800/50 hover:text-gray-900 dark:hover:text-white"
-          >
-            <LogOut size={20} />
-            <span className="text-sm font-medium">Sign Out</span>
-          </button>
-        </div>
-      </aside>
-
-      {/* Main Content Area */}
-      <div className="flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out">
-        {/* Top Bar with Welcome and Theme Toggle */}
-        <div className="px-4 sm:px-6 py-3 flex items-center justify-between border-b transition-all bg-white dark:bg-slate-900 border-gray-200 dark:border-slate-800">
-          <div className="flex items-center space-x-3 sm:space-x-4">
-            {/* Menu Button - Always visible */}
             <button
-              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="p-2 rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-slate-800"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="lg:hidden p-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+              aria-label="Close navigation"
             >
-              <Menu size={20} className="text-gray-600 dark:text-gray-400" />
+              <X size={18} />
             </button>
-
-            <h2 className="text-xs sm:text-sm font-medium truncate text-gray-600 dark:text-slate-400">
-              Welcome, {user?.firstName}
-            </h2>
           </div>
 
-          <div className="flex items-center gap-2 sm:gap-4">
-            {/* Grid Selector - Hidden on mobile */}
-            {currentView === 'dashboard' && onGridChange && (
-              <div className="hidden sm:flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
-                <span className="text-[10px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide px-1.5">Grid</span>
-                {([1, 2, 3] as const).map((cols) => (
-                  <button
-                    key={cols}
-                    onClick={() => onGridChange(cols)}
-                    className={`w-7 h-7 text-xs font-semibold rounded-md transition-all ${gridColumns === cols
-                      ? 'bg-cyan-600 text-white shadow'
-                      : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                      }`}
-                    title={`${cols} column${cols > 1 ? 's' : ''}`}
-                  >
-                    {cols}
-                  </button>
-                ))}
+          {/* Navigation */}
+          <nav className="flex-1 overflow-y-auto px-3 py-4" data-testid="sidebar-nav">
+            {NAV_GROUPS.map((group, gi) => {
+              const items = group.items.filter(canSee);
+              if (items.length === 0) return null;
+              return (
+                <div key={gi} className={gi > 0 ? 'mt-5' : ''}>
+                  {group.title && (
+                    <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                      {group.title}
+                    </p>
+                  )}
+                  <ul className="space-y-0.5">
+                    {items.map((item) => {
+                      const active = currentView === item.view;
+                      const Icon = item.icon;
+                      return (
+                        <li key={item.view}>
+                          <button
+                            onClick={() => go(item.view)}
+                            data-testid={`nav-${item.view === 'features' ? 'analytics' : item.view === 'admin-panel' ? 'admin' : item.view}`}
+                            className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
+                              active
+                                ? 'bg-brand-50 text-brand-800 font-medium dark:bg-slate-800 dark:text-white'
+                                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white'
+                            }`}
+                          >
+                            <Icon size={17} className={active ? 'text-brand-700 dark:text-brand-300' : 'text-slate-400 dark:text-slate-500'} />
+                            <span className="truncate">{item.label}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              );
+            })}
+          </nav>
+
+          {/* Account */}
+          <div className="p-3 border-t border-slate-200 dark:border-slate-800">
+            <div className="flex items-center gap-3 px-2 py-2">
+              <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-semibold text-slate-700 dark:text-slate-200">
+                {initials}
               </div>
-            )}
-            {/* 2D/3D Mode Toggle */}
-            <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+                  {user?.firstName} {user?.lastName}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{ROLE_LABEL[role] ?? role}</p>
+              </div>
               <button
-                onClick={() => on3DModeChange?.(false)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${!is3DMode
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                  }`}
-                title="2D Mode - Clean and lightweight"
+                onClick={logout}
+                title="Sign out"
+                aria-label="Sign out"
+                className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-slate-800"
               >
-                2D
-              </button>
-              <button
-                onClick={() => on3DModeChange?.(true)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-all ${is3DMode
-                  ? 'bg-blue-600 text-white shadow'
-                  : 'text-gray-600 dark:text-slate-400 hover:bg-gray-200 dark:hover:bg-slate-700'
-                  }`}
-                title="3D Mode - Enhanced visual effects"
-              >
-                3D
+                <LogOut size={16} />
+                <span className="sr-only">Sign out</span>
               </button>
             </div>
-            {/* Dark/Light Mode Toggle */}
-            <ThemeToggle compact />
           </div>
-        </div>
+        </aside>
 
-        {/* Page Content */}
-        <div className="flex-1 overflow-auto flex flex-col">
-          <div className="flex-1">
-            {children}
-          </div>
-
-          {/* Footer */}
-          <footer className="bg-white dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800 px-4 sm:px-6 py-4 mt-auto">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs sm:text-sm text-gray-500 dark:text-slate-400">
-              <div className="flex items-center gap-2">
-                <span>© 2025 IronGate QA Navigator</span>
-                <span className="hidden sm:inline">•</span>
-                <span className="hidden sm:inline">Driven By Experience</span>
-                <span className="hidden sm:inline">•</span>
-                <span className="hidden sm:inline">All rights reserved</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <a href="#" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Privacy Policy</a>
-                <span>•</span>
-                <a href="#" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Terms of Service</a>
-                <span>•</span>
-                <a href="#" className="hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors">Support</a>
-              </div>
+      {/* Main column */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-16 flex-shrink-0 px-4 sm:px-8 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setIsMobileMenuOpen(true)}
+              className="lg:hidden p-1.5 -ml-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+              aria-label="Open navigation"
+            >
+              <Menu size={20} />
+            </button>
+            <div className="min-w-0">
+              {meta.parent && (
+                <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                  <span>{meta.parent}</span>
+                  <ChevronRight size={12} />
+                </div>
+              )}
+              <h1 className="text-base font-semibold text-slate-900 dark:text-white truncate">{meta.title}</h1>
             </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleMode}
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+              aria-label="Toggle colour theme"
+              className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
+            >
+              {isDark ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
+          </div>
+        </header>
+
+        <main id="main-scroll" className="flex-1 overflow-auto flex flex-col">
+          <div className="flex-1">{children}</div>
+          <footer className="px-4 sm:px-8 py-4 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2">
+            <span>© {new Date().getFullYear()} IronGate Software Ltd. All rights reserved.</span>
+            <span>QE Navigator</span>
           </footer>
-        </div>
+        </main>
       </div>
+
       {jobNotification && (
-        <div className="fixed top-20 right-4 z-50 bg-green-500 text-white px-6 py-3 rounded-lg shadow-lg transform transition-transform duration-500 ease-in-out animate-slide-in-right">
-          <p className="font-medium">{jobNotification.message}</p>
+        <div className="fixed top-20 right-6 z-50 flex items-center gap-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-lg px-4 py-3 rounded-lg animate-slide-in-right">
+          <span className="h-2 w-2 rounded-full bg-green-500" />
+          <p className="text-sm text-slate-700 dark:text-slate-200">{jobNotification.message}</p>
         </div>
       )}
       <Toaster
@@ -419,20 +307,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, ac
         toastOptions={{
           duration: 3000,
           style: {
-            background: '#333',
-            color: '#fff',
-          },
-          success: {
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
+            background: isDark ? '#1e293b' : '#ffffff',
+            color: isDark ? '#e2e8f0' : '#0f172a',
+            border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+            boxShadow: '0 6px 16px -4px rgb(15 23 42 / 0.12)',
+            fontSize: '14px',
           },
         }}
       />
