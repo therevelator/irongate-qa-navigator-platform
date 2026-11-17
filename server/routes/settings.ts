@@ -2,6 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
 import { runIntervalSync, runHourlySync, runDailySync, runWeeklySync, runMonthlySync } from '../jobs/intervalSync';
+import { isSyntheticDataEnabled } from '../lib/syntheticData';
 
 const router = express.Router();
 
@@ -236,6 +237,14 @@ router.post('/sync-metrics', authenticateToken, async (req: any, res) => {
     // Only admin can trigger manual sync
     if (role !== 'super_admin') {
       return res.status(403).json({ error: 'Only super admin can trigger manual sync' });
+    }
+
+    // The interval sync jobs generate synthetic KPI values; refuse unless enabled.
+    if (!isSyntheticDataEnabled()) {
+      return res.status(409).json({
+        error: 'Synthetic (sample) data generation is disabled on this server. Start the API with ENABLE_SYNTHETIC_DATA=true to use it.',
+        disabled: true
+      });
     }
 
     // Run specific sync based on frequency

@@ -6,6 +6,8 @@ import { aiLimiter } from '../middleware/rateLimit';
 import { seedAllAnalyticsData, updateDailyAnalytics } from '../jobs/analyticsSync';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
+import { toNum, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps } from '../lib/metricFormulas';
+import { isSyntheticDataEnabled } from '../lib/syntheticData';
 
 const router = express.Router();
 
@@ -28,18 +30,15 @@ const getTeamIdForRole = (userRole: string, userPrimaryTeamId: string | undefine
 // SHARED NUMERIC HELPERS
 // ============================================================================
 
-/** Synthetic/sample-data generators are off unless explicitly enabled. */
-const isSyntheticDataEnabled = () => process.env.ENABLE_SYNTHETIC_DATA === 'true';
+/** Synthetic-data refusal (409) used by every endpoint that generates random data. */
+const SYNTHETIC_DISABLED_MESSAGE =
+  'Synthetic (sample) data generation is disabled on this server. Start the API with ENABLE_SYNTHETIC_DATA=true to use it.';
 
 /**
  * Parse a DB/body value to a number, keeping 0 as a real value.
- * null / undefined / '' / non-finite -> null (missing data is never invented).
+ * null / undefined / '' / non-finite -> null (shared definition: metricFormulas.toNum).
  */
-function num(v: any): number | null {
-  if (v === null || v === undefined || v === '') return null;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : null;
-}
+const num = (v: any): number | null => toNum(v);
 
 function roundTo(v: number | null, dp = 1): number | null {
   if (v === null) return null;
@@ -1071,7 +1070,7 @@ router.post('/seed-data', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Only super admin can seed data' });
     }
     if (!isSyntheticDataEnabled()) {
-      return res.status(403).json({ error: 'Synthetic data generation is disabled (ENABLE_SYNTHETIC_DATA is not "true").' });
+      return res.status(409).json({ error: SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
 
     // Run seed in background
@@ -1094,7 +1093,7 @@ router.post('/update-daily', authenticateToken, async (req: any, res) => {
     }
     // updateDailyAnalytics applies random drift / random rows: synthetic only.
     if (!isSyntheticDataEnabled()) {
-      return res.status(403).json({ error: 'Synthetic data generation is disabled (ENABLE_SYNTHETIC_DATA is not "true").' });
+      return res.status(409).json({ error: SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
 
     // Run update in background
@@ -1717,7 +1716,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
       monthlyData.some((m: any) =>
         m?.data_source === 'synthetic' || m?.quality?.data_source === 'synthetic' || m?.kpis?.data_source === 'synthetic');
     if (isSyntheticPayload && !isSyntheticDataEnabled()) {
-      return res.status(400).json({ error: 'Sample (synthetic) data cannot be saved.' });
+      return res.status(409).json({ error: 'Sample (synthetic) data cannot be saved. ' + SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
     const dataSource = isSyntheticPayload ? 'synthetic' : 'manual';
     const manuallyEdited = !isSyntheticPayload;
@@ -1832,7 +1831,7 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
   try {
     const { teamId } = req.params;
     if (!isSyntheticDataEnabled()) {
-      return res.status(403).json({ error: 'Sample data generation is disabled.', disabled: true });
+      return res.status(409).json({ error: SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
     if (!(await assertTeamWrite(req, res, teamId))) return;
 
@@ -2121,16 +2120,17 @@ const KPI_TARGETS = {
 //   High:   deploys >= 1/week AND lead time < 7 days AND CFR < 10% AND MTTR < 24 h
 //   Medium: deploys >= 0.25/week AND lead time < 30 days AND CFR < 15% AND MTTR < 168 h
 //   Low:    otherwise
-// A team missing any of the four inputs is not classified (null), never treated as 0.
+// A team missing any of the four inputs is 'Unknown' (excluded from the score), never treated as 0.
 type DoraLevel = 'Elite' | 'High' | 'Medium' | 'Low';
+type DoraLevelOrUnknown = DoraLevel | 'Unknown';
 const DORA_LEVEL_SCORE: Record<DoraLevel, number> = { Elite: 100, High: 80, Medium: 60, Low: 40 };
 
-function classifyDoraLevel(k: any): DoraLevel | null {
+function classifyDoraLevel(k: any): DoraLevelOrUnknown {
   const deployFreq = num(k.deployment_frequency_per_week);
   const leadTime = num(k.lead_time_days);
   const cfr = num(k.change_failure_rate);
   const mttr = num(k.mttr_hours);
-  if (deployFreq === null || leadTime === null || cfr === null || mttr === null) return null;
+  if (deployFreq === null || leadTime === null || cfr === null || mttr === null) return 'Unknown';
   if (deployFreq >= 7 && leadTime < 1 && cfr < 5 && mttr < 1) return 'Elite';
   if (deployFreq >= 1 && leadTime < 7 && cfr < 10 && mttr < 24) return 'High';
   if (deployFreq >= 0.25 && leadTime < 30 && cfr < 15 && mttr < 168) return 'Medium';
@@ -2251,18 +2251,8 @@ async function computeCompanyMetrics(companyId: string) {
   // Technical debt status (active teams only)
   const techDebtSummary = await queryOne<any>(
     `SELECT 
-       SUM(CASE 
-             WHEN td.status NOT IN ('resolved','wont_fix') THEN
-               CASE td.severity
-                 WHEN 'critical' THEN 30
-                 WHEN 'high' THEN 20
-                 WHEN 'medium' THEN 10
-                 WHEN 'low' THEN 5
-                 ELSE 0
-               END
-             ELSE 0
-           END) AS total_weight,
-       SUM(CASE WHEN td.status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items,
+       ${TECH_DEBT_OPEN_WEIGHT_SQL} AS total_weight,
+       SUM(CASE WHEN status NOT IN ('resolved','wont_fix') THEN 1 ELSE 0 END) AS open_items,
        COUNT(*) as total_items
      FROM technical_debt td
      JOIN teams t ON td.team_id = t.id
@@ -2300,14 +2290,21 @@ async function computeCompanyMetrics(companyId: string) {
   const happiness = developerCount > 0 ? num(dev?.avg_happiness) : null;
   const focusTime = developerCount > 0 ? num(dev?.avg_focus) : null;
   const meetingTime = developerCount > 0 ? num(dev?.avg_meetings) : null;
+  const contextSwitches = developerCount > 0 ? num(dev?.avg_switches) : null;
 
-  // Burnout risk (categorical -> score): High if happiness < 50 OR meetings > 5h OR focus < 2h
-  let burnoutRiskScore: number | null = null;
-  if (happiness !== null && focusTime !== null && meetingTime !== null) {
-    burnoutRiskScore = 100;
-    if (happiness < 50 || meetingTime > 5 || focusTime < 2) burnoutRiskScore = 20;
-    else if (happiness < 70 || meetingTime > 4 || focusTime < 3) burnoutRiskScore = 60;
+  // Burnout risk: same rule as "Team Burnout Risk" in /metrics/team/:id/all
+  //   High: focus < 3h OR meetings > 5h OR switches > 10
+  //   Moderate: focus < 4h OR meetings > 4h OR switches > 7
+  //   Low: otherwise
+  // Scored High 20 / Moderate 60 / Low 100; null when any input is missing.
+  let burnoutRisk: 'High' | 'Moderate' | 'Low' | 'Unknown' = 'Unknown';
+  if (focusTime !== null && meetingTime !== null && contextSwitches !== null) {
+    if (focusTime < 3 || meetingTime > 5 || contextSwitches > 10) burnoutRisk = 'High';
+    else if (focusTime < 4 || meetingTime > 4 || contextSwitches > 7) burnoutRisk = 'Moderate';
+    else burnoutRisk = 'Low';
   }
+  const burnoutRiskScore: number | null =
+    burnoutRisk === 'High' ? 20 : burnoutRisk === 'Moderate' ? 60 : burnoutRisk === 'Low' ? 100 : null;
   const focusTimeScore = focusTime === null ? null
     : focusTime >= 4 ? 100 : focusTime >= 3 ? 80 : focusTime >= 2 ? 60 : 40;
   const meetingLoadScore = meetingTime === null ? null
@@ -2321,11 +2318,12 @@ async function computeCompanyMetrics(companyId: string) {
   const developerWellnessIndex = wellnessRaw !== null ? Math.round(wellnessRaw) : null;
 
   // Delivery performance (DORA): mean of per-team level scores over classified teams
-  const doraLevels: Record<DoraLevel, number> = { Elite: 0, High: 0, Medium: 0, Low: 0 };
+  const doraLevels: Record<DoraLevelOrUnknown, number> = { Elite: 0, High: 0, Medium: 0, Low: 0, Unknown: 0 };
   const doraScores: number[] = [];
   for (const t of teamsWithData) {
     const level = classifyDoraLevel(t);
-    if (level) { doraLevels[level]++; doraScores.push(DORA_LEVEL_SCORE[level]); }
+    doraLevels[level]++;
+    if (level !== 'Unknown') doraScores.push(DORA_LEVEL_SCORE[level]);
   }
   const doraMean = meanOf(doraScores);
   const deliveryPerformanceScore = doraMean !== null ? Math.round(doraMean) : null;
@@ -2423,7 +2421,9 @@ async function computeCompanyMetrics(companyId: string) {
       developers: developerCount,
       avgHappiness: roundTo(happiness, 1),
       avgFocusHours: roundTo(focusTime, 1),
-      avgMeetingHours: roundTo(meetingTime, 1)
+      avgMeetingHours: roundTo(meetingTime, 1),
+      avgContextSwitches: roundTo(contextSwitches, 1),
+      burnoutRisk
     },
     pipelineHealthBasis: {
       definition: 'Successful pipeline runs / (successful + failed) runs, last 30 days',
@@ -2635,7 +2635,17 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
 
     sql += ' ORDER BY dps.snapshot_date ASC, dps.developer_id';
 
-    const snapshots = await query<any>(sql, params);
+    const rawSnapshots = await query<any>(sql, params);
+
+    // One DDPS definition: computeDdps (0-100) from each snapshot's inputs, returned as
+    // a 0-1 fraction (score / 100) like the ddps_score column. Snapshots with missing
+    // inputs have no score and are left out.
+    const snapshots = rawSnapshots
+      .map((s: any) => {
+        const { score } = computeDdps(s);
+        return score === null ? null : { ...s, ddps_score: Math.round(score * 100) / 10000 };
+      })
+      .filter((s: any) => s !== null) as any[];
 
     // Aggregate data by date for chart
     const dailyAverages: Record<string, { count: number; totalDDPS: number; date: string }> = {};
@@ -2685,9 +2695,9 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
       ? ((recentAvg - previousAvg) / previousAvg) * 100
       : null;
 
-    // Executive summary: only when there is data. DDPS is a 0-1 composite index of
-    // normalised focus / PR / review / meeting / context-switch inputs; it is not a
-    // measured share of the working day.
+    // Executive summary: only when there is data. DDPS is a composite points score
+    // (see DDPS_FORMULA in server/lib/metricFormulas.ts); it is not a measured share
+    // of the working day. Values here are 0-1 fractions (score / 100).
     let executiveSummary: null | { headline: string; status: string; lossDrivers: string; recommendation: string } = null;
     if (hasData && avgDDPS !== null) {
       let summaryStatus = 'fragmented';
@@ -2710,7 +2720,7 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
       if (avgMetrics.focusTime < 4) lossDrivers.push('insufficient focus time');
 
       executiveSummary = {
-        headline: `Average DDPS ${avgDDPS.toFixed(2)} (0-1 index) across ${snapshots.length} daily snapshots.`,
+        headline: `Average DDPS ${Math.round(avgDDPS * 100)}/100 across ${snapshots.length} daily snapshots.`,
         status: summaryStatus,
         lossDrivers: lossDrivers.length > 0
           ? `Possible loss drivers: ${lossDrivers.join(' and ')}.`
