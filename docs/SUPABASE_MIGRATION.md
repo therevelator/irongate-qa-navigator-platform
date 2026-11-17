@@ -86,3 +86,19 @@ Then log in on the site with an existing account.
 # restore the dump into any MySQL 8 server, then:
 MYSQL_URL='mysql://user:pass@127.0.0.1:3306/irongate_qa' npx tsx scripts/mysql-to-postgres.ts
 ```
+
+## Loading into Supabase (no superuser)
+
+Supabase's `postgres` role cannot set `session_replication_role`, which the data
+snapshot used to defer foreign-key checks. Use the dedicated loader, which creates
+tables first, loads the data, then adds indexes / foreign keys (as `NOT VALID`, so
+the few pre-existing orphan rows don't block it) / triggers / RLS — no superuser needed:
+
+```bash
+# from the repo root, with the Supabase Session-pooler connection string (port 5432):
+psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f supabase/load/load_supabase.sql
+```
+
+This loads all 38 tables (~20k rows). The single-file `migrations/..._initial_schema.sql`
++ `db_snapshots/latest_snapshot.postgres.sql` path still works where the role may set
+`session_replication_role` (e.g. local Postgres / CI).

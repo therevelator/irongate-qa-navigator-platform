@@ -3,7 +3,13 @@
 
 BEGIN;
 -- Skip FK checks and updated_at triggers while loading, like mysqldump's FOREIGN_KEY_CHECKS=0
-SET LOCAL session_replication_role = replica;
+DO $ironload$ BEGIN
+  BEGIN
+    PERFORM set_config('session_replication_role', 'replica', true);
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE NOTICE 'session_replication_role not permitted; constraints are added after data instead';
+  END;
+END $ironload$;
 
 INSERT INTO "business_impact_business_kpis" ("id", "team_id", "month_year", "monthly_revenue", "active_users", "churn_rate", "feature_adoption_rate", "new_customers", "customer_lifetime_value", "nps_score", "csat_score", "support_ticket_volume", "avg_resolution_time_hours", "manually_edited", "data_source", "created_at", "updated_at") VALUES
 ('08c3d443-32ab-41a4-9e25-899eac9561f4', 'team-1764026202608-vcbic0w8g', '2025-04', '828897.61', 24980, '1.67', '63.76', NULL, NULL, '61.86', '77.67', 134, NULL, true, 'manual', '2025-12-05 20:17:31+00', '2025-12-13 21:38:35+00'),
