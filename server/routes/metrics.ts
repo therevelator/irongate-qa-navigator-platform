@@ -262,22 +262,6 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Trigger manual sync (admin only)
-router.post('/sync', authenticateToken, async (req: AuthRequest, res) => {
-  try {
-    if (req.userRole !== 'super_admin') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
-
-    // This would trigger the sync job manually
-    // For now, just return success
-    res.json({ message: 'Sync triggered successfully' });
-  } catch (error) {
-    console.error('Sync error:', error);
-    res.status(500).json({ error: 'Failed to trigger sync' });
-  }
-});
-
 // Manual metrics input (super_admin, qa_manager, team_lead)
 router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
   try {

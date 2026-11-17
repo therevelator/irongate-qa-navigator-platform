@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowLeft, Clock, Save, RotateCcw, CheckCircle } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import API_URL from '../config/api';
+import { Page, PageIntro, Card, CardHeader, Badge, EmptyState, buttonClass, inputClass, cx } from './ui';
 
 interface MetricInterval {
   id: string | null;
@@ -14,284 +15,162 @@ interface MetricInterval {
 }
 
 interface MetricIntervalsConfigProps {
-  onBack: () => void;
+  onBack?: () => void;
 }
 
 const METRIC_CATEGORIES = {
   quality: {
-    label: 'Quality Metrics',
-    description: 'Code and test quality indicators',
-    metrics: ['test_coverage', 'test_flakiness_rate', 'defect_density', 'defect_escape_rate', 'code_quality_score']
+    label: 'Quality',
+    metrics: ['test_coverage', 'test_flakiness_rate', 'defect_density', 'defect_escape_rate', 'code_quality_score'],
   },
   speed: {
-    label: 'Speed & Efficiency',
-    description: 'Build, deployment, and recovery times',
-    metrics: ['avg_build_time_minutes', 'test_execution_time_minutes', 'deployment_frequency_per_week', 'lead_time_days', 'mttr_hours', 'parallel_test_efficiency']
+    label: 'Speed and efficiency',
+    metrics: ['avg_build_time_minutes', 'test_execution_time_minutes', 'deployment_frequency_per_week', 'lead_time_days', 'mttr_hours', 'parallel_test_efficiency'],
   },
   agile: {
-    label: 'Agile & Process',
-    description: 'Sprint and workflow metrics',
-    metrics: ['sprint_velocity', 'sprint_commitment_rate', 'sprint_carryover', 'first_time_pass_rate', 'blocked_time_hours']
+    label: 'Agile and process',
+    metrics: ['sprint_velocity', 'sprint_commitment_rate', 'sprint_carryover', 'first_time_pass_rate', 'blocked_time_hours', 'sizing_accuracy'],
   },
   automation: {
     label: 'Automation',
-    description: 'Test automation progress and ROI',
-    metrics: ['automation_coverage', 'automation_roi']
+    metrics: ['automation_coverage', 'automation_roi'],
   },
   reliability: {
     label: 'Reliability',
-    description: 'System stability and uptime',
-    metrics: ['change_failure_rate', 'mtbf_hours', 'system_availability', 'infrastructure_failures']
-  }
+    metrics: ['change_failure_rate', 'mtbf_hours', 'system_availability', 'infrastructure_failures'],
+  },
 };
 
 const INTERVAL_UNITS = [
-  { value: 'minutes', label: 'Minutes' },
-  { value: 'hours', label: 'Hours' },
-  { value: 'days', label: 'Days' },
-  { value: 'weeks', label: 'Weeks' },
-  { value: 'months', label: 'Months' }
+  { value: 'hours', label: 'hours' },
+  { value: 'days', label: 'days' },
+  { value: 'weeks', label: 'weeks' },
+  { value: 'months', label: 'months' },
 ];
 
-const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = ({ onBack }) => {
+/**
+ * Expected update frequency per metric. Metrics are pushed in (KPI ingestion API or Manual
+ * metrics); nothing is fetched on this schedule. The setting is used to flag a metric as
+ * stale on Team detail when its last recorded value is older than the expected interval.
+ */
+const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = () => {
   const [intervals, setIntervals] = useState<MetricInterval[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [original, setOriginal] = useState<MetricInterval[]>([]);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [saving, setSaving] = useState(false);
-  const [hasChanges, setHasChanges] = useState(false);
-  const [originalIntervals, setOriginalIntervals] = useState<MetricInterval[]>([]);
-
-  useEffect(() => {
-    fetchIntervals();
-  }, []);
+  const hasChanges = JSON.stringify(intervals) !== JSON.stringify(original);
 
   const fetchIntervals = async () => {
     try {
-      setLoading(true);
-      const response = await fetch(`${API_URL}/settings/metric-intervals`, {
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setIntervals(data.intervals);
-        setOriginalIntervals(JSON.parse(JSON.stringify(data.intervals)));
-      } else {
-        toast.error('Failed to load metric intervals');
-      }
-    } catch (error) {
-      console.error('Error fetching intervals:', error);
-      toast.error('Failed to load metric intervals');
-    } finally {
-      setLoading(false);
+      const response = await fetch(`${API_URL}/settings/metric-intervals`, { credentials: 'include' });
+      if (!response.ok) throw new Error(String(response.status));
+      const data = await response.json();
+      setIntervals(data.intervals);
+      setOriginal(data.intervals);
+      setState('ready');
+    } catch {
+      setState('error');
     }
   };
 
-  const handleIntervalChange = (metricKey: string, field: 'interval_value' | 'interval_unit', value: number | string) => {
-    setIntervals(prev => prev.map(interval => {
-      if (interval.metric_key === metricKey) {
-        return { ...interval, [field]: value, is_default: false };
-      }
-      return interval;
-    }));
-    setHasChanges(true);
-  };
+  useEffect(() => { fetchIntervals(); }, []);
 
-  const handleSaveAll = async () => {
+  const change = (metricKey: string, field: 'interval_value' | 'interval_unit', value: number | string) =>
+    setIntervals(prev => prev.map(i => (i.metric_key === metricKey ? { ...i, [field]: value, is_default: false } : i)));
+
+  const saveAll = async () => {
+    setSaving(true);
     try {
-      setSaving(true);
       const response = await fetch(`${API_URL}/settings/metric-intervals`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ intervals })
+        body: JSON.stringify({ intervals }),
       });
-
-      if (response.ok) {
-        toast.success('Metric intervals saved successfully');
-        setHasChanges(false);
-        setOriginalIntervals(JSON.parse(JSON.stringify(intervals)));
-      } else {
-        toast.error('Failed to save metric intervals');
-      }
-    } catch (error) {
-      console.error('Error saving intervals:', error);
-      toast.error('Failed to save metric intervals');
+      if (!response.ok) throw new Error();
+      toast.success('Expected update frequencies saved');
+      await fetchIntervals();
+    } catch {
+      toast.error('Could not save the update frequencies');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleResetMetric = async (metricKey: string) => {
-    try {
-      const response = await fetch(`${API_URL}/settings/metric-intervals/${metricKey}`, {
-        method: 'DELETE',
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        toast.success('Reset to default');
-        fetchIntervals();
-      } else {
-        toast.error('Failed to reset');
-      }
-    } catch (error) {
-      console.error('Error resetting interval:', error);
-      toast.error('Failed to reset');
-    }
+  const reset = async (metricKey: string) => {
+    const response = await fetch(`${API_URL}/settings/metric-intervals/${metricKey}`, { method: 'DELETE', credentials: 'include' });
+    if (response.ok) { toast.success('Reset to default'); fetchIntervals(); }
+    else toast.error('Could not reset');
   };
-
-  const handleDiscardChanges = () => {
-    setIntervals(JSON.parse(JSON.stringify(originalIntervals)));
-    setHasChanges(false);
-  };
-
-  const getIntervalByKey = (key: string) => {
-    return intervals.find(i => i.metric_key === key);
-  };
-
-  const formatIntervalDisplay = (interval: MetricInterval) => {
-    const value = interval.interval_value;
-    const unit = interval.interval_unit;
-    const unitLabel = value === 1 ? unit.slice(0, -1) : unit;
-    return `Every ${value} ${unitLabel}`;
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-gray-500 dark:text-slate-400">Loading metric intervals...</div>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="px-4 sm:px-8 py-6 sm:py-8">
-      <div className="max-w-6xl mx-auto space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div>
-              <h1 className="text-xl font-semibold tracking-tight text-slate-900 dark:text-white">
-                Metric update intervals
-              </h1>
-              <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">
-                Configure how often each metric should be updated
-              </p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {hasChanges && (
-              <button
-                onClick={handleDiscardChanges}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-300 bg-gray-100 dark:bg-slate-800 rounded-lg hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-              >
-                Discard Changes
-              </button>
-            )}
-            <button
-              onClick={handleSaveAll}
-              disabled={!hasChanges || saving}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors ${
-                hasChanges && !saving
-                  ? 'bg-cyan-600 text-white hover:bg-cyan-700'
-                  : 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-slate-500 cursor-not-allowed'
-              }`}
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Saving...' : 'Save All Changes'}
+    <Page>
+      <PageIntro
+        title="Expected update frequency"
+        description="How often each metric is expected to receive a new value. Metrics arrive through the KPI ingestion API or Manual metrics; this setting does not fetch or generate data. Team detail marks a metric as stale when its last recorded value is older than this interval."
+        actions={
+          <>
+            {hasChanges && <button className={buttonClass.secondary} onClick={() => setIntervals(original)}>Discard changes</button>}
+            <button className={buttonClass.primary} onClick={saveAll} disabled={!hasChanges || saving}>
+              {saving ? 'Saving…' : 'Save changes'}
             </button>
-          </div>
-        </div>
+          </>
+        }
+      />
 
-        {/* Info Banner */}
-        <div className="bg-cyan-50 dark:bg-cyan-900/20 border border-cyan-200 dark:border-cyan-800 rounded-lg p-4">
-          <p className="text-sm text-cyan-800 dark:text-cyan-200">
-            <strong>Tip:</strong> Set intervals based on how frequently each metric naturally changes. 
-            Sprint metrics should align with your sprint duration (e.g., 2 weeks), while build metrics 
-            can be updated more frequently (hourly or daily).
-          </p>
-        </div>
+      {state === 'loading' && <Card><p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p></Card>}
+      {state === 'error' && <Card><EmptyState title="Update frequencies unavailable" description="The settings could not be loaded." /></Card>}
 
-        {/* Metric Categories */}
-        {Object.entries(METRIC_CATEGORIES).map(([categoryKey, category]) => (
-          <div key={categoryKey} className="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-gray-200 dark:border-slate-700">
-            <div className="px-6 py-4 border-b border-gray-200 dark:border-slate-700">
-              <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{category.label}</h2>
-              <p className="text-sm text-gray-500 dark:text-slate-400">{category.description}</p>
-            </div>
-            
-            <div className="divide-y divide-gray-100 dark:divide-slate-700">
-              {category.metrics.map(metricKey => {
-                const interval = getIntervalByKey(metricKey);
-                if (!interval) return null;
-
-                return (
-                  <div key={metricKey} className="px-6 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <h3 className="font-medium text-gray-900 dark:text-white">
-                        {interval.custom_label}
-                      </h3>
-                      <p className="text-sm text-gray-500 dark:text-slate-400">
-                        {interval.is_default ? (
-                          <span className="text-gray-400 dark:text-slate-500">Using default</span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-                            <CheckCircle className="w-3 h-3" />
-                            Custom interval
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                    
-                    <div className="flex items-center gap-3">
+      {state === 'ready' && (
+        <div className="space-y-4">
+          {Object.entries(METRIC_CATEGORIES).map(([key, category]) => (
+            <Card key={key} padded={false}>
+              <div className="px-5 pt-5"><CardHeader title={category.label} /></div>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800">
+                {category.metrics.map(metricKey => {
+                  const interval = intervals.find(i => i.metric_key === metricKey);
+                  if (!interval) return null;
+                  return (
+                    <li key={metricKey} className="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 dark:text-white">{interval.custom_label}</p>
+                        <div className="mt-1">{interval.is_default ? <Badge>Default</Badge> : <Badge tone="brand">Custom</Badge>}</div>
+                      </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500 dark:text-slate-400">Every</span>
+                        <span className="text-sm text-slate-500 dark:text-slate-400">Expected every</span>
                         <input
                           type="number"
                           min={1}
                           max={100}
+                          aria-label={`${interval.custom_label} interval`}
                           value={interval.interval_value}
-                          onChange={(e) => handleIntervalChange(metricKey, 'interval_value', parseInt(e.target.value) || 1)}
-                          className="w-16 px-2 py-1.5 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                          onChange={(e) => change(metricKey, 'interval_value', Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          className={cx(inputClass, 'w-20')}
                         />
                         <select
+                          aria-label={`${interval.custom_label} unit`}
                           value={interval.interval_unit}
-                          onChange={(e) => handleIntervalChange(metricKey, 'interval_unit', e.target.value)}
-                          className="px-3 py-1.5 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 focus:border-transparent"
+                          onChange={(e) => change(metricKey, 'interval_unit', e.target.value)}
+                          className={cx(inputClass, 'pr-8')}
                         >
-                          {INTERVAL_UNITS.map(unit => (
-                            <option key={unit.value} value={unit.value}>{unit.label}</option>
-                          ))}
+                          {INTERVAL_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
+                          {interval.interval_unit === 'minutes' && <option value="minutes">minutes</option>}
                         </select>
+                        {!interval.is_default && (
+                          <button onClick={() => reset(metricKey)} className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title="Reset to default" aria-label="Reset to default">
+                            <RotateCcw size={15} />
+                          </button>
+                        )}
                       </div>
-                      
-                      {!interval.is_default && (
-                        <button
-                          onClick={() => handleResetMetric(metricKey)}
-                          className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-slate-300 transition-colors"
-                          title="Reset to default"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-
-        {/* Footer note */}
-        <div className="text-center text-sm text-gray-500 dark:text-slate-400 py-4">
-          Changes will affect how the system expects metrics to be updated. 
-          This helps identify stale data and set appropriate expectations for data freshness.
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
+          ))}
         </div>
-      </div>
-    </div>
+      )}
+    </Page>
   );
 };
 

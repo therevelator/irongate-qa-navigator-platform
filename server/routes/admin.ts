@@ -3,302 +3,218 @@ import bcrypt from 'bcrypt';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
 import { generateApiKey } from '../middleware/apiKey';
+import { randomUUID } from 'crypto';
+import {
+  ROLE_HIERARCHY, TEAM_OPTIONAL_ROLES, canAssignRole, canManageUser, canEditUser, canEditAssignment,
+  canResetPassword, canDeleteUser, type PolicyActor
+} from '../lib/userPolicy';
+import { syncPrimaryTeamMembership, teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
+import { resolveConfigs, isSecretConfigKey } from '../lib/configResolver';
 
 const router = express.Router();
 
-// Role hierarchy and permissions
-const ROLE_HIERARCHY: Record<string, string[]> = {
-  super_admin: ['qa_manager', 'team_lead', 'qa_engineer', 'viewer'],
-  qa_manager: ['team_lead', 'qa_engineer', 'viewer'],
-  team_lead: ['qa_engineer', 'viewer'],
-  qa_engineer: [],
-  viewer: []
-};
+// User-management rules live in server/lib/userPolicy.ts (shared with the Users and
+// Teams pages, so the UI only offers what the server allows).
+const actorOf = (req: any): PolicyActor => ({
+  id: req.user.id,
+  role: req.user.role,
+  departmentId: req.user.departmentId ?? null,
+  primaryTeamId: req.user.primaryTeamId ?? null,
+});
 
-// Permission levels for each role
-const ROLE_PERMISSIONS = {
-  super_admin: {
-    departments: { create: true, read: true, update: true, delete: true },
-    teams: { create: true, read: true, update: true, delete: true },
-    users: { create: true, read: true, update: true, delete: true },
-    resetPassword: true,
-    advancedFeatures: true
-  },
-  qa_manager: {
-    departments: { create: false, read: true, update: false, delete: false },
-    teams: { create: true, read: true, update: true, delete: true },
-    users: { create: true, read: true, update: true, delete: true },
-    resetPassword: true,
-    advancedFeatures: true
-  },
-  team_lead: {
-    departments: { create: false, read: true, update: false, delete: false },
-    teams: { create: true, read: true, update: true, delete: false },
-    users: { create: true, read: true, update: true, delete: false },
-    resetPassword: true,
-    advancedFeatures: true
-  },
-  qa_engineer: {
-    departments: { create: false, read: true, update: false, delete: false },
-    teams: { create: false, read: true, update: false, delete: false },
-    users: { create: false, read: true, update: false, delete: false },
-    resetPassword: true, // Only their own
-    advancedFeatures: true // Can see metrics but not generate reports
-  },
-  viewer: {
-    departments: { create: false, read: true, update: false, delete: false },
-    teams: { create: false, read: true, update: false, delete: false },
-    users: { create: false, read: true, update: false, delete: false },
-    resetPassword: false,
-    advancedFeatures: false
-  }
-};
-
-// Check if user can create a specific role
-function canCreateRole(userRole: string, targetRole: string): boolean {
-  const allowedRoles = ROLE_HIERARCHY[userRole];
-  return allowedRoles ? allowedRoles.includes(targetRole) : false;
-}
-
-// Check if user can manage another user (created by them or themselves)
-async function canManageUser(managerId: string, targetUserId: string): Promise<boolean> {
-  if (managerId === targetUserId) return true; // Can manage self
-  
-  const targetUser = await queryOne<any>(
-    'SELECT created_by FROM users WHERE id = ?',
-    [targetUserId]
+async function loadTarget(userId: string, companyId: string) {
+  return queryOne<any>(
+    'SELECT id, role, email, department_id, primary_team_id, is_active FROM users WHERE id = ? AND company_id = ?',
+    [userId, companyId]
   );
-  
-  return targetUser?.created_by === managerId;
 }
+
+const USER_LIST_COLUMNS = `u.id, u.email, u.first_name, u.last_name, u.role, u.company_id,
+  u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
+  t.name as team_name, d.name as department_name,
+  ARRAY(
+    SELECT DISTINCT x.team_id FROM (
+      SELECT tm.team_id FROM team_members tm WHERE tm.user_id = u.id
+      UNION SELECT u.primary_team_id WHERE u.primary_team_id IS NOT NULL
+    ) x
+  ) AS team_ids`;
 
 // Get users based on role permissions
 router.get('/users', authenticateToken, async (req: any, res) => {
   try {
-    const { role, id: userId, companyId, primaryTeamId } = req.user;
+    const { role, id: userId, companyId, departmentId, primaryTeamId } = req.user;
+    const base = `SELECT ${USER_LIST_COLUMNS}
+         FROM users u
+         LEFT JOIN teams t ON u.primary_team_id = t.id
+         LEFT JOIN departments d ON u.department_id = d.id
+         WHERE u.company_id = ?`;
 
     let users;
-
     if (role === 'super_admin') {
-      // Super admin sees all users in their company
-      users = await query<any>(
-        `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-                u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
-                t.name as team_name, d.name as department_name
-         FROM users u
-         LEFT JOIN teams t ON u.primary_team_id = t.id
-         LEFT JOIN departments d ON u.department_id = d.id
-         WHERE u.company_id = ?
-         ORDER BY u.created_at DESC`,
-        [companyId]
-      );
+      users = await query<any>(`${base} ORDER BY u.created_at DESC`, [companyId]);
     } else if (role === 'qa_manager') {
-      // QA Manager sees users in their department
-      users = await query<any>(
-        `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-                u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
-                t.name as team_name, d.name as department_name
-         FROM users u
-         LEFT JOIN teams t ON u.primary_team_id = t.id
-         LEFT JOIN departments d ON u.department_id = d.id
-         WHERE u.company_id = ? AND (u.created_by = ? OR u.department_id = (
-           SELECT department_id FROM users WHERE id = ?
-         ))
-         ORDER BY u.created_at DESC`,
-        [companyId, userId, userId]
-      );
+      // Their department (the users they can manage), plus themselves.
+      users = await query<any>(`${base} AND (u.department_id = ? OR u.id = ?) ORDER BY u.created_at DESC`, [companyId, departmentId ?? null, userId]);
     } else if (role === 'team_lead') {
-      // Team Lead sees users in their department
-      users = await query<any>(
-        `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-                u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
-                t.name as team_name, d.name as department_name
-         FROM users u
-         LEFT JOIN teams t ON u.primary_team_id = t.id
-         LEFT JOIN departments d ON u.department_id = d.id
-         WHERE u.department_id = (SELECT department_id FROM users WHERE id = ?)
-         ORDER BY u.created_at DESC`,
-        [userId]
-      );
+      // Their own team, plus themselves.
+      users = await query<any>(`${base} AND (u.primary_team_id = ? OR u.id = ?) ORDER BY u.created_at DESC`, [companyId, primaryTeamId ?? null, userId]);
     } else {
-      // QA Engineer and Viewer see only themselves
-      users = await query<any>(
-        `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-                u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
-                t.name as team_name, d.name as department_name
-         FROM users u
-         LEFT JOIN teams t ON u.primary_team_id = t.id
-         LEFT JOIN departments d ON u.department_id = d.id
-         WHERE u.id = ?`,
-        [userId]
-      );
+      users = await query<any>(`${base} AND u.id = ?`, [companyId, userId]);
     }
-
     res.json(users);
   } catch (error: any) {
     console.error('Error fetching users:', error);
-    res.status(500).json({ 
-      error: 'Failed to fetch users'
-        });
+    res.status(500).json({ error: 'Failed to fetch users' });
   }
 });
 
 // Create user (role-based)
 router.post('/users', authenticateToken, async (req: any, res) => {
   try {
-    const { role: creatorRole, id: creatorId, companyId, departmentId } = req.user;
-    const { email, password, firstName, lastName, role, teamId, departmentId: targetDeptId } = req.body;
+    const actor = actorOf(req);
+    const { companyId } = req.user;
+    const { email, password, firstName, lastName, role } = req.body ?? {};
+    let teamId: string | null = req.body?.teamId || null;
+    let departmentId: string | null = req.body?.departmentId || null;
 
-    // Validate required fields
-    if (!email || !password || !firstName || !lastName || !role || !teamId) {
+    if (!email || !password || !firstName || !lastName || !role) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-
     if (typeof password !== 'string' || password.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
-
-    // Check if creator can create this role
-    if (!canCreateRole(creatorRole, role)) {
-      return res.status(403).json({ 
-        error: `${creatorRole} cannot create ${role} users` 
-      });
+    if (!canAssignRole(actor.role, role)) {
+      return res.status(403).json({ error: `${actor.role} cannot create ${role} users` });
     }
 
-    // Check if user already exists
-    const existingUser = await queryOne<any>(
-      'SELECT id FROM users WHERE LOWER(email) = LOWER(?)',
-      [email]
-    );
+    // Scope: a team lead creates users on their own team only; a manager in their department.
+    if (actor.role === 'team_lead') {
+      if (teamId && teamId !== actor.primaryTeamId) {
+        return res.status(403).json({ error: 'Team leads can only add users to their own team' });
+      }
+      teamId = actor.primaryTeamId ?? null;
+      departmentId = actor.departmentId ?? null;
+    }
+    if (!teamId && !TEAM_OPTIONAL_ROLES.includes(role)) {
+      return res.status(400).json({ error: 'A primary team is required for this role' });
+    }
 
+    if (teamId) {
+      const team = await queryOne<any>('SELECT department_id FROM teams WHERE id = ? AND company_id = ? AND is_active = TRUE', [teamId, companyId]);
+      if (!team) return res.status(400).json({ error: 'Invalid team ID' });
+      if (departmentId && team.department_id !== departmentId) {
+        return res.status(400).json({ error: 'Team must be in the specified department' });
+      }
+      departmentId = team.department_id;
+    }
+    if (actor.role === 'qa_manager') {
+      departmentId = departmentId || actor.departmentId || null;
+      if (departmentId !== actor.departmentId) {
+        return res.status(403).json({ error: 'Can only add users to your department' });
+      }
+    }
+    if (!departmentId) {
+      return res.status(400).json({ error: 'Department ID is required' });
+    }
+    const dept = await queryOne<any>('SELECT id FROM departments WHERE id = ? AND company_id = ? AND is_active = TRUE', [departmentId, companyId]);
+    if (!dept) return res.status(400).json({ error: 'Invalid department ID' });
+
+    const existingUser = await queryOne<any>('SELECT id FROM users WHERE LOWER(email) = LOWER(?)', [email]);
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    // Hash password
     const passwordHash = await bcrypt.hash(password, 10);
-
-    // Determine department and validate team assignment
-    let finalDeptId = targetDeptId || departmentId;
-    
-    if (!finalDeptId) {
-      return res.status(400).json({ error: 'Department ID is required' });
-    }
-
-    // Get team to validate department
-    const team = await queryOne<any>(
-      'SELECT department_id FROM teams WHERE id = ? AND company_id = ?',
-      [teamId, companyId]
-    );
-
-    if (!team) {
-      return res.status(400).json({ error: 'Invalid team ID' });
-    }
-
-    // QA Manager can only assign users to teams in their department
-    if (creatorRole === 'qa_manager') {
-      if (team.department_id !== departmentId) {
-        return res.status(403).json({ 
-          error: 'Can only assign users to teams in your department' 
-        });
-      }
-      finalDeptId = departmentId; // Force QA Manager's department
-    }
-
-    // Super Admin can assign to any department, but team must match
-    if (creatorRole === 'super_admin' && targetDeptId && team.department_id !== targetDeptId) {
-      return res.status(400).json({ 
-        error: 'Team must be in the specified department' 
-      });
-    }
-
-    // Generate UUID for user
-    const userId = `user-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-    // Insert user
+    const userId = randomUUID();
     await query<any>(
       `INSERT INTO users (
         id, email, password_hash, first_name, last_name, role,
         company_id, department_id, primary_team_id, created_by, is_active, email_verified
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, true, true)`,
-      [userId, email, passwordHash, firstName, lastName, role, companyId, finalDeptId, teamId, creatorId]
+      [userId, email, passwordHash, firstName, lastName, role, companyId, departmentId, teamId, actor.id]
     );
+    await syncPrimaryTeamMembership(userId, null, teamId, role);
 
-    // Add to team_members
-    await query(
-      'INSERT INTO team_members (user_id, team_id, role) VALUES (?, ?, ?)',
-      [userId, teamId, role === 'team_lead' ? 'lead' : 'member']
-    );
-
-    // Fetch created user
     const newUser = await queryOne<any>(
-      `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.company_id, 
-              u.department_id, u.primary_team_id, u.is_active, u.created_at,
-              t.name as team_name, d.name as department_name
+      `SELECT ${USER_LIST_COLUMNS}
        FROM users u
        LEFT JOIN teams t ON u.primary_team_id = t.id
        LEFT JOIN departments d ON u.department_id = d.id
        WHERE u.id = ?`,
       [userId]
     );
-
     res.status(201).json(newUser);
   } catch (error: any) {
     console.error('Error creating user:', error);
-    res.status(500).json({ 
-      error: 'Failed to create user'
-        });
+    if (error?.code === '23505') return res.status(400).json({ error: 'Email already registered' });
+    res.status(500).json({ error: 'Failed to create user' });
   }
 });
 
-// Update user
+// Update user. Self: name and email only. Others: super_admin / qa_manager for users they
+// can manage; a changed role must be one they may assign. Fields not sent keep their value.
 router.put('/users/:id', authenticateToken, async (req: any, res) => {
   try {
-    const { role: creatorRole, companyId, departmentId: userDeptId } = req.user;
-    const { id: userId } = req.params;
-    const { firstName, lastName, email, role, departmentId, primaryTeamId } = req.body;
+    const actor = actorOf(req);
+    const { companyId } = req.user;
+    const target = await loadTarget(req.params.id, companyId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
 
-    // Only Super Admin and QA Manager can update users
-    if (creatorRole !== 'super_admin' && creatorRole !== 'qa_manager') {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+    const body = req.body ?? {};
+    const firstName = body.firstName ?? undefined;
+    const lastName = body.lastName ?? undefined;
+    const email = body.email ?? undefined;
+    const role: string = body.role ?? target.role;
+    const departmentId: string | null = body.departmentId === undefined ? target.department_id : (body.departmentId || null);
+    const primaryTeamId: string | null = body.primaryTeamId === undefined ? target.primary_team_id : (body.primaryTeamId || null);
+    const assignmentChanged = role !== target.role || departmentId !== target.department_id || primaryTeamId !== target.primary_team_id;
+
+    if (!canEditUser(actor, target)) {
+      return res.status(403).json({ error: 'You cannot edit this user' });
     }
-
-    // Get user to check department — scoped to the caller's company (tenant boundary).
-    const existingUser = await queryOne<any>(
-      'SELECT department_id FROM users WHERE id = ? AND company_id = ?',
-      [userId, companyId]
-    );
-    if (!existingUser) {
-      return res.status(404).json({ error: 'User not found' });
+    if (assignmentChanged) {
+      if (!canEditAssignment(actor, target)) {
+        return res.status(403).json({ error: 'You cannot change your own role, department or team' });
+      }
+      if (role !== target.role && !canAssignRole(actor.role, role)) {
+        return res.status(403).json({ error: `${actor.role} cannot assign the ${role} role` });
+      }
+      if (actor.role === 'qa_manager' && departmentId !== actor.departmentId) {
+        return res.status(403).json({ error: 'Can only assign users to your department' });
+      }
+      if (!departmentId) return res.status(400).json({ error: 'Department is required' });
+      const dept = await queryOne<any>('SELECT id FROM departments WHERE id = ? AND company_id = ?', [departmentId, companyId]);
+      if (!dept) return res.status(400).json({ error: 'Invalid department ID' });
+      if (primaryTeamId) {
+        const team = await queryOne<any>('SELECT department_id FROM teams WHERE id = ? AND company_id = ?', [primaryTeamId, companyId]);
+        if (!team) return res.status(400).json({ error: 'Invalid team ID' });
+        if (team.department_id !== departmentId) return res.status(400).json({ error: 'Team must be in the selected department' });
+      } else if (!TEAM_OPTIONAL_ROLES.includes(role)) {
+        return res.status(400).json({ error: 'A primary team is required for this role' });
+      }
     }
-
-    // QA Manager can only update users in their department
-    if (creatorRole === 'qa_manager' && existingUser.department_id !== userDeptId) {
-      return res.status(403).json({ error: 'Can only update users in your department' });
-    }
-
-    // A caller may only assign a role they are allowed to create (no escalation).
-    if (role !== undefined && !canCreateRole(creatorRole, role)) {
-      return res.status(403).json({ error: `${creatorRole} cannot assign the ${role} role` });
+    if (email !== undefined) {
+      const clash = await queryOne<any>('SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id <> ?', [email, target.id]);
+      if (clash) return res.status(400).json({ error: 'Email already registered' });
     }
 
     await query(
       `UPDATE users
-       SET first_name = ?, last_name = ?, email = ?, role = ?,
-           department_id = ?, primary_team_id = ?, updated_at = NOW()
+       SET first_name = COALESCE(?, first_name), last_name = COALESCE(?, last_name), email = COALESCE(?, email),
+           role = ?, department_id = ?, primary_team_id = ?, updated_at = NOW()
        WHERE id = ? AND company_id = ?`,
-      [firstName, lastName, email, role, departmentId, primaryTeamId, userId, companyId]
+      [firstName ?? null, lastName ?? null, email ?? null, role, departmentId, primaryTeamId, target.id, companyId]
     );
+    await syncPrimaryTeamMembership(target.id, target.primary_team_id, primaryTeamId, role);
 
     const updatedUser = await queryOne<any>(
-      `SELECT u.*, d.name as department_name, t.name as team_name 
-       FROM users u 
-       LEFT JOIN departments d ON u.department_id = d.id 
-       LEFT JOIN teams t ON u.primary_team_id = t.id 
+      `SELECT ${USER_LIST_COLUMNS}
+       FROM users u
+       LEFT JOIN departments d ON u.department_id = d.id
+       LEFT JOIN teams t ON u.primary_team_id = t.id
        WHERE u.id = ?`,
-      [userId]
+      [target.id]
     );
-    
     res.json(updatedUser);
   } catch (error: any) {
     console.error('Error updating user:', error);
@@ -309,37 +225,14 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
 // Toggle user active status
 router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res) => {
   try {
-    const { role: creatorRole, companyId, departmentId: userDeptId, primaryTeamId: userTeamId } = req.user;
-    const { id: userId } = req.params;
-
-    // Only Super Admin, QA Manager, and Team Lead can toggle user status
-    if (creatorRole !== 'super_admin' && creatorRole !== 'qa_manager' && creatorRole !== 'team_lead') {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+    const { companyId } = req.user;
+    const target = await loadTarget(req.params.id, companyId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (!canManageUser(actorOf(req), target)) {
+      return res.status(403).json({ error: 'You cannot change this user\'s status' });
     }
-
-    // Get user to check permissions
-    const existingUser = await queryOne<any>('SELECT department_id, primary_team_id, is_active FROM users WHERE id = ? AND company_id = ?', [userId, companyId]);
-    if (!existingUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Team lead can only toggle users in their team
-    if (creatorRole === 'team_lead' && existingUser.primary_team_id !== userTeamId) {
-      return res.status(403).json({ error: 'Can only manage users in your team' });
-    }
-
-    // QA Manager can only toggle users in their department
-    if (creatorRole === 'qa_manager' && existingUser.department_id !== userDeptId) {
-      return res.status(403).json({ error: 'Can only manage users in your department' });
-    }
-
-    // Toggle the status
-    const newStatus = !existingUser.is_active;
-    await query(
-      'UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
-      [newStatus, userId, companyId]
-    );
-
+    const newStatus = !target.is_active;
+    await query('UPDATE users SET is_active = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [newStatus, target.id, companyId]);
     res.json({ message: `User ${newStatus ? 'activated' : 'deactivated'} successfully`, is_active: newStatus });
   } catch (error: any) {
     console.error('Error toggling user status:', error);
@@ -347,40 +240,18 @@ router.post('/users/:id/toggle-status', authenticateToken, async (req: any, res)
   }
 });
 
-// Toggle developer insights for a user (team lead and above)
+// Toggle developer insights for a user
 router.patch('/users/:id/developer-insights-toggle', authenticateToken, async (req: any, res) => {
   try {
-    const { role: userRole, companyId, departmentId: userDeptId, primaryTeamId: userTeamId } = req.user;
-    const { id: userId } = req.params;
-    const { enabled } = req.body;
-
-    // Only team_lead and above can toggle developer insights
-    if (!['super_admin', 'qa_manager', 'team_lead'].includes(userRole)) {
-      return res.status(403).json({ error: 'Team lead or above required' });
+    const { companyId } = req.user;
+    const target = await loadTarget(req.params.id, companyId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (!canManageUser(actorOf(req), target)) {
+      return res.status(403).json({ error: 'You cannot change this user\'s developer insights' });
     }
-
-    // Get user to check permissions
-    const targetUser = await queryOne<any>('SELECT department_id, primary_team_id FROM users WHERE id = ? AND company_id = ?', [userId, companyId]);
-    if (!targetUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Team lead can only toggle for users in their team
-    if (userRole === 'team_lead' && targetUser.primary_team_id !== userTeamId) {
-      return res.status(403).json({ error: 'Can only manage users in your team' });
-    }
-
-    // QA Manager can only toggle for users in their department
-    if (userRole === 'qa_manager' && targetUser.department_id !== userDeptId) {
-      return res.status(403).json({ error: 'Can only manage users in your department' });
-    }
-
-    await query(
-      'UPDATE users SET developer_insights_enabled = ?, updated_at = NOW() WHERE id = ?',
-      [enabled ? 1 : 0, userId]
-    );
-
-    res.json({ success: true, developer_insights_enabled: !!enabled });
+    const enabled = !!req.body?.enabled;
+    await query('UPDATE users SET developer_insights_enabled = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [enabled, target.id, companyId]);
+    res.json({ success: true, developer_insights_enabled: enabled });
   } catch (error: any) {
     console.error('Error toggling developer insights:', error);
     res.status(500).json({ error: 'Failed to toggle developer insights' });
@@ -423,32 +294,21 @@ router.post('/teams/:id/toggle-status', authenticateToken, async (req: any, res)
   }
 });
 
-// Reset password (for users you created or yourself)
+// Reset password: yourself, or a user you can manage (userPolicy.canResetPassword).
 router.post('/users/:id/reset-password', authenticateToken, async (req: any, res) => {
   try {
-    const { id: managerId } = req.user;
-    const { id: targetUserId } = req.params;
-    const { newPassword } = req.body;
-
-    if (!newPassword || newPassword.length < 8) {
+    const { companyId } = req.user;
+    const { newPassword } = req.body ?? {};
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
-
-    // Check if user can manage this user
-    const canManage = await canManageUser(managerId, targetUserId);
-    if (!canManage) {
-      return res.status(403).json({ error: 'You can only reset passwords for users you created or yourself' });
+    const target = await loadTarget(req.params.id, companyId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (!canResetPassword(actorOf(req), target)) {
+      return res.status(403).json({ error: 'You cannot reset this user\'s password' });
     }
-
-    // Hash new password
     const passwordHash = await bcrypt.hash(newPassword, 10);
-
-    // Update password
-    await query(
-      'UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ?',
-      [passwordHash, targetUserId]
-    );
-
+    await query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [passwordHash, target.id, companyId]);
     res.json({ message: 'Password reset successfully' });
   } catch (error) {
     console.error('Error resetting password:', error);
@@ -462,8 +322,11 @@ router.get('/teams', authenticateToken, async (req: any, res) => {
     const { companyId } = req.user;
 
     // Everyone can see all teams in their company for the dashboard
+    // member_count / team_lead_name: the shared membership definition (server/lib/teamMembership).
     const teams = await query<any>(
-      `SELECT t.*, d.name as department_name 
+      `SELECT t.*, d.name as department_name,
+              ${teamMemberCountSql('t')} AS member_count,
+              ${teamLeadNameSql('t')} AS team_lead_name
        FROM teams t 
        LEFT JOIN departments d ON t.department_id = d.id 
        WHERE t.company_id = ? AND t.is_active = true
@@ -632,55 +495,20 @@ router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Delete user
+// Delete user = deactivate (history is kept). super_admin / qa_manager for users they can manage.
 router.delete('/users/:id', authenticateToken, async (req: any, res) => {
   try {
-    const { role, id: userId, companyId, departmentId: userDeptId } = req.user;
-    const { id: targetUserId } = req.params;
-
-    // QA Engineers cannot delete users (including themselves)
-    if (role === 'qa_engineer' || role === 'viewer') {
-      return res.status(403).json({ error: 'Insufficient permissions to delete users' });
+    const { companyId } = req.user;
+    const actor = actorOf(req);
+    const target = await loadTarget(req.params.id, companyId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (target.id === actor.id) {
+      return res.status(403).json({ error: 'Cannot delete your own account' });
     }
-
-    // Get target user — scoped to the caller's company (tenant boundary).
-    const targetUser = await queryOne<any>(
-      'SELECT role, department_id, created_by FROM users WHERE id = ? AND company_id = ?',
-      [targetUserId, companyId]
-    );
-
-    if (!targetUser) {
-      return res.status(404).json({ error: 'User not found' });
+    if (!canDeleteUser(actor, target)) {
+      return res.status(403).json({ error: 'Insufficient permissions to delete this user' });
     }
-
-    // Super Admin can delete any user except themselves
-    if (role === 'super_admin') {
-      if (userId === targetUserId) {
-        return res.status(403).json({ error: 'Cannot delete your own account' });
-      }
-    }
-    // QA Manager can delete users in their department that they created
-    else if (role === 'qa_manager') {
-      if (targetUser.department_id !== userDeptId) {
-        return res.status(403).json({ error: 'Can only delete users in your department' });
-      }
-      if (targetUser.created_by !== userId) {
-        return res.status(403).json({ error: 'Can only delete users you created' });
-      }
-    }
-    // Team Lead can delete users they created
-    else if (role === 'team_lead') {
-      if (targetUser.created_by !== userId) {
-        return res.status(403).json({ error: 'Can only delete users you created' });
-      }
-    }
-
-    // Deactivate user instead of deleting
-    await query(
-      'UPDATE users SET is_active = false, updated_at = NOW() WHERE id = ? AND company_id = ?',
-      [targetUserId, companyId]
-    );
-
+    await query('UPDATE users SET is_active = false, updated_at = NOW() WHERE id = ? AND company_id = ?', [target.id, companyId]);
     res.json({ message: 'User deactivated successfully', deactivated: true });
   } catch (error: any) {
     console.error('Error deleting user:', error);
@@ -708,7 +536,7 @@ router.get('/departments', authenticateToken, async (req: any, res) => {
 
     // Everyone can see all departments in their company for the dashboard
     const departments = await query<any>(
-      'SELECT id, name, company_id, created_at FROM departments WHERE company_id = ? ORDER BY name',
+      'SELECT id, name, company_id, created_at FROM departments WHERE company_id = ? AND is_active = true ORDER BY name',
       [companyId]
     );
 
@@ -729,7 +557,7 @@ router.get('/departments/all', authenticateToken, async (req: any, res) => {
     }
 
     const departments = await query<any>(
-      'SELECT id, name, description, company_id, created_at FROM departments WHERE company_id = ? ORDER BY name',
+      'SELECT id, name, description, company_id, created_at FROM departments WHERE company_id = ? AND is_active = true ORDER BY name',
       [companyId]
     );
 
@@ -754,24 +582,31 @@ router.post('/departments', authenticateToken, async (req: any, res) => {
       return res.status(400).json({ error: 'Department name is required' });
     }
 
-    // Check for duplicate name
+    // Duplicate names are checked among active departments only. A deleted (inactive)
+    // department with the same name is reactivated instead of creating a second row.
     const existing = await queryOne<any>(
-      'SELECT id FROM departments WHERE LOWER(name) = LOWER(?) AND company_id = ?',
+      'SELECT id, is_active FROM departments WHERE LOWER(name) = LOWER(?) AND company_id = ?',
       [name.trim(), companyId]
     );
-
-    if (existing) {
+    if (existing?.is_active) {
       return res.status(400).json({ error: 'Department name already exists' });
     }
 
-    // Generate unique ID
-    const departmentId = `dept-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-
-    // Insert department
-    await query(
-      'INSERT INTO departments (id, name, description, company_id) VALUES (?, ?, ?, ?)',
-      [departmentId, name.trim(), description?.trim() || null, companyId]
-    );
+    let departmentId: string;
+    if (existing) {
+      departmentId = existing.id;
+      await query(
+        'UPDATE departments SET is_active = true, name = ?, description = ?, updated_at = NOW() WHERE id = ? AND company_id = ?',
+        [name.trim(), description?.trim() || null, departmentId, companyId]
+      );
+    } else {
+      // Random id: a slug id is a global primary key, so two companies could not both have "QA".
+      departmentId = randomUUID();
+      await query(
+        'INSERT INTO departments (id, name, description, company_id, is_active) VALUES (?, ?, ?, ?, true)',
+        [departmentId, name.trim(), description?.trim() || null, companyId]
+      );
+    }
 
     const newDepartment = await queryOne<any>(
       'SELECT id, name, description, company_id, created_at FROM departments WHERE id = ?',
@@ -781,7 +616,7 @@ router.post('/departments', authenticateToken, async (req: any, res) => {
     res.status(201).json(newDepartment);
   } catch (error: any) {
     console.error('Error creating department:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error?.code === '23505') {
       res.status(400).json({ error: 'Department already exists' });
     } else {
       res.status(500).json({ error: 'Failed to create department' });
@@ -816,7 +651,7 @@ router.put('/departments/:id', authenticateToken, async (req: any, res) => {
 
     // Check for duplicate name (excluding current department)
     const existing = await queryOne<any>(
-      'SELECT id FROM departments WHERE LOWER(name) = LOWER(?) AND company_id = ? AND id != ?',
+      'SELECT id FROM departments WHERE LOWER(name) = LOWER(?) AND company_id = ? AND id != ? AND is_active = true',
       [name.trim(), companyId, id]
     );
 
@@ -838,7 +673,7 @@ router.put('/departments/:id', authenticateToken, async (req: any, res) => {
     res.json(updatedDepartment);
   } catch (error: any) {
     console.error('Error updating department:', error);
-    if (error.code === 'ER_DUP_ENTRY') {
+    if (error?.code === '23505') {
       res.status(400).json({ error: 'Department name already exists' });
     } else {
       res.status(500).json({ error: 'Failed to update department' });
@@ -906,78 +741,45 @@ router.delete('/departments/:id', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Get permissions for current user's role
-router.get('/permissions', authenticateToken, async (req: any, res) => {
-  try {
-    const { role } = req.user;
-    const permissions = ROLE_PERMISSIONS[role as keyof typeof ROLE_PERMISSIONS] || ROLE_PERMISSIONS.viewer;
-    
-    res.json({
-      role,
-      permissions,
-      availableRoles: ROLE_HIERARCHY[role as keyof typeof ROLE_HIERARCHY] || []
-    });
-  } catch (error) {
-    console.error('Error fetching permissions:', error);
-    res.status(500).json({ error: 'Failed to fetch permissions' });
-  }
-});
-
 // ============================================
 // CONFIGS - hierarchical settings per company/department/team
 // ============================================
 
-// Get configs (with inheritance: team → department → company)
+// Configs are readable by the roles that use them: super_admin / qa_manager (Parameters
+// page) and team_lead (SLA thresholds on Performance). Credential-like keys are never
+// returned: the merged view omits them and the raw view reports them only as set/not set.
+const CONFIG_READ_ROLES = ['super_admin', 'qa_manager', 'team_lead'];
+const SECRET_MASK = '__secret_set__';
+
+// Get configs (resolved with the one inheritance rule: team → department → company)
 router.get('/configs', authenticateToken, async (req: any, res) => {
   try {
-    const { companyId } = req.user;
+    const { companyId, role } = req.user;
+    if (!CONFIG_READ_ROLES.includes(role)) return res.status(403).json({ error: 'Insufficient permissions' });
     const { departmentId, teamId } = req.query;
-
-    // Build query based on scope
-    let sql = `SELECT * FROM configs WHERE company_id = ?`;
-    const params: any[] = [companyId];
-
-    if (teamId) {
-      sql += ` AND (team_id = ? OR (team_id IS NULL AND department_id = ?) OR (team_id IS NULL AND department_id IS NULL))`;
-      params.push(teamId, departmentId || null);
-    } else if (departmentId) {
-      sql += ` AND (department_id = ? OR department_id IS NULL) AND team_id IS NULL`;
-      params.push(departmentId);
-    } else {
-      sql += ` AND department_id IS NULL AND team_id IS NULL`;
+    if (role === 'team_lead' && teamId && teamId !== req.user.primaryTeamId) {
+      return res.status(403).json({ error: 'Access denied for this team' });
     }
-
-    const configs = await query<any>(sql, params);
-
-    // Merge configs with inheritance (company < department < team)
-    const merged: Record<string, any> = {};
-    
-    // Sort by specificity: company-wide first, then department, then team
-    const sorted = configs.sort((a: any, b: any) => {
-      const aScore = (a.department_id ? 1 : 0) + (a.team_id ? 2 : 0);
-      const bScore = (b.department_id ? 1 : 0) + (b.team_id ? 2 : 0);
-      return aScore - bScore;
+    const resolved = await resolveConfigs(companyId, {
+      teamId: typeof teamId === 'string' ? teamId : null,
+      departmentId: typeof departmentId === 'string' ? departmentId : null,
     });
-
-    for (const cfg of sorted) {
-      merged[cfg.config_key] = {
-        value: cfg.config_value,
-        scope: cfg.team_id ? 'team' : cfg.department_id ? 'department' : 'company',
-        updatedAt: cfg.updated_at
-      };
+    const configs: Record<string, any> = {};
+    for (const [key, cfg] of Object.entries(resolved)) {
+      if (!isSecretConfigKey(key)) configs[key] = cfg;
     }
-
-    res.json({ configs: merged });
+    res.json({ configs });
   } catch (error) {
     console.error('Error fetching configs:', error);
     res.status(500).json({ error: 'Failed to fetch configs' });
   }
 });
 
-// Get raw configs for editing (exact scope match)
+// Get raw configs for editing (exact scope match). super_admin / qa_manager only.
 router.get('/configs/raw', authenticateToken, async (req: any, res) => {
   try {
-    const { companyId } = req.user;
+    const { companyId, role } = req.user;
+    if (role !== 'super_admin' && role !== 'qa_manager') return res.status(403).json({ error: 'Insufficient permissions' });
     const { departmentId, teamId } = req.query;
 
     let sql = `SELECT * FROM configs WHERE company_id = ?`;
@@ -994,13 +796,10 @@ router.get('/configs/raw', authenticateToken, async (req: any, res) => {
     }
 
     const configs = await query<any>(sql, params);
-    
-    // Convert to key-value object
     const configMap: Record<string, string> = {};
     for (const cfg of configs) {
-      configMap[cfg.config_key] = cfg.config_value;
+      configMap[cfg.config_key] = isSecretConfigKey(cfg.config_key) ? SECRET_MASK : cfg.config_value;
     }
-
     res.json({ configs: configMap });
   } catch (error) {
     console.error('Error fetching raw configs:', error);
@@ -1027,8 +826,9 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
     const deptId = departmentId === 'all' ? null : departmentId || null;
     const tmId = teamId === 'all' ? null : teamId || null;
 
-    // Upsert each config key
+    // Upsert each config key. The secret mask means "unchanged" and is never stored.
     for (const [key, value] of Object.entries(configs)) {
+      if (value === SECRET_MASK) continue;
       if (value === null || value === undefined || value === '') {
         // Delete if empty
         await query(

@@ -1373,15 +1373,18 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     return acc;
   }, {} as Record<string, MetricDefinition[]>);
 
-  // Check if user has access (super_admin, manager, or team_lead)
-  const allowedRoles = ['super_admin', 'manager', 'team_lead'];
+  // Same roles as the server: team KPIs and developer metrics for super_admin, qa_manager
+  // (own department) and team_lead (own team); debt impact and pipeline settings are
+  // company data, edited by super_admin and qa_manager only.
+  const allowedRoles = ['super_admin', 'qa_manager', 'team_lead'];
+  const canEditCompanyData = user?.role === 'super_admin' || user?.role === 'qa_manager';
   if (!user || !allowedRoles.includes(user.role)) {
     return (
       <Page>
         <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
           <AlertCircle className="w-10 h-10 text-red-600 dark:text-red-400 mx-auto mb-4" />
           <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">Access denied</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">This page is only accessible to Super Admins, Managers, and Team Leads.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">This page is only accessible to Super Admins, QA Managers and Team Leads.</p>
           <button
             onClick={onBack}
             className={cx(buttonClass.secondary, 'mt-6')}
@@ -1798,7 +1801,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         )}
 
         {/* Technical Debt Impact Section */}
-        {selectedTeamId && technicalDebtItems.length > 0 && (
+        {canEditCompanyData && selectedTeamId && technicalDebtItems.length > 0 && (
           <div className="bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
             {/* Section Header */}
             <button
@@ -1998,7 +2001,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         {/* ============================================ */}
         {/* PIPELINE STAGES SECTION */}
         {/* ============================================ */}
-        {pipelineStages.length > 0 && (
+        {canEditCompanyData && pipelineStages.length > 0 && (
           <div className="bg-slate-50 dark:bg-slate-800/50 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-800 backdrop-blur-sm">
             <button 
               onClick={() => setExpandedPipeline(!expandedPipeline)}

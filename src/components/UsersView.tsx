@@ -71,6 +71,7 @@ const STATUS_META: Record<DeveloperStatus, { label: string; tone: 'good' | 'warn
 const fmtH = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}h`);
 
 import API_URL from '../config/api';
+import { canEditUser, canEditAssignment, canManageUser, canDeleteUser, canResetPassword, canAssignRole, canCreateUsers, TEAM_OPTIONAL_ROLES, type PolicyActor } from '../../server/lib/userPolicy';
 
 interface UsersViewProps {
   is3DMode?: boolean;
@@ -262,14 +263,13 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     currentPage * usersPerPage
   );
 
-  const canManageTargetUser = (targetUser: User) => {
-    if (!user) return false;
-    if (user.role === 'super_admin' || user.role === 'qa_manager') return true;
-    if (user.role === 'team_lead') {
-      return targetUser.primary_team_id === user.primaryTeamId;
-    }
-    return false;
-  };
+  // One set of rules with the server (server/lib/userPolicy): only offer what will succeed.
+  const actor: PolicyActor = { id: user?.id ?? '', role: user?.role ?? '', departmentId: user?.departmentId ?? null, primaryTeamId: user?.primaryTeamId ?? null };
+  const asTarget = (u: User) => ({ id: u.id, role: u.role, department_id: u.department_id ?? null, primary_team_id: u.primary_team_id ?? null });
+  const canEditTarget = (u: User) => !!user && canEditUser(actor, asTarget(u));
+  const canManageTarget = (u: User) => !!user && canManageUser(actor, asTarget(u));
+  const canDeleteTarget = (u: User) => !!user && canDeleteUser(actor, asTarget(u));
+  const canEditTargetAssignment = (u: User | null) => !!user && !!u && canEditAssignment(actor, asTarget(u));
 
   const getRoleDisplay = (role: string) => {
     const roleMap: Record<string, string> = {
@@ -282,17 +282,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     return roleMap[role] || role;
   };
 
-  // Check if current user can change password for target user
-  const canChangePassword = (targetUser: User) => {
-    if (!user) return false;
-    // User can always change their own password
-    if (user.id === targetUser.id) return true;
-    // Super admin and QA manager can change password for any user they can see
-    if (user.role === 'super_admin' || user.role === 'qa_manager') return true;
-    // Team lead can change password for team members
-    if (user.role === 'team_lead' && targetUser.primary_team_id === user.primaryTeamId) return true;
-    return false;
-  };
+  const canChangePassword = (targetUser: User) => !!user && canResetPassword(actor, asTarget(targetUser));
 
   const getRoleColors = (role: string) => {
     const colors: Record<string, { bg: string; text: string; gradient: string }> = {
@@ -305,7 +295,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     return colors[role] || colors.viewer;
   };
 
-  const canManageUsers = user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead';
+  const canManageUsers = !!user && canCreateUsers(user.role);
 
   if (loading) {
     return (
@@ -507,7 +497,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                       {/* Action Buttons */}
                       <div className="mt-4 flex items-center justify-between">
                         <div className="flex items-center gap-1">
-                          {canManageTargetUser(u) && (
+                          {canEditTarget(u) && (
                             <>
                               <button
                                 onClick={() => {
@@ -544,7 +534,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                               <Key size={16} />
                             </button>
                           )}
-                          {canManageTargetUser(u) && u.id !== user?.id && (
+                          {canManageTarget(u) && (
                             <>
                               <button
                                 onClick={async () => {
@@ -598,7 +588,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                               >
                                 {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
                               </button>
-                              {(user?.role === 'super_admin' || user?.role === 'qa_manager') && (
+                              {canDeleteTarget(u) && (
                                 <button
                                   onClick={async () => {
                                     const result = await confirmDelete(`${u.first_name} ${u.last_name}`, 'user');
@@ -829,8 +819,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 email: userForm.email,
                 password: userForm.password,
                 role: userForm.role,
-                departmentId: userForm.departmentId,
-                teamId: userForm.primaryTeamId
+                departmentId: userForm.departmentId || undefined,
+                teamId: userForm.primaryTeamId || undefined
               })
             });
 
@@ -875,25 +865,26 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Department</label>
-              <select value={userForm.departmentId} onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required data-testid="department-select">
+              <select value={userForm.departmentId} onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required disabled={user?.role !== 'super_admin'} title={user?.role !== 'super_admin' ? 'New users are added to your department' : undefined} data-testid="department-select">
                 <option value="">Select a department</option>
                 {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
               </select>
             </div>
-            {/* Primary Team - show for engineers and leads (required), hidden for managers/superadmins, optional text for viewers */}
-            {userForm.role && ['qa_engineer', 'team_lead', 'viewer'].includes(userForm.role) && (
+            {/* Primary team: required unless the role is team-optional (same list as the server: TEAM_OPTIONAL_ROLES).
+                A team lead always adds people to their own team. */}
+            {userForm.role && user?.role !== 'team_lead' && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Primary Team {userForm.role === 'viewer' ? '(Optional)' : ''}
+                  Primary Team {TEAM_OPTIONAL_ROLES.includes(userForm.role) ? '(Optional)' : ''}
                 </label>
                 <select
                   value={userForm.primaryTeamId}
                   onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500"
                   data-testid="team-select"
-                  required={userForm.role === 'qa_engineer' || userForm.role === 'team_lead'}
+                  required={!TEAM_OPTIONAL_ROLES.includes(userForm.role)}
                 >
-                  <option value="">{userForm.role === 'viewer' ? 'No team' : 'Select a team'}</option>
+                  <option value="">{TEAM_OPTIONAL_ROLES.includes(userForm.role) ? 'No team' : 'Select a team'}</option>
                   {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
                 </select>
               </div>
@@ -931,13 +922,19 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include',
-              body: JSON.stringify({
+              // Role / department / team are only sent when the caller may change them (not for
+              // self-edits); unchanged values are accepted by the server either way.
+              body: JSON.stringify(canEditTargetAssignment(selectedUser) ? {
                 firstName: userForm.firstName,
                 lastName: userForm.lastName,
                 email: userForm.email,
                 role: userForm.role,
                 departmentId: userForm.departmentId,
                 primaryTeamId: userForm.primaryTeamId || null
+              } : {
+                firstName: userForm.firstName,
+                lastName: userForm.lastName,
+                email: userForm.email
               })
             });
 
@@ -970,8 +967,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>
-              {/* Only super_admin can change roles */}
-              {user?.role === 'super_admin' && selectedUser?.role !== 'super_admin' ? (
+              {/* Roles the caller may assign (server: canAssignRole); the current role is kept as an option. */}
+              {canEditTargetAssignment(selectedUser) && selectedUser && canAssignRole(actor.role, selectedUser.role) ? (
                 <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500">
                   {roles.map(role => (<option key={role.id} value={role.id}>{role.name}</option>))}
                 </select>
@@ -984,7 +981,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                           'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
                       }`}>{getRoleDisplay(selectedUser?.role || '')}</span>
                     <span className="text-sm text-gray-500 dark:text-gray-400">
-                      {selectedUser?.role === 'super_admin' ? '(Role cannot be changed)' : '(Only Super Admin can change roles)'}
+                      {selectedUser?.id === user?.id ? '(You cannot change your own role)' : '(You cannot change this role)'}
                     </span>
                   </span>
                 </div>
@@ -992,8 +989,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Department</label>
-              {/* Only super_admin can change departments */}
-              {user?.role === 'super_admin' ? (
+              {/* Only super_admin can move a user to another department */}
+              {user?.role === 'super_admin' && canEditTargetAssignment(selectedUser) ? (
                 <select value={userForm.departmentId} onChange={(e) => setUserForm({ ...userForm, departmentId: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required>
                   <option value="">Select a department</option>
                   {departments.map(dept => (<option key={dept.id} value={dept.id}>{dept.name}</option>))}
@@ -1002,24 +999,24 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 <div className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white">
                   <span className="flex items-center gap-2">
                     <span className="text-sm">{departments.find(d => d.id === userForm.departmentId)?.name || 'No department'}</span>
-                    <span className="text-xs text-gray-500 dark:text-gray-400">(Only Super Admin can change)</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{selectedUser?.id === user?.id ? '(You cannot change your own department)' : '(Only Super Admin can change)'}</span>
                   </span>
                 </div>
               )}
             </div>
-            {/* Primary Team - show for engineers and leads (required), optional for viewers, hidden for managers/superadmins */}
-            {userForm.role && ['qa_engineer', 'team_lead', 'viewer'].includes(userForm.role) && (
+            {/* Primary team (not editable for yourself; optional for TEAM_OPTIONAL_ROLES) */}
+            {userForm.role && canEditTargetAssignment(selectedUser) && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Primary Team {userForm.role === 'viewer' ? '(Optional)' : ''}
+                  Primary Team {TEAM_OPTIONAL_ROLES.includes(userForm.role) ? '(Optional)' : ''}
                 </label>
                 <select
                   value={userForm.primaryTeamId}
                   onChange={(e) => setUserForm({ ...userForm, primaryTeamId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500"
-                  required={userForm.role === 'qa_engineer' || userForm.role === 'team_lead'}
+                  required={!TEAM_OPTIONAL_ROLES.includes(userForm.role)}
                 >
-                  <option value="">{userForm.role === 'viewer' ? 'No team' : 'Select a team'}</option>
+                  <option value="">{TEAM_OPTIONAL_ROLES.includes(userForm.role) ? 'No team' : 'Select a team'}</option>
                   {teams.filter(t => t.department_id === userForm.departmentId).map(team => (<option key={team.id} value={team.id}>{team.name}</option>))}
                 </select>
               </div>

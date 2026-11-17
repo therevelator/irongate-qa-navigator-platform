@@ -11,6 +11,8 @@ import type { Tone } from './ui';
 
 interface TestExecutionTimelineProps {
   onBack?: () => void;
+  /** Team chosen on the Analytics page; company-wide when undefined. */
+  teamId?: string;
 }
 
 const FETCH_DAYS = 7;
@@ -44,7 +46,7 @@ const STATUS_BAR: Record<TestExecution['status'], string> = {
 type Period = '1h' | '6h' | '24h' | '7d';
 type StatusFilter = 'all' | 'running' | 'passed' | 'failed' | 'blocked';
 
-const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = () => {
+const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId }) => {
   const { isDark } = useTheme();
   const [selectedExecution, setSelectedExecution] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'timeline' | 'list'>('timeline');
@@ -59,7 +61,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = () => {
   useEffect(() => {
     const fetchExecutions = async () => {
       try {
-        const response = await fetch(`${API_URL}/analytics/test-executions?days=${FETCH_DAYS}`, { credentials: 'include' });
+        const response = await fetch(`${API_URL}/analytics/test-executions?days=${FETCH_DAYS}${teamId ? `&teamId=${encodeURIComponent(teamId)}` : ''}`, { credentials: 'include' });
         if (response.ok) {
           const data = await response.json();
           setExecutions(data.executions || []);
@@ -71,7 +73,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = () => {
       }
     };
     fetchExecutions();
-  }, []);
+  }, [teamId]);
 
   const truncated = executions.length >= API_ROW_LIMIT;
   const runningTests = executions.filter(e => e.status === 'running').length;

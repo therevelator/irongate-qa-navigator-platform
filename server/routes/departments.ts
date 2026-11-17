@@ -1,6 +1,7 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 
 const router = express.Router();
 
@@ -44,13 +45,12 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
     // Get teams in this department
     const teams = await query<any[]>(
       `SELECT t.*, 
-              (u.first_name || ' ' || u.last_name) as team_lead_name,
-              (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
+              ${teamLeadNameSql('t')} as team_lead_name,
+              ${teamMemberCountSql('t')} as member_count
        FROM teams t
-       LEFT JOIN users u ON t.lead_id = u.id
-       WHERE t.department_id = ? AND t.is_active = true
+       WHERE t.department_id = ? AND t.company_id = ? AND t.is_active = true
        ORDER BY t.name`,
-      [req.params.id]
+      [req.params.id, req.companyId]
     );
 
     department.teams = teams;

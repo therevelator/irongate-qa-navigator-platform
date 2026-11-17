@@ -9,6 +9,7 @@ import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues } from '../../src/config/metricsConfig';
 import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
+import { resolveConfigs } from '../lib/configResolver';
 
 const router = express.Router();
 
@@ -155,67 +156,6 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
 // TEST CASE MANAGEMENT
 // ============================================================================
 
-router.get('/test-cases', authenticateToken, async (req: any, res) => {
-  try {
-    const { companyId, role, primaryTeamId } = req.user;
-    const { teamId: requestedTeamId, status } = req.query;
-
-    const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
-    if (!scope) return;
-    const teamId = scope.teamId;
-
-    let sql = `
-      SELECT 
-        tc.id,
-        tc.name,
-        tc.requirement_id,
-        tc.status,
-        tc.last_executed,
-        tc.pass_rate,
-        tc.execution_count,
-        tc.avg_duration,
-        tc.effectiveness_score,
-        STRING_AGG(tct.tag, ',') as tags
-      FROM test_cases tc
-      LEFT JOIN test_case_tags tct ON tc.id = tct.test_case_id
-      LEFT JOIN teams t ON tc.team_id = t.id
-      WHERE t.company_id = ?
-    `;
-    const params: any[] = [companyId];
-
-    if (teamId) {
-      sql += ' AND tc.team_id = ?';
-      params.push(teamId);
-    }
-
-    if (status) {
-      sql += ' AND tc.status = ?';
-      params.push(status);
-    }
-
-    sql += ' GROUP BY tc.id ORDER BY tc.updated_at DESC LIMIT 200';
-
-    const testCases = await query<any>(sql, params);
-
-    const result = testCases.map((tc: any) => ({
-      id: tc.id,
-      name: tc.name,
-      requirement_id: tc.requirement_id || '',
-      status: tc.status,
-      last_executed: tc.last_executed,
-      pass_rate: num(tc.pass_rate),
-      execution_count: num(tc.execution_count),
-      avg_duration: num(tc.avg_duration),
-      effectiveness_score: num(tc.effectiveness_score),
-      tags: tc.tags ? tc.tags.split(',') : []
-    }));
-
-    res.json({ testCases: result });
-  } catch (error) {
-    console.error('Error fetching test cases:', error);
-    res.status(500).json({ error: 'Failed to fetch test cases' });
-  }
-});
 
 // ============================================================================
 // FLAKY TEST INTELLIGENCE
@@ -522,25 +462,13 @@ async function getFinancialConfig(companyId: string, teamId?: string): Promise<{
   const configured = new Set<string>();
 
   try {
-    let sql = `SELECT config_key, config_value, team_id FROM configs WHERE company_id = ?`;
-    const params: any[] = [companyId];
-
-    if (teamId) {
-      sql += ` AND (team_id = ? OR team_id IS NULL)`;
-      params.push(teamId);
-    } else {
-      sql += ` AND team_id IS NULL`;
-    }
-    // Company-level rows first, team rows last, so the team value is applied last and wins.
-    sql += ` ORDER BY (team_id IS NOT NULL) ASC, updated_at ASC NULLS FIRST`;
-
-    const configs = await query<any>(sql, params);
-
-    for (const cfg of configs) {
-      const value = num(cfg.config_value);
-      if (Object.prototype.hasOwnProperty.call(FINANCIAL_DEFAULTS, cfg.config_key) && value !== null) {
-        config[cfg.config_key] = value;
-        configured.add(cfg.config_key);
+    // Same inheritance as every other config reader: team, then department, then company.
+    const resolved = await resolveConfigs(companyId, { teamId });
+    for (const [key, cfg] of Object.entries(resolved)) {
+      const value = num(cfg.value);
+      if (Object.prototype.hasOwnProperty.call(FINANCIAL_DEFAULTS, key) && value !== null) {
+        config[key] = value;
+        configured.add(key);
       }
     }
   } catch (e) {

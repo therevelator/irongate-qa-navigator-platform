@@ -29,6 +29,14 @@ interface TeamWithKPI extends Omit<Team, 'qaScore'> {
   kpiFieldSources?: Record<string, { source?: string; recorded_at?: string; carried_forward?: boolean } | undefined>;
 }
 
+const INTERVAL_UNIT_MS: Record<string, number> = {
+  minutes: 60_000,
+  hours: 3_600_000,
+  days: 86_400_000,
+  weeks: 7 * 86_400_000,
+  months: 30 * 86_400_000,
+};
+
 /** "manual · as of 17 Nov 2026" caption for a KPI, or null when no provenance is recorded. */
 const sourceCaption = (fs?: { source?: string; recorded_at?: string }): string | null => {
   if (!fs?.source) return null;
@@ -183,6 +191,7 @@ interface TeamMember {
   last_name: string;
   role: string;
   avatar_url?: string;
+  developer_insights_enabled?: boolean | null;
 }
 
 interface DevMetricRow {
@@ -201,6 +210,8 @@ interface MemberRow {
   name: string;
   email: string;
   metrics: DevMetricRow | null;
+  /** The person turned developer insights off, so their metrics are not shown. */
+  insightsDisabled: boolean;
 }
 
 interface TeamAISuggestions {
@@ -329,12 +340,29 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const [metricIntervals, setMetricIntervals] = useState<Record<string, { interval_value: number; interval_unit: string }>>({});
   const [kpiHistory, setKpiHistory] = useState<Record<string, HistoryPoint[]>>({});
 
-  const getIntervalText = (historyKey: string): string => {
+  const intervalLabel = (historyKey: string): string | null => {
     const interval = metricIntervals[historyKey];
-    if (!interval) return 'No snapshots in the last 90 days';
+    if (!interval) return null;
     const { interval_value, interval_unit } = interval;
     const unitLabel = interval_value === 1 ? interval_unit.replace(/s$/, '') : interval_unit;
-    return `No snapshots in the last 90 days · updates every ${interval_value} ${unitLabel}`;
+    return `${interval_value} ${unitLabel}`;
+  };
+
+  const getIntervalText = (historyKey: string): string => {
+    const every = intervalLabel(historyKey);
+    return every ? `No snapshots in the last 90 days · expected every ${every}` : 'No snapshots in the last 90 days';
+  };
+
+  /** Stale = the last recorded value (field_sources.recorded_at) is older than the expected update frequency. */
+  const staleText = (historyKey: string): string | null => {
+    const interval = metricIntervals[historyKey];
+    const recordedAt = team.kpiFieldSources?.[historyKey]?.recorded_at;
+    if (!interval || !recordedAt) return null;
+    const t = new Date(recordedAt).getTime();
+    if (!Number.isFinite(t)) return null;
+    const ms = interval.interval_value * (INTERVAL_UNIT_MS[interval.interval_unit] ?? 0);
+    if (!ms || Date.now() - t <= ms) return null;
+    return `Stale: expected every ${intervalLabel(historyKey)}, last updated ${formatAsOf(recordedAt)}`;
   };
 
   useEffect(() => {
@@ -372,12 +400,20 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
         let byId: Record<string, DevMetricRow> = {};
         let byName: Record<string, DevMetricRow> = {};
         if (canViewDeveloperInsights) {
-          const metricsResponse = await fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, { credentials: 'include' });
+          // Recorded metrics come from developer-metrics (independent of the team's AI toggle;
+          // it applies the per-person opt-out). AI recommendations are loaded separately.
+          const [metricsResponse, aiResponse] = await Promise.all([
+            fetch(`${API_URL}/analytics/developer-metrics?teamId=${encodeURIComponent(team.id)}`, { credentials: 'include' }),
+            fetch(`${API_URL}/teams/${team.id}/developer-ai-suggestions`, { credentials: 'include' }),
+          ]);
+          if (aiResponse.ok) {
+            const aiData: DeveloperAISuggestions = await aiResponse.json();
+            if (!cancelled) setDevAISuggestions(aiData);
+          }
           if (metricsResponse.ok) {
-            const metricsData: DeveloperAISuggestions = await metricsResponse.json();
-            if (!cancelled) setDevAISuggestions(metricsData);
-            (metricsData.metrics || []).forEach((m: any) => {
-              const row = normalizeMetric(m);
+            const metricsData = await metricsResponse.json();
+            (metricsData.developers || []).forEach((m: any) => {
+              const row = metricFromDeveloperMetricsRow(m);
               if (row.developerId) byId[String(row.developerId)] = row;
               if (row.name) byName[row.name.toLowerCase()] = row;
             });
@@ -396,7 +432,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
         if (!cancelled) {
           setMembers(list.map((m) => {
             const name = [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || m.email;
-            return { id: String(m.id), name, email: m.email, metrics: byId[String(m.id)] ?? byName[name.toLowerCase()] ?? null };
+            const metrics = byId[String(m.id)] ?? byName[name.toLowerCase()] ?? null;
+            return { id: String(m.id), name, email: m.email, metrics, insightsDisabled: !metrics && m.developer_insights_enabled === false };
           }));
         }
       } catch (error) {
@@ -603,7 +640,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                             </td>
                           </>
                         ) : (
-                          <td colSpan={7} className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">{devMetricsUnavailable ? 'Not available' : 'No metrics recorded'}</td>
+                          <td colSpan={7} className="px-3 py-3 text-xs text-slate-500 dark:text-slate-400">{devMetricsUnavailable ? 'Not available' : m.insightsDisabled ? 'Developer insights turned off for this person' : 'No metrics recorded'}</td>
                         )}
                       </tr>
                     );
@@ -642,6 +679,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                   {k.value != null && sourceCaption(team.kpiFieldSources?.[k.historyKey]) && (
                     <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400" data-testid={`kpi-source-${k.historyKey}`}>
                       {sourceCaption(team.kpiFieldSources?.[k.historyKey])}
+                    </p>
+                  )}
+                  {k.value != null && staleText(k.historyKey) && (
+                    <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid={`kpi-stale-${k.historyKey}`}>
+                      {staleText(k.historyKey)}
                     </p>
                   )}
                   <div className="mt-1 min-h-[1.25rem]">
@@ -824,6 +866,20 @@ const ListBlock: React.FC<{ title: string; tone: Tone; items?: string[]; empty: 
     ) : <p className="text-sm text-slate-500 dark:text-slate-400">{empty}</p>}
   </div>
 );
+
+/** Row of GET /analytics/developer-metrics (snake_case). */
+function metricFromDeveloperMetricsRow(m: any): DevMetricRow {
+  return {
+    developerId: m.developer_id,
+    name: m.name ?? '',
+    prMergeTimeHours: toNum(m.pr_merge_time_avg),
+    codeReviewTimeHours: toNum(m.code_review_time_avg),
+    focusTimeHours: toNum(m.focus_time_hours),
+    meetingTimeHours: toNum(m.meeting_time_hours),
+    contextSwitchesPerDay: toNum(m.context_switches_per_day),
+    happinessScore: toNum(m.happiness_score),
+  };
+}
 
 /** Server rows can carry NUMERIC strings or nulls; never coerce missing values to 0. */
 function normalizeMetric(m: any): DevMetricRow {

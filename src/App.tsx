@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { Toaster } from 'react-hot-toast';
 import type { Team } from './data/mockData';
 import { useAuth } from './contexts/AuthContext';
 import API_URL from './config/api';
@@ -13,7 +12,6 @@ import PerformanceTesting from './components/PerformanceTesting';
 import DeveloperProductivity from './components/DeveloperProductivity';
 import TestExecutionTimeline from './components/TestExecutionTimeline';
 import TeamGamification from './components/TeamGamification';
-import TeamManagement from './components/TeamManagement';
 import AdminPanel from './components/AdminPanel';
 import PDFReportGenerator from './components/PDFReportGenerator';
 import UsersView from './components/UsersView';
@@ -32,7 +30,6 @@ const VIEW_TO_PATH: Record<string, string> = {
   'teams': '/teams',
   'departments': '/departments',
   'features': '/analytics',
-  'manage-teams': '/manage-teams',
   'admin-panel': '/admin-panel',
   'manual-metrics': '/manual-metrics',
   'metric-intervals': '/metric-intervals',
@@ -57,7 +54,7 @@ function App() {
   const { user, isLoading } = useAuth();
   const [activeTab, setActiveTab] = useState('all');
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null);
-  const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'manage-teams' | 'admin-panel' | string>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'features' | 'admin-panel' | string>('dashboard');
   const [teams, setTeams] = useState<Team[]>([]);
   const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(1);
   const [userTeams, setUserTeams] = useState<any[]>([]);
@@ -139,7 +136,8 @@ function App() {
       case 'parameters-config':
         return ['super_admin', 'qa_manager'].includes(role);
       case 'manual-metrics':
-        return role === 'super_admin';
+        // Same roles as POST /metrics/manual and /metrics/developer (team scope enforced server-side).
+        return ['super_admin', 'qa_manager', 'team_lead'].includes(role);
       default:
         return true;
     }
@@ -276,21 +274,16 @@ function App() {
     );
   }
 
-  if (currentView === 'flaky-test-intelligence') return renderLayout(<FlakyTestIntelligence onBack={() => handleViewChange('features')} />);
-  if (currentView === 'technical-debt') return renderLayout(<TechnicalDebtTracker onBack={() => handleViewChange('features')} />);
+  if (currentView === 'flaky-test-intelligence') return renderLayout(<FlakyTestIntelligence onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
+  if (currentView === 'technical-debt') return renderLayout(<TechnicalDebtTracker onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
   if (currentView === 'pipeline-visualization') return renderLayout(<PipelineVisualization onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
   if (currentView === 'business-impact') return renderLayout(<BusinessImpactAnalysisV2 onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'performance-metrics') return renderLayout(<PerformanceTesting onBack={() => handleViewChange('features')} />);
+  if (currentView === 'performance-metrics') return renderLayout(<PerformanceTesting onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
   if (currentView === 'developer-productivity') return renderLayout(<DeveloperProductivity onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'test-execution-timeline') return renderLayout(<TestExecutionTimeline onBack={() => handleViewChange('features')} />);
+  if (currentView === 'test-execution-timeline') return renderLayout(<TestExecutionTimeline onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
   if (currentView === 'team-gamification') return renderLayout(<TeamGamification onBack={() => handleViewChange('features')} />);
   if (currentView === 'pdf-report-generator') return renderLayout(<PDFReportGenerator onBack={() => handleViewChange('features')} />);
 
-  if (currentView === 'manage-teams') {
-    return renderLayout(
-      <TeamManagement teams={teams} onBack={() => handleViewChange('dashboard')} onUpdateTeams={setTeams} />
-    );
-  }
 
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
   if (currentView === 'manual-metrics') return renderLayout(<ManualMetricsInput onBack={() => handleViewChange('dashboard')} />);
@@ -299,28 +292,6 @@ function App() {
 
   return (
     <>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3000,
-          style: {
-            background: '#333',
-            color: '#fff',
-          },
-          success: {
-            iconTheme: {
-              primary: '#10b981',
-              secondary: '#fff',
-            },
-          },
-          error: {
-            iconTheme: {
-              primary: '#ef4444',
-              secondary: '#fff',
-            },
-          },
-        }}
-      />
       <Layout
         currentView={currentView}
         onViewChange={handleViewChange}

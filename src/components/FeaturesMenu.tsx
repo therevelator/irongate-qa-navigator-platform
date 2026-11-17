@@ -69,7 +69,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onSelectFeature }) => {
     <Page>
       <PageIntro
         title="Analytics"
-        description={selectedTeamName ? `Showing analytics for ${selectedTeamName}` : 'Choose a team to scope the analytics modules, or open a module to select within it.'}
+        description={selectedTeamName ? `Modules open scoped to ${selectedTeamName}. Team rankings and Reports always cover all teams.` : 'Choose a team to scope the analytics modules. Without a team, modules show company-wide data.'}
         actions={
           isLead ? (
             <span className="text-sm text-slate-600 dark:text-slate-300" data-testid="team-static-label">

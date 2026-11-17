@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Shield, X, ArrowLeft, Building2, Edit2, Trash2, ChevronDown, ChevronRight, Key, UserCheck, UserX, Bot, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import toast, { Toaster } from 'react-hot-toast';
+import { canEditUser, canResetPassword, type PolicyActor } from '../../server/lib/userPolicy';
+import toast from 'react-hot-toast';
 import { confirmDelete, showCannotDeleteWarning, confirmDeactivate, showSuccess } from '../utils/alerts';
 
 interface User {
@@ -13,6 +14,7 @@ interface User {
   team_name: string;
   department_name: string;
   primary_team_id: string;
+  department_id?: string | null;
   is_active: boolean;
   created_at: string;
   developer_insights_enabled?: boolean;
@@ -44,6 +46,11 @@ interface AdminPanelProps {}
 
 const AdminPanel: React.FC<AdminPanelProps> = () => {
   const { user } = useAuth();
+  // Offer only what the server allows (server/lib/userPolicy, shared with the Users page).
+  const actor: PolicyActor = { id: user?.id ?? '', role: user?.role ?? '', departmentId: user?.departmentId ?? null, primaryTeamId: user?.primaryTeamId ?? null };
+  const asTarget = (u: User) => ({ id: u.id, role: u.role, department_id: u.department_id ?? null, primary_team_id: u.primary_team_id ?? null });
+  const canEdit = (u: User) => canEditUser(actor, asTarget(u));
+  const canReset = (u: User) => canResetPassword(actor, asTarget(u));
   const [users, setUsers] = useState<User[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -376,7 +383,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
     e.preventDefault();
     
     try {
-      const response = await fetch(`${API_URL}/users/${selectedUser?.id}`, {
+      // Same endpoint and rules as the Users page (server/lib/userPolicy).
+      const response = await fetch(`${API_URL}/admin/users/${selectedUser?.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -505,7 +513,6 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
 
   return (
     <>
-      <Toaster position="top-right" />
       {/* Team Detail View */}
       {selectedTeam ? (() => {
         // Get team members for the selected team
@@ -586,6 +593,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm space-x-2">
+                            {canEdit(u) && (
                             <button
                               onClick={() => {
                                 setSelectedUser(u);
@@ -601,6 +609,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                             >
                               Edit
                             </button>
+                            )}
+                            {canReset(u) && (
                             <button
                               onClick={() => {
                                 setSelectedUser(u);
@@ -610,6 +620,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                             >
                               Reset Password
                             </button>
+                            )}
                             {u.id !== user?.id && (
                               <button
                                 onClick={() => {
@@ -933,6 +944,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                               </td>
                                               <td className="px-3 py-2 whitespace-nowrap text-sm">
                                                 <div className="flex items-center gap-1">
+                                                  {canEdit(u) && (
                                                   <button
                                                     onClick={(e) => {
                                                       e.stopPropagation();
@@ -950,6 +962,8 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                   >
                                                     <Edit2 className="w-4 h-4" />
                                                   </button>
+                                                  )}
+                                                  {canReset(u) && (
                                                   <button
                                                     onClick={(e) => {
                                                       e.stopPropagation();
@@ -961,6 +975,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                                   >
                                                     <Key className="w-4 h-4" />
                                                   </button>
+                                                  )}
                                                   {/* Developer Insights Toggle - Team Lead and above */}
                                                   {['super_admin', 'qa_manager', 'team_lead'].includes(user?.role || '') && (
                                                     <button

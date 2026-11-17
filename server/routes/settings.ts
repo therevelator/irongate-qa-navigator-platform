@@ -1,12 +1,12 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
-import { runIntervalSync, runHourlySync, runDailySync, runWeeklySync, runMonthlySync } from '../jobs/intervalSync';
-import { isSyntheticDataEnabled } from '../lib/syntheticData';
 
 const router = express.Router();
 
-// Default metric intervals configuration
+// Expected update frequency per metric. Metrics are pushed (KPI ingestion API, Manual
+// metrics); these intervals do not schedule anything. Team detail uses them to flag a
+// metric as stale when field_sources[metric].recorded_at is older than the interval.
 const DEFAULT_METRIC_INTERVALS = [
   // Quality Metrics
   { metric_key: 'test_coverage', interval_value: 1, interval_unit: 'days', custom_label: 'Test Coverage' },
@@ -29,6 +29,7 @@ const DEFAULT_METRIC_INTERVALS = [
   { metric_key: 'sprint_carryover', interval_value: 2, interval_unit: 'weeks', custom_label: 'Sprint Carryover' },
   { metric_key: 'first_time_pass_rate', interval_value: 1, interval_unit: 'days', custom_label: 'First Time Pass Rate' },
   { metric_key: 'blocked_time_hours', interval_value: 1, interval_unit: 'days', custom_label: 'Blocked Time' },
+  { metric_key: 'sizing_accuracy', interval_value: 2, interval_unit: 'weeks', custom_label: 'Sizing Accuracy' },
   
   // Automation
   { metric_key: 'automation_coverage', interval_value: 1, interval_unit: 'weeks', custom_label: 'Automation Coverage' },
@@ -44,12 +45,8 @@ const DEFAULT_METRIC_INTERVALS = [
 // Get all metric intervals for company
 router.get('/metric-intervals', authenticateToken, async (req: any, res) => {
   try {
-    const { role, companyId } = req.user;
-
-    // Only admin and manager can view
-    if (role !== 'super_admin' && role !== 'qa_manager') {
-      return res.status(403).json({ error: 'Insufficient permissions' });
-    }
+    // Readable by every role (Team detail shows staleness to everyone); editing is admin/manager.
+    const { companyId } = req.user;
 
     // Get saved intervals
     const savedIntervals = await query<any>(
@@ -228,90 +225,8 @@ router.delete('/metric-intervals/:metricKey', authenticateToken, async (req: any
   }
 });
 
-// Manually trigger metric sync
-router.post('/sync-metrics', authenticateToken, async (req: any, res) => {
-  try {
-    const { role } = req.user;
-    const { frequency } = req.body; // 'hourly' | 'daily' | 'weekly' | 'monthly' | 'all'
-
-    // Only admin can trigger manual sync
-    if (role !== 'super_admin') {
-      return res.status(403).json({ error: 'Only super admin can trigger manual sync' });
-    }
-
-    // The interval sync jobs generate synthetic KPI values; refuse unless enabled.
-    if (!isSyntheticDataEnabled()) {
-      return res.status(409).json({
-        error: 'Synthetic (sample) data generation is disabled on this server. Start the API with ENABLE_SYNTHETIC_DATA=true to use it.',
-        disabled: true
-      });
-    }
-
-    // Run specific sync based on frequency
-    const syncFunctions: Record<string, () => Promise<void>> = {
-      hourly: runHourlySync,
-      daily: runDailySync,
-      weekly: runWeeklySync,
-      monthly: runMonthlySync,
-      all: runIntervalSync,
-    };
-
-    const syncFn = syncFunctions[frequency || 'all'];
-    if (!syncFn) {
-      return res.status(400).json({ error: 'Invalid frequency. Use: hourly, daily, weekly, monthly, or all' });
-    }
-
-    // Run sync in background
-    syncFn().catch(err => console.error('Manual sync error:', err));
-
-    res.json({ success: true, message: `${frequency || 'all'} metric sync triggered` });
-  } catch (error) {
-    console.error('Error triggering metric sync:', error);
-    res.status(500).json({ error: 'Failed to trigger metric sync' });
-  }
-});
-
-// Get sync status for metrics
-router.get('/sync-status', authenticateToken, async (req: any, res) => {
-  try {
-    const { role, companyId } = req.user;
-
-    // Only admin and manager can view
-    if (role !== 'super_admin' && role !== 'qa_manager') {
-      return res.status(403).json({ error: 'Insufficient permissions' });
-    }
-
-    // Get last update times for all metrics across company teams
-    const lastUpdates = await query<any>(
-      `SELECT mlu.metric_key, mlu.team_id, t.name as team_name, 
-              mlu.last_updated_at, mlu.next_update_at
-       FROM metric_last_updated mlu
-       JOIN teams t ON mlu.team_id = t.id
-       WHERE mlu.company_id = ?
-       ORDER BY mlu.next_update_at ASC`,
-      [companyId]
-    );
-
-    // Group by metric
-    const statusByMetric: Record<string, any[]> = {};
-    for (const update of lastUpdates) {
-      if (!statusByMetric[update.metric_key]) {
-        statusByMetric[update.metric_key] = [];
-      }
-      statusByMetric[update.metric_key].push({
-        teamId: update.team_id,
-        teamName: update.team_name,
-        lastUpdatedAt: update.last_updated_at,
-        nextUpdateAt: update.next_update_at,
-        isDue: new Date() >= new Date(update.next_update_at)
-      });
-    }
-
-    res.json({ status: statusByMetric });
-  } catch (error) {
-    console.error('Error fetching sync status:', error);
-    res.status(500).json({ error: 'Failed to fetch sync status' });
-  }
-});
+// The former /sync-metrics and /sync-status routes were removed: the first only ran the
+// synthetic-data generators, and the second read a table nothing writes. Freshness is
+// derived from kpi_snapshots.field_sources[metric].recorded_at instead.
 
 export default router;

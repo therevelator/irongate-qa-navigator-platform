@@ -8,6 +8,8 @@ import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, Segment
 
 interface PerformanceTestingProps {
   onBack?: () => void;
+  /** Team chosen on the Analytics page; company-wide when undefined. */
+  teamId?: string;
 }
 
 /** One row of performance_metrics: one endpoint on one recorded_date. Throughput is per minute. */
@@ -47,7 +49,7 @@ const slaStatus = (r: PerfRow, sla: SLAConfig | null): 'within' | 'outside' | 'u
   return p95Bad || errBad ? 'outside' : 'within';
 };
 
-const PerformanceTesting: React.FC<PerformanceTestingProps> = () => {
+const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ teamId }) => {
   const { isDark } = useTheme();
   const [selectedEndpoint, setSelectedEndpoint] = useState<string | null>(null);
   const [selectedTrendEndpoint, setSelectedTrendEndpoint] = useState<string>('');
@@ -63,7 +65,7 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = () => {
     setError(null);
     (async () => {
       try {
-        const response = await fetch(`${API_URL}/analytics/performance-metrics?days=${range}`, { credentials: 'include' });
+        const response = await fetch(`${API_URL}/analytics/performance-metrics?days=${range}${teamId ? `&teamId=${encodeURIComponent(teamId)}` : ''}`, { credentials: 'include' });
         if (!response.ok) throw new Error(String(response.status));
         const data = await response.json();
         if (!cancelled) setRows(data.metrics || []);
@@ -75,14 +77,14 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [range]);
+  }, [range, teamId]);
 
   useEffect(() => {
-    fetchSLAConfig().then(setSlaConfig);
-    const handler = () => { invalidateSLACache(); fetchSLAConfig().then(setSlaConfig); };
+    fetchSLAConfig(teamId).then(setSlaConfig);
+    const handler = () => { invalidateSLACache(); fetchSLAConfig(teamId).then(setSlaConfig); };
     window.addEventListener('slaConfigUpdated', handler as EventListener);
     return () => window.removeEventListener('slaConfigUpdated', handler as EventListener);
-  }, []);
+  }, [teamId]);
 
   // Rows grouped per endpoint, sorted oldest → newest by recorded_date.
   const byEndpoint = useMemo(() => {

@@ -25,6 +25,8 @@ app.set('trust proxy', true);
 const allowedOrigins = [
   process.env.URL,                    // Netlify deploy URL (auto-set by Netlify)
   process.env.DEPLOY_PRIME_URL,       // Netlify branch deploy URL
+  process.env.DEPLOY_URL,             // This deploy's unique URL
+  process.env.FRONTEND_URL,           // Custom domain, if any
   'http://localhost:5173',            // Local dev
   'http://localhost:3000',
 ].filter(Boolean);
@@ -33,10 +35,9 @@ const allowedOrigins = [
 app.use((req, res, next) => {
   const origin = req.headers.origin as string | undefined;
   
-  // Only allow specific origins (not open to any domain)
-  const isAllowed = origin && allowedOrigins.some(allowed => 
-    origin === allowed || origin.endsWith('.netlify.app')
-  );
+  // Exact match only, as in server/index.ts: a suffix check would let any other
+  // *.netlify.app site make credentialed requests.
+  const isAllowed = origin && allowedOrigins.some(allowed => origin === allowed);
   
   if (isAllowed) {
     res.header('Access-Control-Allow-Origin', origin);

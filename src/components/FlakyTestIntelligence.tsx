@@ -8,6 +8,8 @@ import { Page, PageIntro, Card, Badge, StatTile, EmptyState, SegmentedControl, c
 
 interface FlakyTestIntelligenceProps {
   onBack?: () => void;
+  /** Team chosen on the Analytics page; company-wide when undefined. */
+  teamId?: string;
 }
 
 /** API row; total_runs / pass_count / root_cause_verified are optional until the server provides them. */
@@ -51,7 +53,7 @@ const PATTERNS: { value: PatternFilter; label: string }[] = [
   { value: 'unknown', label: 'Unknown' },
 ];
 
-const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = () => {
+const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId }) => {
   const [selectedPattern, setSelectedPattern] = useState<PatternFilter>('all');
   const [flakyTests, setFlakyTests] = useState<FlakyTestRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -60,7 +62,7 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = () => {
   useEffect(() => {
     const fetchFlakyTests = async () => {
       try {
-        const response = await fetch(`${API_URL}/analytics/flaky-tests`, { credentials: 'include' });
+        const response = await fetch(`${API_URL}/analytics/flaky-tests${teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''}`, { credentials: 'include' });
         if (response.ok) {
           const data = await response.json();
           // Server-side placeholder rows (id 'sample-*') are not real detections.
@@ -76,7 +78,7 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = () => {
       }
     };
     fetchFlakyTests();
-  }, []);
+  }, [teamId]);
 
   const filteredTests = selectedPattern === 'all' ? flakyTests : flakyTests.filter(t => t.failure_pattern === selectedPattern);
 

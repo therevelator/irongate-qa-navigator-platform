@@ -72,8 +72,8 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
     title: 'Administration',
     items: [
       { view: 'admin-panel', label: 'Admin console', icon: Shield, roles: ADMIN_ROLES },
-      { view: 'manual-metrics', label: 'Manual metrics', icon: Calculator, roles: ['super_admin'] },
-      { view: 'metric-intervals', label: 'Metric intervals', icon: Clock, roles: ADMIN_ROLES },
+      { view: 'manual-metrics', label: 'Manual metrics', icon: Calculator, roles: ['super_admin', 'qa_manager', 'team_lead'] },
+      { view: 'metric-intervals', label: 'Update frequency', icon: Clock, roles: ADMIN_ROLES },
       { view: 'parameters-config', label: 'Parameters', icon: SlidersHorizontal, roles: ADMIN_ROLES },
     ],
   },
@@ -95,10 +95,9 @@ const PAGE_META: Record<string, { title: string; parent?: string }> = {
   users: { title: 'Users', parent: 'Organisation' },
   teams: { title: 'Teams', parent: 'Organisation' },
   departments: { title: 'Departments', parent: 'Organisation' },
-  'manage-teams': { title: 'Manage teams', parent: 'Organisation' },
   'admin-panel': { title: 'Admin console', parent: 'Administration' },
   'manual-metrics': { title: 'Manual metrics', parent: 'Administration' },
-  'metric-intervals': { title: 'Metric intervals', parent: 'Administration' },
+  'metric-intervals': { title: 'Expected update frequency', parent: 'Administration' },
   'parameters-config': { title: 'Parameters', parent: 'Administration' },
 };
 
@@ -123,6 +122,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
 
   // Background job notifications pushed over the WebSocket (long-running server only)
   useEffect(() => {
+    // Netlify Functions have no WebSocket server; do not try to connect there.
+    if (window.location.hostname.endsWith('.netlify.app') || import.meta.env.VITE_DISABLE_WEBSOCKET === 'true') return;
     const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
     const wsHost = isLocal ? 'localhost:3000' : window.location.host;

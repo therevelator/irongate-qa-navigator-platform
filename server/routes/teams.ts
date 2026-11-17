@@ -19,6 +19,7 @@ import {
   type DeveloperAssessment
 } from '../lib/developerHealth';
 import { METRICS_CONFIG, type MetricsConfig } from '../../src/config/metricsConfig';
+import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 
 const router = express.Router();
 
@@ -135,8 +136,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
       SELECT t.*, 
              d.name as department,
              c.name as company_name,
-             (u.first_name || ' ' || u.last_name) as team_lead_name,
-             (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count,
+             ${teamLeadNameSql('t')} as team_lead_name,
+             ${teamMemberCountSql('t')} as member_count,
              k.qa_score as "qaScore",
              k.status,
              k.test_coverage,
@@ -324,7 +325,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT t.*, 
               d.name as department_name,
               c.name as company_name,
-              (u.first_name || ' ' || u.last_name) as team_lead_name
+              ${teamLeadNameSql('t')} as team_lead_name
        FROM teams t
        JOIN departments d ON t.department_id = d.id
        JOIN companies c ON t.company_id = c.id
@@ -388,7 +389,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
 
     // Get team members from team_members table (only active users)
     const teamMembers = await query<any[]>(
-      `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.avatar_url,
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.avatar_url, u.developer_insights_enabled,
               tm.role as team_role, tm.joined_at
        FROM team_members tm
        JOIN users u ON tm.user_id = u.id
@@ -398,7 +399,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
 
     // Also get users who have this as their primary team (only active users)
     const primaryTeamMembers = await query<any[]>(
-      `SELECT id, email, first_name, last_name, role, avatar_url,
+      `SELECT id, email, first_name, last_name, role, avatar_url, developer_insights_enabled,
               'member' as team_role, created_at as joined_at
        FROM users
        WHERE primary_team_id = ? AND is_active = true`,
@@ -434,15 +435,9 @@ router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) 
   try {
     const teamId = req.params.id;
     
-    // Super admin and qa_manager can toggle any team
-    // Team lead can only toggle their own team
-    if (req.userRole === 'team_lead') {
-      if (req.user?.primaryTeamId !== teamId) {
-        return res.status(403).json({ error: 'Can only toggle AI for your own team' });
-      }
-    } else if (req.userRole !== 'super_admin' && req.userRole !== 'qa_manager') {
-      return res.status(403).json({ error: 'Admin access required' });
-    }
+    // Same rule as every other team write (assertTeamWrite): super_admin any team,
+    // qa_manager teams in their department, team_lead their own team.
+    if (!(await assertTeamWrite(req, res, teamId))) return;
 
     const { enabled } = req.body;
     
@@ -461,7 +456,9 @@ router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) 
 // Get KPI history for a team (for graphs)
 router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    if (!(await assertTeamRead(req, res, req.params.id))) return;
+    // Team-level KPIs are company-visible (the dashboard lists every team's latest KPIs to
+    // every role), so the history uses the same rule as GET /teams/:id: company scope only.
+    if (!(await getOwnedTeam(req, req.params.id))) return res.status(404).json({ error: 'Team not found' });
     const { days = '30' } = req.query;
     const numDays = Math.min(parseInt(days as string) || 30, 90);
 
@@ -552,7 +549,7 @@ router.get('/:id/ai-suggestions', aiLimiter, authenticateToken, async (req: Auth
               t.ai_enabled,
               d.name as department_name,
               c.name as company_name,
-              (u.first_name || ' ' || u.last_name) as team_lead_name
+              ${teamLeadNameSql('t')} as team_lead_name
        FROM teams t
        JOIN departments d ON t.department_id = d.id
        JOIN companies c ON t.company_id = c.id

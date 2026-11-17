@@ -10,6 +10,8 @@ import type { Tone } from './ui';
 
 interface TechnicalDebtTrackerProps {
   onBack?: () => void;
+  /** Team chosen on the Analytics page; company-wide when undefined. */
+  teamId?: string;
 }
 
 /** Row from GET /analytics/technical-debt. Calculated fields are null when inputs are missing. */
@@ -76,7 +78,7 @@ const cmp = (a: number | null, b: number | null, dir: 1 | -1) => {
   return (a - b) * dir;
 };
 
-const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = () => {
+const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ teamId }) => {
   const { isDark } = useTheme();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedSeverity, setSelectedSeverity] = useState<SeverityFilter>('all');
@@ -88,7 +90,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = () => {
 
   const fetchDebt = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/analytics/technical-debt`, { credentials: 'include' });
+      const response = await fetch(`${API_URL}/analytics/technical-debt${teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''}`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setDebtItems(data.debts || []);
@@ -106,7 +108,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = () => {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [teamId]);
 
   useEffect(() => { fetchDebt(); }, [fetchDebt]);
 
