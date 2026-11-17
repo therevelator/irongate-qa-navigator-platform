@@ -444,6 +444,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                   >
                     {/* User Card Header */}
                     <div className="p-4">
+                      <span data-testid="user-ai-status" className="sr-only">{u.developer_insights_enabled ? 'Developer insights on' : 'Developer insights off'}</span>
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* Avatar */}
@@ -457,7 +458,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                 {u.first_name} {u.last_name}
                               </h3>
                               {/* Status Badge - inline with name */}
-                              <span className={`flex-shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full ${u.is_active
+                              <span data-testid="user-status" className={`flex-shrink-0 px-2 py-0.5 text-[10px] font-bold rounded-full ${u.is_active
                                 ? is3DMode
                                   ? 'bg-gradient-to-r from-green-400 to-emerald-500 text-white shadow-lg shadow-green-500/40'
                                   : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
@@ -481,7 +482,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                           {getRoleDisplay(u.role)}
                         </span>
                         {u.team_name && (
-                          <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300">
+                          <span data-testid="user-team" className="px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300">
                             {u.team_name}
                           </span>
                         )}
@@ -490,7 +491,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                       {/* Department */}
                       {u.department_name && (
                         <p className="mt-2 text-xs text-gray-400 dark:text-slate-500 truncate">
-                          📁 {u.department_name}
+                          {u.department_name}
                         </p>
                       )}
 
@@ -514,6 +515,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                   setShowEditModal(true);
                                 }}
                                 className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
+                                data-testid="edit-btn"
                                 title="Edit"
                               >
                                 <Edit2 size={16} />
@@ -560,6 +562,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                   : 'text-gray-400 dark:text-slate-500 hover:text-purple-500'
                                   }`}
                                 title={u.developer_insights_enabled ? 'Disable AI Insights' : 'Enable AI Insights'}
+                                data-testid="user-ai-toggle"
                               >
                                 <Bot size={16} />
                               </button>
@@ -585,6 +588,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                   : 'text-gray-400 dark:text-slate-500 hover:text-green-500'
                                   }`}
                                 title={u.is_active ? 'Deactivate' : 'Activate'}
+                                data-testid="user-status-toggle"
                               >
                                 {u.is_active ? <UserX size={16} /> : <UserCheck size={16} />}
                               </button>
@@ -610,6 +614,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                     }
                                   }}
                                   className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
+                                  data-testid="delete-btn"
                                   title="Delete"
                                 >
                                   <Trash2 size={16} />

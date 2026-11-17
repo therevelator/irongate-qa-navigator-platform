@@ -175,7 +175,7 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
                     <input
                       type="number"
                       inputMode="decimal"
-                      placeholder={field.placeholder}
+                      placeholder={`Not set (default ${field.placeholder})`}
                       value={configs[field.key] ?? ''}
                       onChange={(e) => setConfigs(prev => ({ ...prev, [field.key]: e.target.value }))}
                       className={cx(inputClass, 'w-full')}

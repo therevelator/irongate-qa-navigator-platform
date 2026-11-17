@@ -52,13 +52,14 @@ Server will start on `http://localhost:3000`
 - `GET /api/metrics/teams/:teamId` - Get latest KPIs
 - `GET /api/metrics/teams/:teamId/history` - Get historical data
 - `GET /api/metrics/teams/:teamId/velocity` - Get sprint velocity
-- `POST /api/metrics/sync` - Trigger manual sync (admin)
+- `POST /api/metrics/manual` - Save team KPIs (super_admin, qa_manager, team_lead; team scope enforced)
+- `POST /api/ingest/kpis` - KPI ingestion with an API key (see the main README)
 
 ### Users
-- `GET /api/users` - List all users
-- `GET /api/users/:id` - Get user details
-- `PUT /api/users/:id` - Update user
-- `DELETE /api/users/:id` - Delete user (admin)
+- `GET /api/users/:id`, `PUT /api/users/:id` - Read / edit your OWN profile (name, email, phone, timezone)
+- User administration: `GET|POST /api/admin/users`, `PUT|DELETE /api/admin/users/:id`,
+  `POST /api/admin/users/:id/toggle-status`, `POST /api/admin/users/:id/reset-password`
+  (rules in `server/lib/userPolicy.ts`, summarised in ROLE_PERMISSIONS.md)
 
 ### Departments
 - `GET /api/departments` - List all departments

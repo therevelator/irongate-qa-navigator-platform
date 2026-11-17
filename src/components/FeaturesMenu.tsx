@@ -67,6 +67,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onSelectFeature }) => {
 
   return (
     <Page>
+      <div data-testid="features-menu">
       <PageIntro
         title="Analytics"
         description={selectedTeamName ? `Modules open scoped to ${selectedTeamName}. Team rankings and Reports always cover all teams.` : 'Choose a team to scope the analytics modules. Without a team, modules show company-wide data.'}
@@ -118,6 +119,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onSelectFeature }) => {
             </div>
           </section>
         ))}
+      </div>
       </div>
     </Page>
   );

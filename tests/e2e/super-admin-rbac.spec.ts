@@ -31,17 +31,16 @@ test.describe('Super Admin Role-Based Access Control', () => {
 
     // Super Admin should see all sections: team members, AI insights, developer insights
     // Use a precise heading locator to avoid strict-mode conflicts with "No Team Members" text.
-    const teamMembersHeader = page.getByRole('heading', { name: 'Team Members', exact: true });
-    await expect(teamMembersHeader).toBeVisible();
-    await expect(page.locator('text=AI Insights')).toBeVisible();
-    await expect(page.locator('text=Developer Insights')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Team members', exact: true })).toBeVisible();
+    await expect(page.locator('[data-testid="ai-insights-header"]')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Developer recommendations', exact: true })).toBeVisible();
 
     // Check admin panel access
     await page.goto('/admin-panel');
 
     // Admin panel container and headings from current implementation
     await expect(page.locator('[data-testid="admin-panel"]')).toBeVisible();
-    await expect(page.locator('text=Admin Control Panel')).toBeVisible();
+    await expect(page.getByTestId('admin-panel').getByRole('heading', { name: 'Admin console' })).toBeVisible();
     await expect(page.locator('text=Organization Structure')).toBeVisible();
   });
 
@@ -58,22 +57,32 @@ test.describe('Super Admin Role-Based Access Control', () => {
     // Fill user creation form
     await page.fill('[data-testid="first-name-input"]', 'Test');
     await page.fill('[data-testid="last-name-input"]', 'User');
-    await page.fill('[data-testid="email-input"]', 'test@example.com');
+    const email = `e2e-${Date.now()}@example.com`;
+    await page.fill('[data-testid="email-input"]', email);
     await page.fill('[data-testid="password-input"]', 'password123');
 
     // Select role - Super Admin should be able to create any role
     await page.selectOption('[data-testid="role-select"]', 'qa_engineer');
 
-    // Select first available department and team option (after any placeholder)
-    await page.selectOption('[data-testid="department-select"]', { index: 1 });
+    // Pick a department that has teams, then its first team.
+    const deptOptions = await page.locator('[data-testid="department-select"] option').count();
+    for (let i = 1; i < deptOptions; i++) {
+      await page.selectOption('[data-testid="department-select"]', { index: i });
+      if (await page.locator('[data-testid="team-select"] option').count() > 1) break;
+    }
     await page.selectOption('[data-testid="team-select"]', { index: 1 });
 
     // Submit form
     await page.click('[data-testid="create-user-btn"]');
 
     // Verify the new user appears in the users table
-    const newUserRow = page.locator('[data-testid="user-row"]', { hasText: 'test@example.com' });
-    await expect(newUserRow).toBeVisible();
+    await expect(page.locator('text=User created successfully')).toBeVisible();
+    // Clean up: deactivate the user through the API.
+    const cookie = (await page.context().cookies()).map(c => `${c.name}=${c.value}`).join('; ');
+    const list = await page.request.get('http://localhost:3000/api/admin/users', { headers: { cookie } });
+    const created = (await list.json()).find((u: any) => u.email === email);
+    expect(created).toBeTruthy();
+    await page.request.delete(`http://localhost:3000/api/admin/users/${created.id}`, { headers: { cookie } });
   });
 
   test('Super Admin can access all analytics features', async ({ page }) => {
@@ -103,7 +112,7 @@ test.describe('Super Admin Role-Based Access Control', () => {
     }
 
     // Should see at least one analytics feature card if data is available
-    const featureCards = page.locator('[data-testid="feature-card"]');
+    const featureCards = page.locator('button[data-testid^="feature-"]');
     const featureCount = await featureCards.count();
 
     if (featureCount === 0) {

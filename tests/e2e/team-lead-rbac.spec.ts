@@ -59,7 +59,7 @@ test.describe('Team Lead Role-Based Access Control', () => {
     await page.waitForSelector('[data-testid="users-page"]', { timeout: 10000 });
 
     // Count visible users - should only see users from their team
-    const userRows = page.locator('[data-testid="user-row"]');
+    const userRows = page.locator('[data-testid="user-card"]');
     const visibleUsers = await userRows.count();
 
     // Should see some users (at least 1, but not all users in system)
@@ -81,14 +81,14 @@ test.describe('Team Lead Role-Based Access Control', () => {
     await page.waitForSelector('[data-testid="features-menu"]', { timeout: 10000 });
 
     // Should NOT see department/team dropdowns
-    await expect(page.locator('select')).toHaveCount(0); // No dropdown selects should be visible
+    await expect(page.locator('[data-testid="features-menu"] select')).toHaveCount(0);
 
     // Should see static label showing their team name
     const staticLabel = page.locator('[data-testid="team-static-label"]');
     await expect(staticLabel).toBeVisible();
 
     const labelText = await staticLabel.textContent();
-    expect(labelText).toContain('Viewing');
+    expect(labelText).toContain('Team:');
 
     console.log(`Team Lead sees static label: "${labelText}"`);
   });
@@ -160,7 +160,7 @@ test.describe('Team Lead Role-Based Access Control', () => {
     await page.waitForSelector('[data-testid="users-page"]', { timeout: 10000 });
 
     // Find users in their team
-    const userRows = page.locator('[data-testid="user-row"]');
+    const userRows = page.locator('[data-testid="user-card"]').filter({ has: page.locator('[data-testid="user-status-toggle"]') });
     const userCount = await userRows.count();
 
     if (userCount > 0) {
@@ -177,11 +177,13 @@ test.describe('Team Lead Role-Based Access Control', () => {
         // Wait for status update (toast notification should appear)
         await page.waitForTimeout(2000);
 
-        // Verify status changed
+        // Verify status changed, then restore it
         const newStatus = await userRows.first().locator('[data-testid="user-status"]').textContent();
         expect(newStatus).not.toBe(currentStatus);
+        await firstUserToggle.click();
+        await page.waitForTimeout(2000);
 
-        console.log(`Successfully toggled user status from ${currentStatus} to ${newStatus}`);
+        console.log(`Successfully toggled user status from ${currentStatus} to ${newStatus} and back`);
       } else {
         console.log('User status toggle not visible (expected for team leads)');
       }
@@ -210,9 +212,11 @@ test.describe('Team Lead Role-Based Access Control', () => {
       // Wait for update
       await page.waitForTimeout(2000);
 
-      // Verify status changed
+      // Verify status changed, then restore it
       const newAiStatus = await teamRow.locator('[data-testid="team-ai-status"]').textContent();
       expect(newAiStatus).not.toBe(currentAiStatus);
+      await teamAiToggle.click();
+      await page.waitForTimeout(2000);
 
       console.log(`Successfully toggled team AI from ${currentAiStatus} to ${newAiStatus}`);
     }
@@ -221,7 +225,7 @@ test.describe('Team Lead Role-Based Access Control', () => {
     await page.goto('/users');
     await page.waitForSelector('[data-testid="users-page"]', { timeout: 10000 });
 
-    const userRows = page.locator('[data-testid="user-row"]');
+    const userRows = page.locator('[data-testid="user-card"]').filter({ has: page.locator('[data-testid="user-ai-toggle"]') });
     const userCount = await userRows.count();
 
     if (userCount > 0) {
@@ -237,9 +241,11 @@ test.describe('Team Lead Role-Based Access Control', () => {
         // Wait for update
         await page.waitForTimeout(2000);
 
-        // Verify status changed
+        // Verify status changed, then restore it
         const newUserAiStatus = await userRows.first().locator('[data-testid="user-ai-status"]').textContent();
         expect(newUserAiStatus).not.toBe(currentUserAiStatus);
+        await firstUserAiToggle.click();
+        await page.waitForTimeout(2000);
 
         console.log(`Successfully toggled user AI from ${currentUserAiStatus} to ${newUserAiStatus}`);
       }
@@ -258,7 +264,8 @@ test.describe('Team Lead Role-Based Access Control', () => {
     // Should NOT see admin/super admin features in navigation
     await expect(page.locator('[data-testid="nav-departments"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="nav-admin"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="nav-manual-metrics"]')).toHaveCount(0);
+    // Manual metrics is available to team leads for their own team
+    await expect(page.locator('[data-testid="nav-manual-metrics"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-metric-intervals"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="nav-parameters-config"]')).toHaveCount(0);
 

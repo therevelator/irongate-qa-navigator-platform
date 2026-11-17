@@ -16,7 +16,7 @@ test.describe('QA Manager Role-Based Access Control', () => {
     expect(teamCount).toBeGreaterThan(1);
 
     // Check navigation menu - should see Users, Teams, Analytics, Admin, Metric Intervals, Parameters Config
-    // Should NOT see Departments, Manual Metrics
+    // Should NOT see Departments
     await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-users"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-teams"]')).toBeVisible();
@@ -24,10 +24,11 @@ test.describe('QA Manager Role-Based Access Control', () => {
     await expect(page.locator('[data-testid="nav-admin"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-metric-intervals"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-parameters-config"]')).toBeVisible();
+    // Manual metrics: same roles as POST /api/metrics/manual (team scope enforced server-side)
+    await expect(page.locator('[data-testid="nav-manual-metrics"]')).toBeVisible();
 
     // Should NOT see these restricted items
     await expect(page.locator('[data-testid="nav-departments"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="nav-manual-metrics"]')).toHaveCount(0);
   });
 
   test('QA Manager can manage users and teams in their department', async ({ page }) => {
@@ -38,7 +39,7 @@ test.describe('QA Manager Role-Based Access Control', () => {
     await page.waitForSelector('[data-testid="users-page"]', { timeout: 10000 });
 
     // Should see users in their department
-    const userRows = page.locator('[data-testid="user-row"]');
+    const userRows = page.locator('[data-testid="user-card"]');
     await expect(userRows.first()).toBeVisible();
 
     // Go to teams page
@@ -47,12 +48,17 @@ test.describe('QA Manager Role-Based Access Control', () => {
 
     // Should be able to create teams
     await page.click('[data-testid="add-team-btn"]');
-    await page.fill('[data-testid="team-name-input"]', 'QA Manager Test Team');
+    const teamName = `QA Manager Test Team ${Date.now()}`;
+    await page.fill('[data-testid="team-name-input"]', teamName);
     await page.fill('[data-testid="team-description-input"]', 'Test team created by QA Manager');
     await page.click('[data-testid="create-team-btn"]');
 
-    // Verify team creation
-    await expect(page.locator('text=QA Manager Test Team')).toBeVisible();
+    // Verify team creation, then deactivate it again
+    const row = page.locator('[data-testid="team-row"]', { hasText: teamName });
+    await expect(row).toBeVisible();
+    const id = await row.getAttribute('data-team-id');
+    const cookie = (await page.context().cookies()).map(c => `${c.name}=${c.value}`).join('; ');
+    await page.request.delete(`http://localhost:3000/api/admin/teams/${id}`, { headers: { cookie } });
   });
 
   test('QA Manager can see team details with full insights', async ({ page }) => {
@@ -78,7 +84,7 @@ test.describe('QA Manager Role-Based Access Control', () => {
     await expect(page.locator('[data-testid="admin-panel"]')).toBeVisible();
 
     // Header content matches current AdminPanel copy
-    await expect(page.locator('text=Admin Control Panel')).toBeVisible();
+    await expect(page.getByTestId('admin-panel').getByRole('heading', { name: 'Admin console' })).toBeVisible();
     await expect(page.locator('text=Organization Structure')).toBeVisible();
 
     // Note: Department creation and its empty-state message are controlled by Super Admin.

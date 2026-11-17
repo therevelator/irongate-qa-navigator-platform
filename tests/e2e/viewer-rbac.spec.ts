@@ -35,11 +35,6 @@ test.describe('Viewer Role-Based Access Control', () => {
     const teamCards = page.locator('[data-testid="team-card"]');
     await expect(teamCards.first()).toBeVisible();
 
-    // Should be able to filter by departments
-    const departmentFilters = page.locator('[data-testid="department-filter"]');
-    if (await departmentFilters.count() > 0) {
-      await expect(departmentFilters.first()).toBeVisible();
-    }
 
     // Count teams to verify viewer can see all teams
     const teamCount = await teamCards.count();
@@ -72,10 +67,10 @@ test.describe('Viewer Role-Based Access Control', () => {
 
     await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
 
-    // Viewer should NOT see AI Insights or Developer Insights sections
-    await expect(page.locator('text=AI Insights')).not.toBeVisible();
-    await expect(page.locator('text=Developer Insights')).not.toBeVisible();
-    await expect(page.locator('text=Team Members')).not.toBeVisible();
+    // Viewer should NOT see recommendations or the team members table
+    await expect(page.locator('[data-testid="ai-insights-header"]')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Developer recommendations', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Team members', exact: true })).toHaveCount(0);
 
     // Should still see basic team information
     await expect(page.locator('[data-testid="team-kpis"]')).toBeVisible();
@@ -95,7 +90,7 @@ test.describe('Viewer Role-Based Access Control', () => {
     // Verify team detail loaded
     await expect(page.locator('[data-testid="team-detail"]')).toBeVisible();
 
-    // Go back to dashboard
+    // Go back to dashboard (breadcrumb link)
     await page.click('[data-testid="back-to-dashboard"]');
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 10000 });
 

@@ -1426,9 +1426,9 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         <div className="bg-slate-50 dark:bg-slate-800/50 border border-brand-200 dark:border-brand-900 rounded-lg p-4 flex items-start gap-3">
           <Info className="w-5 h-5 text-brand-700 dark:text-brand-300 flex-shrink-0 mt-0.5" />
           <div className="text-sm text-slate-700 dark:text-slate-300">
-            <p className="font-medium text-brand-700 dark:text-brand-300 mb-1">Why Manual Input?</p>
-            <p>While the aggregator is being set up, you can manually enter metrics data. 
-            Enter the raw values for each formula, and the system will calculate and display the results on the dashboard automatically.</p>
+            <p className="font-medium text-brand-700 dark:text-brand-300 mb-1">When to use manual entry</p>
+            <p>For values that are not sent through the KPI ingestion API (POST /api/ingest/kpis). Enter the raw values for each
+            formula; the calculated results are saved as manual entries and shown on the dashboard.</p>
           </div>
         </div>
 

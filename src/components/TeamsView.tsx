@@ -214,6 +214,7 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
                           <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{team.name}</h3>
                           <Badge tone={team.is_active ? 'good' : 'neutral'}>{team.is_active ? 'Active' : 'Inactive'}</Badge>
                           {team.ai_enabled && <Badge tone="brand"><Bot size={11} /> AI suggestions</Badge>}
+                          <span data-testid="team-ai-status" className="sr-only">{team.ai_enabled ? 'AI suggestions on' : 'AI suggestions off'}</span>
                         </div>
                         <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
                           {team.department_name || 'No department'}
@@ -242,7 +243,7 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
                           {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                         </button>
                         {writeData && (
-                          <button onClick={() => toggleAi(team)} className={cx('rounded-md p-2 hover:bg-slate-100 dark:hover:bg-slate-800', team.ai_enabled ? 'text-brand-700 dark:text-brand-300' : 'text-slate-400')} title={team.ai_enabled ? 'Turn AI suggestions off' : 'Turn AI suggestions on'} aria-label="Toggle AI suggestions">
+                          <button onClick={() => toggleAi(team)} className={cx('rounded-md p-2 hover:bg-slate-100 dark:hover:bg-slate-800', team.ai_enabled ? 'text-brand-700 dark:text-brand-300' : 'text-slate-400')} title={team.ai_enabled ? 'Turn AI suggestions off' : 'Turn AI suggestions on'} aria-label="Toggle AI suggestions" data-testid="team-ai-toggle">
                             <Bot size={16} />
                           </button>
                         )}
@@ -251,11 +252,11 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
                             <button
                               onClick={() => { setSelectedTeam(team); setEditForm({ name: team.name, description: team.description || '', departmentId: team.department_id }); setShowEditModal(true); }}
                               className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-                              title="Edit" aria-label="Edit team"
+                              title="Edit" aria-label="Edit team" data-testid="edit-team-btn"
                             >
                               <Edit2 size={16} />
                             </button>
-                            <button onClick={() => deleteTeam(team)} className="rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 dark:hover:text-red-400" title="Delete" aria-label="Delete team">
+                            <button onClick={() => deleteTeam(team)} className="rounded-md p-2 text-slate-400 hover:bg-red-50 hover:text-red-700 dark:hover:bg-red-950/40 dark:hover:text-red-400" title="Delete" aria-label="Delete team" data-testid="delete-team-btn">
                               <Trash2 size={16} />
                             </button>
                           </>

@@ -356,7 +356,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   /** Stale = the last recorded value (field_sources.recorded_at) is older than the expected update frequency. */
   const staleText = (historyKey: string): string | null => {
     const interval = metricIntervals[historyKey];
-    const recordedAt = team.kpiFieldSources?.[historyKey]?.recorded_at;
+    // Per-field recorded_at (ingestion provenance); for older snapshots without provenance,
+    // the snapshot date is the latest date the value is known to be from.
+    const recordedAt = team.kpiFieldSources?.[historyKey]?.recorded_at ?? snapshotDate ?? undefined;
     if (!interval || !recordedAt) return null;
     const t = new Date(recordedAt).getTime();
     if (!Number.isFinite(t)) return null;

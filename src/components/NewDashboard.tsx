@@ -346,10 +346,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                       <tr
                         key={r.team.id}
                         data-testid="team-card"
+                        data-primary-team={r.team.id === user?.primaryTeamId ? 'true' : undefined}
                         onClick={() => onTeamClick?.(r.team)}
                         className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40"
                       >
-                        <td className="px-3 py-3 font-medium text-slate-900 dark:text-white whitespace-nowrap max-w-[18rem] truncate">{r.name}</td>
+                        <td className="px-3 py-3 font-medium text-slate-900 dark:text-white whitespace-nowrap max-w-[18rem] truncate" data-testid="team-name">{r.name}</td>
                         <td className="px-3 py-3 text-slate-600 dark:text-slate-300 whitespace-nowrap">{r.department}</td>
                         <td className="px-3 py-3">
                           <div className="flex items-center gap-2.5 min-w-[7.5rem]">

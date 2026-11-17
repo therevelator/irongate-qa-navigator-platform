@@ -33,8 +33,8 @@ test.describe('QA Engineer Role-Based Access Control', () => {
 
     await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
 
-    // Team Members section should be visible for their own team
-    await expect(page.locator('text=Team Members')).toBeVisible();
+    // Team members section should be visible for their own team
+    await expect(page.getByRole('heading', { name: 'Team members', exact: true })).toBeVisible();
 
     // For QA Engineers, TeamDetailView shows only themselves as a member for their own team
     const memberCards = page.locator('[data-testid="team-member-card"]');
@@ -47,15 +47,15 @@ test.describe('QA Engineer Role-Based Access Control', () => {
     // Go to dashboard
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
-    // Click a team that is NOT QualityCowboys
-    const otherTeamCard = page.locator('[data-testid="team-card"]').filter({ hasNotText: 'QualityCowboys' }).first();
+    // Click a team that is not the engineer's own team
+    const otherTeamCard = page.locator('[data-testid="team-card"]:not([data-primary-team="true"])').first();
 
     if (await otherTeamCard.count() > 0) {
       await otherTeamCard.click();
       await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
 
-      // Should NOT see Team Members section
-      await expect(page.locator('text=Team Members')).not.toBeVisible();
+      // Should NOT see the Team members section
+      await expect(page.getByRole('heading', { name: 'Team members', exact: true })).toHaveCount(0);
     }
   });
 
@@ -67,9 +67,9 @@ test.describe('QA Engineer Role-Based Access Control', () => {
     await page.locator('[data-testid="team-card"]').first().click();
     await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
 
-    // Should NOT see AI Insights
-    await expect(page.locator('text=AI Insights')).not.toBeVisible();
-    await expect(page.locator('text=Developer Insights')).not.toBeVisible();
+    // Should NOT see team or developer recommendations
+    await expect(page.locator('[data-testid="ai-insights-header"]')).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Developer recommendations', exact: true })).toHaveCount(0);
   });
 
   test('QA Engineer cannot access restricted pages directly', async ({ page }) => {

@@ -9,9 +9,10 @@ import { createHash } from 'crypto';
  */
 
 // General API ceiling to blunt scraping / abuse.
+// API_RATE_LIMIT_MAX can raise it for local end-to-end test runs, which log in many times a minute.
 export const apiLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 300,
+  max: Number(process.env.API_RATE_LIMIT_MAX) || 300,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please slow down.' },
