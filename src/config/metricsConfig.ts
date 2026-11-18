@@ -357,17 +357,39 @@ const r1 = (v: number) => Math.round(v * 10) / 10;
  * table filter: QA score below the warning threshold, or any recorded KPI off its target.
  * Returns the reasons; an empty list means the team does not need attention.
  */
-export function teamAttentionIssues(t: TeamKpiValues): string[] {
+export function teamAttentionIssues(t: TeamKpiValues, opts: KpiJudgeOptions = {}): string[] {
   const issues: string[] = [];
+  const tg = { ...KPI_TARGETS, ...(opts.targets ?? {}) };
+  const use = (key: KpiTargetCheck['key'], v: number | null) => (v !== null && !opts.stale?.has(key) ? v : null);
   if (t.qaScore !== null && t.qaScore < QA_SCORE_THRESHOLDS.warning) {
     issues.push(`QA score ${Math.round(t.qaScore)} (critical, <${QA_SCORE_THRESHOLDS.warning})`);
   }
-  if (t.testCoverage !== null && t.testCoverage < KPI_TARGETS.coverage) issues.push(`Test coverage ${r1(t.testCoverage)}% (target ≥${KPI_TARGETS.coverage}%)`);
-  if (t.testFlakinessRate !== null && t.testFlakinessRate > KPI_TARGETS.flakiness) issues.push(`Flakiness ${r1(t.testFlakinessRate)}% (target ≤${KPI_TARGETS.flakiness}%)`);
-  if (t.defectEscapeRate !== null && t.defectEscapeRate > KPI_TARGETS.escapeRate) issues.push(`Defect escape rate ${r1(t.defectEscapeRate)}% (target ≤${KPI_TARGETS.escapeRate}%)`);
-  if (t.automationCoverage !== null && t.automationCoverage < KPI_TARGETS.automation) issues.push(`Automation ${r1(t.automationCoverage)}% (target ≥${KPI_TARGETS.automation}%)`);
+  const cov = use('testCoverage', t.testCoverage), flk = use('testFlakinessRate', t.testFlakinessRate);
+  const esc = use('defectEscapeRate', t.defectEscapeRate), aut = use('automationCoverage', t.automationCoverage);
+  if (cov !== null && cov < tg.coverage) issues.push(`Test coverage ${r1(cov)}% (target ≥${tg.coverage}%)`);
+  if (flk !== null && flk > tg.flakiness) issues.push(`Flakiness ${r1(flk)}% (target ≤${tg.flakiness}%)`);
+  if (esc !== null && esc > tg.escapeRate) issues.push(`Defect escape rate ${r1(esc)}% (target ≤${tg.escapeRate}%)`);
+  if (aut !== null && aut < tg.automation) issues.push(`Automation ${r1(aut)}% (target ≥${tg.automation}%)`);
   return issues;
 }
+
+/**
+ * How a team's current KPIs are judged: the targets valid at each value's date (target history,
+ * server/lib/targets.ts; default KPI_TARGETS) and the KPIs whose latest value is stale (left out:
+ * a stale value is shown, greyed, but not judged).
+ */
+export interface KpiJudgeOptions {
+  targets?: Partial<Record<keyof typeof KPI_TARGETS, number>>;
+  stale?: ReadonlySet<KpiTargetCheck['key']>;
+}
+
+/** KPI_TARGETS key ↔ the KPI it checks. */
+export const KPI_TARGET_KEYS = {
+  coverage: 'testCoverage',
+  automation: 'automationCoverage',
+  flakiness: 'testFlakinessRate',
+  escapeRate: 'defectEscapeRate',
+} as const;
 
 /** Company status "Teams vs KPI targets" bucket of one team. */
 export type KpiTrackBucket = 'onTrack' | 'atRisk' | 'offTrack' | 'noData';
@@ -382,6 +404,8 @@ export interface KpiTargetCheck {
   met: boolean | null;
   /** distance to the target in the KPI's unit (positive = short of it), null when met or not recorded */
   gap: number | null;
+  /** true when the latest value is stale (older than its expected update interval): not judged */
+  stale?: boolean;
 }
 
 /** Shares of KPI targets met that make a team "on track" / "at risk"; below = "off track". */
@@ -396,16 +420,18 @@ export const KPI_TRACK_RULE_TEXT =
  * ONE definition of a team's "Teams vs KPI targets" bucket (company summary counts and the
  * dashboard's breakdown modal): the share of recorded KPI targets met.
  */
-export function teamKpiTrack(t: Omit<TeamKpiValues, 'qaScore'>): { bucket: KpiTrackBucket; checks: KpiTargetCheck[]; met: number; recorded: number } {
+export function teamKpiTrack(t: Omit<TeamKpiValues, 'qaScore'>, opts: KpiJudgeOptions = {}): { bucket: KpiTrackBucket; checks: KpiTargetCheck[]; met: number; recorded: number } {
+  const tg = { ...KPI_TARGETS, ...(opts.targets ?? {}) };
   const mk = (key: KpiTargetCheck['key'], label: string, value: number | null, target: number, lowerIsBetter: boolean): KpiTargetCheck => {
-    const met = value === null ? null : lowerIsBetter ? value <= target : value >= target;
-    return { key, label, value, target, lowerIsBetter, met, gap: value === null || met ? null : Math.abs(value - target) };
+    const stale = value !== null && !!opts.stale?.has(key);
+    const met = value === null || stale ? null : lowerIsBetter ? value <= target : value >= target;
+    return { key, label, value, target, lowerIsBetter, met, gap: met === null || met ? null : Math.abs((value as number) - target), ...(stale ? { stale } : {}) };
   };
   const checks = [
-    mk('testCoverage', 'Test coverage', t.testCoverage, KPI_TARGETS.coverage, false),
-    mk('automationCoverage', 'Automation coverage', t.automationCoverage, KPI_TARGETS.automation, false),
-    mk('testFlakinessRate', 'Test flakiness', t.testFlakinessRate, KPI_TARGETS.flakiness, true),
-    mk('defectEscapeRate', 'Defect escape rate', t.defectEscapeRate, KPI_TARGETS.escapeRate, true),
+    mk('testCoverage', 'Test coverage', t.testCoverage, tg.coverage, false),
+    mk('automationCoverage', 'Automation coverage', t.automationCoverage, tg.automation, false),
+    mk('testFlakinessRate', 'Test flakiness', t.testFlakinessRate, tg.flakiness, true),
+    mk('defectEscapeRate', 'Defect escape rate', t.defectEscapeRate, tg.escapeRate, true),
   ];
   const recordedChecks = checks.filter((c) => c.met !== null);
   const met = recordedChecks.filter((c) => c.met).length;
@@ -414,6 +440,27 @@ export function teamKpiTrack(t: Omit<TeamKpiValues, 'qaScore'>): { bucket: KpiTr
   const share = met / recorded;
   const bucket: KpiTrackBucket = share >= KPI_TRACK_RULE.onTrack ? 'onTrack' : share >= KPI_TRACK_RULE.atRisk ? 'atRisk' : 'offTrack';
   return { bucket, checks, met, recorded };
+}
+
+/** One target period of a metric (target history): [validFrom, validTo). */
+export interface TargetPeriod {
+  validFrom: string;
+  validTo: string | null;
+  good: number;
+  warning: number;
+  scope: 'company' | 'department' | 'team' | 'default';
+}
+
+/** The instant a day is judged at: the end of that UTC day (a target changed during the day applies to it). */
+export function judgeInstant(day: string): number {
+  return Date.parse(`${day.slice(0, 10)}T00:00:00Z`) + 86_400_000 - 1;
+}
+
+/** The target valid on a day ('YYYY-MM-DD'), from periods returned by the API; null when none covers it. */
+export function targetOnDay(periods: TargetPeriod[] | undefined | null, day: string): TargetPeriod | null {
+  if (!periods?.length) return null;
+  const t = judgeInstant(day);
+  return periods.find((p) => Date.parse(p.validFrom) <= t && (p.validTo === null || t < Date.parse(p.validTo))) ?? null;
 }
 
 /** Short target text for a metric, e.g. "≥ 80%" or "≤ 4 hours". */

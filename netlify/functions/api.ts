@@ -15,6 +15,8 @@ import analyticsRoutes from '../../server/routes/analytics';
 import settingsRoutes from '../../server/routes/settings';
 import ingestRoutes from '../../server/routes/ingest';
 import tvRoutes from '../../server/routes/tv';
+import targetsRoutes from '../../server/routes/targets';
+import ingestionLogRoutes from '../../server/routes/ingestionLog';
 
 const app = express();
 
@@ -81,6 +83,8 @@ router.use('/analytics', analyticsRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/ingest', ingestRoutes);
 router.use('/tv', tvRoutes);
+router.use('/targets', targetsRoutes);
+router.use('/ingestion-log', ingestionLogRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix

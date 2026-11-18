@@ -325,6 +325,15 @@ export function defaultAnalyticsTeamId(actor: PolicyActor, teamsInScope: ScopeTe
   return teamsInScope[0]?.id ?? null;
 }
 
+/**
+ * May the actor see the people of a team (member names, emails, roles on GET /api/teams/:id)?
+ * The team's analytics scope: super_admin any team of the company, a QA manager the teams of the
+ * departments they manage, anyone assigned to the team. Team KPIs stay company-visible.
+ */
+export function canViewTeamMembers(actor: PolicyActor, team: ScopeTeam): boolean {
+  return canViewTeamAnalytics(actor, team);
+}
+
 /** May the actor see other developers' individual metrics for this team? */
 export function canViewIndividualDevelopers(actor: PolicyActor, team: ScopeTeam): boolean {
   return rolesOnTeam(actor, team).some((r) => DEVELOPER_INSIGHT_ROLES.includes(r));
@@ -359,4 +368,31 @@ export function canViewAuditEntry(actor: PolicyActor, entry: { department_ids?: 
   if (hasCompany(actor)) return true;
   const mine = managedDepartmentIds(actor);
   return (entry.department_ids ?? []).some((d) => mine.includes(d));
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Ingestion log and KPI targets
+ * ---------------------------------------------------------------------------------------- */
+
+/** Who may open the Ingestion log: super_admin (whole company) and QA managers (entries of their departments). */
+export function canViewIngestionLog(actor: PolicyActor): boolean {
+  return hasCompany(actor) || managedDepartmentIds(actor).length > 0;
+}
+
+/** May the actor see this ingestion log entry? super_admin: all; QA manager: entries touching a team of their departments. */
+export function canViewIngestionEntry(actor: PolicyActor, entry: { department_ids?: string[] | null }): boolean {
+  if (hasCompany(actor)) return true;
+  const mine = managedDepartmentIds(actor);
+  return (entry.department_ids ?? []).some((d) => mine.includes(d));
+}
+
+/**
+ * May the actor set KPI targets at this scope? Company: super_admin. Department: super_admin or
+ * a QA manager of it. Team: super_admin or the QA manager of the team's department (as other
+ * company configuration; team leads do not set their own targets).
+ */
+export function canSetTargets(actor: PolicyActor, scope: { type: 'company' | 'department' | 'team'; departmentId?: string | null }): boolean {
+  if (hasCompany(actor)) return true;
+  if (scope.type === 'company') return false;
+  return !!scope.departmentId && managedDepartmentIds(actor).includes(scope.departmentId);
 }

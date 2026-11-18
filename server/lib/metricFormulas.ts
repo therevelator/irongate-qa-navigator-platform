@@ -98,6 +98,118 @@ export function computeQaScore(row: QaScoreInputs | null | undefined): QaScoreRe
 }
 
 // ============================================================================
+// CONFIDENCE OF A COMPOSITE (how many of its inputs it is based on)
+// ============================================================================
+
+export type Confidence = 'high' | 'medium' | 'low';
+
+/** Share of inputs used: high ≥ 90 %, medium ≥ 50 %, otherwise low (also low when there is no value). */
+export const CONFIDENCE_RULE = { high: 0.9, medium: 0.5 } as const;
+
+export const CONFIDENCE_RULE_TEXT =
+  'Confidence = inputs used ÷ inputs expected: high at 90 % or more, medium at 50 % or more, otherwise low. ' +
+  'Stale and missing inputs are not used.';
+
+/** Every composite score is returned with the inputs it is based on. */
+export interface Composite {
+  value: number | null;
+  inputsUsed: number;
+  inputsTotal: number;
+  confidence: Confidence;
+}
+
+export function confidenceOf(inputsUsed: number, inputsTotal: number, hasValue = true): Confidence {
+  if (!hasValue || inputsTotal <= 0 || inputsUsed <= 0) return 'low';
+  const share = inputsUsed / inputsTotal;
+  return share >= CONFIDENCE_RULE.high ? 'high' : share >= CONFIDENCE_RULE.medium ? 'medium' : 'low';
+}
+
+export function composite(value: number | null, inputsUsed: number, inputsTotal: number): Composite {
+  return { value, inputsUsed, inputsTotal, confidence: confidenceOf(inputsUsed, inputsTotal, value !== null) };
+}
+
+/** "based on 3 of 4 inputs" (UI wording; the noun is per composite: inputs, teams, components). */
+export function basedOnText(c: Pick<Composite, 'inputsUsed' | 'inputsTotal'>, noun = 'inputs'): string {
+  return `based on ${c.inputsUsed} of ${c.inputsTotal} ${noun}`;
+}
+
+export const QA_SCORE_INPUTS = Object.keys(QA_SCORE_WEIGHTS) as Array<keyof typeof QA_SCORE_WEIGHTS>;
+
+export interface QaScoreComposite extends Composite {
+  status: QaStatus | null;
+  /** Inputs left out because their latest value is older than the expected update interval. */
+  staleInputs: string[];
+  /** Inputs with no recorded value. */
+  missingInputs: string[];
+}
+
+/**
+ * The QA score of a snapshot with stale inputs left out: exactly computeQaScore() on the same
+ * row with every stale input treated as not recorded (the database's compute_qa_score gives the
+ * same result for the same inputs; tests/database/qaScoreTrigger.test.ts checks every stale
+ * combination). Minimum-inputs rule unchanged: coverage plus at least 2 of the 4 inputs.
+ */
+export function qaScoreComposite(row: QaScoreInputs | null | undefined, stale: Iterable<string> = []): QaScoreComposite {
+  const staleSet = new Set(stale);
+  const fresh: QaScoreInputs = {};
+  const staleInputs: string[] = [];
+  const missingInputs: string[] = [];
+  for (const key of QA_SCORE_INPUTS) {
+    const v = toNum(row?.[key]);
+    if (v === null) missingInputs.push(key);
+    else if (staleSet.has(key)) staleInputs.push(key);
+    else fresh[key] = v;
+  }
+  const r = computeQaScore(fresh);
+  const used = QA_SCORE_INPUTS.length - staleInputs.length - missingInputs.length;
+  return { ...composite(r.score, used, QA_SCORE_INPUTS.length), status: r.status, staleInputs, missingInputs };
+}
+
+// ============================================================================
+// COMPANY AGGREGATES (team-size weighted, with the distribution)
+// ============================================================================
+
+export const COMPANY_AGGREGATE_TEXT =
+  'Company value = mean of the team values weighted by active team size (assigned members; a team with no members counts as 1). ' +
+  'Teams without a current value are left out. The unweighted mean, median, 25th percentile (weakest quartile), minimum and count are reported alongside.';
+
+export interface Distribution {
+  weightedMean: number | null;
+  unweightedMean: number | null;
+  median: number | null;
+  /** 25th percentile (linear interpolation): the weakest quarter of teams is at or below it. */
+  p25: number | null;
+  min: number | null;
+  count: number;
+}
+
+/** Percentile p (0..1) of sorted values, linear interpolation between closest ranks. */
+export function percentile(sorted: number[], p: number): number | null {
+  if (!sorted.length) return null;
+  const idx = (sorted.length - 1) * p;
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
+export function distributionOf(items: Array<{ value: Num; weight?: Num }>): Distribution {
+  const vals = items
+    .map((i) => ({ v: toNum(i.value), w: Math.max(1, toNum(i.weight) ?? 1) }))
+    .filter((i): i is { v: number; w: number } => i.v !== null);
+  if (!vals.length) return { weightedMean: null, unweightedMean: null, median: null, p25: null, min: null, count: 0 };
+  const sorted = vals.map((i) => i.v).sort((a, b) => a - b);
+  const wSum = vals.reduce((s, i) => s + i.w, 0);
+  return {
+    weightedMean: vals.reduce((s, i) => s + i.v * i.w, 0) / wSum,
+    unweightedMean: sorted.reduce((s, v) => s + v, 0) / sorted.length,
+    median: percentile(sorted, 0.5),
+    p25: percentile(sorted, 0.25),
+    min: sorted[0],
+    count: sorted.length,
+  };
+}
+
+// ============================================================================
 // TECHNICAL DEBT SCORE (team)
 // ============================================================================
 

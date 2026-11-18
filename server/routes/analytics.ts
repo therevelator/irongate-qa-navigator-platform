@@ -10,11 +10,15 @@ import { demoSummary, todayUtc } from '../seeds/demoData';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues, teamKpiTrack } from '../../src/config/metricsConfig';
-import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel, computeBottleneckScores } from '../lib/metricFormulas';
+import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
+import { evaluateSnapshot, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { loadIntervals, referenceFor } from '../lib/staleness';
+import { loadTargetBook } from '../lib/targets';
+import { teamMemberCountSql } from '../lib/teamMembership';
 
 const router = express.Router();
 
@@ -425,6 +429,15 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
     // defaults to the caller's own team). super_admin / qa_manager / team_lead see the
     // team's developers who have not opted out (plus themselves); qa_engineer / viewer
     // see only their own row (canViewIndividualDevelopers, server/lib/userPolicy.ts).
+    // Without a teamId, a caller who has no team of their own in scope (e.g. a super admin
+    // with no team assignment, as the Users page asks) gets an empty list, not an error.
+    const requestedTeam = typeof req.query.teamId === 'string' && req.query.teamId && req.query.teamId !== 'all' ? req.query.teamId : null;
+    if (!requestedTeam) {
+      const own = req.user?.primaryTeamId ? await getOwnedTeam(req, req.user.primaryTeamId) : null;
+      if (!own || !canViewTeamAnalytics(policyActor(req), own)) {
+        return res.json({ teamId: null, individualScope: 'none', developers: [], message: 'No team of your own: choose a team to see developer metrics.' });
+      }
+    }
     const scope = await resolveAnalyticsTeam(req, res, req.query.teamId);
     if (!scope) return;
     const scopeTeamId = scope.teamId;
@@ -2206,45 +2219,63 @@ const ENGINEERING_HEALTH_WEIGHTS = {
 };
 
 async function computeCompanyMetrics(companyId: string) {
-  // Active teams and the latest KPI snapshot per active team
+  // Active teams (with their size: active assigned members) and the latest KPI snapshot per active team
   const activeTeams = await query<any>(
-    'SELECT id, name FROM teams WHERE company_id = ? AND is_active = TRUE',
+    `SELECT t.id, t.name, t.department_id, ${teamMemberCountSql('t')} AS member_count
+       FROM teams t WHERE t.company_id = ? AND t.is_active = TRUE`,
     [companyId]
   );
+  const sizeOf = new Map<string, number>(activeTeams.map((t: any) => [t.id as string, Number(t.member_count) || 0]));
   const latestSnapshots = await query<any>(`
     SELECT DISTINCT ON (ks.team_id)
-      ks.*, t.name, to_char(ks.snapshot_date, 'YYYY-MM-DD') AS snapshot_day,
+      ks.*, t.name, t.department_id, to_char(ks.snapshot_date, 'YYYY-MM-DD') AS snapshot_day,
       (SELECT d.name FROM departments d WHERE d.id = t.department_id) AS department_name
     FROM kpi_snapshots ks
     JOIN teams t ON t.id = ks.team_id
     WHERE t.company_id = ? AND t.is_active = TRUE
     ORDER BY ks.team_id, ks.snapshot_date DESC, ks.created_at DESC
   `, [companyId]);
-  const teamsWithData = latestSnapshots.filter((t: any) => num(t.qa_score) !== null);
+
+  // Current values only: staleness at now (server/lib/staleness.ts) and the targets valid at
+  // each value's date (server/lib/targets.ts). A team's QA score leaves its stale inputs out.
+  const evalCtx: EvalContext = { companyId, intervals: await loadIntervals(companyId), book: await loadTargetBook(companyId) };
+  const now = Date.now();
+  const evaluated = latestSnapshots.map((t: any) => ({ t, ev: evaluateSnapshot(t, { id: t.team_id, department_id: t.department_id }, evalCtx, now) }));
+  const evalOf = new Map<string, SnapshotEvaluation>(evaluated.map((x: any) => [x.t.team_id as string, x.ev]));
+  const teamsWithData = evaluated.filter((x: any) => x.ev.qa.value !== null).map((x: any) => x.t);
+  const qaOf = (t: any) => evalOf.get(t.team_id)!.qa.value as number;
+  /** A KPI value of a team, null when not recorded or stale. */
+  const fresh = (t: any, field: string) => (evalOf.get(t.team_id)?.values[field]?.stale ? null : num(t[field]));
+  const weightOf = (teamId: string) => Math.max(1, sizeOf.get(teamId) ?? 0);
 
   const snapshotDays = teamsWithData.map((t: any) => t.snapshot_day as string).sort();
   const asOf: string | null = snapshotDays.length ? snapshotDays[snapshotDays.length - 1] : null;
   const oldestSnapshotDate: string | null = snapshotDays.length ? snapshotDays[0] : null;
 
-  // Global QA score: mean of each active team's latest qa_score
-  const globalQaScoreRaw = meanOf(teamsWithData.map((t: any) => num(t.qa_score)));
+  // Global QA score: mean of each active team's current QA score weighted by team size
+  // (COMPANY_AGGREGATE_TEXT), with the unweighted mean and the distribution alongside.
+  const qaDist = distributionOf(teamsWithData.map((t: any) => ({ value: qaOf(t), weight: weightOf(t.team_id) })));
+  const globalQaScoreRaw = qaDist.weightedMean;
   const globalQaScore = globalQaScoreRaw !== null ? Math.round(globalQaScoreRaw) : null;
+  const globalQaScoreConfidence = composite(globalQaScore, teamsWithData.length, activeTeams.length);
 
-  // Trend: vs. mean of each active team's latest qa_score dated 7-14 days ago.
-  // Null (not "stable") when that window has no snapshots.
-  const prev = await queryOne<any>(`
-    SELECT AVG(p.qa_score) AS avg_score, COUNT(*) AS n FROM (
-      SELECT DISTINCT ON (ks.team_id) ks.qa_score
-      FROM kpi_snapshots ks
-      JOIN teams t ON t.id = ks.team_id
-      WHERE t.company_id = ? AND t.is_active = TRUE
-        AND ks.qa_score IS NOT NULL
-        AND ks.snapshot_date >= CURRENT_DATE - 14
-        AND ks.snapshot_date < CURRENT_DATE - 7
-      ORDER BY ks.team_id, ks.snapshot_date DESC
-    ) p
+  // Trend: vs. the same weighted mean over each active team's latest snapshot dated 7-14 days
+  // ago (QA score of that day, without the inputs stale on that day).
+  // Null (not "stable") when that window has no scored snapshots.
+  const prevRows = await query<any>(`
+    SELECT DISTINCT ON (ks.team_id) ks.*, t.department_id, to_char(ks.snapshot_date, 'YYYY-MM-DD') AS snapshot_day
+    FROM kpi_snapshots ks
+    JOIN teams t ON t.id = ks.team_id
+    WHERE t.company_id = ? AND t.is_active = TRUE
+      AND ks.snapshot_date >= CURRENT_DATE - 14
+      AND ks.snapshot_date < CURRENT_DATE - 7
+    ORDER BY ks.team_id, ks.snapshot_date DESC
   `, [companyId]);
-  const prevScore = num(prev?.n) ? num(prev?.avg_score) : null;
+  const prevDist = distributionOf(prevRows.map((r: any) => ({
+    value: evaluateSnapshot(r, { id: r.team_id, department_id: r.department_id }, evalCtx, referenceFor(r.snapshot_day, now)).qa.value,
+    weight: weightOf(r.team_id),
+  })));
+  const prevScore = prevDist.weightedMean;
   const globalQaScoreTrend = globalQaScoreRaw !== null && prevScore !== null
     ? Math.round(globalQaScoreRaw - prevScore)
     : null;
@@ -2256,50 +2287,61 @@ async function computeCompanyMetrics(companyId: string) {
     else riskLevel = 'stable';
   }
 
-  // Averages over teams that have a value (nulls excluded, never counted as 0)
-  const avgField = (field: string) => roundTo(meanOf(teamsWithData.map((t: any) => num(t[field]))), 1);
+  // Averages over teams that have a current value (stale and missing values excluded, never
+  // counted as 0), weighted by team size; the unweighted means are in kpiAveragesUnweighted.
+  const avgDist = (field: string) => distributionOf(teamsWithData.map((t: any) => ({ value: fresh(t, field), weight: weightOf(t.team_id) })));
+  const avgField = (field: string) => roundTo(avgDist(field).weightedMean, 1);
   const avgTestCoverage = avgField('test_coverage');
   const avgDefectEscapeRate = avgField('defect_escape_rate');
   const automationCoverage = avgField('automation_coverage');
   const avgFlakinessRate = avgField('test_flakiness_rate');
+  const kpiAveragesUnweighted = {
+    avgTestCoverage: roundTo(avgDist('test_coverage').unweightedMean, 1),
+    avgDefectEscapeRate: roundTo(avgDist('defect_escape_rate').unweightedMean, 1),
+    automationCoverage: roundTo(avgDist('automation_coverage').unweightedMean, 1),
+    avgFlakinessRate: roundTo(avgDist('test_flakiness_rate').unweightedMean, 1),
+  };
 
   // Top teams by current score (not an improvement measure)
-  const sortedByScore = [...teamsWithData].sort((a, b) => (num(b.qa_score) as number) - (num(a.qa_score) as number));
-  const topImproving = sortedByScore.slice(0, 3).map(t => ({ name: t.name, score: Math.round(num(t.qa_score) as number) }));
+  const sortedByScore = [...teamsWithData].sort((a, b) => qaOf(b) - qaOf(a));
+  const topImproving = sortedByScore.slice(0, 3).map(t => ({ name: t.name, score: Math.round(qaOf(t)) }));
 
-  // Needs attention: QA score critical or any recorded KPI off target. Same rule as the
-  // dashboard table's "Needs attention" filter (teamAttentionIssues in metricsConfig).
+  // Needs attention: QA score critical or any current KPI off the target valid at its date. Same
+  // rule as the dashboard table's "Needs attention" filter (teamAttentionIssues in metricsConfig).
   type AttentionItem = { name: string; score: number; issue: string; issues: string[]; snapshotDate: string };
   const needsAttention: AttentionItem[] = teamsWithData
     .map((t: any): AttentionItem => {
-      const score = num(t.qa_score) as number;
+      const score = qaOf(t);
       const issues = teamAttentionIssues({
         qaScore: score,
         testCoverage: num(t.test_coverage),
         testFlakinessRate: num(t.test_flakiness_rate),
         defectEscapeRate: num(t.defect_escape_rate),
         automationCoverage: num(t.automation_coverage),
-      });
+      }, evalOf.get(t.team_id)!.judge);
       return { name: t.name, score: Math.round(score), issue: issues.join('; '), issues, snapshotDate: t.snapshot_day };
     })
     .filter((t: AttentionItem) => t.issues.length > 0)
     .sort((a: AttentionItem, b: AttentionItem) => a.score - b.score || b.issues.length - a.issues.length);
 
-  // KPI status: share of recorded KPI targets met (needs >= 2 recorded KPIs). One rule
-  // (teamKpiTrack in src/config/metricsConfig.ts) gives both the per-team list and the counts,
-  // so the dashboard's breakdown can never disagree with the numbers.
+  // KPI status: share of current KPI targets met (needs >= 2). One rule (teamKpiTrack in
+  // src/config/metricsConfig.ts, with the targets valid at each value's date and stale values
+  // left out) gives both the per-team list and the counts, so the dashboard's breakdown can
+  // never disagree with the numbers.
   const kpiStatusTeams = teamsWithData.map((t: any) => {
+    const ev = evalOf.get(t.team_id)!;
     const track = teamKpiTrack({
       testCoverage: num(t.test_coverage),
       testFlakinessRate: num(t.test_flakiness_rate),
       defectEscapeRate: num(t.defect_escape_rate),
       automationCoverage: num(t.automation_coverage),
-    });
+    }, ev.judge);
     return {
       teamId: t.team_id as string,
       name: t.name as string,
       department: (t.department_name ?? null) as string | null,
-      qaScore: num(t.qa_score),
+      qaScore: qaOf(t),
+      qaScoreConfidence: qaConfidenceJson(ev.qa),
       snapshotDate: t.snapshot_day as string,
       ...track,
     };
@@ -2363,15 +2405,21 @@ async function computeCompanyMetrics(companyId: string) {
   const wellnessRaw = happiness;
   const developerWellnessIndex = wellnessRaw !== null ? Math.round(wellnessRaw) : null;
 
-  // Delivery performance (DORA): mean of per-team level scores over classified teams
+  // Delivery performance (DORA): mean of per-team level scores over classified teams, weighted
+  // by team size. A team with a stale DORA input is 'Unknown' (left out), like a missing one.
   const doraLevels: Record<DoraLevelOrUnknown, number> = { Elite: 0, High: 0, Medium: 0, Low: 0, Unknown: 0 };
-  const doraScores: number[] = [];
+  const doraScores: Array<{ value: number; weight: number }> = [];
   for (const t of teamsWithData) {
-    const level = classifyDoraLevel(t);
+    const level = classifyDoraLevel({
+      deployment_frequency_per_week: fresh(t, 'deployment_frequency_per_week'),
+      lead_time_days: fresh(t, 'lead_time_days'),
+      change_failure_rate: fresh(t, 'change_failure_rate'),
+      mttr_hours: fresh(t, 'mttr_hours'),
+    });
     doraLevels[level]++;
-    if (level !== 'Unknown') doraScores.push(DORA_LEVEL_SCORE[level]);
+    if (level !== 'Unknown') doraScores.push({ value: DORA_LEVEL_SCORE[level], weight: weightOf(t.team_id) });
   }
-  const doraMean = meanOf(doraScores);
+  const doraMean = distributionOf(doraScores).weightedMean;
   const deliveryPerformanceScore = doraMean !== null ? Math.round(doraMean) : null;
 
   // Pipeline health: successful / (successful + failed) pipeline runs in the last
@@ -2406,6 +2454,11 @@ async function computeCompanyMetrics(companyId: string) {
   const engineeringHealthScore = healthRaw !== null ? Math.round(healthRaw) : null;
   const healthIncluded = (Object.keys(healthParts) as Array<keyof typeof healthParts>).filter(k => healthParts[k] !== null);
   const healthMissing = (Object.keys(healthParts) as Array<keyof typeof healthParts>).filter(k => healthParts[k] === null);
+  const engineeringHealthConfidence = composite(engineeringHealthScore, healthIncluded.length, Object.keys(healthParts).length);
+  const deliveryPerformanceConfidence = composite(deliveryPerformanceScore, doraScores.length, teamsWithData.length);
+  // Any current KPI value of an active team comes from generated sample data.
+  const sampleData = evaluated.some((x: any) => x.ev.sampleData);
+  const round1 = (v: number | null) => roundTo(v, 1);
 
   // Rule-based summary text (no AI)
   let aiSummary: string;
@@ -2416,11 +2469,16 @@ async function computeCompanyMetrics(companyId: string) {
     else if (globalQaScoreTrend > 0) aiSummary = `Quality improved by ${globalQaScoreTrend} points vs. 7-14 days ago. `;
     else if (globalQaScoreTrend < 0) aiSummary = `Quality declined by ${Math.abs(globalQaScoreTrend)} points vs. 7-14 days ago. `;
     else aiSummary = 'Quality unchanged vs. 7-14 days ago. ';
-    const teamsLowCoverage = teamsWithData.filter((t: any) => num(t.test_coverage) !== null && (num(t.test_coverage) as number) < KPI_TARGETS.coverage).length;
-    if (teamsLowCoverage > 0) aiSummary += `${teamsLowCoverage} team${teamsLowCoverage > 1 ? 's' : ''} below ${KPI_TARGETS.coverage}% coverage. `;
+    const teamsLowCoverage = teamsWithData.filter((t: any) => {
+      const v = fresh(t, 'test_coverage');
+      return v !== null && v < evalOf.get(t.team_id)!.judge.targets.coverage;
+    }).length;
+    if (teamsLowCoverage > 0) aiSummary += `${teamsLowCoverage} team${teamsLowCoverage > 1 ? 's' : ''} below their test coverage target. `;
     if (automationCoverage !== null) {
-      aiSummary += automationCoverage < KPI_TARGETS.automation
-        ? `Automation at ${automationCoverage}% - below the ${KPI_TARGETS.automation}% target. `
+      // The company-level automation target in force today (target history; default KPI_TARGETS).
+      const automationTarget = evalCtx.book.at({ id: '', department_id: null }, companyId, 'automation_coverage', now).good;
+      aiSummary += automationCoverage < automationTarget
+        ? `Automation at ${automationCoverage}% - below the ${automationTarget}% target. `
         : `Automation coverage at ${automationCoverage}%. `;
     }
     if (asOf) aiSummary += `Based on KPI snapshots as of ${asOf}.`;
@@ -2436,6 +2494,22 @@ async function computeCompanyMetrics(companyId: string) {
 
     globalQaScore,
     globalQaScoreTrend,
+    // What the headline is based on (teams with a current QA score of the active teams).
+    globalQaScoreConfidence,
+    // Distribution of the current team QA scores (COMPANY_AGGREGATE_TEXT).
+    globalQaScoreDistribution: {
+      weightedMean: round1(qaDist.weightedMean),
+      unweightedMean: round1(qaDist.unweightedMean),
+      median: round1(qaDist.median),
+      p25: round1(qaDist.p25),
+      min: round1(qaDist.min),
+      count: qaDist.count,
+      weighting: COMPANY_AGGREGATE_TEXT,
+    },
+    engineeringHealthConfidence,
+    deliveryPerformanceConfidence,
+    kpiAveragesUnweighted,
+    sampleData,
     riskLevel,
     avgTestCoverage,
     avgDefectEscapeRate,
@@ -2459,7 +2533,7 @@ async function computeCompanyMetrics(companyId: string) {
       missing: healthMissing
     },
     deliveryPerformanceBasis: {
-      method: 'Mean of per-team DORA level scores (Elite 100, High 80, Medium 60, Low 40); bands as getDORALevel',
+      method: 'Mean of per-team DORA level scores (Elite 100, High 80, Medium 60, Low 40), weighted by team size; bands as getDORALevel; teams with a missing or stale input are not classified',
       teamsClassified: doraScores.length,
       levels: doraLevels
     },

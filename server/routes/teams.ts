@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor } from '../middleware/access';
-import { canViewIndividualDevelopers, canManageDepartment, canRequestTeamInsights } from '../lib/userPolicy';
+import { canViewIndividualDevelopers, canManageDepartment, canRequestTeamInsights, canViewTeamMembers } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { groqChatCompletion, parseGroqJson, isGroqConfigured } from '../lib/groq';
 import {
@@ -23,6 +23,9 @@ import { METRICS_CONFIG, type MetricsConfig } from '../../src/config/metricsConf
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 import { teamMembers } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
+import { evaluateSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { loadIntervals } from '../lib/staleness';
+import { loadTargetBook } from '../lib/targets';
 
 const router = express.Router();
 
@@ -201,29 +204,39 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     sql += ' ORDER BY t.name';
 
     const teams = await query<any[]>(sql, params);
-    
+
+    // Staleness and targets: one load per request (server/lib/kpiEvaluation.ts).
+    const evalCtx: EvalContext = {
+      companyId: req.companyId as string,
+      intervals: await loadIntervals(req.companyId as string),
+      book: await loadTargetBook(req.companyId as string),
+    };
+    const now = Date.now();
+
     // Transform teams to match frontend format
-    // Status of a single headline metric against METRICS_CONFIG; null when not recorded.
-    const metricStatus = (value: number | null, key: keyof MetricsConfig) => {
+    // Status of a single headline metric against the target valid at the value's date; null when
+    // not recorded or when the value is stale (shown, not judged).
+    const metricStatus = (value: number | null, key: string, ev: SnapshotEvaluation | null) => {
       if (value === null) return null;
-      const cfg = METRICS_CONFIG[key];
+      if (ev?.staleness[key]?.stale) return null;
+      const cfg = ev?.thresholds[key] ?? METRICS_CONFIG[key as keyof MetricsConfig];
       if (cfg.lowerIsBetter) return value <= cfg.good ? 'good' : value <= cfg.warning ? 'warning' : 'critical';
       return value >= cfg.good ? 'good' : value >= cfg.warning ? 'warning' : 'critical';
     };
 
     const transformedTeams = await Promise.all(teams.map(async team => {
       const technicalDebtScore = await getTechnicalDebtScore(team.id);
-      const qaScore = toNum(team.qaScore);
-      // A team with no snapshot (or no QA score) has no score — never 0/critical.
-      const storedStatus = team.status === 'good' || team.status === 'warning' || team.status === 'critical'
-        ? team.status
-        : null;
-      const status = qaScore === null ? 'no-data' : (storedStatus ?? qaStatusFromScore(qaScore));
+      // QA score with stale inputs left out, and what it is based on. A team with no snapshot
+      // (or not enough current inputs) has no score — never 0/critical.
+      const ev = team.snapshot_date ? evaluateSnapshot(team, { id: team.id, department_id: team.department_id }, evalCtx, now) : null;
+      const qaScore = ev ? ev.qa.value : null;
+      const status = qaScore === null ? 'no-data' : (ev?.qa.status ?? qaStatusFromScore(qaScore));
 
       const coverage = toNum(team.test_coverage);
       const density = toNum(team.defect_density);
       const automation = toNum(team.automation_coverage);
       const deploys = toNum(team.deployment_frequency_per_week);
+      const staleFlag = (key: string) => (ev?.staleness[key]?.stale ? { stale: true, staleSince: ev.staleness[key].staleSince } : {});
 
       return {
         id: team.id,
@@ -234,6 +247,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
         description: team.description,
         qaScore,
         status,
+        // The stored snapshot score (every input the snapshot holds, stale ones included).
+        qaScoreRecorded: toNum(team.qaScore),
+        qaScoreConfidence: ev ? qaConfidenceJson(ev.qa) : null,
         snapshotDate: team.snapshot_date ?? null,
         memberCount: team.member_count || 0,
         teamLead: team.team_lead_name,
@@ -248,8 +264,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
             unit: '%',
             change: null,
             trend: null,
-            status: metricStatus(coverage, 'testCoverage'),
-            history: []
+            status: metricStatus(coverage, 'testCoverage', ev),
+            history: [],
+            ...staleFlag('testCoverage')
           },
           {
             id: 'defect-density',
@@ -258,8 +275,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
             unit: '/1k',
             change: null,
             trend: null,
-            status: metricStatus(density, 'defectDensity'),
-            history: []
+            status: metricStatus(density, 'defectDensity', ev),
+            history: [],
+            ...staleFlag('defectDensity')
           },
           {
             id: 'automation-coverage',
@@ -268,8 +286,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
             unit: '%',
             change: null,
             trend: null,
-            status: metricStatus(automation, 'automationCoverage'),
-            history: []
+            status: metricStatus(automation, 'automationCoverage', ev),
+            history: [],
+            ...staleFlag('automationCoverage')
           },
           {
             id: 'deployment-frequency',
@@ -278,8 +297,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
             unit: '',
             change: null,
             trend: null,
-            status: metricStatus(deploys, 'deploymentFrequencyPerWeek'),
-            history: []
+            status: metricStatus(deploys, 'deploymentFrequencyPerWeek', ev),
+            history: [],
+            ...staleFlag('deploymentFrequencyPerWeek')
           }
         ],
         technicalDebtScore,
@@ -310,7 +330,16 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
           infrastructureFailures: team.infrastructure_failures
         },
         // Per-field provenance of the latest snapshot: { column: { source, recorded_at, ... } }.
-        kpiFieldSources: team.field_sources ?? {}
+        kpiFieldSources: team.field_sources ?? {},
+        // camelCase KPI key -> { recordedAt, stale, staleSince, source } (server/lib/staleness.ts).
+        kpiStaleness: ev?.staleness ?? {},
+        // camelCase KPI key -> target valid at the value's date (target history).
+        kpiThresholds: ev?.thresholds ?? null,
+        // teamKpiTrack / teamAttentionIssues inputs: targets at the values' dates and stale KPIs.
+        kpiTargets: ev ? ev.judge.targets : null,
+        staleKpis: ev ? Array.from(ev.judge.stale) : [],
+        // Any value of the latest snapshot is generated sample data (source 'synthetic').
+        sampleData: ev?.sampleData ?? false
       };
     }));
     
@@ -352,11 +381,18 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       [req.params.id]
     );
 
-    // Add KPI data to team response
-    team.qaScore = toNum(kpiSnapshot?.qa_score);
-    team.status = team.qaScore === null
-      ? 'no-data'
-      : (['good', 'warning', 'critical'].includes(kpiSnapshot?.status) ? kpiSnapshot.status : qaStatusFromScore(team.qaScore));
+    // Add KPI data to team response. QA score with stale inputs left out (and what it is
+    // based on); the stored snapshot score is qaScoreRecorded.
+    const evalCtx: EvalContext = {
+      companyId: req.companyId as string,
+      intervals: await loadIntervals(req.companyId as string),
+      book: await loadTargetBook(req.companyId as string),
+    };
+    const ev = kpiSnapshot ? evaluateSnapshot(kpiSnapshot, { id: team.id, department_id: team.department_id }, evalCtx, Date.now()) : null;
+    team.qaScore = ev ? ev.qa.value : null;
+    team.status = team.qaScore === null ? 'no-data' : (ev?.qa.status ?? qaStatusFromScore(team.qaScore));
+    team.qaScoreRecorded = toNum(kpiSnapshot?.qa_score);
+    team.qaScoreConfidence = ev ? qaConfidenceJson(ev.qa) : null;
     team.snapshotDate = kpiSnapshot?.snapshot_date ?? null;
     team.taskSizingAccuracy = toNum(kpiSnapshot?.sizing_accuracy);
     if (kpiSnapshot) {
@@ -386,13 +422,27 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
         infrastructureFailures: kpiSnapshot.infrastructure_failures
       };
       team.kpiFieldSources = kpiSnapshot.field_sources ?? {};
+      team.kpiStaleness = ev?.staleness ?? {};
+      team.kpiThresholds = ev?.thresholds ?? null;
+      team.kpiTargets = ev ? ev.judge.targets : null;
+      team.staleKpis = ev ? Array.from(ev.judge.stale) : [];
+      team.sampleData = ev?.sampleData ?? false;
     }
 
     team.technicalDebtScore = technicalDebtScore;
 
-    // Team members: active users with an active role assignment on the team
-    // (server/lib/assignments.ts, the one membership definition).
-    team.members = await teamMembers(req.params.id);
+    // Team members (names, emails, roles): only for callers who may see the people of this team
+    // (canViewTeamMembers in server/lib/userPolicy.ts: super_admin, the QA manager of its
+    // department, people assigned to the team). Others get the team and its KPIs only.
+    const actor = policyActor(req);
+    if (canViewTeamMembers(actor, { id: team.id, department_id: team.department_id })) {
+      // Active users with an active role assignment on the team (server/lib/assignments.ts).
+      team.members = await teamMembers(req.params.id);
+      team.membersHidden = false;
+    } else {
+      team.members = [];
+      team.membersHidden = true;
+    }
 
     res.json({ team });
   } catch (error) {
@@ -425,72 +475,18 @@ router.patch('/:id/ai-toggle', authenticateToken, async (req: AuthRequest, res) 
 });
 
 // Get KPI history for a team (for graphs)
+// Scope: the team's analytics scope (assertTeamAnalytics → canViewTeamAnalytics).
+// qa_score per day is the score of that day with the inputs that were stale on that day left out
+// (qaScoreConfidence per day says what it is based on); targets lists the target periods valid
+// in the window (target history) so every day is judged with the target of that day.
 router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    // Team-level KPIs are company-visible (the dashboard lists every team's latest KPIs to
-    // every role), so the history uses the same rule as GET /teams/:id: company scope only.
-    if (!(await getOwnedTeam(req, req.params.id))) return res.status(404).json({ error: 'Team not found' });
+    const owned = await assertTeamAnalytics(req, res, req.params.id);
+    if (!owned) return;
     const { days = '30' } = req.query;
     const numDays = Math.min(parseInt(days as string) || 30, 90);
-
-    const history = await query<any>(
-      `SELECT 
-        snapshot_date,
-        test_coverage,
-        test_flakiness_rate,
-        defect_density,
-        defect_escape_rate,
-        code_quality_score,
-        avg_build_time_minutes,
-        test_execution_time_minutes,
-        deployment_frequency_per_week,
-        lead_time_days,
-        mttr_hours,
-        parallel_test_efficiency,
-        sprint_velocity,
-        sprint_commitment_rate,
-        sprint_carryover,
-        first_time_pass_rate,
-        blocked_time_hours,
-        automation_coverage,
-        automation_roi,
-        change_failure_rate,
-        mtbf_hours,
-        system_availability,
-        infrastructure_failures,
-        qa_score
-       FROM kpi_snapshots
-       WHERE team_id = ? AND snapshot_date >= CURRENT_DATE - CAST(? AS INTEGER)
-       ORDER BY snapshot_date ASC`,
-      [req.params.id, numDays]
-    );
-
-    // Transform to metric-keyed format for easy frontend consumption
-    const metricHistory: Record<string, { date: string; value: number }[]> = {};
-    const metricKeys = [
-      'test_coverage', 'test_flakiness_rate', 'defect_density', 'defect_escape_rate',
-      'code_quality_score', 'avg_build_time_minutes', 'test_execution_time_minutes',
-      'deployment_frequency_per_week', 'lead_time_days', 'mttr_hours',
-      'parallel_test_efficiency', 'sprint_velocity', 'sprint_commitment_rate',
-      'sprint_carryover', 'first_time_pass_rate', 'blocked_time_hours',
-      'automation_coverage', 'automation_roi', 'change_failure_rate',
-      'mtbf_hours', 'system_availability', 'infrastructure_failures', 'qa_score'
-    ];
-
-    for (const key of metricKeys) {
-      metricHistory[key] = [];
-    }
-
-    for (const row of history) {
-      const date = String(row.snapshot_date); // DATE → 'YYYY-MM-DD' (db.ts type parser)
-      for (const key of metricKeys) {
-        if (row[key] !== null && row[key] !== undefined) {
-          metricHistory[key].push({ date, value: Number(row[key]) });
-        }
-      }
-    }
-
-    res.json({ history: metricHistory, days: numDays, count: history.length });
+    const out = await kpiHistoryFor(req.companyId as string, owned, numDays);
+    res.json(out);
   } catch (error) {
     console.error('Error fetching KPI history:', error);
     res.status(500).json({ error: 'Failed to fetch KPI history' });

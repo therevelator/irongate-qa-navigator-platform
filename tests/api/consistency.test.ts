@@ -156,8 +156,9 @@ describe('Consistency regressions', () => {
     await request(API_URL).delete(`/api/admin/users/${created.body.id}`).set('Cookie', c.admin);
   });
 
-  // M2: team detail and team history use the same read rule
-  it('CON-009: team KPI history is readable by every role that can open the team', async () => {
+  // M2 (updated in R2 phase 2): team detail (KPIs) is company-visible, its member list and its
+  // KPI history follow the shared policy (canViewTeamMembers / analytics scope).
+  it('CON-009: another team: detail (KPIs) readable, members hidden, KPI history outside the analytics scope (403)', async () => {
     if (skip()) return;
     const other = teams.find((t) => t.id !== u.lead.primary_team_id && t.id !== u.viewer.primary_team_id);
     if (!other) return;
@@ -165,8 +166,13 @@ describe('Consistency regressions', () => {
       const detail = await request(API_URL).get(`/api/teams/${other.id}`).set('Cookie', c[k]);
       const history = await request(API_URL).get(`/api/teams/${other.id}/kpi-history?days=30`).set('Cookie', c[k]);
       expect(detail.status).toBe(200);
-      expect(history.status).toBe(200);
+      expect(detail.body.team.membersHidden).toBe(true);
+      expect(detail.body.team.members).toEqual([]);
+      expect(history.status).toBe(403);
     }
+    // In scope: the caller's own team.
+    const own = await request(API_URL).get(`/api/teams/${u.lead.primary_team_id}/kpi-history?days=30`).set('Cookie', c.lead);
+    expect(own.status).toBe(200);
   });
 
   // M5

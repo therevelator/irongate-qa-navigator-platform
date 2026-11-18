@@ -9,7 +9,7 @@
  */
 import { Client } from 'pg';
 import dotenv from 'dotenv';
-import { computeQaScore, qaStatusFromScore } from '../../server/lib/metricFormulas';
+import { computeQaScore, qaScoreComposite, qaStatusFromScore, QA_SCORE_INPUTS } from '../../server/lib/metricFormulas';
 
 dotenv.config();
 
@@ -142,6 +142,41 @@ describe('QA score: SQL function matches computeQaScore()', () => {
       expect(upd[0]).toEqual({ qa_score: expected.score, status: expected.status });
     } finally {
       await client.query('ROLLBACK');
+    }
+  });
+
+  it('QA-SQL-005: stale inputs left out (qaScoreComposite) equal the SQL function with those inputs missing, on every case and stale combination', async () => {
+    // The grid part of buildCases() (every boundary) plus 2,000 random cases, each with all 16
+    // combinations of stale inputs: excluding a stale input must be exactly "not recorded" in both.
+    const base = buildCases();
+    const cases = [...base.slice(0, 14 * 11 * 8 * 9), ...base.slice(14 * 11 * 8 * 9, 14 * 11 * 8 * 9 + 2000)];
+    const rows: Array<{ c: Case; mask: number }> = [];
+    for (const c of cases) for (let mask = 0; mask < 16; mask++) rows.push({ c, mask });
+    const nulled = (r: { c: Case; mask: number }, i: number) => ((r.mask >> i) & 1 ? null : r.c[i]);
+    const { rows: sql } = await client.query(
+      `SELECT t.i, public.compute_qa_score(t.cov, t.esc, t.cfr, t.cq) AS score
+         FROM unnest($1::int[], $2::numeric[], $3::numeric[], $4::numeric[], $5::numeric[]) AS t(i, cov, esc, cfr, cq)
+        ORDER BY t.i`,
+      [rows.map((_, i) => i), rows.map((r) => nulled(r, 0)), rows.map((r) => nulled(r, 1)), rows.map((r) => nulled(r, 2)), rows.map((r) => nulled(r, 3))]
+    );
+    expect(sql).toHaveLength(rows.length);
+    const mismatches: string[] = [];
+    sql.forEach((r: any) => {
+      const { c, mask } = rows[r.i];
+      const stale = QA_SCORE_INPUTS.filter((_, i) => (mask >> i) & 1);
+      const comp = qaScoreComposite({ test_coverage: c[0], defect_escape_rate: c[1], change_failure_rate: c[2], code_quality_score: c[3] }, stale);
+      if (comp.value !== r.score || comp.status !== qaStatusFromScore(r.score)) {
+        mismatches.push(`${JSON.stringify(c)} stale=${stale.join(',')}: ts=${comp.value} sql=${r.score}`);
+      }
+      // inputsUsed counts recorded, non-stale inputs.
+      const used = c.filter((v, i) => v !== null && !((mask >> i) & 1)).length;
+      if (comp.inputsUsed !== used || comp.inputsTotal !== 4) mismatches.push(`${JSON.stringify(c)} mask=${mask}: inputsUsed ${comp.inputsUsed} != ${used}`);
+    });
+    expect(mismatches.slice(0, 10)).toEqual([]);
+    // With nothing stale it is computeQaScore() itself.
+    for (const c of cases.slice(0, 500)) {
+      const row = { test_coverage: c[0], defect_escape_rate: c[1], change_failure_rate: c[2], code_quality_score: c[3] };
+      expect(qaScoreComposite(row).value).toBe(computeQaScore(row).score);
     }
   });
 

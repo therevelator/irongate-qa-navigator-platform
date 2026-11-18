@@ -59,7 +59,7 @@ const ACTION_LABEL: Record<string, string> = {
   'team.create': 'Team created', 'team.update': 'Team changed', 'team.move': 'Team moved', 'team.lead_change': 'Team lead changed',
   'team.deactivate': 'Team deactivated', 'team.activate': 'Team reactivated',
   'invitation.create': 'Invitation sent', 'invitation.resend': 'Invitation re-sent', 'invitation.revoke': 'Invitation revoked', 'invitation.accept': 'Invitation accepted',
-  'config.update': 'Settings changed', 'config.metric_interval': 'Update frequency', 'config.pipeline': 'Pipeline settings',
+  'config.update': 'Settings changed', 'targets.update': 'KPI targets', 'config.metric_interval': 'Update frequency', 'config.pipeline': 'Pipeline settings',
   'api_key.create': 'API key created', 'api_key.revoke': 'API key revoked', 'sso.link': 'Single sign-on linked', 'company.create': 'Organisation created',
   undo: 'Undo',
 };

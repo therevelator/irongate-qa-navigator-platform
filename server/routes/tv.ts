@@ -4,6 +4,9 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamAnalytics } from '../middleware/access';
 import { TECH_DEBT_OPEN_WEIGHT_SQL, techDebtScoreFromWeight, toNum, qaStatusFromScore } from '../lib/metricFormulas';
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
+import { evaluateSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext } from '../lib/kpiEvaluation';
+import { loadIntervals } from '../lib/staleness';
+import { loadTargetBook } from '../lib/targets';
 
 /**
  * Team TV / meeting mode (src/components/TeamTvView.tsx).
@@ -45,7 +48,6 @@ const KPI_COLUMNS: Record<string, string> = {
   system_availability: 'systemAvailability',
   infrastructure_failures: 'infrastructureFailures',
 };
-const HISTORY_COLUMNS = [...Object.keys(KPI_COLUMNS), 'qa_score'];
 const HISTORY_DAYS = 90;
 
 router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
@@ -72,42 +74,35 @@ router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT ${TECH_DEBT_OPEN_WEIGHT_SQL} AS open_weight FROM technical_debt WHERE team_id = ?`,
       [owned.id]
     );
-    const history = await query<any>(
-      `SELECT snapshot_date, ${HISTORY_COLUMNS.join(', ')}
-         FROM kpi_snapshots
-        WHERE team_id = ? AND snapshot_date >= CURRENT_DATE - CAST(? AS INTEGER)
-        ORDER BY snapshot_date ASC`,
-      [owned.id, HISTORY_DAYS]
-    );
-
-    const metricHistory: Record<string, { date: string; value: number }[]> = {};
-    for (const key of HISTORY_COLUMNS) metricHistory[key] = [];
-    for (const row of history) {
-      const date = String(row.snapshot_date);
-      for (const key of HISTORY_COLUMNS) {
-        const v = toNum(row[key]);
-        if (v !== null) metricHistory[key].push({ date, value: v });
-      }
-    }
+    // Same history as Team detail (QA score per day without that day's stale inputs; target periods).
+    const hist = await kpiHistoryFor(req.companyId as string, owned, HISTORY_DAYS);
 
     let latest: any = null;
     if (snapshot) {
+      const ctx: EvalContext = { companyId: req.companyId as string, intervals: await loadIntervals(req.companyId as string), book: await loadTargetBook(req.companyId as string) };
+      const ev = evaluateSnapshot(snapshot, owned, ctx, Date.now());
       const kpiData: Record<string, number | null> = {};
       for (const [col, key] of Object.entries(KPI_COLUMNS)) kpiData[key] = toNum(snapshot[col]);
       const sources: Record<string, any> = snapshot.field_sources && typeof snapshot.field_sources === 'object' ? snapshot.field_sources : {};
       const recorded = Object.values(sources)
         .map((s: any) => (s && typeof s.recorded_at === 'string' ? Date.parse(s.recorded_at) : NaN))
         .filter((t) => Number.isFinite(t));
-      const qaScore = toNum(snapshot.qa_score);
+      const qaScore = ev.qa.value;
       latest = {
         snapshotDate: String(snapshot.snapshot_date),
+        // QA score with stale inputs left out, and what it is based on.
         qaScore,
         status: qaScore === null ? 'no-data' : qaStatusFromScore(qaScore),
+        qaScoreConfidence: qaConfidenceJson(ev.qa),
         kpiData,
+        // camelCase KPI key -> { recordedAt, stale, staleSince, source }.
+        kpiStaleness: ev.staleness,
+        // camelCase KPI key -> target valid at the value's date (target history).
+        kpiThresholds: ev.thresholds,
         // Newest per-field recorded_at of the snapshot (ingestion provenance), when known.
         lastRecordedAt: recorded.length ? new Date(Math.max(...recorded)).toISOString() : null,
         // Any value of the snapshot from generated demo data (field_sources source 'synthetic').
-        sampleData: Object.values(sources).some((s: any) => s?.source === 'synthetic'),
+        sampleData: ev.sampleData,
       };
     }
 
@@ -123,8 +118,11 @@ router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
       latest,
       // Same value as Team detail (metricFormulas.techDebtScoreFromWeight over open items).
       technicalDebtScore: techDebtScoreFromWeight(debt?.open_weight),
-      history: metricHistory,
+      history: hist.history,
       historyDays: HISTORY_DAYS,
+      // Target periods per metric in the history window and the QA score basis per day.
+      targets: hist.targets,
+      qaConfidence: hist.qaConfidence,
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {

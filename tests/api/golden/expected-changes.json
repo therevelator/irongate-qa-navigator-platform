@@ -1,0 +1,592 @@
+[
+  {
+    "path": "summary.engineeringHealthScore",
+    "before": 75,
+    "after": 80,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.deliveryPerformanceScore",
+    "before": 75,
+    "after": 80,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.globalQaScore",
+    "before": 85,
+    "after": 88,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.globalQaScoreTrend",
+    "before": 1,
+    "after": 0,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.avgTestCoverage",
+    "before": 78.8,
+    "after": 84,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.avgDefectEscapeRate",
+    "before": 10.8,
+    "after": 6,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.automationCoverage",
+    "before": 70,
+    "after": 75.7,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.avgFlakinessRate",
+    "before": 2.8,
+    "after": 2.3,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.topImproving[1].score",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[0].name",
+    "before": "Stale Team",
+    "after": "Small Team",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[0].score",
+    "before": 80,
+    "after": 81,
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[0].issue",
+    "before": "Test coverage 69.2% (target ≥80%); Flakiness 3.1% (target ≤2%); Defect escape rate 18.6% (target ≤5%); Automation 66% (target ≥70%)",
+    "after": "Test coverage 76% (target ≥80%); Flakiness 4.2% (target ≤2%); Defect escape rate 12% (target ≤5%); Automation 58% (target ≥70%)",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[0].issues[0]",
+    "before": "Test coverage 69.2% (target ≥80%)",
+    "after": "Test coverage 76% (target ≥80%)",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[0].issues[1]",
+    "before": "Flakiness 3.1% (target ≤2%)",
+    "after": "Flakiness 4.2% (target ≤2%)",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[0].issues[2]",
+    "before": "Defect escape rate 18.6% (target ≤5%)",
+    "after": "Defect escape rate 12% (target ≤5%)",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[0].issues[3]",
+    "before": "Automation 66% (target ≥70%)",
+    "after": "Automation 58% (target ≥70%)",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[1].name",
+    "before": "Small Team",
+    "after": "Partial Team",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[1].score",
+    "before": 81,
+    "after": 85,
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[1].issue",
+    "before": "Test coverage 76% (target ≥80%); Flakiness 4.2% (target ≤2%); Defect escape rate 12% (target ≤5%); Automation 58% (target ≥70%)",
+    "after": "Flakiness 2.5% (target ≤2%)",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[1].issues[0]",
+    "before": "Test coverage 76% (target ≥80%)",
+    "after": "Flakiness 2.5% (target ≤2%)",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[1].issues[1]",
+    "before": "Flakiness 4.2% (target ≤2%)",
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[1].issues[2]",
+    "before": "Defect escape rate 12% (target ≤5%)",
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[1].issues[3]",
+    "before": "Automation 58% (target ≥70%)",
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.needsAttention[2]",
+    "before": {
+      "name": "Partial Team",
+      "score": 87,
+      "issue": "Flakiness 2.5% (target ≤2%); Defect escape rate 8.5% (target ≤5%)",
+      "issues": [
+        "Flakiness 2.5% (target ≤2%)",
+        "Defect escape rate 8.5% (target ≤5%)"
+      ],
+      "snapshotDate": "D+0"
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate; Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.kpiStatus.offTrack",
+    "before": 2,
+    "after": 1,
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.kpiStatusTeams[1].qaScore",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.kpiStatusTeams[1].checks[3].met",
+    "before": false,
+    "after": null,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.kpiStatusTeams[1].checks[3].gap",
+    "before": 3.5,
+    "after": null,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.kpiStatusTeams[1].recorded",
+    "before": 4,
+    "after": 3,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "summary.kpiStatusTeams[3]",
+    "before": {
+      "teamId": "golden-team-stale",
+      "name": "Stale Team",
+      "department": "Beta",
+      "qaScore": 80,
+      "snapshotDate": "D+0",
+      "bucket": "offTrack",
+      "checks": [
+        {
+          "key": "testCoverage",
+          "label": "Test coverage",
+          "value": 69.2,
+          "target": 80,
+          "lowerIsBetter": false,
+          "met": false,
+          "gap": 10.799999999999997
+        },
+        {
+          "key": "automationCoverage",
+          "label": "Automation coverage",
+          "value": 66,
+          "target": 70,
+          "lowerIsBetter": false,
+          "met": false,
+          "gap": 4
+        },
+        {
+          "key": "testFlakinessRate",
+          "label": "Test flakiness",
+          "value": 3.1,
+          "target": 2,
+          "lowerIsBetter": true,
+          "met": false,
+          "gap": 1.1
+        },
+        {
+          "key": "defectEscapeRate",
+          "label": "Defect escape rate",
+          "value": 18.6,
+          "target": 5,
+          "lowerIsBetter": true,
+          "met": false,
+          "gap": 13.600000000000001
+        }
+      ],
+      "met": 0,
+      "recorded": 4
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.aiSummary",
+    "before": "Quality improved by 1 points vs. 7-14 days ago. 2 teams below 80% coverage. Automation coverage at 70%. Based on KPI snapshots as of D+0.",
+    "after": "Quality unchanged vs. 7-14 days ago. 1 team below their test coverage target. Automation coverage at 75.7%. Based on KPI snapshots as of D+0.",
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members) (trend 88.3 now vs 88.0 on D-8 = 0); coverage is judged against each team's target valid at the value's date (target history), so the text names the team target"
+  },
+  {
+    "path": "summary.teamsWithKpiData",
+    "before": 4,
+    "after": 3,
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "summary.deliveryPerformanceBasis.method",
+    "before": "Mean of per-team DORA level scores (Elite 100, High 80, Medium 60, Low 40); bands as getDORALevel",
+    "after": "Mean of per-team DORA level scores (Elite 100, High 80, Medium 60, Low 40), weighted by team size; bands as getDORALevel; teams with a missing or stale input are not classified",
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate (its DORA level is not counted)"
+  },
+  {
+    "path": "summary.deliveryPerformanceBasis.teamsClassified",
+    "before": 4,
+    "after": 3,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate (its DORA level is not counted)"
+  },
+  {
+    "path": "summary.deliveryPerformanceBasis.levels.High",
+    "before": 1,
+    "after": 0,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate (its DORA level is not counted)"
+  },
+  {
+    "path": "teams.golden-team-partial.qaScore",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "teams.golden-team-stale.qaScore",
+    "before": 80,
+    "after": null,
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "teams.golden-team-stale.status",
+    "before": "warning",
+    "after": "no-data",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "teams.golden-team-stale.metrics[0].status",
+    "before": "critical",
+    "after": null,
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "detail.golden-team-stale.qaScore",
+    "before": 80,
+    "after": null,
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "detail.golden-team-stale.status",
+    "before": "warning",
+    "after": "no-data",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "detail.golden-team-partial.qaScore",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[9]",
+    "before": {
+      "date": "D-11",
+      "value": 79
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[10]",
+    "before": {
+      "date": "D-10",
+      "value": 79
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[11]",
+    "before": {
+      "date": "D-9",
+      "value": 79
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[12]",
+    "before": {
+      "date": "D-8",
+      "value": 79
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[13]",
+    "before": {
+      "date": "D-7",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[14]",
+    "before": {
+      "date": "D-6",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[15]",
+    "before": {
+      "date": "D-5",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[16]",
+    "before": {
+      "date": "D-4",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[17]",
+    "before": {
+      "date": "D-3",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[18]",
+    "before": {
+      "date": "D-2",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[19]",
+    "before": {
+      "date": "D-1",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-stale.history.qa_score[20]",
+    "before": {
+      "date": "D+0",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "history.golden-team-partial.history.qa_score[17].value",
+    "before": 86,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "history.golden-team-partial.history.qa_score[18].value",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "history.golden-team-partial.history.qa_score[19].value",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "history.golden-team-partial.history.qa_score[20].value",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "tv.golden-team-stale.latest.qaScore",
+    "before": 80,
+    "after": null,
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.latest.status",
+    "before": "warning",
+    "after": "no-data",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[9]",
+    "before": {
+      "date": "D-11",
+      "value": 79
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[10]",
+    "before": {
+      "date": "D-10",
+      "value": 79
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[11]",
+    "before": {
+      "date": "D-9",
+      "value": 79
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[12]",
+    "before": {
+      "date": "D-8",
+      "value": 79
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[13]",
+    "before": {
+      "date": "D-7",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[14]",
+    "before": {
+      "date": "D-6",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[15]",
+    "before": {
+      "date": "D-5",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[16]",
+    "before": {
+      "date": "D-4",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[17]",
+    "before": {
+      "date": "D-3",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[18]",
+    "before": {
+      "date": "D-2",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[19]",
+    "before": {
+      "date": "D-1",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-stale.history.qa_score[20]",
+    "before": {
+      "date": "D+0",
+      "value": 80
+    },
+    "after": "<absent>",
+    "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+  },
+  {
+    "path": "tv.golden-team-partial.latest.qaScore",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "tv.golden-team-partial.history.qa_score[17].value",
+    "before": 86,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "tv.golden-team-partial.history.qa_score[18].value",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "tv.golden-team-partial.history.qa_score[19].value",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  },
+  {
+    "path": "tv.golden-team-partial.history.qa_score[20].value",
+    "before": 87,
+    "after": 85,
+    "reason": "Staleness: Partial Team's defect escape rate (last recorded D-10, expected weekly) is stale from D-3, so its QA score uses 3 of 4 inputs and the escape rate is not judged"
+  }
+]

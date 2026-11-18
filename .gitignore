@@ -39,3 +39,6 @@ db_snapshots/snapshot_*.sql
 
 # Local Netlify folder
 .netlify
+
+# Golden test scratch output
+tests/api/golden/*.local.json

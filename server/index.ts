@@ -18,6 +18,8 @@ import settingsRoutes from './routes/settings';
 import analyticsRoutes from './routes/analytics';
 import ingestRoutes from './routes/ingest';
 import tvRoutes from './routes/tv';
+import targetsRoutes from './routes/targets';
+import ingestionLogRoutes from './routes/ingestionLog';
 // import './jobs/syncMetrics'; // Start cron jobs (disabled temporarily)
 import './jobs/intervalSync'; // Interval-based metric sync
 import './jobs/analyticsSync'; // Analytics data sync
@@ -103,6 +105,8 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ingest', ingestRoutes);
 app.use('/api/tv', tvRoutes);
+app.use('/api/targets', targetsRoutes);
+app.use('/api/ingestion-log', ingestionLogRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
