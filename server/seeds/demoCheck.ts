@@ -95,6 +95,22 @@ async function main() {
         console.log(`  ${l.email.padEnd(36)} ${l.has_team ? '✓' : '✗'} ${l.primary_ok ? '✓' : '✗'}`);
       }
     }
+    // Saved views (migration 20261121100000): every company with active teams has sample views,
+    // one of them shared with the company, so the quick switchers are not empty in the demo.
+    const views = (await pool.query(
+      `SELECT c.id, c.name, COUNT(v.id)::int AS n, COUNT(v.id) FILTER (WHERE v.shared)::int AS shared
+         FROM companies c LEFT JOIN saved_views v ON v.company_id = c.id
+        WHERE c.id = ANY($1::text[]) GROUP BY c.id, c.name ORDER BY c.name`, [[...new Set(teams.map(t => t.company_id))]]
+    )).rows as Array<{ id: string; name: string; n: number; shared: number }>;
+    if (views.length) {
+      console.log('\nSaved views (total / shared with the company):');
+      for (const v of views) {
+        total++;
+        const good = v.n > 0 && v.shared > 0;
+        if (good) ok++; else missing.push(`${v.name}: no saved views (${v.n}) or none shared (${v.shared})`);
+        console.log(`  ${v.name.slice(0, 36).padEnd(36)} ${v.n} / ${v.shared} ${good ? '✓' : '✗'}`);
+      }
+    }
     const pct = total ? (ok / total) * 100 : 100;
     console.log(`\nCoverage: ${ok} / ${total} team-modules = ${pct.toFixed(1)} %`);
     if (missing.length) {

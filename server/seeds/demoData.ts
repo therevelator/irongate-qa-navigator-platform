@@ -20,6 +20,7 @@ import { createHash } from 'crypto';
 import { computeQaScore, computeDdps, TECH_DEBT_SEVERITY_WEIGHTS } from '../lib/metricFormulas';
 import { calculateWorkloadBalance } from '../../src/data/advancedFeatures';
 import { DEFAULT_METRIC_INTERVALS } from '../lib/metricIntervals';
+import { savedViewsSql } from './demoSavedViews';
 
 // ============================================================================
 // Identity of the demo company
@@ -614,6 +615,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   const today = checkDate(opts.today ?? todayUtc());
   const ds = new Dataset(today);
   emitCompany(ds, { id: DEMO_COMPANY_ID, isDemo: true, teams: NORTHWIND_TEAMS, teamCount: NORTHWIND_TEAMS.length, realDebt: [], extraHappiness: [] });
+  ds.sql('saved_views', savedViewsSql(DEMO_COMPANY_ID));
   return ds;
 }
 
@@ -621,7 +623,10 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
 export function buildFillDataset(companies: CompanyInput[], opts: BuildOptions = {}): Dataset {
   const today = checkDate(opts.today ?? todayUtc());
   const ds = new Dataset(today);
-  for (const c of companies) emitCompany(ds, c);
+  for (const c of companies) {
+    emitCompany(ds, c);
+    ds.sql('saved_views', savedViewsSql(c.id));
+  }
   return ds;
 }
 
@@ -1854,6 +1859,7 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
   // Demo logins given a team (teamlessLogins): their primary team goes back to none.
   { table: 'users (primary_team_id)', sql: `UPDATE users u SET primary_team_id = NULL FROM role_assignments ra
     WHERE ra.id LIKE '${DEMO_PREFIX}ral-%' AND ra.user_id = u.id AND u.primary_team_id = ra.scope_id AND u.id NOT LIKE ${D_}` },
+  { table: 'saved_views', sql: `DELETE FROM saved_views WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'metric_values', sql: `DELETE FROM metric_values WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR idempotency_key LIKE 'backfill:${DEMO_PREFIX}%'` },
   { table: 'ingestion_log', sql: `DELETE FROM ingestion_log WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'target_history', sql: `DELETE FROM target_history WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
@@ -1912,7 +1918,7 @@ export const ALL_TABLES = [
   'kpi_snapshots', 'metric_last_updated', 'metric_update_intervals', 'performance_metrics', 'pipeline_config', 'pipeline_execution_summary',
   'invitations', 'pipeline_runs', 'pipeline_stage_history', 'pipeline_stages', 'role_assignments', 'seeder_runs', 'sprint_velocity', 'team_analytics', 'team_members',
   'team_pipeline_metrics', 'team_test_executions', 'teams', 'technical_debt', 'test_case_tags', 'test_cases', 'test_execution_runs',
-  'test_executions', 'users', 'metric_values', 'target_history', 'ingestion_log',
+  'test_executions', 'users', 'metric_values', 'target_history', 'ingestion_log', 'saved_views',
 ];
 
 /** SQL condition selecting the demo rows of a table (for counts). */
