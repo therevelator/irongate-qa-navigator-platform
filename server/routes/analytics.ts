@@ -3,7 +3,9 @@ import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, getOwnedTeam, canManageCompanyData } from '../middleware/access';
 import { aiLimiter } from '../middleware/rateLimit';
-import { seedAllAnalyticsData, updateDailyAnalytics } from '../jobs/analyticsSync';
+import { updateDailyAnalytics } from '../jobs/analyticsSync';
+import { runDemoSeed, isDemoSeeded } from '../seeds/demoSeed';
+import { demoSummary, todayUtc } from '../seeds/demoData';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues } from '../../src/config/metricsConfig';
@@ -1026,25 +1028,59 @@ router.get('/business-impact', authenticateToken, async (req: any, res) => {
 // SEED & UPDATE ANALYTICS DATA
 // ============================================================================
 
-// Seed all historical analytics data (30 days)
+// Sample data: the one-shot demo dataset (server/seeds/demoData.ts), the same data as
+// `npm run seed:demo`. It creates a separate sample company (with its own users, password
+// demo123) and is additive: existing companies and rows are never changed. Re-running adds
+// nothing new on the same day. super_admin only; off unless ENABLE_SYNTHETIC_DATA=true.
+router.get('/seed-data/status', authenticateToken, async (req: any, res) => {
+  try {
+    if (req.user.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only super admin can load sample data' });
+    }
+    const enabled = isSyntheticDataEnabled();
+    const summary = demoSummary(todayUtc());
+    res.json({
+      enabled,
+      message: enabled ? null : SYNTHETIC_DISABLED_MESSAGE,
+      seeded: await isDemoSeeded(),
+      companyName: summary.companyName,
+      teams: summary.teams,
+      users: summary.users,
+      logins: summary.logins,
+      password: summary.password,
+    });
+  } catch (error) {
+    console.error('Error reading sample data status:', error);
+    res.status(500).json({ error: 'Failed to read sample data status' });
+  }
+});
+
 router.post('/seed-data', authenticateToken, async (req: any, res) => {
   try {
     const { role } = req.user;
 
     if (role !== 'super_admin') {
-      return res.status(403).json({ error: 'Only super admin can seed data' });
+      return res.status(403).json({ error: 'Only super admin can load sample data' });
     }
     if (!isSyntheticDataEnabled()) {
       return res.status(409).json({ error: SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
 
-    // Run seed in background
-    seedAllAnalyticsData().catch(err => console.error('Seed error:', err));
-
-    res.json({ success: true, message: 'Analytics data seeding started. Check server logs for progress.' });
+    const result = await runDemoSeed();
+    res.json({
+      success: true,
+      message: result.insertedTotal > 0
+        ? `Sample data loaded: ${result.insertedTotal} rows for "${result.companyName}".`
+        : `Sample data for "${result.companyName}" is already loaded (nothing new to add).`,
+      companyName: result.companyName,
+      insertedTotal: result.insertedTotal,
+      inserted: result.inserted,
+      logins: result.logins,
+      password: result.password,
+    });
   } catch (error) {
-    console.error('Error starting seed:', error);
-    res.status(500).json({ error: 'Failed to start seeding' });
+    console.error('Error loading sample data:', error);
+    res.status(500).json({ error: 'Failed to load sample data' });
   }
 });
 

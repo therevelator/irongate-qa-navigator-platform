@@ -352,7 +352,8 @@ export async function runPipelineSeederForAllCompanies(): Promise<void> {
     return;
   }
   try {
-    const companies = await query<any>('SELECT id FROM companies WHERE is_active = true');
+    // The demo company (npm run seed:demo) is a fixed, consistent dataset: never randomised.
+    const companies = await query<any>("SELECT id FROM companies WHERE is_active = true AND id NOT LIKE 'demo-%'");
     
     console.log(`[PipelineSeeder] Running for ${companies.length} companies...`);
     

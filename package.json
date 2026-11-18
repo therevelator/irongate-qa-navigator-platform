@@ -18,6 +18,8 @@
     "preview": "vite preview",
     "server": "tsx watch server/index.ts",
     "server:prod": "tsx server/index.ts",
+    "seed:demo": "tsx server/seeds/demoSeedCli.ts",
+    "seed:demo:clear": "tsx server/seeds/demoSeedCli.ts --clear",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "jest --config jest.config.cjs",
     "test:api": "jest --config jest.config.cjs tests/api",

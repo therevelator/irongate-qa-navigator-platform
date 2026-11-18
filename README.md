@@ -27,6 +27,42 @@ npm run dev                   # app on http://localhost:5173
 Registering creates a **new** organisation and makes you its super admin. People join an
 existing organisation only when one of its admins creates their account (Users page).
 
+## Sample (demo) data
+
+One command fills every table with a fictional, internally consistent company for demos:
+**Northwind Payments (Sample data)**: 4 departments, 10 teams, 57 users in all roles, about
+120 days of daily KPI history up to today (some teams strong, some struggling, slowly
+trending), plus developer productivity, CI/CD pipeline runs, test cases, executions and flaky
+tests, performance metrics, technical debt with financial impact, 12 months of business-impact
+data and company KPI snapshots. KPI values are marked `field_sources.<column>.source =
+'synthetic'`. Business-impact rows have `data_source = 'synthetic'`.
+
+```bash
+npm run seed:demo                              # write to DATABASE_URL (local hosts only)
+npm run seed:demo:clear                        # remove the demo rows again
+npm run seed:demo -- --sql out/demo-seed.sql   # write SQL files instead (no DB connection)
+npm run seed:demo:clear -- --sql out/demo-clear.sql
+```
+
+- **Sign in**: password `demo123` for every demo user. For example, `alex.morgan@northwind.example`
+  (super admin), `priya.raman@…` (QA manager), `olivia.bennett@…` (team lead),
+  `mia.thompson@…` (QA engineer) and `hannah.brooks@…` (viewer).
+- **Additive and idempotent**: every row has an id starting with `demo-`, or belongs to the
+  demo company or its users (for tables with integer or composite keys). Every insert is
+  `ON CONFLICT DO NOTHING`, and the values come from a seeded PRNG, so a second run on the
+  same day adds nothing. A run on a later day only adds the new days. Other companies and
+  their rows are never changed. `seed:demo:clear` deletes only the demo company's rows, in
+  foreign-key order.
+- **SQL mode**: `--sql` writes one transaction per file, split into numbered parts of up to
+  ~1.4 MB (`demo-seed-01.sql`, `demo-seed-02.sql`, …). Apply them in order after the
+  migrations. Use `--today YYYY-MM-DD` to fix the last day of history.
+- **In the app**: a super admin can choose **Administration → Admin console → Sample data → Load sample data**
+  (`POST /api/analytics/seed-data`). This runs the same seed. It is only available when the API
+  runs with `ENABLE_SYNTHETIC_DATA=true`. Otherwise the button is disabled and the endpoint
+  returns 409. The background random generators enabled by that flag skip the demo company.
+- The CLI refuses a non-local `DATABASE_URL` unless you pass `--allow-remote`. For a hosted
+  database, prefer the SQL files.
+
 ## Where metrics come from
 
 - **KPI ingestion API** (below): the supported way to feed metrics from CI, issue trackers,

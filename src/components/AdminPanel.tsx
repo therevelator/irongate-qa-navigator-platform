@@ -41,6 +41,7 @@ interface Department {
 
 import API_URL from '../config/api';
 import ApiKeysPanel from './ApiKeysPanel';
+import SampleDataPanel from './SampleDataPanel';
 
 interface AdminPanelProps {}
 
@@ -1084,6 +1085,9 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
 
       {/* API keys for KPI ingestion (super admin only) */}
       {user?.role === 'super_admin' && <ApiKeysPanel />}
+
+      {/* Sample (demo) data loader (super admin only; server must allow it) */}
+      {user?.role === 'super_admin' && <SampleDataPanel />}
 
       {/* Create User Modal */}
       {showCreateUser && (

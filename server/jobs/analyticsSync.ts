@@ -457,7 +457,8 @@ async function updateDailyAnalytics(): Promise<void> {
 
   try {
     // Get all companies
-    const companies = await query<any>('SELECT id FROM companies WHERE is_active = true');
+    // The demo company (npm run seed:demo) is a fixed, consistent dataset: never randomised.
+    const companies = await query<any>("SELECT id FROM companies WHERE is_active = true AND id NOT LIKE 'demo-%'");
 
     for (const company of companies) {
       const companyId = company.id;
@@ -588,7 +589,8 @@ export async function seedAllAnalyticsData(): Promise<void> {
   console.log('📊 Seeding all analytics data...');
 
   try {
-    const companies = await query<any>('SELECT id FROM companies WHERE is_active = true');
+    // The demo company (npm run seed:demo) is a fixed, consistent dataset: never randomised.
+    const companies = await query<any>("SELECT id FROM companies WHERE is_active = true AND id NOT LIKE 'demo-%'");
 
     for (const company of companies) {
       const companyId = company.id;

@@ -222,7 +222,8 @@ async function getActiveTeams(): Promise<{ id: string; name: string }[]> {
   const teams = await query<any>(
     `SELECT id, name FROM teams 
      WHERE is_active = true 
-     AND (exclude_from_auto_sync = FALSE OR exclude_from_auto_sync IS NULL)`
+     AND (exclude_from_auto_sync = FALSE OR exclude_from_auto_sync IS NULL)
+     AND id NOT LIKE 'demo-%'`
   );
 
   // Also check for teams with manually edited snapshots
