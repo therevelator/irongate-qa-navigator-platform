@@ -1,0 +1,144 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Local Postgres service only (never a remote database).
+  DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/irongate_qa
+  DB_HOST: 127.0.0.1
+  DB_PORT: '5432'
+  DB_USER: postgres
+  DB_PASSWORD: postgres
+  DB_NAME: irongate_qa
+  JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-else
+  API_RATE_LIMIT_MAX: '10000'
+  LOG_DIR: /tmp/irongate-ci-logs
+
+jobs:
+  quality:
+    name: Typecheck, lint, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck app
+        run: npx tsc --noEmit -p tsconfig.app.json
+
+      - name: Typecheck server
+        run: npx tsc --noEmit -p tsconfig.server.json
+
+      - name: Lint (report only, existing lint debt does not fail the build)
+        run: |
+          npx eslint . -f json -o eslint-report.json || true
+          node scripts/ci/lint-summary.mjs eslint-report.json
+
+      - name: Build
+        run: npm run build
+
+  api-and-db:
+    name: API and database tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: irongate_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d irongate_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up database and API
+        uses: ./.github/actions/setup-test-env
+
+      - name: API tests
+        run: npx jest --config jest.config.cjs tests/api --ci
+
+      - name: Database tests
+        run: npx jest --config jest.config.cjs tests/database --ci
+
+      - name: Upload API log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-and-db-logs
+          path: /tmp/irongate-ci-logs/
+          retention-days: 14
+
+  e2e:
+    name: End-to-end tests (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: irongate_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d irongate_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up database, API and web app
+        uses: ./.github/actions/setup-test-env
+        with:
+          start-web: 'true'
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: npx playwright test --project=chromium
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload test results and service logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-and-logs
+          path: |
+            test-results/
+            /tmp/irongate-ci-logs/
+          retention-days: 14

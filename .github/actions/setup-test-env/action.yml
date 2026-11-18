@@ -1,0 +1,50 @@
+name: Set up test environment
+description: >-
+  Install dependencies, prepare the local Postgres service database like production
+  (all migrations + snapshot + demo seed + fill) and start the API (and optionally the web app).
+inputs:
+  start-web:
+    description: Also start the Vite dev server on port 5173
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: npm
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
+
+    - name: Install Postgres client
+      shell: bash
+      run: |
+        if ! command -v psql >/dev/null || ! command -v pg_isready >/dev/null; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+        fi
+        psql --version
+
+    - name: Write .env
+      shell: bash
+      run: |
+        cat > .env <<ENV
+        DATABASE_URL=${DATABASE_URL}
+        JWT_SECRET=${JWT_SECRET}
+        PORT=3000
+        ENV
+
+    - name: Prepare database
+      shell: bash
+      run: scripts/ci/prepare-db.sh
+
+    - name: Start API
+      shell: bash
+      run: scripts/ci/start-services.sh api
+
+    - name: Start web app
+      if: inputs.start-web == 'true'
+      shell: bash
+      run: scripts/ci/start-services.sh web

@@ -1,5 +1,7 @@
 # IronGate QE Navigator
 
+[![CI](https://github.com/therevelator/irongate-qa-navigator-platform/actions/workflows/ci.yml/badge.svg)](https://github.com/therevelator/irongate-qa-navigator-platform/actions/workflows/ci.yml)
+
 Quality-engineering metrics for engineering organisations: team KPIs, a company dashboard,
 analytics modules and user / team administration.
 
@@ -162,6 +164,20 @@ npx tsc --noEmit -p tsconfig.server.json   # API types
 npm run test:api                           # API tests (need the API running on :3000)
 npm run test:e2e                           # Playwright role tests (need API + app running)
 ```
+
+**CI** (`.github/workflows/ci.yml`, GitHub Actions tab) runs on every push to any branch, on
+every pull request and on demand, in three jobs:
+
+- `quality`: both typechecks, ESLint (report only: counts go to the job summary), `npm run build`;
+- `api-and-db`: a Postgres 16 service prepared like production by `scripts/ci/prepare-db.sh`
+  (initial schema, snapshot, later migrations in timestamp order, `seed:demo`,
+  `seed:demo -- --fill-existing`), the API started by `scripts/ci/start-services.sh`, then the
+  jest API and database suites;
+- `e2e`: the same database and API plus the Vite app, then all Playwright specs (HTML report
+  uploaded as an artifact).
+
+The same scripts work locally against an empty local database:
+`DATABASE_URL=postgres://…@127.0.0.1:5432/irongate_ci scripts/ci/prepare-db.sh`.
 
 ## Licence
 
