@@ -103,9 +103,9 @@ kept in step for display only.
 
 | Role | Assigned on | Analytics scope (which teams' analytics, members, TV, compare) | Individual developer rows |
 |---|---|---|---|
-| `super_admin` | the company | every team of the company | everyone who has not opted out |
-| `qa_manager` | a department (one or more) | the teams of those departments | everyone who has not opted out, on those teams |
-| `team_lead` | a team (one or more; one lead per team) | those teams | everyone who has not opted out, on those teams |
+| `super_admin` | the company | every team of the company | everyone who opted in to developer insights |
+| `qa_manager` | a department (one or more) | the teams of those departments | everyone who opted in, on those teams |
+| `team_lead` | a team (one or more; one lead per team) | those teams | everyone who opted in, on those teams |
 | `qa_engineer` | a team (one or more) | those teams | own row only |
 | `viewer` | a team (one or more) | those teams | own row only |
 
@@ -114,7 +114,7 @@ What each role may do (from `userPolicy.ts`; the navigation in [`src/components/
 | Capability | super_admin | qa_manager | team_lead | qa_engineer | viewer |
 |---|---|---|---|---|---|
 | Overview (company dashboard; team KPIs are company-visible) | yes | yes | yes | yes | yes |
-| Analytics modules, Compare teams, TV mode | all teams | their departments' teams | their teams | their teams | their teams |
+| Analytics modules, Compare teams, TV mode, per-team metric detail (history, velocity) | all teams | their departments' teams | their teams | their teams | their teams |
 | Team member names and e-mails (`canViewTeamMembers`) | any team | their departments | assigned teams | assigned teams | assigned teams |
 | Manage users (activate / deactivate, reset password, developer-insights toggle) | anyone in the company except themselves | users of their departments ranked below QA manager | users of teams they lead ranked below team lead | no | no |
 | Edit another user's profile and assignments; delete (= deactivate) | yes | users they manage | no | no | no |
@@ -131,6 +131,8 @@ What each role may do (from `userPolicy.ts`; the navigation in [`src/components/
 | Read pulse comments | yes | yes | yes | no | no |
 | Share saved views with the company; onboarding checklist | yes | no | no | no | no |
 | Executive briefing (AI) | yes | yes | yes | no | no |
+| Team AI recommendations | all teams | their departments' teams | teams they lead | no | no |
+| Formula mode ("Show formulas & data sources") | yes | no | no | no | no |
 | See alerts and tracked actions | all teams | their departments' teams | their teams | their teams | their teams |
 | Acknowledge alerts; create / edit / delete tracked actions | any team (plus company-level alerts) | their departments | teams they lead | no (an action's owner may change its status) | no (same) |
 | Alert rules | change company, department, team | read; change department and team rules in their departments | no | no | no |
@@ -789,7 +791,7 @@ Why: everything about one team in one place, with each number explained
   its date, status, "source · as of date", stale marker and history chart.
 - Wellbeing (survey) result with its response rate and a link to the pulse survey; for the lead, QA managers and admins the **Send the
   survey** panel (send, remind, sent N of M, automatic sending); Team members with their latest workload metrics (only for people who may see
-  the team's people, and without metrics for those who opted out); Team recommendations (rule-based or AI); Developer recommendations.
+  the team's people, and with metrics only for those who opted in to developer insights); Team recommendations (rule-based or AI); Developer recommendations.
 - **Action plan**: the team's tracked actions with owner, due date, status, linked KPI, baseline and computed outcome; **Create action**
   from a recommendation (section 7).
 - **Open TV mode** and, for super admins, the **Show formulas & data sources** switch (formula mode) that opens the metric explanation
@@ -863,8 +865,8 @@ All roles can open them, each for the teams in their analytics scope, chosen in 
 
 ### Developer productivity and individual data
 
-QA engineers and viewers see only their own row. Team leads, QA managers and super admins see the rows of developers in their scope who have
-not opted out. Team tiles come from the k-anonymous team summary. Only your own row is exported when you may not see others.
+QA engineers and viewers see only their own row. Team leads, QA managers and super admins see the rows of developers in their scope who
+opted in to developer insights (off by default; an unset value counts as off). Team tiles come from the k-anonymous team summary. Only your own row is exported when you may not see others.
 
 ### Administration
 
@@ -899,8 +901,8 @@ Defined once in [`server/lib/privacy.ts`](../server/lib/privacy.ts):
 > there were. Zero contributors is plain "no data".
 
 **Who contributes** to developer aggregates: active QA engineers and team leads assigned to the team, who opted in to developer insights
-(`users.developer_insights_enabled`) and have all five inputs recorded. Someone who opted out is left out of every aggregate, including the
-ones they can see themselves.
+(`users.developer_insights_enabled`, off by default) and have all five inputs recorded. Someone who has not opted in is left out of every
+aggregate, including the ones they can see themselves.
 
 **Where it applies:**
 
@@ -973,8 +975,8 @@ fewer than 7 days, to the end of the following one. Every change is in Activity.
 - The send tables know who was e-mailed and reminded (a reminder goes to people who had not answered yet); like the participation list they
   never leave the server, and the API returns only counts under the same threshold.
 - A personal link works for whoever holds it (as with any e-mailed link): it is single-use, period-bound and says not to forward it.
-- Developer metrics individual rows are visible to leads, managers and admins for people who have not opted out; opting out is per person
-  (users page toggle).
+- Developer metrics individual rows are visible to leads, managers and admins only for people who opted in; the choice is per person
+  (users page toggle, off by default).
 
 ---
 
@@ -1155,18 +1157,25 @@ Playwright specs, HTML report as an artifact).
 - **Developer metrics have no history from manual entry.** `developer_metrics` holds one current row per developer and team; DDPS history
   (`developer_productivity_snapshots`) is written only by the seed.
 - **Company snapshots are stored only when someone opens the executive briefing**, so the briefing's 30-day history depends on usage.
-- **Hosted demo data ages.** Sample history stops at the day it was seeded; values then turn stale (planned: a refresh step).
+- **Hosted demo data ages** unless it is refreshed: sample history stops at the day it was seeded. `npm run seed:demo -- --refresh-dates`
+  adds the missing recent days for sample-data teams only (README, "Keeping hosted demo data current"); it has to be run (by the owner) against
+  the hosted database, it is not scheduled.
 
 ### Open items from the release plan and README
 
-- Not yet staleness- or target-history-aware: `/api/metrics/dashboard`, `/metrics/analytics/*` averages and Team rankings; other analytics pages
-  still use default thresholds instead of target history.
-- `GET /api/analytics/pipeline-stages` answers 400 for a caller without a team.
-- Migrations tested on PostgreSQL 16; a run on PostgreSQL 17 (Supabase) is planned.
-- Compare teams marks the worst value "LOWEST" even for lower-is-better metrics (to be renamed "Weakest").
+Resolved in R2 Phase 4 (see [docs/reports/r2-final-review.md](reports/r2-final-review.md)): `/api/metrics/dashboard`,
+`/metrics/analytics/*` and Team rankings leave stale values out (rankings colour with each team's target history); analytics without a team id
+use the caller's default team in scope; all migrations run on PostgreSQL 16 and 17; Compare teams labels the worst value "Weakest"
+(direction-aware).
+
+Still open:
+
 - No CSV on some sub-tables (team-detail members, admin-console members, department team list, report preview); saved views cannot be renamed in
   the UI.
-- Formula mode is offered to super admins only.
+- Formula mode is offered to super admins only (a product decision: it is a demo and audit aid; `canUseFormulaMode`).
+- Several older admin screens (Admin console, Users page) still decide some buttons from the display role; the API enforces the shared rules.
+- No ingestion API for monthly business series, debt items, pipeline runs or test executions; business-impact `deployment_frequency` is per month
+  while the KPI is per week.
 
 ---
 

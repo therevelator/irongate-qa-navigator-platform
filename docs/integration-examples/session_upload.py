@@ -83,8 +83,8 @@ def main() -> int:
     s = login(base)
 
     if kind == "developer":
-        # POST /api/metrics/developer replaces the developer's whole row for the team:
-        # always send all five inputs (a missing one is stored as empty) plus the derived score.
+        # POST /api/metrics/developer is a partial update (omitted fields keep their value);
+        # send the five inputs together with the derived score so they stay consistent.
         for m in data:
             body = dict(m, happinessScore=workload_balance(m))
             check(s.post(f"{base}/metrics/developer", json=body, timeout=30), f"developer {m['developerId']}")

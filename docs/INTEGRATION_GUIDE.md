@@ -146,7 +146,7 @@ tells you which integration sent what.
 | All `/api` requests per client IP | 300 per minute (`API_RATE_LIMIT_MAX` on the server) | `429 {"error":"Too many requests, please slow down."}` |
 | Failed logins (session auth) | 20 per 15 minutes per IP | `429` |
 | Items per request | 1 to 100 | `400 Send between 1 and 100 items` |
-| Request body | 100 kB of JSON (Express default). 100 items with all 23 metrics and a short `sourceRef` are about 75 kB. | `413` (body `{"error":"Internal server error"}`) |
+| Request body | 100 kB of JSON (Express default). 100 items with all 23 metrics and a short `sourceRef` are about 75 kB. | `413` (body `{"error":"Payload too large"}`) |
 
 Every ingestion response carries `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` (seconds). On the serverless
 (Netlify) deployment the counters are per warm instance, so treat the limits as the ceiling, not a guarantee. Stay well below
@@ -179,8 +179,8 @@ Caveats, read them before you automate anything this way:
 - They run with the **permissions of that user** (role and scope, section 5 names the roles). Use a dedicated account with the
   smallest role that works (usually a QA manager of the department, or a team lead for one team), a long random password from
   your secret store, and nothing else on it.
-- Writes through them are **not** recorded in the ingestion log, are **not** idempotent, and mostly do no range validation
-  (out-of-range numbers are refused by the database with `500`).
+- Writes through them are **not** recorded in the ingestion log and are **not** idempotent. Developer metrics, debt impact and
+  business impact values are range-checked: an out-of-range or non-numeric value is `400` with the field named (since R2 Phase 4).
 - The session token cannot be revoked individually: `POST /api/auth/logout` only clears the cookie. Deactivating the user stops
   it at once (the server reloads the user on every request).
 - Invalid or expired session token: `403 {"error":"Invalid or expired token"}`; none: `401 {"error":"Access token required"}`.
@@ -403,7 +403,7 @@ All errors are JSON `{ "error": "…", … }`. Validation errors list **every** 
 | 400 | Body is not valid JSON | `{"error":"Bad request"}` | No |
 | 401 | No / malformed / unknown / revoked key | `{"error":"API key required (Authorization: Bearer igk_…)"}`, `{"error":"Invalid or revoked API key"}` | No: fix the secret |
 | 403 | Team unknown or of another company (all errors are of this kind) | `{"error":"Team no-such-team is not accessible with this API key","status":"rejected","ingestionId":"…"}` | No: fix the team id |
-| 413 | Body over 100 kB | `{"error":"Internal server error"}` | No: send smaller batches |
+| 413 | Body over 100 kB | `{"error":"Payload too large"}` | No: send smaller batches |
 | 422 | `Idempotency-Key` reused with a different body | `{"error":"This Idempotency-Key was already used with a different request"}` | No: new key for a new request |
 | 429 | Rate limit | `{"error":"Ingestion rate limit reached (60 requests per minute per key). …"}` + `Retry-After` | Yes, after `Retry-After` seconds |
 | 500 | Server error; nothing was written (logged as rejected) | `{"error":"Failed to ingest metrics"}` or `{"error":"Authentication failed"}` | Yes, with backoff and the same `Idempotency-Key` |
@@ -450,8 +450,10 @@ How to send:
 - **UI:** **Administration → Manual metrics → Developer Productivity Metrics** (super admin, QA manager, team lead for their team).
 - **Session:** `POST /api/metrics/developer` (roles super admin, QA manager, team lead; team must be writable by the caller) →
   `200 {"message":"Developer metrics saved successfully","teamId":…,"developerId":…}`; `400 Invalid developer ID`;
-  `400 Happiness score must be between 0 and 100`. **Each call replaces the whole row: an omitted input is stored as empty.** Always
-  send all five inputs and the derived score. No range validation of the five inputs. Example: `docs/integration-examples/session_upload.py developer`.
+  `400 Workload balance score must be between 0 and 100`, and the same for every input (PR merge and review time 0–10,000 hours, focus and
+  meeting time 0–24 hours a day, context switches a whole number 0–1,000). **Partial update: only the fields you send change; an omitted
+  field keeps its stored value, `null` clears it** (the response lists `updated`). The derived score is not computed by the server: send it
+  when you send its inputs. Example: `docs/integration-examples/session_upload.py developer`.
 - **API key: not possible.**
 
 To appear in team figures a developer must be an **active QA engineer or team lead assigned to the team**, have
@@ -485,8 +487,8 @@ How to send:
     → `{"success":true,"monthsSaved":n,"dataSource":"manual"}`. Months with a malformed `month_year` are silently skipped (check `monthsSaved`).
   - `POST …/:teamId/quality-metrics`, `…/business-kpis`, `…/context` — one month each, body `{ "month_year": "YYYY-MM", <fields> }`;
     `400 Invalid month_year format. Use YYYY-MM`.
-  - Upsert per team and month; **an empty field keeps the stored value** (COALESCE). No range validation: a value too large for its
-    column (e.g. `test_coverage: 1000`) gives `500`.
+  - Upsert per team and month; **an empty field keeps the stored value** (COALESCE). Values are range-checked (percentages 0–100, NPS
+    −100…100, counts whole and non-negative): an invalid one gives `400` naming the field (and, for bulk-save, the month); nothing is saved.
   - Do **not** send `data_source: "synthetic"`: it is refused (`409`) unless sample data is enabled, and marks rows as sample data.
   - `GET /api/analytics/business-impact-v2/:teamId` shows what is stored and `summary.monthsWithPairedData`.
   - Example: `docs/integration-examples/session_upload.py business`.
@@ -505,7 +507,8 @@ How to send:
 - **ROI inputs and effort of an existing item:** **UI** Administration → Manual metrics → *Technical Debt ROI Impact*;
   **Session** `PUT /api/analytics/technical-debt/:id/impact` (super admin or QA manager of the item's department) with
   `{ affected_users, support_tickets_monthly, downtime_minutes_monthly, revenue_impact_percent, sla_breaches_monthly, estimated_effort_hours }`.
-  **All six are set on every call; an omitted one is cleared.** Item ids come from `GET /api/analytics/technical-debt?teamId=`.
+  **Partial update: only the fields you send change** (an omitted one keeps its value, `null` clears it); ranges are checked (`400`), an
+  empty body is `400 Nothing to update`. Item ids come from `GET /api/analytics/technical-debt?teamId=`.
 - **Cost rates** (developer hourly rate, support ticket cost, revenue per user per month, downtime cost per minute, SLA breach penalty):
   section 5.9.
 
@@ -1064,7 +1067,7 @@ run it against a test team, or overwrite the values with real ones (the latest v
 | Value on the wrong day | `recordedAt` in a time zone whose date differs from UTC | Use UTC times (section 4.4) |
 | Business impact "needs k more months" / no correlations | Fewer than 6 paired months of quality metrics and business KPIs | Send more months (5.2) |
 | Developer tiles say "Not shown: fewer than 3 contributors" | Fewer than 3 opted-in developers with all five inputs assigned to the team | Expected privacy rule (section 11) |
-| Session endpoint `500` | A value too large for its database column (no range validation there) | Check units and ranges (5.1–5.3) |
+| Session endpoint `400` naming a field | A value outside its range or not a number | Check units and ranges (5.1–5.3) |
 
 ---
 

@@ -19,7 +19,7 @@ unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 | [docs/pitch/](docs/pitch/) | Source of the 11-slide pitch deck, with speaker notes and the placeholders to fill |
 | [docs/release-r2/](docs/release-r2/) | The R2 release plan and its working rules |
 | [docs/reports/](docs/reports/) | The accuracy audits and the consistency report that led to the "no invented numbers" fixes |
-| [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md) | Older permission notes; where they differ, `server/lib/userPolicy.ts` and the Product guide are current |
+| [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md) | Who may do what, per role, written from `server/lib/userPolicy.ts` (R2) |
 
 ## Stack
 
