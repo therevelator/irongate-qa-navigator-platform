@@ -570,7 +570,7 @@ it is calculated from pipeline runs: a test-stage run is flaky when it failed on
 passed; rate = flaky failed runs ÷ all test-stage runs in the last 7 days × 100
 ([`server/jobs/intervalSync.ts`](../server/jobs/intervalSync.ts)).
 
-### 3.13 Business-impact correlations
+### 3.13 Business impact: money, revenue impact and correlations
 
 The Business impact page relates a team's monthly quality metrics to its business KPIs
 (`business-impact-v2` endpoints in [`server/routes/analytics.ts`](../server/routes/analytics.ts)):
@@ -590,6 +590,48 @@ The Business impact page relates a team's monthly quality metrics to its busines
   analytics (Amplitude, Mixpanel: active users, adoption), CRM / billing (churn), survey tools (NPS, CSAT), Zendesk /
   ServiceNow (ticket volume).
 - An optional **AI summary** (needs `GROQ_API_KEY`) describes the stored correlations; it is labelled as model output.
+
+**Revenue impact** (the Money, What-if, Details and All teams tabs; `server/lib/revenueImpact.ts`,
+`server/lib/stats.ts`, `GET /api/revenue-impact/teams/:teamId`, `…/what-if?metric=&change=`, `GET /api/revenue-impact/rollup`).
+Amounts are per month and per year (month × 12), rounded; a missing input shows "—" with the reason.
+
+- **Revenue per metric (sensitivity).** For each of the eight quality metrics, the ordinary least-squares slope b of
+  monthly revenue on the metric over the months with both values:
+
+  ```
+  b = Σ(x − x̄)(y − ȳ) ÷ Σ(x − x̄)²          a = ȳ − b·x̄
+  SE(b) = √( Σ(y − a − b·x)² ÷ (n − 2) ÷ Σ(x − x̄)² )
+  t = b ÷ SE(b), df = n − 2, exact two-sided p
+  95 % range = b ± t(0.975, n − 2) × SE(b);  r = Pearson r;  R² = r²
+  ```
+
+  "$ per month associated with +1 unit of the metric". Shown from 6 paired months (else "needs k more");
+  significant when p < 0.05, **exploratory, not corrected for multiple comparisons** (the Correlations matrix applies
+  BH-FDR across all pairs). Sample and recorded months are never fitted together: when both exist, only the months
+  with the kind of source of the latest month are used. In the page: Details → "How sure are we?" (Strong evidence
+  p < 0.01, Some evidence p < 0.05, Not significant).
+- **Where the money is going now** (the causes overlap, so no total):
+  quality below target = Σ over metrics with a significant slope of b × (target valid today − latest value), a met
+  target adding 0, metrics taken by smallest p and a metric whose monthly series correlates at |r| ≥ 0.7 with one
+  already counted not added again, range = Σ(CI low × gap, CI high × gap); open technical debt = Σ of the open items'
+  monthly cost of delay (section 3.5, components shown); incidents and downtime = latest month's downtime minutes ×
+  downtime cost per minute; support tickets = latest month's tickets × support ticket cost; customers leaving =
+  churn % × monthly revenue of the latest month (assumes churned customers had average revenue). Deployment frequency
+  has no target in the same unit and so no gap.
+- **What you gain when these are fixed**, biggest first, five shown: each counted quality gap (b × gap with its range
+  and evidence tag; metrics that move with it are named), each open debt item (its monthly cost of delay; fix cost =
+  effort hours × developer hourly rate), downtime above the availability target ((downtime − (100 − target %) ÷ 100 ×
+  minutes in the month) × downtime cost per minute). A gap whose b × gap is negative (reaching the target associated
+  with lower revenue) is listed as not counted.
+- **Where to put the money first**: the fixes by monthly gain, or by return on cost (yearly gain ÷ fix cost; payback =
+  fix cost ÷ monthly gain) for debt items with an effort estimate.
+- **What-if**: projected monthly change = b × change, range (CI low × change, CI high × change), yearly × 12; disabled
+  with the reason when the slope is not significant; a value outside the recorded range is flagged as extrapolation.
+- **All teams**: sum of the team figures over the teams of the caller's analytics scope (super admin: company, QA
+  manager: their departments; optional department); teams without a figure are listed with the reason.
+- Rates come from Parameters → Financial and ROI settings (team, else department, else company); built-in defaults are
+  labelled "(default)". Production sources: finance / BI for revenue, product analytics for active users and churn,
+  incident tooling for downtime, Zendesk / ServiceNow for tickets, SonarQube / Jira for debt items.
 
 ### 3.14 Team rankings
 
@@ -807,7 +849,7 @@ All roles can open them, each for the teams in their analytics scope, chosen in 
 | CI/CD pipeline | Stage flow, average duration and success rate per stage, bottleneck score, stage executions over 14 days (section 3.7) | Find the stage that slows delivery |
 | Developer productivity | Team tiles (k-anonymous), DDPS by developer, recorded DDPS snapshots, developer list and recommendations (section 3.10) | Spot overload and slow review loops; fix the environment, not the person |
 | Wellbeing pulse | The survey and its results (sections 3.11 and 6) | Ask the team directly how it is doing |
-| Business impact | Monthly quality and business series, correlation matrix, strongest correlations, AI summary (section 3.13) | Connect quality work to business outcomes, with honest statistics |
+| Business impact | **Money** first: where the money is going now, what you gain when issues are fixed, where to put the money first; **What-if**; **Details** (revenue per metric, monthly trends, correlation matrix, AI summary); **All teams** roll-up for super admins and QA managers (section 3.13) | Say in money what quality problems cost and what fixing them is worth, with honest statistics |
 | Team rankings | Department teams ranked by a chosen KPI (section 3.14) | Friendly comparison inside a department |
 | Reports | A PDF report for the selected team: QA score with confidence and 14 KPIs (coverage, automation, escape rate, defect density, change failure rate, flakiness, code quality, deployments, lead time, MTTR, build time, first-time pass rate, commitment rate, availability) | A shareable snapshot for reviews and steering meetings |
 

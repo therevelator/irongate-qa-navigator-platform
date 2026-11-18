@@ -97,7 +97,8 @@ database that differs from the one it was planned on.
 `npm run seed:demo:check [-- --company <id>]` prints, per company and team, which modules have
 data in their windows. It covers KPI, developer metrics, DDPS (30 days and 6 months), test cases,
 flaky tests, test executions (7 days), pipeline history (14 days), runs (30 days) and stages,
-performance (7, 30 and 90 days), tech debt, business impact, sprints, team analytics and metric
+performance (7, 30 and 90 days), tech debt, business impact (6 paired months) and revenue impact
+(12 months with monthly revenue), sprints, team analytics and metric
 update times. It exits with code 1 below 100 %.
 
 The seed also writes the stored values behind the KPI snapshots (`metric_values`), a sample
@@ -499,6 +500,50 @@ used), `APP_URL` (link in emails / Slack; Netlify's `URL` is used when unset), `
 (turn the local schedule off), `ALERTS_EVALUATE_CRON` / `DIGEST_CRON` (local schedule, UTC),
 `NOTIFY_SLACK_ALLOW_LOCAL=true` (tests only, ignored in production: accept a `http://127.0.0.1:<port>/`
 webhook). On Netlify the three scheduled functions run without further setup (Scheduled Functions).
+
+## Business impact: money and revenue impact
+
+**Delivery → Business impact** opens on **Money**, three plain-language sections for the selected team
+(`GET /api/revenue-impact/teams/:teamId`; formulas in `server/lib/revenueImpact.ts`, statistics in
+`server/lib/stats.ts`). Amounts are $/month and $/year (= month × 12), rounded ($12.4k, $149k, $1.24M);
+a missing input shows "—" with the reason. Every line has **How is this calculated?** (formula, inputs,
+months used, r, p, n, range, rates with "(default)" where a built-in rate is used); for super admins the
+**Show formulas & data sources** switch opens the metric catalog entry of each section.
+
+1. **Where the money is going now** (causes overlap, so they are not added up):
+   - *Quality below target* = Σ over metrics with a significant slope of slope × (target valid today − latest
+     value); a met target adds 0; metrics whose monthly series correlate at |r| ≥ 0.7 with one already counted
+     (taken by smallest p first) are not added again. Range = Σ (CI low × gap, CI high × gap).
+   - *Open technical debt* = Σ over open items with impact data of tickets × support ticket cost + downtime
+     min × downtime cost per minute + affected users × revenue per user per month × revenue impact % + SLA
+     breaches × SLA penalty (the technical-debt ROI formula and the same Financial and ROI settings).
+   - *Incidents and downtime* = latest month's downtime minutes × downtime cost per minute.
+   - *Support tickets* = latest month's tickets × support ticket cost.
+   - *Customers leaving* = churn % × monthly revenue of the latest month (churned customers assumed average).
+2. **What you gain when these are fixed**, biggest first (5 shown, "Show all"): each counted quality gap
+   (slope × gap, with the 95% range and "Strong evidence" p < 0.01 / "Some evidence" p < 0.05), each open
+   debt item (its monthly cost of delay; fix cost = effort hours × developer hourly rate) and downtime above
+   the availability target ((downtime − (100 − target %) × minutes in the month) × cost per minute). Targets
+   whose gap is associated with lower revenue are listed as not counted.
+3. **Where to put the money first**: the same fixes ranked by monthly gain, or by return on cost (yearly gain ÷
+   fix cost, payback = fix cost ÷ monthly gain) where a debt item has an effort estimate.
+
+**Revenue per metric** (Details → "How sure are we?"): ordinary least-squares slope b of monthly revenue on
+each quality metric over the months with both values: b = Σ(x − x̄)(y − ȳ) ÷ Σ(x − x̄)², SE(b) = √(SSE ÷ (n − 2)
+÷ Σ(x − x̄)²), t = b ÷ SE with df = n − 2 (exact two-sided p), 95% CI = b ± t(0.975, n − 2) × SE, r and R² = r².
+Shown from 6 paired months (else how many are missing); significant when p < 0.05, exploratory, not corrected
+for multiple comparisons ("associated with", never "causes"). Sample and recorded months are never fitted
+together: when both exist only the months with the source of the latest month are used.
+**What-if**: change × b with the range and ×12; disabled (with the reason) without a significant slope;
+values outside the recorded range are flagged as extrapolation. **Details** also holds the monthly trend chart,
+the correlation matrix (Pearson, BH-FDR), the AI summary and the metric definitions, collapsed.
+**All teams** (super admins: company; QA managers: their departments; `GET /api/revenue-impact/rollup
+[?departmentId=]`, `canViewRevenueRollup`): the sum of the team figures with the teams that have none and why;
+CSV export. Every endpoint checks the analytics scope (`assertTeamAnalytics`). No migration.
+
+Demo data: 12 months of business-impact data per team (`data_source = 'synthetic'`, sample-data banner); the
+sample revenue follows team health with modest growth so the associations are plausible. `seed:demo:check`
+requires 12 months with monthly revenue per team.
 
 ## Tests
 
