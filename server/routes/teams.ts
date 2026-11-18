@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor } from '../middleware/access';
-import { canViewIndividualDevelopers } from '../lib/userPolicy';
+import { canViewIndividualDevelopers, canManageDepartment, canRequestTeamInsights } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { groqChatCompletion, parseGroqJson, isGroqConfigured } from '../lib/groq';
 import {
@@ -21,6 +21,8 @@ import {
 } from '../lib/developerHealth';
 import { METRICS_CONFIG, type MetricsConfig } from '../../src/config/metricsConfig';
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
+import { teamMembers } from '../lib/assignments';
+import { recordAudit } from '../lib/audit';
 
 const router = express.Router();
 
@@ -388,41 +390,9 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
 
     team.technicalDebtScore = technicalDebtScore;
 
-    // Get team members from team_members table (only active users)
-    const teamMembers = await query<any[]>(
-      `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.avatar_url, u.developer_insights_enabled,
-              tm.role as team_role, tm.joined_at
-       FROM team_members tm
-       JOIN users u ON tm.user_id = u.id
-       WHERE tm.team_id = ? AND u.is_active = true`,
-      [req.params.id]
-    );
-
-    // Also get users who have this as their primary team (only active users)
-    const primaryTeamMembers = await query<any[]>(
-      `SELECT id, email, first_name, last_name, role, avatar_url, developer_insights_enabled,
-              'member' as team_role, created_at as joined_at
-       FROM users
-       WHERE primary_team_id = ? AND is_active = true`,
-      [req.params.id]
-    );
-
-    // Combine both lists and remove duplicates
-    const memberMap = new Map();
-    
-    // Add team_members first (they have explicit roles)
-    teamMembers.forEach(member => {
-      memberMap.set(member.id, member);
-    });
-    
-    // Add primary team members (if not already in team_members)
-    primaryTeamMembers.forEach(member => {
-      if (!memberMap.has(member.id)) {
-        memberMap.set(member.id, member);
-      }
-    });
-
-    team.members = Array.from(memberMap.values());
+    // Team members: active users with an active role assignment on the team
+    // (server/lib/assignments.ts, the one membership definition).
+    team.members = await teamMembers(req.params.id);
 
     res.json({ team });
   } catch (error) {
@@ -540,8 +510,9 @@ router.get('/:id/ai-suggestions', aiLimiter, authenticateToken, async (req: Auth
         restricted: true
       });
     }
-    // A team lead may only request insights (and trigger the Groq call) for their own team.
-    if (userRole === 'team_lead' && req.user?.primaryTeamId !== req.params.id) {
+    // A team lead may only request insights (and trigger the Groq call) for a team they lead
+    // (canRequestTeamInsights, server/lib/userPolicy.ts).
+    if (!canRequestTeamInsights(policyActor(req), { id: req.params.id })) {
       return res.status(403).json({ error: 'You can only view AI insights for your own team' });
     }
 
@@ -891,19 +862,15 @@ Only give praise (e.g. "keep up the good work") when there are no concerns. When
 });
 
 // Create team
-// Validate that a referenced department / lead user belongs to the caller's company.
+// Validate that a referenced department belongs to the caller's company.
 async function departmentInCompany(req: AuthRequest, departmentId?: string | null): Promise<boolean> {
   if (!departmentId) return false;
   return !!(await queryOne<any>('SELECT id FROM departments WHERE id = ? AND company_id = ?', [departmentId, req.companyId]));
 }
-async function userInCompany(req: AuthRequest, userId?: string | null): Promise<boolean> {
-  if (!userId) return true; // null lead is allowed
-  return !!(await queryOne<any>('SELECT id FROM users WHERE id = ? AND company_id = ?', [userId, req.companyId]));
-}
 
 router.post('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    if (!canManageCompanyData(req.userRole)) {
+    if (!canManageCompanyData(req)) {
       return res.status(403).json({ error: 'Only QA Managers and Super Admins can create teams' });
     }
     const { name, description, departmentId, platform, leadId } = req.body;
@@ -915,20 +882,25 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     if (!(await departmentInCompany(req, departmentId))) {
       return res.status(400).json({ error: 'Invalid department' });
     }
-    if (!(await userInCompany(req, leadId))) {
-      return res.status(400).json({ error: 'Invalid team lead' });
+    // The lead is a role assignment (one source of truth): set it with PUT /api/admin/teams/:id/lead.
+    if (leadId) {
+      return res.status(400).json({ error: 'Set the team lead with PUT /api/admin/teams/:id/lead (Departments page)' });
     }
-    // qa_manager can only create teams in their own department.
-    if (req.userRole === 'qa_manager' && departmentId !== req.user?.departmentId) {
+    // A QA manager can only create teams in a department they manage.
+    if (!canManageDepartment(policyActor(req), departmentId)) {
       return res.status(403).json({ error: 'Can only create teams in your department' });
     }
 
     const [result] = await query<any>(
-      `INSERT INTO teams (company_id, department_id, name, description, platform, lead_id)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO teams (company_id, department_id, name, description, platform)
+       VALUES (?, ?, ?, ?, ?)
        RETURNING id`,
-      [req.companyId, departmentId, name, description, platform, leadId]
+      [req.companyId, departmentId, name, description, platform]
     );
+    await recordAudit({
+      companyId: req.companyId!, actorId: req.user!.id, action: 'team.create', entityType: 'team', entityId: result.id,
+      summary: `Created team ${name}`, after: { name, description: description ?? null, departmentId }, departmentIds: [departmentId], subjectIds: [result.id],
+    });
 
     const team = await queryOne<any>(
       'SELECT * FROM teams WHERE id = ? AND company_id = ?',
@@ -951,20 +923,26 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
     if (!owned) return;
 
     const { name, description, platform, leadId, isActive } = req.body;
-    if (leadId !== undefined && !(await userInCompany(req, leadId))) {
-      return res.status(400).json({ error: 'Invalid team lead' });
+    // The lead is a role assignment (one source of truth): set it with PUT /api/admin/teams/:id/lead.
+    if (leadId !== undefined && leadId !== null) {
+      return res.status(400).json({ error: 'Set the team lead with PUT /api/admin/teams/:id/lead (Departments page)' });
     }
+    const before = await queryOne<any>('SELECT name, description, platform, is_active FROM teams WHERE id = ? AND company_id = ?', [req.params.id, req.companyId]);
 
     await query(
       `UPDATE teams
        SET name = COALESCE(?, name),
            description = COALESCE(?, description),
            platform = COALESCE(?, platform),
-           lead_id = COALESCE(?, lead_id),
            is_active = COALESCE(?, is_active)
        WHERE id = ? AND company_id = ?`,
-      [name, description, platform, leadId, isActive, req.params.id, req.companyId]
+      [name, description, platform, isActive, req.params.id, req.companyId]
     );
+    const after = await queryOne<any>('SELECT name, description, platform, is_active FROM teams WHERE id = ? AND company_id = ?', [req.params.id, req.companyId]);
+    await recordAudit({
+      companyId: req.companyId!, actorId: req.user!.id, action: 'team.update', entityType: 'team', entityId: req.params.id,
+      summary: `Updated team ${after?.name ?? ''}`, before, after, departmentIds: [owned.department_id], subjectIds: [req.params.id],
+    });
 
     const team = await queryOne<any>(
       'SELECT * FROM teams WHERE id = ? AND company_id = ?',

@@ -1,20 +1,57 @@
 /**
- * User-management rules: the ONE definition used by the server (/api/admin/users routes)
- * and by the Users / Teams pages to decide which actions to offer. Pure functions, no DB.
+ * Access rules: the ONE definition used by the server (every route, through
+ * server/middleware/access.ts and server/lib/assignments.ts) and by the UI (which pages and
+ * buttons to offer). Pure functions, no DB.
+ *
+ * Who may do what comes from the user's ROLE ASSIGNMENTS (table role_assignments, loaded per
+ * request by server/middleware/auth.ts through server/lib/assignments.ts). A grant is a role on
+ * a scope:
+ *   super_admin  on the company
+ *   qa_manager   on a department     (a user may manage several departments)
+ *   team_lead    on a team           (a user may lead several teams; one lead per team)
+ *   qa_engineer  on a team           (member)
+ *   viewer       on a team           (read-only member)
+ * users.role / department_id / primary_team_id are display columns (highest role, primary
+ * department / team), kept in sync by the server; access never depends on them alone.
+ *
+ * Analytics scope (which team's analytics the actor may open): the union of the grants:
+ *   company grant   every team of the company
+ *   department      every team of that department
+ *   team            that team
+ * Individual developer rows: super_admin / qa_manager / team_lead grants covering the team
+ * show every developer who has not opted out; a member grant only shows the actor's own row.
  *
  * Managing another user (activate/deactivate, delete = deactivate, reset password,
  * developer-insights toggle):
  *   super_admin  any user in the company
- *   qa_manager   users in their department whose role is below qa_manager
- *   team_lead    users on their primary team whose role is below team_lead
- *   others       nobody
- * Editing another user's profile, role, department or team: super_admin and qa_manager,
- *   for users they can manage. A new role must be one the actor may assign.
- * Editing yourself: name and email only (role, department and team stay as they are).
- * Resetting a password: yourself, or a user you can manage.
- * Creating users: the roles in ROLE_HIERARCHY; qa_manager only in their department;
- *   team_lead only on their own team.
+ *   qa_manager   users of a department they manage whose highest role is below qa_manager
+ *   team_lead    users of a team they lead whose highest role is below team_lead
+ * Editing another user's profile and assignments: super_admin and qa_manager (for users they
+ * manage that way). Editing yourself: name and email only.
+ *
+ * Granting / revoking an assignment (Users page chips, invitations):
+ *   super_admin  any grant in the company
+ *   qa_manager   team_lead / qa_engineer / viewer on teams of a department they manage
+ *   team_lead    qa_engineer / viewer on a team they lead
+ *   never your own assignments.
  */
+
+export type Role = 'super_admin' | 'qa_manager' | 'team_lead' | 'qa_engineer' | 'viewer';
+export type ScopeType = 'company' | 'department' | 'team';
+
+export const ROLES: Role[] = ['super_admin', 'qa_manager', 'team_lead', 'qa_engineer', 'viewer'];
+
+/** The scope type each role is assigned on. */
+export const ROLE_SCOPE: Record<Role, ScopeType> = {
+  super_admin: 'company',
+  qa_manager: 'department',
+  team_lead: 'team',
+  qa_engineer: 'team',
+  viewer: 'team',
+};
+
+/** Higher = more access; used for the "highest role" display column. */
+export const ROLE_RANK: Record<string, number> = { super_admin: 5, qa_manager: 4, team_lead: 3, qa_engineer: 2, viewer: 1 };
 
 export const ROLE_HIERARCHY: Record<string, string[]> = {
   super_admin: ['qa_manager', 'team_lead', 'qa_engineer', 'viewer'],
@@ -24,11 +61,24 @@ export const ROLE_HIERARCHY: Record<string, string[]> = {
   viewer: [],
 };
 
+/** One active role assignment. scopeId is the company, department or team id. */
+export interface Grant {
+  role: Role | string;
+  scopeType: ScopeType | string;
+  scopeId: string;
+}
+
 export interface PolicyActor {
   id: string;
+  /** Highest role (display column). */
   role: string;
   departmentId?: string | null;
   primaryTeamId?: string | null;
+  /**
+   * Active role assignments. The server always sets them. When absent (an actor built from
+   * the display columns only), they are derived from role / departmentId / primaryTeamId.
+   */
+  grants?: Grant[];
 }
 
 export interface PolicyTarget {
@@ -36,30 +86,104 @@ export interface PolicyTarget {
   role: string;
   department_id?: string | null;
   primary_team_id?: string | null;
+  /** Departments the target belongs to (department grants and their teams' departments). */
+  department_ids?: string[] | null;
+  /** Teams the target is assigned to. */
+  team_ids?: string[] | null;
 }
 
-/** May the actor give a user this role (on create, or when changing a role)? */
+export interface ScopeTeam {
+  id: string;
+  department_id?: string | null;
+}
+
+/** Grants of an actor built from display columns only (one assignment, as before assignments existed). */
+export function grantsFromDisplay(role: string, departmentId?: string | null, primaryTeamId?: string | null): Grant[] {
+  if (role === 'super_admin') return [{ role, scopeType: 'company', scopeId: '*' }];
+  if (role === 'qa_manager') return departmentId ? [{ role, scopeType: 'department', scopeId: departmentId }] : [];
+  if (role === 'team_lead' || role === 'qa_engineer' || role === 'viewer') {
+    return primaryTeamId ? [{ role, scopeType: 'team', scopeId: primaryTeamId }] : [];
+  }
+  return [];
+}
+
+export function grantsOf(actor: PolicyActor): Grant[] {
+  return actor.grants ?? grantsFromDisplay(actor.role, actor.departmentId, actor.primaryTeamId);
+}
+
+const hasCompany = (actor: PolicyActor) => grantsOf(actor).some((g) => g.scopeType === 'company' && g.role === 'super_admin');
+
+/** Departments the actor manages (qa_manager grants). */
+export function managedDepartmentIds(actor: PolicyActor): string[] {
+  return grantsOf(actor).filter((g) => g.role === 'qa_manager' && g.scopeType === 'department').map((g) => g.scopeId);
+}
+
+/** Teams the actor leads (team_lead grants). */
+export function ledTeamIds(actor: PolicyActor): string[] {
+  return grantsOf(actor).filter((g) => g.role === 'team_lead' && g.scopeType === 'team').map((g) => g.scopeId);
+}
+
+/** Every team the actor is assigned to (any team-scoped role). */
+export function assignedTeamIds(actor: PolicyActor): string[] {
+  return grantsOf(actor).filter((g) => g.scopeType === 'team').map((g) => g.scopeId);
+}
+
+/** The roles the actor holds over this team (from company, department and team grants). */
+export function rolesOnTeam(actor: PolicyActor, team: ScopeTeam): string[] {
+  const out: string[] = [];
+  for (const g of grantsOf(actor)) {
+    if (g.scopeType === 'company') out.push(g.role);
+    else if (g.scopeType === 'department' && !!team.department_id && g.scopeId === team.department_id) out.push(g.role);
+    else if (g.scopeType === 'team' && g.scopeId === team.id) out.push(g.role);
+  }
+  return out;
+}
+
+/** Highest role among the actor's grants (falls back to the display role). */
+export function highestRole(actor: PolicyActor): string {
+  const gs = grantsOf(actor);
+  if (!gs.length) return actor.role;
+  return gs.reduce((best, g) => ((ROLE_RANK[g.role] ?? 0) > (ROLE_RANK[best] ?? 0) ? g.role : best), gs[0].role);
+}
+
+/** Does the actor hold this role anywhere? */
+export function holdsRole(actor: PolicyActor, role: string): boolean {
+  return grantsOf(actor).some((g) => g.role === role);
+}
+
+/** May the actor give a user this role (role hierarchy on the actor's highest role)? */
 export function canAssignRole(actorRole: string, targetRole: string): boolean {
   return (ROLE_HIERARCHY[actorRole] || []).includes(targetRole);
 }
 
+/* ------------------------------------------------------------------------------------------
+ * Users
+ * ---------------------------------------------------------------------------------------- */
+
+const targetDepartments = (t: PolicyTarget) => t.department_ids ?? (t.department_id ? [t.department_id] : []);
+const targetTeams = (t: PolicyTarget) => t.team_ids ?? (t.primary_team_id ? [t.primary_team_id] : []);
+
+/** Through which role (if any) may the actor manage this user? */
+export function manageUserVia(actor: PolicyActor, target: PolicyTarget): 'super_admin' | 'qa_manager' | 'team_lead' | null {
+  if (actor.id === target.id) return null;
+  if (hasCompany(actor)) return 'super_admin';
+  const depts = managedDepartmentIds(actor);
+  if (depts.length && canAssignRole('qa_manager', target.role) && targetDepartments(target).some((d) => depts.includes(d))) return 'qa_manager';
+  const led = ledTeamIds(actor);
+  if (led.length && canAssignRole('team_lead', target.role) && targetTeams(target).some((t) => led.includes(t))) return 'team_lead';
+  return null;
+}
+
 /** Activate/deactivate, delete (deactivate), reset password, developer-insights toggle. */
 export function canManageUser(actor: PolicyActor, target: PolicyTarget): boolean {
-  if (actor.id === target.id) return false;
-  if (actor.role === 'super_admin') return true;
-  if (actor.role === 'qa_manager') {
-    return !!actor.departmentId && target.department_id === actor.departmentId && canAssignRole('qa_manager', target.role);
-  }
-  if (actor.role === 'team_lead') {
-    return !!actor.primaryTeamId && target.primary_team_id === actor.primaryTeamId && canAssignRole('team_lead', target.role);
-  }
-  return false;
+  return manageUserVia(actor, target) !== null;
 }
 
 /** May the actor open the edit form for this user? (Self: name and email only.) */
 export function canEditUser(actor: PolicyActor, target: PolicyTarget): boolean {
   if (actor.id === target.id) return true;
-  return (actor.role === 'super_admin' || actor.role === 'qa_manager') && canManageUser(actor, target);
+  const via = manageUserVia(actor, target);
+  return via === 'super_admin' || via === 'qa_manager';
 }
 
 /** May the actor change this user's role, department and team (not just name/email)? */
@@ -73,7 +197,7 @@ export function canResetPassword(actor: PolicyActor, target: PolicyTarget): bool
 
 /** Delete is a soft delete (deactivation) offered to super_admin and qa_manager. */
 export function canDeleteUser(actor: PolicyActor, target: PolicyTarget): boolean {
-  return (actor.role === 'super_admin' || actor.role === 'qa_manager') && canManageUser(actor, target);
+  return canEditAssignment(actor, target);
 }
 
 export function canCreateUsers(actorRole: string): boolean {
@@ -83,43 +207,79 @@ export function canCreateUsers(actorRole: string): boolean {
 /** Roles that may be created without a primary team (they are not measured as a team member). */
 export const TEAM_OPTIONAL_ROLES = ['viewer', 'qa_manager'];
 
-/** Team-management rules (create / edit / delete): super_admin any team, qa_manager own department. */
-export function canManageTeam(actor: PolicyActor, team: { department_id?: string | null }): boolean {
-  if (actor.role === 'super_admin') return true;
-  if (actor.role === 'qa_manager') return !!actor.departmentId && team.department_id === actor.departmentId;
+/**
+ * May the actor grant (or revoke) this assignment? `team` is the team of a team-scoped grant
+ * (needed for its department). Never your own assignments (checked by the caller with the
+ * target user id).
+ */
+export function canGrant(actor: PolicyActor, grant: Grant, team?: ScopeTeam | null): boolean {
+  if (ROLE_SCOPE[grant.role as Role] !== grant.scopeType) return false;
+  if (hasCompany(actor)) return true;
+  if (grant.scopeType !== 'team' || !team || team.id !== grant.scopeId) return false;
+  if (['team_lead', 'qa_engineer', 'viewer'].includes(grant.role) && !!team.department_id && managedDepartmentIds(actor).includes(team.department_id)) return true;
+  if (['qa_engineer', 'viewer'].includes(grant.role) && ledTeamIds(actor).includes(team.id)) return true;
   return false;
 }
 
-/** Team data writes (AI toggle, metrics): same rule as assertTeamWrite — plus team_lead on their own team. */
-export function canWriteTeamData(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
-  return canManageTeam(actor, team) || (actor.role === 'team_lead' && !!actor.primaryTeamId && actor.primaryTeamId === team.id);
+/** May the actor send invitations at all (any grant they could give)? */
+export function canInvite(actor: PolicyActor): boolean {
+  return hasCompany(actor) || managedDepartmentIds(actor).length > 0 || ledTeamIds(actor).length > 0;
 }
 
 /* ------------------------------------------------------------------------------------------
- * Analytics scope: the ONE definition of which team's analytics a user may open, used by
- * the server (server/middleware/access.ts assertTeamAnalytics, /api/analytics/*, the
- * developer endpoints in teams.ts / metrics.ts) and by the Analytics scope bar in the UI
- * (src/contexts/AnalyticsScopeContext.tsx). Pure functions; the company (tenant) boundary is
- * checked separately by the server (a team outside the caller's company is never in scope).
- *
- *   super_admin  any department and team in their company
- *   qa_manager   their own department and every team in it
- *   team_lead    their own (primary) team
- *   qa_engineer  their own (primary) team
- *   viewer       their own (primary) team
- *
- * Every analytics module shows exactly one team. Individual developer rows (developer
- * metrics, DDPS snapshots, developer recommendations, the team members' metrics):
- *   super_admin / qa_manager / team_lead  every developer of an in-scope team who has not
- *                                         opted out (developer_insights_enabled), plus themselves
- *   qa_engineer / viewer                  only their own row
- * Team aggregates are available to everyone for an in-scope team.
+ * Teams and departments
  * ---------------------------------------------------------------------------------------- */
 
-export interface ScopeTeam {
-  id: string;
-  department_id?: string | null;
+/** Team-management rules (create / edit / delete): super_admin any team, qa_manager their departments. */
+export function canManageTeam(actor: PolicyActor, team: { department_id?: string | null }): boolean {
+  if (hasCompany(actor)) return true;
+  return !!team.department_id && managedDepartmentIds(actor).includes(team.department_id);
 }
+
+/** May the actor create / manage teams in this department? */
+export function canManageDepartment(actor: PolicyActor, departmentId: string | null | undefined): boolean {
+  return canManageTeam(actor, { department_id: departmentId ?? null });
+}
+
+/** Team data writes (AI toggle, metrics): canManageTeam, plus team_lead on a team they lead. */
+export function canWriteTeamData(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
+  return canManageTeam(actor, team) || ledTeamIds(actor).includes(team.id);
+}
+
+/** Company-level administration (departments, API keys, moving teams, assigning managers and leads). */
+export function isCompanyAdmin(actor: PolicyActor): boolean {
+  return hasCompany(actor);
+}
+
+/** Company-level config writes (Parameters, metric intervals, pipeline config): super_admin or a QA manager. */
+export function canManageCompanyConfig(actor: PolicyActor): boolean {
+  return hasCompany(actor) || managedDepartmentIds(actor).length > 0;
+}
+
+/**
+ * Per-team detail reads (team metrics history, velocity, team metric bundles): super_admin and
+ * QA managers read any team of the company (the dashboards are company-wide by design); others
+ * the teams they are assigned to.
+ */
+export function canReadTeamDetail(actor: PolicyActor, team: ScopeTeam): boolean {
+  if (hasCompany(actor) || managedDepartmentIds(actor).length > 0) return true;
+  return assignedTeamIds(actor).includes(team.id);
+}
+
+/**
+ * Team AI insights (rule-based / LLM recommendations): super_admin and QA managers for any team
+ * of the company (as the dashboards), team leads for the teams they lead.
+ */
+export function canRequestTeamInsights(actor: PolicyActor, team: { id: string }): boolean {
+  return hasCompany(actor) || managedDepartmentIds(actor).length > 0 || ledTeamIds(actor).includes(team.id);
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Analytics scope: which team's analytics a user may open. Used by the server
+ * (assertTeamAnalytics, /api/analytics/*, the developer endpoints in teams.ts / metrics.ts) and
+ * by the Analytics scope bar in the UI. The company (tenant) boundary is checked separately by
+ * the server (a team outside the caller's company is never in scope).
+ * ---------------------------------------------------------------------------------------- */
 
 /** Every role may use the team-level Analytics modules (for the teams in their scope). */
 export const ANALYTICS_ROLES = ['super_admin', 'qa_manager', 'team_lead', 'qa_engineer', 'viewer'];
@@ -130,6 +290,7 @@ export const DEVELOPER_INSIGHT_ROLES = ['super_admin', 'qa_manager', 'team_lead'
 /** How far the user's analytics scope reaches; decides which selectors are editable. */
 export type AnalyticsScopeLevel = 'company' | 'department' | 'team' | 'none';
 
+/** Level from a role alone (display role). Prefer analyticsScopeLevelOf(actor). */
 export function analyticsScopeLevel(role?: string | null): AnalyticsScopeLevel {
   if (role === 'super_admin') return 'company';
   if (role === 'qa_manager') return 'department';
@@ -137,18 +298,18 @@ export function analyticsScopeLevel(role?: string | null): AnalyticsScopeLevel {
   return 'none';
 }
 
+/** Level from the actor's grants: the widest scope they hold. */
+export function analyticsScopeLevelOf(actor: PolicyActor): AnalyticsScopeLevel {
+  const gs = grantsOf(actor);
+  if (gs.some((g) => g.scopeType === 'company')) return 'company';
+  if (gs.some((g) => g.scopeType === 'department')) return 'department';
+  if (gs.some((g) => g.scopeType === 'team')) return 'team';
+  return 'none';
+}
+
 /** May the actor open analytics for this team (team in the actor's company)? */
 export function canViewTeamAnalytics(actor: PolicyActor, team: ScopeTeam): boolean {
-  switch (analyticsScopeLevel(actor.role)) {
-    case 'company':
-      return true;
-    case 'department':
-      return !!actor.departmentId && team.department_id === actor.departmentId;
-    case 'team':
-      return !!actor.primaryTeamId && actor.primaryTeamId === team.id;
-    default:
-      return false;
-  }
+  return rolesOnTeam(actor, team).length > 0;
 }
 
 /** The teams (of the actor's company) whose analytics the actor may open. */
@@ -156,15 +317,17 @@ export function analyticsTeamsInScope<T extends ScopeTeam>(actor: PolicyActor, t
   return teams.filter((t) => canViewTeamAnalytics(actor, t));
 }
 
-/** Default team for the modules: the actor's primary team when in scope, else the first in scope. */
+/** Default team for the modules: the actor's primary team when in scope, else a led team, else the first in scope. */
 export function defaultAnalyticsTeamId(actor: PolicyActor, teamsInScope: ScopeTeam[]): string | null {
   if (actor.primaryTeamId && teamsInScope.some((t) => t.id === actor.primaryTeamId)) return actor.primaryTeamId;
+  const led = ledTeamIds(actor).find((id) => teamsInScope.some((t) => t.id === id));
+  if (led) return led;
   return teamsInScope[0]?.id ?? null;
 }
 
 /** May the actor see other developers' individual metrics for this team? */
 export function canViewIndividualDevelopers(actor: PolicyActor, team: ScopeTeam): boolean {
-  return DEVELOPER_INSIGHT_ROLES.includes(actor.role) && canViewTeamAnalytics(actor, team);
+  return rolesOnTeam(actor, team).some((r) => DEVELOPER_INSIGHT_ROLES.includes(r));
 }
 
 /**
@@ -180,4 +343,20 @@ export function canViewDeveloperRow(
   if (!canViewTeamAnalytics(actor, team)) return false;
   if (developer.id === actor.id) return true;
   return canViewIndividualDevelopers(actor, team) && developer.developer_insights_enabled !== false;
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Change history (audit log)
+ * ---------------------------------------------------------------------------------------- */
+
+/** Who may open the Activity page: super_admin (whole company) and QA managers (their departments). */
+export function canViewActivity(actor: PolicyActor): boolean {
+  return hasCompany(actor) || managedDepartmentIds(actor).length > 0;
+}
+
+/** May the actor see this audit entry? super_admin: all; QA manager: entries of a department they manage. */
+export function canViewAuditEntry(actor: PolicyActor, entry: { department_ids?: string[] | null }): boolean {
+  if (hasCompany(actor)) return true;
+  const mine = managedDepartmentIds(actor);
+  return (entry.department_ids ?? []).some((d) => mine.includes(d));
 }

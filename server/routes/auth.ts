@@ -4,6 +4,10 @@ import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
 import { authLimiter } from '../middleware/rateLimit';
+import { execOn, grantAssignment, listAssignments } from '../lib/assignments';
+import { recordAudit } from '../lib/audit';
+import { transaction } from '../../src/lib/db';
+import ssoRoutes, { setSessionCookie } from './authSso';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -12,6 +16,18 @@ const broadcast = (_wss: any, _data: any) => {}; // No-op in serverless
 const wss = null; // Not available in serverless
 
 const router = express.Router();
+
+// SSO (Google / Microsoft), invitation acceptance and GET /providers: server/routes/authSso.ts.
+router.use(ssoRoutes);
+
+/** The user's active assignments with scope names (the UI builds its policy actor from them). */
+async function assignmentsOf(user: { id: string; company_id: string }) {
+  const rows = await listAssignments(user.company_id, [user.id]);
+  return rows.map((r) => ({
+    id: r.id, role: r.role, scopeType: r.scope_type, scopeId: r.scope_id, scopeName: r.scope_name,
+    departmentId: r.department_id, departmentName: r.department_name,
+  }));
+}
 
 // Helper to generate human-readable 12-character company ID
 // Format: 8 alphanumeric chars + 4 digit checksum
@@ -103,20 +119,26 @@ router.post('/register', authLimiter, async (req, res) => {
     // Generate user ID
     const userId = generateUUID();
 
-    // Insert user
-    await query(
-      `INSERT INTO users (
-        id, email, password_hash, first_name, last_name, role,
-        company_id, department_id, primary_team_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [userId, email, passwordHash, firstName, lastName, role, companyId, departmentId, teamId]
-    );
-
-    // Add to team_members
-    await query(
-      'INSERT INTO team_members (user_id, team_id, role) VALUES (?, ?, ?)',
-      [userId, teamId, 'member']
-    );
+    // Insert user, their role assignments (super admin of the company, member of the first
+    // team) and the compatibility membership row, in one transaction.
+    await transaction(async (client) => {
+      const exec = execOn(client);
+      await exec(
+        `INSERT INTO users (
+          id, email, password_hash, first_name, last_name, role,
+          company_id, department_id, primary_team_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [userId, email, passwordHash, firstName, lastName, role, companyId, departmentId, teamId]
+      );
+      await grantAssignment(exec, { companyId, userId, grant: { role: 'super_admin', scopeType: 'company', scopeId: companyId }, actorId: userId });
+      await grantAssignment(exec, { companyId, userId, grant: { role: 'qa_engineer', scopeType: 'team', scopeId: teamId }, actorId: userId });
+      await exec('INSERT INTO team_members (user_id, team_id, role) VALUES (?, ?, ?) ON CONFLICT DO NOTHING', [userId, teamId, 'member']);
+      await recordAudit({
+        companyId, actorId: userId, action: 'company.create', entityType: 'company', entityId: companyId,
+        summary: `${firstName} ${lastName} created the organisation ${companyName}`, after: { companyName, departmentName, teamName },
+        departmentIds: [departmentId], subjectIds: [userId, companyId],
+      }, exec);
+    });
 
     // Get created user
     const user = await queryOne<any>(
@@ -131,27 +153,8 @@ router.post('/register', authLimiter, async (req, res) => {
       data: user
     });
 
-    // Generate token
-    const token = jwt.sign(
-      { 
-        userId: user.id, 
-        role: user.role, 
-        companyId: user.company_id,
-        departmentId: user.department_id,
-        primaryTeamId: user.primary_team_id
-      },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Set secure cookie
-    const isProduction = process.env.NODE_ENV === 'production';
-    res.cookie('irongate_token', token, {
-      httpOnly: true,
-      secure: isProduction, // secure only in production (https)
-      sameSite: isProduction ? 'strict' : 'lax', // lax for local dev
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+    setSessionCookie(res, user.id);
+    user.assignments = await assignmentsOf(user);
 
     res.status(201).json({ user });
   } catch (error) {
@@ -200,31 +203,13 @@ router.post('/login', authLimiter, async (req, res) => {
 
     // Get assigned teams
     const teams = await query<any[]>(
-      'SELECT team_id FROM team_members WHERE user_id = ?',
+      "SELECT scope_id AS team_id FROM role_assignments WHERE user_id = ? AND scope_type = 'team' AND revoked_at IS NULL",
       [user.id]
     );
     user.assignedTeams = teams.map(t => t.team_id);
 
-    // Generate token
-    const token = jwt.sign(
-      { 
-        userId: user.id, 
-        role: user.role, 
-        companyId: user.company_id,
-        departmentId: user.department_id,
-        primaryTeamId: user.primary_team_id
-      },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    // Set secure cookie
-    res.cookie('irongate_token', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-    });
+    setSessionCookie(res, user.id);
+    user.assignments = await assignmentsOf(user);
 
     res.json({ user });
   } catch (error) {
@@ -280,10 +265,11 @@ router.get('/me', async (req, res) => {
 
     // Get assigned teams
     const teams = await query<any[]>(
-      'SELECT team_id FROM team_members WHERE user_id = ?',
+      "SELECT scope_id AS team_id FROM role_assignments WHERE user_id = ? AND scope_type = 'team' AND revoked_at IS NULL",
       [user.id]
     );
     user.assignedTeams = teams.map(t => t.team_id);
+    user.assignments = await assignmentsOf(user);
 
     res.json({ user });
   } catch (error) {

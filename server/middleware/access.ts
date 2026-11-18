@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { queryOne } from '../../src/lib/db';
 import { AuthRequest } from './auth';
-import { canViewTeamAnalytics, type PolicyActor } from '../lib/userPolicy';
+import { canViewTeamAnalytics, canReadTeamDetail, canWriteTeamData, canManageTeam, canManageCompanyConfig, type PolicyActor } from '../lib/userPolicy';
 
 /**
  * Tenant / team access helpers.
@@ -31,10 +31,10 @@ export async function getOwnedTeam(req: AuthRequest, teamId?: string | null): Pr
 }
 
 /**
- * Enforce READ access to a team's data. Company scope is mandatory. Beyond that,
- * super_admin and qa_manager may read any team in their company (the dashboards
- * are company-wide by design); team_lead / qa_engineer / viewer are limited to
- * their own primary team for per-team detail reads.
+ * Enforce READ access to a team's per-team detail data. Company scope is mandatory. Beyond
+ * that the shared rule canReadTeamDetail (server/lib/userPolicy.ts): super_admin and QA
+ * managers read any team in their company (the dashboards are company-wide by design);
+ * everyone else the teams they are assigned to.
  * Writes the HTTP error and returns null when access is denied.
  */
 export async function assertTeamRead(req: AuthRequest, res: Response, teamId?: string | null): Promise<OwnedTeam | null> {
@@ -43,16 +43,14 @@ export async function assertTeamRead(req: AuthRequest, res: Response, teamId?: s
     res.status(404).json({ error: 'Team not found' });
     return null;
   }
-  const role = req.userRole;
-  if (role === 'super_admin' || role === 'qa_manager') return team;
-  if (req.user?.primaryTeamId && req.user.primaryTeamId === team.id) return team;
+  if (canReadTeamDetail(policyActor(req), team)) return team;
   res.status(403).json({ error: 'Access denied for this team' });
   return null;
 }
 
 /**
- * Enforce WRITE access to a team's data: super_admin (any team in company),
- * qa_manager (teams in their department), team_lead (their own team only).
+ * Enforce WRITE access to a team's data (canWriteTeamData): super_admin (any team in company),
+ * QA managers (teams of the departments they manage), team leads (the teams they lead).
  * qa_engineer and viewer may never write team data.
  * Writes the HTTP error and returns null when access is denied.
  */
@@ -62,32 +60,32 @@ export async function assertTeamWrite(req: AuthRequest, res: Response, teamId?: 
     res.status(404).json({ error: 'Team not found' });
     return null;
   }
-  const role = req.userRole;
-  if (role === 'super_admin') return team;
-  if (role === 'qa_manager') {
-    if (team.department_id && team.department_id === req.user?.departmentId) return team;
+  const actor = policyActor(req);
+  if (canWriteTeamData(actor, team)) return team;
+  if (canManageCompanyConfig(actor) && !canManageTeam(actor, team)) {
     res.status(403).json({ error: 'Can only manage teams in your department' });
     return null;
   }
-  if (role === 'team_lead' && req.user?.primaryTeamId === team.id) return team;
   res.status(403).json({ error: 'Insufficient permissions for this team' });
   return null;
 }
 
-/** The caller as a PolicyActor (live role, department and primary team from authenticateToken). */
+/** The caller as a PolicyActor (live assignments and display columns from authenticateToken). */
 export function policyActor(req: AuthRequest): PolicyActor {
   return {
     id: req.user?.id ?? '',
     role: req.user?.role ?? '',
     departmentId: req.user?.departmentId ?? null,
     primaryTeamId: req.user?.primaryTeamId ?? null,
+    grants: req.user?.grants ?? [],
   };
 }
 
 /**
  * Enforce ANALYTICS access to one team (the shared rule canViewTeamAnalytics in
- * server/lib/userPolicy.ts): super_admin any team of their company, qa_manager the teams
- * of their department, team_lead / qa_engineer / viewer their own primary team.
+ * server/lib/userPolicy.ts): super_admin any team of their company, a QA manager the teams
+ * of the departments they manage, team_lead / qa_engineer / viewer the teams they are
+ * assigned to.
  * A team of another company, an unknown id and an out-of-scope team all get the same
  * 403, so the response does not reveal whether a team exists elsewhere.
  * Writes the HTTP error and returns null when access is denied.
@@ -101,7 +99,12 @@ export async function assertTeamAnalytics(req: AuthRequest, res: Response, teamI
   return team;
 }
 
-/** True if the role may perform company-level write/config operations. */
-export function canManageCompanyData(role?: string): boolean {
-  return role === 'super_admin' || role === 'qa_manager';
+/**
+ * True if the caller may perform company-level write/config operations (super_admin, or a QA
+ * manager of any department). Takes the request (assignments); a role string is accepted for
+ * older call sites and checked against the caller's highest role.
+ */
+export function canManageCompanyData(reqOrRole?: AuthRequest | string): boolean {
+  if (typeof reqOrRole === 'object' && reqOrRole) return canManageCompanyConfig(policyActor(reqOrRole));
+  return reqOrRole === 'super_admin' || reqOrRole === 'qa_manager';
 }

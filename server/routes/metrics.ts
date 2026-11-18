@@ -5,6 +5,7 @@ import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
 import { canViewDeveloperRow } from '../lib/userPolicy';
+import { teamMemberCountSql } from '../lib/teamMembership';
 import {
   BURNOUT_DEFINITION,
   burnoutRiskLabel,
@@ -519,7 +520,7 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
     // Get team info
     const team = await queryOne<any>(
       `SELECT t.name, d.name as department_name,
-        (SELECT COUNT(*) FROM team_members WHERE team_id = t.id) as member_count
+        ${teamMemberCountSql('t')} as member_count
       FROM teams t 
       LEFT JOIN departments d ON t.department_id = d.id
       WHERE t.id = ?`,
@@ -579,7 +580,7 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       { id: 'tech_debt_total_items', name: 'Total Tech Debt Items', value: debtSummary?.total_items, unit: 'count', category: 'tech_debt', source: 'technical_debt' },
       
       // Team Info
-      { id: 'team_member_count', name: 'Team Members', value: team?.member_count, unit: 'count', category: 'team', source: 'team_members' },
+      { id: 'team_member_count', name: 'Team Members', value: team?.member_count, unit: 'count', category: 'team', source: 'role_assignments' },
       { id: 'developer_count', name: 'Active Developers (30d)', value: devMetrics?.developer_count_30d ?? 0, unit: 'count', category: 'team', source: 'developer_metrics (rows updated in the last 30 days)' }
     ];
 

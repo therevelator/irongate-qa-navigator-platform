@@ -1,4 +1,6 @@
 import { query, queryOne, transaction } from '../../src/lib/db';
+import { departmentManagers, execOn, syncUserDisplay } from './assignments';
+import { recordAudit } from './audit';
 
 /**
  * Moving a team to another department: the ONE definition of what moves with it, used by
@@ -6,7 +8,8 @@ import { query, queryOne, transaction } from '../../src/lib/db';
  * confirm dialog.
  *
  * Everything that decides a team's department reads teams.department_id: analytics scope
- * (userPolicy.canViewTeamAnalytics via access.getOwnedTeam), team management (canManageTeam),
+ * (userPolicy.canViewTeamAnalytics via access.getOwnedTeam: QA managers of a department see its
+ * teams through their department assignment), team management (canManageTeam),
  * KPI dashboards and their department filters, and config inheritance (configResolver). Two
  * other columns carry a department and are kept in step here, in the same transaction:
  *   users.department_id    members whose primary team is this team and who were in the old
@@ -15,6 +18,9 @@ import { query, queryOne, transaction } from '../../src/lib/db';
  *                          and so does anyone whose primary team is elsewhere.
  *   configs.department_id  team-level config rows (team_id set) also store the department;
  *                          they follow so the Parameters page finds them under the new one.
+ * Role assignments do not move: QA managers of the old department lose the team (their scope is
+ * their department, so a membership they had of the team ends), the new department's managers
+ * gain it, and the team's lead and members keep their team assignments. Recorded and undoable.
  */
 
 /** Roles whose department never changes because a team moved. */
@@ -34,7 +40,7 @@ export interface TeamMovePlan {
   to: DepartmentRef;
   /** Users whose department follows the team. */
   followers: PersonRef[];
-  /** Active QA managers of the old department: they lose the team. */
+  /** Active QA managers of the old department: they lose the team (their assignments stay). */
   managersLosing: PersonRef[];
   /** Active QA managers of the new department: they gain the team. */
   managersGaining: PersonRef[];
@@ -52,15 +58,9 @@ const person = (r: any): PersonRef => ({
   is_active: r.is_active,
 });
 
+/** Active QA managers of a department (role assignments, server/lib/assignments.ts). */
 async function activeManagers(companyId: string, departmentId: string | null): Promise<PersonRef[]> {
-  if (!departmentId) return [];
-  const rows = await query<any[]>(
-    `SELECT id, first_name, last_name, email, role, is_active FROM users
-      WHERE company_id = ? AND department_id = ? AND role = 'qa_manager' AND is_active = TRUE
-      ORDER BY first_name, last_name`,
-    [companyId, departmentId]
-  );
-  return rows.map(person);
+  return (await departmentManagers(companyId, departmentId)).map(person);
 }
 
 /** Validate a move and describe what it changes. Does not write. */
@@ -119,7 +119,7 @@ export async function planTeamDepartmentMove(companyId: string, teamId: string, 
  * plan saw, so a concurrent move makes this one fail instead of moving members twice.
  * Returns the ids of the users whose department followed the team.
  */
-export async function applyTeamDepartmentMove(companyId: string, plan: TeamMovePlan): Promise<string[] | null> {
+export async function applyTeamDepartmentMove(companyId: string, plan: TeamMovePlan, actorId: string | null = null): Promise<string[] | null> {
   return transaction(async (client) => {
     const fromId = plan.from?.id ?? null;
     const moved = await client.query(
@@ -144,6 +144,31 @@ export async function applyTeamDepartmentMove(companyId: string, plan: TeamMoveP
       'UPDATE configs SET department_id = $1, updated_at = NOW() WHERE company_id = $2 AND team_id = $3',
       [plan.to.id, companyId, plan.team.id]
     );
+    // QA managers of the old department who were members of the team stay in their department
+    // (their scope is the department): their membership of the moved team ends, as when a
+    // manager is assigned (server/lib/roleAssignment.ts). Managers of the new department keep it.
+    const exec = execOn(client);
+    const ended = await exec<any>(
+      `UPDATE role_assignments ra SET revoked_at = now(), revoked_by = ?
+        WHERE ra.scope_type = 'team' AND ra.scope_id = ? AND ra.revoked_at IS NULL AND ra.role <> 'team_lead'
+          AND EXISTS (SELECT 1 FROM role_assignments m WHERE m.user_id = ra.user_id AND m.role = 'qa_manager'
+                       AND m.scope_type = 'department' AND m.scope_id = ? AND m.revoked_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM role_assignments m WHERE m.user_id = ra.user_id AND m.role = 'qa_manager'
+                       AND m.scope_type = 'department' AND m.scope_id = ? AND m.revoked_at IS NULL)
+        RETURNING ra.user_id, ra.role`,
+      [actorId, plan.team.id, fromId, plan.to.id]
+    );
+    for (const r of ended) await syncUserDisplay(exec, r.user_id);
+    const revokedMemberships = ended.map((r: any) => ({ userId: r.user_id, role: r.role }));
+
+    // Change history (undoable): the team, the users whose department followed it.
+    await recordAudit({
+      companyId, actorId, action: 'team.move', entityType: 'team', entityId: plan.team.id,
+      summary: `Moved ${plan.team.name} from ${plan.from?.name ?? 'no department'} to ${plan.to.name}`,
+      before: { departmentId: fromId, departmentName: plan.from?.name ?? null },
+      after: { departmentId: plan.to.id, departmentName: plan.to.name, movedUserIds: userIds, revokedMemberships },
+      departmentIds: [fromId, plan.to.id], subjectIds: [plan.team.id, ...userIds, ...revokedMemberships.map((m: any) => m.userId)],
+    }, exec);
     return userIds;
   });
 }

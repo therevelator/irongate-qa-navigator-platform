@@ -1,5 +1,10 @@
-import { query, queryOne, transaction } from '../../src/lib/db';
-import { execOn, syncPrimaryTeamMembership } from './teamMembership';
+import { query, queryOne } from '../../src/lib/db';
+import {
+  loadGrants, grantAssignment, revokeGrant, syncUserDisplay, lastSuperAdminGuard, departmentManagers, teamsLedBy,
+  AssignmentError, type Exec,
+} from './assignments';
+import { auditedUserChange } from './audit';
+import { ROLE_RANK, type Grant } from './userPolicy';
 
 /**
  * Assigning department QA managers and team leads (Departments page, super_admin only).
@@ -8,21 +13,23 @@ import { execOn, syncPrimaryTeamMembership } from './teamMembership';
  *   POST /api/admin/departments/:id/managers/:userId/remove { role, teamId?, dryRun? }
  *   PUT  /api/admin/teams/:id/lead                          { userId, dryRun? }
  *
- * Common rules: the assignee is an active user of the caller's company; an admin cannot
- * change their own role, and the last super_admin of a company cannot be demoted. Each
- * assignment runs in one transaction. Authorisation reads role, department and primary team
- * from the users row on every request (middleware/auth.ts), so a change applies to the user's
- * next request without signing in again.
+ * All three change role ASSIGNMENTS (server/lib/assignments.ts) in one transaction, recorded in
+ * the change history (undoable). Common rules: the assignee is an active user of the caller's
+ * company; an admin cannot change their own role, and the last super_admin of a company cannot
+ * be demoted. Authorisation reads the assignments on every request, so a change applies to the
+ * user's next request without signing in again.
  *
- * Department manager: role qa_manager, department_id = the department. The primary team is
- *   kept when it is a team of that department, otherwise cleared (a manager's scope is the
- *   whole department). Teams the person led (teams.lead_id) lose them as lead.
- * Removing a manager: the person stays in the department with the chosen role (qa_engineer by
- *   default, or viewer). A qa_engineer needs a primary team in the department.
- * Team lead: teams.lead_id = the user, who becomes team_lead with primary_team_id = the team
- *   and department_id = the team's department (team_members kept in step). The previous lead
- *   stays on the team: demoted to qa_engineer, unless they still lead another team, in which
- *   case they keep the team_lead role.
+ * Department manager: adds a qa_manager assignment on the department. Other departments the
+ *   person manages stay (a manager may manage several). Their team assignments in the department
+ *   stay; team assignments elsewhere end (a manager's scope is their departments), so teams they
+ *   led there lose them as lead. A super admin made manager loses the super admin assignment.
+ * Removing a manager: ends the qa_manager assignment of that department; the person stays in the
+ *   department with the chosen role (qa_engineer by default, or viewer) on a team there. A
+ *   qa_engineer needs a team in the department.
+ * Team lead: the team_lead assignment of the team (one per team) goes to the user; their primary
+ *   team becomes the team. Other teams they lead stay; a membership of their previous primary team
+ *   ends; QA manager / super admin assignments end (they will see only their teams). The previous
+ *   lead stays on the team as a qa_engineer (their role stays team_lead if they lead another team).
  */
 
 export const ROLE_LABEL: Record<string, string> = {
@@ -44,10 +51,14 @@ export interface PersonSummary { id: string; name: string; email: string; role: 
 export interface AssignmentPlan {
   kind: 'assign_manager' | 'remove_manager' | 'assign_lead';
   user: PersonSummary;
+  /** Display role before / after (highest role). */
   role: { from: string; to: string };
   department: { from: string | null; to: string | null; fromName: string | null; toName: string | null };
   primaryTeam: { from: string | null; to: string | null; fromName: string | null; toName: string | null };
-  /** Teams whose lead_id is cleared (assign_manager). */
+  /** Assignments that end / start for the user. */
+  revokes: Grant[];
+  grants: Grant[];
+  /** Teams whose lead assignment ends (assign_manager). */
   clearedLeadOf: Array<{ id: string; name: string }>;
   /** assign_lead: the lead being replaced and what happens to them. */
   previousLead: (PersonSummary & { newRole: string; alsoLeads: string[] }) | null;
@@ -61,9 +72,11 @@ const fail = (status: number, error: string): Fail => ({ ok: false, status, erro
 
 const nameOf = (u: { first_name: string | null; last_name: string | null; email: string }) =>
   `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email;
-const firstName = (u: UserRow) => nameOf(u);
 const summary = (u: UserRow): PersonSummary => ({ id: u.id, name: nameOf(u), email: u.email, role: u.role });
 const list = (items: string[]) => (items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`);
+const highest = (gs: Grant[], fallback: string) =>
+  gs.length ? gs.reduce((b, g) => ((ROLE_RANK[g.role] ?? 0) > (ROLE_RANK[b] ?? 0) ? g.role : b), gs[0].role) : fallback;
+const same = (a: Grant, b: Grant) => a.role === b.role && a.scopeType === b.scopeType && a.scopeId === b.scopeId;
 
 async function loadUser(companyId: string, userId: unknown): Promise<UserRow | null> {
   if (typeof userId !== 'string' || !userId) return null;
@@ -88,25 +101,30 @@ async function loadAssignee(companyId: string, userId: unknown): Promise<UserRow
 }
 
 /** Role-change guard: never your own role, never the company's last super_admin. */
-export async function roleChangeError(companyId: string, actorId: string, target: { id: string; role: string }, newRole: string): Promise<string | null> {
-  if (target.role === newRole) return null;
+export async function roleChangeError(companyId: string, actorId: string, target: { id: string; role: string }, losesSuperAdmin: boolean): Promise<string | null> {
   if (target.id === actorId) return 'You cannot change your own role';
-  if (target.role === 'super_admin') {
-    const row = await queryOne<{ n: number }>(
-      `SELECT COUNT(*)::int AS n FROM users WHERE company_id = ? AND role = 'super_admin' AND is_active = TRUE`,
-      [companyId]
-    );
-    if ((row?.n ?? 0) <= 1) return 'This is the last super admin of the company and cannot be demoted';
+  if (losesSuperAdmin) {
+    try {
+      await lastSuperAdminGuard(companyId, target.id);
+    } catch (e) {
+      if (e instanceof AssignmentError) return e.message;
+      throw e;
+    }
   }
   return null;
 }
 
-/** Shared consequence lines for a change of role / department / primary team. */
-function changeLines(u: UserRow, p: AssignmentPlan): string[] {
+/** Teams (id → name, department) for a set of team grants. */
+async function teamInfo(ids: string[]): Promise<Map<string, { name: string; department_id: string | null }>> {
+  if (!ids.length) return new Map();
+  const rows = await query<any[]>('SELECT id, name, department_id FROM teams WHERE id = ANY(?::text[])', [ids]);
+  return new Map(rows.map((r: any) => [r.id, { name: r.name, department_id: r.department_id }]));
+}
+
+function changeLines(who: string, p: AssignmentPlan): string[] {
   const out: string[] = [];
-  const who = firstName(u);
   if (p.role.from !== p.role.to) out.push(`${who}'s role changes from ${label(p.role.from)} to ${label(p.role.to)}.`);
-  if (p.role.from === 'super_admin') out.push(`${who} loses super admin access: other departments, admin settings and API keys.`);
+  if (p.revokes.some((g) => g.role === 'super_admin')) out.push(`${who} loses super admin access: other departments, admin settings and API keys.`);
   return out;
 }
 
@@ -118,51 +136,68 @@ export async function planAssignManager(companyId: string, actorId: string, depa
   if (!dept.is_active) return fail(400, 'That department is inactive');
   const u = await loadAssignee(companyId, userId);
   if ('ok' in u) return u;
-  if (u.role === 'qa_manager' && u.department_id === dept.id) return fail(400, `${nameOf(u)} is already a QA manager of ${dept.name}`);
-  const roleErr = await roleChangeError(companyId, actorId, u, 'qa_manager');
+  const grants = await loadGrants(companyId, u.id);
+  const add: Grant = { role: 'qa_manager', scopeType: 'department', scopeId: dept.id };
+  if (grants.some((g) => same(g, add))) return fail(400, `${nameOf(u)} is already a QA manager of ${dept.name}`);
+
+  const teams = await teamInfo(grants.filter((g) => g.scopeType === 'team').map((g) => g.scopeId));
+  const revokes = grants.filter((g) => g.role === 'super_admin'
+    || (g.scopeType === 'team' && teams.get(g.scopeId)?.department_id !== dept.id));
+  const roleErr = await roleChangeError(companyId, actorId, u, revokes.some((g) => g.role === 'super_admin'));
   if (roleErr) return fail(400, roleErr);
 
-  const keepTeam = !!u.primary_team_id && u.team_department_id === dept.id;
-  const led = await query<any[]>('SELECT id, name FROM teams WHERE company_id = ? AND lead_id = ? ORDER BY name', [companyId, u.id]);
+  const after = [...grants.filter((g) => !revokes.some((r) => same(r, g))), add];
+  const keepTeam = !!u.primary_team_id && after.some((g) => g.scopeType === 'team' && g.scopeId === u.primary_team_id);
+  const otherDepts = grants.filter((g) => g.role === 'qa_manager').map((g) => g.scopeId);
+  const otherDeptNames = otherDepts.length
+    ? (await query<any[]>('SELECT name FROM departments WHERE id = ANY(?::text[]) ORDER BY name', [otherDepts])).map((d: any) => d.name as string)
+    : [];
+  const led = revokes.filter((g) => g.role === 'team_lead').map((g) => ({ id: g.scopeId, name: teams.get(g.scopeId)?.name ?? g.scopeId }));
 
   const plan: AssignmentPlan = {
     kind: 'assign_manager',
     user: summary(u),
-    role: { from: u.role, to: 'qa_manager' },
+    role: { from: u.role, to: highest(after, u.role) },
     department: { from: u.department_id, to: dept.id, fromName: u.department_name, toName: dept.name },
     primaryTeam: { from: u.primary_team_id, to: keepTeam ? u.primary_team_id : null, fromName: u.team_name, toName: keepTeam ? u.team_name : null },
-    clearedLeadOf: led.map((t: any) => ({ id: t.id, name: t.name })),
+    revokes, grants: [add],
+    clearedLeadOf: led,
     previousLead: null,
     consequences: [],
   };
-  const who = firstName(u);
-  const c = changeLines(u, plan);
+  const who = nameOf(u);
+  const c = changeLines(who, plan);
   const scope = 'every team\'s analytics there, and can manage its teams and users';
-  if (u.role === 'qa_manager' && u.department_id && u.department_id !== dept.id) {
-    c.push(`${who} will lose access to ${u.department_name ?? 'their current department'} and manage ${dept.name}: they will see ${scope}.`);
+  if (otherDeptNames.length) {
+    c.push(`${who} will manage ${dept.name} as well as ${list(otherDeptNames)}: they will see ${scope}.`);
   } else if (u.department_id !== dept.id) {
     c.push(`${who} moves from ${u.department_name ?? 'no department'} to ${dept.name} and will manage it: they will see ${scope}.`);
   } else {
     c.push(`${who} will manage ${dept.name}: they will see ${scope}.`);
   }
-  if (u.primary_team_id && !keepTeam) c.push(`${who} leaves ${u.team_name ?? 'their current team'} (QA managers do not need a team; their scope is the department).`);
+  const leftTeams = revokes.filter((g) => g.scopeType === 'team' && g.role !== 'team_lead').map((g) => teams.get(g.scopeId)?.name ?? g.scopeId);
+  if (leftTeams.length) c.push(`${who} leaves ${list(leftTeams)} (QA managers do not need a team; their scope is the department).`);
   if (keepTeam) c.push(`${who} stays a member of ${u.team_name}.`);
-  if (led.length) c.push(`${list(led.map((t: any) => t.name))} will no longer have ${who} as team lead.`);
+  if (led.length) c.push(`${list(led.map((t) => t.name))} will no longer have ${who} as team lead.`);
   plan.consequences = c;
   return { ok: true, plan, target: { id: u.id, departmentId: dept.id } };
 }
 
-export async function applyAssignManager(companyId: string, plan: AssignmentPlan): Promise<void> {
-  await transaction(async (client) => {
-    const exec = execOn(client);
-    await exec(
-      `UPDATE users SET role = 'qa_manager', department_id = ?, primary_team_id = ?, updated_at = NOW()
-        WHERE id = ? AND company_id = ?`,
-      [plan.department.to, plan.primaryTeam.to, plan.user.id, companyId]
-    );
-    await exec('UPDATE teams SET lead_id = NULL, updated_at = NOW() WHERE company_id = ? AND lead_id = ?', [companyId, plan.user.id]);
-    await syncPrimaryTeamMembership(plan.user.id, plan.primaryTeam.from, plan.primaryTeam.to, 'qa_manager', client);
-  });
+/** Apply a plan's assignment changes for its user, then the display columns. */
+async function applyUserGrants(exec: Exec, companyId: string, actorId: string, userId: string, plan: AssignmentPlan, prefs: Parameters<typeof syncUserDisplay>[2]) {
+  for (const g of plan.revokes) await revokeGrant(exec, { userId, grant: g, actorId });
+  for (const g of plan.grants) await grantAssignment(exec, { companyId, userId, grant: g, actorId, replaceLead: plan.kind === 'assign_lead' });
+  await syncUserDisplay(exec, userId, prefs);
+}
+
+export async function applyAssignManager(companyId: string, actorId: string, plan: AssignmentPlan): Promise<void> {
+  await auditedUserChange(
+    { companyId, actorId, action: 'department.manager_assign', userIds: [plan.user.id], extraSubjects: [plan.department.to as string] },
+    async (exec) => {
+      await applyUserGrants(exec, companyId, actorId, plan.user.id, plan, { departmentId: plan.department.to, primaryTeamId: plan.primaryTeam.to });
+      return { summary: `${plan.user.name} made QA manager of ${plan.department.toName}`, result: null };
+    },
+  );
 }
 
 /* ------------------------------------------------------------------------------------------ */
@@ -176,59 +211,70 @@ export async function planRemoveManager(
   if (!dept) return fail(404, 'Department not found');
   const u = await loadUser(companyId, userId);
   if (!u) return fail(400, 'User not found in your company');
-  if (u.role !== 'qa_manager' || u.department_id !== dept.id) return fail(400, `${nameOf(u)} is not a QA manager of ${dept.name}`);
-  const roleErr = await roleChangeError(companyId, actorId, u, role);
+  const grants = await loadGrants(companyId, u.id);
+  const mgr: Grant = { role: 'qa_manager', scopeType: 'department', scopeId: dept.id };
+  if (!grants.some((g) => same(g, mgr))) return fail(400, `${nameOf(u)} is not a QA manager of ${dept.name}`);
+  const roleErr = await roleChangeError(companyId, actorId, u, false);
   if (roleErr) return fail(400, roleErr);
 
+  const teams = await teamInfo(grants.filter((g) => g.scopeType === 'team').map((g) => g.scopeId));
   let team: { id: string; name: string } | null = null;
   if (typeof teamId === 'string' && teamId) {
     team = await queryOne<any>('SELECT id, name FROM teams WHERE id = ? AND company_id = ? AND department_id = ? AND is_active = TRUE', [teamId, companyId, dept.id]);
     if (!team) return fail(400, `Choose an active team in ${dept.name}`);
-  } else if (u.primary_team_id && u.team_department_id === dept.id) {
-    team = { id: u.primary_team_id, name: u.team_name ?? '' };
+  } else {
+    const inDept = grants.filter((g) => g.scopeType === 'team' && teams.get(g.scopeId)?.department_id === dept.id);
+    const pick = inDept.find((g) => g.scopeId === u.primary_team_id) ?? inDept[0];
+    if (pick) team = { id: pick.scopeId, name: teams.get(pick.scopeId)?.name ?? '' };
   }
-  if (!team && role === 'qa_engineer') return fail(400, `A QA engineer needs a team: choose a team in ${dept.name}, or make ${firstName(u)} a viewer`);
+  if (!team && role === 'qa_engineer') return fail(400, `A QA engineer needs a team: choose a team in ${dept.name}, or make ${nameOf(u)} a viewer`);
 
-  const others = await queryOne<{ n: number }>(
-    `SELECT COUNT(*)::int AS n FROM users WHERE company_id = ? AND department_id = ? AND role = 'qa_manager' AND is_active = TRUE AND id <> ?`,
-    [companyId, dept.id, u.id]
-  );
+  const existingOnTeam = team ? grants.find((g) => g.scopeType === 'team' && g.scopeId === team!.id) : undefined;
+  const add: Grant[] = team && existingOnTeam?.role !== 'team_lead' && existingOnTeam?.role !== role
+    ? [{ role, scopeType: 'team', scopeId: team.id }]
+    : [];
+  const after = [...grants.filter((g) => !same(g, mgr) && !(add.length && g.scopeType === 'team' && g.scopeId === team!.id)), ...add];
+
+  const others = await departmentManagers(companyId, dept.id);
   const plan: AssignmentPlan = {
     kind: 'remove_manager',
     user: summary(u),
-    role: { from: 'qa_manager', to: role },
-    department: { from: dept.id, to: dept.id, fromName: dept.name, toName: dept.name },
+    role: { from: u.role, to: highest(after, role) },
+    department: { from: u.department_id, to: dept.id, fromName: u.department_name, toName: dept.name },
     primaryTeam: { from: u.primary_team_id, to: team?.id ?? null, fromName: u.team_name, toName: team?.name ?? null },
+    revokes: [mgr], grants: add,
     clearedLeadOf: [],
     previousLead: null,
     consequences: [],
   };
-  const who = firstName(u);
-  const c = changeLines(u, plan);
+  const who = nameOf(u);
+  const c = changeLines(who, plan);
   c.push(`${who} stays in ${dept.name} but will no longer manage it.`);
   c.push(team
-    ? `${who} will see only ${team.name}${role === 'viewer' ? ', read-only' : ''}${team.id !== u.primary_team_id ? ` (their new primary team)` : ''}.`
+    ? `${who} will see ${team.name}${role === 'viewer' ? ', read-only' : ''}${team.id !== u.primary_team_id ? ` (their new primary team)` : ''}.`
     : `${who} will have no team, so no team analytics, until a team is assigned on the Users page.`);
-  if ((others?.n ?? 0) === 0) c.push(`${dept.name} will have no QA manager; only super admins will manage it.`);
+  if (!others.some((m) => m.id !== u.id)) c.push(`${dept.name} will have no QA manager; only super admins will manage it.`);
   plan.consequences = c;
   return { ok: true, plan, target: { id: u.id, departmentId: dept.id } };
 }
 
-export async function applyRemoveManager(companyId: string, plan: AssignmentPlan): Promise<void> {
-  await transaction(async (client) => {
-    await execOn(client)(
-      `UPDATE users SET role = ?, primary_team_id = ?, updated_at = NOW() WHERE id = ? AND company_id = ? AND role = 'qa_manager'`,
-      [plan.role.to, plan.primaryTeam.to, plan.user.id, companyId]
-    );
-    await syncPrimaryTeamMembership(plan.user.id, plan.primaryTeam.from, plan.primaryTeam.to, plan.role.to, client);
-  });
+export async function applyRemoveManager(companyId: string, actorId: string, plan: AssignmentPlan): Promise<void> {
+  await auditedUserChange(
+    { companyId, actorId, action: 'department.manager_remove', userIds: [plan.user.id], extraSubjects: [plan.department.to as string] },
+    async (exec) => {
+      await applyUserGrants(exec, companyId, actorId, plan.user.id, plan, {
+        primaryTeamId: plan.primaryTeam.to, departmentId: plan.department.to, fallbackRole: plan.role.to,
+      });
+      return { summary: `${plan.user.name} is no longer QA manager of ${plan.department.toName}`, result: null };
+    },
+  );
 }
 
 /* ------------------------------------------------------------------------------------------ */
 
 export async function planAssignLead(companyId: string, actorId: string, teamId: string, userId: unknown): Promise<PlanResult> {
   const team = await queryOne<any>(
-    `SELECT t.id, t.name, t.department_id, t.is_active, t.lead_id, d.name AS department_name
+    `SELECT t.id, t.name, t.department_id, t.is_active, d.name AS department_name
        FROM teams t LEFT JOIN departments d ON d.id = t.department_id
       WHERE t.id = ? AND t.company_id = ?`,
     [teamId, companyId]
@@ -238,51 +284,53 @@ export async function planAssignLead(companyId: string, actorId: string, teamId:
   if (!team.department_id) return fail(400, 'The team has no department');
   const u = await loadAssignee(companyId, userId);
   if ('ok' in u) return u;
-  if (team.lead_id === u.id && u.role === 'team_lead' && u.primary_team_id === team.id) return fail(400, `${nameOf(u)} already leads ${team.name}`);
-  const roleErr = await roleChangeError(companyId, actorId, u, 'team_lead');
+  const grants = await loadGrants(companyId, u.id);
+  const lead: Grant = { role: 'team_lead', scopeType: 'team', scopeId: team.id };
+  if (grants.some((g) => same(g, lead))) return fail(400, `${nameOf(u)} already leads ${team.name}`);
+
+  // The new lead: keeps other teams they lead and other memberships, leaves the membership of
+  // their previous primary team (unless they lead it), and ends manager / admin assignments.
+  const revokes = grants.filter((g) => g.role === 'super_admin' || g.role === 'qa_manager'
+    || (g.scopeType === 'team' && g.scopeId === u.primary_team_id && g.scopeId !== team.id && g.role !== 'team_lead'));
+  const roleErr = await roleChangeError(companyId, actorId, u, revokes.some((g) => g.role === 'super_admin'));
   if (roleErr) return fail(400, roleErr);
 
-  // The lead shown today: teams.lead_id, else the earliest active team_lead on the team (teamLeadNameSql).
-  let prev: UserRow | null = team.lead_id ? await loadUser(companyId, team.lead_id) : null;
-  if (!prev) {
-    const row = await queryOne<{ id: string }>(
-      `SELECT id FROM users WHERE company_id = ? AND primary_team_id = ? AND role = 'team_lead' AND is_active = TRUE
-        ORDER BY created_at ASC NULLS LAST LIMIT 1`,
-      [companyId, team.id]
-    );
-    prev = row ? await loadUser(companyId, row.id) : null;
-  }
-  if (prev?.id === u.id) prev = null;
-
+  // The lead today: the team's active team_lead assignment (any user, so an inactive lead is replaced too).
+  const prevRow = await queryOne<{ user_id: string }>(
+    `SELECT user_id FROM role_assignments WHERE scope_type = 'team' AND scope_id = ? AND role = 'team_lead' AND revoked_at IS NULL AND user_id <> ?`,
+    [team.id, u.id]
+  );
+  const prev = prevRow ? await loadUser(companyId, prevRow.user_id) : null;
   let previousLead: AssignmentPlan['previousLead'] = null;
   if (prev) {
-    const other = await query<any[]>('SELECT name FROM teams WHERE company_id = ? AND lead_id = ? AND id <> ? ORDER BY name', [companyId, prev.id, team.id]);
-    const alsoLeads = other.map((t: any) => t.name as string);
-    const newRole = prev.role === 'team_lead' && alsoLeads.length === 0 ? 'qa_engineer' : prev.role;
-    previousLead = { ...summary(prev), newRole, alsoLeads };
+    const prevGrants = await loadGrants(companyId, prev.id);
+    const prevAfter = [...prevGrants.filter((g) => !same(g, lead)), { role: 'qa_engineer', scopeType: 'team', scopeId: team.id }];
+    const alsoLeads = (await teamsLedBy(companyId, prev.id)).filter((t) => t.id !== team.id).map((t) => t.name);
+    previousLead = { ...summary(prev), newRole: highest(prevAfter, prev.role), alsoLeads };
   }
-  const alsoLeads = (await query<any[]>('SELECT name FROM teams WHERE company_id = ? AND lead_id = ? AND id <> ? ORDER BY name', [companyId, u.id, team.id]))
-    .map((t: any) => t.name as string);
+  const alsoLeads = (await teamsLedBy(companyId, u.id)).filter((t) => t.id !== team.id).map((t) => t.name);
+  const after = [...grants.filter((g) => !revokes.some((r) => same(r, g)) && !(g.scopeType === 'team' && g.scopeId === team.id)), lead];
 
   const plan: AssignmentPlan = {
     kind: 'assign_lead',
     user: summary(u),
-    role: { from: u.role, to: 'team_lead' },
+    role: { from: u.role, to: highest(after, 'team_lead') },
     department: { from: u.department_id, to: team.department_id, fromName: u.department_name, toName: team.department_name },
     primaryTeam: { from: u.primary_team_id, to: team.id, fromName: u.team_name, toName: team.name },
+    revokes, grants: [lead],
     clearedLeadOf: [],
     previousLead,
     consequences: [],
   };
-  const who = firstName(u);
-  const c = changeLines(u, plan);
+  const who = nameOf(u);
+  const c = changeLines(who, plan);
   c.push(`${who} becomes team lead of ${team.name}${u.primary_team_id === team.id ? '' : ` and ${team.name} becomes their primary team`}.`);
-  if (u.role === 'qa_manager') c.push(`${who} stops managing ${u.department_name ?? 'their department'} and will see only ${team.name}.`);
+  if (grants.some((g) => g.role === 'qa_manager')) c.push(`${who} stops managing ${u.department_name ?? 'their department'} and will see only the teams they belong to.`);
   if (u.department_id !== team.department_id) c.push(`${who} moves from ${u.department_name ?? 'no department'} to ${team.department_name}.`);
-  if (u.primary_team_id && u.primary_team_id !== team.id && !alsoLeads.includes(u.team_name ?? '')) c.push(`${who} leaves ${u.team_name ?? 'their current team'}.`);
+  if (revokes.some((g) => g.scopeType === 'team')) c.push(`${who} leaves ${u.team_name ?? 'their current team'}.`);
   if (alsoLeads.length) c.push(`${who} keeps leading ${list(alsoLeads)} as well.`);
   if (previousLead && prev) {
-    const p = firstName(prev);
+    const p = nameOf(prev);
     if (previousLead.newRole !== prev.role) {
       c.push(`${p}, the current lead, stays on ${team.name} as ${label(previousLead.newRole)} (role changes from ${label(prev.role)}).`);
     } else if (previousLead.alsoLeads.length) {
@@ -297,29 +345,15 @@ export async function planAssignLead(companyId: string, actorId: string, teamId:
   return { ok: true, plan, target: { id: u.id, teamId: team.id } };
 }
 
-export async function applyAssignLead(companyId: string, plan: AssignmentPlan): Promise<void> {
+export async function applyAssignLead(companyId: string, actorId: string, plan: AssignmentPlan): Promise<void> {
   const teamId = plan.primaryTeam.to as string;
-  await transaction(async (client) => {
-    const exec = execOn(client);
-    const prev = plan.previousLead;
-    if (prev) {
-      if (prev.newRole !== prev.role) {
-        await exec(`UPDATE users SET role = ?, updated_at = NOW() WHERE id = ? AND company_id = ?`, [prev.newRole, prev.id, companyId]);
-      }
-      await exec(`UPDATE team_members SET role = 'member' WHERE user_id = ? AND team_id = ?`, [prev.id, teamId]);
-    }
-    await exec(
-      `UPDATE users SET role = 'team_lead', department_id = ?, primary_team_id = ?, updated_at = NOW() WHERE id = ? AND company_id = ?`,
-      [plan.department.to, teamId, plan.user.id, companyId]
-    );
-    await exec('UPDATE teams SET lead_id = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [plan.user.id, teamId, companyId]);
-    await syncPrimaryTeamMembership(plan.user.id, plan.primaryTeam.from, teamId, 'team_lead', client);
-    // A lead is a member of every team they lead (they may still lead their previous team).
-    await exec(
-      `INSERT INTO team_members (user_id, team_id, role)
-       SELECT ?, t.id, 'lead' FROM teams t WHERE t.company_id = ? AND t.lead_id = ?
-       ON CONFLICT (user_id, team_id) DO UPDATE SET role = 'lead'`,
-      [plan.user.id, companyId, plan.user.id]
-    );
-  });
+  const users = [plan.user.id, ...(plan.previousLead ? [plan.previousLead.id] : [])];
+  await auditedUserChange(
+    { companyId, actorId, action: 'team.lead_change', entityType: 'team', entityId: teamId, userIds: users, extraSubjects: [teamId] },
+    async (exec) => {
+      await applyUserGrants(exec, companyId, actorId, plan.user.id, plan, { primaryTeamId: teamId, departmentId: plan.department.to });
+      if (plan.previousLead) await syncUserDisplay(exec, plan.previousLead.id);
+      return { summary: `${plan.user.name} made team lead of ${plan.primaryTeam.toName}${plan.previousLead ? ` (replacing ${plan.previousLead.name})` : ''}`, result: null };
+    },
+  );
 }

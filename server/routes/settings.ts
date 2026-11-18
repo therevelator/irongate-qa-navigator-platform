@@ -2,6 +2,9 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
 import { DEFAULT_METRIC_INTERVALS } from '../lib/metricIntervals';
+import { policyActor } from '../middleware/access';
+import { canManageCompanyConfig } from '../lib/userPolicy';
+import { recordAudit } from '../lib/audit';
 
 const router = express.Router();
 
@@ -58,7 +61,7 @@ router.put('/metric-intervals/:metricKey', authenticateToken, async (req: any, r
     const { interval_value, interval_unit, custom_label } = req.body;
 
     // Only admin and manager can update
-    if (role !== 'super_admin' && role !== 'qa_manager') {
+    if (!canManageCompanyConfig(policyActor(req))) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -101,6 +104,11 @@ router.put('/metric-intervals/:metricKey', authenticateToken, async (req: any, r
       'SELECT * FROM metric_update_intervals WHERE company_id = ? AND metric_key = ?',
       [companyId, metricKey]
     );
+    await recordAudit({
+      companyId, actorId: userId, action: 'config.metric_interval', entityType: 'config', entityId: metricKey,
+      summary: `Update interval of ${metricKey} set to ${interval_value} ${interval_unit}`,
+      after: { interval_value, interval_unit, custom_label: custom_label ?? null }, subjectIds: [`interval:${metricKey}`],
+    });
 
     res.json(updated);
   } catch (error) {
@@ -116,7 +124,7 @@ router.put('/metric-intervals', authenticateToken, async (req: any, res) => {
     const { intervals } = req.body;
 
     // Only admin and manager can update
-    if (role !== 'super_admin' && role !== 'qa_manager') {
+    if (!canManageCompanyConfig(policyActor(req))) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -154,6 +162,13 @@ router.put('/metric-intervals', authenticateToken, async (req: any, res) => {
       }
     }
 
+    await recordAudit({
+      companyId, actorId: userId, action: 'config.metric_interval', entityType: 'config', entityId: companyId,
+      summary: `Update intervals saved for ${intervals.length} metric${intervals.length === 1 ? '' : 's'}`,
+      after: { intervals: intervals.map((i: any) => ({ metric_key: i.metric_key, interval_value: i.interval_value, interval_unit: i.interval_unit })) },
+      subjectIds: intervals.map((i: any) => `interval:${i.metric_key}`),
+    });
+
     // Return all intervals
     const savedIntervals = await query<any>(
       'SELECT * FROM metric_update_intervals WHERE company_id = ?',
@@ -174,7 +189,7 @@ router.delete('/metric-intervals/:metricKey', authenticateToken, async (req: any
     const { metricKey } = req.params;
 
     // Only admin and manager can delete
-    if (role !== 'super_admin' && role !== 'qa_manager') {
+    if (!canManageCompanyConfig(policyActor(req))) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
@@ -182,6 +197,10 @@ router.delete('/metric-intervals/:metricKey', authenticateToken, async (req: any
       'DELETE FROM metric_update_intervals WHERE company_id = ? AND metric_key = ?',
       [companyId, metricKey]
     );
+    await recordAudit({
+      companyId, actorId: req.user.id, action: 'config.metric_interval', entityType: 'config', entityId: metricKey,
+      summary: `Update interval of ${metricKey} reset to the default`, subjectIds: [`interval:${metricKey}`],
+    });
 
     res.json({ success: true, message: 'Reset to default' });
   } catch (error) {

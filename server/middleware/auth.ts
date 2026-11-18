@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { queryOne } from '../../src/lib/db';
+import { loadAccessContext } from '../lib/assignments';
+import type { Grant } from '../lib/userPolicy';
 
 // Resolve the signing secret once. In production a secret MUST be provided;
 // we fail closed (throw on startup) rather than fall back to a public default,
@@ -18,6 +19,8 @@ export interface AuthRequest extends Request {
     companyId: string;
     primaryTeamId?: string;
     departmentId?: string;
+    /** Active role assignments (server/lib/assignments.ts): what every access decision reads. */
+    grants: Grant[];
   };
   userId?: string;
   userRole?: string;
@@ -25,11 +28,11 @@ export interface AuthRequest extends Request {
 }
 
 /**
- * Verify the session token, then load the caller's CURRENT role, company, department,
- * primary team and active flag from the database. The JWT only proves identity
- * (userId); authorisation always uses the live row, so a deactivated user or one whose
- * role/team changed loses the old rights on their next request — the same state
- * /auth/me shows the UI.
+ * Verify the session token, then load the caller's CURRENT row (company, active flag, display
+ * role / department / primary team) and active role assignments from the database. The JWT
+ * only proves identity (userId); authorisation always uses the live assignments, so a
+ * deactivated user or one whose assignments changed loses the old rights on their next
+ * request — the same state /auth/me shows the UI.
  */
 export async function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
   let token = req.cookies?.irongate_token;
@@ -48,12 +51,9 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 
-  let row: { id: string; role: string; company_id: string; department_id: string | null; primary_team_id: string | null; is_active: boolean } | null;
+  let row: Awaited<ReturnType<typeof loadAccessContext>>;
   try {
-    row = await queryOne(
-      'SELECT id, role, company_id, department_id, primary_team_id, is_active FROM users WHERE id = ?',
-      [decoded?.userId]
-    );
+    row = typeof decoded?.userId === 'string' ? await loadAccessContext(decoded.userId) : null;
   } catch (error) {
     console.error('[Auth] Failed to load user:', error);
     return res.status(500).json({ error: 'Authentication failed' });
@@ -70,7 +70,8 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
     role: row.role,
     companyId: row.company_id,
     primaryTeamId: row.primary_team_id ?? undefined,
-    departmentId: row.department_id ?? undefined
+    departmentId: row.department_id ?? undefined,
+    grants: row.grants,
   };
   // Backward-compatible fields used by older handlers.
   req.userId = row.id;

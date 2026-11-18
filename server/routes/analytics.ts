@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor, type OwnedTeam } from '../middleware/access';
-import { ANALYTICS_ROLES, analyticsScopeLevel, analyticsTeamsInScope, canManageTeam, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
+import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageTeam, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
 import { runDemoSeed, runFillExisting, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
@@ -13,6 +13,8 @@ import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues } from '../../src/conf
 import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel, computeBottleneckScores } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
+import { isTeamMemberSql } from '../lib/assignments';
+import { recordAudit } from '../lib/audit';
 
 const router = express.Router();
 
@@ -22,9 +24,10 @@ const router = express.Router();
  * Every team-scoped Analytics endpoint resolves exactly ONE team and checks it with the
  * shared rule canViewTeamAnalytics (server/lib/userPolicy.ts) through assertTeamAnalytics:
  *   super_admin  any team of their company
- *   qa_manager   the teams of their department
- *   team_lead / qa_engineer / viewer  their own primary team
- * A team out of scope, of another company or unknown gets 403.
+ *   qa_manager   the teams of the departments they manage
+ *   team_lead / qa_engineer / viewer  the teams they are assigned to
+ * (all from the caller's role assignments). A team out of scope, of another company or
+ * unknown gets 403.
  *
  * teamId: required in principle. When a request carries none, it defaults to the caller's
  * own primary team (and is checked like any other team); a caller with no primary team
@@ -127,7 +130,7 @@ router.get('/scope', authenticateToken, async (req: any, res) => {
       }
     }
     res.json({
-      level: analyticsScopeLevel(actor.role),
+      level: analyticsScopeLevelOf(actor),
       departments,
       teams,
       defaultTeamId: defaultAnalyticsTeamId(actor, teams),
@@ -666,7 +669,7 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
 router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    if (!canManageCompanyData(req.user.role)) {
+    if (!canManageCompanyData(req)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     const { id } = req.params;
@@ -763,7 +766,7 @@ router.get('/pipeline-config', authenticateToken, async (req: any, res) => {
 router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    if (!canManageCompanyData(req.user.role)) {
+    if (!canManageCompanyData(req)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     const { time_savings_percent, cost_savings_percent, cost_per_minute } = req.body;
@@ -795,6 +798,11 @@ router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
         [id, companyId, timeSavings, costSavings, costPerMin]
       );
     }
+    await recordAudit({
+      companyId, actorId: req.user.id, action: 'config.pipeline', entityType: 'config', entityId: companyId,
+      summary: `Pipeline cost settings saved (time savings ${timeSavings} %, cost savings ${costSavings} %, ${costPerMin} per minute)`,
+      after: { time_savings_percent: timeSavings, cost_savings_percent: costSavings, cost_per_minute: costPerMin }, subjectIds: [`pipeline-config:${companyId}`],
+    });
 
     res.json({
       success: true,
@@ -975,7 +983,7 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
 router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    if (!canManageCompanyData(req.user.role)) {
+    if (!canManageCompanyData(req)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     const { id } = req.params;
@@ -2654,13 +2662,12 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
       params.push(developerId);
     }
 
-    // Filter by team membership (snapshots carry no team id): team members, or users
-    // whose metrics are recorded for the team, or whose primary team it is.
+    // Filter by team membership (snapshots carry no team id): team members (assignments),
+    // or users whose metrics are recorded for the team.
     if (teamId) {
-      sql += ` AND (u.primary_team_id = ?
-        OR EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = u.id AND tm.team_id = ?)
+      sql += ` AND (${isTeamMemberSql('u', '?')}
         OR EXISTS (SELECT 1 FROM developer_metrics dm WHERE dm.developer_id = u.id AND dm.team_id = ?))`;
-      params.push(teamId, teamId, teamId);
+      params.push(teamId, teamId);
     }
 
     sql += ' ORDER BY dps.snapshot_date ASC, dps.developer_id';
