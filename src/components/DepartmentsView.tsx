@@ -9,6 +9,7 @@ import {
   DepartmentTeamsPanel, MoveTeamDialog,
   type CandidateTeam, type DepartmentDetail, type MoveRequest,
 } from './DepartmentTeams';
+import { AssignmentDialog, type AssignmentRequest, type CompanyUser } from './RoleAssignment';
 
 interface Department {
   id: string;
@@ -54,15 +55,19 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
   const [details, setDetails] = useState<Record<string, DepartmentDetail>>({});
   const [detailErrors, setDetailErrors] = useState<Record<string, string>>({});
   const [moveRequest, setMoveRequest] = useState<MoveRequest | null>(null);
+  const [assignment, setAssignment] = useState<AssignmentRequest | null>(null);
+  const [users, setUsers] = useState<CompanyUser[]>([]);
 
   const fetchData = useCallback(async () => {
     try {
-      const [deptsRes, teamsRes] = await Promise.all([
+      const [deptsRes, teamsRes, usersRes] = await Promise.all([
         fetch(`${API_URL}/admin/departments/all`, { credentials: 'include' }),
         fetch(`${API_URL}/admin/teams`, { credentials: 'include' }),
+        fetch(`${API_URL}/admin/users`, { credentials: 'include' }),
       ]);
       if (deptsRes.ok) setDepartments(await deptsRes.json());
       if (teamsRes.ok) setTeams(await teamsRes.json());
+      if (usersRes.ok) setUsers(await usersRes.json());
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -108,6 +113,16 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
     setMoveRequest(null);
     // Drop cached detail for both sides, then reload counts, lists and the open panel.
     setDetails((d) => { const next = { ...d }; if (fromId) delete next[fromId]; delete next[toId]; return next; });
+    await fetchData();
+    if (openId) await fetchDetail(openId);
+    onTeamsChanged?.();
+  };
+
+  // After a manager or lead assignment: people may have changed department, so every cached
+  // panel is stale; reload counts, users, the open panel and the app-wide team list.
+  const afterAssignment = async () => {
+    setAssignment(null);
+    setDetails({});
     await fetchData();
     if (openId) await fetchDetail(openId);
     onTeamsChanged?.();
@@ -287,6 +302,7 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
                             departments={deptOptions}
                             onOpenTeam={onOpenTeam}
                             onRequestMove={setMoveRequest}
+                            onRequestAssignment={setAssignment}
                           />
                         </td>
                       </tr>
@@ -299,6 +315,8 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
           </table>
         </div>
       </Card>
+
+      <AssignmentDialog request={assignment} users={users} onClose={() => setAssignment(null)} onDone={afterAssignment} />
 
       <MoveTeamDialog
         request={moveRequest}

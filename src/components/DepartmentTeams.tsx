@@ -1,10 +1,11 @@
 import React, { useEffect, useId, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { ArrowRightLeft, ChevronRight, Plus, ShieldCheck, Users, UsersRound } from 'lucide-react';
+import { ArrowRightLeft, ChevronRight, Plus, ShieldCheck, UserMinus, UserPlus, Users, UsersRound } from 'lucide-react';
 import Modal from './Modal';
 import API_URL from '../config/api';
 import { Badge, EmptyState, buttonClass, cx, inputClass, type Tone } from './ui';
 import { QA_SCORE_THRESHOLDS, qaStatusFromScore } from '../../server/lib/metricFormulas';
+import type { AssignmentRequest } from './RoleAssignment';
 
 /**
  * Department detail on the Departments page: the department's teams (active and inactive)
@@ -26,13 +27,15 @@ export interface DepartmentTeam {
   /** Active members: primary team or team_members (server/lib/teamMembership). */
   member_count: number;
   team_lead_name: string | null;
+  /** The lead team_lead_name names: teams.lead_id, else the fallback team_lead. */
+  team_lead_id: string | null;
   qa_score: number | null;
   snapshot_date: string | null;
 }
 
 export interface DepartmentDetail {
   department: { id: string; name: string; description: string | null; is_active: boolean };
-  managers: Array<{ id: string; name: string; email: string }>;
+  managers: Array<{ id: string; name: string; email: string; primary_team_id: string | null }>;
   teams: DepartmentTeam[];
 }
 
@@ -285,7 +288,7 @@ export const MoveTeamDialog: React.FC<{
                 </div>
               </dl>
               <p className="border-t border-slate-200 px-4 py-2.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                KPI history, metrics and team settings stay with the team. Super admins, QA managers and people for whom this is a secondary team keep their department.
+                QA managers and super admins never move with a team: they stay in their department, so a manager keeps managing it and loses this team. To give the team a manager in {plan.to.name}, assign one there. KPI history, metrics and team settings stay with the team; people for whom it is a secondary team keep their department.
                 {!plan.team.is_active && ' This team is inactive; it stays inactive.'}
               </p>
             </div>
@@ -316,14 +319,68 @@ export const DepartmentTeamsPanel: React.FC<{
   departments: DepartmentOption[];
   onOpenTeam?: (teamId: string) => void;
   onRequestMove: (req: MoveRequest) => void;
-}> = ({ departmentId, departmentName, detail, error, departments, onOpenTeam, onRequestMove }) => {
+  onRequestAssignment: (req: AssignmentRequest) => void;
+}> = ({ departmentId, departmentName, detail, error, departments, onOpenTeam, onRequestMove, onRequestAssignment }) => {
   const otherDepartments = useMemo(() => departments.filter((d) => d.id !== departmentId), [departments, departmentId]);
   const teams = detail?.teams ?? [];
   const activeCount = teams.filter((t) => t.is_active).length;
+  const activeTeams = teams.filter((t) => t.is_active).map((t) => ({ id: t.id, name: t.name }));
+  const managers = detail?.managers ?? [];
 
   return (
-    <div className="px-4 py-4 sm:px-6">
-      <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-5 px-4 py-4 sm:px-6">
+      {/* QA managers */}
+      <section aria-labelledby={`mgr-${departmentId}`}>
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 id={`mgr-${departmentId}`} className="text-sm font-semibold text-slate-900 dark:text-white">QA managers</h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">See every team of {departmentName} and manage its teams and users. They stay here when teams move.</p>
+          </div>
+          <button
+            type="button"
+            disabled={!detail}
+            onClick={() => onRequestAssignment({ kind: 'assign_manager', departmentId, departmentName, excludeIds: managers.map((m) => m.id) })}
+            className={cx(buttonClass.secondary, 'h-8 shrink-0 px-3')}
+          >
+            <UserPlus size={16} aria-hidden="true" />
+            Assign manager
+          </button>
+        </div>
+        {detail && (managers.length === 0 ? (
+          <p className="rounded-md border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
+            No QA manager yet. Only super admins manage {departmentName} until one is assigned.
+          </p>
+        ) : (
+          <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {managers.map((m) => (
+              <li key={m.id} className="flex items-center gap-3 rounded-md border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  {m.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-slate-900 dark:text-white">{m.name}</span>
+                  <span className="block truncate text-xs text-slate-500 dark:text-slate-400">{m.email}</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => onRequestAssignment({
+                    kind: 'remove_manager', departmentId, departmentName, user: { id: m.id, name: m.name },
+                    teams: activeTeams, currentTeamId: m.primary_team_id && activeTeams.some((t) => t.id === m.primary_team_id) ? m.primary_team_id : null,
+                  })}
+                  aria-label={`Remove ${m.name} as manager`}
+                  className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium text-slate-500 transition-colors hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-slate-400 dark:hover:bg-red-950/40 dark:hover:text-red-300"
+                >
+                  <UserMinus size={14} aria-hidden="true" />
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        ))}
+      </section>
+
+      <section>
+      <div className="mb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
             Teams in {departmentName}
@@ -333,13 +390,7 @@ export const DepartmentTeamsPanel: React.FC<{
               </span>
             )}
           </h3>
-          {detail && (
-            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              {detail.managers.length > 0
-                ? <>QA manager{detail.managers.length === 1 ? '' : 's'}: {detail.managers.map((m) => m.name).join(', ')}</>
-                : 'No QA manager in this department'}
-            </p>
-          )}
+
         </div>
         <button
           type="button"
@@ -401,8 +452,22 @@ export const DepartmentTeamsPanel: React.FC<{
                     {t.is_active ? <Badge tone="good">Active</Badge> : <Badge tone="neutral">Inactive</Badge>}
                   </td>
                   <td className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-white">{t.member_count}</td>
-                  <td className="px-4 py-2.5 text-slate-700 dark:text-slate-300">
-                    {t.team_lead_name || <span className="text-slate-400 dark:text-slate-500">No lead</span>}
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <span className={cx('min-w-0 truncate', t.team_lead_name ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500')}>
+                        {t.team_lead_name || 'No lead'}
+                      </span>
+                      {t.is_active && (
+                        <button
+                          type="button"
+                          onClick={() => onRequestAssignment({ kind: 'assign_lead', teamId: t.id, teamName: t.name, currentLeadId: t.team_lead_id, currentLeadName: t.team_lead_name })}
+                          aria-label={`Assign team lead for ${t.name}`}
+                          className="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium text-brand-700 hover:bg-brand-50 hover:text-brand-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:text-brand-300 dark:hover:bg-brand-950/40 dark:hover:text-brand-200"
+                        >
+                          {t.team_lead_name ? 'Change' : 'Assign'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-4 py-2.5"><QaScoreBadge score={t.qa_score} date={t.snapshot_date} /></td>
                   <td className="px-4 py-2">
@@ -427,6 +492,7 @@ export const DepartmentTeamsPanel: React.FC<{
           </table>
         </div>
       )}
+      </section>
     </div>
   );
 };

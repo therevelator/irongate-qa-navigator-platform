@@ -8,9 +8,13 @@ import {
   ROLE_HIERARCHY, TEAM_OPTIONAL_ROLES, canAssignRole, canManageUser, canEditUser, canEditAssignment,
   canResetPassword, canDeleteUser, type PolicyActor
 } from '../lib/userPolicy';
-import { syncPrimaryTeamMembership, teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
+import { syncPrimaryTeamMembership, teamMemberCountSql, teamLeadNameSql, teamLeadIdSql } from '../lib/teamMembership';
 import { resolveConfigs, isSecretConfigKey } from '../lib/configResolver';
 import { planTeamDepartmentMove, applyTeamDepartmentMove } from '../lib/teamDepartment';
+import {
+  planAssignManager, applyAssignManager, planRemoveManager, applyRemoveManager, planAssignLead, applyAssignLead,
+  type PlanResult, type AssignmentPlan,
+} from '../lib/roleAssignment';
 
 const router = express.Router();
 
@@ -476,6 +480,37 @@ router.put('/teams/:id/department', authenticateToken, async (req: any, res) => 
   }
 });
 
+// Manager and team-lead assignment (Departments page). super_admin only; every rule lives in
+// server/lib/roleAssignment.ts. dryRun: true returns the plan (with its consequences) unchanged.
+async function runAssignment(
+  req: any, res: any,
+  plan: () => Promise<PlanResult>,
+  apply: (companyId: string, p: AssignmentPlan) => Promise<void>,
+) {
+  try {
+    if (req.user.role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only Super Admins can assign managers and team leads' });
+    }
+    const result = await plan();
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    if (req.body?.dryRun === true) return res.json({ dryRun: true, ...result.plan });
+    await apply(req.user.companyId, result.plan);
+    res.json(result.plan);
+  } catch (error) {
+    console.error('Error assigning role:', error);
+    res.status(500).json({ error: 'Failed to save the assignment' });
+  }
+}
+
+router.post('/departments/:id/managers', authenticateToken, (req: any, res) =>
+  runAssignment(req, res, () => planAssignManager(req.user.companyId, req.user.id, req.params.id, req.body?.userId), applyAssignManager));
+
+router.post('/departments/:id/managers/:userId/remove', authenticateToken, (req: any, res) =>
+  runAssignment(req, res, () => planRemoveManager(req.user.companyId, req.user.id, req.params.id, req.params.userId, req.body?.role, req.body?.teamId), applyRemoveManager));
+
+router.put('/teams/:id/lead', authenticateToken, (req: any, res) =>
+  runAssignment(req, res, () => planAssignLead(req.user.companyId, req.user.id, req.params.id, req.body?.userId), applyAssignLead));
+
 // Delete team
 router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
   try {
@@ -622,6 +657,7 @@ router.get('/departments/:id/teams', authenticateToken, async (req: any, res) =>
       `SELECT t.id, t.name, t.description, t.is_active, t.department_id,
               ${teamMemberCountSql('t')}::int AS member_count,
               ${teamLeadNameSql('t')} AS team_lead_name,
+              ${teamLeadIdSql('t')} AS team_lead_id,
               k.qa_score, k.snapshot_date
          FROM teams t
          LEFT JOIN LATERAL (
@@ -633,7 +669,7 @@ router.get('/departments/:id/teams', authenticateToken, async (req: any, res) =>
       [companyId, department.id]
     );
     const managers = await query<any>(
-      `SELECT id, TRIM(first_name || ' ' || last_name) AS name, email FROM users
+      `SELECT id, COALESCE(NULLIF(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')), ''), email) AS name, email, primary_team_id FROM users
         WHERE company_id = ? AND department_id = ? AND role = 'qa_manager' AND is_active = TRUE
         ORDER BY first_name, last_name`,
       [companyId, department.id]

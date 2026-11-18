@@ -24,4 +24,6 @@ export interface Team {
   technicalDebtScore?: number | null;  // Lower is better (0-100 scale)
   taskSizingAccuracy?: number | null;  // 1.0 is perfect, <1 overestimated, >1 underestimated
   snapshotDate?: string | null;        // date of the KPI snapshot the scores come from
+  teamLead?: string | null;            // teams.lead_id, else the team's team_lead (server/lib/teamMembership)
+  memberCount?: number | string | null;
 }

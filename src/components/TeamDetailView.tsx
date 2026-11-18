@@ -575,6 +575,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             <>
               {team.department}
               {' · '}
+              {team.teamLead ? <>Lead: {team.teamLead}</> : 'No team lead'}
+              {' · '}
               {asOf ? <>KPI snapshot as of {asOf}</> : 'No KPI snapshot recorded'}
             </>
           }
