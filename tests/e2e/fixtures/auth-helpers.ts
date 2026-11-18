@@ -19,13 +19,13 @@ export async function login(page: Page, email: string, password: string) {
   await page.click('button:has-text("Sign In")');
   
   // Wait for login to complete - look for dashboard elements
-  await page.waitForSelector('button:has-text("Sign Out")', { state: 'visible', timeout: 10000 });
+  // (the navigation, including Sign out, sits in a drawer behind the top-bar burger button)
+  await page.waitForSelector('[data-testid="nav-toggle"]', { state: 'visible', timeout: 10000 });
   
-  // Verify we're logged in by checking for multiple dashboard elements
-  const hasSignOut = await page.locator('button:has-text("Sign Out")').isVisible();
-  const hasAllTeams = await page.locator('text=All Teams').isVisible();
+  // Verify we're logged in by checking for the dashboard
+  const hasDashboard = await page.locator('[data-testid="dashboard"]').isVisible();
   
-  if (!hasSignOut && !hasAllTeams) {
+  if (!hasDashboard) {
     throw new Error('Login failed - dashboard elements not found');
   }
   
@@ -57,8 +57,9 @@ export async function loginAsQAEngineer(page: Page) {
 }
 
 export async function logout(page: Page) {
-  // Click the Sign Out button
-  await page.click('button:has-text("Sign Out")');
+  // Open the navigation drawer, then click Sign out
+  await page.click('[data-testid="nav-toggle"]');
+  await page.click('button[aria-label="Sign out"]');
   
   // Wait for login page to appear
   await page.waitForSelector('input[type="email"]', { state: 'visible', timeout: 10000 });

@@ -1,77 +1,112 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
 
 /**
- * Compact 0–100 score ring. Static (no glow / count-up animation) so the number
- * shown is always the real value. Colour uses the caller's thresholds.
- * `mode` and `animationDelay` are accepted for backwards compatibility and ignored.
+ * Battery gauges for 0–100 scores.
+ *
+ * The fill colour is the score's status against the caller's thresholds (defaults: the QA score
+ * thresholds shared with the server, ≥85 good, ≥70 warning, otherwise critical). A missing value
+ * renders an empty grey battery labelled "—", never 0. The only motion is a short fill transition
+ * on first render, which is switched off for prefers-reduced-motion.
  */
+
+export type GaugeStatus = 'good' | 'warning' | 'critical' | 'none';
+
+export const clampScore = (v: number | string | null | undefined): number | null => {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
+};
+
+export const gaugeStatus = (
+  value: number | null,
+  good: number = QA_SCORE_THRESHOLDS.good,
+  warn: number = QA_SCORE_THRESHOLDS.warning,
+): GaugeStatus => (value == null ? 'none' : value >= good ? 'good' : value >= warn ? 'warning' : 'critical');
+
+/** Fill colour per status (new palette: green / ochre / crimson, slate for no data). */
+export const GAUGE_FILL: Record<GaugeStatus, string> = {
+  good: 'bg-green-600 dark:bg-green-500',
+  warning: 'bg-amber-500 dark:bg-amber-400',
+  critical: 'bg-red-600 dark:bg-red-500',
+  none: 'bg-transparent',
+};
+
+/** Animate from 0 to the value once mounted (the CSS transition is disabled for reduced motion). */
+export const useMountedFill = (pct: number) => {
+  const [shown, setShown] = useState(0);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setShown(pct));
+    return () => cancelAnimationFrame(id);
+  }, [pct]);
+  return shown;
+};
+
 interface BatteryIndicatorProps {
-  percentage: number | null | undefined;
+  percentage: number | string | null | undefined;
   size?: 'sm' | 'md' | 'lg';
-  mode?: 'flat' | '3d';
   className?: string;
-  animationDelay?: number;
-  /** value at/above which the ring is green (default 80) */
+  /** value at/above which the fill is green (default: QA score "good" threshold) */
   good?: number;
-  /** value at/above which the ring is amber (default 60) */
+  /** value at/above which the fill is amber (default: QA score "warning" threshold) */
   warn?: number;
   label?: string;
+  /** show the number next to the battery (default true) */
+  showValue?: boolean;
+  /** Accepted for backwards compatibility and ignored. */
+  mode?: 'flat' | '3d';
+  animationDelay?: number;
 }
 
 const SIZES = {
-  sm: { px: 48, stroke: 5, text: 'text-xs' },
-  md: { px: 64, stroke: 6, text: 'text-sm' },
-  lg: { px: 80, stroke: 7, text: 'text-base' },
+  sm: { w: 30, h: 15, nibW: 2, nibH: 6, text: 'text-sm' },
+  md: { w: 40, h: 20, nibW: 3, nibH: 8, text: 'text-base' },
+  lg: { w: 52, h: 26, nibW: 3, nibH: 10, text: 'text-lg' },
 };
 
+/** Compact horizontal battery, e.g. for team cards. */
 const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
   percentage,
   size = 'md',
   className = '',
-  good = 80,
-  warn = 60,
+  good,
+  warn,
   label,
+  showValue = true,
 }) => {
-  const { px, stroke, text } = SIZES[size];
-  const value = percentage == null || Number.isNaN(Number(percentage)) ? null : Math.max(0, Math.min(100, Number(percentage)));
-  const r = (px - stroke) / 2;
-  const c = 2 * Math.PI * r;
-  const dash = value == null ? 0 : (value / 100) * c;
-  const tone =
-    value == null
-      ? 'text-slate-300 dark:text-slate-700'
-      : value >= good
-        ? 'text-green-600 dark:text-green-500'
-        : value >= warn
-          ? 'text-amber-500 dark:text-amber-400'
-          : 'text-red-600 dark:text-red-500';
+  const value = clampScore(percentage);
+  const status = gaugeStatus(value, good, warn);
+  const s = SIZES[size];
+  const fill = useMountedFill(value ?? 0);
 
   return (
     <div
-      className={`relative inline-flex items-center justify-center ${className}`}
-      style={{ width: px, height: px }}
+      className={`inline-flex items-center gap-2 ${className}`}
       role="img"
       aria-label={`${label ?? 'Score'}: ${value == null ? 'no data' : `${Math.round(value)} of 100`}`}
     >
-      <svg width={px} height={px} className="-rotate-90">
-        <circle cx={px / 2} cy={px / 2} r={r} fill="none" strokeWidth={stroke} className="stroke-slate-200 dark:stroke-slate-800" />
-        {value != null && (
-          <circle
-            cx={px / 2}
-            cy={px / 2}
-            r={r}
-            fill="none"
-            strokeWidth={stroke}
-            strokeLinecap="round"
-            stroke="currentColor"
-            strokeDasharray={`${dash} ${c}`}
-            className={tone}
-          />
-        )}
-      </svg>
-      <span className={`absolute ${text} font-semibold tabular-nums text-slate-900 dark:text-white`}>
-        {value == null ? '—' : Math.round(value)}
-      </span>
+      <div className="flex items-center" aria-hidden="true">
+        <div
+          className={`relative rounded-[5px] border-2 p-[2px] ${value == null ? 'border-slate-300 border-dashed dark:border-slate-600' : 'border-slate-400 dark:border-slate-500'}`}
+          style={{ width: s.w, height: s.h }}
+        >
+          <div className="relative h-full w-full overflow-hidden rounded-[2px] bg-slate-100 dark:bg-slate-800">
+            <div
+              className={`absolute inset-y-0 left-0 rounded-[2px] ${GAUGE_FILL[status]} transition-[width] duration-700 ease-out motion-reduce:transition-none`}
+              style={{ width: `${fill}%` }}
+            />
+          </div>
+        </div>
+        <div
+          className={`rounded-r-sm ${value == null ? 'bg-slate-300 dark:bg-slate-600' : 'bg-slate-400 dark:bg-slate-500'}`}
+          style={{ width: s.nibW, height: s.nibH }}
+        />
+      </div>
+      {showValue && (
+        <span className={`${s.text} font-semibold tabular-nums ${value == null ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white'}`}>
+          {value == null ? '—' : Math.round(value)}
+        </span>
+      )}
     </div>
   );
 };

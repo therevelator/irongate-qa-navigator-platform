@@ -17,6 +17,8 @@ test.describe('QA Manager Role-Based Access Control', () => {
 
     // Check navigation menu - should see Users, Teams, Analytics, Admin, Metric Intervals, Parameters Config
     // Should NOT see Departments
+    // Navigation sits in a drawer behind the burger button in the top bar
+    await page.click('[data-testid="nav-toggle"]');
     await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-users"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-teams"]')).toBeVisible();

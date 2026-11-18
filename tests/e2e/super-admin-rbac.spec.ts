@@ -11,6 +11,8 @@ test.describe('Super Admin Role-Based Access Control', () => {
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
     // Check navigation menu - all items should be visible (by data-testid)
+    // Navigation sits in a drawer behind the burger button in the top bar
+    await page.click('[data-testid="nav-toggle"]');
     await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-users"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-teams"]')).toBeVisible();
@@ -20,6 +22,9 @@ test.describe('Super Admin Role-Based Access Control', () => {
     await expect(page.locator('[data-testid="nav-manual-metrics"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-metric-intervals"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-parameters-config"]')).toBeVisible();
+    // Close the navigation drawer (Escape) before using the page behind it
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-testid="nav-toggle"]')).toHaveAttribute('aria-expanded', 'false');
 
     // Check dashboard shows all teams and departments
     const teamCards = page.locator('[data-testid="team-card"]');

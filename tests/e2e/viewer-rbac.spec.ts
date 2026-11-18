@@ -12,6 +12,8 @@ test.describe('Viewer Role-Based Access Control', () => {
 
     // Check navigation menu - should ONLY see Dashboard (nav button)
     // Should NOT see Users, Teams, Departments, Analytics, Admin, Manual Metrics, etc.
+    // Navigation sits in a drawer behind the burger button in the top bar
+    await page.click('[data-testid="nav-toggle"]');
     await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible();
 
     // Should NOT see these restricted nav items at all

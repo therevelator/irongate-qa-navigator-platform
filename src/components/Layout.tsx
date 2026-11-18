@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity,
-  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight,
+  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -109,16 +109,77 @@ const ROLE_LABEL: Record<string, string> = {
   viewer: 'Viewer',
 };
 
+const PIN_KEY = 'irongate_nav_pinned';
+const WIDE_QUERY = '(min-width: 1280px)';
+
+const readPinned = () => {
+  try { return localStorage.getItem(PIN_KEY) === 'true'; } catch { return false; }
+};
+
+const useMediaQuery = (q: string) => {
+  const [matches, setMatches] = useState(() => (typeof window !== 'undefined' && window.matchMedia ? window.matchMedia(q).matches : false));
+  useEffect(() => {
+    if (!window.matchMedia) return;
+    const mql = window.matchMedia(q);
+    const onChange = () => setMatches(mql.matches);
+    onChange();
+    mql.addEventListener?.('change', onChange);
+    return () => mql.removeEventListener?.('change', onChange);
+  }, [q]);
+  return matches;
+};
+
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, onTabChange }) => {
   const { user, logout } = useAuth();
   const { isDark, toggleMode } = useTheme();
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  // Navigation lives in a drawer behind the burger button. On wide screens it can be pinned
+  // (docked beside the content); the pin is the only preference remembered.
+  const [navOpen, setNavOpen] = useState(false);
+  const [pinned, setPinned] = useState<boolean>(readPinned);
+  const isWide = useMediaQuery(WIDE_QUERY);
+  const docked = pinned && isWide;
+  const navVisible = docked || navOpen;
+  const drawerRef = useRef<HTMLElement>(null);
+  const burgerRef = useRef<HTMLButtonElement>(null);
   const [jobNotification, setJobNotification] = useState<{ message: string; timestamp?: string } | null>(null);
+
+  useEffect(() => {
+    try { localStorage.setItem(PIN_KEY, pinned ? 'true' : 'false'); } catch { /* storage unavailable */ }
+  }, [pinned]);
 
   // Scroll to top when view changes
   useEffect(() => {
     document.getElementById('main-scroll')?.scrollTo({ top: 0 });
   }, [currentView]);
+
+  const closeNav = useCallback((restoreFocus = true) => {
+    setNavOpen(false);
+    if (restoreFocus) requestAnimationFrame(() => burgerRef.current?.focus());
+  }, []);
+
+  // Overlay drawer: focus the active item on open, trap Tab inside, close on Escape.
+  useEffect(() => {
+    if (!navOpen || docked) return;
+    const drawer = drawerRef.current;
+    const first = drawer?.querySelector<HTMLElement>('[aria-current="page"]') ?? drawer?.querySelector<HTMLElement>(FOCUSABLE);
+    const t = window.setTimeout(() => first?.focus(), 60);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { e.preventDefault(); closeNav(); return; }
+      if (e.key !== 'Tab' || !drawer) return;
+      const items = Array.from(drawer.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.offsetParent !== null);
+      if (items.length === 0) return;
+      const firstEl = items[0], lastEl = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === firstEl) { e.preventDefault(); lastEl.focus(); }
+      else if (!e.shiftKey && document.activeElement === lastEl) { e.preventDefault(); firstEl.focus(); }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => { window.clearTimeout(t); document.removeEventListener('keydown', onKey); };
+  }, [navOpen, docked, closeNav]);
+
+  // Docking (pin on a wide screen) replaces the overlay.
+  useEffect(() => { if (docked) setNavOpen(false); }, [docked]);
 
   // Background job notifications pushed over the WebSocket (long-running server only)
   useEffect(() => {
@@ -152,7 +213,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
   const go = (view: string) => {
     if (view === 'dashboard') onTabChange?.('all');
     onViewChange(view);
-    setIsMobileMenuOpen(false);
+    if (!docked) closeNav(false);
+  };
+
+  const toggleNav = () => {
+    if (docked) { setPinned(false); return; }
+    setNavOpen((o) => !o);
   };
 
   const meta = PAGE_META[currentView] || { title: 'Overview' };
@@ -160,20 +226,30 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
 
   return (
     <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
-      {/* Mobile overlay */}
-      {isMobileMenuOpen && (
-        <div className="fixed inset-0 z-40 bg-slate-900/40 lg:hidden" onClick={() => setIsMobileMenuOpen(false)} />
+      {/* Backdrop for the overlay drawer */}
+      {!docked && (
+        <div
+          className={`fixed inset-0 z-40 bg-slate-900/40 dark:bg-slate-950/60 transition-opacity duration-200 motion-reduce:transition-none ${navOpen ? 'opacity-100' : 'pointer-events-none opacity-0'}`}
+          onClick={() => closeNav()}
+          aria-hidden="true"
+          data-testid="nav-backdrop"
+        />
       )}
 
       <aside
-          className={`fixed lg:static inset-y-0 left-0 z-50 w-64 flex-shrink-0 flex flex-col
+          id="app-navigation"
+          ref={drawerRef}
+          aria-label="Main navigation"
+          {...(!docked ? { role: 'dialog', 'aria-modal': navOpen ? true : undefined } : {})}
+          aria-hidden={!navVisible || undefined}
+          className={`${docked ? 'static' : 'fixed inset-y-0 left-0 z-50 shadow-xl'} w-72 max-w-[85vw] flex-shrink-0 flex flex-col
             bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800
-            transition-transform duration-200 ease-out
-            ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+            transition-[transform,visibility] duration-200 ease-out motion-reduce:transition-none
+            ${navVisible ? 'translate-x-0 visible' : '-translate-x-full invisible'}`}
         >
           {/* Brand */}
           <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
-            <button onClick={() => go('dashboard')} className="flex items-center gap-3 text-left">
+            <button onClick={() => go('dashboard')} className="flex items-center gap-3 text-left rounded-md">
               <div className="h-8 w-8 rounded-md bg-brand-700 dark:bg-brand-500 flex items-center justify-center">
                 <span className="text-[13px] font-semibold tracking-tight text-white">IG</span>
               </div>
@@ -182,13 +258,27 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
                 <p className="text-xs text-slate-500 dark:text-slate-400">QE Navigator</p>
               </div>
             </button>
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="lg:hidden p-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-              aria-label="Close navigation"
-            >
-              <X size={18} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPinned((p) => !p)}
+                className="hidden xl:inline-flex p-1.5 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                aria-pressed={pinned}
+                aria-label={pinned ? 'Unpin navigation' : 'Pin navigation open'}
+                title={pinned ? 'Unpin navigation' : 'Keep navigation open'}
+                data-testid="nav-pin"
+              >
+                {pinned ? <PinOff size={16} /> : <Pin size={16} />}
+              </button>
+              {!docked && (
+                <button
+                  onClick={() => closeNav()}
+                  className="p-1.5 rounded-md text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white"
+                  aria-label="Close navigation"
+                >
+                  <X size={18} />
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Navigation */}
@@ -211,6 +301,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
                         <li key={item.view}>
                           <button
                             onClick={() => go(item.view)}
+                            aria-current={active ? 'page' : undefined}
                             data-testid={`nav-${item.view === 'features' ? 'analytics' : item.view === 'admin-panel' ? 'admin' : item.view}`}
                             className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors ${
                               active
@@ -257,15 +348,26 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
 
       {/* Main column */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 flex-shrink-0 px-4 sm:px-8 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+        <header className="h-16 flex-shrink-0 px-4 sm:px-6 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
           <div className="flex items-center gap-3 min-w-0">
             <button
-              onClick={() => setIsMobileMenuOpen(true)}
-              className="lg:hidden p-1.5 -ml-1.5 rounded-md text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-              aria-label="Open navigation"
+              ref={burgerRef}
+              onClick={toggleNav}
+              className="h-9 w-9 -ml-1 flex flex-shrink-0 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
+              aria-label={docked ? 'Hide navigation' : navOpen ? 'Close navigation' : 'Open navigation'}
+              aria-expanded={navVisible}
+              aria-controls="app-navigation"
+              data-testid="nav-toggle"
             >
-              <Menu size={20} />
+              {docked ? <PanelLeftClose size={19} /> : <Menu size={20} />}
             </button>
+            {!docked && (
+              <button onClick={() => go('dashboard')} className="hidden sm:flex flex-shrink-0 items-center gap-2.5 rounded-md pr-1" aria-label="IronGate QE Navigator, go to overview">
+                <span className="h-7 w-7 rounded-md bg-brand-700 dark:bg-brand-500 flex items-center justify-center text-[12px] font-semibold tracking-tight text-white">IG</span>
+                <span className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</span>
+              </button>
+            )}
+            {!docked && <span className="hidden sm:block h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />}
             <div className="min-w-0">
               {meta.parent && (
                 <div className="flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
@@ -285,6 +387,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
             >
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
+            <span
+              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
+              title={`${user?.firstName ?? ''} ${user?.lastName ?? ''} · ${ROLE_LABEL[role] ?? role}`.trim()}
+              aria-hidden="true"
+            >
+              {initials}
+            </span>
           </div>
         </header>
 

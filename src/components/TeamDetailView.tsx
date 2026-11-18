@@ -317,6 +317,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const { user } = useAuth();
   const ct = chartTheme(isDark);
 
+  // Opening a team keeps the same app view, so start the detail page at the top.
+  useEffect(() => {
+    document.getElementById('main-scroll')?.scrollTo({ top: 0 });
+  }, [team.id]);
+
   const isOwnTeam =
     (user?.primaryTeamId != null && team?.id != null && String(user.primaryTeamId) === String(team.id)) ||
     (Array.isArray(user?.assignedTeams) && team?.id != null && user!.assignedTeams!.some(tid => String(tid) === String(team.id)));
@@ -531,7 +536,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
         {/* Headline scores */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" data-testid="team-kpis">
           <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <BatteryIndicator percentage={qaScore} size="md" good={qaThreshold?.good} warn={qaThreshold?.warning} label="QA score" />
+            <BatteryIndicator percentage={qaScore} size="lg" good={qaThreshold?.good} warn={qaThreshold?.warning} label="QA score" showValue={false} />
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
                 QA score <InfoTip text={METRIC_EXPLANATIONS.qaScore.detailed} />

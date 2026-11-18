@@ -256,6 +256,8 @@ test.describe('Team Lead Role-Based Access Control', () => {
     await setupAuth(page, 'team_lead');
 
     // Should see limited navigation options via stable nav test IDs
+    // Navigation sits in a drawer behind the burger button in the top bar
+    await page.click('[data-testid="nav-toggle"]');
     await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-teams"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-users"]')).toBeVisible();

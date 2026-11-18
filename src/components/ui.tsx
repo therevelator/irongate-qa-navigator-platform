@@ -121,7 +121,7 @@ export function SegmentedControl<T extends string>({ value, onChange, options }:
           key={o.value}
           onClick={() => onChange(o.value)}
           className={cx(
-            'px-3 py-1.5 text-sm rounded transition-colors',
+            'px-3 py-1.5 text-sm rounded whitespace-nowrap transition-colors',
             value === o.value
               ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
               : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
