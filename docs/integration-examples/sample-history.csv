@@ -1,0 +1,7 @@
+team_id,date,metric,value
+TEAM_ID_CHECKOUT,2026-08-03,defect_escape_rate,7.2
+TEAM_ID_CHECKOUT,2026-08-03,defect_density,0.81
+TEAM_ID_CHECKOUT,2026-08-10,defect_escape_rate,6.4
+TEAM_ID_CHECKOUT,2026-08-10,defect_density,0.77
+TEAM_ID_LEDGER,2026-08-03,defect_escape_rate,3.9
+TEAM_ID_LEDGER,2026-08-10,defect_escape_rate,4.1

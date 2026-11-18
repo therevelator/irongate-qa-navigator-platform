@@ -14,6 +14,7 @@ unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 | Document | What it covers |
 |---|---|
 | [docs/PRODUCT_GUIDE.md](docs/PRODUCT_GUIDE.md) | What the product is and the need it addresses, roles, every metric with its formula, target, data source today and in production, how data gets in, every screen, privacy, alerts and operations |
+| [docs/INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) | For developers: sending data to the platform (API keys, the KPI ingestion API, every metric's unit and range, backfill, retries) with curl / Node / Python / CI examples, runnable scripts in [docs/integration-examples/](docs/integration-examples/), and what cannot be sent via API yet |
 | [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) | Direct and adjacent competitors, gaps and positioning (sources checked 18 Nov 2026) |
 | [docs/pitch/](docs/pitch/) | Source of the 11-slide pitch deck, with speaker notes and the placeholders to fill |
 | [docs/release-r2/](docs/release-r2/) | The R2 release plan and its working rules |
