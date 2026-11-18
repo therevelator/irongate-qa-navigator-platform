@@ -8,6 +8,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Toaster } from 'react-hot-toast';
 import { ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES } from '../../server/lib/userPolicy';
+import NotificationsBell from './NotificationsBell';
+import { NOTIFICATIONS_TAB_EVENT, NOTIFICATIONS_TAB_KEY } from './NotificationsCenter';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -106,6 +108,7 @@ const PAGE_META: Record<string, { title: string; parent?: string }> = {
   'metric-intervals': { title: 'Expected update frequency', parent: 'Administration' },
   'parameters-config': { title: 'Parameters', parent: 'Administration' },
   'ingestion-log': { title: 'Ingestion log', parent: 'Administration' },
+  notifications: { title: 'Notifications' },
 };
 
 const ROLE_LABEL: Record<string, string> = {
@@ -386,6 +389,13 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <NotificationsBell
+              onOpenAll={(tab = 'alerts') => {
+                try { sessionStorage.setItem(NOTIFICATIONS_TAB_KEY, tab); } catch { /* storage unavailable */ }
+                window.dispatchEvent(new CustomEvent(NOTIFICATIONS_TAB_EVENT, { detail: tab }));
+                go('notifications');
+              }}
+            />
             <button
               onClick={toggleMode}
               title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}

@@ -19,6 +19,7 @@ import TeamsView from './components/TeamsView';
 import DepartmentsView from './components/DepartmentsView';
 import ActivityLog from './components/ActivityLog';
 import IngestionLog from './components/IngestionLog';
+import NotificationsCenter from './components/NotificationsCenter';
 import Layout from './components/Layout';
 import NewDashboard from './components/NewDashboard';
 import ManualMetricsInput from './components/ManualMetricsInput';
@@ -53,6 +54,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'test-execution-timeline': '/analytics/timeline',
   'team-gamification': '/analytics/gamification',
   'pdf-report-generator': '/analytics/reports',
+  'notifications': '/notifications',
   'tv': '/tv'
 };
 
@@ -337,6 +339,7 @@ function App() {
 
   if (currentView === 'activity') return renderLayout(<ActivityLog />);
   if (currentView === 'ingestion-log') return renderLayout(<IngestionLog />);
+  if (currentView === 'notifications') return renderLayout(<NotificationsCenter />);
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
   if (currentView === 'manual-metrics') return renderLayout(<ManualMetricsInput onBack={() => handleViewChange('dashboard')} />);
   if (currentView === 'metric-intervals') return renderLayout(<MetricIntervalsConfig onBack={() => handleViewChange('dashboard')} />);
