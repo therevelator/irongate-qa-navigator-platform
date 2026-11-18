@@ -20,6 +20,7 @@ unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 | [docs/release-r2/](docs/release-r2/) | The R2 release plan and its working rules |
 | [docs/reports/](docs/reports/) | The accuracy audits and the consistency report that led to the "no invented numbers" fixes |
 | [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md) | Who may do what, per role, written from `server/lib/userPolicy.ts` (R2) |
+| [docs/reports/r2-final-review.md](docs/reports/r2-final-review.md) | Release R2 final review: findings, fixes, deferred items; per-role security matrix in `tests/api/r2-security-matrix.test.ts` |
 
 ## Stack
 
