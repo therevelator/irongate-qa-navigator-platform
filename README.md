@@ -74,10 +74,11 @@ companies that already hold sample (`demo-`) rows. It never changes or deletes a
 sample data to a team that has none (a real team created after seeding stays empty), leaves every
 group with real data alone (the same checks as `--fill-existing`) and adds nothing when run twice on
 the same day. Like every seed command it refuses a database host other than localhost / 127.0.0.1
-unless `--allow-remote` is passed. To refresh a hosted demo database, the owner runs it from a
-trusted machine, once a day or before a demo, for example
+unless `--allow-remote` is passed. On Netlify it runs **every night** on its own (see "Nightly demo
+refresh" below), so the hosted demo stays current without anyone running it. To refresh by hand, for
+example before a demo, run it from a trusted machine:
 `DATABASE_URL=<hosted connection string> npm run seed:demo -- --refresh-dates --allow-remote`
-(check `seed:demo:check` afterwards). It was tested on local PostgreSQL 16 and 17 only.
+(check `seed:demo:check` afterwards).
 
 **Fill existing companies** (`--fill-existing`, optional `--company <id>`, repeatable): every
 active team of every non-demo company gets the same model wherever the analytics pages would
@@ -543,6 +544,13 @@ Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (table
   names.
 - **Database keep-alive**: `netlify/functions/db-keepalive.ts` runs `SELECT 1` at 06:00 and 18:00 UTC
   (logs only ok / failed).
+- **Nightly demo refresh**: `netlify/functions/demo-refresh.ts` (02:17 UTC) starts
+  `demo-refresh-background.ts`, which does the same work as `seed:demo -- --refresh-dates`: it adds
+  the missing recent days of sample data and never changes, deletes or adds to real data. Two
+  functions because a scheduled function may run 30 seconds and the refresh takes longer (a
+  background function may run 15 minutes). The call is signed with an HMAC of `DEMO_REFRESH_SECRET`
+  (or `JWT_SECRET`), so a request to the public URL without it does nothing. Logs counts only. Turn it
+  off with `DEMO_REFRESH_ENABLED=false`, for a deployment with no demo data.
 
 Environment (all optional; the Slack webhook is entered in the app, not in the environment):
 `SETTINGS_ENCRYPTION_KEY` (recommended in production, a long random string; otherwise `JWT_SECRET` is

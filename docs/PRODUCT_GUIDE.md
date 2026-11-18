@@ -1053,6 +1053,15 @@ admins) sends yours immediately.
 `netlify/functions/db-keepalive.ts` runs `SELECT 1` at 06:00 and 18:00 UTC (`0 6,18 * * *`), logging only ok / failed, so a hosted database on a
 plan that pauses idle projects stays available.
 
+### Nightly demo refresh
+
+Sample history stops on the day it was seeded, so without a refresh a hosted demo looks a day older every day. `netlify/functions/demo-refresh.ts`
+runs at 02:17 UTC and starts `demo-refresh-background.ts`, which adds the missing recent days of sample data, exactly as
+`npm run seed:demo -- --refresh-dates`: only the demo company and teams that already hold sample rows, never a change or deletion, never real
+data, nothing on a second run the same day. A scheduled function may only run for 30 seconds, so the work runs in a background function (up to
+15 minutes); the call carries an HMAC of `DEMO_REFRESH_SECRET` (falling back to `JWT_SECRET`) and anything else is ignored. It logs counts only.
+`DEMO_REFRESH_ENABLED=false` turns it off.
+
 ### Configuration
 
 `SETTINGS_ENCRYPTION_KEY` (recommended in production: a long random string), `ALERTS_CRON=false` (turn the local schedule off, for example on a
@@ -1101,8 +1110,9 @@ The Slack webhook is entered in **Parameters → Notification channels**, not in
 
 - A single Node service (Railway: `npm run server:prod` serves the built app from `dist/`), or
 - Netlify: static site plus `netlify/functions/api.ts`, which mounts the same routers. On Netlify there are no long-running cron jobs and no
-  WebSocket (dashboards refresh on load and on their own timers). Three Netlify Scheduled Functions replace the local schedule:
-  `alerts-evaluate` (hourly, `15 * * * *`), `weekly-digest` (Monday 07:00 UTC) and `db-keepalive` (06:00 and 18:00 UTC).
+  WebSocket (dashboards refresh on load and on their own timers). Netlify Scheduled Functions replace the local schedule:
+  `alerts-evaluate` (hourly, `15 * * * *`), `weekly-digest` (Monday 07:00 UTC), `pulse-auto-send` (hourly, `40 * * * *`), `db-keepalive`
+  (06:00 and 18:00 UTC) and `demo-refresh` (02:17 UTC, which starts the background function `demo-refresh-background`).
 - On the long-running server, `server/jobs/alertsCron.ts` evaluates alerts hourly (and once 20 s after start), computes due action
   outcomes, sends pending notifications and runs the weekly digest.
 - Schema: apply `supabase/migrations/` in timestamp order. Migrations are additive and idempotent.
@@ -1158,8 +1168,8 @@ Playwright specs, HTML report as an artifact).
   (`developer_productivity_snapshots`) is written only by the seed.
 - **Company snapshots are stored only when someone opens the executive briefing**, so the briefing's 30-day history depends on usage.
 - **Hosted demo data ages** unless it is refreshed: sample history stops at the day it was seeded. `npm run seed:demo -- --refresh-dates`
-  adds the missing recent days for sample-data teams only (README, "Keeping hosted demo data current"); it has to be run (by the owner) against
-  the hosted database, it is not scheduled.
+  adds the missing recent days for sample-data teams only (README, "Keeping hosted demo data current"); on Netlify it runs every night
+  (`demo-refresh`, 02:17 UTC); elsewhere the owner runs it against the hosted database.
 
 ### Open items from the release plan and README
 
