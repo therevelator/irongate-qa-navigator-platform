@@ -6,7 +6,8 @@ import { useTheme } from '../contexts/ThemeContext';
 import { chartTheme, formatAsOf } from '../data/advancedFeatures';
 import { Badge, Card, CardHeader, EmptyState, ProgressBar, StatTile, buttonClass, cx, scoreTone } from './ui';
 import { SuppressedNote } from './PrivacyNote';
-import { WELLBEING_BANDS } from '../../server/lib/pulseRules';
+import { CADENCE_LABELS, WELLBEING_BANDS, type PulseCadence } from '../../server/lib/pulseRules';
+import { PulseSendPanel, type PulseSendStatus } from './PulseSurveySend';
 
 /**
  * Wellbeing (survey) results of one team, from GET /api/pulse/teams/:teamId
@@ -14,7 +15,7 @@ import { WELLBEING_BANDS } from '../../server/lib/pulseRules';
  * suppressed periods have no values. Comments only for leads, managers and admins.
  */
 
-export type PulseCadence = 'weekly' | 'biweekly';
+export type { PulseCadence };
 
 export interface PulsePeriodResult {
   start: string;
@@ -25,19 +26,31 @@ export interface PulsePeriodResult {
   responses: number | null;
   score: number | null;
   questions: Array<{ key: string; text: string; mean: number }> | null;
+  /** Members the survey e-mail was delivered to for this period. */
+  sent: number;
+  /** Responses ÷ members sent (0-100), null when not shown or never sent. */
+  responseRate: number | null;
 }
 
 export interface TeamPulseData {
   team: { id: string; name: string; isActive: boolean };
   cadence: PulseCadence;
   pendingCadence: { cadence: PulseCadence; from: string } | null;
-  currentPeriod: { start: string; end: string; lastDay: string; responded: boolean; responsesSoFar: number | null; responsesSoFarText: string };
+  currentPeriod: {
+    start: string; end: string; lastDay: string; responded: boolean; responsesSoFar: number | null; responsesSoFarText: string;
+    sent: number; responseRate: number | null;
+  };
   periods: PulsePeriodResult[];
   latest: PulsePeriodResult;
   comments: string[] | null;
   threshold: number;
   canRespond: boolean;
   canSetCadence: boolean;
+  /** Lead, QA manager or admin of the team: may e-mail the survey and reminders. */
+  canSend: boolean;
+  /** Send status (only with canSend). */
+  sending: PulseSendStatus | null;
+  cadences: Array<{ value: PulseCadence; label: string }>;
   canViewComments: boolean;
   questions: Array<{ key: string; text: string }>;
   scale: { min: number; max: number; minLabel: string; maxLabel: string };
@@ -47,7 +60,11 @@ export interface TeamPulseData {
   suppressedText: string;
 }
 
-export const CADENCE_LABEL: Record<PulseCadence, string> = { weekly: 'Weekly', biweekly: 'Every two weeks' };
+export const CADENCE_LABEL: Record<PulseCadence, string> = CADENCE_LABELS;
+
+/** "12 of 15 members (80%)" — response rate of a shown period, or null. */
+export const responseRateText = (p: { responses: number | null; sent: number; responseRate: number | null }) =>
+  p.responseRate == null || p.responses == null ? null : `${p.responses} of ${p.sent} members sent the survey (${p.responseRate}%)`;
 
 /** "16 Nov – 22 Nov 2026" */
 export const periodLabel = (p: { start: string; lastDay: string }) => {
@@ -84,7 +101,7 @@ export const wellbeingTone = (score: number | null | undefined) => scoreTone(sco
 export const PulseTrendChart: React.FC<{ periods: PulsePeriodResult[]; height?: number }> = ({ periods, height = 220 }) => {
   const { isDark } = useTheme();
   const ct = chartTheme(isDark);
-  const rows = periods.map((p) => ({ label: formatAsOf(p.start)?.replace(/ \d{4}$/, '') ?? p.start, score: p.score, period: periodLabel(p), responses: p.responses }));
+  const rows = periods.map((p) => ({ label: formatAsOf(p.start)?.replace(/ \d{4}$/, '') ?? p.start, score: p.score, period: periodLabel(p), responses: p.responses, rate: p.responseRate }));
   return (
     <div style={{ height }} role="img" aria-label={`Wellbeing (survey) trend over ${periods.length} periods`}>
       <ResponsiveContainer width="100%" height="100%">
@@ -95,7 +112,7 @@ export const PulseTrendChart: React.FC<{ periods: PulsePeriodResult[]; height?: 
           <Tooltip
             contentStyle={ct.tooltip.contentStyle} labelStyle={ct.tooltip.labelStyle} itemStyle={ct.tooltip.itemStyle}
             labelFormatter={(_l, payload) => (payload?.[0]?.payload?.period as string) ?? ''}
-            formatter={(v: any, _n, item: any) => [v == null ? 'Not shown (fewer than 3 responses)' : `${v}/100 · ${item?.payload?.responses} responses`, 'Wellbeing']}
+            formatter={(v: any, _n, item: any) => [v == null ? 'Not shown (fewer than 3 responses)' : `${v}/100 · ${item?.payload?.responses} responses${item?.payload?.rate != null ? ` · ${item.payload.rate}% response rate` : ''}`, 'Wellbeing']}
           />
           <Line type="monotone" dataKey="score" name="Wellbeing (survey)" stroke={ct.series} strokeWidth={2} dot={{ r: 2.5 }} connectNulls={false} />
         </LineChart>
@@ -124,8 +141,13 @@ export const PulseResults: React.FC<{ data: TeamPulseData }> = ({ data }) => {
           <EmptyState title="No answers for this period" description={`Nobody answered the survey for ${periodLabel(latest)}.`} />
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" data-testid="pulse-latest">
-            <StatTile label="Wellbeing (survey)" value={Math.round(latest.score)} unit="/100" tone={wellbeingTone(latest.score)} progress={latest.score}
-              caption={`Mean answer ${((latest.score / 100) * 4 + 1).toFixed(1)} of 5`} />
+            <div className="space-y-3">
+              <StatTile label="Wellbeing (survey)" value={Math.round(latest.score)} unit="/100" tone={wellbeingTone(latest.score)} progress={latest.score}
+                caption={`Mean answer ${((latest.score / 100) * 4 + 1).toFixed(1)} of 5`} />
+              <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="pulse-response-rate">
+                Response rate: {responseRateText(latest) ?? (latest.sent ? '—' : 'not e-mailed this period (answered in the app)')}
+              </p>
+            </div>
             <ul className="space-y-3" aria-label="Average answer per question">
               {(latest.questions ?? []).map((q) => (
                 <li key={q.key}>
@@ -181,7 +203,7 @@ export const PulseResults: React.FC<{ data: TeamPulseData }> = ({ data }) => {
  * a link to the pulse page (answer / full results).
  */
 export const PulseTeamSummary: React.FC<{ teamId: string; onOpen?: () => void }> = ({ teamId, onOpen }) => {
-  const { data, status } = useTeamPulse(teamId);
+  const { data, status, reload } = useTeamPulse(teamId);
   if (status === 'forbidden') return null;
   const latest = data?.latest;
   return (
@@ -212,6 +234,9 @@ export const PulseTeamSummary: React.FC<{ teamId: string; onOpen?: () => void }>
                 <Badge tone={wellbeingTone(latest.score)} className="ml-2 whitespace-nowrap">{latest.responses} responses</Badge>
               </p>
             )}
+            {latest.responseRate != null && (
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Response rate {latest.responseRate}% ({latest.responses} of {latest.sent} sent)</p>
+            )}
             <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
               Asked {CADENCE_LABEL[data.cadence].toLowerCase()}
               {data.pendingCadence ? ` (${CADENCE_LABEL[data.pendingCadence.cadence].toLowerCase()} from ${formatAsOf(data.pendingCadence.from)})` : ''}.
@@ -221,6 +246,11 @@ export const PulseTeamSummary: React.FC<{ teamId: string; onOpen?: () => void }>
           {data.periods.some((p) => !p.suppressed) ? <PulseTrendChart periods={data.periods} height={140} /> : (
             <p className="self-center text-sm text-slate-500 dark:text-slate-400">{data.periods.length ? `No trend: no period reached ${data.threshold} responses.` : "No closed periods with answers yet."}</p>
           )}
+        </div>
+      )}
+      {data?.canSend && data.sending && (
+        <div className="mt-5 border-t border-slate-200 pt-4 dark:border-slate-800">
+          <PulseSendPanel data={data} sending={data.sending} onChanged={reload} compact />
         </div>
       )}
     </Card>
