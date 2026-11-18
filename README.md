@@ -118,13 +118,47 @@ One definition per metric, shared by server and UI:
 
 - QA score, technical-debt score, DDPS, burnout risk: `server/lib/metricFormulas.ts`
 - KPI thresholds and dashboard targets: `src/config/metricsConfig.ts` (`METRICS_CONFIG`,
-  `KPI_TARGETS`, `teamAttentionIssues`); QA score bands come from `QA_SCORE_THRESHOLDS`
+  `KPI_TARGETS`, `teamAttentionIssues`, `teamKpiTrack`); QA score bands come from `QA_SCORE_THRESHOLDS`
 - Developer health rules: `server/lib/developerHealth.ts`. "Workload balance (derived)"
   (`developer_metrics.happiness_score`) is calculated from focus, meetings, context switches,
   PR and review times; it is not a survey score and is not counted twice.
 - Config inheritance (team, then department, then company): `server/lib/configResolver.ts`
 - Team membership (primary team or `team_members`): `server/lib/teamMembership.ts`
 - Who may do what: `server/lib/userPolicy.ts` (see [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md))
+
+## Dashboard
+
+- **Cards per row (1, 2 or 3)**: next to Grid / List in the Team performance section (grid
+  view only). Remembered in the browser. Phones always show 1 column, tablets at most 2.
+- **Teams vs KPI targets**: the on track / at risk / off track counts in Company status open
+  a breakdown (per team: QA score, as-of date, the targets not met with their gap, the ones
+  met collapsed). Rule (`teamKpiTrack`): of the four KPI targets recorded for the team
+  (coverage, automation, flakiness, escape rate), on track = at least 75% met, at risk = 50%
+  to 75%, off track = under 50%; fewer than two recorded = not classified. The counts and
+  the list both come from `GET /api/analytics/company-summary` (`kpiStatus`,
+  `kpiStatusTeams`), computed by the same function.
+
+## Team TV mode
+
+A full-screen view of ONE team for a meeting-room screen or a team wall: `/tv?team=<id>`.
+Open it with **Open TV mode** on Team detail or in the Analytics scope bar.
+
+- Shows the team name, department, lead and member count, the QA score battery with its
+  status and change since the previous snapshot, six key KPIs (value, target, status, change,
+  90-day sparkline), "data as of", a clock, and two more panels: 90-day trends with target
+  lines, and focus areas (KPIs off target, plus recommended actions for team leads and up).
+  Team aggregates only: no member list and no individual developer data.
+- Scope: the analytics rule. Admins any team, QA managers the teams of their department,
+  team leads / engineers / viewers their own team. `GET /api/tv/teams/:id` answers 403 for
+  any other team (also another company's team or an unknown id).
+- Refreshes every 60 s, on the live "metrics updated" event and when the tab becomes
+  visible; a failed refresh keeps the last data on screen and says so.
+- Keys: **F** full screen (if the browser refuses, a message suggests F11), **T** light/dark
+  (dark by default, remembered separately from the app theme), **R** auto-rotate the panels
+  every 20 s, **← →** or **1–3** panels, **Esc** exit. The controls bar appears on mouse
+  move and hides after 4 s, with the cursor.
+- Kiosk URL options: `?team=<id>&theme=light|dark&rotate=1`. The layout scales with the
+  screen (1366×768 up to 3840×2160) and keeps the screen awake where the browser allows it.
 
 ## KPI ingestion API
 

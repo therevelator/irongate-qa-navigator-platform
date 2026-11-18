@@ -9,7 +9,7 @@ import { runDemoSeed, runFillExisting, isDemoSeeded, teamsLackingData } from '..
 import { demoSummary, todayUtc } from '../seeds/demoData';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
-import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues } from '../../src/config/metricsConfig';
+import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues, teamKpiTrack } from '../../src/config/metricsConfig';
 import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel, computeBottleneckScores } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
@@ -2213,7 +2213,8 @@ async function computeCompanyMetrics(companyId: string) {
   );
   const latestSnapshots = await query<any>(`
     SELECT DISTINCT ON (ks.team_id)
-      ks.*, t.name, to_char(ks.snapshot_date, 'YYYY-MM-DD') AS snapshot_day
+      ks.*, t.name, to_char(ks.snapshot_date, 'YYYY-MM-DD') AS snapshot_day,
+      (SELECT d.name FROM departments d WHERE d.id = t.department_id) AS department_name
     FROM kpi_snapshots ks
     JOIN teams t ON t.id = ks.team_id
     WHERE t.company_id = ? AND t.is_active = TRUE
@@ -2284,21 +2285,27 @@ async function computeCompanyMetrics(companyId: string) {
     .filter((t: AttentionItem) => t.issues.length > 0)
     .sort((a: AttentionItem, b: AttentionItem) => a.score - b.score || b.issues.length - a.issues.length);
 
-  // KPI status: share of recorded KPI targets met (needs >= 2 recorded KPIs)
-  let onTrack = 0, atRisk = 0, offTrack = 0, noData = 0;
-  for (const t of teamsWithData) {
-    const checks = [
-      num(t.test_coverage) === null ? null : (num(t.test_coverage) as number) >= KPI_TARGETS.coverage,
-      num(t.test_flakiness_rate) === null ? null : (num(t.test_flakiness_rate) as number) <= KPI_TARGETS.flakiness,
-      num(t.defect_escape_rate) === null ? null : (num(t.defect_escape_rate) as number) <= KPI_TARGETS.escapeRate,
-      num(t.automation_coverage) === null ? null : (num(t.automation_coverage) as number) >= KPI_TARGETS.automation
-    ].filter((c): c is boolean => c !== null);
-    if (checks.length < 2) { noData++; continue; }
-    const share = checks.filter(Boolean).length / checks.length;
-    if (share >= 0.75) onTrack++;
-    else if (share >= 0.5) atRisk++;
-    else offTrack++;
-  }
+  // KPI status: share of recorded KPI targets met (needs >= 2 recorded KPIs). One rule
+  // (teamKpiTrack in src/config/metricsConfig.ts) gives both the per-team list and the counts,
+  // so the dashboard's breakdown can never disagree with the numbers.
+  const kpiStatusTeams = teamsWithData.map((t: any) => {
+    const track = teamKpiTrack({
+      testCoverage: num(t.test_coverage),
+      testFlakinessRate: num(t.test_flakiness_rate),
+      defectEscapeRate: num(t.defect_escape_rate),
+      automationCoverage: num(t.automation_coverage),
+    });
+    return {
+      teamId: t.team_id as string,
+      name: t.name as string,
+      department: (t.department_name ?? null) as string | null,
+      qaScore: num(t.qa_score),
+      snapshotDate: t.snapshot_day as string,
+      ...track,
+    };
+  });
+  const countBucket = (b: string) => kpiStatusTeams.filter((x: any) => x.bucket === b).length;
+  const onTrack = countBucket('onTrack'), atRisk = countBucket('atRisk'), offTrack = countBucket('offTrack'), noData = countBucket('noData');
 
   // Technical debt status (active teams only)
   const techDebtSummary = await queryOne<any>(
@@ -2438,6 +2445,7 @@ async function computeCompanyMetrics(companyId: string) {
     topImproving,
     needsAttention,
     kpiStatus: { onTrack, atRisk, offTrack, noData },
+    kpiStatusTeams,
     aiSummary,
     teamCount: activeTeams.length,
     teamsWithKpiData: teamsWithData.length,

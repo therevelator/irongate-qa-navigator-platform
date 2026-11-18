@@ -10,11 +10,14 @@ import { QA_SCORE_THRESHOLDS, qaStatusFromScore } from '../../server/lib/metricF
 import { useAuth } from '../contexts/AuthContext';
 import { Page, PageIntro, Card, Badge, SegmentedControl, EmptyState, buttonClass, inputClass, cx, type Tone } from './ui';
 import HeroBattery from './HeroBattery';
+import KpiStatusModal, { type KpiStatusTeam, type KpiTab } from './KpiStatusModal';
+import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
+import { openTvMode } from './tv/tvNavigation';
 
 interface NewDashboardProps {
   teams: Team[];
   onTeamClick?: (team: Team) => void;
-  // Accepted for compatibility with App; the dashboard keeps its own grid/list choice.
+  // Accepted for compatibility with App; the dashboard keeps its own grid/list and columns choice.
   gridColumns?: 1 | 2 | 3;
   is3DMode?: boolean;
 }
@@ -35,6 +38,8 @@ interface CompanySummary {
   avgFlakinessRate: number | null;
   needsAttention: { name: string; score: number; issue: string }[];
   kpiStatus: { onTrack: number; atRisk: number; offTrack: number; noData?: number };
+  /** Per-team breakdown behind kpiStatus (same rule: teamKpiTrack). */
+  kpiStatusTeams?: KpiStatusTeam[];
   aiSummary?: string;
   teamCount: number;
   teamsWithKpiData: number;
@@ -158,6 +163,22 @@ const readView = (): ViewMode => {
   try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'grid'; } catch { return 'grid'; }
 };
 
+/** Grid density: 1, 2 or 3 cards per row (grid view only), remembered per browser. */
+type Columns = 1 | 2 | 3;
+const COLUMNS_KEY = 'irongate_dashboard_columns';
+const readColumns = (): Columns => {
+  try {
+    const v = Number(localStorage.getItem(COLUMNS_KEY));
+    return v === 1 || v === 2 ? v : 3;
+  } catch { return 3; }
+};
+// Responsive caps: always 1 column on phones, at most 2 on tablets (md), the choice from xl.
+const GRID_CLASS: Record<Columns, string> = {
+  1: 'grid grid-cols-1 gap-4',
+  2: 'grid grid-cols-1 gap-4 md:grid-cols-2',
+  3: 'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3',
+};
+
 const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
   const { user } = useAuth();
   const [summary, setSummary] = useState<CompanySummary | null>(null);
@@ -167,11 +188,18 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
   const [department, setDepartment] = useState('all');
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'qa', dir: 'desc' });
   const [view, setView] = useState<ViewMode>(readView);
+  const [columns, setColumns] = useState<Columns>(readColumns);
   const [briefingOpen, setBriefingOpen] = useState(false);
+  const [kpiModal, setKpiModal] = useState<KpiTab | null>(null);
+  const analyticsScope = useAnalyticsScope();
 
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* storage unavailable */ }
   }, [view]);
+
+  useEffect(() => {
+    try { localStorage.setItem(COLUMNS_KEY, String(columns)); } catch { /* storage unavailable */ }
+  }, [columns]);
 
   useEffect(() => {
     let cancelled = false;
@@ -265,7 +293,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
           )}
         />
 
-        <CompanyHero summary={summary} state={summaryState} />
+        <CompanyHero summary={summary} state={summaryState} onOpenKpiStatus={setKpiModal} />
 
         {/* Team overview */}
         <section className="mt-10" aria-labelledby="team-overview-title">
@@ -330,7 +358,36 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 {sort.dir === 'asc' ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
               </button>
             </div>
-            <div className="self-start sm:self-auto sm:ml-auto inline-flex rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900" role="group" aria-label="Layout">
+            <div className="flex items-center gap-2 self-start sm:self-auto sm:ml-auto">
+            {view === 'grid' && (
+              <div
+                className="hidden md:inline-flex rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900"
+                role="group"
+                aria-label="Cards per row"
+                data-testid="grid-columns"
+              >
+                {([1, 2, 3] as const).map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setColumns(n)}
+                    aria-pressed={columns === n}
+                    aria-label={`${n} ${n === 1 ? 'card' : 'cards'} per row`}
+                    title={n === 3 ? '3 per row (2 on tablets)' : n === 2 ? '2 per row' : '1 per row'}
+                    data-testid={`grid-columns-${n}`}
+                    className={cx(
+                      'inline-flex h-8 w-8 items-center justify-center rounded text-sm font-medium tabular-nums transition-colors',
+                      columns === n
+                        ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
+                        : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white',
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="inline-flex rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900" role="group" aria-label="Layout">
               {([
                 { v: 'grid' as const, label: 'Grid', Icon: LayoutGrid },
                 { v: 'list' as const, label: 'List', Icon: Rows3 },
@@ -351,12 +408,13 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 </button>
               ))}
             </div>
+            </div>
           </div>
 
           {visible.length === 0 ? (
             <Card><EmptyState title="No teams match" description="Adjust the filters or search term." /></Card>
           ) : (
-            <div className={view === 'grid' ? 'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3' : 'flex flex-col gap-3'}>
+            <div className={view === 'grid' ? GRID_CLASS[columns] : 'flex flex-col gap-3'} data-columns={view === 'grid' ? columns : undefined}>
               {visible.map((r) => (
                 <TeamCard
                   key={r.team.id}
@@ -372,6 +430,19 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
       </div>
 
       {briefingOpen && <BriefingDrawer onClose={() => setBriefingOpen(false)} />}
+      <KpiStatusModal
+        isOpen={kpiModal !== null}
+        onClose={() => setKpiModal(null)}
+        initialTab={kpiModal ?? 'offTrack'}
+        teams={summary?.kpiStatusTeams ?? []}
+        onOpenTeam={(id) => {
+          setKpiModal(null);
+          const t = teams.find((x) => x.id === id);
+          if (t) onTeamClick?.(t);
+        }}
+        onOpenTv={(id) => { setKpiModal(null); openTvMode(id); }}
+        canOpenTv={(id) => analyticsScope.teams.some((t) => t.id === id)}
+      />
     </Page>
   );
 };
@@ -390,7 +461,7 @@ const VALUE_TEXT: Record<Status, string> = {
   none: 'text-slate-400 dark:text-slate-500',
 };
 
-const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' | 'ready' | 'error' }> = ({ summary, state }) => {
+const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' | 'ready' | 'error'; onOpenKpiStatus: (tab: KpiTab) => void }> = ({ summary, state, onOpenKpiStatus }) => {
   if (state === 'error') {
     return (
       <Card>
@@ -568,18 +639,36 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
           );
         })}
         <div className="col-span-2 bg-white px-5 py-3.5 dark:bg-slate-900 sm:col-span-1 sm:px-6">
-          <p className="text-xs text-slate-500 dark:text-slate-400">Teams vs KPI targets</p>
           {kpi && kpi.onTrack + kpi.atRisk + kpi.offTrack > 0 ? (
-            <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-              {[
-                { l: 'on track', v: kpi.onTrack, c: 'bg-green-600 dark:bg-green-500' },
-                { l: 'at risk', v: kpi.atRisk, c: 'bg-amber-500 dark:bg-amber-400' },
-                { l: 'off track', v: kpi.offTrack, c: 'bg-red-600 dark:bg-red-500' },
-              ].map((k) => (
-                <span key={k.l} className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
+            <button
+              type="button"
+              onClick={() => onOpenKpiStatus(kpi.offTrack > 0 ? 'offTrack' : kpi.atRisk > 0 ? 'atRisk' : 'onTrack')}
+              className="inline-flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900 hover:underline dark:text-slate-400 dark:hover:text-white"
+              data-testid="kpi-status-open"
+            >
+              Teams vs KPI targets <ChevronRight size={12} aria-hidden="true" />
+            </button>
+          ) : (
+            <p className="text-xs text-slate-500 dark:text-slate-400">Teams vs KPI targets</p>
+          )}
+          {kpi && kpi.onTrack + kpi.atRisk + kpi.offTrack > 0 ? (
+            <p className="mt-1 flex flex-wrap items-center gap-x-1 gap-y-1 text-sm">
+              {([
+                { l: 'on track', tab: 'onTrack', v: kpi.onTrack, c: 'bg-green-600 dark:bg-green-500' },
+                { l: 'at risk', tab: 'atRisk', v: kpi.atRisk, c: 'bg-amber-500 dark:bg-amber-400' },
+                { l: 'off track', tab: 'offTrack', v: kpi.offTrack, c: 'bg-red-600 dark:bg-red-500' },
+              ] as const).map((k) => (
+                <button
+                  key={k.l}
+                  type="button"
+                  onClick={() => onOpenKpiStatus(k.tab)}
+                  aria-label={`${k.v} teams ${k.l}: show details`}
+                  data-testid={`kpi-status-${k.tab}`}
+                  className="-mx-0.5 inline-flex items-center gap-1.5 rounded px-1.5 py-0.5 text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
                   <span className={cx('h-1.5 w-1.5 rounded-full', k.c)} aria-hidden="true" />
                   <span className="font-semibold tabular-nums text-slate-900 dark:text-white">{k.v}</span> {k.l}
-                </span>
+                </button>
               ))}
             </p>
           ) : (

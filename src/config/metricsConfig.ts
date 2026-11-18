@@ -369,6 +369,53 @@ export function teamAttentionIssues(t: TeamKpiValues): string[] {
   return issues;
 }
 
+/** Company status "Teams vs KPI targets" bucket of one team. */
+export type KpiTrackBucket = 'onTrack' | 'atRisk' | 'offTrack' | 'noData';
+
+export interface KpiTargetCheck {
+  key: 'testCoverage' | 'testFlakinessRate' | 'defectEscapeRate' | 'automationCoverage';
+  label: string;
+  value: number | null;
+  target: number;
+  lowerIsBetter: boolean;
+  /** null when the KPI is not recorded */
+  met: boolean | null;
+  /** distance to the target in the KPI's unit (positive = short of it), null when met or not recorded */
+  gap: number | null;
+}
+
+/** Shares of KPI targets met that make a team "on track" / "at risk"; below = "off track". */
+export const KPI_TRACK_RULE = { onTrack: 0.75, atRisk: 0.5, minRecorded: 2 } as const;
+
+export const KPI_TRACK_RULE_TEXT =
+  `Based on 4 KPI targets (coverage ≥ ${KPI_TARGETS.coverage}%, automation ≥ ${KPI_TARGETS.automation}%, flakiness ≤ ${KPI_TARGETS.flakiness}%, escape rate ≤ ${KPI_TARGETS.escapeRate}%) ` +
+  `among those recorded: on track = at least ${KPI_TRACK_RULE.onTrack * 100}% met, at risk = ${KPI_TRACK_RULE.atRisk * 100}% to ${KPI_TRACK_RULE.onTrack * 100}%, off track = under ${KPI_TRACK_RULE.atRisk * 100}%. ` +
+  `Teams with fewer than ${KPI_TRACK_RULE.minRecorded} recorded are not classified.`;
+
+/**
+ * ONE definition of a team's "Teams vs KPI targets" bucket (company summary counts and the
+ * dashboard's breakdown modal): the share of recorded KPI targets met.
+ */
+export function teamKpiTrack(t: Omit<TeamKpiValues, 'qaScore'>): { bucket: KpiTrackBucket; checks: KpiTargetCheck[]; met: number; recorded: number } {
+  const mk = (key: KpiTargetCheck['key'], label: string, value: number | null, target: number, lowerIsBetter: boolean): KpiTargetCheck => {
+    const met = value === null ? null : lowerIsBetter ? value <= target : value >= target;
+    return { key, label, value, target, lowerIsBetter, met, gap: value === null || met ? null : Math.abs(value - target) };
+  };
+  const checks = [
+    mk('testCoverage', 'Test coverage', t.testCoverage, KPI_TARGETS.coverage, false),
+    mk('automationCoverage', 'Automation coverage', t.automationCoverage, KPI_TARGETS.automation, false),
+    mk('testFlakinessRate', 'Test flakiness', t.testFlakinessRate, KPI_TARGETS.flakiness, true),
+    mk('defectEscapeRate', 'Defect escape rate', t.defectEscapeRate, KPI_TARGETS.escapeRate, true),
+  ];
+  const recordedChecks = checks.filter((c) => c.met !== null);
+  const met = recordedChecks.filter((c) => c.met).length;
+  const recorded = recordedChecks.length;
+  if (recorded < KPI_TRACK_RULE.minRecorded) return { bucket: 'noData', checks, met, recorded };
+  const share = met / recorded;
+  const bucket: KpiTrackBucket = share >= KPI_TRACK_RULE.onTrack ? 'onTrack' : share >= KPI_TRACK_RULE.atRisk ? 'atRisk' : 'offTrack';
+  return { bucket, checks, met, recorded };
+}
+
 /** Short target text for a metric, e.g. "≥ 80%" or "≤ 4 hours". */
 export function metricTargetText(metricKey: keyof MetricsConfig): string {
   const c = METRICS_CONFIG[metricKey];
