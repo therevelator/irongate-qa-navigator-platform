@@ -81,6 +81,8 @@ function App() {
   // Handle URL routing on mount and popstate
   useEffect(() => {
     const handleLocationChange = () => {
+      // Signed out: keep the address (e.g. an e-mailed TV mode link) so it opens after sign-in.
+      if (!user) return;
       const path = window.location.pathname;
 
       // Find exact match or best match. The analytics team (?team=) is read by

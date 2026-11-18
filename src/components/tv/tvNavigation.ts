@@ -14,6 +14,19 @@ export function tvUrl(teamId?: string | null): string {
   return teamId ? `${TV_PATH}?team=${encodeURIComponent(teamId)}` : TV_PATH;
 }
 
+/** Absolute TV mode link of a team, to copy or e-mail (the recipient signs in, then sees the team if it is in their scope). */
+export function tvShareUrl(teamId: string): string {
+  return `${window.location.origin}${tvUrl(teamId)}`;
+}
+
+/** mailto: link with the TV mode link of a team. */
+export function tvMailto(teamId: string, teamName: string): string {
+  const subject = `${teamName}: IronGate TV mode`;
+  const body = `Open ${teamName} in TV mode on the meeting-room screen:\n\n${tvShareUrl(teamId)}\n\n`
+    + 'Sign in with your IronGate account; the screen shows the team if it is in your scope and refreshes on its own.';
+  return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 export function openTvMode(teamId?: string | null): void {
   window.history.pushState({ [FROM_APP]: true }, '', tvUrl(teamId));
   window.dispatchEvent(new PopStateEvent('popstate', { state: window.history.state }));

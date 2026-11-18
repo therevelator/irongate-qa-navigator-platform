@@ -16,7 +16,9 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { canViewIndividualDevelopers, canViewTeamAnalytics } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
-import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay, Mail, Link2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { tvMailto, tvShareUrl } from './tv/tvNavigation';
 import BatteryIndicator from './BatteryIndicator';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, cx, toneText, buttonClass } from './ui';
@@ -603,9 +605,31 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
             <>
               {canShowFormulas && <FormulaSwitch checked={showFormulasPref} onChange={setShowFormulas} />}
               {onOpenTv && canOpenTv && (
-                <button type="button" className={buttonClass.secondary} onClick={() => onOpenTv(String(team.id))} data-testid="open-tv-mode">
-                  <MonitorPlay size={15} aria-hidden /> Open TV mode
-                </button>
+                <>
+                  <button type="button" className={buttonClass.secondary} onClick={() => onOpenTv(String(team.id))} data-testid="open-tv-mode">
+                    <MonitorPlay size={15} aria-hidden /> Open TV mode
+                  </button>
+                  <a
+                    href={tvMailto(String(team.id), team.name)}
+                    className={buttonClass.secondary}
+                    title="E-mail the TV mode link of this team (for the meeting-room screen)"
+                    data-testid="email-tv-link"
+                  >
+                    <Mail size={15} aria-hidden /> E-mail TV link
+                  </a>
+                  <button
+                    type="button"
+                    className={buttonClass.secondary}
+                    onClick={async () => {
+                      try { await navigator.clipboard.writeText(tvShareUrl(String(team.id))); toast.success('TV mode link copied'); }
+                      catch { toast.error(`Copy failed. The link is ${tvShareUrl(String(team.id))}`); }
+                    }}
+                    title="Copy the TV mode link of this team"
+                    data-testid="copy-tv-link"
+                  >
+                    <Link2 size={15} aria-hidden /> Copy link
+                  </button>
+                </>
               )}
             </>
           ) : undefined}
