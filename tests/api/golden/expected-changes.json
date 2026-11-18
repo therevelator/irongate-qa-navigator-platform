@@ -248,6 +248,24 @@
     "reason": "Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
   },
   {
+    "path": "summary.engineeringHealthBasis.weights.workloadBalance",
+    "before": 0.2,
+    "after": "<absent>",
+    "reason": "Wellbeing (phase 3C): engineering health uses Wellbeing (survey) from the anonymous pulse survey as its fourth component (20%) instead of workload balance (derived), which is a workload signal and no longer part of it; the fixture has no survey answers, so the component is still missing and the score is unchanged"
+  },
+  {
+    "path": "summary.engineeringHealthBasis.weights.wellbeingSurvey",
+    "before": "<absent>",
+    "after": 0.2,
+    "reason": "Wellbeing (phase 3C): engineering health uses Wellbeing (survey) from the anonymous pulse survey as its fourth component (20%) instead of workload balance (derived), which is a workload signal and no longer part of it; the fixture has no survey answers, so the component is still missing and the score is unchanged"
+  },
+  {
+    "path": "summary.engineeringHealthBasis.missing[2]",
+    "before": "workloadBalance",
+    "after": "wellbeingSurvey",
+    "reason": "Wellbeing (phase 3C): engineering health uses Wellbeing (survey) from the anonymous pulse survey as its fourth component (20%) instead of workload balance (derived), which is a workload signal and no longer part of it; the fixture has no survey answers, so the component is still missing and the score is unchanged"
+  },
+  {
     "path": "summary.deliveryPerformanceBasis.method",
     "before": "Mean of per-team DORA level scores (Elite 100, High 80, Medium 60, Low 40); bands as getDORALevel",
     "after": "Mean of per-team DORA level scores (Elite 100, High 80, Medium 60, Low 40), weighted by team size; bands as getDORALevel; teams with a missing or stale input are not classified",
@@ -264,6 +282,103 @@
     "before": 1,
     "after": 0,
     "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate (its DORA level is not counted)"
+  },
+  {
+    "path": "summary.developerWellnessBasis.method",
+    "before": "Workload balance (derived): mean of developer_metrics.happiness_score per developer, which is calculated from focus, meetings, context switches, PR and review times. Not a survey score.",
+    "after": "Wellbeing (survey): mean of the anonymous pulse-survey answers of each team’s latest closed period, (mean − 1) ÷ 4 × 100, over teams with at least 3 responses (teams below that are left out), weighted by responses.",
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.developers",
+    "before": 0,
+    "after": "<absent>",
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.avgHappiness",
+    "before": null,
+    "after": "<absent>",
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.avgFocusHours",
+    "before": null,
+    "after": "<absent>",
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.avgMeetingHours",
+    "before": null,
+    "after": "<absent>",
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.avgContextSwitches",
+    "before": null,
+    "after": "<absent>",
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.burnoutRisk",
+    "before": "Unknown",
+    "after": "<absent>",
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.teamsReporting",
+    "before": "<absent>",
+    "after": 0,
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.teamsTotal",
+    "before": "<absent>",
+    "after": 5,
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.teamsSuppressed",
+    "before": "<absent>",
+    "after": 0,
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.responses",
+    "before": "<absent>",
+    "after": 0,
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.developerWellnessBasis.minResponses",
+    "before": "<absent>",
+    "after": 3,
+    "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.workloadBalanceIndex",
+    "before": "<absent>",
+    "after": null,
+    "reason": "Wellbeing (phase 3C): workload balance (derived) is reported separately as workloadBalanceIndex / workloadBalanceBasis, as a k-anonymous company aggregate (only teams with at least 3 opted-in contributing developers); the fixture has no developer metrics"
+  },
+  {
+    "path": "summary.workloadBalanceBasis",
+    "before": "<absent>",
+    "after": {
+      "method": "Workload balance (derived): mean of developer_metrics.happiness_score, calculated from focus, meetings, context switches, PR and review times. Not a survey score and not wellbeing.",
+      "basis": "Company figures: developers of teams that reach the threshold themselves (teams below it are left out, so their figures cannot be worked out), each developer counted once. Team figures are means over the team’s developers (QA engineers and team leads assigned to the team) who opted in to developer insights and have all five inputs recorded. They are shown only with at least 3 such developers.",
+      "suppressed": false,
+      "contributors": 0,
+      "reason": null,
+      "minContributors": 3,
+      "teamsIncluded": 0,
+      "teamsSuppressed": 0,
+      "avgFocusHours": null,
+      "avgMeetingHours": null,
+      "avgContextSwitches": null,
+      "burnoutRisk": "Unknown"
+    },
+    "reason": "Wellbeing (phase 3C): workload balance (derived) is reported separately as workloadBalanceIndex / workloadBalanceBasis, as a k-anonymous company aggregate (only teams with at least 3 opted-in contributing developers); the fixture has no developer metrics"
   },
   {
     "path": "teams.golden-team-partial.qaScore",
