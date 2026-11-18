@@ -15,6 +15,10 @@ import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { openTvMode } from './tv/tvNavigation';
 import { ConfidenceNote, type ConfidenceInfo } from './MetricQuality';
 import SampleDataBanner from './SampleDataBanner';
+import OnboardingChecklist from './OnboardingChecklist';
+import SavedViewsMenu from './SavedViewsMenu';
+import ExportCsvButton from './ExportCsvButton';
+import type { CsvColumn } from '../lib/csv';
 
 interface NewDashboardProps {
   teams: Team[];
@@ -299,6 +303,36 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
     });
   }, [inDepartment, search, filter, sort]);
 
+  // Saved views (SavedViewsMenu): the dashboard's choices, and applying a saved set of them.
+  const viewState = useMemo(() => ({ filter, search, department, sort, view, columns }), [filter, search, department, sort, view, columns]);
+  const applyView = (s: Record<string, any>) => {
+    setFilter((['all', 'high', 'attention'] as Filter[]).includes(s.filter) ? s.filter : 'all');
+    setSearch(typeof s.search === 'string' ? s.search : '');
+    setDepartment(typeof s.department === 'string' ? s.department : 'all');
+    if (s.sort && typeof s.sort.key === 'string') setSort({ key: s.sort.key as SortKey, dir: s.sort.dir === 'asc' ? 'asc' : 'desc' });
+    if (s.view === 'grid' || s.view === 'list') setView(s.view);
+    if ([1, 2, 3].includes(s.columns)) setColumns(s.columns as Columns);
+  };
+
+  // CSV export of the listed teams (filters and sort as shown): values as shown plus raw numbers.
+  const csvColumns: CsvColumn<Row>[] = [
+    { header: 'Team', value: (r) => r.name },
+    { header: 'Department', value: (r) => r.department },
+    { header: 'QA score', value: (r) => (r.qa == null ? '—' : String(Math.round(r.qa))), raw: (r) => r.qa },
+    { header: 'Status', value: (r) => STATUS_META[r.status].label },
+    { header: 'QA score basis', value: (r) => (r.confidence ? `${r.confidence.inputsUsed} of ${r.confidence.inputsTotal} inputs (${r.confidence.confidence} confidence)` : '') },
+    ...KPI_FIELDS.map((f): CsvColumn<Row> => ({
+      header: f.label,
+      value: (r) => fmt(r[f.key], f.digits, f.suffix),
+      raw: (r) => r[f.key],
+    })),
+    { header: 'Stale KPIs', value: (r) => KPI_FIELDS.filter((f) => r.staleness[f.metric]?.stale).map((f) => f.label).join('; ') },
+    { header: 'Needs attention', value: (r) => (r.attention ? 'yes' : 'no') },
+    { header: 'High performing', value: (r) => (isHighPerforming(r) ? 'yes' : 'no') },
+    { header: 'Members', value: (r) => r.members },
+    { header: 'Snapshot date', value: (r) => r.snapshotDate ?? '' },
+  ];
+
   const canBrief = user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead';
   const hour = new Date().getHours();
   const greeting = `Good ${hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'}${user?.firstName ? `, ${user.firstName}` : ''}`;
@@ -317,6 +351,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
         />
 
         <SampleDataBanner show={!!summary?.sampleData || teams.some((t: any) => t.sampleData)} />
+
+        <OnboardingChecklist />
 
         <CompanyHero summary={summary} state={summaryState} onOpenKpiStatus={setKpiModal} />
 
@@ -383,7 +419,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
                 {sort.dir === 'asc' ? <ArrowUp size={15} /> : <ArrowDown size={15} />}
               </button>
             </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto sm:ml-auto">
+            <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto sm:ml-auto">
+            <SavedViewsMenu kind="dashboard" state={viewState} onApply={applyView} />
+            <ExportCsvButton what="Team performance" columns={csvColumns} rows={visible} testId="dashboard-export" compact />
             {view === 'grid' && (
               <div
                 className="hidden md:inline-flex rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900"

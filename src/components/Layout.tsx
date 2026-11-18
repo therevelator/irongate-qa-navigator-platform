@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
-  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History,
+  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History, GitCompareArrows,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -42,6 +42,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
     items: [
       { view: 'dashboard', label: 'Overview', icon: LayoutDashboard },
       { view: 'features', label: 'Analytics', icon: BarChart3, roles: ANALYTICS_ROLES },
+      { view: 'compare', label: 'Compare teams', icon: GitCompareArrows, roles: ANALYTICS_ROLES },
     ],
   },
   {
@@ -88,6 +89,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
 const PAGE_META: Record<string, { title: string; parent?: string }> = {
   dashboard: { title: 'Overview' },
   features: { title: 'Analytics' },
+  compare: { title: 'Compare teams' },
   'flaky-test-intelligence': { title: 'Flaky tests', parent: 'Quality' },
   'test-execution-timeline': { title: 'Test execution', parent: 'Quality' },
   'technical-debt': { title: 'Technical debt', parent: 'Quality' },

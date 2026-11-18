@@ -4,6 +4,22 @@ import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import type { AnalyticsScopeTeam } from '../contexts/AnalyticsScopeContext';
 import { Card, EmptyState, inputClass, buttonClass, cx } from './ui';
 import { openTvMode } from './tv/tvNavigation';
+import toast from 'react-hot-toast';
+import SavedViewsMenu from './SavedViewsMenu';
+
+/** Analytics module of the current page (App.tsx paths), for saved views of that module. */
+const MODULE_BY_PATH: Record<string, string> = {
+  '/analytics': 'features',
+  '/analytics/flaky-tests': 'flaky-test-intelligence',
+  '/analytics/technical-debt': 'technical-debt',
+  '/analytics/pipeline': 'pipeline-visualization',
+  '/analytics/business-impact': 'business-impact',
+  '/analytics/performance': 'performance-metrics',
+  '/analytics/productivity': 'developer-productivity',
+  '/analytics/timeline': 'test-execution-timeline',
+  '/analytics/gamification': 'team-gamification',
+  '/analytics/reports': 'pdf-report-generator',
+};
 
 /**
  * Department + Team selector shown at the top of the Analytics hub and of every Analytics
@@ -101,6 +117,19 @@ export const AnalyticsScopeBar: React.FC<{ note?: React.ReactNode }> = ({ note }
           >
             <MonitorPlay size={15} aria-hidden /> Open TV mode
           </button>
+          {MODULE_BY_PATH[window.location.pathname] && (
+            <SavedViewsMenu
+              kind="analytics"
+              module={MODULE_BY_PATH[window.location.pathname]}
+              state={{ departmentId: team.department_id ?? undefined, teamId: team.id }}
+              onApply={(s) => {
+                const id = typeof s.teamId === 'string' ? s.teamId : '';
+                if (scope.teams.some((t) => t.id === id)) scope.setTeamId(id);
+                else toast.error('The team of this view is outside your analytics scope');
+              }}
+              className="self-start sm:self-auto"
+            />
+          )}
         </>
       )}
 

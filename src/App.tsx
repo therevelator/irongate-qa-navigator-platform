@@ -25,6 +25,7 @@ import ManualMetricsInput from './components/ManualMetricsInput';
 import MetricIntervalsConfig from './components/MetricIntervalsConfig';
 import ParametersConfiguration from './components/ParametersConfiguration';
 import TeamTvView from './components/TeamTvView';
+import CompareTeams from './components/CompareTeams';
 import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
@@ -53,7 +54,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'test-execution-timeline': '/analytics/timeline',
   'team-gamification': '/analytics/gamification',
   'pdf-report-generator': '/analytics/reports',
-  'tv': '/tv'
+  'tv': '/tv',
+  'compare': '/compare'
 };
 
 const PATH_TO_VIEW = Object.entries(VIEW_TO_PATH).reduce((acc, [view, path]) => {
@@ -142,6 +144,7 @@ function App() {
       case 'test-execution-timeline':
       case 'team-gamification':
       case 'pdf-report-generator':
+      case 'compare': // Team comparison: only teams of the analytics scope (GET /api/compare/teams)
       case 'tv': // Team TV mode: the team must be in the analytics scope (GET /api/tv/teams/:id)
         // Every role (server/lib/userPolicy.ts ANALYTICS_ROLES); each sees only the teams
         // in its analytics scope, enforced by the API.
@@ -335,6 +338,7 @@ function App() {
   if (currentView === 'team-gamification') return analytics((id) => <TeamGamification onBack={toHub} teamId={id} />, 'Rankings compare the teams of the selected department; the selected team is highlighted.');
   if (currentView === 'pdf-report-generator') return analytics((id) => <PDFReportGenerator onBack={toHub} teamId={id} />, 'The report covers the selected team.');
 
+  if (currentView === 'compare') return renderLayout(<CompareTeams />);
   if (currentView === 'activity') return renderLayout(<ActivityLog />);
   if (currentView === 'ingestion-log') return renderLayout(<IngestionLog />);
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
