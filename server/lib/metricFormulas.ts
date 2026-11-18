@@ -362,6 +362,79 @@ export const TECH_DEBT_ROI_FORMULA =
   'Annual savings = monthly cost of delay × 12; ROI % = (annual savings − investment) ÷ investment × 100; ' +
   'Payback months = investment ÷ monthly cost of delay.';
 
+/**
+ * Financial and ROI settings (Parameters → Financial and ROI settings; team overrides department
+ * overrides company). Keys without a configured value use these built-in defaults, which every
+ * screen labels as defaults.
+ */
+export const FINANCIAL_DEFAULTS = {
+  developer_hourly_rate: 75,
+  support_ticket_cost: 25,
+  revenue_per_user_monthly: 50,
+  downtime_cost_per_minute: 100,
+  sla_breach_penalty: 1000,
+} as const;
+
+export type FinancialKey = keyof typeof FINANCIAL_DEFAULTS;
+export type FinancialConfig = Record<FinancialKey, number>;
+
+export const FINANCIAL_PARAM_LABELS: Record<FinancialKey, string> = {
+  developer_hourly_rate: 'Developer hourly rate',
+  support_ticket_cost: 'Support ticket cost',
+  revenue_per_user_monthly: 'Revenue per user per month',
+  downtime_cost_per_minute: 'Downtime cost per minute',
+  sla_breach_penalty: 'SLA breach penalty',
+};
+
+export interface TechDebtImpactInputs {
+  estimated_effort_hours?: Num;
+  affected_users?: Num;
+  support_tickets_monthly?: Num;
+  downtime_minutes_monthly?: Num;
+  revenue_impact_percent?: Num;
+  sla_breaches_monthly?: Num;
+}
+
+export interface TechDebtCostOfDelay {
+  /** false when none of the five impact inputs was entered: the cost is unknown, not 0 */
+  hasImpactData: boolean;
+  supportCost: number;
+  downtimeCost: number;
+  /** affected users × revenue per user per month × revenue impact % ÷ 100 */
+  revenueLoss: number;
+  slaCost: number;
+  /** null when hasImpactData is false */
+  monthly: number | null;
+}
+
+/** Monthly cost of delay of one debt item, by component (TECH_DEBT_ROI_FORMULA). */
+export function techDebtCostOfDelay(debt: TechDebtImpactInputs, config: FinancialConfig): TechDebtCostOfDelay {
+  const impacts = [debt.affected_users, debt.support_tickets_monthly, debt.downtime_minutes_monthly, debt.revenue_impact_percent, debt.sla_breaches_monthly].map(toNum);
+  const hasImpactData = impacts.some(v => v !== null);
+  const [affectedUsers, supportTickets, downtimeMinutes, revenueImpactPct, slaBreaches] = impacts.map(v => v ?? 0);
+  const supportCost = supportTickets * config.support_ticket_cost;
+  const downtimeCost = downtimeMinutes * config.downtime_cost_per_minute;
+  const revenueLoss = affectedUsers * config.revenue_per_user_monthly * (revenueImpactPct / 100);
+  const slaCost = slaBreaches * config.sla_breach_penalty;
+  return {
+    hasImpactData, supportCost, downtimeCost, revenueLoss, slaCost,
+    monthly: hasImpactData ? supportCost + downtimeCost + revenueLoss + slaCost : null,
+  };
+}
+
+/** Per-item ROI (TECH_DEBT_ROI_FORMULA). Values that cannot be computed are null. */
+export function techDebtRoi(debt: TechDebtImpactInputs, config: FinancialConfig): {
+  investment: number | null; monthlyCost: number | null; annualSavings: number | null; roi: number | null; paybackMonths: number | null;
+} {
+  const effortHours = toNum(debt.estimated_effort_hours);
+  const investment = effortHours !== null ? effortHours * config.developer_hourly_rate : null;
+  const monthlyCost = techDebtCostOfDelay(debt, config).monthly;
+  const annualSavings = monthlyCost !== null ? monthlyCost * 12 : null;
+  const roi = investment !== null && investment > 0 && annualSavings !== null ? ((annualSavings - investment) / investment) * 100 : null;
+  const paybackMonths = investment !== null && monthlyCost !== null && monthlyCost > 0 ? investment / monthlyCost : null;
+  return { investment, monthlyCost, annualSavings, roi, paybackMonths };
+}
+
 // ============================================================================
 // PIPELINE BOTTLENECK SCORE (per stage, relative to the other stages)
 // ============================================================================

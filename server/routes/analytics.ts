@@ -10,7 +10,7 @@ import { demoSummary, todayUtc } from '../seeds/demoData';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues, teamKpiTrack } from '../../src/config/metricsConfig';
-import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT } from '../lib/metricFormulas';
+import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT, techDebtRoi } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
@@ -22,6 +22,8 @@ import { teamMemberCountSql } from '../lib/teamMembership';
 import { multiTeamDeveloperSummary, teamDeveloperSummary } from '../lib/developerAggregates';
 import { K_ANONYMITY_MIN, privacyInfo } from '../lib/privacy';
 import { wellbeingAcrossTeams } from '../lib/pulse';
+import { benjaminiHochberg, studentTTwoSidedP } from '../lib/stats';
+import { getFinancialConfig } from '../lib/financialConfig';
 
 const router = express.Router();
 
@@ -509,73 +511,9 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
 // TECHNICAL DEBT TRACKER
 // ============================================================================
 
-// Helper to get financial config with inheritance (company -> team; team overrides company).
-// Keys with no configured value keep the built-in default and are listed in `defaultsUsed`.
-const FINANCIAL_DEFAULTS: Record<string, number> = {
-  developer_hourly_rate: 75,
-  support_ticket_cost: 25,
-  revenue_per_user_monthly: 50,
-  downtime_cost_per_minute: 100,
-  sla_breach_penalty: 1000
-};
-
-async function getFinancialConfig(companyId: string, teamId?: string): Promise<{ config: Record<string, number>; defaultsUsed: string[] }> {
-  const config: Record<string, number> = { ...FINANCIAL_DEFAULTS };
-  const configured = new Set<string>();
-
-  try {
-    // Same inheritance as every other config reader: team, then department, then company.
-    const resolved = await resolveConfigs(companyId, { teamId });
-    for (const [key, cfg] of Object.entries(resolved)) {
-      const value = num(cfg.value);
-      if (Object.prototype.hasOwnProperty.call(FINANCIAL_DEFAULTS, key) && value !== null) {
-        config[key] = value;
-        configured.add(key);
-      }
-    }
-  } catch (e) {
-    console.error('Error loading financial config, using defaults:', e);
-  }
-
-  return { config, defaultsUsed: Object.keys(FINANCIAL_DEFAULTS).filter(k => !configured.has(k)) };
-}
-
-// Calculate ROI metrics for a debt item.
-// Returns null for values that cannot be computed (no effort estimate / no impact data).
-function calculateROI(
-  debt: any,
-  config: Record<string, number>
-): { investment: number | null; monthlyCost: number | null; annualSavings: number | null; roi: number | null; paybackMonths: number | null } {
-  const effortHours = num(debt.estimated_effort_hours);
-  const impacts = [
-    num(debt.affected_users), num(debt.support_tickets_monthly), num(debt.downtime_minutes_monthly),
-    num(debt.revenue_impact_percent), num(debt.sla_breaches_monthly)
-  ];
-  const hasImpactData = impacts.some(v => v !== null);
-  const [affectedUsers, supportTickets, downtimeMinutes, revenueImpactPct, slaBreaches] = impacts.map(v => v ?? 0);
-
-  // Investment = developer hours x hourly rate
-  const investment = effortHours !== null ? effortHours * config.developer_hourly_rate : null;
-
-  // Monthly cost of delay = sum of all impact costs (only when impact data was entered)
-  const monthlyCost = hasImpactData
-    ? supportTickets * config.support_ticket_cost +
-      downtimeMinutes * config.downtime_cost_per_minute +
-      affectedUsers * config.revenue_per_user_monthly * (revenueImpactPct / 100) +
-      slaBreaches * config.sla_breach_penalty
-    : null;
-  const annualSavings = monthlyCost !== null ? monthlyCost * 12 : null;
-
-  // ROI = ((annual savings - investment) / investment) x 100
-  const roi = investment !== null && investment > 0 && annualSavings !== null
-    ? ((annualSavings - investment) / investment) * 100
-    : null;
-
-  // Payback period in months (null when there is no monthly cost to recover)
-  const paybackMonths = investment !== null && monthlyCost !== null && monthlyCost > 0 ? investment / monthlyCost : null;
-
-  return { investment, monthlyCost, annualSavings, roi, paybackMonths };
-}
+// Financial config (getFinancialConfig, server/lib/financialConfig.ts) and the per-item ROI
+// (techDebtRoi, server/lib/metricFormulas.ts) are shared with the revenue impact analysis.
+const calculateROI = techDebtRoi;
 
 router.get('/technical-debt', authenticateToken, async (req: any, res) => {
   try {
@@ -1202,61 +1140,7 @@ router.post('/update-daily', authenticateToken, async (req: any, res) => {
 // Results are exploratory: monthly series are short and often share trends.
 // ---------------------------------------------------------------------------
 
-const LANCZOS_COEFFS = [
-  0.99999999999980993, 676.5203681218851, -1259.1392167224028, 771.32342877765313,
-  -176.61502916214059, 12.507343278686905, -0.13857109526572012, 9.9843695780195716e-6,
-  1.5056327351493116e-7
-];
-
-function logGamma(x: number): number {
-  if (x < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * x)) - logGamma(1 - x);
-  x -= 1;
-  let a = LANCZOS_COEFFS[0];
-  const t = x + 7.5;
-  for (let i = 1; i < 9; i++) a += LANCZOS_COEFFS[i] / (x + i);
-  return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
-}
-
-// Continued fraction for the incomplete beta function (Numerical Recipes, betacf)
-function betaContinuedFraction(a: number, b: number, x: number): number {
-  const MAXIT = 300, EPS = 3e-16, FPMIN = 1e-300;
-  const qab = a + b, qap = a + 1, qam = a - 1;
-  let c = 1;
-  let d = 1 - qab * x / qap;
-  if (Math.abs(d) < FPMIN) d = FPMIN;
-  d = 1 / d;
-  let h = d;
-  for (let m = 1; m <= MAXIT; m++) {
-    const m2 = 2 * m;
-    let aa = m * (b - m) * x / ((qam + m2) * (a + m2));
-    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
-    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
-    d = 1 / d; h *= d * c;
-    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
-    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
-    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
-    d = 1 / d;
-    const del = d * c;
-    h *= del;
-    if (Math.abs(del - 1) < EPS) break;
-  }
-  return h;
-}
-
-/** Regularized incomplete beta I_x(a, b). */
-function regularizedIncompleteBeta(x: number, a: number, b: number): number {
-  if (x <= 0) return 0;
-  if (x >= 1) return 1;
-  const bt = Math.exp(logGamma(a + b) - logGamma(a) - logGamma(b) + a * Math.log(x) + b * Math.log(1 - x));
-  if (x < (a + 1) / (a + b + 2)) return bt * betaContinuedFraction(a, b, x) / a;
-  return 1 - bt * betaContinuedFraction(b, a, 1 - x) / b;
-}
-
-/** Two-sided p-value of a Student-t statistic: p = I_{df/(df+t^2)}(df/2, 1/2). */
-function studentTTwoSidedP(t: number, df: number): number {
-  if (!Number.isFinite(t)) return 0;
-  return Math.max(0, Math.min(1, regularizedIncompleteBeta(df / (df + t * t), df / 2, 0.5)));
-}
+// logGamma, regularized incomplete beta and the Student-t p-value: server/lib/stats.ts
 
 interface PearsonResult { correlation: number | null; pValue: number | null; sampleSize: number }
 
@@ -1296,21 +1180,7 @@ function calculatePearsonCorrelation(x: number[], y: number[]): PearsonResult {
   return { correlation: Math.round(r * 1000) / 1000, pValue, sampleSize: n };
 }
 
-/** Benjamini-Hochberg adjusted q-values (same order as input; null stays null). */
-function benjaminiHochberg(pValues: Array<number | null>): Array<number | null> {
-  const indexed = pValues
-    .map((p, i) => ({ p, i }))
-    .filter((o): o is { p: number; i: number } => o.p !== null)
-    .sort((a, b) => a.p - b.p);
-  const m = indexed.length;
-  const q: Array<number | null> = pValues.map(() => null);
-  let running = 1;
-  for (let k = m - 1; k >= 0; k--) {
-    running = Math.min(running, (indexed[k].p * m) / (k + 1));
-    q[indexed[k].i] = Math.min(1, running);
-  }
-  return q;
-}
+// benjaminiHochberg: server/lib/stats.ts
 
 // Helper: Get correlation strength label (magnitude only; see is_significant for evidence)
 function getCorrelationStrength(r: number): string {
