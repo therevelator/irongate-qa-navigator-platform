@@ -47,16 +47,20 @@ const router = express.Router();
  */
 async function resolveAnalyticsTeam(req: any, res: any, requestedTeamId: unknown): Promise<{ teamId: string; team: OwnedTeam } | null> {
   const requested = typeof requestedTeamId === 'string' && requestedTeamId && requestedTeamId !== 'all' ? requestedTeamId : undefined;
-  const own = req.user?.primaryTeamId as string | undefined;
-  if (!requested) {
-    // No teamId: the caller's own team, if it exists and is in scope; otherwise 400.
-    const ownTeam = own ? await getOwnedTeam(req, own) : null;
-    if (!ownTeam || !canViewTeamAnalytics(policyActor(req), ownTeam)) {
+  let teamId = requested;
+  if (!teamId) {
+    // No teamId: the caller's default team of their analytics scope (primary team, else a led
+    // team, else the first in scope — as GET /api/analytics/scope); 400 only when none is in scope.
+    const actor = policyActor(req);
+    const rows = await query<any>('SELECT id, department_id FROM teams WHERE company_id = ? AND is_active = TRUE ORDER BY name', [req.user?.companyId]);
+    const inScope = analyticsTeamsInScope(actor, rows.map((r: any) => ({ id: String(r.id), department_id: r.department_id ?? null })));
+    const fallback = defaultAnalyticsTeamId(actor, inScope);
+    if (!fallback) {
       res.status(400).json({ error: 'teamId is required. Choose a team for this analytics view.' });
       return null;
     }
+    teamId = fallback;
   }
-  const teamId = requested ?? (own as string);
   const team = await assertTeamAnalytics(req, res, teamId);
   return team ? { teamId: team.id, team } : null;
 }

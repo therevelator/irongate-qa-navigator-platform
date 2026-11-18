@@ -10,6 +10,7 @@ import { API_URL, NEW_PW, backendUp, del, get, localDb, login, post, put } from 
  *   FIX-004  a body over the JSON limit → 413 { error: 'Payload too large' }
  *   FIX-005  QA managers read team detail and AI insights only for teams of their departments
  *   FIX-006  /api/metrics/dashboard and /api/metrics/analytics/{teams,history} leave stale values out
+ *   FIX-007  team analytics without ?teamId use the caller's default team in scope (was 400 without a primary team)
  */
 
 let up = true;
@@ -173,5 +174,14 @@ describe('R2 Phase 4 fixes', () => {
     const hist = (await get('/api/metrics/analytics/history?days=3', c.admin)).body;
     expect(Array.isArray(hist.history)).toBe(true);
     expect(typeof hist.staleness).toBe('string');
+  });
+
+  it('FIX-007: analytics without teamId fall back to the default team in scope', async () => {
+    if (skip()) return;
+    // The QA manager has no primary team (department-scoped); their scope holds A1.
+    for (const path of ['/api/analytics/pipeline-stages', '/api/analytics/technical-debt', '/api/analytics/flaky-tests']) {
+      const r = await get(path, c.manager);
+      expect({ path, status: r.status }).toEqual({ path, status: 200 });
+    }
   });
 });
