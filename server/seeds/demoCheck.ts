@@ -45,8 +45,10 @@ const MODULES: Module[] = [
   { key: 'ta', label: 'Team analytics (14 d)', sql: `SELECT DISTINCT team_id FROM team_analytics WHERE period_end >= $1::date - 14` },
   { key: 'mlu', label: 'Metric last updated', sql: `SELECT DISTINCT team_id FROM metric_last_updated WHERE $1::date IS NOT NULL` },
   // The stored values the KPI snapshots are derived from (metric_values, migration 20261120000000).
-  // Anonymous wellbeing pulse answers (migration 20261121200000): a closed period in the last 12 weeks.
-  { key: 'pulse', label: 'Pulse survey (closed period, 12 w)', sql: `SELECT DISTINCT team_id FROM pulse_responses WHERE period_end <= $1::date AND period_end > $1::date - 84` },
+  // Anonymous wellbeing pulse answers (migration 20261121200000): a closed period in the last 12 weeks
+  // (a quarterly team, migration 20261122200000: in the last 6 months).
+  { key: 'pulse', label: 'Pulse survey (closed period, 12 w; quarterly 6 m)', sql: `SELECT DISTINCT team_id FROM pulse_responses
+      WHERE period_end <= $1::date AND period_end > $1::date - CASE WHEN period_end - period_start > 31 THEN 190 ELSE 84 END` },
   { key: 'mv', label: 'Metric values (30 d)', sql: `SELECT DISTINCT team_id FROM metric_values WHERE superseded_by IS NULL AND recorded_at >= $1::date - 30` },
   // Tracked actions (Team detail → Action plan, TV focus panel, digest; migration 20261121000000).
   { key: 'actions', label: 'Tracked actions', sql: `SELECT DISTINCT team_id FROM team_actions WHERE $1::date IS NOT NULL` },

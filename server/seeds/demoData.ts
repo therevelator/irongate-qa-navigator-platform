@@ -22,7 +22,7 @@ import { calculateWorkloadBalance } from '../../src/data/advancedFeatures';
 import { DEFAULT_METRIC_INTERVALS } from '../lib/metricIntervals';
 import { savedViewsSql } from './demoSavedViews';
 import { K_ANONYMITY_MIN } from '../lib/privacy';
-import { DEFAULT_ANCHOR, PULSE_QUESTIONS, periodFor, wellbeingScore, type CadenceRow } from '../lib/pulseRules';
+import { DEFAULT_ANCHOR, PULSE_QUESTIONS, periodFor, wellbeingScore, type CadenceRow, type PulseCadence } from '../lib/pulseRules';
 import { thresholdCondition, dedupeKey } from '../lib/alerts';
 import { defaultTarget, TARGET_METRIC_KEYS, type TargetMetric } from '../lib/targets';
 
@@ -1778,12 +1778,23 @@ const PULSE_COMMENTS = [
   'Fewer meetings this period, much better.',
 ];
 
+/** Period lengths (days) each cadence produces (re-seed guard: a team keeps the cadence its answers were made for). */
+const PULSE_LENGTHS: Record<PulseCadence, number[]> = { weekly: [7], biweekly: [14], monthly: [28, 29, 30, 31], quarterly: [90, 91, 92] };
+/** Calendar cadences of the demo start on 1 January 2026; weekly / biweekly on DEFAULT_ANCHOR (a Monday). */
+const PULSE_CALENDAR_FROM = '2026-01-01';
+
 /**
  * Anonymous pulse answers for every active team of the company (closed periods of the last
- * PULSE_WEEKS weeks, none in the running period), and some teams on a weekly cadence. Per
+ * PULSE_WEEKS weeks, or four quarters for a quarterly team; none in the running period), with
+ * the teams spread over the four cadences (every week, two weeks, month, three months). Per
  * company one team (the smallest) gets only 2 answers per period, so its results show as
  * suppressed. No participation rows: nobody is linked to an answer, and real users can still
- * answer the running period. Returns the company wellbeing on a given day (as the API computes it).
+ * answer the running period.
+ * Sending (migration 20261122200000): demo-company teams get a pulse setting (automatic sending
+ * on, except one team), and every team a send log per closed period (automatic or manual, now and
+ * then a reminder) with the members it was e-mailed to, so response rates show; teams with
+ * automatic sending also have the running period sent. Recipients are only demo users.
+ * Returns the company wellbeing on a given day (as the API computes it).
  */
 function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: string) => number | null } {
   const today = ds.today;
@@ -1792,20 +1803,52 @@ function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: stri
   const low = [...teams].sort((a, b) => respondents(a) - respondents(b) || a.id.localeCompare(b.id))[0]?.id;
   const results = new Map<string, Array<{ start: string; end: string; n: number; mean: number }>>();
   const cadences = new Map<string, CadenceRow[]>();
+  const autoOff = company.isDemo ? [...teams].sort((a, b) => a.id.localeCompare(b.id))[1]?.id : undefined;
   for (const team of teams) {
-    const guard = G(ds, team, 'base', 'pulse',
+    const base = G(ds, team, 'base', 'pulse',
       `NOT EXISTS (SELECT 1 FROM pulse_responses WHERE team_id = ${literal(team.id)} AND id NOT LIKE ${literal(DEMO_PREFIX + '%')})`);
-    const rows: CadenceRow[] = rnd('pulse-cadence', team.id) < 0.35 ? [{ cadence: 'weekly', effective_from: DEFAULT_ANCHOR }] : [];
+    if (base === SKIP) { cadences.set(team.id, []); continue; }
+    // Weekly stays on the teams that had it before; the others spread over the remaining cadences.
+    const r = rnd('pulse-cadence', team.id);
+    const cadence: PulseCadence = r < 0.35 ? 'weekly' : r < 0.55 ? 'monthly' : r < 0.7 ? 'quarterly' : 'biweekly';
+    const rows: CadenceRow[] = cadence === 'biweekly' ? [] : [{ cadence, effective_from: cadence === 'weekly' ? DEFAULT_ANCHOR : PULSE_CALENDAR_FROM }];
+    const T = literal(team.id);
+    // Re-seeding never mixes cadences: nothing is added for a team whose answers or cadence row are of another shape.
+    const shape = `NOT EXISTS (SELECT 1 FROM pulse_responses WHERE team_id = ${T} AND (period_end - period_start) NOT IN (${PULSE_LENGTHS[cadence].join(', ')}))`
+      + ` AND NOT EXISTS (SELECT 1 FROM pulse_cadences WHERE team_id = ${T}${rows.length ? ` AND cadence <> ${literal(cadence)}` : ''})`;
+    const guard = ds.guard(`${team.id}|pulse-shape`, [base ? ds.guards.get(base) : null, shape].filter(Boolean).join(' AND '));
     cadences.set(team.id, rows);
     if (rows.length) {
-      ds.add('pulse_cadences', { id: did('pcad', team.key), company_id: company.id, team_id: team.id, cadence: 'weekly', effective_from: DEFAULT_ANCHOR, created_by: null, created_at: ts(DEFAULT_ANCHOR, 9) }, guard);
+      ds.add('pulse_cadences', { id: did('pcad', team.key), company_id: company.id, team_id: team.id, cadence, effective_from: rows[0].effective_from, created_by: null, created_at: ts(rows[0].effective_from, 9) }, guard);
     }
+    const auto = company.isDemo && team.id !== autoOff;
+    if (company.isDemo) {
+      ds.add('pulse_settings', { team_id: team.id, company_id: company.id, auto_send: auto, auto_send_from: auto ? rows[0]?.effective_from ?? DEFAULT_ANCHOR : null, updated_by: null, updated_at: ts(DEFAULT_ANCHOR, 9) }, guard);
+    }
+    const lead = leadOf(team);
+    const leadId = lead && lead.id.startsWith(DEMO_PREFIX) ? lead.id : null;
+    const mailed = team.members.filter(u => u.id.startsWith(DEMO_PREFIX));
+    const logSend = (p: { start: string; end: string }, trigger: 'auto' | 'manual') => {
+      ds.add('pulse_sends', {
+        id: did('psend', sha1(`${team.id}|${p.start}|survey`).slice(0, 24)), company_id: company.id, team_id: team.id,
+        period_start: p.start, period_end: p.end, kind: 'survey', trigger, actor_id: trigger === 'auto' ? null : leadId,
+        created_at: ts(p.start, trigger === 'auto' ? 0 : 9, 40), recipients: mailed.length, delivered: mailed.length, answered: null, channel: 'smtp',
+      }, guard);
+      for (const u of mailed) {
+        ds.add('pulse_recipients', {
+          company_id: company.id, team_id: team.id, user_id: u.id, period_start: p.start, period_end: p.end,
+          first_sent_at: ts(p.start, trigger === 'auto' ? 0 : 9, 40), delivered: true,
+        }, guard);
+      }
+    };
     const list: Array<{ start: string; end: string; n: number; mean: number }> = [];
-    let p = periodFor(rows, today);
-    const since = addDays(today, -7 * PULSE_WEEKS);
+    const current = periodFor(rows, today);
+    let p = current;
+    const since = addDays(today, cadence === 'quarterly' ? -400 : -7 * PULSE_WEEKS);
+    const first = rows[0]?.effective_from ?? DEFAULT_ANCHOR;
     for (;;) {
       p = periodFor(rows, addDays(p.start, -1));
-      if (p.start < since || p.start < DEFAULT_ANCHOR) break;
+      if (p.start < since || p.start < first) break;
       const m = respondents(team);
       const share = 0.6 + 0.35 * rnd('pulse-share', team.id, p.start);
       const n = team.id === low ? Math.min(2, m) : Math.min(m, Math.max(K_ANONYMITY_MIN, Math.round(m * share)));
@@ -1828,7 +1871,22 @@ function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: stri
         }, guard);
       }
       if (n) list.push({ start: p.start, end: p.end, n, mean: total / (n * PULSE_QUESTIONS.length) });
+      // Send log of the period: e-mailed to the members (demo users) when it opened; now and then a reminder.
+      if (mailed.length >= n && mailed.length > 0) {
+        logSend(p, auto ? 'auto' : 'manual');
+        if (rnd('pulse-remind', team.id, p.start) < 0.4 && mailed.length > n) {
+          const answered = Math.max(K_ANONYMITY_MIN, Math.floor(n * 0.7));
+          ds.add('pulse_sends', {
+            id: did('psend', sha1(`${team.id}|${p.start}|reminder`).slice(0, 24)), company_id: company.id, team_id: team.id,
+            period_start: p.start, period_end: p.end, kind: 'reminder', trigger: 'manual', actor_id: leadId,
+            created_at: ts(addDays(p.start, Math.max(2, Math.floor((Date.parse(p.end) - Date.parse(p.start)) / DAY_MS / 2))), 10, 5),
+            recipients: Math.max(0, mailed.length - answered), delivered: Math.max(0, mailed.length - answered), answered, channel: 'smtp',
+          }, guard);
+        }
+      }
     }
+    // The running period: already e-mailed for teams with automatic sending.
+    if (auto && mailed.length) logSend(current, 'auto');
     results.set(team.id, list);
   }
   return {
@@ -2123,6 +2181,10 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
   { table: 'users (primary_team_id)', sql: `UPDATE users u SET primary_team_id = NULL FROM role_assignments ra
     WHERE ra.id LIKE '${DEMO_PREFIX}ral-%' AND ra.user_id = u.id AND u.primary_team_id = ra.scope_id AND u.id NOT LIKE ${D_}` },
   { table: 'saved_views', sql: `DELETE FROM saved_views WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'pulse_links', sql: `DELETE FROM pulse_links WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_}` },
+  { table: 'pulse_recipients', sql: `DELETE FROM pulse_recipients WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_}` },
+  { table: 'pulse_sends', sql: `DELETE FROM pulse_sends WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
+  { table: 'pulse_settings', sql: `DELETE FROM pulse_settings WHERE company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'pulse_participation', sql: `DELETE FROM pulse_participation WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_}` },
   { table: 'pulse_responses', sql: `DELETE FROM pulse_responses WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'pulse_cadences', sql: `DELETE FROM pulse_cadences WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
@@ -2193,7 +2255,7 @@ export const ALL_TABLES = [
   'invitations', 'pipeline_runs', 'pipeline_stage_history', 'pipeline_stages', 'role_assignments', 'seeder_runs', 'sprint_velocity', 'team_analytics', 'team_members',
   'team_pipeline_metrics', 'team_test_executions', 'teams', 'technical_debt', 'test_case_tags', 'test_cases', 'test_execution_runs',
   'test_executions', 'users', 'metric_values', 'target_history', 'ingestion_log', 'saved_views',
-  'pulse_cadences', 'pulse_responses', 'pulse_participation',
+  'pulse_cadences', 'pulse_responses', 'pulse_participation', 'pulse_settings', 'pulse_sends', 'pulse_recipients', 'pulse_links',
   'alerts', 'alert_rules', 'notifications', 'notification_preferences', 'company_notification_settings', 'notification_deliveries', 'team_actions',
 ];
 
@@ -2204,6 +2266,9 @@ export function demoRowCondition(table: string): string {
     case 'developer_productivity_snapshots': return `(developer_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN})`;
     case 'team_members': return `user_id LIKE ${D_}`;
     case 'pulse_participation': return `(company_id LIKE ${D_} OR user_id LIKE ${D_})`;
+    case 'pulse_settings': return `(company_id LIKE ${D_} OR team_id LIKE ${D_})`;
+    case 'pulse_recipients':
+    case 'pulse_links': return `(company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_})`;
     case 'metric_values': return `(company_id LIKE ${D_} OR idempotency_key LIKE 'backfill:${DEMO_PREFIX}%')`;
     case 'notification_preferences': return `user_id LIKE ${D_}`;
     case 'company_notification_settings': return `company_id LIKE ${D_}`;

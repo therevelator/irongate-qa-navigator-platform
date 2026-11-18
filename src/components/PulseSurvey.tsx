@@ -1,6 +1,7 @@
 import React from 'react';
 import { ShieldCheck } from 'lucide-react';
 import { Card, CardHeader, EmptyState, Page, PageIntro } from './ui';
+import { PulseSendPanel } from './PulseSurveySend';
 import { PulseResults, useTeamPulse } from './PulseSurveyResults';
 import { PulseCadenceControl, PulseSurveyForm } from './PulseSurveyForm';
 
@@ -29,6 +30,9 @@ const PulseSurvey: React.FC<{ teamId: string }> = ({ teamId }) => {
       ) : (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
           <div className="space-y-6">
+            {data.canSend && data.sending && (
+              <Card><PulseSendPanel data={data} sending={data.sending} onChanged={reload} /></Card>
+            )}
             <PulseSurveyForm data={data} onSubmitted={reload} />
             <Card>
               <CardHeader title="How your answers are protected" />
@@ -36,6 +40,7 @@ const PulseSurvey: React.FC<{ teamId: string }> = ({ teamId }) => {
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Answers are stored without your name, user id or the time you answered. Only the period is kept.</li>
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />A separate list records that you answered this period, only so you cannot answer twice. It cannot be matched to an answer.</li>
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Results are averages, shown only after a period ends and only when at least {data.threshold} people answered.</li>
+                <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />E-mailed survey links are personal, work once and expire when the period ends. Answering through a link is stored the same way: without your name.</li>
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Comments are shown to the team lead, QA managers and admins with the period’s results, in alphabetical order.</li>
               </ul>
               <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{data.formula}</p>

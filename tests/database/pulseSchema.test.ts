@@ -6,6 +6,10 @@
  *           period and a second participation row for the same person, team and period;
  *   PS-003  row level security is on (no policies: only the table owner, the API, reads them);
  *   PS-004  the migration is idempotent (runs again without error, inside a rolled-back transaction).
+ * Sending (migration 20261122200000_pulse_cadence_sending.sql):
+ *   PS-005  the cadence accepts weekly, biweekly, monthly and quarterly only; one automatic survey send
+ *           per team and period; links keep only a sha256 (64 hex), no time of use, no answer reference;
+ *   PS-006  row level security on the four new tables; the migration runs again without error.
  * All writes run inside transactions that are rolled back. Runs against DATABASE_URL from .env (local only).
  */
 import { Client } from 'pg';
@@ -95,6 +99,56 @@ describe('Pulse survey storage', () => {
 
   it('PS-004: the migration runs again without error (idempotent)', async () => {
     const sql = fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261121200000_privacy_pulse_survey.sql'), 'utf8')
+      .replace(/^\s*BEGIN;\s*$/m, '').replace(/^\s*COMMIT;\s*$/m, '');
+    await client.query('BEGIN');
+    try {
+      await expect(client.query(sql)).resolves.toBeDefined();
+    } finally {
+      await client.query('ROLLBACK');
+    }
+  });
+
+  const attempt = async (sql: string, params: unknown[]) => {
+    await client.query('BEGIN');
+    try {
+      await client.query(sql, params);
+      return 'ok';
+    } catch (e: any) {
+      return e.code as string;
+    } finally {
+      await client.query('ROLLBACK');
+    }
+  };
+
+  it('PS-005: four cadences; one automatic send per team and period; links store a hash only', async () => {
+    if (!team || !userId) return;
+    const cad = `INSERT INTO pulse_cadences (company_id, team_id, cadence, effective_from) VALUES ($1, $2, $3, '2031-01-01')`;
+    for (const c of ['weekly', 'biweekly', 'monthly', 'quarterly']) expect(await attempt(cad, [team.company_id, team.id, c])).toBe('ok');
+    expect(await attempt(cad, [team.company_id, team.id, 'yearly'])).toBe('23514');
+    const send = (trigger: string, kind: string) => `INSERT INTO pulse_sends (company_id, team_id, period_start, period_end, kind, trigger)
+      VALUES ($1, $2, '2031-01-01', '2031-02-01', '${kind}', '${trigger}')`;
+    expect(await attempt(`${send('auto', 'survey')}; ${send('auto', 'survey')}`.replace(/\$1/g, `'${team.company_id}'`).replace(/\$2/g, `'${team.id}'`), [])).toBe('23505');
+    expect(await attempt(`${send('manual', 'survey')}; ${send('manual', 'survey')}; ${send('auto', 'survey')}`.replace(/\$1/g, `'${team.company_id}'`).replace(/\$2/g, `'${team.id}'`), [])).toBe('ok');
+    expect(await attempt(send('auto', 'reply'), [team.company_id, team.id])).toBe('23514');
+    const link = `INSERT INTO pulse_links (token_hash, company_id, team_id, user_id, period_start, period_end, expires_at)
+      VALUES ($1, $2, $3, $4, '2031-01-01', '2031-02-01', '2031-02-01')`;
+    expect(await attempt(link, ['a'.repeat(64), team.company_id, team.id, userId])).toBe('ok');
+    expect(await attempt(link, ['igp_plain-token', team.company_id, team.id, userId])).toBe('23514');
+    const cols = (await columns('pulse_links')).map((c) => c.column_name);
+    expect(cols).toEqual(['token_hash', 'company_id', 'team_id', 'user_id', 'period_start', 'period_end', 'expires_at', 'used']);
+    const fks = (await client.query(
+      `SELECT confrelid::regclass::text AS ref FROM pg_constraint WHERE contype = 'f'
+         AND conrelid IN ('pulse_links'::regclass, 'pulse_recipients'::regclass, 'pulse_sends'::regclass, 'pulse_settings'::regclass)`
+    )).rows.map((r) => r.ref);
+    expect(fks.some((r) => r === 'pulse_responses' || r === 'pulse_participation')).toBe(false);
+  });
+
+  it('PS-006: row level security on the sending tables; the sending migration is idempotent', async () => {
+    const rows = (await client.query(
+      `SELECT relname, relrowsecurity FROM pg_class WHERE relname IN ('pulse_settings', 'pulse_sends', 'pulse_recipients', 'pulse_links') ORDER BY relname`
+    )).rows;
+    expect(rows).toEqual(['pulse_links', 'pulse_recipients', 'pulse_sends', 'pulse_settings'].map((relname) => ({ relname, relrowsecurity: true })));
+    const sql = fs.readFileSync(path.join(__dirname, '../../supabase/migrations/20261122200000_pulse_cadence_sending.sql'), 'utf8')
       .replace(/^\s*BEGIN;\s*$/m, '').replace(/^\s*COMMIT;\s*$/m, '');
     await client.query('BEGIN');
     try {

@@ -3,8 +3,11 @@ import { useAuth } from '../contexts/AuthContext';
 import Login from './Login';
 import Register from './Register';
 import AcceptInvite from './AcceptInvite';
+import PulseAnswerLink from './PulseAnswerLink';
 
 const isAcceptInvitePath = () => window.location.pathname === '/accept-invite';
+/** Personal survey link from the pulse e-mail: works signed in or not (the token covers one answer only). */
+const isPulseLinkPath = () => window.location.pathname === '/pulse/answer';
 
 interface AuthWrapperProps {
   children: React.ReactNode;
@@ -15,12 +18,14 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const [showRegister, setShowRegister] = useState(false);
   // /accept-invite is public (the invited person has no account yet).
   const [acceptInvite, setAcceptInvite] = useState(isAcceptInvitePath);
+  const [pulseLink, setPulseLink] = useState(isPulseLinkPath);
   useEffect(() => {
-    const onPop = () => setAcceptInvite(isAcceptInvitePath());
+    const onPop = () => { setAcceptInvite(isAcceptInvitePath()); setPulseLink(isPulseLinkPath()); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
+  if (pulseLink) return <PulseAnswerLink />;
   if (acceptInvite && !isLoading) return <AcceptInvite />;
 
   // Show loading state

@@ -402,8 +402,10 @@ Migration: `supabase/migrations/20261121100000_saved_views_onboarding.sql` (tabl
 
 ## Privacy and wellbeing
 
-Migration: `supabase/migrations/20261121200000_privacy_pulse_survey.sql` (tables `pulse_cadences`,
-`pulse_responses`, `pulse_participation`; row level security on, no policies).
+Migrations: `supabase/migrations/20261121200000_privacy_pulse_survey.sql` (tables `pulse_cadences`,
+`pulse_responses`, `pulse_participation`) and `20261122200000_pulse_cadence_sending.sql` (monthly and
+quarterly cadences; tables `pulse_settings`, `pulse_sends`, `pulse_recipients`, `pulse_links`); row level
+security on, no policies.
 
 - **k-anonymity** (`server/lib/privacy.ts`, one helper for every endpoint): an aggregate of individual
   developer data is returned only when at least **3** people contribute; otherwise its values are
@@ -420,8 +422,37 @@ Migration: `supabase/migrations/20261121200000_privacy_pulse_survey.sql` (tables
   (QA engineers and viewers see only their own; leads, managers and admins see people who opted in).
 - **Pulse survey** (**Delivery → Wellbeing pulse**, also from Team detail): five statements on a 1–5
   scale plus an optional comment (≤ 500 characters), once per person, team and period. A team is asked
-  weekly or every two weeks (default every two weeks, counted from Monday 2026-01-05); the team lead,
-  the department's QA managers and super admins change it, effective from the next period (Activity log).
+  **every week, every two weeks, every month or every three months** (team-wide; default every two
+  weeks, counted from Monday 2026-01-05). **Managers decide**: the department's QA managers and super
+  admins (not team leads) change it, effective from the next period (Activity log). Weeks are counted
+  from the day the cadence starts; months and quarters are calendar months and quarters (Jan–Mar,
+  Apr–Jun, …). A change to monthly or quarterly starts when the running period ends; that first period
+  runs to the end of the month / quarter (or, if that leaves fewer than 7 days, to the end of the next
+  one). Pure rules in `server/lib/pulseRules.ts` (`periodFor`, `planCadenceChange`).
+  - **Send survey to the team** (pulse page and Team detail → Wellbeing (survey); the team lead, the
+    department's QA managers and super admins): e-mails every active member assigned to the team who
+    has not been sent it yet a **personal single-use link** for the running period
+    (`APP_URL/pulse/answer?token=igp_…`). Only the token's sha256 is stored (`pulse_links`); a link is
+    bound to one user, team and period, expires when the period ends, and is used up by answering
+    (through the link or in the app). The token authenticates only that submission: no session, no other
+    access. The page shows "Sent to N of M members on <date>", who has **not been sent** it yet (sending
+    is not answering), answers so far as a count only from 3 on, and a send log. **Send reminder to those
+    who haven't answered** e-mails the members without an answer (read server-side from the
+    participation list); the UI and the API return only a count, and not even that when it would reveal
+    that 1 or 2 people answered; one reminder per 24 hours. Personal links are never returned by the
+    API or shown to anyone but the recipient's mailbox, so nobody can answer as someone else.
+  - **Without SMTP** (`SMTP_HOST` unset) nothing is e-mailed: the page says e-mail is not configured and
+    that members can answer in the app (Analytics → Wellbeing pulse); the send is still logged as "not
+    e-mailed". In development the log mailer prints the message; `MAIL_CAPTURE_FILE` (ignored in
+    production) also writes it to a file for end-to-end tests.
+  - **Automatic sending**: when a manager first sets a team's cadence, automatic sending is switched on
+    from the next period (managers and admins can turn it off or on per team). An hourly job
+    (`server/jobs/pulseCron.ts`, `PULSE_SEND_CRON` default `40 * * * *`, `PULSE_CRON=false` turns it off;
+    on Netlify `netlify/functions/pulse-auto-send.ts`) sends the survey once per team and period, during
+    the first quarter of the period (at least 2 days); a unique index on `pulse_sends` makes a second run
+    or a second scheduler send nothing. Expired links are deleted after 30 days.
+  - **Response rate** per closed period = responses ÷ members the survey was e-mailed to (at most 100 %),
+    shown with the period's results (only when the results are shown, i.e. ≥ 3 responses).
   - Answers are stored **without user id or time** (only team and period). Who answered which period is
     stored separately (`pulse_participation`) only to refuse a second answer (409). Each answer rewrites
     the period's answer set in random order with fresh ids in one transaction, so ids, row order and
@@ -436,9 +467,14 @@ Migration: `supabase/migrations/20261121200000_privacy_pulse_survey.sql` (tables
     component is left out (not replaced by workload balance) and the confidence shows 3 of 4 components.
     `developerWellnessIndex` in the API is this survey value; workload balance is `workloadBalanceIndex`.
 - Endpoints (authenticated, company-scoped, `server/lib/userPolicy.ts`): `GET /api/pulse/teams/:teamId`
-  (`canViewPulseResults`: the team's analytics scope), `POST /api/pulse/teams/:teamId/responses`
-  (`canTakePulseSurvey`: assigned to the team), `PUT /api/pulse/teams/:teamId/cadence`
-  (`canSetPulseCadence`: lead, QA manager of the department, super admin).
+  (`canViewPulseResults`: the team's analytics scope; send status only with `canSendPulseSurvey`),
+  `POST /api/pulse/teams/:teamId/responses` (`canTakePulseSurvey`: assigned to the team),
+  `PUT /api/pulse/teams/:teamId/cadence` and `PUT /api/pulse/teams/:teamId/auto-send` (`canSetPulseCadence`:
+  QA manager of the department, super admin), `POST /api/pulse/teams/:teamId/send` and `…/remind`
+  (`canSendPulseSurvey`: the team lead, QA manager of the department, super admin). Without a session, the
+  token being the credential: `POST /api/pulse/link` `{ token }` (what the answer page shows; no personal
+  data) and `POST /api/pulse/link/respond` `{ token, answers, comment }`. Cadence changes, sends, reminders
+  and automatic-sending changes are in the Activity log; answers never are.
 - Residual risk, by design of k = 3: someone who answered themselves knows their own answers and so the
   sum of the other two in a 3-response period. Database superusers could read dead row versions before
   vacuum; the API never exposes rows.
@@ -497,7 +533,8 @@ Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (table
 Environment (all optional; the Slack webhook is entered in the app, not in the environment):
 `SETTINGS_ENCRYPTION_KEY` (recommended in production, a long random string; otherwise `JWT_SECRET` is
 used), `APP_URL` (link in emails / Slack; Netlify's `URL` is used when unset), `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (email; without them emails are logged), `ALERTS_CRON=false`
+`SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (email; without them emails are logged), `PULSE_CRON=false` /
+`PULSE_SEND_CRON` (automatic pulse-survey e-mail), `ALERTS_CRON=false`
 (turn the local schedule off), `ALERTS_EVALUATE_CRON` / `DIGEST_CRON` (local schedule, UTC),
 `NOTIFY_SLACK_ALLOW_LOCAL=true` (tests only, ignored in production: accept a `http://127.0.0.1:<port>/`
 webhook). On Netlify the three scheduled functions run without further setup (Scheduled Functions).

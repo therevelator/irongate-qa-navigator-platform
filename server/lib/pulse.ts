@@ -5,10 +5,12 @@
  * Survey: five statements answered on a 1-5 scale (1 = strongly disagree, 5 = strongly agree)
  * plus an optional comment, once per team and period.
  *
- * Periods: a team is asked weekly or biweekly. Periods are counted in whole days from the
- * effective_from date of the cadence in force (pulse_cadences), or from DEFAULT_ANCHOR
+ * Periods: a team is asked every week, two weeks, calendar month or calendar quarter
+ * (server/lib/pulseRules.ts periodFor). Weekly / biweekly periods are counted in whole days from
+ * the effective_from date of the cadence in force (pulse_cadences), or from DEFAULT_ANCHOR
  * (a Monday) with DEFAULT_CADENCE when the team has none. A cadence change takes effect at the
- * start of the next period, so the running period keeps its length.
+ * start of the next period, so the running period keeps its length. Sending the survey by
+ * e-mail (personal single-use links) lives in server/lib/pulseSend.ts.
  *
  * Anonymity:
  *   - an answer row has no user id and no timestamp; the period is the finest time it carries;
@@ -33,7 +35,7 @@ import { K_ANONYMITY_MIN, SUPPRESSED_TEXT, isSuppressed, meetsKAnonymity } from 
 
 export * from './pulseRules';
 import {
-  PULSE_QUESTIONS, PULSE_HISTORY_PERIODS, addDays, cadenceAt, periodFor, previousPeriod, todayUtc, wellbeingScore,
+  MAX_PERIOD_DAYS, PULSE_QUESTIONS, PULSE_HISTORY_PERIODS, addDays, cadenceAt, periodFor, planCadenceChange, previousPeriod, todayUtc, wellbeingScore,
   type CadenceRow, type PulseCadence, type PulsePeriod, type PulseQuestionKey,
 } from './pulseRules';
 
@@ -147,7 +149,7 @@ export async function teamPulse(teamId: string, userId: string, opts: { withComm
   const prev = previousPeriod(cadences, today);
   const pending = cadences.filter((c) => c.effective_from > today).sort((a, b) => a.effective_from.localeCompare(b.effective_from))[0] ?? null;
 
-  const since = addDays(today, -7 * 2 * PULSE_HISTORY_PERIODS);
+  const since = addDays(today, -MAX_PERIOD_DAYS * (PULSE_HISTORY_PERIODS + 1));
   const aggs = (await loadPeriodAggregates([teamId], since, current.start)).filter((a) => a.end <= today);
   const periods = aggs.map(periodResult).slice(-PULSE_HISTORY_PERIODS);
   const prevAgg = aggs.find((a) => a.start === prev.start && a.end === prev.end);
@@ -282,6 +284,9 @@ export async function submitPulseResponse(args: {
         args.comment,
       ]
     );
+    // Personal survey links of this person for this period stop working (single use).
+    await exec(`UPDATE pulse_links SET used = TRUE WHERE team_id = ? AND user_id = ? AND period_start = ?::date AND NOT used`,
+      [args.teamId, args.userId, period.start]);
   });
   return period;
 }
@@ -295,22 +300,21 @@ export async function setPulseCadence(args: { companyId: string; teamId: string;
   Promise<{ current: PulseCadence; pending: { cadence: PulseCadence; from: string } | null; previousPending: { cadence: PulseCadence; from: string } | null }> {
   const today = args.today ?? todayUtc();
   const cadences = (await loadCadences([args.teamId])).get(args.teamId) ?? [];
-  const now = cadenceAt(cadences, today);
-  const from = periodFor(cadences, today).end;
+  const plan = planCadenceChange(cadences, today, args.cadence);
   const waiting = cadences.find((c) => c.effective_from > today) ?? null;
   await transaction(async (client: pg.PoolClient) => {
     const exec = execOn(client);
     await exec(`DELETE FROM pulse_cadences WHERE team_id = ? AND effective_from > ?::date`, [args.teamId, today]);
-    if (args.cadence !== now.cadence) {
+    if (plan.insert) {
       await exec(
         `INSERT INTO pulse_cadences (company_id, team_id, cadence, effective_from, created_by) VALUES (?, ?, ?, ?::date, ?)`,
-        [args.companyId, args.teamId, args.cadence, from, args.actorId]
+        [args.companyId, args.teamId, plan.insert.cadence, plan.insert.effective_from, args.actorId]
       );
     }
   });
   return {
-    current: now.cadence,
-    pending: args.cadence !== now.cadence ? { cadence: args.cadence, from } : null,
+    current: plan.current,
+    pending: plan.insert ? { cadence: plan.insert.cadence, from: plan.insert.effective_from } : null,
     previousPending: waiting ? { cadence: waiting.cadence, from: waiting.effective_from } : null,
   };
 }
