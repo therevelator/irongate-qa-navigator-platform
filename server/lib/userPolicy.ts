@@ -19,7 +19,7 @@
  *   department      every team of that department
  *   team            that team
  * Individual developer rows: super_admin / qa_manager / team_lead grants covering the team
- * show every developer who has not opted out; a member grant only shows the actor's own row.
+ * show every developer who has opted in to developer insights; a member grant only shows the actor's own row.
  *
  * Managing another user (activate/deactivate, delete = deactivate, reset password,
  * developer-insights toggle):
@@ -363,7 +363,7 @@ export function canViewIndividualDevelopers(actor: PolicyActor, team: ScopeTeam)
 /**
  * May the actor see this developer's individual row for this team? Their own row always
  * (when the team is in scope); someone else's only with canViewIndividualDevelopers and
- * when that person has not opted out of developer insights.
+ * when that person has opted in to developer insights (an unset value counts as not opted in).
  */
 export function canViewDeveloperRow(
   actor: PolicyActor,
@@ -372,7 +372,9 @@ export function canViewDeveloperRow(
 ): boolean {
   if (!canViewTeamAnalytics(actor, team)) return false;
   if (developer.id === actor.id) return true;
-  return canViewIndividualDevelopers(actor, team) && developer.developer_insights_enabled !== false;
+  // Opt-in (users.developer_insights_enabled defaults to FALSE): only an explicit TRUE shares the row,
+  // as in the SQL of every developer aggregate (optedInDeveloperSql in server/lib/privacy.ts).
+  return canViewIndividualDevelopers(actor, team) && developer.developer_insights_enabled === true;
 }
 
 /* ------------------------------------------------------------------------------------------

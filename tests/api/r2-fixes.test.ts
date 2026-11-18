@@ -10,6 +10,7 @@ import { API_URL, NEW_PW, backendUp, del, get, localDb, login, post, put } from 
  *   FIX-004  a body over the JSON limit → 413 { error: 'Payload too large' }
  *   FIX-005  QA managers read team detail and AI insights only for teams of their departments
  *   FIX-006  /api/metrics/dashboard and /api/metrics/analytics/{teams,history} leave stale values out
+ *   FIX-008  another developer's individual row needs an explicit opt-in (NULL counts as not opted in)
  *   FIX-007  team analytics without ?teamId use the caller's default team in scope (was 400 without a primary team)
  */
 
@@ -183,5 +184,18 @@ describe('R2 Phase 4 fixes', () => {
       const r = await get(path, c.manager);
       expect({ path, status: r.status }).toEqual({ path, status: 200 });
     }
+  });
+
+  it('FIX-008: individual developer rows need an explicit opt-in', async () => {
+    if (skip()) return;
+    await post('/api/metrics/developer', c.admin, { teamId: T.A1, developerId: ids.dev, focusTimeHours: 4 });
+    const db = await localDb();
+    try {
+      await db.query('UPDATE users SET developer_insights_enabled = NULL WHERE id = $1', [ids.dev]);
+      expect((await get(`/api/metrics/developer/${ids.dev}`, c.manager)).status).toBe(403);
+      expect((await get(`/api/metrics/developer/${ids.dev}`, c.dev)).status).toBe(200); // own row
+      await db.query('UPDATE users SET developer_insights_enabled = TRUE WHERE id = $1', [ids.dev]);
+      expect((await get(`/api/metrics/developer/${ids.dev}`, c.manager)).status).toBe(200);
+    } finally { await db.end(); }
   });
 });
