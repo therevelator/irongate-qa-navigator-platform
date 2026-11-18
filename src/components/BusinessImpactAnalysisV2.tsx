@@ -7,6 +7,14 @@ import { toast } from 'react-hot-toast';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import ExportCsvButton from './ExportCsvButton';
+import { useAuth } from '../contexts/AuthContext';
+import { useShowFormulas } from '../hooks/useShowFormulas';
+import { FormulaSwitch } from './FormulaNote';
+import { policyActorOf } from '../lib/policyActor';
+import { canViewRevenueRollup } from '../../server/lib/userPolicy';
+import {
+  RevenueMoneyView, RevenueWhatIf, RevenueSensitivityTable, RevenueRollupView, RevenueLoadState, Section, useRevenueImpact,
+} from './RevenueImpact';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, buttonClass, inputClass, cx } from './ui';
 
 // Renders the AI response (HTML produced by the LLM). Treated as untrusted: sanitized before rendering.
@@ -155,14 +163,23 @@ const toMonthly = (data: any): MonthlyData[] => {
   });
 };
 
-type Tab = 'overview' | 'data-entry' | 'correlations';
+type Tab = 'money' | 'what-if' | 'details' | 'all-teams' | 'data-entry';
 
 const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ teamId: propTeamId }) => {
   // Data entry and recalculation are team writes (canWriteTeamData, server/lib/userPolicy.ts):
   // hidden for roles that can only read the team's analytics.
-  const canWrite = useAnalyticsScope().canWriteTeam;
+  const scope = useAnalyticsScope();
+  const canWrite = scope.canWriteTeam;
   const { isDark } = useTheme();
-  const [activeTab, setActiveTab] = useState<Tab>('overview');
+  const { user } = useAuth();
+  // "Show formulas & data sources" (super admin demo aid, same preference as Team detail).
+  const [showFormulasPref, setShowFormulas] = useShowFormulas();
+  const canShowFormulas = user?.role === 'super_admin';
+  const showFormulas = canShowFormulas && showFormulasPref;
+  // Company / department roll-up: super admins and QA managers (canViewRevenueRollup).
+  const canRollup = !!user && canViewRevenueRollup(policyActorOf(user));
+  const [activeTab, setActiveTab] = useState<Tab>('money');
+  const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [calculating, setCalculating] = useState(false);
@@ -236,6 +253,8 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
     fetchData(selectedTeamId);
   }, [selectedTeamId, fetchData]);
 
+  const revenue = useRevenueImpact(selectedTeamId || null, reloadKey);
+
   const updateMetric = (monthYear: string, category: 'quality' | 'kpis' | 'context', key: string, value: string) => {
     setMonthlyData(prev => prev.map(m => {
       if (m.month_year !== monthYear) return m;
@@ -262,6 +281,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
         const result = await response.json();
         toast.success(`Saved data for ${result.monthsSaved} months`);
         await fetchData(selectedTeamId);
+        setReloadKey(k => k + 1);
       } else {
         const err = await response.json().catch(() => null);
         toast.error(err?.error || 'Failed to save data');
@@ -386,25 +406,30 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
   return (
     <Page>
       <PageIntro
-        title="Business impact correlation"
-        description="Exploratory statistics on how monthly quality metrics and business KPIs move together. Correlation does not show cause."
+        title="Business impact"
+        description="Where quality costs money today, what fixing it is worth, and where to start. Figures come from the team's own data; quality links are associations, not causes."
         actions={
           <>
+            {canShowFormulas && <FormulaSwitch checked={showFormulasPref} onChange={setShowFormulas} />}
             {useTeamSelector && (
               <select aria-label="Team" value={selectedTeamId} onChange={(e) => setSelectedTeamId(e.target.value)} className={inputClass}>
                 <option value="">Select team</option>
                 {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
               </select>
             )}
+            <div className="max-w-full overflow-x-auto">
             <SegmentedControl
               value={activeTab}
               onChange={setActiveTab}
               options={[
-                { value: 'overview', label: 'Overview' },
+                { value: 'money', label: 'Money' },
+                { value: 'what-if', label: 'What-if' },
+                { value: 'details', label: 'Details' },
+                ...(canRollup ? [{ value: 'all-teams' as Tab, label: 'All teams' }] : []),
                 ...(canWrite ? [{ value: 'data-entry' as Tab, label: 'Data entry' }] : []),
-                { value: 'correlations', label: 'Correlations' },
               ]}
             />
+            </div>
           </>
         }
       />
@@ -419,6 +444,11 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
         <Card><EmptyState title="No team selected" description="Select a team to view its business impact data." /></Card>
       ) : (
         <>
+          {activeTab === 'money' && (revenue.data ? <RevenueMoneyView data={revenue.data} showFormulas={showFormulas} /> : <RevenueLoadState loading={revenue.loading} error={revenue.error} />)}
+          {activeTab === 'what-if' && (revenue.data ? <RevenueWhatIf data={revenue.data} showFormulas={showFormulas} /> : <RevenueLoadState loading={revenue.loading} error={revenue.error} />)}
+          {activeTab === 'all-teams' && canRollup && <RevenueRollupView departments={scope.departments} showFormulas={showFormulas} />}
+
+          {(activeTab === 'details' || activeTab === 'data-entry') && (
           <div className="mb-6 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-slate-500 dark:text-slate-400">
             <span>
               <span className="font-medium text-slate-900 dark:text-white">{paired}</span> months with both quality and KPI data (minimum {method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS})
@@ -431,9 +461,15 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
               <span>Data range {formatMonth(dataSummary.earliestMonth)} – {formatMonth(dataSummary.latestMonth)}</span>
             )}
           </div>
+          )}
 
-          {activeTab === 'overview' && (
-            <div className="space-y-6">
+          {activeTab === 'details' && (
+            <div className="space-y-3" data-testid="business-details">
+              <Section title="How sure are we? Revenue per metric" subtitle="$ per month associated with each quality metric, with the range, months used and the statistics" testId="details-sensitivity">
+                {revenue.data ? <RevenueSensitivityTable data={revenue.data} /> : <RevenueLoadState loading={revenue.loading} error={revenue.error} />}
+              </Section>
+              <Section title="Monthly trends" subtitle="Test coverage, NPS and churn by month">
+                <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatTile
                   label="Strongest correlation"
@@ -477,6 +513,10 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                 )}
               </Card>
 
+                </div>
+              </Section>
+              <Section title="Correlations between quality and business KPIs" subtitle="Strongest pairs, the full matrix, an optional AI summary and how to read them">
+                <div className="space-y-6">
               <Card>
                 <CardHeader title="Strongest correlations" subtitle={calculatedNote} action={canWrite ? calcButton : undefined} />
                 {sortedCorrelations.length === 0 ? (
@@ -493,86 +533,6 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                 )}
               </Card>
 
-              {correlations.length > 0 && (
-                <AiPanel analyzing={aiAnalyzing} analysis={aiAnalysis} onAnalyze={analyzeCorrelationsWithAI} />
-              )}
-
-              <MetricGlossary />
-            </div>
-          )}
-
-          {activeTab === 'data-entry' && canWrite && (
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="text-sm text-slate-500 dark:text-slate-400">
-                  Enter values recorded for each month. Leave a field empty if it was not measured; correlations are recalculated from the saved data.
-                </p>
-                <button onClick={saveData} disabled={saving} className={cx(buttonClass.primary, 'disabled:opacity-50')}>
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                  Save
-                </button>
-              </div>
-
-              {monthlyData.map(month => {
-                const isExpanded = expandedMonths.has(month.month_year);
-                const hasQuality = Object.values(month.quality).some(v => v !== null);
-                const hasKpis = Object.values(month.kpis).some(v => v !== null);
-                return (
-                  <Card key={month.month_year} padded={false}>
-                    <button
-                      onClick={() => toggleMonth(month.month_year)}
-                      className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-slate-900 dark:text-white">{formatMonth(month.month_year)}</span>
-                        {hasQuality && <Badge>Quality</Badge>}
-                        {hasKpis && <Badge>KPIs</Badge>}
-                        {hasQuality && hasKpis && <Badge tone="brand">Paired</Badge>}
-                      </div>
-                      {isExpanded ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
-                    </button>
-                    {isExpanded && (
-                      <div className="space-y-5 border-t border-slate-200 px-5 py-4 dark:border-slate-800">
-                        <FieldGroup title="Quality metrics">
-                          {QUALITY_METRICS.map(metric => (
-                            <NumberField key={metric.key} label={metric.label} unit={metric.unit} placeholder={metric.description}
-                              value={month.quality[metric.key]} onChange={(v) => updateMetric(month.month_year, 'quality', metric.key, v)} />
-                          ))}
-                        </FieldGroup>
-                        <FieldGroup title="Business KPIs">
-                          {BUSINESS_KPIS.map(kpi => (
-                            <NumberField key={kpi.key} label={kpi.label} unit={kpi.unit} placeholder={kpi.description}
-                              value={month.kpis[kpi.key]} onChange={(v) => updateMetric(month.month_year, 'kpis', kpi.key, v)} />
-                          ))}
-                        </FieldGroup>
-                        <FieldGroup title="Context (optional)">
-                          {CONTEXT_FIELDS.map(field => field.key === 'is_holiday_season' ? (
-                            <label key={field.key} className="block">
-                              <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">{field.label}</span>
-                              <select
-                                value={month.context[field.key] ? 'true' : 'false'}
-                                onChange={(e) => updateMetric(month.month_year, 'context', field.key, e.target.value)}
-                                className={cx(inputClass, 'w-full')}
-                              >
-                                <option value="false">No</option>
-                                <option value="true">Yes</option>
-                              </select>
-                            </label>
-                          ) : (
-                            <NumberField key={field.key} label={field.label}
-                              value={month.context[field.key] as number | null} onChange={(v) => updateMetric(month.month_year, 'context', field.key, v)} />
-                          ))}
-                        </FieldGroup>
-                      </div>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-
-          {activeTab === 'correlations' && (
-            <div className="space-y-6">
               <Card padded={false}>
                 <div className="px-5 pt-5">
                   <CardHeader
@@ -678,8 +638,84 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                   </div>
                 </div>
               </Card>
+                </div>
+              </Section>
+              <Section title="Metric definitions">
+                <MetricGlossary bare />
+              </Section>
             </div>
           )}
+
+          {activeTab === 'data-entry' && canWrite && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  Enter values recorded for each month. Leave a field empty if it was not measured; correlations are recalculated from the saved data.
+                </p>
+                <button onClick={saveData} disabled={saving} className={cx(buttonClass.primary, 'disabled:opacity-50')}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  Save
+                </button>
+              </div>
+
+              {monthlyData.map(month => {
+                const isExpanded = expandedMonths.has(month.month_year);
+                const hasQuality = Object.values(month.quality).some(v => v !== null);
+                const hasKpis = Object.values(month.kpis).some(v => v !== null);
+                return (
+                  <Card key={month.month_year} padded={false}>
+                    <button
+                      onClick={() => toggleMonth(month.month_year)}
+                      className="flex w-full items-center justify-between px-5 py-3 text-left hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-slate-900 dark:text-white">{formatMonth(month.month_year)}</span>
+                        {hasQuality && <Badge>Quality</Badge>}
+                        {hasKpis && <Badge>KPIs</Badge>}
+                        {hasQuality && hasKpis && <Badge tone="brand">Paired</Badge>}
+                      </div>
+                      {isExpanded ? <ChevronDown className="h-4 w-4 text-slate-500" /> : <ChevronRight className="h-4 w-4 text-slate-500" />}
+                    </button>
+                    {isExpanded && (
+                      <div className="space-y-5 border-t border-slate-200 px-5 py-4 dark:border-slate-800">
+                        <FieldGroup title="Quality metrics">
+                          {QUALITY_METRICS.map(metric => (
+                            <NumberField key={metric.key} label={metric.label} unit={metric.unit} placeholder={metric.description}
+                              value={month.quality[metric.key]} onChange={(v) => updateMetric(month.month_year, 'quality', metric.key, v)} />
+                          ))}
+                        </FieldGroup>
+                        <FieldGroup title="Business KPIs">
+                          {BUSINESS_KPIS.map(kpi => (
+                            <NumberField key={kpi.key} label={kpi.label} unit={kpi.unit} placeholder={kpi.description}
+                              value={month.kpis[kpi.key]} onChange={(v) => updateMetric(month.month_year, 'kpis', kpi.key, v)} />
+                          ))}
+                        </FieldGroup>
+                        <FieldGroup title="Context (optional)">
+                          {CONTEXT_FIELDS.map(field => field.key === 'is_holiday_season' ? (
+                            <label key={field.key} className="block">
+                              <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">{field.label}</span>
+                              <select
+                                value={month.context[field.key] ? 'true' : 'false'}
+                                onChange={(e) => updateMetric(month.month_year, 'context', field.key, e.target.value)}
+                                className={cx(inputClass, 'w-full')}
+                              >
+                                <option value="false">No</option>
+                                <option value="true">Yes</option>
+                              </select>
+                            </label>
+                          ) : (
+                            <NumberField key={field.key} label={field.label}
+                              value={month.context[field.key] as number | null} onChange={(v) => updateMetric(month.month_year, 'context', field.key, v)} />
+                          ))}
+                        </FieldGroup>
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+
         </>
       )}
     </Page>
@@ -742,9 +778,9 @@ const NumberField: React.FC<{ label: string; unit?: string; placeholder?: string
   </label>
 );
 
-const MetricGlossary: React.FC = () => (
-  <Card>
-    <CardHeader title="Metric definitions" />
+const MetricGlossary: React.FC<{ bare?: boolean }> = ({ bare }) => (
+  <Card className={bare ? 'border-0 !p-0 shadow-none' : undefined}>
+    {!bare && <CardHeader title="Metric definitions" />}
     <div className="grid grid-cols-1 gap-6 text-sm md:grid-cols-2">
       <div>
         <h4 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">Quality metrics</h4>

@@ -27,6 +27,10 @@ import {
   TECH_DEBT_SEVERITY_WEIGHTS,
 } from '../../server/lib/metricFormulas';
 import { DEVELOPER_RULES_TEXT } from '../../server/lib/developerHealth';
+import {
+  REVENUE_SENSITIVITY_FORMULA, REVENUE_AT_STAKE_FORMULA, REVENUE_AT_RISK_DEBT_FORMULA, INCIDENT_COST_FORMULA, CHURN_REVENUE_FORMULA,
+  SUPPORT_COST_FORMULA, DOWNTIME_GAP_FORMULA, WHAT_IF_FORMULA, REVENUE_ROLLUP_FORMULA, REVENUE_CAVEATS, REVENUE_MIN_PAIRED_MONTHS,
+} from '../../server/lib/revenueImpact';
 import { DDPS_BANDS, WORKLOAD_BALANCE_FORMULA } from './advancedFeatures';
 import { K_ANONYMITY_RULE } from '../../server/lib/privacy';
 import { PULSE_QUESTIONS, WELLBEING_BANDS, WELLBEING_FORMULA } from '../../server/lib/pulseRules';
@@ -109,7 +113,11 @@ export type ExtraCatalogKey =
   | 'ddps'
   | 'team_members'
   | 'team_recommendations'
-  | 'developer_recommendations';
+  | 'developer_recommendations'
+  | 'revenue_sensitivity'
+  | 'revenue_at_stake'
+  | 'revenue_at_risk'
+  | 'revenue_rollup';
 
 export type MetricCatalogKey = KpiColumn | ExtraCatalogKey;
 
@@ -958,6 +966,98 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
       note: 'Recommendations update from the stored developer metrics; there is nothing to send for them directly.',
     },
     related: ['team_members', 'workload_balance', 'burnout_risk'],
+  },
+
+  revenue_sensitivity: {
+    kind: 'derived',
+    title: 'Revenue per metric (sensitivity)',
+    whyItMatters:
+      'Shows how much monthly revenue has moved with each quality metric in this team\'s own history, so quality work can be discussed in money. ' +
+      'It is an association, not a cause, and it is only shown when the data support it.',
+    howCalculated: REVENUE_SENSITIVITY_FORMULA,
+    calculationNotes: [
+      `Shown from ${REVENUE_MIN_PAIRED_MONTHS} paired months (the same minimum as the correlations); fewer months give an empty state saying how many are missing.`,
+      `What-if: ${WHAT_IF_FORMULA}`,
+      ...REVENUE_CAVEATS,
+      'Code: server/lib/revenueImpact.ts (revenueSensitivity, whatIf) and server/lib/stats.ts (olsFit). API: GET /api/revenue-impact/teams/:teamId and …/what-if.',
+    ],
+    unit: '$/month per unit',
+    direction: 'none',
+    thresholds: null,
+    storedIn: ['business_impact_quality_metrics.*', 'business_impact_business_kpis.monthly_revenue', 'business_impact_*.data_source'],
+    whereToFindIt: ['Delivery → Business impact → Money (How is this calculated?), What-if and Details'],
+    productionSources: [
+      { system: 'Finance / BI (ERP, billing, Snowflake, Looker)', detail: 'Monthly recognised revenue attributable to the team\'s product area' },
+      { system: 'IronGate KPI history', detail: 'Monthly averages of the quality KPIs (coverage, escape rate, MTTR, …)' },
+    ],
+    howToSendIt: { kind: 'no-api', manual: 'Delivery → Business impact → Data entry (monthly quality metrics and business KPIs).', note: 'There is no ingestion endpoint for the monthly business-impact series yet.' },
+    related: ['revenue_at_stake', 'revenue_rollup'],
+  },
+  revenue_at_stake: {
+    kind: 'derived',
+    title: 'Revenue associated with quality gaps',
+    whyItMatters:
+      'Puts a monthly money figure on the gaps between the team\'s quality metrics and their targets, using only associations that are significant in its own data.',
+    howCalculated: REVENUE_AT_STAKE_FORMULA,
+    calculationNotes: [
+      'Targets: the KPI target valid today (Administration → Parameters → KPI targets, with history); deployment frequency has no target in the same unit.',
+      'Each gain in "What you gain when these are fixed" is one metric\'s slope × its gap; metrics that move together are counted once.',
+      ...REVENUE_CAVEATS,
+    ],
+    unit: '$/month',
+    direction: 'none',
+    thresholds: null,
+    storedIn: ['business_impact_quality_metrics.*', 'business_impact_business_kpis.monthly_revenue', 'target_history'],
+    whereToFindIt: ['Delivery → Business impact → Money'],
+    productionSources: [
+      { system: 'Finance / BI', detail: 'Monthly revenue per product area' },
+      { system: 'IronGate targets', detail: 'KPI targets with history (target_history)' },
+    ],
+    howToSendIt: { kind: 'computed', note: 'Computed from the monthly business-impact data and the targets; nothing to send directly.' },
+    related: ['revenue_sensitivity', 'revenue_at_risk'],
+  },
+  revenue_at_risk: {
+    kind: 'computed',
+    title: 'Money lost or at risk now',
+    whyItMatters: 'The monthly cost of what is going wrong today (open technical debt, downtime, support tickets, churn), from recorded data and your financial settings.',
+    howCalculated: REVENUE_AT_RISK_DEBT_FORMULA,
+    calculationNotes: [
+      INCIDENT_COST_FORMULA,
+      SUPPORT_COST_FORMULA,
+      CHURN_REVENUE_FORMULA,
+      DOWNTIME_GAP_FORMULA,
+      `Fix cost and return: ${TECH_DEBT_ROI_FORMULA}`,
+      'Rates come from Administration → Parameters → Financial and ROI settings (team, else department, else company); built-in defaults are labelled "default".',
+      'The causes overlap, so they are not added up.',
+    ],
+    unit: '$/month',
+    direction: 'lower',
+    thresholds: null,
+    storedIn: ['technical_debt.*', 'business_impact_context.downtime_minutes', 'business_impact_business_kpis.support_ticket_volume', 'business_impact_business_kpis.churn_rate', 'configs (financial settings)'],
+    whereToFindIt: ['Delivery → Business impact → Money', 'Analytics → Technical debt (per-item ROI)'],
+    productionSources: [
+      { system: 'SonarQube / Jira', detail: 'Open technical-debt items with their impact inputs' },
+      { system: 'Incident tooling (PagerDuty, Opsgenie, Statuspage)', detail: 'Downtime minutes per month' },
+      { system: 'Zendesk / ServiceNow', detail: 'Support tickets per month' },
+      { system: 'Product analytics (Amplitude, Mixpanel) and CRM / billing', detail: 'Active users and churn rate per month' },
+    ],
+    howToSendIt: { kind: 'no-api', manual: 'Business impact → Data entry; Manual metrics → Technical Debt ROI Impact; Parameters → Financial and ROI settings.' },
+    related: ['revenue_at_stake', 'technical_debt_score'],
+  },
+  revenue_rollup: {
+    kind: 'computed',
+    title: 'Revenue impact: all teams',
+    whyItMatters: 'Adds the team figures up for a department or the company, and says which teams had no figure and why.',
+    howCalculated: REVENUE_ROLLUP_FORMULA,
+    calculationNotes: ['Super admins see the company, QA managers the teams of their departments (the analytics scope). API: GET /api/revenue-impact/rollup.'],
+    unit: '$/month',
+    direction: 'none',
+    thresholds: null,
+    storedIn: ['(computed per team, see Revenue associated with quality gaps)'],
+    whereToFindIt: ['Delivery → Business impact → All teams (super admin, QA manager)'],
+    productionSources: [{ system: 'Not sourced directly', detail: 'Sum of the team figures' }],
+    howToSendIt: { kind: 'computed', note: 'Computed from the team figures.' },
+    related: ['revenue_at_stake', 'revenue_at_risk'],
   },
 };
 
