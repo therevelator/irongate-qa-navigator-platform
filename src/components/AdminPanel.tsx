@@ -641,10 +641,10 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
         );
       })() : (
         /* Main Admin Panel View */
-    <div className="min-h-screen bg-white dark:bg-slate-900 p-8" data-testid="admin-panel">
+    <div className="min-h-screen bg-white dark:bg-slate-900 p-4 sm:p-8" data-testid="admin-panel">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
             <Shield className="w-8 h-8 text-gray-600 dark:text-slate-400" />
             <div>
@@ -652,7 +652,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
               <p className="text-sm text-gray-500 dark:text-slate-400">Manage users and teams</p>
             </div>
           </div>
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           {availableRoles.length > 0 && (
             <button
               onClick={() => setShowCreateUser(true)}
@@ -706,9 +706,9 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                   {/* Department Header */}
                   <div
                     onClick={() => toggleDepartment(dept.id)}
-                    className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer flex items-center justify-between"
+                    className="px-4 py-4 sm:px-6 hover:bg-gray-50 dark:hover:bg-slate-700 cursor-pointer flex items-center justify-between"
                   >
-                    <div className="flex items-center gap-4 flex-1">
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-4 gap-y-1">
                       <div className="flex items-center gap-2">
                         {isDeptExpanded ? (
                           <ChevronDown className="w-6 h-6 text-gray-600 dark:text-slate-400" />
@@ -717,14 +717,14 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                         )}
                         <Building2 className="w-6 h-6 text-gray-600 dark:text-slate-400" />
                       </div>
-                      <div className="flex-1">
+                      <div className="min-w-0 flex-1">
                         <h3 className="font-bold text-gray-900 dark:text-white text-lg">{dept.name}</h3>
                         <p className="text-sm text-gray-600 dark:text-slate-400 mt-0.5">{dept.description || 'No description'}</p>
                       </div>
-                      <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-slate-400">
-                        <span className="font-medium">{deptTeams.length} {deptTeams.length === 1 ? 'Team' : 'Teams'}</span>
-                        <span className="text-gray-400">•</span>
-                        <span>{new Date(dept.created_at).toLocaleDateString()}</span>
+                      <div className="flex w-full items-center gap-4 pl-16 text-sm text-gray-600 dark:text-slate-400 sm:w-auto sm:pl-0">
+                        <span className="font-medium whitespace-nowrap">{deptTeams.length} {deptTeams.length === 1 ? 'Team' : 'Teams'}</span>
+                        <span className="text-gray-400" aria-hidden="true">•</span>
+                        <span className="whitespace-nowrap">{new Date(dept.created_at).toLocaleDateString()}</span>
                       </div>
                     </div>
                   </div>
@@ -745,13 +745,13 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                           return (
                             <div key={team.id} className="border-b border-gray-200 last:border-b-0" data-testid="team-row">
                               {/* Team Header */}
-                              <div className="px-6 py-3 ml-8 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center justify-between">
+                              <div className="px-3 py-3 ml-2 sm:px-6 sm:ml-8 hover:bg-gray-50 dark:hover:bg-slate-800 flex flex-wrap items-center justify-between gap-y-2">
                                 <div 
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     toggleTeam(team.id);
                                   }}
-                                  className="flex items-center gap-3 flex-1 cursor-pointer"
+                                  className="flex min-w-0 items-center gap-3 flex-1 cursor-pointer"
                                 >
                                   <div className="flex items-center gap-2">
                                     {isTeamExpanded ? (
