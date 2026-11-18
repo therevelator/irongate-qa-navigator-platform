@@ -92,6 +92,14 @@ Core set its own escape-rate target 30 days ago), sample ingestion log entries, 
 (removed again by `seed:demo:clear`). `seed:demo:check` also checks metric values and that every
 demo sign-in has a team.
 
+Alerts and actions (sample): the alerts today's generated KPIs raise (judged exactly as the
+evaluator does, so it adopts them), in-app notifications for Northwind's leads and managers, a few
+notification preferences, alert rules (a company score-drop rule, team overrides) and, on every
+active team without real ones, tracked actions (in progress, open / overdue, done 20 days ago and,
+on Northwind, done 35 days ago). Baselines are read from the stored values when the seed runs and
+outcomes are computed by the server. `seed:demo:check` checks that every active team has tracked
+actions; `seed:demo:clear` also removes alerts, notifications and actions of demo teams.
+
 Seeded flaky tests have no stored root cause, so the API reports their pattern guidance as
 unverified.
 
@@ -318,6 +326,65 @@ current targets; existing snapshot rows are not rewritten).
 - **Team detail access**: the team and its KPIs are company-visible; member names and emails only for
   people who may see that team's people (`canViewTeamMembers`: super admin, the department's QA
   manager, people assigned to the team); KPI history follows the analytics scope.
+
+## Alerts, notifications, weekly digest and tracked actions
+
+Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (tables `alert_rules`,
+`alerts`, `notifications`, `notification_preferences`, `company_notification_settings`,
+`notification_deliveries`, `team_actions`; nothing existing is changed).
+
+- **Alert rules** (`server/lib/alerts.ts`, **Administration → Parameters → Alert rules**,
+  `GET/PUT /api/alerts/rules`): *KPI off target* (a current, non-stale value at watch = warning or off
+  target = critical against the target valid at its date, as on Team detail), *Metric stale*
+  (one info alert per team listing its stale KPIs), *QA score drop* (at least N points within D days;
+  critical at twice the drop), *Ingestion failures* (rejected or partial requests to the ingestion API
+  in the last H hours, per team named in them; company-level when none). Team settings override
+  department settings, which override company settings, which override the defaults. Who may change
+  them follows KPI targets (company: super admins; department / team: super admins and that
+  department's QA managers); QA managers can read them.
+- **Evaluation**: after every KPI write (Manual metrics, ingestion API, generators) and every hour
+  (`server/jobs/alertsCron.ts` locally, `netlify/functions/alerts-evaluate.ts` on Netlify; super admins
+  also have **Evaluate alerts now**). One open alert per condition; it is refreshed while the condition
+  holds and resolved when it is gone. Team leads, the department's QA managers and super admins can
+  **acknowledge** an alert (recorded in the Activity history).
+- **Notifications**: the **bell** in the top bar (unread count, latest, mark read, acknowledge) and the
+  **Notifications** page (`/notifications`: alerts of your scope, inbox, preferences). People assigned
+  to a team (and its department's QA managers) are told about its alerts at the severity they chose;
+  company-wide roles about critical team alerts only. **Preferences** per person: in-app on/off, an email
+  for each alert, the weekly digest (super admins, QA managers, team leads), minimum severity
+  (defaults: in-app, no immediate email, digest on for leads and above, from warning). Email goes
+  through the one mailer (SMTP when `SMTP_*` is set, otherwise written to the server log).
+- **Slack** (super admins, Parameters → Notification channels): one incoming webhook per company,
+  posts alerts from a chosen severity and optionally a weekly summary. The URL must be a
+  `https://hooks.slack.com/…` webhook; it is stored AES-256-GCM encrypted (key derived from
+  `SETTINGS_ENCRYPTION_KEY`, else `JWT_SECRET`; if that key changes the webhook must be entered again),
+  only a masked hint is ever returned, and it never appears in logs, the change history or the
+  delivery log. **Send test message** checks it. Every email / Slack message goes through an outbox
+  (`notification_deliveries`) with a dedupe key and up to 3 attempts.
+- **Weekly digest** (`server/lib/digest.ts`): Mondays 07:00 UTC (`netlify/functions/weekly-digest.ts`;
+  locally `DIGEST_CRON`), per recipient for the teams in their scope: QA score now vs 7 days earlier
+  (with "based on n of m inputs"), alerts opened and still open, stale metrics, actions overdue / due in
+  the next 7 days / completed with their outcome. At most one per person and ISO week. **Send test
+  digest** (Notifications → Preferences, and Parameters for super admins) sends yours now.
+- **Tracked actions** (`server/lib/actions.ts`, `/api/actions`, **Team detail → Action plan**, TV
+  focus panel, digest): created by team leads, the department's QA managers and super admins, by hand
+  or with **Create action** on a recommendation; an owner who has the team in scope, a due date, a
+  status (open, in progress, done, dropped) and optionally a linked KPI. The **baseline** is the latest
+  stored value of that KPI when the action is created; the **outcome** is computed from the stored
+  values at completion and 14 and 30 days later (improved / worse when it moved more than 2 % of the
+  baseline in the KPI's direction, otherwise unchanged; "no new data" when nothing was recorded in that
+  window) — never typed in. The owner may change the status. TV mode shows the actions without owner
+  names.
+- **Database keep-alive**: `netlify/functions/db-keepalive.ts` runs `SELECT 1` at 06:00 and 18:00 UTC
+  (logs only ok / failed).
+
+Environment (all optional; the Slack webhook is entered in the app, not in the environment):
+`SETTINGS_ENCRYPTION_KEY` (recommended in production, a long random string; otherwise `JWT_SECRET` is
+used), `APP_URL` (link in emails / Slack; Netlify's `URL` is used when unset), `SMTP_HOST`, `SMTP_PORT`,
+`SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (email; without them emails are logged), `ALERTS_CRON=false`
+(turn the local schedule off), `ALERTS_EVALUATE_CRON` / `DIGEST_CRON` (local schedule, UTC),
+`NOTIFY_SLACK_ALLOW_LOCAL=true` (tests only, ignored in production: accept a `http://127.0.0.1:<port>/`
+webhook). On Netlify the three scheduled functions run without further setup (Scheduled Functions).
 
 ## Tests
 
