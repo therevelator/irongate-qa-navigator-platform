@@ -22,6 +22,8 @@ import NewDashboard from './components/NewDashboard';
 import ManualMetricsInput from './components/ManualMetricsInput';
 import MetricIntervalsConfig from './components/MetricIntervalsConfig';
 import ParametersConfiguration from './components/ParametersConfiguration';
+import TeamTvView from './components/TeamTvView';
+import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
 import { ANALYTICS_ROLES } from '../server/lib/userPolicy';
@@ -45,7 +47,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'developer-productivity': '/analytics/productivity',
   'test-execution-timeline': '/analytics/timeline',
   'team-gamification': '/analytics/gamification',
-  'pdf-report-generator': '/analytics/reports'
+  'pdf-report-generator': '/analytics/reports',
+  'tv': '/tv'
 };
 
 const PATH_TO_VIEW = Object.entries(VIEW_TO_PATH).reduce((acc, [view, path]) => {
@@ -128,6 +131,7 @@ function App() {
       case 'test-execution-timeline':
       case 'team-gamification':
       case 'pdf-report-generator':
+      case 'tv': // Team TV mode: the team must be in the analytics scope (GET /api/tv/teams/:id)
         // Every role (server/lib/userPolicy.ts ANALYTICS_ROLES); each sees only the teams
         // in its analytics scope, enforced by the API.
         return ANALYTICS_ROLES.includes(role);
@@ -192,6 +196,7 @@ function App() {
           if (data.type === 'JOB_NOTIFICATION' && data.source === 'metrics') {
             clearTimeout(timer);
             timer = setTimeout(() => { fetchDepartmentsAndTeams(); }, 500);
+            window.dispatchEvent(new Event(METRICS_UPDATED_EVENT)); // TV mode refreshes too
           }
         } catch { /* ignore malformed messages */ }
       };
@@ -246,6 +251,9 @@ function App() {
     return null; // Or loading spinner
   }
 
+  // Team TV / meeting mode: full screen, no app chrome. Exit returns to where it was opened.
+  if (currentView === 'tv') return <TeamTvView />;
+
   // If a team is selected, show detail view (sidebar hidden, top bar visible)
   if (selectedTeam) {
     return (
@@ -259,7 +267,7 @@ function App() {
         onTabChange={setActiveTab}
         hideSidebar
       >
-        <TeamDetailView team={selectedTeam} onBack={() => setSelectedTeam(null)} />
+        <TeamDetailView team={selectedTeam} onBack={() => setSelectedTeam(null)} onOpenTv={openTvMode} />
       </Layout>
     );
   }

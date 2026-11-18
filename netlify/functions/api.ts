@@ -14,6 +14,7 @@ import adminRoutes from '../../server/routes/admin';
 import analyticsRoutes from '../../server/routes/analytics';
 import settingsRoutes from '../../server/routes/settings';
 import ingestRoutes from '../../server/routes/ingest';
+import tvRoutes from '../../server/routes/tv';
 
 const app = express();
 
@@ -79,6 +80,7 @@ router.use('/admin', adminRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/ingest', ingestRoutes);
+router.use('/tv', tvRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix

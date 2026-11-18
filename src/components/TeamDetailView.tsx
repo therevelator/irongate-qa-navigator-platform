@@ -15,16 +15,17 @@ import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { canViewIndividualDevelopers, canViewTeamAnalytics } from '../../server/lib/userPolicy';
-import { TrendingUp, TrendingDown, Minus, Users, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay } from 'lucide-react';
 import BatteryIndicator from './BatteryIndicator';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
-import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, cx, toneText } from './ui';
+import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, cx, toneText, buttonClass } from './ui';
 import type { Tone } from './ui';
 import MetricInfoTrigger from './MetricInfoTrigger';
 import { FormulaSwitch } from './FormulaNote';
 import { useShowFormulas } from '../hooks/useShowFormulas';
 import { SIZING_ACCURACY_TOLERANCE } from '../data/metricCatalog';
 import type { MetricCatalogKey } from '../data/metricCatalog';
+import { describeChange, type HistoryPoint } from '../data/kpiTrend';
 
 // Team as returned by GET /api/teams (NUMERIC columns may arrive as strings; missing values are null)
 interface TeamWithKPI extends Omit<Team, 'qaScore'> {
@@ -254,11 +255,11 @@ interface DeveloperAISuggestions {
   message?: string;
 }
 
-type HistoryPoint = { date: string; value: number };
-
 interface TeamDetailViewProps {
   team: TeamWithKPI;
   onBack: () => void;
+  /** Open this team in TV / meeting mode (/tv?team=…). */
+  onOpenTv?: (teamId: string) => void;
 }
 
 const STATUS_BADGE: Record<KPIStatus, { tone: Tone; label: string }> = {
@@ -279,19 +280,6 @@ const thresholdText = (t: Threshold | null, unit: string) => {
   if (!t) return null;
   const u = unit && !unit.startsWith('/') && unit !== '%' ? ` ${unit}` : unit;
   return t.lowerIsBetter ? `Target ≤ ${t.good}${u} · watch ≤ ${t.warning}${u}` : `Target ≥ ${t.good}${u} · watch ≥ ${t.warning}${u}`;
-};
-
-/** Change between the last two snapshots; tone respects metric polarity. */
-const describeChange = (history: HistoryPoint[], lowerIsBetter: boolean, hasDirection: boolean) => {
-  if (history.length < 2) return null;
-  const last = history[history.length - 1];
-  const prev = history[history.length - 2];
-  const delta = last.value - prev.value;
-  const direction: 'up' | 'down' | 'flat' = Math.abs(delta) < 1e-9 ? 'flat' : delta > 0 ? 'up' : 'down';
-  const improved = direction === 'flat' ? null : lowerIsBetter ? direction === 'down' : direction === 'up';
-  const tone: Tone = !hasDirection || improved === null ? 'neutral' : improved ? 'good' : 'bad';
-  const pct = prev.value !== 0 ? (delta / Math.abs(prev.value)) * 100 : null;
-  return { delta, pct, direction, tone, prevDate: prev.date };
 };
 
 const TrendLine: React.FC<{ change: ReturnType<typeof describeChange>; unit?: string; usePoints?: boolean }> = ({ change, unit = '', usePoints }) => {
@@ -317,7 +305,7 @@ const InfoTip: React.FC<{ text: string }> = ({ text }) => (
   </span>
 );
 
-const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
+const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv }) => {
   const detailedKPIs = useMemo(() => generateDetailedKPIs(team), [team]);
   const { isDark } = useTheme();
   const { user } = useAuth();
@@ -346,6 +334,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const policyTeam = { id: String(team.id), department_id: (team as any).department_id != null ? String((team as any).department_id) : null };
   const canViewDeveloperInsights = !!policyActor && canViewIndividualDevelopers(policyActor, policyTeam);
   const canViewOwnRow = !canViewDeveloperInsights && !!policyActor && canViewTeamAnalytics(policyActor, policyTeam);
+  // TV mode uses the analytics scope (GET /api/tv/teams/:id enforces the same rule).
+  const canOpenTv = !!policyActor && canViewTeamAnalytics(policyActor, policyTeam);
 
   const kpi: KPIData = team.kpiData || {};
   const [snapshotDate, setSnapshotDate] = useState<string | null>(team.snapshotDate ?? kpi.snapshotDate ?? null);
@@ -580,7 +570,16 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               {asOf ? <>KPI snapshot as of {asOf}</> : 'No KPI snapshot recorded'}
             </>
           }
-          actions={canShowFormulas ? <FormulaSwitch checked={showFormulasPref} onChange={setShowFormulas} /> : undefined}
+          actions={(canShowFormulas || (onOpenTv && canOpenTv)) ? (
+            <>
+              {canShowFormulas && <FormulaSwitch checked={showFormulasPref} onChange={setShowFormulas} />}
+              {onOpenTv && canOpenTv && (
+                <button type="button" className={buttonClass.secondary} onClick={() => onOpenTv(String(team.id))} data-testid="open-tv-mode">
+                  <MonitorPlay size={15} aria-hidden /> Open TV mode
+                </button>
+              )}
+            </>
+          ) : undefined}
         />
         {showFormulas && (
           <p className="-mt-3 mb-4 text-xs text-slate-500 dark:text-slate-400" data-testid="formula-mode-hint">

@@ -1,8 +1,9 @@
 import React from 'react';
-import { Lock, Loader2, UsersRound } from 'lucide-react';
+import { Lock, Loader2, UsersRound, MonitorPlay } from 'lucide-react';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import type { AnalyticsScopeTeam } from '../contexts/AnalyticsScopeContext';
-import { Card, EmptyState, inputClass, cx } from './ui';
+import { Card, EmptyState, inputClass, buttonClass, cx } from './ui';
+import { openTvMode } from './tv/tvNavigation';
 
 /**
  * Department + Team selector shown at the top of the Analytics hub and of every Analytics
@@ -91,6 +92,15 @@ export const AnalyticsScopeBar: React.FC<{ note?: React.ReactNode }> = ({ note }
               <ReadOnlyField label="Team" value={team.name} testId="analytics-scope-team-static" />
             )}
           </div>
+          <button
+            type="button"
+            onClick={() => openTvMode(team.id)}
+            className={cx(buttonClass.secondary, 'self-start sm:self-auto')}
+            title="Show this team full screen on a large display"
+            data-testid="analytics-scope-tv"
+          >
+            <MonitorPlay size={15} aria-hidden /> Open TV mode
+          </button>
         </>
       )}
 
