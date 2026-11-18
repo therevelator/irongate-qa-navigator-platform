@@ -755,7 +755,7 @@ router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async 
     const optedIn = new Set(developerMetrics.filter((r: any) => r.developer_insights_enabled === true).map((r: any) => String(r.developer_id)));
     const teamAssessments = seeAll ? ruleAssessments.filter((a) => optedIn.has(String(a.developerId))) : [];
     const teamSummaryPrivacy = privacyInfo(teamAssessments.length);
-    const teamInsight = !seeAll
+    const teamInsight = !seeAll || teamAssessments.length === 0
       ? null
       : teamSummaryPrivacy.suppressed
         ? `Team summary ${SUPPRESSED_TEXT.charAt(0).toLowerCase()}${SUPPRESSED_TEXT.slice(1)}.`

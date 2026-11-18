@@ -29,7 +29,7 @@
 import type pg from 'pg';
 import { query, transaction } from '../../src/lib/db';
 import { execOn } from './assignments';
-import { K_ANONYMITY_MIN, SUPPRESSED_TEXT, meetsKAnonymity } from './privacy';
+import { K_ANONYMITY_MIN, SUPPRESSED_TEXT, isSuppressed, meetsKAnonymity } from './privacy';
 
 export * from './pulseRules';
 import {
@@ -111,13 +111,14 @@ export interface PulsePeriodResult {
 /** One closed period's result with the k-anonymity rule applied. */
 export function periodResult(agg: { start: string; end: string; responses: number; means?: Record<PulseQuestionKey, number>; overall?: number }): PulsePeriodResult {
   const ok = meetsKAnonymity(agg.responses);
+  const hidden = isSuppressed(agg.responses);
   return {
     start: agg.start,
     lastDay: addDays(agg.end, -1),
     end: agg.end,
-    suppressed: !ok,
-    reason: ok ? null : SUPPRESSED_TEXT,
-    responses: ok ? agg.responses : null,
+    suppressed: hidden,
+    reason: hidden ? SUPPRESSED_TEXT : null,
+    responses: hidden ? null : agg.responses,
     score: ok && agg.overall !== undefined ? wellbeingScore(agg.overall) : null,
     questions: ok && agg.means ? PULSE_QUESTIONS.map((q) => ({ key: q.key, text: q.text, mean: r1(agg.means![q.key]) })) : null,
   };

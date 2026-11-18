@@ -81,7 +81,7 @@ const r = (v: number | null, dp = 1) => (v === null ? null : Math.round(v * 10 *
 /** Summary over one developer per entry (already averaged per developer). */
 function summarise(devs: DevRow[], basis: string): DeveloperSummary {
   const privacy = privacyInfo(devs.length);
-  if (privacy.suppressed) {
+  if (!meetsKAnonymity(devs.length)) {
     return {
       privacy, basis, burnout: null, burnoutOfAverages: 'Unknown',
       averages: { ddps: null, prMergeHours: null, reviewHours: null, focusHours: null, meetingHours: null, contextSwitches: null, workloadBalance: null },

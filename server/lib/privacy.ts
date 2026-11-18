@@ -47,10 +47,15 @@ export function meetsKAnonymity(contributors: number, min = K_ANONYMITY_MIN): bo
   return Number.isFinite(contributors) && contributors >= min;
 }
 
-/** Privacy info for an aggregate over `contributors` people. */
+/** Is an aggregate over `contributors` people withheld? 1 to min-1 people (0 = no data, nothing to hide). */
+export function isSuppressed(contributors: number, min = K_ANONYMITY_MIN): boolean {
+  return contributors > 0 && !meetsKAnonymity(contributors, min);
+}
+
+/** Privacy info for an aggregate over `contributors` people (0 = no data: not suppressed, no value). */
 export function privacyInfo(contributors: number, min = K_ANONYMITY_MIN): PrivacyInfo {
-  const ok = meetsKAnonymity(contributors, min);
-  return { suppressed: !ok, contributors: ok ? contributors : null, reason: ok ? null : SUPPRESSED_TEXT, minContributors: min };
+  const hidden = isSuppressed(contributors, min);
+  return { suppressed: hidden, contributors: hidden ? null : contributors, reason: hidden ? SUPPRESSED_TEXT : null, minContributors: min };
 }
 
 /** The value when enough people contribute, else null. */
