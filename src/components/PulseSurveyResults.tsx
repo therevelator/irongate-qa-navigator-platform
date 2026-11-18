@@ -190,8 +190,8 @@ export const PulseTeamSummary: React.FC<{ teamId: string; onOpen?: () => void }>
         title="Wellbeing (survey)"
         subtitle="Anonymous team pulse survey: averages of closed periods only, never single answers. Workload balance (derived) above is a separate workload signal."
         action={onOpen && data ? (
-          <button type="button" className={buttonClass.secondary} onClick={onOpen} data-testid="open-pulse">
-            <HeartPulse size={15} aria-hidden /> {data.canRespond && !data.currentPeriod.responded ? 'Answer the survey' : 'Open pulse'}
+          <button type="button" className={cx(buttonClass.secondary, 'shrink-0 whitespace-nowrap')} onClick={onOpen} data-testid="open-pulse">
+            <HeartPulse size={15} aria-hidden /> {data.canRespond && !data.currentPeriod.responded ? 'Answer' : 'Open'}<span className="hidden sm:inline">{data.canRespond && !data.currentPeriod.responded ? ' the survey' : ' pulse'}</span>
           </button>
         ) : undefined}
       />
