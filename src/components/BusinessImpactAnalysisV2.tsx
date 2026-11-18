@@ -179,6 +179,13 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
   // Company / department roll-up: super admins and QA managers (canViewRevenueRollup).
   const canRollup = !!user && canViewRevenueRollup(policyActorOf(user));
   const [activeTab, setActiveTab] = useState<Tab>('money');
+  const tabOptions: { value: Tab; label: string }[] = [
+    { value: 'money', label: 'Money' },
+    { value: 'what-if', label: 'What-if' },
+    { value: 'details', label: 'Details' },
+    ...(canRollup ? [{ value: 'all-teams' as Tab, label: 'All teams' }] : []),
+    ...(canWrite ? [{ value: 'data-entry' as Tab, label: 'Data entry' }] : []),
+  ];
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -417,18 +424,17 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                 {teams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
               </select>
             )}
-            <div className="max-w-full overflow-x-auto">
-            <SegmentedControl
+            {/* Phones: a select (five tabs do not fit 390px without scrolling sideways); wider: the segmented control. */}
+            <select
+              aria-label="Business impact view"
               value={activeTab}
-              onChange={setActiveTab}
-              options={[
-                { value: 'money', label: 'Money' },
-                { value: 'what-if', label: 'What-if' },
-                { value: 'details', label: 'Details' },
-                ...(canRollup ? [{ value: 'all-teams' as Tab, label: 'All teams' }] : []),
-                ...(canWrite ? [{ value: 'data-entry' as Tab, label: 'Data entry' }] : []),
-              ]}
-            />
+              onChange={(e) => setActiveTab(e.target.value as Tab)}
+              className={cx(inputClass, 'sm:hidden')}
+            >
+              {tabOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+            <div className="hidden sm:block">
+              <SegmentedControl value={activeTab} onChange={setActiveTab} options={tabOptions} />
             </div>
           </>
         }
