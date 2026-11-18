@@ -38,11 +38,29 @@ data and company KPI snapshots. KPI values are marked `field_sources.<column>.so
 'synthetic'`. Business-impact rows have `data_source = 'synthetic'`.
 
 ```bash
-npm run seed:demo                              # write to DATABASE_URL (local hosts only)
-npm run seed:demo:clear                        # remove the demo rows again
-npm run seed:demo -- --sql out/demo-seed.sql   # write SQL files instead (no DB connection)
+npm run seed:demo                              # demo company -> DATABASE_URL (local hosts only)
+npm run seed:demo -- --fill-existing           # also fill existing companies' teams that lack data
+npm run seed:demo:clear                        # remove all demo rows again (both modes)
+npm run seed:demo -- --sql out/demo-seed.sql   # demo company as SQL files (no DB connection)
+npm run seed:demo -- --fill-existing --sql out/demo-fill.sql   # fill as SQL (reads the local DB to plan)
 npm run seed:demo:clear -- --sql out/demo-clear.sql
 ```
+
+**Fill existing companies** (`--fill-existing`, optional `--company <id>`): every active team
+of every non-demo company gets the same model wherever it has no real data yet. The data is
+grouped: KPI snapshots, sprints, metric update times, developer metrics, test cases,
+suite runs, daily test totals, pipeline, performance, technical debt, business impact and
+weekly analytics. A group is skipped for a team that already has real rows there (for time
+series, rows from the last 30 days; so a team with a recent KPI snapshot keeps its real KPI
+history). A team with fewer than 3 QA engineers gets demo developer users (password `demo123`).
+Each company also gets company KPI snapshots. All of these rows have `demo-` ids; the
+integer-keyed snapshot tables use ids of 1,000,000,000 or more. `seed:demo:clear` removes them.
+In the SQL output, each group is wrapped in a `DO` block that checks again, when it runs, that
+the team exists and still lacks that data. That makes it safe to apply on a copy of the
+database that differs from the one it was planned on.
+
+Seeded flaky tests have no stored root cause, so the API reports their pattern guidance as
+unverified.
 
 - **Sign in**: password `demo123` for every demo user. For example, `alex.morgan@northwind.example`
   (super admin), `priya.raman@…` (QA manager), `olivia.bennett@…` (team lead),
@@ -51,13 +69,14 @@ npm run seed:demo:clear -- --sql out/demo-clear.sql
   demo company or its users (for tables with integer or composite keys). Every insert is
   `ON CONFLICT DO NOTHING`, and the values come from a seeded PRNG, so a second run on the
   same day adds nothing. A run on a later day only adds the new days. Other companies and
-  their rows are never changed. `seed:demo:clear` deletes only the demo company's rows, in
+  their existing rows are never changed. `seed:demo:clear` deletes only demo rows, in
   foreign-key order.
 - **SQL mode**: `--sql` writes one transaction per file, split into numbered parts of up to
-  ~1.4 MB (`demo-seed-01.sql`, `demo-seed-02.sql`, …). Apply them in order after the
-  migrations. Use `--today YYYY-MM-DD` to fix the last day of history.
+  ~1.4 MB (`demo-seed-01.sql`, `demo-seed-02.sql`, …). Apply the seed parts in order after
+  the migrations, then the fill parts. Use `--today YYYY-MM-DD` to fix the last day of history.
 - **In the app**: a super admin can choose **Administration → Admin console → Sample data → Load sample data**
-  (`POST /api/analytics/seed-data`). This runs the same seed. It is only available when the API
+  (`POST /api/analytics/seed-data`). This runs the same seed for the demo company and fills the
+  admin's own company. It is only available when the API
   runs with `ENABLE_SYNTHETIC_DATA=true`. Otherwise the button is disabled and the endpoint
   returns 409. The background random generators enabled by that flag skip the demo company.
 - The CLI refuses a non-local `DATABASE_URL` unless you pass `--allow-remote`. For a hosted

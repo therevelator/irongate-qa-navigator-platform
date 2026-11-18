@@ -11,6 +11,7 @@ interface SampleStatus {
   users: number;
   logins: Array<{ role: string; email: string; name: string }>;
   password: string;
+  ownCompany: { teams: number; lacking: number } | null;
 }
 
 /**
@@ -62,7 +63,7 @@ const SampleDataPanel: React.FC = () => {
       <CardHeader
         title="Sample data"
         subtitle={status
-          ? <>Creates the fictional company “{status.companyName}” with {status.teams} teams, {status.users} users and about 120 days of consistent sample history in every module. Your own company and its data are not changed. Values are generated, not measurements.</>
+          ? <>Creates the fictional company “{status.companyName}” ({status.teams} teams, {status.users} users) and fills your own company’s active teams that have no data yet{status.ownCompany ? <> ({status.ownCompany.lacking} of {status.ownCompany.teams} teams lack some data)</> : null}, with about 120 days of consistent sample history in every module. Existing values are never changed; sample rows can be removed with <code className="font-mono">npm run seed:demo:clear</code>. Values are generated, not measurements.</>
           : 'Load a fictional sample company for demos.'}
         action={<span className="flex gap-2"><Badge tone="warn">Sample data</Badge>{status?.seeded && <Badge tone="good">Loaded</Badge>}</span>}
       />
@@ -82,7 +83,7 @@ const SampleDataPanel: React.FC = () => {
           {!status
             ? 'Checking whether sample data is enabled…'
             : status.enabled
-              ? 'Safe to run more than once. Remove it with npm run seed:demo:clear.'
+              ? 'Safe to run more than once: only missing rows are added.'
               : <>{status.message ?? 'Sample data is turned off on this server. Start the API with ENABLE_SYNTHETIC_DATA=true to enable it.'} It can also be loaded from a terminal with <code className="font-mono">npm run seed:demo</code>.</>}
         </p>
       </div>

@@ -4,7 +4,7 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, getOwnedTeam, canManageCompanyData } from '../middleware/access';
 import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
-import { runDemoSeed, isDemoSeeded } from '../seeds/demoSeed';
+import { runDemoSeed, runFillExisting, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
 import { demoSummary, todayUtc } from '../seeds/demoData';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
@@ -1029,9 +1029,10 @@ router.get('/business-impact', authenticateToken, async (req: any, res) => {
 // ============================================================================
 
 // Sample data: the one-shot demo dataset (server/seeds/demoData.ts), the same data as
-// `npm run seed:demo`. It creates a separate sample company (with its own users, password
-// demo123) and is additive: existing companies and rows are never changed. Re-running adds
-// nothing new on the same day. super_admin only; off unless ENABLE_SYNTHETIC_DATA=true.
+// `npm run seed:demo` + `--fill-existing`. It creates the separate sample company (own users,
+// password demo123) and fills the caller's own active teams that lack data (demo- ids, removed
+// by seed:demo:clear). Additive: existing rows are never changed; re-running adds nothing new
+// on the same day. super_admin only; off unless ENABLE_SYNTHETIC_DATA=true.
 router.get('/seed-data/status', authenticateToken, async (req: any, res) => {
   try {
     if (req.user.role !== 'super_admin') {
@@ -1043,6 +1044,9 @@ router.get('/seed-data/status', authenticateToken, async (req: any, res) => {
       enabled,
       message: enabled ? null : SYNTHETIC_DISABLED_MESSAGE,
       seeded: await isDemoSeeded(),
+      ownCompany: req.user.companyId && !String(req.user.companyId).startsWith('demo-')
+        ? await teamsLackingData(req.user.companyId)
+        : null,
       companyName: summary.companyName,
       teams: summary.teams,
       users: summary.users,
@@ -1067,14 +1071,20 @@ router.post('/seed-data', authenticateToken, async (req: any, res) => {
     }
 
     const result = await runDemoSeed();
+    const companyId = String(req.user.companyId ?? '');
+    const fill = companyId && !companyId.startsWith('demo-') ? await runFillExisting({ companyIds: [companyId] }) : null;
+    const filledTeams = fill?.companies[0]?.teamsFilled ?? 0;
+    const total = result.insertedTotal + (fill?.insertedTotal ?? 0);
     res.json({
       success: true,
-      message: result.insertedTotal > 0
-        ? `Sample data loaded: ${result.insertedTotal} rows for "${result.companyName}".`
-        : `Sample data for "${result.companyName}" is already loaded (nothing new to add).`,
+      message: total > 0
+        ? `Sample data loaded: ${result.insertedTotal} rows for "${result.companyName}"` +
+          (fill ? ` and ${fill.insertedTotal} rows for ${filledTeams} of your teams that lacked data.` : '.')
+        : 'Sample data is already loaded (nothing new to add).',
       companyName: result.companyName,
-      insertedTotal: result.insertedTotal,
+      insertedTotal: total,
       inserted: result.inserted,
+      ownCompany: fill ? { insertedTotal: fill.insertedTotal, inserted: fill.inserted, teams: fill.companies[0]?.teams ?? 0, teamsFilled: filledTeams } : null,
       logins: result.logins,
       password: result.password,
     });

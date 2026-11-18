@@ -121,39 +121,55 @@ export type SqlValue = string | number | boolean | null | undefined | { json: un
 export type Row = Record<string, SqlValue>;
 
 export type Segment =
-  | { kind: 'insert'; table: string; rows: Row[] }
+  | { kind: 'insert'; table: string; rows: Row[]; guard?: string }
   | { kind: 'sql'; label: string; sql: string };
+
+/** Guard value meaning "do not emit this row" (the team already has real data there). */
+export const SKIP = '\u0000skip';
 
 export class Dataset {
   readonly segments: Segment[] = [];
-  private byTable = new Map<string, Row[]>();
+  /** Guard key -> SQL condition; guarded rows are emitted inside DO blocks (IF condition). */
+  readonly guards = new Map<string, string>();
+  private byKey = new Map<string, Row[]>();
 
-  add(table: string, row: Row): void {
-    let rows = this.byTable.get(table);
+  constructor(readonly today: string) {}
+
+  guard(key: string, condition: string): string {
+    if (!this.guards.has(key)) this.guards.set(key, condition);
+    return key;
+  }
+
+  private segment(table: string, guard: string | undefined): Row[] {
+    const key = `${guard ?? ''}#${table}`;
+    let rows = this.byKey.get(key);
     if (!rows) {
       rows = [];
-      this.byTable.set(table, rows);
-      this.segments.push({ kind: 'insert', table, rows });
+      this.byKey.set(key, rows);
+      this.segments.push({ kind: 'insert', table, rows, guard });
     }
-    rows.push(row);
+    return rows;
+  }
+
+  add(table: string, row: Row, guard?: string): void {
+    if (guard === SKIP) return;
+    this.segment(table, guard).push(row);
   }
 
   /** Fix the insert position of tables (parents before children) before rows are added. */
-  reserve(...tables: string[]): void {
-    for (const table of tables) {
-      if (this.byTable.has(table)) continue;
-      const rows: Row[] = [];
-      this.byTable.set(table, rows);
-      this.segments.push({ kind: 'insert', table, rows });
-    }
+  reserve(guard: string | undefined, ...tables: string[]): void {
+    if (guard === SKIP) return;
+    for (const table of tables) this.segment(table, guard);
   }
 
   sql(label: string, sql: string): void {
     this.segments.push({ kind: 'sql', label, sql });
   }
 
-  tables(): string[] { return [...this.byTable.keys()]; }
-  count(table: string): number { return this.byTable.get(table)?.length ?? 0; }
+  tables(): string[] { return [...new Set(this.segments.filter(s => s.kind === 'insert').map(s => (s as { table: string }).table))]; }
+  count(table: string): number {
+    return this.segments.reduce((n, s) => n + (s.kind === 'insert' && s.table === table ? s.rows.length : 0), 0);
+  }
 }
 
 function literal(v: SqlValue): string {
@@ -169,7 +185,7 @@ function literal(v: SqlValue): string {
   return v.sql;
 }
 
-export interface RenderedStatement { table: string; rows: number; sql: string }
+export interface RenderedStatement { table: string; rows: number; sql: string; guard?: string }
 
 /** Render every segment as SQL statements (INSERT … ON CONFLICT DO NOTHING), batched. */
 export function renderStatements(ds: Dataset, maxBatchBytes = 200_000): RenderedStatement[] {
@@ -182,12 +198,13 @@ export function renderStatements(ds: Dataset, maxBatchBytes = 200_000): Rendered
     const columns: string[] = [];
     const seen = new Set<string>();
     for (const r of seg.rows) for (const k of Object.keys(r)) if (!seen.has(k)) { seen.add(k); columns.push(k); }
+    const guard = seg.guard;
     const head = `INSERT INTO ${seg.table} (${columns.map(c => `"${c}"`).join(', ')}) VALUES\n`;
     let batch: string[] = [];
     let size = head.length;
     const flush = () => {
       if (!batch.length) return;
-      out.push({ table: seg.table, rows: batch.length, sql: `${head}${batch.join(',\n')}\nON CONFLICT DO NOTHING;` });
+      out.push({ table: seg.table, rows: batch.length, sql: `${head}${batch.join(',\n')}\nON CONFLICT DO NOTHING;`, guard });
       batch = [];
       size = head.length;
     };
@@ -199,6 +216,36 @@ export function renderStatements(ds: Dataset, maxBatchBytes = 200_000): Rendered
     }
     flush();
   }
+  return out;
+}
+
+/**
+ * Render the dataset as executable statements. Consecutive guarded statements with the
+ * same guard are wrapped in one DO block: `IF <condition> THEN … END IF`, so the SQL decides
+ * at apply time whether a team still lacks that data (safe on a database that differs from
+ * the one the plan was read from).
+ */
+export function renderScript(ds: Dataset, maxBlockBytes = 1_200_000): RenderedStatement[] {
+  const out: RenderedStatement[] = [];
+  let block: RenderedStatement[] = [];
+  let size = 0;
+  const flush = () => {
+    if (!block.length) return;
+    const cond = ds.guards.get(block[0].guard!)!;
+    const body = block.map(b => b.sql).join('\n');
+    if (body.includes('$demo$')) throw new Error('Demo data contains the DO-block delimiter');
+    out.push({ table: block[0].table, rows: block.reduce((n, b) => n + b.rows, 0), guard: block[0].guard,
+      sql: `DO $demo$\nBEGIN\nIF ${cond} THEN\n${body}\nEND IF;\nEND\n$demo$;` });
+    block = [];
+    size = 0;
+  };
+  for (const st of renderStatements(ds)) {
+    if (!st.guard) { flush(); out.push(st); continue; }
+    if (block.length && (block[0].guard !== st.guard || size + st.sql.length > maxBlockBytes)) flush();
+    block.push(st);
+    size += st.sql.length;
+  }
+  flush();
   return out;
 }
 
@@ -313,10 +360,145 @@ export const DEMO_LOGINS = (['super_admin', 'qa_manager', 'team_lead', 'qa_engin
   return { role, email: u.email, name: `${u.first} ${u.last}` };
 });
 
-const membersOf = (team: TeamDef) => USERS.filter(u => u.team === team.key);
-const devsOf = (team: TeamDef) => membersOf(team).filter(u => u.role === 'qa_engineer' || u.role === 'team_lead');
-const leadOf = (team: TeamDef) => USERS.find(u => u.team === team.key && u.role === 'team_lead')!;
-const engineersOf = (team: TeamDef) => USERS.filter(u => u.team === team.key && u.role === 'qa_engineer');
+// ============================================================================
+// Team contexts: the demo company's teams, or existing teams being filled
+// ============================================================================
+
+export type Group = 'base' | 'kpi' | 'sprint' | 'mlu' | 'dev' | 'tests' | 'suites' | 'tte' | 'pipeline' | 'perf' | 'debt' | 'bi' | 'analytics';
+/**
+ * Per group: the table whose (non-demo) rows mean "this team already has this data", and for
+ * time series the date column: only rows from the last RECENT_DAYS days count (older data
+ * would leave the windowed pages empty, so such a team is filled).
+ */
+export const GROUP_CHECK: Record<Exclude<Group, 'base'>, { table: string; recent?: string }> = {
+  kpi: { table: 'kpi_snapshots', recent: 'snapshot_date' }, sprint: { table: 'sprint_velocity' }, mlu: { table: 'metric_last_updated' },
+  dev: { table: 'developer_metrics' }, tests: { table: 'test_cases' }, suites: { table: 'test_execution_runs', recent: 'start_time' },
+  tte: { table: 'team_test_executions', recent: 'execution_date' }, pipeline: { table: 'pipeline_runs', recent: 'started_at' },
+  perf: { table: 'performance_metrics', recent: 'recorded_date' }, debt: { table: 'technical_debt' },
+  bi: { table: 'business_impact_quality_metrics' }, analytics: { table: 'team_analytics', recent: 'period_end' },
+};
+/** A team with real rows at most this many days old keeps that data (e.g. its KPI history). */
+export const RECENT_DAYS = 30;
+
+/** SQL: the team has real (non-demo) rows of a group. */
+export function realDataExists(group: Exclude<Group, 'base'>, teamIdSql: string, todaySql: string): string {
+  const c = GROUP_CHECK[group];
+  return `EXISTS (SELECT 1 FROM ${c.table} WHERE team_id = ${teamIdSql} AND id NOT LIKE '${DEMO_PREFIX}%'${c.recent ? ` AND ${c.recent} >= ${todaySql}::date - ${RECENT_DAYS}` : ''})`;
+}
+
+export interface Member {
+  id: string; first: string; last: string; role: UserDef['role']; insights: boolean;
+  /** Set for demo developers created on an existing team (inserted as users). */
+  newUser?: { email: string; departmentId: string };
+}
+
+export interface TeamCtx extends TeamDef {
+  companyId: string;
+  deptId: string;
+  members: Member[];
+  /** true: rows are emitted inside DO blocks that re-check at apply time that data is missing. */
+  guarded: boolean;
+  /** Groups to fill; null = all (demo company). */
+  groups: Set<Group> | null;
+  /** Real KPI rows by date (teams that keep their real KPI history), for company snapshots. */
+  realKpi?: Map<string, Record<string, number | null>>;
+  /** Existing developers who already have productivity snapshots (not generated again). */
+  devsWithSnapshots?: Set<string>;
+}
+
+export interface CompanyInput {
+  id: string;
+  isDemo: boolean;
+  teams: TeamCtx[];
+  /** All active teams of the company (company snapshot normalisation). */
+  teamCount: number;
+  realDebt: Array<{ severity: string; created: string; resolved: string | null }>;
+  /** Workload balance of developers whose real developer_metrics are kept. */
+  extraHappiness: number[];
+}
+
+const devsOf = (team: TeamCtx) => team.members.filter(u => u.role === 'qa_engineer' || u.role === 'team_lead');
+const engineersOf = (team: TeamCtx) => {
+  const e = team.members.filter(u => u.role === 'qa_engineer');
+  return e.length ? e : devsOf(team);
+};
+const leadOf = (team: TeamCtx) => team.members.find(u => u.role === 'team_lead') ?? engineersOf(team)[0];
+
+/** Guard for a team's rows of one group (undefined = unguarded, SKIP = not emitted). */
+function G(ds: Dataset, team: TeamCtx, group: Group, extraKey?: string, extraCond?: string): string | undefined {
+  if (team.groups && group !== 'base' && !team.groups.has(group)) return SKIP;
+  if (!team.guarded) return undefined;
+  const T = literal(team.id);
+  let cond = `EXISTS (SELECT 1 FROM teams WHERE id = ${T} AND is_active)`;
+  if (group !== 'base') cond += ` AND NOT ${realDataExists(group, T, `'${ds.today}'`)}`;
+  if (extraCond) cond += ` AND ${extraCond}`;
+  return ds.guard(`${team.id}|${group}${extraKey ? `|${extraKey}` : ''}`, cond);
+}
+
+/** Integer id for identity-keyed tables: 1e9 + (key bucket) * 1e4 + day. Marks demo rows (id >= 1e9). */
+export const DEMO_INT_ID_MIN = 1_000_000_000;
+function demoIntId(key: string, date: string): number {
+  const day = Math.round(Date.parse(`${date}T00:00:00Z`) / DAY_MS) % 10000;
+  return DEMO_INT_ID_MIN + (hash32(key) % 100000) * 10000 + day;
+}
+
+const NORTHWIND_TEAMS: TeamCtx[] = TEAMS.map(t => ({
+  ...t, companyId: DEMO_COMPANY_ID, deptId: `demo-dept-${t.dept}`, guarded: false, groups: null,
+  members: USERS.filter(u => u.team === t.key).map(u => ({ id: u.id, first: u.first, last: u.last, role: u.role, insights: u.insights })),
+}));
+
+// Existing teams: a team profile derived deterministically from the team id.
+const GENERIC_AREAS = ['Login', 'Search', 'Checkout', 'Notifications', 'Profile settings', 'Reporting', 'Data import', 'Billing',
+  'Permissions', 'Audit log', 'File upload', 'Dashboard', 'Scheduling', 'Integrations', 'Payments', 'Onboarding',
+  'Exports', 'Webhooks', 'Feature flags', 'Localisation', 'Inventory', 'Messaging', 'Subscriptions', 'Analytics'];
+const GENERIC_ENDPOINTS: Array<[string, string, number]> = [['/api/session', 'POST', 90], ['/api/search', 'GET', 140], ['/api/orders', 'POST', 160],
+  ['/api/orders/{id}', 'GET', 45], ['/api/reports', 'GET', 320], ['/api/users/{id}', 'PUT', 70], ['/api/notifications', 'GET', 40],
+  ['/api/uploads', 'POST', 380], ['/api/payments', 'POST', 130], ['/api/settings', 'GET', 35]];
+const PLATFORMS = ['Backend API', 'Web', 'iOS & Android', 'Data / ML', 'Infrastructure'];
+
+export function teamDefFor(t: { id: string; name: string; platform: string | null; description?: string | null }): TeamDef {
+  const order = <T>(xs: T[], k: string) => [...xs].sort((a, b) => rnd(k, t.id, String(a)) - rnd(k, t.id, String(b)));
+  const words = t.name.replace(/[^A-Za-z ]+/g, ' ').trim().split(/\s+/).filter(Boolean);
+  let code = (words.length >= 2 ? words.map(w => w[0]).join('') : (words[0] ?? 'TEAM')).toUpperCase().replace(/[^A-Z]/g, '');
+  code = (code + 'XXX').slice(0, 3);
+  const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'team';
+  return {
+    key: t.id, id: t.id, code, name: t.name, dept: '', platform: t.platform || PLATFORMS[Math.floor(rnd('plat', t.id) * PLATFORMS.length)],
+    description: t.description ?? '', h: round(0.32 + 0.62 * rnd('h', t.id), 3), change: round((rnd('chg', t.id) - 0.45) * 0.2, 3),
+    phase: rnd('phase', t.id) * 6, sprintOffset: rnd('spo', t.id) < 0.5 ? 0 : 7,
+    revenue: Math.round(300_000 + 1_900_000 * rnd('rev', t.id)),
+    areas: order(GENERIC_AREAS, 'area').slice(0, 8),
+    endpoints: order(GENERIC_ENDPOINTS, 'ep').slice(0, 4).map(([path, m, b]) => [`/${slug}${path}`, m, b] as [string, string, number]),
+  };
+}
+
+const DEV_NAMES: Array<[string, string]> = [['Aoife', 'Byrne'], ['Rohan', 'Iyer'], ['Clara', 'Weber'], ['Mateus', 'Alves'], ['Hana', 'Suzuki'],
+  ['Joseph', 'Mensah'], ['Ingrid', 'Berg'], ['Pavel', 'Novak'], ['Laila', 'Rahimi'], ['Conor', 'Doyle'], ['Ines', 'Moreau'], ['Daniel', 'Kowal'],
+  ['Mei', 'Lin'], ['Tariq', 'Haddad'], ['Freya', 'Olsen'], ['Marco', 'Bianchi'], ['Esme', 'Clarke'], ['Kwame', 'Asante'], ['Lena', 'Vogel'],
+  ['Sami', 'Korhonen'], ['Paula', 'Ortega'], ['Arash', 'Karimi'], ['Niamh', 'Walsh'], ['Theo', 'Laurent'], ['Asha', 'Nair'], ['Erik', 'Lund'],
+  ['Bianca', 'Ferraro'], ['Kofi', 'Owusu'], ['Selin', 'Demir'], ['Jonas', 'Keller'], ['Rosa', 'Jimenez'], ['Viktor', 'Horvat'],
+  ['Maeve', 'Kelly'], ['Ravi', 'Kumar'], ['Elif', 'Yilmaz'], ['Hugo', 'Martins'], ['Saoirse', 'Ryan'], ['Kai', 'Muller'], ['Amira', 'Saleh'], ['Finn', 'Schmidt']];
+
+/**
+ * Demo developers for an existing team with fewer than 3 engineers: deterministic ids/names,
+ * emails in the company's domain that are not taken (`taken` is updated).
+ */
+export function demoDevelopersFor(team: { id: string; departmentId: string }, domain: string, existingEngineers: number, taken: Set<string>): Member[] {
+  const out: Member[] = [];
+  for (let i = 0; existingEngineers + out.length < 3; i++) {
+    const start = Math.floor(rnd('devname', team.id) * DEV_NAMES.length);
+    let email = '', first = '', last = '';
+    for (let k = 0; k < DEV_NAMES.length * 3; k++) {
+      [first, last] = DEV_NAMES[(start + i * 7 + k) % DEV_NAMES.length];
+      const n = Math.floor(k / DEV_NAMES.length);
+      email = `${first}.${last}${n ? n + 1 : ''}@${domain}`.toLowerCase();
+      if (!taken.has(email)) break;
+    }
+    taken.add(email);
+    out.push({ id: did('u', team.id, i + 1), first, last, role: 'qa_engineer', insights: true, newUser: { email, departmentId: team.departmentId } });
+  }
+  return out;
+}
 
 // ============================================================================
 // KPI model: every metric of a team as a smooth function of the date
@@ -390,14 +572,38 @@ export function todayUtc(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
-  const today = opts.today ?? todayUtc();
+function checkDate(today: string): string {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(today)) throw new Error(`Invalid date: ${today}`);
-  const ds = new Dataset();
+  return today;
+}
+
+/** The demo company (Northwind) dataset. */
+export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
+  const today = checkDate(opts.today ?? todayUtc());
+  const ds = new Dataset(today);
+  emitCompany(ds, { id: DEMO_COMPANY_ID, isDemo: true, teams: NORTHWIND_TEAMS, teamCount: NORTHWIND_TEAMS.length, realDebt: [], extraHappiness: [] });
+  return ds;
+}
+
+/** Sample data for existing companies' teams that lack it (see planFillExisting in demoSeed.ts). */
+export function buildFillDataset(companies: CompanyInput[], opts: BuildOptions = {}): Dataset {
+  const today = checkDate(opts.today ?? todayUtc());
+  const ds = new Dataset(today);
+  for (const c of companies) emitCompany(ds, c);
+  return ds;
+}
+
+function emitCompany(ds: Dataset, company: CompanyInput): void {
+  const today = ds.today;
+  // Teams with something to fill (a team whose every group already has real data only
+  // contributes its real KPIs to the company snapshots).
+  const teams = company.teams.filter(t => !t.groups || t.groups.size > 0);
+  const companyId = company.id;
   const D = (t: number) => addDays(today, -t);
   const yesterday = D(1);
   const admin = USERS.find(u => u.role === 'super_admin')!;
 
+  if (company.isDemo) {
   // --------------------------------------------------------------------------
   // Company, departments, teams, users, membership
   // --------------------------------------------------------------------------
@@ -412,7 +618,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
       created_at: ts(D(700), 9), updated_at: ts(D(700), 9), is_active: true,
     });
   }
-  for (const t of TEAMS) {
+  for (const t of teams) {
     ds.add('teams', {
       id: t.id, company_id: DEMO_COMPANY_ID, department_id: `demo-dept-${t.dept}`, name: t.name, description: t.description,
       platform: t.platform, lead_id: null, created_at: ts(D(650), 10), updated_at: ts(D(650), 10), is_active: true,
@@ -438,7 +644,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   }
   // Leads and department managers reference users, so they are set after the users exist
   // (only where still NULL: never overwrites a value someone changed in the app).
-  ds.sql('teams.lead_id', `UPDATE teams SET lead_id = v.lead_id FROM (VALUES\n${TEAMS.map(t => `  (${literal(t.id)}, ${literal(leadOf(t).id)})`).join(',\n')}\n) AS v(id, lead_id)\nWHERE teams.id = v.id AND teams.lead_id IS NULL;`);
+  ds.sql('teams.lead_id', `UPDATE teams SET lead_id = v.lead_id FROM (VALUES\n${teams.map(t => `  (${literal(t.id)}, ${literal(leadOf(t).id)})`).join(',\n')}\n) AS v(id, lead_id)\nWHERE teams.id = v.id AND teams.lead_id IS NULL;`);
   ds.sql('departments.manager_id', `UPDATE departments SET manager_id = v.manager_id FROM (VALUES\n${DEPTS.map(d => `  (${literal(d.id)}, ${literal(USERS.find(u => u.dept === d.key && u.role === 'qa_manager')!.id)})`).join(',\n')}\n) AS v(id, manager_id)\nWHERE departments.id = v.id AND departments.manager_id IS NULL;`);
 
   // team_members: exactly one row per user with a primary team (lead for team leads), plus a
@@ -484,13 +690,34 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
     created_by: admin.id, created_at: ts(D(90), 11), last_used_at: ts(D(40), 3, 12), revoked_at: ts(D(35), 16, 5),
   });
 
+  }
+
+  // Demo developers created on existing teams (only those with fewer than 3 engineers).
+  for (const team of teams) {
+    for (const [i, u] of team.members.entries()) {
+      if (!u.newUser) continue;
+      const U = literal(u.id);
+      const userGuard = G(ds, team, 'base', `user:${u.id}`, `NOT EXISTS (SELECT 1 FROM users WHERE lower(email) = lower(${literal(u.newUser.email)}) AND id <> ${U})`);
+      const created = D(200 + i * 11);
+      ds.add('users', {
+        id: u.id, email: u.newUser.email, password_hash: DEMO_PASSWORD_HASH, first_name: u.first, last_name: u.last, role: 'qa_engineer',
+        company_id: companyId, department_id: u.newUser.departmentId, primary_team_id: team.id, avatar_url: null, phone: null, timezone: 'UTC',
+        created_at: ts(created, 9, 30), updated_at: ts(created, 9, 30), last_login: ts(D(2 + i), 9, 15), is_active: true, email_verified: true,
+        email_verified_at: ts(created, 9, 45), password_reset_token: null, password_reset_expires: null, failed_login_attempts: 0, locked_until: null,
+        created_by: null, developer_insights_enabled: true,
+      }, userGuard);
+      ds.add('team_members', { user_id: u.id, team_id: team.id, role: 'member', joined_at: ts(created, 10) },
+        G(ds, team, 'base', `tm:${u.id}`, `EXISTS (SELECT 1 FROM users WHERE id = ${U})`));
+    }
+  }
+
   // --------------------------------------------------------------------------
   // Sprints (2-week cadence anchored on a fixed date, so names/ids are stable)
   // --------------------------------------------------------------------------
   interface Sprint { name: string; start: string; end: string; committed: number; delivered: number; carryover: number }
   const sprintsByTeam = new Map<string, Sprint[]>();
   const EPOCH = '2024-01-05'; // a Friday
-  for (const team of TEAMS) {
+  for (const team of teams) {
     const sprints: Sprint[] = [];
     const daysSinceEpoch = (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${EPOCH}T00:00:00Z`)) / DAY_MS - team.sprintOffset;
     const lastK = Math.floor(daysSinceEpoch / 14);
@@ -511,7 +738,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
       ds.add('sprint_velocity', {
         id: did('sv', team.key, compact(s.end)), team_id: team.id, sprint_name: s.name, start_date: s.start, end_date: s.end,
         committed_points: s.committed, delivered_points: s.delivered, carryover_points: s.carryover, created_at: ts(s.end, 17),
-      });
+      }, G(ds, team, 'sprint'));
     }
   }
   const sprintAt = (team: TeamDef, date: string): Sprint | null => {
@@ -544,27 +771,27 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
     return row;
   };
   const fieldSources = { json: Object.fromEntries(KPI_COLUMNS.map(c => [c, { source: 'synthetic' }])) };
-  for (const team of TEAMS) {
+  for (const team of teams) {
     for (let t = HISTORY_DAYS; t >= 0; t--) {
       const date = D(t);
       const row = kpiOf(team, t);
       ds.add('kpi_snapshots', {
         id: did('kpi', team.key, compact(date)), team_id: team.id, snapshot_date: date,
         ...row, created_at: ts(date, 0, 5), manually_edited: false, field_sources: fieldSources,
-      });
+      }, G(ds, team, 'kpi'));
     }
   }
 
   // Last update per team and metric (today's snapshot); next update from the interval.
   const unitMs: Record<string, number> = { minutes: 60e3, hours: 3600e3, days: DAY_MS, weeks: 7 * DAY_MS, months: 30 * DAY_MS };
-  for (const team of TEAMS) {
+  for (const team of teams) {
     for (const mi of DEFAULT_METRIC_INTERVALS) {
       const last = ts(today, 0, 5);
       ds.add('metric_last_updated', {
         id: did('mlu', team.key, KPI_COLUMNS.indexOf(mi.metric_key) >= 0 ? KPI_COLUMNS.indexOf(mi.metric_key) : mi.metric_key),
-        company_id: DEMO_COMPANY_ID, team_id: team.id, metric_key: mi.metric_key, last_updated_at: last,
+        company_id: companyId, team_id: team.id, metric_key: mi.metric_key, last_updated_at: last,
         next_update_at: new Date(Date.parse(last) + mi.interval_value * unitMs[mi.interval_unit]).toISOString(), created_at: ts(D(HISTORY_DAYS), 0, 5),
-      });
+      }, G(ds, team, 'mlu'));
     }
   }
 
@@ -573,7 +800,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   // --------------------------------------------------------------------------
   interface DevDay { focus: number; pr: number; review: number; meetings: number; switches: number }
   const devDays = new Map<string, Map<string, DevDay>>(); // user -> date -> values
-  for (const team of TEAMS) {
+  for (const team of teams) {
     for (const u of devsOf(team)) {
       const jitter = (rnd('devjit', u.id) - 0.5) * 0.3;
       const isLead = u.role === 'team_lead';
@@ -592,16 +819,18 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         });
       }
       devDays.set(u.id, byDate);
+      const dpsGuard = team.devsWithSnapshots?.has(u.id) ? SKIP : G(ds, team, 'dev', `dps:${u.id}`,
+        `EXISTS (SELECT 1 FROM users WHERE id = ${literal(u.id)}) AND NOT EXISTS (SELECT 1 FROM developer_productivity_snapshots WHERE developer_id = ${literal(u.id)} AND id < ${DEMO_INT_ID_MIN})`);
       for (const [date, v] of byDate) {
         const { score } = computeDdps({ focus_time_hours: v.focus, meeting_time_hours: v.meetings, context_switches_per_day: v.switches, pr_merge_time_avg: v.pr, code_review_time_avg: v.review });
         ds.add('developer_productivity_snapshots', {
-          developer_id: u.id, snapshot_date: date,
+          id: demoIntId(u.id, date), developer_id: u.id, snapshot_date: date,
           focus_time_hours: v.focus, pr_merge_time_avg: v.pr, code_review_time_avg: v.review, meeting_time_hours: v.meetings, context_switches_per_day: v.switches,
           focus_time_norm: round(Math.min(v.focus / 8, 1), 4), pr_time_norm: round(Math.min(v.pr / 24, 1), 4),
           review_time_norm: round(Math.min(v.review / 8, 1), 4), meeting_time_norm: round(Math.min(v.meetings / 8, 1), 4),
           context_switches_norm: round(Math.min(v.switches / 5, 1), 4),
           ddps_score: round((score ?? 0) / 100, 4), created_at: ts(date, 23, 30),
-        });
+        }, dpsGuard);
       }
     }
   }
@@ -618,16 +847,16 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
     focus_time_hours: v.focus, meeting_time_hours: v.meetings, context_switches_per_day: v.switches,
     pr_merge_time_avg: v.pr, code_review_time_avg: v.review,
   } as Parameters<typeof calculateWorkloadBalance>[0]);
-  for (const team of TEAMS) {
+  for (const team of teams) {
     for (const u of devsOf(team)) {
       const avg = devAverage(u.id, today)!;
       const cur = { focus: round(avg.focus, 2), meetings: round(avg.meetings, 2), switches: Math.round(avg.switches), pr: round(avg.pr, 2), review: round(avg.review, 2) };
       ds.add('developer_metrics', {
-        id: did('dm', u.id.slice(DEMO_PREFIX.length)), team_id: team.id, developer_id: u.id,
+        id: team.guarded ? did('dm', team.key, u.id) : did('dm', u.id.slice(DEMO_PREFIX.length)), team_id: team.id, developer_id: u.id,
         pr_merge_time_avg: cur.pr, code_review_time_avg: cur.review, focus_time_hours: cur.focus, meeting_time_hours: cur.meetings,
         context_switches_per_day: cur.switches, happiness_score: round(workloadBalance(cur), 1),
         created_at: ts(D(HISTORY_DAYS), 18), updated_at: ts(yesterday, 18),
-      });
+      }, G(ds, team, 'dev', `dm:${u.id}`, `EXISTS (SELECT 1 FROM users WHERE id = ${literal(u.id)})`));
     }
   }
 
@@ -657,10 +886,11 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   const TAGS = ['smoke', 'regression', 'critical-path', 'api', 'ui', 'contract', 'nightly', 'pci', 'accessibility'];
 
   interface CaseInfo { id: string; type: string; flaky: boolean; pattern: string; active: boolean; area: string; n: number; scenario: string; status: string; spec: typeof TYPES[number] }
-  ds.reserve('test_cases', 'test_case_tags', 'test_executions', 'flaky_tests');
   const casesByTeam = new Map<string, CaseInfo[]>();
-  for (const team of TEAMS) {
+  for (const team of teams) {
     const rng = new Rng('cases', team.key);
+    const gTests = G(ds, team, 'tests');
+    ds.reserve(gTests, 'test_cases', 'test_case_tags', 'test_executions', 'flaky_tests');
     const lead = leadOf(team);
     const engineers = engineersOf(team);
     const cases: CaseInfo[] = [];
@@ -715,7 +945,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
           build_number: `${team.key}-${4200 + Math.round((Date.parse(e.at) - Date.parse(`${D(EVENT_DAYS)}T00:00:00Z`)) / 3600000)}`,
           branch: rnd('br', c.id, i) < 0.8 ? 'main' : `feature/${team.code}-${200 + Math.floor(rnd('brn', c.id, i) * 300)}`,
           executed_by: manual ? engineers[i % engineers.length].id : null, executed_at: e.at,
-        });
+        }, gTests);
       }
       const ran = execs.filter(e => e.status !== 'skipped');
       const passed = execs.filter(e => e.status === 'passed').length;
@@ -744,43 +974,38 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         maintenance_cost_hours: round((c.flaky ? 6 : 0.5) + rnd('mc', c.id) * (c.type === 'e2e' ? 10 : 3), 2),
         created_by: rnd('cb', c.id) < 0.3 ? lead.id : engineers[meta.n % engineers.length].id,
         created_at: ts(created, 11), updated_at: last ? last.at : ts(created, 11),
-      });
+      }, gTests);
       const nTags = 1 + Math.floor(rnd('ntag', c.id) * 3);
       const tags = new Set<string>([c.type === 'e2e' ? 'ui' : c.type === 'api' ? 'api' : TAGS[meta.n % TAGS.length]]);
       for (let i = 0; tags.size < nTags && i < 10; i++) tags.add(TAGS[Math.floor(rnd('tag', c.id, i) * TAGS.length)]);
-      [...tags].forEach((tag, i) => ds.add('test_case_tags', { id: did('tag', team.key, String(meta.n).padStart(2, '0'), i), test_case_id: c.id, tag, created_at: ts(created, 11, 5) }));
+      [...tags].forEach((tag, i) => ds.add('test_case_tags', { id: did('tag', team.key, String(meta.n).padStart(2, '0'), i), test_case_id: c.id, tag, created_at: ts(created, 11, 5) }, gTests));
 
       if (c.flaky) {
         const fails = execs.filter(e => e.status === 'failed');
-        const verified = rnd('verified', c.id) < 0.5;
-        const ROOT: Record<string, [string, string]> = {
-          timing: ['Animation on the payment button is not awaited before the click', 'Wait for the button to be enabled instead of a fixed sleep; disable animations in test runs'],
-          environment: ['Shared staging database is reset by a parallel job', 'Use a per-run schema created by the test fixture'],
-          data: ['Test relies on the FX rate of the day; rounding differs on some days', 'Freeze the FX rate in the fixture and assert with the stored rate'],
-          network: ['Sandbox payment provider throttles bursts of requests', 'Mock the provider in CI and keep one nightly contract test against the sandbox'],
-          unknown: ['', ''],
-        };
         ds.add('flaky_tests', {
-          id: did('flaky', team.key, String(meta.n).padStart(2, '0')), test_case_id: c.id, team_id: team.id, company_id: DEMO_COMPANY_ID,
+          id: did('flaky', team.key, String(meta.n).padStart(2, '0')), test_case_id: c.id, team_id: team.id, company_id: companyId,
           test_name: `${meta.area}: ${meta.scenario}`, failure_pattern: c.pattern, flakiness_score: flakiness,
           failure_count: fails.length, pass_count: passed, total_runs: execs.length,
           last_flaky_at: fails.length ? fails[fails.length - 1].at : null,
-          root_cause: verified ? ROOT[c.pattern][0] : null, suggested_fix: verified ? ROOT[c.pattern][1] : null,
+          // Seeded data never claims a verified root cause: the API then shows the pattern
+          // guidance marked "unverified".
+          root_cause: null, suggested_fix: null,
           is_quarantined: flakiness >= 45, created_at: fails.length ? fails[0].at : ts(D(EVENT_DAYS), 9), updated_at: last.at,
-        });
+        }, gTests);
       }
     }
   }
 
   // Suite runs (test execution timeline), last EVENT_DAYS days.
-  for (const team of TEAMS) {
+  for (const team of teams) {
     const engineers = engineersOf(team);
-    const e2eCase = casesByTeam.get(team.key)!.find(c => c.type === 'e2e' && c.active)!;
+    const e2eCase = G(ds, team, 'tests') === SKIP ? null : casesByTeam.get(team.key)!.find(c => c.type === 'e2e' && c.active)!;
+    const gSuites = G(ds, team, 'suites');
     const suites: Array<{ name: string; hour: number; days: number[]; dur: [number, number]; deps: string[]; caseId: string | null }> = [
       { name: 'Smoke', hour: 6, days: [0, 1, 2, 3, 4, 5, 6], dur: [180, 420], deps: [], caseId: null },
       { name: 'API contract', hour: 7, days: [1, 2, 3, 4, 5], dur: [300, 900], deps: ['Smoke'], caseId: null },
       { name: 'Regression', hour: 1, days: [1, 2, 3, 4, 5], dur: [1800, 4800], deps: ['Smoke'], caseId: null },
-      { name: `E2E ${team.areas[0]}`, hour: 9, days: [1, 3, 5], dur: [900, 2400], deps: ['Smoke', 'API contract'], caseId: e2eCase.id },
+      { name: `E2E ${team.areas[0]}`, hour: 9, days: [1, 3, 5], dur: [900, 2400], deps: ['Smoke', 'API contract'], caseId: e2eCase ? e2eCase.id : null },
     ];
     for (let t = EVENT_DAYS; t >= 1; t--) {
       const date = D(t);
@@ -795,19 +1020,19 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         const start = ts(date, s.hour, Math.floor(rnd('sm', team.key, si, date) * 50));
         const dur = status === 'blocked' || status === 'skipped' ? 0 : Math.round(lerp(s.dur[0], s.dur[1], rnd('sd', team.key, si, date)) * (1.3 - 0.4 * h));
         ds.add('test_execution_runs', {
-          id: did('ter', team.key, compact(date), si), company_id: DEMO_COMPANY_ID, team_id: team.id, test_suite: s.name, test_case_id: s.caseId,
+          id: did('ter', team.key, compact(date), si), company_id: companyId, team_id: team.id, test_suite: s.name, test_case_id: s.caseId,
           status, start_time: start, end_time: addSeconds(start, dur), duration_seconds: dur,
           assigned_to: engineers[(t + si) % engineers.length].id, dependencies: { json: s.deps },
           error_message: status === 'failed' ? `${1 + Math.floor(rnd('nf', team.key, si, date) * 6)} test(s) failed in ${s.name}` : status === 'blocked' ? `Blocked: dependency ${s.deps.join(', ')} did not pass` : status === 'skipped' ? 'Skipped: no changes since last run' : null,
           created_at: start,
-        });
+        }, gSuites);
       }
     }
   }
 
   // Daily test totals per team (weekdays, full KPI history window).
   const tteByTeam = new Map<string, Map<string, { total: number; passed: number; failed: number; skipped: number; avg: number }>>();
-  for (const team of TEAMS) {
+  for (const team of teams) {
     const byDate = new Map<string, { total: number; passed: number; failed: number; skipped: number; avg: number }>();
     for (let t = HISTORY_DAYS; t >= 1; t--) {
       const date = D(t);
@@ -826,8 +1051,8 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         id: did('tte', team.key, compact(date)), team_id: team.id, execution_date: date, total_tests: total, passed, failed, skipped, blocked,
         total_duration_seconds: totalDur, avg_duration_seconds: round(totalDur / total, 2),
         unit_tests: unit, integration_tests: integration, e2e_tests: total - unit - integration - api, api_tests: api,
-        environment: 'ci', build_number: `${team.key}-nightly-${compact(date)}`, created_at: ts(date, 23, 50),
-      });
+        environment: 'ci', build_number: `${team.code}-nightly-${compact(date)}`, created_at: ts(date, 23, 50),
+      }, G(ds, team, 'tte'));
     }
     tteByTeam.set(team.key, byDate);
   }
@@ -851,11 +1076,13 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
     'Canary health check failed: error rate above threshold, rolled back',
   ];
 
-  ds.reserve('pipeline_stages', 'pipeline_runs', 'pipeline_execution_summary', 'pipeline_stage_history', 'team_pipeline_metrics');
   interface RunAgg { durations: number[]; success: number; failed: number; cancelled: number }
   const allRuns: Array<{ team: string; si: number; date: string; status: string; dur: number }> = [];
-  const authorsOf = (team: TeamDef) => devsOf(team).map(u => `${u.first.toLowerCase()}.${u.last.toLowerCase().replace(/[^a-z]/g, '')}`);
-  for (const team of TEAMS) {
+  const authorsOf = (team: TeamCtx) => devsOf(team).map(u => `${u.first.toLowerCase()}.${u.last.toLowerCase().replace(/[^a-z]/g, '')}`);
+  for (const team of teams) {
+    const gPipe = G(ds, team, 'pipeline');
+    if (gPipe === SKIP) continue;
+    ds.reserve(gPipe, 'pipeline_stages', 'pipeline_runs', 'pipeline_execution_summary', 'pipeline_stage_history', 'team_pipeline_metrics');
     const authors = authorsOf(team);
     const stageIds = STAGES.map((_, si) => did('stage', team.key, si + 1));
     const execsPerDay = new Map<string, { total: number; ok: number; failed: number; build: number[]; test: number[]; deploy: number[]; failsByStage: number[] }>();
@@ -885,11 +1112,11 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
           const status = cancelled ? 'cancelled' : failed ? 'failed' : 'success';
           const runDur = cancelled ? Math.round(dur * rng.float()) : dur;
           ds.add('pipeline_runs', {
-            id: did('run', team.key, compact(date), e, si + 1), company_id: DEMO_COMPANY_ID, team_id: team.id, stage_id: stageIds[si],
+            id: did('run', team.key, compact(date), e, si + 1), company_id: companyId, team_id: team.id, stage_id: stageIds[si],
             status, duration_seconds: runDur, triggered_by: isMain ? (e === 0 && rng.chance(0.3) ? 'schedule' : `merge:${author}`) : `push:${author}`,
             commit_sha: sha, branch, started_at: clock, completed_at: addSeconds(clock, runDur),
             error_message: failed ? STAGE_ERRORS[si] : cancelled ? `Cancelled by ${author}` : null,
-          });
+          }, gPipe);
           allRuns.push({ team: team.key, si, date, status, dur: runDur });
           if (si === 0) day.build.push(runDur);
           if (si === 1 || si === 2 || si === 5) testSecs += runDur;
@@ -923,19 +1150,19 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         if (!a.durations.length) return;
         const total = a.durations.length;
         ds.add('pipeline_execution_summary', {
-          id: did('pes', team.key, si + 1, compact(date)), company_id: DEMO_COMPANY_ID, team_id: team.id, stage_id: stageIds[si], execution_date: date,
+          id: did('pes', team.key, si + 1, compact(date)), company_id: companyId, team_id: team.id, stage_id: stageIds[si], execution_date: date,
           total_runs: total, successful_runs: a.success, failed_runs: a.failed,
           avg_duration_seconds: Math.round(mean(a.durations)), min_duration_seconds: Math.min(...a.durations), max_duration_seconds: Math.max(...a.durations),
           total_cost: round((a.durations.reduce((s, d) => s + d, 0) / 60) * PIPELINE_COST_PER_MINUTE, 2), created_at: ts(date, 23, 55), updated_at: ts(date, 23, 55),
-        });
+        }, gPipe);
         const avg = mean(a.durations);
         ds.add('pipeline_stage_history', {
-          id: did('psh', team.key, si + 1, compact(date)), stage_id: stageIds[si], company_id: DEMO_COMPANY_ID, team_id: team.id, name: STAGES[si].name,
+          id: did('psh', team.key, si + 1, compact(date)), stage_id: stageIds[si], company_id: companyId, team_id: team.id, name: STAGES[si].name,
           duration_seconds: Math.round(avg), success_rate: a.success + a.failed ? round((a.success / (a.success + a.failed)) * 100, 2) : 100,
           cpu_usage: round(clamp(STAGES[si].cpu + (rnd('cpu', team.key, si, date) - 0.5) * 16, 5, 99), 2),
           memory_usage: round(clamp(STAGES[si].mem + (rnd('mem', team.key, si, date) - 0.5) * 14, 5, 99), 2),
           cost_per_run: round((avg / 60) * PIPELINE_COST_PER_MINUTE, 2), bottleneck_score: dayBottleneck[si] ?? 0, recorded_at: ts(date, 23, 58),
-        });
+        }, gPipe);
       });
     }
     const stageBottleneck = bottleneckScores(stageAgg.map(a => (a.durations.length ? mean(a.durations) : null)), stageAgg.map(a => (a.success + a.failed ? (a.success / (a.success + a.failed)) * 100 : null)));
@@ -943,12 +1170,12 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
       const a = stageAgg[si];
       const avg = a.durations.length ? mean(a.durations) : stageDuration(si, kpiOf(team, 1), teamHealth(team, 1));
       ds.add('pipeline_stages', {
-        id: stageIds[si], company_id: DEMO_COMPANY_ID, team_id: team.id, name: s.name, stage_order: si + 1,
+        id: stageIds[si], company_id: companyId, team_id: team.id, name: s.name, stage_order: si + 1,
         avg_duration_seconds: Math.round(avg), success_rate: a.success + a.failed ? round((a.success / (a.success + a.failed)) * 100, 2) : 100,
         cpu_usage: round(clamp(s.cpu + (rnd('scpu', team.key, si) - 0.5) * 10, 5, 99), 2), memory_usage: round(clamp(s.mem + (rnd('smem', team.key, si) - 0.5) * 10, 5, 99), 2),
         cost_per_run: round((avg / 60) * PIPELINE_COST_PER_MINUTE, 2), bottleneck_score: stageBottleneck[si] ?? 0,
         manually_edited: false, is_active: true, created_at: ts(D(400), 10), updated_at: ts(yesterday, 23, 58),
-      });
+      }, gPipe);
     });
 
     // Team pipeline metrics per day (from the runs above).
@@ -966,11 +1193,11 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         avg_deploy_time_minutes: round(d.deploy.length ? mean(d.deploy) / 60 : 0, 2),
         slowest_stage: STAGES[slowestIdx].name, most_failing_stage: maxFails > 0 ? STAGES[d.failsByStage.indexOf(maxFails)].name : null,
         created_at: ts(date, 23, 59),
-      });
+      }, gPipe);
     }
   }
   // Company-level default stages (shown for the company-wide view): aggregates over all teams.
-  {
+  if (company.isDemo) {
     const coAgg: RunAgg[] = STAGES.map(() => ({ durations: [], success: 0, failed: 0, cancelled: 0 }));
     for (const r of allRuns) {
       const a = coAgg[r.si];
@@ -983,7 +1210,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
       const avg = mean(a.durations);
       const id = did('stage', 'co', si + 1);
       ds.add('pipeline_stages', {
-        id, company_id: DEMO_COMPANY_ID, team_id: null, name: s.name, stage_order: si + 1,
+        id, company_id: companyId, team_id: null, name: s.name, stage_order: si + 1,
         avg_duration_seconds: Math.round(avg), success_rate: round((a.success / Math.max(1, a.success + a.failed)) * 100, 2),
         cpu_usage: s.cpu, memory_usage: s.mem, cost_per_run: round((avg / 60) * PIPELINE_COST_PER_MINUTE, 2), bottleneck_score: scores[si] ?? 0,
         manually_edited: false, is_active: true, created_at: ts(D(400), 10), updated_at: ts(yesterday, 23, 58),
@@ -996,7 +1223,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         const ok = runs.filter(r => r.status === 'success').length, bad = runs.filter(r => r.status === 'failed').length;
         const ravg = mean(runs.map(r => r.dur));
         ds.add('pipeline_stage_history', {
-          id: did('psh', 'co', si + 1, compact(date)), stage_id: id, company_id: DEMO_COMPANY_ID, team_id: null, name: s.name,
+          id: did('psh', 'co', si + 1, compact(date)), stage_id: id, company_id: companyId, team_id: null, name: s.name,
           duration_seconds: Math.round(ravg), success_rate: round((ok / Math.max(1, ok + bad)) * 100, 2), cpu_usage: s.cpu, memory_usage: s.mem,
           cost_per_run: round((ravg / 60) * PIPELINE_COST_PER_MINUTE, 2), bottleneck_score: scores[si] ?? 0, recorded_at: ts(date, 23, 59),
         });
@@ -1007,7 +1234,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   // --------------------------------------------------------------------------
   // Weekly team analytics (Monday..Sunday, complete weeks in the history window)
   // --------------------------------------------------------------------------
-  for (const team of TEAMS) {
+  for (const team of teams) {
     const tte = tteByTeam.get(team.key)!;
     const devs = devsOf(team);
     let lastSunday = today;
@@ -1035,6 +1262,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
       const weekDev = devs.map(u => devAverage(u.id, end, 5)).filter(Boolean) as DevDay[];
       const prs = Math.round(devs.length * (3 + 5 * team.h) * (0.85 + rnd('prs', team.key, start) * 0.3));
       const testCases = casesByTeam.get(team.key)!.filter(c => c.active).length;
+      // (test case counts come from the model even when the team keeps its own test cases)
       ds.add('team_analytics', {
         id: did('ta', team.key, compact(start)), team_id: team.id, period_start: start, period_end: end, period_type: 'weekly',
         total_test_cases: runs.length ? runs[runs.length - 1].total : 0, passed_tests: passedT, failed_tests: failedT, skipped_tests: skippedT,
@@ -1050,18 +1278,19 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         avg_pr_merge_time_hours: weekDev.length ? round(mean(weekDev.map(v => v.pr)), 2) : 0,
         avg_code_review_time_hours: weekDev.length ? round(mean(weekDev.map(v => v.review)), 2) : 0,
         total_prs_merged: prs, total_code_reviews: Math.round(prs * 1.6), created_at: ts(addDays(end, 1), 2), updated_at: ts(addDays(end, 1), 2),
-      });
+      }, G(ds, team, 'analytics'));
     }
   }
 
   // --------------------------------------------------------------------------
   // Performance metrics: each team's endpoints, daily
   // --------------------------------------------------------------------------
-  for (const team of TEAMS) {
+  for (const team of teams) {
     for (let t = PERF_DAYS; t >= 1; t--) {
       const date = D(t);
       const h = teamHealth(team, t);
       const weekdayLoad = isWeekday(date) ? 1 : 0.55;
+      const gPerf = G(ds, team, 'perf');
       team.endpoints.forEach(([path, method, base], ei) => {
         const n = (k: string) => rnd('perf', team.key, ei, k, date);
         const p50 = Math.round(base * (1 + 0.9 * (1 - h)) * (0.9 + n('p50') * 0.2));
@@ -1081,8 +1310,8 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
           first_contentful_paint_ms: Math.round(380 + 1300 * (1 - h) * (0.8 + n('fcp') * 0.4)),
           largest_contentful_paint_ms: Math.round(1050 + 3200 * (1 - h) * (0.8 + n('lcp') * 0.4)),
           time_to_interactive_ms: Math.round(1450 + 4300 * (1 - h) * (0.8 + n('tti') * 0.4)),
-          created_at: ts(date, 23, 45), company_id: DEMO_COMPANY_ID,
-        });
+          created_at: ts(date, 23, 45), company_id: companyId,
+        }, gPerf);
       });
     }
   }
@@ -1110,12 +1339,13 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   ];
   const debtItems: Array<{ team: string; severity: string; created: string; resolved: string | null; status: string }> = [];
   const cfg = { hourly: 85, ticket: 30, rpu: 42, downtime: 180, sla: 2500 };
-  for (const team of TEAMS) {
+  for (const team of teams) {
     const rng = new Rng('debt', team.key);
+    const gDebt = G(ds, team, 'debt');
     const count = 4 + Math.round(5 * (1 - team.h));
     const engineers = engineersOf(team);
     for (let i = 0; i < count; i++) {
-      const [title, category, baseSeverity, description] = DEBT[(i * 5 + TEAMS.indexOf(team) * 3) % DEBT.length];
+      const [title, category, baseSeverity, description] = DEBT[(i * 5 + teams.indexOf(team) * 3) % DEBT.length];
       const severity = rng.chance(0.25) ? rng.pick(['critical', 'high', 'medium', 'low']) : baseSeverity;
       const age = rng.int(10, 320);
       const created = D(age);
@@ -1133,7 +1363,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
       const investment = effort * cfg.hourly;
       const priority = round(clamp(25 * sevF + 55 * Math.min(1, (monthly * 12) / Math.max(investment * 4, 1)) + 20 * rng.float(), 1, 99.99), 2);
       const lead = leadOf(team);
-      debtItems.push({ team: team.key, severity, created, resolved, status });
+      if (gDebt !== SKIP) debtItems.push({ team: team.key, severity, created, resolved, status });
       ds.add('technical_debt', {
         id: did('td', team.key, String(i + 1).padStart(2, '0')), team_id: team.id, title, description, severity, category,
         impact_score: Math.round(clamp(100 * sevF * (0.6 + 0.4 * rng.float()), 1, 100)), effort_hours: effort, status,
@@ -1142,10 +1372,10 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         line_number: category === 'documentation' ? null : rng.int(12, 900),
         assigned_to: status === 'open' && rng.chance(0.4) ? null : engineers[i % engineers.length].id, created_by: lead.id,
         resolved_at: resolved ? ts(resolved, 15) : null, created_at: ts(created, 10), updated_at: ts(resolved ?? D(Math.min(age, rng.int(1, 20))), 15),
-        company_id: DEMO_COMPANY_ID, cost_of_delay: round(monthly, 2), priority_score: priority,
+        company_id: companyId, cost_of_delay: round(monthly, 2), priority_score: priority,
         affected_users: affected, support_tickets_monthly: tickets, downtime_minutes_monthly: downtime, revenue_impact_percent: revenuePct,
         sla_breaches_monthly: slaBreaches, manually_edited: false,
-      });
+      }, gDebt);
     }
   }
 
@@ -1165,7 +1395,8 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   const kpisByTeamMonth = new Map<string, Record<string, number>>();
   const companyMonth = new Map<string, { revenue: number; users: number; nps: number[]; csat: number[]; churn: number[]; adoption: number[]; tickets: number; h: number[] }>();
   const CORR_METRICS: Array<[string, string]> = [['Test Coverage', 'test_coverage'], ['Code Quality', 'code_quality_score'], ['Deployment Frequency', 'deployment_frequency'], ['MTTR', 'mttr_hours'], ['Change Failure Rate', 'change_failure_rate']];
-  for (const team of TEAMS) {
+  for (const team of teams) {
+    const gBi = G(ds, team, 'bi');
     const arpu = 18 + rnd('arpu', team.key) * 30;
     const growth = 0.006 + rnd('growth', team.key) * 0.02;
     let prevRevenue: number | null = null;
@@ -1195,28 +1426,28 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
       kSeries.push(kpis);
       qualityByTeamMonth.set(`${team.key}|${ym}`, q);
       kpisByTeamMonth.set(`${team.key}|${ym}`, kpis);
-      ds.add('business_impact_quality_metrics', { id: did('biq', team.key, ym), team_id: team.id, month_year: ym, ...q, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) });
-      ds.add('business_impact_business_kpis', { id: did('bik', team.key, ym), team_id: team.id, month_year: ym, ...kpis, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) });
+      ds.add('business_impact_quality_metrics', { id: did('biq', team.key, ym), team_id: team.id, month_year: ym, ...q, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) }, gBi);
+      ds.add('business_impact_business_kpis', { id: did('bik', team.key, ym), team_id: team.id, month_year: ym, ...kpis, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) }, gBi);
       const workingDays = [...Array(daysInMonth(ym))].filter((_, i) => isWeekday(`${ym}-${String(i + 1).padStart(2, '0')}`)).length;
       const deploysPerMonth = q.deployment_frequency * (daysInMonth(ym) / 7);
       const resolvedDebt = debtItems.filter(d => d.team === team.key && d.status === 'resolved' && d.resolved && monthOf(d.resolved) === ym).length;
       const availability = avg('system_availability');
       ds.add('business_impact_context', {
-        id: did('bix', team.key, ym), team_id: team.id, month_year: ym, team_size: membersOf(team).length, sprint_length_days: 14, working_days: workingDays,
+        id: did('bix', team.key, ym), team_id: team.id, month_year: ym, team_size: team.members.length, sprint_length_days: 14, working_days: workingDays,
         feature_release_count: Math.max(1, Math.round(deploysPerMonth * 0.35)), bug_fix_count: Math.round(deploysPerMonth * 0.4 + q.defect_density * 6),
         tech_debt_items_resolved: resolvedDebt, user_growth_rate: prevUsers ? round(((users - prevUsers) / prevUsers) * 100, 2) : round(growth * 100, 2),
         total_user_base: users, is_holiday_season: holiday, marketing_spend: round(revenue * (0.04 + rnd('mkt', team.key, ym) * 0.03), 2),
         major_incident_count: Math.round((q.change_failure_rate / 100) * deploysPerMonth * 0.25), downtime_minutes: Math.round(((100 - availability) / 100) * daysInMonth(ym) * 1440),
         notes: mi === 11 ? 'Current month (partial).' : holiday ? 'Holiday trading peak.' : null, manually_edited: false,
         created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6),
-      });
+      }, gBi);
       ds.add('business_impact_history', {
         id: did('bih', team.key, ym), team_id: team.id, month_year: ym,
         quality_score: computeQaScore({ test_coverage: q.test_coverage, defect_escape_rate: q.defect_escape_rate, change_failure_rate: q.change_failure_rate, code_quality_score: q.code_quality_score }).score ?? 0,
         revenue_impact: prevRevenue === null ? 0 : round(revenue - prevRevenue, 2), customer_satisfaction: kpis.csat_score, churn_rate: churn,
         // Shown on the Business impact configuration page, which lists entered history only.
         manually_edited: true, created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6),
-      });
+      }, gBi);
       const cm = companyMonth.get(ym) ?? { revenue: 0, users: 0, nps: [], csat: [], churn: [], adoption: [], tickets: 0, h: [] };
       cm.revenue += revenue; cm.users += users; cm.nps.push(kpis.nps_score); cm.csat.push(kpis.csat_score); cm.churn.push(churn);
       cm.adoption.push(kpis.feature_adoption_rate); cm.tickets += kpis.support_ticket_volume; cm.h.push(h);
@@ -1242,13 +1473,13 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         start_month: months[0], end_month: months[months.length - 1],
         correlation_strength: abs >= 0.7 ? 'strong' : abs >= 0.5 ? 'moderate' : abs >= 0.3 ? 'weak' : 'none',
         is_significant: qv[i] < 0.05, calculated_at: ts(yesterday, 4), created_at: ts(yesterday, 4), updated_at: ts(yesterday, 4),
-      });
+      }, gBi);
     });
     ds.add('business_impact_data_status', {
       id: did('bis', team.key), team_id: team.id, months_with_quality_data: months.length, months_with_kpi_data: months.length,
       months_with_paired_data: months.length, earliest_month: months[0], latest_month: months[months.length - 1], is_correlation_ready: true,
       missing_quality_metrics: null, missing_kpi_metrics: null, last_validated_at: ts(yesterday, 4), created_at: ts(D(365), 4), updated_at: ts(yesterday, 4),
-    });
+    }, gBi);
 
     // Per-metric impact configuration (latest month), with the metric's revenue correlation.
     const latestQ = qSeries[qSeries.length - 1], latestK = kSeries[kSeries.length - 1];
@@ -1261,24 +1492,24 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
         feature_adoption_rate: latestK.feature_adoption_rate, correlation_strength: round(r?.r ?? 0, 2),
         // The Business impact (v1) page lists configured (entered) values only.
         manually_edited: true, created_at: ts(D(60), 9), updated_at: ts(yesterday, 9),
-      });
+      }, gBi);
     }
   }
-  // Company-level monthly impact per metric.
-  for (const ym of months) {
+  // Company-level monthly impact per metric (demo company only).
+  if (company.isDemo) for (const ym of months) {
     for (const [mi, [name, field]] of CORR_METRICS.entries()) {
-      const scores = TEAMS.map(t => metricScore(field, qualityByTeamMonth.get(`${t.key}|${ym}`)![field]));
+      const scores = teams.map(t => metricScore(field, qualityByTeamMonth.get(`${t.key}|${ym}`)![field]));
       const cm = companyMonth.get(ym)!;
       ds.add('business_impact_metrics', {
-        id: did('bim', mi, ym), company_id: DEMO_COMPANY_ID, metric_name: name, quality_score: round(mean(scores), 2),
+        id: did('bim', mi, ym), company_id: companyId, metric_name: name, quality_score: round(mean(scores), 2),
         revenue_impact: round(cm.revenue * 0.01 * (mean(scores) / 100), 2), customer_satisfaction: round(mean(cm.csat), 2),
         feature_adoption_rate: round(mean(cm.adoption), 2), correlation_strength: round(0.25 + 0.5 * mean(cm.h) * (1 - mi * 0.08), 4),
         recorded_date: `${ym}-01`, created_at: ts(`${ym}-01`, 6),
       });
     }
   }
-  // Company business metrics, daily.
-  for (let t = HISTORY_DAYS - 1; t >= 0; t--) {
+  // Company business metrics, daily (demo company only).
+  if (company.isDemo) for (let t = HISTORY_DAYS - 1; t >= 0; t--) {
     const date = D(t);
     const ym = monthOf(date);
     const cm = companyMonth.get(ym);
@@ -1286,7 +1517,7 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
     const n = (k: string) => (rnd('bm', k, date) - 0.5) * 2;
     const dailyRevenue = (cm.revenue / daysInMonth(ym)) * (isWeekday(date) ? 1.12 : 0.7) * (1 + n('rev') * 0.05);
     ds.add('business_metrics', {
-      id: did('bm', compact(date)), company_id: DEMO_COMPANY_ID, metric_date: date, revenue: round(dailyRevenue, 2), mrr: round(cm.revenue, 2), arr: round(cm.revenue * 12, 2),
+      id: did('bm', compact(date)), company_id: companyId, metric_date: date, revenue: round(dailyRevenue, 2), mrr: round(cm.revenue, 2), arr: round(cm.revenue * 12, 2),
       customer_satisfaction_nps: Math.round(mean(cm.nps) + n('nps') * 2), customer_satisfaction_csat: round(mean(cm.csat) + n('csat') * 0.8, 2),
       churn_rate: round(mean(cm.churn), 2), feature_adoption_rate: round(mean(cm.adoption) + n('ad') * 0.5, 2),
       support_ticket_volume: Math.round((cm.tickets / daysInMonth(ym)) * (isWeekday(date) ? 1.15 : 0.6) * (1 + n('tix') * 0.1)),
@@ -1297,12 +1528,28 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   // --------------------------------------------------------------------------
   // Company KPI snapshots: the dashboard's company metrics, one per day
   // --------------------------------------------------------------------------
+  // Effective KPI row of a team on a day: generated, or the team's real (carried-forward) row.
+  const realDates = new Map<string, string[]>();
+  for (const team of company.teams) if (team.realKpi) realDates.set(team.key, [...team.realKpi.keys()].sort());
+  const effectiveKpi = (team: TeamCtx, t: number): Record<string, number | null> | null => {
+    if (!team.groups || team.groups.has('kpi')) return kpiOf(team, t);
+    const dates = realDates.get(team.key) ?? [];
+    const date = D(t);
+    let found: string | null = null;
+    for (const d of dates) if (d <= date) found = d;
+    return found ? team.realKpi!.get(found)! : null;
+  };
+  const meanOf = (xs: Array<number | null | undefined>) => mean(xs.filter((x): x is number => typeof x === 'number' && Number.isFinite(x)));
+  const devTeams = teams.filter(team => !team.groups || team.groups.has('dev'));
+  const companyGuard = company.isDemo ? undefined : ds.guard(`company:${companyId}`, `EXISTS (SELECT 1 FROM companies WHERE id = ${literal(companyId)})`);
   for (let t = HISTORY_DAYS; t >= 0; t--) {
     const date = D(t);
-    const rows = TEAMS.map(team => kpiOf(team, t));
-    const qa = rows.map(k => computeQaScore(k).score).filter((s): s is number => s !== null);
+    const rows = company.teams.map(team => effectiveKpi(team, t)).filter((r): r is Record<string, number | null> => r !== null);
+    if (!rows.length) continue;
+    const qa = rows.map(k => computeQaScore(k).score).filter((x): x is number => x !== null);
     const dora = rows.map(k => {
       const f = k.deployment_frequency_per_week, l = k.lead_time_days, c = k.change_failure_rate, m = k.mttr_hours;
+      if (f == null || l == null || c == null || m == null) return null;
       if (f >= 7 && l < 1 && c < 5 && m < 1) return 100;
       if (f >= 1 && l < 7 && c < 10 && m < 24) return 80;
       if (f >= 0.25 && l < 30 && c < 15 && m < 168) return 60;
@@ -1311,34 +1558,36 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
     const windowRuns = allRuns.filter(r => r.date <= date && r.date > addDays(date, -30) && r.status !== 'cancelled');
     const pipeline = windowRuns.length
       ? (windowRuns.filter(r => r.status === 'success').length / windowRuns.length) * 100
-      : mean(TEAMS.map(team => mean(STAGES.map((_, si) => stageSuccess(si, teamHealth(team, t)))))) * 100;
-    const openWeight = debtItems
+      : mean(teams.map(team => mean(STAGES.map((_, si) => stageSuccess(si, teamHealth(team, t)))))) * 100;
+    const openWeight = [...debtItems, ...company.realDebt]
       .filter(d => d.created <= date && !(d.resolved && d.resolved <= date))
-      .reduce((s, d) => s + TECH_DEBT_SEVERITY_WEIGHTS[d.severity as keyof typeof TECH_DEBT_SEVERITY_WEIGHTS], 0);
-    const debtScore = Math.max(0, 100 - Math.min(100, openWeight / TEAMS.length));
+      .reduce((s, d) => s + (TECH_DEBT_SEVERITY_WEIGHTS[d.severity as keyof typeof TECH_DEBT_SEVERITY_WEIGHTS] ?? 0), 0);
+    const debtScore = Math.max(0, 100 - Math.min(100, openWeight / Math.max(1, company.teamCount)));
     let wellnessDate = date;
     while (!isWeekday(wellnessDate)) wellnessDate = addDays(wellnessDate, -1);
-    const wellness = mean(TEAMS.flatMap(team => devsOf(team).map(u => {
+    const wellnessValues = [...devTeams.flatMap(team => devsOf(team).map(u => {
       const v = devDays.get(u.id)!.get(wellnessDate) ?? devAverage(u.id, wellnessDate, 1);
       return v ? workloadBalance(v) : 0;
-    })));
-    const delivery = mean(dora);
+    })), ...company.extraHappiness];
+    const wellness = wellnessValues.length ? mean(wellnessValues) : 50;
+    const delivery = meanOf(dora);
     const health = delivery * 0.35 + pipeline * 0.25 + debtScore * 0.2 + wellness * 0.2;
     ds.add('company_kpi_snapshots', {
-      company_id: DEMO_COMPANY_ID, snapshot_date: date,
+      id: demoIntId(companyId, date), company_id: companyId, snapshot_date: date,
       engineering_health_score: Math.round(health), delivery_performance_score: Math.round(delivery), developer_wellness_index: Math.round(wellness),
-      tech_debt_status_score: round(debtScore, 1), pipeline_health_score: round(pipeline, 1), avg_qa_score: Math.round(mean(qa)),
-      avg_test_coverage: round(mean(rows.map(k => k.test_coverage)), 1), avg_defect_escape_rate: round(mean(rows.map(k => k.defect_escape_rate)), 1),
-      avg_flakiness_rate: round(mean(rows.map(k => k.test_flakiness_rate)), 1), automation_coverage: round(mean(rows.map(k => k.automation_coverage)), 1),
+      tech_debt_status_score: round(debtScore, 1), pipeline_health_score: round(pipeline, 1), avg_qa_score: Math.round(meanOf(qa)),
+      avg_test_coverage: round(meanOf(rows.map(k => k.test_coverage)), 1), avg_defect_escape_rate: round(meanOf(rows.map(k => k.defect_escape_rate)), 1),
+      avg_flakiness_rate: round(meanOf(rows.map(k => k.test_flakiness_rate)), 1), automation_coverage: round(meanOf(rows.map(k => k.automation_coverage)), 1),
       created_at: ts(date, 0, 10),
-    });
+    }, companyGuard);
   }
 
-  // One seeder run record (fixed id: inserted once, never duplicated).
+  // One seeder run record per company (fixed id: inserted once, never duplicated).
   const total = ds.tables().reduce((s, tbl) => s + ds.count(tbl), 0);
-  ds.add('seeder_runs', { id: 'demo-seeder-run', seeder_name: 'demo-seed', company_id: DEMO_COMPANY_ID, last_run_at: ts(today, 0, 1), records_affected: total, status: 'success', error_message: null });
-
-  return ds;
+  ds.add('seeder_runs', {
+    id: company.isDemo ? 'demo-seeder-run' : did('fill-run', companyId), seeder_name: company.isDemo ? 'demo-seed' : 'demo-fill-existing',
+    company_id: companyId, last_run_at: ts(today, 0, 1), records_affected: total, status: 'success', error_message: null,
+  }, companyGuard);
 }
 
 // ============================================================================
@@ -1444,7 +1693,11 @@ function benjaminiHochberg(p: number[]): number[] {
 // ============================================================================
 
 const D_ = `'${DEMO_PREFIX}%'`;
-/** Statements that delete every demo row, children before parents. */
+/**
+ * Statements that delete every demo row, children before parents: ids starting with 'demo-'
+ * (including rows added to existing teams by --fill-existing), rows of the demo company, and
+ * integer ids >= DEMO_INT_ID_MIN in the identity-keyed snapshot tables.
+ */
 export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
   { table: 'team_members', sql: `DELETE FROM team_members WHERE user_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'test_case_tags', sql: `DELETE FROM test_case_tags WHERE id LIKE ${D_} OR test_case_id IN (SELECT id FROM test_cases WHERE team_id LIKE ${D_})` },
@@ -1461,7 +1714,7 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
   { table: 'pipeline_config', sql: `DELETE FROM pipeline_config WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'performance_metrics', sql: `DELETE FROM performance_metrics WHERE id LIKE ${D_} OR team_id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'technical_debt', sql: `DELETE FROM technical_debt WHERE id LIKE ${D_} OR team_id LIKE ${D_}` },
-  { table: 'developer_productivity_snapshots', sql: `DELETE FROM developer_productivity_snapshots WHERE developer_id LIKE ${D_}` },
+  { table: 'developer_productivity_snapshots', sql: `DELETE FROM developer_productivity_snapshots WHERE developer_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN}` },
   { table: 'developer_metrics', sql: `DELETE FROM developer_metrics WHERE id LIKE ${D_} OR team_id LIKE ${D_} OR developer_id LIKE ${D_}` },
   { table: 'kpi_snapshots', sql: `DELETE FROM kpi_snapshots WHERE id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'sprint_velocity', sql: `DELETE FROM sprint_velocity WHERE id LIKE ${D_} OR team_id LIKE ${D_}` },
@@ -1477,7 +1730,7 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
   { table: 'business_impact_config', sql: `DELETE FROM business_impact_config WHERE id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'business_impact_metrics', sql: `DELETE FROM business_impact_metrics WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'business_metrics', sql: `DELETE FROM business_metrics WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
-  { table: 'company_kpi_snapshots', sql: `DELETE FROM company_kpi_snapshots WHERE company_id LIKE ${D_}` },
+  { table: 'company_kpi_snapshots', sql: `DELETE FROM company_kpi_snapshots WHERE company_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN}` },
   { table: 'configs', sql: `DELETE FROM configs WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'api_keys', sql: `DELETE FROM api_keys WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'seeder_runs', sql: `DELETE FROM seeder_runs WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
@@ -1503,8 +1756,8 @@ export const ALL_TABLES = [
 /** SQL condition selecting the demo rows of a table (for counts). */
 export function demoRowCondition(table: string): string {
   switch (table) {
-    case 'company_kpi_snapshots': return `company_id LIKE ${D_}`;
-    case 'developer_productivity_snapshots': return `developer_id LIKE ${D_}`;
+    case 'company_kpi_snapshots': return `(company_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN})`;
+    case 'developer_productivity_snapshots': return `(developer_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN})`;
     case 'team_members': return `user_id LIKE ${D_}`;
     default: return `id LIKE ${D_}`;
   }
