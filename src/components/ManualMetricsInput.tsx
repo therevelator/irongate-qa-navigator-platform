@@ -30,6 +30,8 @@ import {
   toNum,
 } from '../../server/lib/metricFormulas';
 import { useShowFormulas } from '../hooks/useShowFormulas';
+import MetricInfoTrigger from './MetricInfoTrigger';
+import type { MetricCatalogKey } from '../data/metricCatalog';
 import { Code as Col, FormulaNote, FormulaSwitch, describeFieldSource } from './FormulaNote';
 import type { FieldSource, FormulaNoteRow } from './FormulaNote';
 
@@ -1703,7 +1705,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     const value = existingMetrics[dbField];
                     if (value === null || value === undefined) return null;
                     
-                    return (
+                    const tileColumn = METRIC_COLUMN[metric.id] as MetricCatalogKey | undefined;
+                    const tile = (
                       <div 
                         key={metric.id} 
                         onClick={() => scrollToMetric(metric.id)}
@@ -1716,6 +1719,21 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         {showFormulas && <FormulaNote stacked className="mt-2" rows={kpiTileNoteRows(metric)} />}
                       </div>
                     );
+                    return tileColumn && showFormulas ? (
+                      <MetricInfoTrigger
+                        key={metric.id}
+                        enabled
+                        variant="chip"
+                        metricKey={tileColumn}
+                        currentValue={`${typeof value === 'number' ? value.toFixed(2) : value}${metric.unit}`}
+                        sources={fieldSources}
+                        snapshotDate={snapshotDate}
+                        teamId={selectedTeamId || undefined}
+                        context={teams.find(t => t.id === selectedTeamId)?.name}
+                      >
+                        {tile}
+                      </MetricInfoTrigger>
+                    ) : tile;
                   }).filter(Boolean)}
                 </div>
                 

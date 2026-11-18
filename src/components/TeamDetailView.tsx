@@ -20,6 +20,11 @@ import BatteryIndicator from './BatteryIndicator';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, cx, toneText } from './ui';
 import type { Tone } from './ui';
+import MetricInfoTrigger from './MetricInfoTrigger';
+import { FormulaSwitch } from './FormulaNote';
+import { useShowFormulas } from '../hooks/useShowFormulas';
+import { SIZING_ACCURACY_TOLERANCE } from '../data/metricCatalog';
+import type { MetricCatalogKey } from '../data/metricCatalog';
 
 // Team as returned by GET /api/teams (NUMERIC columns may arrive as strings; missing values are null)
 interface TeamWithKPI extends Omit<Team, 'qaScore'> {
@@ -318,6 +323,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const { user } = useAuth();
   const ct = chartTheme(isDark);
 
+  // "Show formulas & data sources" (super admin demo aid; same preference as Manual metrics).
+  const [showFormulasPref, setShowFormulas] = useShowFormulas();
+  const canShowFormulas = user?.role === 'super_admin';
+  const showFormulas = canShowFormulas && showFormulasPref;
+
   // Opening a team keeps the same app view, so start the detail page at the top.
   useEffect(() => {
     document.getElementById('main-scroll')?.scrollTo({ top: 0 });
@@ -521,6 +531,29 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
   const visibleMembers = members.filter(m => (canViewDeveloperInsights ? true : m.id === String(user?.id)));
   const showMembers = canViewDeveloperInsights || canViewOwnRow;
 
+  /** Wraps a container so it opens its catalog entry while the formulas switch is on. */
+  const info = (
+    metricKey: MetricCatalogKey,
+    child: React.ReactNode,
+    opts: { value?: React.ReactNode; variant?: 'card' | 'section'; context?: string; key?: React.Key } = {},
+  ) => (
+    <MetricInfoTrigger
+      key={opts.key}
+      enabled={showFormulas}
+      metricKey={metricKey}
+      currentValue={opts.value}
+      sources={team.kpiFieldSources}
+      snapshotDate={snapshotDate}
+      teamId={String(team.id)}
+      context={opts.context ?? team.name}
+      variant={opts.variant}
+    >
+      {child}
+    </MetricInfoTrigger>
+  );
+  const shown = (v: string | number | null | undefined, unit?: string) =>
+    v == null || v === '—' ? '— (not recorded)' : `${v}${unit ? (unit.startsWith('%') || unit.startsWith('/') ? unit : ` ${unit}`) : ''}`;
+
   const metricsFor = (dev: DeveloperAISuggestion): DevMetricRow | undefined =>
     devAISuggestions?.metrics?.map(normalizeMetric).find(m =>
       (dev.developerId && m.developerId && String(m.developerId) === String(dev.developerId)) || m.name === dev.name,
@@ -545,11 +578,17 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               {asOf ? <>KPI snapshot as of {asOf}</> : 'No KPI snapshot recorded'}
             </>
           }
+          actions={canShowFormulas ? <FormulaSwitch checked={showFormulasPref} onChange={setShowFormulas} /> : undefined}
         />
+        {showFormulas && (
+          <p className="-mt-3 mb-4 text-xs text-slate-500 dark:text-slate-400" data-testid="formula-mode-hint">
+            Select any tile, chart or section to see how it is calculated and where its data comes from.
+          </p>
+        )}
 
         {/* Headline scores */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" data-testid="team-kpis">
-          <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+          {info('qa_score', <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
             <BatteryIndicator percentage={qaScore} size="lg" good={qaThreshold?.good} warn={qaThreshold?.warning} label="QA score" showValue={false} />
             <div className="min-w-0">
               <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
@@ -566,42 +605,41 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 )}
               </div>
             </div>
-          </div>
-          <StatTile
+          </div>, { value: shown(qaScore == null ? null : Math.round(qaScore), '/100') })}
+          {info('technical_debt_score', <StatTile
             label="Technical debt score"
             value={debt == null ? '—' : Math.round(debt)}
             unit={debt == null ? undefined : '/100'}
             tone={statusTone(debtStatus)}
             caption={debt == null ? 'No data recorded' : `Lower is better · ${STATUS_BADGE[debtStatus].label.toLowerCase()}`}
-          />
-          <StatTile
+          />, { value: shown(debt == null ? null : Math.round(debt), '/100') })}
+          {info('sizing_accuracy', <StatTile
             label="Task sizing accuracy"
             value={sizing == null ? '—' : sizing.toFixed(2)}
             unit={sizing == null ? undefined : '× estimate'}
-            tone={sizing == null ? 'neutral' : Math.abs(sizing - 1) <= 0.15 ? 'good' : Math.abs(sizing - 1) <= 0.3 ? 'warn' : 'bad'}
-            caption={sizing == null ? 'No data recorded' : sizing < 0.85 ? 'Overestimated (actual < estimate)' : sizing > 1.15 ? 'Underestimated (actual > estimate)' : 'Within ±15% of estimate'}
-          />
+            tone={sizing == null ? 'neutral' : Math.abs(sizing - 1) <= SIZING_ACCURACY_TOLERANCE.good ? 'good' : Math.abs(sizing - 1) <= SIZING_ACCURACY_TOLERANCE.warning ? 'warn' : 'bad'}
+            caption={sizing == null ? 'No data recorded' : sizing < 1 - SIZING_ACCURACY_TOLERANCE.good ? 'Overestimated (actual < estimate)' : sizing > 1 + SIZING_ACCURACY_TOLERANCE.good ? 'Underestimated (actual > estimate)' : `Within ±${Math.round(SIZING_ACCURACY_TOLERANCE.good * 100)}% of estimate`}
+          />, { value: shown(sizing == null ? null : sizing.toFixed(2), '× estimate') })}
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
           {headline.map(h => {
             const k = kpiById(h.key);
-            return (
+            return info(k.historyKey as MetricCatalogKey, (
               <StatTile
-                key={h.key}
                 label={h.label}
                 value={k.value == null ? '—' : fmt(k.value, k.key === 'defectDensity' ? 2 : 1)}
                 unit={k.value == null ? undefined : k.unit}
                 tone={statusTone(k.status)}
                 caption={k.value == null ? 'No data recorded' : STATUS_BADGE[k.status].label}
               />
-            );
+            ), { key: h.key, value: shown(k.value == null ? null : fmt(k.value, k.key === 'defectDensity' ? 2 : 1), k.unit) });
           })}
         </div>
       </div>
 
       {/* Team members */}
-      {showMembers && (
+      {showMembers && info('team_members', (
         <Card padded={false}>
           <div className="flex items-start justify-between gap-4 p-5 pb-0">
             <CardHeader
@@ -671,7 +709,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             </div>
           )}
         </Card>
-      )}
+      ), { variant: 'section', value: membersLoading ? undefined : `${visibleMembers.length} ${visibleMembers.length === 1 ? 'member' : 'members'}` })}
 
       {/* KPI categories */}
       {categories.map(category => (
@@ -682,8 +720,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
               const history = kpiHistory[k.historyKey] || [];
               const change = describeChange(history, k.lowerIsBetter, !!k.threshold);
               const target = thresholdText(k.threshold, k.unit);
-              return (
-                <Card key={k.id}>
+              return info(k.historyKey as MetricCatalogKey, (
+                <Card>
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h4 className="text-sm font-medium text-slate-900 dark:text-white">{k.name}</h4>
@@ -733,14 +771,14 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                   )}
                   {change && target && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{target}</p>}
                 </Card>
-              );
+              ), { key: k.id, value: shown(k.value == null ? null : fmt(k.value, DIGITS[k.key] ?? 1), k.unit) });
             })}
           </div>
         </section>
       ))}
 
       {/* Team recommendations */}
-      {canViewDeveloperInsights && (
+      {canViewDeveloperInsights && info('team_recommendations', (
         <Card>
           <div data-testid="ai-insights-header">
             <CardHeader
@@ -783,10 +821,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
             </div>
           )}
         </Card>
-      )}
+      ), {
+        variant: 'section',
+        value: aiSuggestions && aiSuggestions.aiEnabled !== false
+          ? `${aiSuggestions.source === 'groq' ? 'AI' : 'Rule-based'} · ${aiSuggestions.strongpoints?.length ?? 0} strengths, ${aiSuggestions.areasOfImprovement?.length ?? 0} areas to improve, ${aiSuggestions.actionPlan?.length ?? 0} actions`
+          : undefined,
+      })}
 
       {/* Developer recommendations */}
-      {canViewDeveloperInsights && (
+      {canViewDeveloperInsights && info('developer_recommendations', (
         <Card>
           <CardHeader
             title="Developer recommendations"
@@ -814,8 +857,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 {devAISuggestions.developers.map((dev, idx) => {
                   const meta = developerStatusMeta(dev.status);
                   const m = metricsFor(dev);
-                  return (
-                    <div key={`${dev.name}-${idx}`} className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
+                  return info('developer_recommendations', (
+                    <div className="rounded-lg border border-slate-200 p-4 dark:border-slate-800">
                       <div className="mb-3 flex items-center justify-between gap-2">
                         <h4 className="text-sm font-semibold text-slate-900 dark:text-white">{dev.name}</h4>
                         <Badge tone={meta.tone}>{meta.label}</Badge>
@@ -864,13 +907,16 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                         </div>
                       )}
                     </div>
-                  );
+                  ), { key: `${dev.name}-${idx}`, context: dev.name, value: meta.label });
                 })}
               </div>
             </>
           )}
         </Card>
-      )}
+      ), {
+        variant: 'section',
+        value: devAISuggestions?.developers?.length ? `${devAISuggestions.developers.length} developers · ${devAISuggestions.source === 'groq' ? 'AI' : 'rule-based'}` : undefined,
+      })}
     </Page>
   );
 };

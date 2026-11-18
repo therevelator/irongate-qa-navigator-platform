@@ -72,8 +72,10 @@ export interface FieldSource {
 
 export class KpiValidationError extends Error {
   status = 400;
-  constructor(public errors: string[]) {
+  errors: string[];
+  constructor(errors: string[]) {
     super(errors.join('; '));
+    this.errors = errors;
   }
 }
 

@@ -144,13 +144,19 @@ export const calculateDDPS = (d: DeveloperInputs) => {
   };
 };
 
+/** DDPS bands on the 0–100 scale, highest first (lower bound inclusive). */
+export const DDPS_BANDS: ReadonlyArray<{ min: number; label: string; tone: 'good' | 'warn' | 'bad' }> = [
+  { min: 80, label: 'Exceptional', tone: 'good' },
+  { min: 60, label: 'High', tone: 'good' },
+  { min: 40, label: 'Moderate', tone: 'warn' },
+  { min: -Infinity, label: 'Low', tone: 'bad' },
+];
+
 /** DDPS band labels on the 0–100 scale. */
 export const ddpsBand = (score: number | null | undefined): { label: string; tone: 'good' | 'warn' | 'bad' | 'neutral' } => {
   if (score == null || Number.isNaN(score)) return { label: 'No data', tone: 'neutral' };
-  if (score >= 80) return { label: 'Exceptional', tone: 'good' };
-  if (score >= 60) return { label: 'High', tone: 'good' };
-  if (score >= 40) return { label: 'Moderate', tone: 'warn' };
-  return { label: 'Low', tone: 'bad' };
+  const band = DDPS_BANDS.find((b) => score >= b.min) ?? DDPS_BANDS[DDPS_BANDS.length - 1];
+  return { label: band.label, tone: band.tone };
 };
 
 export type BurnoutRisk = BurnoutRiskLevel;
