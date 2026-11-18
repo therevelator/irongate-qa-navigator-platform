@@ -151,10 +151,18 @@ const userState = (u: UserSnapshot) => ({
   email: u.email, first_name: u.first_name, last_name: u.last_name,
 });
 
+/** Is this entry an undoable kind, with the recorded state an undo needs? */
+export function isReversible(entry: Pick<AuditEntry, 'action' | 'undo_of' | 'before' | 'after'>): boolean {
+  const kind = REVERSIBLE_ACTIONS[entry.action];
+  if (!kind || entry.undo_of) return false;
+  if (kind === 'users') return !!entry.before?.users && !!entry.after?.users && Object.keys(entry.after.users).length > 0;
+  return !!entry.before && !!entry.after;
+}
+
 /** Does the actor have the right to undo this entry (independent of conflicts)? */
 export async function canUndoEntry(actor: PolicyActor, entry: AuditEntry, exec: Exec = execOn()): Promise<{ ok: boolean; reason?: string }> {
   const kind = REVERSIBLE_ACTIONS[entry.action];
-  if (!kind || entry.undo_of) return { ok: false, reason: 'This change cannot be undone.' };
+  if (!kind || !isReversible(entry)) return { ok: false, reason: 'This change cannot be undone.' };
   if (!canViewAuditEntry(actor, entry)) return { ok: false, reason: 'This change is outside your scope.' };
   if (isCompanyAdmin(actor)) {
     if (kind === 'users' && entry.before?.users?.[actor.id]) return { ok: false, reason: 'You cannot undo a change to your own access.' };

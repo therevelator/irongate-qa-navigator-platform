@@ -10,6 +10,10 @@ import request, { Response } from 'supertest';
  *   department B: team B1 (engineer B)
  *   another company: one team (foreign)
  *
+ * MATRIX-009.. extend it to several assignments per user (role_assignments): a manager of two
+ * departments sees both, a lead of two teams sees both, and revoking an assignment removes the
+ * access on the very next request.
+ *
  * Runs against a live backend at API_URL; skips cleanly when none is running.
  */
 
@@ -33,6 +37,7 @@ const get = (path: string, cookie: string) => request(API_URL).get(path).set('Co
 const post = (path: string, cookie: string, body: object = {}) => request(API_URL).post(path).set('Cookie', cookie).send(body);
 const put = (path: string, cookie: string, body: object = {}) => request(API_URL).put(path).set('Cookie', cookie).send(body);
 const patch = (path: string, cookie: string, body: object = {}) => request(API_URL).patch(path).set('Cookie', cookie).send(body);
+const del = (path: string, cookie: string) => request(API_URL).delete(path).set('Cookie', cookie);
 
 export const ROLES = ['admin', 'manager', 'lead', 'engineer', 'viewer'] as const;
 type Who = typeof ROLES[number] | 'engineerB' | 'foreign';
@@ -277,5 +282,142 @@ describe('Role matrix (regression)', () => {
     expect((await patch(`/api/teams/${T.A1}/ai-toggle`, c.foreign, { enabled: true })).status).toBe(404);
     const users = (await get('/api/admin/users', c.foreign)).body as any[];
     expect(users.some((u) => u.id === id.engineer)).toBe(false);
+  });
+
+  /* ---------------------------------------------------------------------------------------
+   * Several assignments per user
+   * ------------------------------------------------------------------------------------- */
+
+  const scopeIds = async (who: string) => new Set(((await get('/api/analytics/scope', c[who])).body.teams as any[]).map((t) => t.id));
+  const grant = (who: string, userKey: string, body: object) => post(`/api/admin/users/${id[userKey]}/assignments`, c[who], body);
+  const assignmentId = async (userKey: string, role: string, scopeId: string) =>
+    ((await get(`/api/admin/users/${id[userKey]}/assignments`, c.admin)).body.assignments as any[])
+      .find((a) => a.role === role && a.scope_id === scopeId)?.id as string | undefined;
+
+  it('MATRIX-009: a QA manager of two departments sees and manages both; revoking one removes it on the next request', async () => {
+    if (skip()) return;
+    const add = await grant('admin', 'manager', { role: 'qa_manager', scopeId: D.B });
+    expect(add.status).toBe(201);
+    const ids = await scopeIds('manager');
+    expect([T.A1, T.A2, T.B1].every((t) => ids.has(t))).toBe(true);
+    expect((await get('/api/analytics/scope', c.manager)).body.departments.map((d: any) => d.id)).toEqual(expect.arrayContaining([D.A, D.B]));
+    expect((await get(`/api/analytics/flaky-tests?teamId=${T.B1}`, c.manager)).status).toBe(200);
+    expect((await patch(`/api/teams/${T.B1}/ai-toggle`, c.manager, { enabled: false })).status).toBe(200);
+    expect((await put(`/api/admin/users/${id.engineerB}`, c.manager, { firstName: 'Matrix' })).status).toBe(200);
+    const users = ((await get('/api/admin/users', c.manager)).body as any[]).map((u) => u.id);
+    expect(users).toEqual(expect.arrayContaining([id.engineerB, id.engineer]));
+    expect((await get(`/api/metrics/developer/${id.peer}`, c.manager)).status).toBe(200);
+
+    const aid = await assignmentId('manager', 'qa_manager', D.B);
+    expect(aid).toBeTruthy();
+    expect((await del(`/api/admin/users/${id.manager}/assignments/${aid}`, c.admin)).status).toBe(200);
+    // Same session, next request: department B is gone, department A stays.
+    expect((await get(`/api/analytics/flaky-tests?teamId=${T.B1}`, c.manager)).status).toBe(403);
+    expect((await patch(`/api/teams/${T.B1}/ai-toggle`, c.manager, { enabled: false })).status).toBe(403);
+    expect((await put(`/api/admin/users/${id.engineerB}`, c.manager, { firstName: 'Matrix' })).status).toBe(403);
+    expect((await get(`/api/analytics/flaky-tests?teamId=${T.A2}`, c.manager)).status).toBe(200);
+    const after = await scopeIds('manager');
+    expect(after.has(T.B1)).toBe(false);
+    expect(after.has(T.A1)).toBe(true);
+  });
+
+  it('MATRIX-010: a team lead of two teams sees and writes both; revoking one removes it on the next request', async () => {
+    if (skip()) return;
+    // The lead of A1 also leads A2 (A2 has no lead).
+    const add = await grant('admin', 'lead', { role: 'team_lead', scopeId: T.A2 });
+    expect(add.status).toBe(201);
+    const ids = await scopeIds('lead');
+    expect(ids.has(T.A1) && ids.has(T.A2) && !ids.has(T.B1)).toBe(true);
+    const scope = (await get('/api/analytics/scope', c.lead)).body;
+    expect(scope.level).toBe('team');
+    for (const t of [T.A1, T.A2]) {
+      expect((await get(`/api/analytics/flaky-tests?teamId=${t}`, c.lead)).status).toBe(200);
+      expect((await patch(`/api/teams/${t}/ai-toggle`, c.lead, { enabled: false })).status).toBe(200);
+      expect((await get(`/api/analytics/developer-metrics?teamId=${t}`, c.lead)).body.individualScope).toBe('team');
+    }
+    expect((await get(`/api/analytics/flaky-tests?teamId=${T.B1}`, c.lead)).status).toBe(403);
+    // The team lists show the lead on both teams (one source: the team_lead assignment).
+    const detail = (await get(`/api/admin/departments/${D.A}/teams`, c.admin)).body.teams as any[];
+    expect(detail.filter((t) => [T.A1, T.A2].includes(t.id)).map((t) => t.team_lead_id)).toEqual([id.lead, id.lead]);
+
+    const aid = await assignmentId('lead', 'team_lead', T.A2);
+    expect((await del(`/api/admin/users/${id.lead}/assignments/${aid}`, c.admin)).status).toBe(200);
+    expect((await get(`/api/analytics/flaky-tests?teamId=${T.A2}`, c.lead)).status).toBe(403);
+    expect((await patch(`/api/teams/${T.A2}/ai-toggle`, c.lead, { enabled: false })).status).toBe(403);
+    expect((await get(`/api/analytics/flaky-tests?teamId=${T.A1}`, c.lead)).status).toBe(200);
+    const after = (await get(`/api/admin/departments/${D.A}/teams`, c.admin)).body.teams as any[];
+    expect(after.find((t) => t.id === T.A2).team_lead_id).toBeNull();
+  });
+
+  it('MATRIX-011: a member of two teams sees both teams, but only their own developer row', async () => {
+    if (skip()) return;
+    expect((await grant('admin', 'engineer', { role: 'qa_engineer', scopeId: T.B1 })).status).toBe(201);
+    const ids = await scopeIds('engineer');
+    expect(ids.has(T.A1) && ids.has(T.B1)).toBe(true);
+    const dev = await get(`/api/analytics/developer-metrics?teamId=${T.B1}`, c.engineer);
+    expect(dev.status).toBe(200);
+    expect(dev.body.individualScope).toBe('self');
+    expect((await patch(`/api/teams/${T.B1}/ai-toggle`, c.engineer, { enabled: false })).status).toBe(403);
+    const aid = await assignmentId('engineer', 'qa_engineer', T.B1);
+    expect((await del(`/api/admin/users/${id.engineer}/assignments/${aid}`, c.admin)).status).toBe(200);
+    expect((await get(`/api/analytics/flaky-tests?teamId=${T.B1}`, c.engineer)).status).toBe(403);
+  });
+
+  it('MATRIX-012: assignment endpoints: who may give and remove what', async () => {
+    if (skip()) return;
+    const errors: string[] = [];
+    const expectStatus = async (label: string, res: Promise<Response>, expected: number) => {
+      const r = await res;
+      if (r.status !== expected) errors.push(`${label} -> ${r.status} (${JSON.stringify(r.body).slice(0, 100)}), expected ${expected}`);
+    };
+    // Not authenticated
+    await expectStatus('anonymous', request(API_URL).post(`/api/admin/users/${id.viewer}/assignments`).send({ role: 'viewer', scopeId: T.A2 }), 401);
+    // Engineers and viewers give nothing
+    await expectStatus('engineer -> viewer on A1', grant('engineer', 'viewer', { role: 'viewer', scopeId: T.A1 }), 403);
+    await expectStatus('viewer -> peer on A1', grant('viewer', 'peer', { role: 'qa_engineer', scopeId: T.A2 }), 403);
+    // A lead: members of their own team only, never a lead or another team
+    await expectStatus('lead -> viewer on B1', grant('lead', 'viewer', { role: 'viewer', scopeId: T.B1 }), 403);
+    await expectStatus('lead -> team_lead on A1', grant('lead', 'peer', { role: 'team_lead', scopeId: T.A1 }), 403);
+    await expectStatus('lead -> peer member of A1 as viewer', grant('lead', 'peer', { role: 'viewer', scopeId: T.A1 }), 201);
+    await expectStatus('lead -> peer back to qa_engineer', grant('lead', 'peer', { role: 'qa_engineer', scopeId: T.A1 }), 201);
+    // A manager: team roles in their department; never a manager or super admin, never outside
+    await expectStatus('manager -> qa_manager of A', grant('manager', 'engineer', { role: 'qa_manager', scopeId: D.A }), 403);
+    await expectStatus('manager -> super_admin', grant('manager', 'engineer', { role: 'super_admin' }), 403);
+    await expectStatus('manager -> member of B1', grant('manager', 'engineer', { role: 'qa_engineer', scopeId: T.B1 }), 403);
+    await expectStatus('manager -> viewer member of A2', grant('manager', 'viewer', { role: 'viewer', scopeId: T.A2 }), 201);
+    // Nobody changes their own assignments; nobody changes someone of their rank or above
+    await expectStatus('manager -> self', grant('manager', 'manager', { role: 'qa_engineer', scopeId: T.A2 }), 403);
+    await expectStatus('lead -> manager', grant('lead', 'manager', { role: 'viewer', scopeId: T.A1 }), 403);
+    // One lead per team: a second lead is refused unless the lead is replaced
+    await expectStatus('admin -> second lead of A1', grant('admin', 'engineer', { role: 'team_lead', scopeId: T.A1 }), 409);
+    // Other company, unknown scope, inactive company scope
+    await expectStatus('foreign -> our user', post(`/api/admin/users/${id.viewer}/assignments`, c.foreign, { role: 'viewer', scopeId: T.F }), 404);
+    await expectStatus('admin -> foreign team', grant('admin', 'viewer', { role: 'viewer', scopeId: T.F }), 400);
+    await expectStatus('admin -> bad role', grant('admin', 'viewer', { role: 'owner', scopeId: T.A1 }), 400);
+    // Removing: the same rules
+    const viewerA2 = await assignmentId('viewer', 'viewer', T.A2);
+    await expectStatus('lead removes viewer on A2', del(`/api/admin/users/${id.viewer}/assignments/${viewerA2}`, c.lead), 403);
+    await expectStatus('engineer removes viewer on A2', del(`/api/admin/users/${id.viewer}/assignments/${viewerA2}`, c.engineer), 403);
+    await expectStatus('manager removes viewer on A2', del(`/api/admin/users/${id.viewer}/assignments/${viewerA2}`, c.manager), 200);
+    await expectStatus('remove twice', del(`/api/admin/users/${id.viewer}/assignments/${viewerA2}`, c.manager), 404);
+    expect(errors).toEqual([]);
+  });
+
+  it('MATRIX-013: replacing a team lead keeps the previous lead on the team as a member', async () => {
+    if (skip()) return;
+    const res = await grant('admin', 'engineer', { role: 'team_lead', scopeId: T.A1, replaceLead: true });
+    expect(res.status).toBe(201);
+    const detail = (await get(`/api/admin/departments/${D.A}/teams`, c.admin)).body.teams as any[];
+    expect(detail.find((t) => t.id === T.A1).team_lead_id).toBe(id.engineer);
+    const leadRow = ((await get('/api/admin/users', c.admin)).body as any[]).find((u) => u.id === id.lead);
+    expect(leadRow.role).toBe('qa_engineer');
+    expect(leadRow.assignments.map((a: any) => `${a.role}:${a.scope_id}`)).toEqual([`qa_engineer:${T.A1}`]);
+    // The former lead lost lead rights on the next request; the new lead has them.
+    expect((await patch(`/api/teams/${T.A1}/ai-toggle`, c.lead, { enabled: false })).status).toBe(403);
+    expect((await get(`/api/analytics/developer-metrics?teamId=${T.A1}`, c.lead)).body.individualScope).toBe('self');
+    expect((await patch(`/api/teams/${T.A1}/ai-toggle`, c.engineer, { enabled: false })).status).toBe(200);
+    // Put it back (replace again).
+    expect((await grant('admin', 'lead', { role: 'team_lead', scopeId: T.A1, replaceLead: true })).status).toBe(201);
+    expect((await patch(`/api/teams/${T.A1}/ai-toggle`, c.lead, { enabled: false })).status).toBe(200);
   });
 });

@@ -2,7 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
-import { authLimiter } from '../middleware/rateLimit';
+import { inviteLimiter } from '../middleware/rateLimit';
 import { recordAudit } from '../lib/audit';
 import {
   providerConfig, enabledProviders, beginSignIn, checkState, completeSignIn, appBaseUrl, SsoError, PROVIDER_LABEL, type ProviderId,
@@ -87,7 +87,7 @@ function backWithError(res: express.Response, code: string, message: string, inv
   res.redirect(302, url.toString());
 }
 
-router.get('/sso/:provider/start', authLimiter, async (req, res) => {
+router.get('/sso/:provider/start', inviteLimiter, async (req, res) => {
   const cfg = providerConfig(req.params.provider);
   if (!cfg) return res.status(404).json({ error: 'This sign-in method is not enabled' });
   const invite = typeof req.query.invite === 'string' && req.query.invite.startsWith('igi_') && req.query.invite.length < 200 ? req.query.invite : null;
@@ -101,7 +101,7 @@ router.get('/sso/:provider/start', authLimiter, async (req, res) => {
   }
 });
 
-router.get('/sso/:provider/callback', authLimiter, async (req: any, res) => {
+router.get('/sso/:provider/callback', inviteLimiter, async (req: any, res) => {
   const provider = req.params.provider as ProviderId;
   const cfg = providerConfig(provider);
   if (!cfg) return res.status(404).json({ error: 'This sign-in method is not enabled' });
@@ -170,7 +170,7 @@ router.get('/sso/:provider/callback', authLimiter, async (req: any, res) => {
  * Invitations (public)
  * ---------------------------------------------------------------------------------------- */
 
-router.get('/invitations/:token', authLimiter, async (req, res) => {
+router.get('/invitations/:token', inviteLimiter, async (req, res) => {
   try {
     const inv = await findByToken(req.params.token);
     if (!inv) return res.status(404).json({ error: 'This invitation link is not valid.', status: 'invalid' });
@@ -194,7 +194,7 @@ router.get('/invitations/:token', authLimiter, async (req, res) => {
   }
 });
 
-router.post('/invitations/accept', authLimiter, async (req, res) => {
+router.post('/invitations/accept', inviteLimiter, async (req, res) => {
   try {
     const { token, firstName, lastName, password } = req.body ?? {};
     if (typeof token !== 'string' || typeof password !== 'string' || typeof firstName !== 'string' || typeof lastName !== 'string') {

@@ -31,8 +31,10 @@ export interface Mailer {
   send(message: MailMessage): Promise<MailResult>;
 }
 
+export interface SmtpConfig { host: string; port: number; secure: boolean; user?: string; pass?: string; from: string }
+
 /** SMTP settings from the environment, or null when SMTP is not configured. */
-export function smtpConfigFromEnv(env: NodeJS.ProcessEnv = process.env) {
+export function smtpConfigFromEnv(env: NodeJS.ProcessEnv = process.env): SmtpConfig | null {
   const host = env.SMTP_HOST?.trim();
   if (!host) return null;
   const port = Number(env.SMTP_PORT) || 587;
@@ -47,7 +49,7 @@ export function smtpConfigFromEnv(env: NodeJS.ProcessEnv = process.env) {
   };
 }
 
-export function createSmtpMailer(cfg: NonNullable<ReturnType<typeof smtpConfigFromEnv>>): Mailer {
+export function createSmtpMailer(cfg: SmtpConfig): Mailer {
   let transport: any = null;
   return {
     channel: 'smtp',

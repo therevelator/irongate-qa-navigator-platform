@@ -51,3 +51,15 @@ export const ingestLimiter = rateLimit({
   },
   message: { error: 'Ingestion rate limit reached (60 requests per minute per key). Batch several teams into one request.' },
 });
+
+// Invitation acceptance and single sign-on (public): failed attempts per IP, separate from the
+// password login counter so a mistyped invitation link never locks anyone out of signing in.
+// Tokens are 256-bit random values, so this only blunts scanning.
+export const inviteLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: 'Too many attempts, please try again later.' },
+});

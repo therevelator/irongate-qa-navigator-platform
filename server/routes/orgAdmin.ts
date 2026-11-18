@@ -10,7 +10,7 @@ import {
   execOn, resolveGrant, grantAssignment, revokeGrant, syncUserDisplay, lastSuperAdminGuard, listAssignments,
   AssignmentError, type ScopeInfo,
 } from '../lib/assignments';
-import { auditedUserChange, recordAudit, undoEntry, canUndoEntry, REVERSIBLE_ACTIONS, UndoError, type AuditEntry } from '../lib/audit';
+import { auditedUserChange, recordAudit, undoEntry, canUndoEntry, isReversible, REVERSIBLE_ACTIONS, UndoError, type AuditEntry } from '../lib/audit';
 import { newToken, sendInvitationEmail, statusSql, INVITE_TTL_HOURS, EMAIL_RE, ROLE_NAMES } from '../lib/invitations';
 
 /**
@@ -196,7 +196,7 @@ router.get('/audit', authenticateToken, async (req: any, res) => {
     const page = rows.slice(0, limit);
     const entries = [];
     for (const r of page) {
-      const reversible = !!REVERSIBLE_ACTIONS[r.action] && !r.undo_of;
+      const reversible = isReversible(r);
       const undo = reversible && !r.undone_at ? await canUndoEntry(actor, r as AuditEntry) : { ok: false };
       entries.push({ ...r, reversible, canUndo: undo.ok, undoBlockedReason: reversible && !r.undone_at && !undo.ok ? (undo as any).reason ?? null : null });
     }
