@@ -121,7 +121,9 @@ What each role may do (from `userPolicy.ts`; the navigation in [`src/components/
 | Grant / revoke assignments and send invitations | any grant | team lead, QA engineer, viewer on teams of their departments | QA engineer, viewer on teams they lead | no | no |
 | Create / edit / delete teams | any | in their departments | no | no | no |
 | Departments page, API keys, move teams, assign managers and leads | yes | no | no | no | no |
-| Team data writes: Manual metrics, AI toggle, pulse cadence (`canWriteTeamData`) | any team | their departments | teams they lead | no | no |
+| Team data writes: Manual metrics, AI toggle (`canWriteTeamData`) | any team | their departments | teams they lead | no | no |
+| Wellbeing pulse: how often and whether automatically (`canSetPulseCadence`) | any team | their departments | no | no | no |
+| Wellbeing pulse: send the survey and reminders (`canSendPulseSurvey`) | any team | their departments | teams they lead | no | no |
 | KPI targets | company, department, team | department and team, in their departments | no | no | no |
 | Admin console, Update frequency, Parameters | yes | yes | no | no | no |
 | Activity (change history), Ingestion log | whole company | entries of their departments | no | no | no |
@@ -548,8 +550,12 @@ Wellbeing (survey), 0–100 = (mean of all answers on the 1–5 scale − 1) ÷ 
 ```
 
 Over the responses of one **closed** period, shown only with at least 3 responses. Bands: on target ≥ 70, watch ≥ 50,
-below low (`WELLBEING_BANDS`). Periods: weekly or every two weeks per team (default every two weeks, counted from Monday
-2026-01-05); results show up to 12 closed periods as a trend.
+below low (`WELLBEING_BANDS`). Periods: every week, two weeks, month or three months per team (default every two weeks,
+counted from Monday 2026-01-05; section 6); results show up to 12 closed periods as a trend.
+
+```
+Response rate (per closed period) = responses ÷ members the survey was e-mailed to   (at most 100 %; shown only with the results)
+```
 
 **Company / department value:** each team's latest closed period with at least 3 responses (teams below 3 left out),
 weighted by responses. In the API this is `developerWellnessIndex`. It feeds engineering health (20 %).
@@ -738,7 +744,8 @@ Why: everything about one team in one place, with each number explained
 - Header tiles: QA score (with confidence), technical debt score, task sizing accuracy and key KPIs.
 - KPI sections Quality & testing, Speed & efficiency, Agile & process, Reliability & stability: each KPI with value, target valid at
   its date, status, "source · as of date", stale marker and history chart.
-- Wellbeing (survey) result and a link to the pulse survey; Team members with their latest workload metrics (only for people who may see
+- Wellbeing (survey) result with its response rate and a link to the pulse survey; for the lead, QA managers and admins the **Send the
+  survey** panel (send, remind, sent N of M, automatic sending); Team members with their latest workload metrics (only for people who may see
   the team's people, and without metrics for those who opted out); Team recommendations (rule-based or AI); Developer recommendations.
 - **Action plan**: the team's tracked actions with owner, due date, status, linked KPI, baseline and computed outcome; **Create action**
   from a recommendation (section 7).
@@ -806,7 +813,7 @@ All roles can open them, each for the teams in their analytics scope, chosen in 
 | Performance | Response times per endpoint, SLA breaches (section 3.12) | Catch performance regressions before customers do |
 | CI/CD pipeline | Stage flow, average duration and success rate per stage, bottleneck score, stage executions over 14 days (section 3.7) | Find the stage that slows delivery |
 | Developer productivity | Team tiles (k-anonymous), DDPS by developer, recorded DDPS snapshots, developer list and recommendations (section 3.10) | Spot overload and slow review loops; fix the environment, not the person |
-| Wellbeing pulse | The survey and its results (sections 3.11 and 6) | Ask the team directly how it is doing |
+| Wellbeing pulse | Answer the survey; results of closed periods with response rate and trend; for the lead, QA managers and admins **Send survey to the team**, **Send reminder to those who haven't answered**, the send log and, for managers, how often it goes out and whether automatically (sections 3.11 and 6) | Ask the team directly how it is doing, and make sure everyone is asked |
 | Business impact | Monthly quality and business series, correlation matrix, strongest correlations, AI summary (section 3.13) | Connect quality work to business outcomes, with honest statistics |
 | Team rankings | Department teams ranked by a chosen KPI (section 3.14) | Friendly comparison inside a department |
 | Reports | A PDF report for the selected team: QA score with confidence and 14 KPIs (coverage, automation, escape rate, defect density, change failure rate, flakiness, code quality, deployments, lead time, MTTR, build time, first-time pass rate, commitment rate, availability) | A shareable snapshot for reviews and steering meetings |
@@ -874,16 +881,55 @@ Individual rows follow the role rules of section 2 (own row for QA engineers and
 - Results: only **closed** periods (never the running one, so results never move after one person answers), only aggregates, only with at
   least 3 responses. Comments follow the same rule, are sorted alphabetically, and are shown to leads, managers and admins only. Members see
   their team's averages.
-- Cadence (weekly or every two weeks) is set by the team lead, the department's QA managers and super admins, effective from the next period
-  (recorded in Activity).
-- Tables have row level security switched on with no policies (migration
-  [`20261121200000_privacy_pulse_survey.sql`](../supabase/migrations/20261121200000_privacy_pulse_survey.sql)), so they are reachable only
-  through the API.
+- Answering through an e-mailed personal link stores the answer exactly the same way (no user id, participation recorded separately).
+- Tables have row level security switched on with no policies (migrations
+  [`20261121200000_privacy_pulse_survey.sql`](../supabase/migrations/20261121200000_privacy_pulse_survey.sql) and
+  [`20261122200000_pulse_cadence_sending.sql`](../supabase/migrations/20261122200000_pulse_cadence_sending.sql)), so they are reachable
+  only through the API.
+
+### How often the survey goes out (managers decide)
+
+The cadence is **team-wide** and set by the **department's QA managers and super admins** (team leads see it but cannot change it), on the
+Wellbeing pulse page. Four options ([`server/lib/pulseRules.ts`](../server/lib/pulseRules.ts) `periodFor`):
+
+| Cadence | Periods |
+|---|---|
+| Every week | 7 days, counted from the day the cadence starts |
+| Every two weeks (default) | 14 days, counted from the day the cadence starts (teams never set: from Monday 2026-01-05) |
+| Every month | Calendar months (28–31 days; February 29 in leap years) |
+| Every three months | Calendar quarters: Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec (90–92 days) |
+
+A change takes effect **when the running period ends**, so a period is never cut short; asking for the cadence in force again cancels a
+waiting change. When monthly or quarterly starts in the middle of a month / quarter, the first period runs to its end, or, if that would be
+fewer than 7 days, to the end of the following one. Every change is in Activity.
+
+### Sending the survey
+
+- **Send survey to the team** (Wellbeing pulse page and Team detail → Wellbeing (survey); the team lead, the department's QA managers and
+  super admins): every active member assigned to the team who has not been sent it yet gets an e-mail with a **personal link** for the
+  running period. Only the sha256 of the link's token is stored. The link is bound to that person, team and period, works **once**
+  (answering through it or in the app uses it up) and **expires when the period ends**. It authenticates only that one answer: it gives no
+  session and no other access, and it stops working if the person leaves the team.
+- The panel shows "Sent to N of M members on <date>", the members **not sent it yet** (sending says nothing about answering), the answers
+  so far **as a count only, from 3 on**, and a log of sends.
+- **Send reminder to those who haven't answered** e-mails the members without an answer (worked out on the server from the participation
+  list). Only a count comes back, and not even that when it would reveal that 1 or 2 people answered. One reminder per 24 hours.
+- **Personal links are never shown to anyone in the app** (a manager holding one could answer as someone else). Without SMTP configured
+  the survey is not e-mailed: the panel says so and points members to answering in the app.
+- **Automatic sending**: switched on (from the next period) when a manager first sets the cadence; managers and admins can turn it off
+  or on per team. An hourly job sends the survey once per team and period, during the first quarter of the period (at least 2 days);
+  the database makes a second run send nothing.
+- The answer page (`/pulse/answer?token=…`) works signed in or not, shows the team, company, period and questions (no personal data),
+  and ends with a thank-you. A used, expired or wrong link says so.
+- Activity records cadence changes, sends (manual and automatic), reminders and automatic-sending changes, never answers.
 
 ### Residual risks (by design, documented)
 
 - With k = 3, a person who answered a 3-response period knows their own answers and therefore the sum of the other two.
 - Database superusers could read dead row versions before vacuum; the API never exposes rows.
+- The send tables know who was e-mailed and reminded (a reminder goes to people who had not answered yet); like the participation list they
+  never leave the server, and the API returns only counts under the same threshold.
+- A personal link works for whoever holds it (as with any e-mailed link): it is single-use, period-bound and says not to forward it.
 - Developer metrics individual rows are visible to leads, managers and admins for people who have not opted out; opting out is per person
   (users page toggle).
 
@@ -991,7 +1037,9 @@ Only names and purposes are listed here. Never commit real values; `.env` is git
 | `APP_URL` | for invitations, SSO, e-mail and Slack links | Public URL of the app (invitation links, SSO redirect and return, links in alert e-mails, digest and Slack). On Netlify defaults to `URL` |
 | `API_PUBLIC_URL` | no | Only when the API has its own origin (local development) |
 | `INVITE_TTL_HOURS` | no | Invitation lifetime, default 168 (1 to 720) |
-| `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | no | Outgoing e-mail (invitations, alert e-mails, weekly digest). Without `SMTP_HOST` nothing is sent: messages are logged and invitation links are shown to copy |
+| `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | no | Outgoing e-mail (invitations, alert e-mails, weekly digest, wellbeing pulse survey). Without `SMTP_HOST` nothing is sent: messages are logged, invitation links are shown to copy, and the pulse survey is answered in the app (its personal links are never shown) |
+| `PULSE_CRON`, `PULSE_SEND_CRON` | no | `false` turns the local automatic pulse-survey e-mail off; its schedule in UTC (default `40 * * * *`, hourly). On Netlify the scheduled function `pulse-auto-send` does the same |
+| `MAIL_CAPTURE_FILE` | tests only | The log mailer also writes each message as a JSON line to this file (end-to-end tests follow survey links); ignored in production |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | no | Google sign-in (redirect URI `<APP_URL>/api/auth/sso/google/callback`) |
 | `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_TENANT` | no | Microsoft sign-in (redirect URI `<APP_URL>/api/auth/sso/microsoft/callback`; a single tenant is recommended) |
 | `GOOGLE_OIDC_DISCOVERY_URL`, `MS_OIDC_DISCOVERY_URL` | no | Override the OpenID discovery documents (testing) |
