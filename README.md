@@ -84,6 +84,14 @@ flaky tests, test executions (7 days), pipeline history (14 days), runs (30 days
 performance (7, 30 and 90 days), tech debt, business impact, sprints, team analytics and metric
 update times. It exits with code 1 below 100 %.
 
+The seed also writes the stored values behind the KPI snapshots (`metric_values`), a sample
+KPI target history (Northwind raised its coverage target from 75 % to 80 % 45 days ago; Checkout
+Core set its own escape-rate target 30 days ago), sample ingestion log entries, and, with
+`--fill-existing`, gives each IronGate demo sign-in (`admin@`, `manager@`, `lead@`, `engineer@`,
+`viewer@irongate.com`) that has no team a demo assignment on a real team of their department
+(removed again by `seed:demo:clear`). `seed:demo:check` also checks metric values and that every
+demo sign-in has a team.
+
 Seeded flaky tests have no stored root cause, so the API reports their pattern guidance as
 unverified.
 
@@ -113,8 +121,8 @@ unverified.
   code analysis and other tools. There are no built-in Jenkins / Jira / SonarQube connectors.
 - **Manual metrics** page: the same server path, for values entered by hand.
 - **Expected update frequency** (Administration): how often each metric should receive a
-  value. It schedules nothing; Team detail marks a metric as stale when its last recorded
-  value (`field_sources.recorded_at`) is older than the interval.
+  value. It schedules nothing; a value older than its interval is stale: shown greyed and left
+  out of composite scores (see [Staleness, confidence, …](#staleness-confidence-company-aggregates-and-kpi-targets)).
 
 ## Definitions
 
@@ -136,9 +144,10 @@ One definition per metric, shared by server and UI:
   view only). Remembered in the browser. Phones always show 1 column, tablets at most 2.
 - **Teams vs KPI targets**: the on track / at risk / off track counts in Company status open
   a breakdown (per team: QA score, as-of date, the targets not met with their gap, the ones
-  met collapsed). Rule (`teamKpiTrack`): of the four KPI targets recorded for the team
-  (coverage, automation, flakiness, escape rate), on track = at least 75% met, at risk = 50%
-  to 75%, off track = under 50%; fewer than two recorded = not classified. The counts and
+  met collapsed, "based on n of 4 inputs" for the QA score). Rule (`teamKpiTrack`): of the four
+  KPI targets with a current (not stale) value (coverage, automation, flakiness, escape rate),
+  judged with the target valid at the value's date, on track = at least 75% met, at risk = 50%
+  to 75%, off track = under 50%; fewer than two = not classified. The counts and
   the list both come from `GET /api/analytics/company-summary` (`kpiStatus`,
   `kpiStatusTeams`), computed by the same function.
 
@@ -246,29 +255,69 @@ External systems (CI, issue tracker, code analysis) push team KPIs to `POST /api
 Manual entry in the app uses the same server path (`server/lib/kpiIngest.ts`), so both behave identically:
 
 - **Auth:** `Authorization: Bearer igk_…`. A super admin creates keys in **Admin console → API keys**. The key is shown once; only its SHA-256 hash is stored. A key belongs to one company and can write any team in it. Revoked keys get `401`; a team from another company gets `403`.
-- **Body:** `{ "teamId", "source", "recordedAt"?, "metrics": { column: number } }`, or an array of up to 100 such items. The whole array is validated first and then written in one transaction (all or nothing).
+- **Body:** `{ "teamId", "source", "recordedAt"?, "metrics": { column: number }, "idempotencyKey"?, "sourceRef"? }`, or an array of up to 100 such items.
   - `source` is a label such as `jenkins`, `jira` or `sonarqube` (`manual` is reserved for the app).
-  - `recordedAt` is an ISO 8601 timestamp that defaults to now and cannot be in the future.
+  - `recordedAt` is the time the values are **for** (ISO 8601). It defaults to now, cannot be in the future and can be up to 365 days back (backfill).
   - `metrics` keys are `kpi_snapshots` columns from the whitelist in `KPI_COLUMNS` (`server/lib/kpiIngest.ts`), for example `test_coverage`, `defect_escape_rate`, `change_failure_rate`, `code_quality_score`, `deployment_frequency_per_week`, `lead_time_days` or `mttr_hours`. Values are range-checked, and integer columns are rounded to whole numbers. `null` means "not provided" and does not clear a stored value.
-- **Behaviour:** values go into the team's snapshot for today. If today's snapshot is new, every other KPI is carried forward from the team's previous snapshot, so a partial update never wipes the other metrics.
-- **Provenance:** each field's `{source, recorded_at}` is stored in `kpi_snapshots.field_sources`. Carried-forward fields keep their original source and date. The team page shows this as "source · as of date".
+  - `idempotencyKey` (per item): an item already written with this key for the team is skipped and reported as `duplicate`.
+- **All or nothing / partial:** by default the whole batch is validated first and written in one transaction; any invalid item → `400`, nothing written. With `?partial=true` the valid items are written and the others are reported per item (`207`, `status: "partial"`).
+- **Idempotency-Key header:** a retried request with the same key (same API key, same body) returns the stored result with `Idempotent-Replayed: true` and writes nothing; the same key with a different body gets `422`. Concurrent duplicates wait for the first and then replay it. A rejected request does not bind its key.
+- **Storage:** every value is stored in `metric_values` (team, metric, value, `recorded_at`, `received_at`, source, actor, keys). `kpi_snapshots` is derived from it per day: a day holds the latest value of each metric recorded before the end of that day (UTC). A backdated value updates that day and the later days on which no newer value exists; a day without a snapshot gets one. The same team, metric and `recorded_at` sent again is a correction (the earlier value is marked superseded).
+- **Provenance:** each field's `{source, recorded_at, recorded_by, carried_forward}` is in `kpi_snapshots.field_sources`. The team page shows "source · as of date".
 - **QA score:** `qa_score` and `status` cannot be supplied. A database trigger computes them from the stored inputs using the same rules as `computeQaScore` in `server/lib/metricFormulas.ts`.
+- **Ingestion log:** every request (accepted, partial or rejected; API and Manual metrics) is recorded with its items, errors and response: **Administration → Ingestion log** (super admins; QA managers see requests that touched their departments' teams), with per-source "last received".
 - **Rate limit:** 60 requests per minute per key. Open dashboards refresh automatically after each write.
 
 ```bash
-curl -X POST https://<host>/api/ingest/kpis \
+curl -X POST "https://<host>/api/ingest/kpis?partial=true" \
   -H "Authorization: Bearer $IRONGATE_API_KEY" \
   -H "Content-Type: application/json" \
+  -H "Idempotency-Key: sonar-build-4812" \
   -d '{
         "teamId": "<team id>",
         "source": "sonarqube",
         "recordedAt": "2026-11-17T08:00:00Z",
         "metrics": { "code_quality_score": 82, "test_coverage": 78.4 }
       }'
-# → {"result":{"teamId":"…","snapshotDate":"2026-11-17","qaScore":<0–100 or null>,"status":"good|warning|critical|null",
-#     "updated":["code_quality_score","test_coverage"],"carriedForward":["defect_escape_rate", …]}}
+# → {"status":"accepted","ingestionId":"…","result":{"teamId":"…","snapshotDate":"2026-11-17","recordedAt":"2026-11-17T08:00:00.000Z",
+#     "qaScore":<0–100 or null>,"status":"good|warning|critical|null","updated":["code_quality_score","test_coverage"],
+#     "carriedForward":["defect_escape_rate", …],"duplicate":false},"items":[…]}
 ```
 
+## Staleness, confidence, company aggregates and KPI targets
+
+Migration: `supabase/migrations/20261120000000_metric_values_targets_ingestion_log.sql` (tables
+`metric_values`, `target_history`, `ingestion_log`; backfills values from `kpi_snapshots` and the
+current targets; existing snapshot rows are not rewritten).
+
+- **Staleness** (`server/lib/staleness.ts`): a value is stale when it is older than its expected
+  update interval (**Administration → Update frequency**). Stale values are shown greyed with
+  "Stale since …" and are left out of composites: the QA score, KPI targets (on track / needs
+  attention), company averages and DORA. For a past day, staleness is measured at the end of that day.
+- **Confidence** (`metricFormulas.ts`: `qaScoreComposite`, `composite`, `CONFIDENCE_RULE`): every
+  composite returns `{ value, inputsUsed, inputsTotal, confidence }` and the UI says "Based on n of m
+  inputs" (high ≥ 90 % of inputs, medium ≥ 50 %, otherwise low): dashboard hero (teams), engineering
+  health (components), team cards, team detail, TV, the KPI-status breakdown and the PDF report. The QA
+  score keeps its minimum-inputs rule (coverage plus at least 2 of 4). `kpi_snapshots.qa_score` stays the
+  score of every input the snapshot holds (database trigger); leaving a stale input out is exactly
+  treating it as not recorded (checked against the database function for every stale combination).
+- **Company aggregates** (`COMPANY_AGGREGATE_TEXT`): the global QA score, KPI averages and DORA are
+  means weighted by active team size (assigned members; a team with none counts as 1), with the
+  unweighted mean, median, 25th percentile ("weakest 25 %"), minimum and count in
+  `globalQaScoreDistribution` / `kpiAveragesUnweighted`. The trend compares like with like (weighted, 7–14 days ago).
+- **KPI targets with history** (`server/lib/targets.ts`, **Administration → Parameters → KPI targets**,
+  `GET/PUT /api/targets`): good / watch levels per company, department or team, each with a validity
+  period; a change closes the current row and opens a new one. Team > department > company > default
+  (`METRICS_CONFIG`). Every judgement of a value uses the target valid at that value's date (the end of
+  its UTC day): team cards, team detail, `teamKpiTrack` / `teamAttentionIssues`, the company summary and
+  TV (trend charts draw the target of each day). Company targets: super admins; department and team
+  targets: super admins and that department's QA managers. Changes are in the Activity history.
+- **Sample data banner**: "Includes sample data" appears (dismissible for the session) when a value on
+  the screen comes from source `synthetic` (`field_sources` / `metric_values.source`), never from the
+  company name; with "Show formulas & data sources" on, such values carry a "Sample" marker.
+- **Team detail access**: the team and its KPIs are company-visible; member names and emails only for
+  people who may see that team's people (`canViewTeamMembers`: super admin, the department's QA
+  manager, people assigned to the team); KPI history follows the analytics scope.
 
 ## Tests
 

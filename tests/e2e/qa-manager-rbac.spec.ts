@@ -12,6 +12,8 @@ test.describe('QA Manager Role-Based Access Control', () => {
 
     // QA Manager should see the same global team overview as other roles on the main dashboard.
     const teamCards = page.locator('[data-testid="team-card"]');
+    // The team list loads after the dashboard shell: wait for it before counting.
+    await expect(teamCards.first()).toBeVisible({ timeout: 15000 });
     const teamCount = await teamCards.count();
     expect(teamCount).toBeGreaterThan(1);
 
