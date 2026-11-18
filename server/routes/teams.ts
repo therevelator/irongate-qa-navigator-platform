@@ -22,6 +22,7 @@ import {
 import { METRICS_CONFIG, type MetricsConfig } from '../../src/config/metricsConfig';
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 import { teamMembers } from '../lib/assignments';
+import { SUPPRESSED_TEXT, privacyInfo } from '../lib/privacy';
 import { recordAudit } from '../lib/audit';
 import { evaluateSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
 import { loadIntervals } from '../lib/staleness';
@@ -748,6 +749,18 @@ router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async 
     // and the fallback for any developer the LLM omits or mislabels.
     const ruleAssessments: DeveloperAssessment[] = devMetricsPayload.map(assessDeveloper);
 
+    // Team summary (status counts) is an aggregate of individual data: only opted-in developers
+    // count, and only with at least 3 of them (server/lib/privacy.ts). Callers who see only their
+    // own row get no team summary.
+    const optedIn = new Set(developerMetrics.filter((r: any) => r.developer_insights_enabled === true).map((r: any) => String(r.developer_id)));
+    const teamAssessments = seeAll ? ruleAssessments.filter((a) => optedIn.has(String(a.developerId))) : [];
+    const teamSummaryPrivacy = privacyInfo(teamAssessments.length);
+    const teamInsight = !seeAll || teamAssessments.length === 0
+      ? null
+      : teamSummaryPrivacy.suppressed
+        ? `Team summary ${SUPPRESSED_TEXT.charAt(0).toLowerCase()}${SUPPRESSED_TEXT.slice(1)}.`
+        : summariseTeamDevelopers(teamAssessments);
+
     // Try Groq (retries on the primary model, then a smaller model, then rule-based)
     if (isGroqConfigured()) {
       try {
@@ -784,7 +797,7 @@ Metric benchmarks (per day unless noted):
 - Focus Time: >=5h excellent, 3-5h good, <3h concerning (concern, weight 2)
 - Meeting Time: <=2h ideal, 2-4h acceptable, >4h too high (concern, weight 2)
 - Context Switches: <=3 excellent, 3-6 acceptable, >6 disruptive (concern, weight 2)
-- happinessScore is "workload balance (derived)", 0-100, calculated from the five inputs above. It is NOT a survey or wellbeing score and is NOT a separate concern (that would count the same inputs twice); you may mention it, but do not weight it.
+- happinessScore is "workload balance (derived)", 0-100, calculated from the five inputs above. It is NOT a survey or wellbeing score (wellbeing comes only from the anonymous team survey, which is not part of this data) and is NOT a separate concern (that would count the same inputs twice); you may mention it, but do not weight it.
 
 Status rules: "at-risk" if the summed concern weight is 3 or more; "needs-attention" if the summed weight is 1 or 2; "healthy" only when there are no concerns.
 A null value means the metric was NOT MEASURED: never treat it as good, and mention that it is missing.
@@ -829,7 +842,8 @@ Only give praise (e.g. "keep up the good work") when there are no concerns. When
           aiEnabled: true,
           source: 'groq',
           developers,
-          teamInsight: summariseTeamDevelopers(ruleAssessments),
+          teamInsight,
+          teamSummaryPrivacy,
           rules: DEVELOPER_RULES_TEXT,
           individualScope: seeAll ? 'team' : 'self',
           metrics: devMetricsPayload
@@ -846,7 +860,8 @@ Only give praise (e.g. "keep up the good work") when there are no concerns. When
       aiEnabled: true,
       source: 'rule-based',
       developers: ruleAssessments.map((a) => ({ ...a, source: 'rule-based' as const })),
-      teamInsight: summariseTeamDevelopers(ruleAssessments),
+      teamInsight,
+      teamSummaryPrivacy,
       rules: DEVELOPER_RULES_TEXT,
       individualScope: seeAll ? 'team' : 'self',
       metrics: devMetricsPayload

@@ -23,6 +23,7 @@ import ingestionLogRoutes from './routes/ingestionLog';
 import compareRoutes from './routes/compare';
 import savedViewsRoutes from './routes/savedViews';
 import onboardingRoutes from './routes/onboarding';
+import pulseRoutes from './routes/pulse';
 // import './jobs/syncMetrics'; // Start cron jobs (disabled temporarily)
 import './jobs/intervalSync'; // Interval-based metric sync
 import './jobs/analyticsSync'; // Analytics data sync
@@ -113,6 +114,7 @@ app.use('/api/ingestion-log', ingestionLogRoutes);
 app.use('/api/compare', compareRoutes);
 app.use('/api/saved-views', savedViewsRoutes);
 app.use('/api/onboarding', onboardingRoutes);
+app.use('/api/pulse', pulseRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

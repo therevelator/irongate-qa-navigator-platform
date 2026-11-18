@@ -71,8 +71,13 @@ rows *in the window the page shows*:
 Developers are handled one by one. Every developer of an active team whose latest real
 productivity snapshot is older than 30 days gets 180 days of snapshots, and every developer
 without a `developer_metrics` row for the team gets one. A team with fewer than 3 QA engineers,
-or fewer than 2 developers who share developer insights, gets demo developer users (password
-`demo123`). Each company also gets company KPI snapshots. Every added row has a `demo-` id; the
+or fewer than 3 developers who share developer insights (team figures need 3, see
+[Privacy and wellbeing](#privacy-and-wellbeing)), gets demo developer users (password
+`demo123`). Every active team gets anonymous pulse-survey answers for the closed periods of the
+last 16 weeks (some teams weekly, the rest every two weeks); per company the smallest team gets
+only 2 answers per period, so its results show as "Not shown: fewer than 3 contributors". No
+participation rows are seeded, so real users can still answer the running period. Each company
+also gets company KPI snapshots. Every added row has a `demo-` id; the
 integer-keyed snapshot tables use ids of 1,000,000,000 or more. `seed:demo:clear` removes them.
 In the SQL output, each group is wrapped in a `DO` block that checks again, when it runs, that
 the team exists and still lacks that data. That makes it safe to apply on a copy of the
@@ -133,7 +138,9 @@ One definition per metric, shared by server and UI:
   `KPI_TARGETS`, `teamAttentionIssues`, `teamKpiTrack`); QA score bands come from `QA_SCORE_THRESHOLDS`
 - Developer health rules: `server/lib/developerHealth.ts`. "Workload balance (derived)"
   (`developer_metrics.happiness_score`) is calculated from focus, meetings, context switches,
-  PR and review times; it is not a survey score and is not counted twice.
+  PR and review times; it is a workload signal, not a survey score and not wellbeing, and is not counted twice.
+- Wellbeing (survey) and the pulse survey: `server/lib/pulseRules.ts` (questions, periods, score)
+  and `server/lib/pulse.ts`; privacy threshold for aggregates of individual data: `server/lib/privacy.ts`.
 - Config inheritance (team, then department, then company): `server/lib/configResolver.ts`
 - Team membership (primary team or `team_members`): `server/lib/teamMembership.ts`
 - Who may do what: `server/lib/userPolicy.ts` (see [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md))
@@ -358,6 +365,49 @@ Migration: `supabase/migrations/20261121100000_saved_views_onboarding.sql` (tabl
   again with `/restore`; both recorded in Activity).
 - Demo seed: every company gets sample views of its first super admin (two shared), ids `demo-sv-…`;
   `seed:demo:check` requires them, `seed:demo:clear` removes them.
+
+## Privacy and wellbeing
+
+Migration: `supabase/migrations/20261121200000_privacy_pulse_survey.sql` (tables `pulse_cadences`,
+`pulse_responses`, `pulse_participation`; row level security on, no policies).
+
+- **k-anonymity** (`server/lib/privacy.ts`, one helper for every endpoint): an aggregate of individual
+  developer data is returned only when at least **3** people contribute; otherwise its values are
+  `null` with `privacy: { suppressed: true, contributors: null, reason: "Not shown: fewer than 3
+  contributors" }` (the count is not revealed; 0 contributors is plain "no data"). Contributors are
+  active QA engineers and team leads assigned to the team who opted in to developer insights and have
+  all five inputs recorded (`server/lib/developerAggregates.ts`). Applied to: the team summary of
+  `GET /api/analytics/developer-metrics` (team averages, DDPS, workload balance, burnout counts; the
+  Developer productivity tiles now come from it), `GET /api/analytics/ddps-history` (team statistics and
+  each daily point), `GET /api/metrics/team/:teamId/all` (developer averages, workload balance, team
+  burnout risk), the status counts of `GET /api/teams/:id/developer-ai-suggestions`, and the company
+  summary (workload balance and burnout of the averages: only teams that reach 3 themselves, so a
+  suppressed team can never be worked out from the total). Individual rows keep the existing rules
+  (QA engineers and viewers see only their own; leads, managers and admins see people who opted in).
+- **Pulse survey** (**Delivery → Wellbeing pulse**, also from Team detail): five statements on a 1–5
+  scale plus an optional comment (≤ 500 characters), once per person, team and period. A team is asked
+  weekly or every two weeks (default every two weeks, counted from Monday 2026-01-05); the team lead,
+  the department's QA managers and super admins change it, effective from the next period (Activity log).
+  - Answers are stored **without user id or time** (only team and period). Who answered which period is
+    stored separately (`pulse_participation`) only to refuse a second answer (409). Each answer rewrites
+    the period's answer set in random order with fresh ids in one transaction, so ids, row order and
+    transaction ids do not tell whose answer is whose. No audit entry is written for an answer.
+  - Results: only **closed** periods (never the running one, so results never move after one person
+    answers), only aggregates, only with **≥ 3 responses**; comments with the same rule, sorted
+    alphabetically, for leads, managers and admins only. Members see their team's averages.
+  - **Wellbeing (survey)** = (mean answer − 1) ÷ 4 × 100 (0–100; on target ≥ 70, watch ≥ 50). It is the
+    wellbeing signal everywhere: Team detail, the dashboard's Company status (teams' latest closed
+    period with ≥ 3 responses, weighted by responses; teams below 3 left out) and **engineering health**
+    (delivery 35 %, pipeline 25 %, debt 20 %, wellbeing 20 %). Without survey results the wellbeing
+    component is left out (not replaced by workload balance) and the confidence shows 3 of 4 components.
+    `developerWellnessIndex` in the API is this survey value; workload balance is `workloadBalanceIndex`.
+- Endpoints (authenticated, company-scoped, `server/lib/userPolicy.ts`): `GET /api/pulse/teams/:teamId`
+  (`canViewPulseResults`: the team's analytics scope), `POST /api/pulse/teams/:teamId/responses`
+  (`canTakePulseSurvey`: assigned to the team), `PUT /api/pulse/teams/:teamId/cadence`
+  (`canSetPulseCadence`: lead, QA manager of the department, super admin).
+- Residual risk, by design of k = 3: someone who answered themselves knows their own answers and so the
+  sum of the other two in a 3-response period. Database superusers could read dead row versions before
+  vacuum; the API never exposes rows.
 
 ## Tests
 

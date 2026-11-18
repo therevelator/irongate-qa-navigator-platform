@@ -1,5 +1,5 @@
 import React from 'react';
-import { Bug, CalendarClock, Wrench, Gauge, GitBranch, Activity, TrendingUp, Trophy, FileText, ChevronRight } from 'lucide-react';
+import { Bug, CalendarClock, Wrench, Gauge, GitBranch, Activity, TrendingUp, Trophy, FileText, ChevronRight, HeartPulse } from 'lucide-react';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { AnalyticsScopeBar, AnalyticsNoTeam } from './AnalyticsScopeBar';
 import { Page, PageIntro } from './ui';
@@ -24,7 +24,8 @@ const MODULES: { group: string; items: { id: string; title: string; description:
     group: 'Delivery',
     items: [
       { id: 'pipeline-visualization', title: 'CI/CD pipeline', description: 'Stage durations, success rates, cost and bottlenecks.', icon: GitBranch },
-      { id: 'developer-productivity', title: 'Developer productivity', description: 'Review and merge times, focus time, meetings and workload balance.', icon: Activity },
+      { id: 'developer-productivity', title: 'Developer productivity', description: 'Review and merge times, focus time, meetings and workload balance (derived).', icon: Activity },
+      { id: 'team-pulse', title: 'Wellbeing pulse', description: 'Anonymous five-question team survey and its wellbeing trend.', icon: HeartPulse },
       { id: 'business-impact', title: 'Business impact', description: 'Statistical correlation between quality metrics and business KPIs.', icon: TrendingUp },
       { id: 'team-gamification', title: 'Team rankings', description: 'Comparative team standings across quality measures.', icon: Trophy },
       { id: 'pdf-report-generator', title: 'Reports', description: 'Export a PDF quality report for stakeholders.', icon: FileText },

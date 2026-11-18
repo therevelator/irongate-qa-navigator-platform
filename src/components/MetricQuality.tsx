@@ -34,7 +34,7 @@ const INPUT_LABEL: Record<string, string> = {
   deliveryPerformance: 'delivery',
   pipelineHealth: 'pipeline',
   techDebtStatus: 'tech debt',
-  workloadBalance: 'workload balance',
+  wellbeingSurvey: 'wellbeing (survey)',
 };
 const label = (k: string) => INPUT_LABEL[k] ?? k.replace(/_/g, ' ');
 

@@ -7,6 +7,7 @@ import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
 import { KPI_TARGETS, METRICS_CONFIG, getMetricStatus, teamAttentionIssues, type MetricsConfig } from '../config/metricsConfig';
 import { QA_SCORE_THRESHOLDS, qaStatusFromScore } from '../../server/lib/metricFormulas';
+import { WELLBEING_BANDS } from '../../server/lib/pulseRules';
 import { useAuth } from '../contexts/AuthContext';
 import { Page, PageIntro, Card, Badge, SegmentedControl, EmptyState, buttonClass, inputClass, cx, type Tone } from './ui';
 import HeroBattery from './HeroBattery';
@@ -53,7 +54,8 @@ interface CompanySummary {
   oldestSnapshotDate?: string | null;
   engineeringHealthBasis?: { weights: Record<string, number>; included: string[]; missing: string[] };
   deliveryPerformanceBasis?: { method: string; teamsClassified: number };
-  developerWellnessBasis?: { method: string; developers: number };
+  /** Wellbeing (survey): teams with a shown latest-period result (k-anonymous, server/lib/pulse.ts). */
+  developerWellnessBasis?: { method: string; teamsReporting: number; teamsTotal: number; teamsSuppressed: number; responses: number; minResponses: number };
   pipelineHealthBasis?: { definition: string; successfulRuns: number; totalRuns: number; windowDays: number };
   techDebtBasis?: { openItems: number; totalItems: number };
   /** Teams with a current QA score of the active teams (composite confidence). */
@@ -142,7 +144,7 @@ const HEALTH_PART_LABEL: Record<string, string> = {
   deliveryPerformance: 'delivery',
   pipelineHealth: 'pipeline',
   techDebtStatus: 'debt',
-  workloadBalance: 'workload',
+  wellbeingSurvey: 'wellbeing survey',
 };
 
 interface Row {
@@ -542,7 +544,6 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
   const missingHealth = s?.engineeringHealthBasis?.missing ?? [];
   const pipe = s?.pipelineHealthBasis;
   const debt = s?.techDebtBasis;
-  const happiness = METRICS_CONFIG.happinessScore;
   const dist = s?.globalQaScoreDistribution;
   // The company-level targets in force today (target history), else the defaults.
   const companyTargets = s?.companyKpiTargets ?? KPI_TARGETS;
@@ -556,8 +557,8 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
         ? 'No component has data'
         : missingHealth.length
           ? `Excludes ${missingHealth.map((m) => HEALTH_PART_LABEL[m] ?? m).join(', ')} (no data)`
-          : 'Delivery, pipeline, debt, workload',
-      title: 'Weighted mean: delivery 35%, pipeline 25%, debt 20%, workload balance 20%. Components without data are excluded.',
+          : 'Delivery, pipeline, debt, wellbeing survey',
+      title: 'Weighted mean: delivery 35%, pipeline 25%, debt 20%, wellbeing (survey) 20%. Components without data are excluded, not replaced. Workload balance (derived) is not part of it.',
       confidence: s?.engineeringHealthConfidence, noun: 'components',
     },
     {
@@ -573,13 +574,15 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
       confidence: s?.deliveryPerformanceConfidence, noun: 'teams',
     },
     {
-      label: 'Workload balance',
+      label: 'Wellbeing (survey)',
       value: num(s?.developerWellnessIndex),
-      good: happiness.good, warn: happiness.warning,
+      good: WELLBEING_BANDS.good, warn: WELLBEING_BANDS.warning,
       caption: s?.developerWellnessBasis
-        ? s.developerWellnessBasis.developers > 0
-          ? `Derived · ${s.developerWellnessBasis.developers} developer${s.developerWellnessBasis.developers === 1 ? '' : 's'}`
-          : 'No developer metrics recorded'
+        ? s.developerWellnessBasis.teamsReporting > 0
+          ? `${s.developerWellnessBasis.teamsReporting} of ${s.developerWellnessBasis.teamsTotal} teams · ${s.developerWellnessBasis.responses} responses`
+          : s.developerWellnessBasis.teamsSuppressed > 0
+            ? `Not shown: fewer than ${s.developerWellnessBasis.minResponses} responses per team`
+            : 'No survey results yet'
         : '',
       title: s?.developerWellnessBasis?.method ?? '',
     },

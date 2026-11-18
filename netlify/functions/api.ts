@@ -20,6 +20,7 @@ import ingestionLogRoutes from '../../server/routes/ingestionLog';
 import compareRoutes from '../../server/routes/compare';
 import savedViewsRoutes from '../../server/routes/savedViews';
 import onboardingRoutes from '../../server/routes/onboarding';
+import pulseRoutes from '../../server/routes/pulse';
 
 const app = express();
 
@@ -91,6 +92,7 @@ router.use('/ingestion-log', ingestionLogRoutes);
 router.use('/compare', compareRoutes);
 router.use('/saved-views', savedViewsRoutes);
 router.use('/onboarding', onboardingRoutes);
+router.use('/pulse', pulseRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix

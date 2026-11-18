@@ -28,6 +28,8 @@ import {
 } from '../../server/lib/metricFormulas';
 import { DEVELOPER_RULES_TEXT } from '../../server/lib/developerHealth';
 import { DDPS_BANDS, WORKLOAD_BALANCE_FORMULA } from './advancedFeatures';
+import { K_ANONYMITY_RULE } from '../../server/lib/privacy';
+import { PULSE_QUESTIONS, WELLBEING_BANDS, WELLBEING_FORMULA } from '../../server/lib/pulseRules';
 import { METRICS_CONFIG, KPI_TARGETS, metricTargetText } from '../config/metricsConfig';
 import type { MetricsConfig } from '../config/metricsConfig';
 
@@ -102,6 +104,7 @@ export type ExtraCatalogKey =
   | 'qa_score'
   | 'technical_debt_score'
   | 'workload_balance'
+  | 'wellbeing_survey'
   | 'burnout_risk'
   | 'ddps'
   | 'team_members'
@@ -158,6 +161,7 @@ const REPORTS = 'Analytics → Reports (PDF)';
 const MANUAL_CURRENT = 'Manual metrics → Current metrics (super admin, team lead, QA manager)';
 const UPDATE_FREQUENCY = 'Administration → Update frequency (expected interval; marks the value stale)';
 const DEV_PRODUCTIVITY = 'Analytics → Developer productivity';
+const PULSE_PAGE = 'Analytics → Wellbeing pulse';
 
 const MANUAL = (section: string, card: string) =>
   `Manual metrics → ${section} → ${card} (POST /api/metrics/manual, recorded with source "manual")`;
@@ -720,12 +724,13 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     title: 'Workload balance (derived)',
     whyItMatters:
       'A 0–100 indicator of whether a developer\'s week leaves room for focused work: lots of focus time, few meetings and interruptions, and fast reviews score high. ' +
-      'It is derived from workload data, not a survey of how people feel, so treat it as a prompt for a conversation, not a verdict.',
+      'It is a workload signal derived from workload data, not wellbeing: how people feel comes only from the anonymous survey (Wellbeing (survey)). Treat it as a prompt for a conversation, not a verdict.',
     howCalculated: `Workload balance = ${WORKLOAD_BALANCE_FORMULA}`,
     calculationNotes: [
       'Derived, not measured: calculateWorkloadBalance() in src/data/advancedFeatures.ts, run when developer metrics are saved.',
-      'Stored in the column named happiness_score for historical reasons; it is not a happiness survey.',
+      'Stored in the column named happiness_score for historical reasons; it is not a happiness survey and not part of engineering health.',
       'Not counted again in developer recommendations, because it uses the same inputs.',
+      `Team and company averages: ${K_ANONYMITY_RULE}`,
     ],
     unit: '/100',
     direction: dir('happinessScore'),
@@ -740,7 +745,39 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
       manual: 'Manual metrics → Developer Productivity Metrics (POST /api/metrics/developer). Calculated from the inputs on save.',
       note: 'The KPI ingestion API does not accept developer metrics.',
     },
-    related: ['burnout_risk', 'ddps', 'team_members'],
+    related: ['wellbeing_survey', 'burnout_risk', 'ddps', 'team_members'],
+  },
+  wellbeing_survey: {
+    kind: 'computed',
+    title: 'Wellbeing (survey)',
+    whyItMatters:
+      'How the team says it is doing, in its own words: workload, focus time, support, energy and outlook, answered anonymously every week or two. ' +
+      'It is the wellbeing signal of IronGate and part of engineering health; workload balance (derived) is a separate workload signal.',
+    howCalculated: WELLBEING_FORMULA,
+    calculationNotes: [
+      `Questions (1 = strongly disagree … 5 = strongly agree): ${PULSE_QUESTIONS.map((q, i) => `${i + 1}. ${q.text}`).join(' ')}`,
+      'Answers are stored without a user id or a time, only with the team and period; a separate list (who answered which period) only prevents a second answer and cannot be matched to an answer.',
+      'Results appear after a period ends (never for the running period), as averages, and only with at least 3 responses; comments only for leads, managers and admins.',
+      'Company / department figure: the teams\' latest closed period, teams below 3 responses left out, weighted by responses. Engineering health leaves it out (not replaced) when no team has a result.',
+    ],
+    unit: '/100',
+    direction: 'higher',
+    thresholds: {
+      text: `On target ≥ ${WELLBEING_BANDS.good} · watch ≥ ${WELLBEING_BANDS.warning} · below that low`,
+      target: `≥ ${WELLBEING_BANDS.good}`,
+      source: 'WELLBEING_BANDS (server/lib/pulseRules.ts)',
+    },
+    storedIn: ['pulse_responses (anonymous answers)', 'pulse_participation (who answered which period, duplicates only)', 'pulse_cadences (weekly / biweekly per team)'],
+    whereToFindIt: [PULSE_PAGE, `${TD} → Wellbeing (survey)`, 'Overview → Company status (wellbeing and engineering health)'],
+    productionSources: [
+      { system: 'IronGate pulse survey', detail: 'Answered in the app by the team\'s members (POST /api/pulse/teams/:teamId/responses)' },
+    ],
+    howToSendIt: {
+      kind: 'computed',
+      manual: `${PULSE_PAGE}: members answer once per period; the lead, a QA manager or an admin sets weekly or every two weeks.`,
+      note: 'There is no import: answers can only be given by the people themselves, so they stay anonymous.',
+    },
+    related: ['workload_balance', 'team_members'],
   },
   burnout_risk: {
     kind: 'derived',
@@ -752,6 +789,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     calculationNotes: [
       'Derived, not measured: computeBurnoutRisk() in server/lib/metricFormulas.ts, from the developer\'s latest recorded values.',
       'Calculated when the page is shown; not stored.',
+      `Team counts (how many developers are high / moderate / low): ${K_ANONYMITY_RULE}`,
     ],
     unit: null,
     direction: 'lower',
@@ -782,6 +820,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     calculationNotes: [
       'Derived, not measured: computeDdps() in server/lib/metricFormulas.ts, from each developer\'s latest recorded metrics.',
       'History uses developer_productivity_snapshots; the score is recalculated from each snapshot\'s inputs, not read from the stored ddps_score.',
+      `Team average and daily team history: ${K_ANONYMITY_RULE} A day with fewer developers is not shown.`,
     ],
     unit: '/100',
     direction: 'higher',
@@ -822,6 +861,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     calculationNotes: [
       'Visibility (server/lib/userPolicy.ts): super admin any team, QA manager their department, team lead their team; other roles see only their own row.',
       'Members who turned developer insights off are listed without metrics.',
+      `Team averages built from these rows: ${K_ANONYMITY_RULE}`,
     ],
     unit: null,
     direction: 'none',

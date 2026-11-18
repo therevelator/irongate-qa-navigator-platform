@@ -9,6 +9,7 @@ import TechnicalDebtTracker from './components/TechnicalDebtTracker';
 import PipelineVisualization from './components/PipelineVisualization';
 import BusinessImpactAnalysisV2 from './components/BusinessImpactAnalysisV2';
 import PerformanceTesting from './components/PerformanceTesting';
+import PulseSurvey from './components/PulseSurvey';
 import DeveloperProductivity from './components/DeveloperProductivity';
 import TestExecutionTimeline from './components/TestExecutionTimeline';
 import TeamGamification from './components/TeamGamification';
@@ -51,6 +52,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'business-impact': '/analytics/business-impact',
   'performance-metrics': '/analytics/performance',
   'developer-productivity': '/analytics/productivity',
+  'team-pulse': '/analytics/pulse',
   'test-execution-timeline': '/analytics/timeline',
   'team-gamification': '/analytics/gamification',
   'pdf-report-generator': '/analytics/reports',
@@ -141,6 +143,7 @@ function App() {
       case 'business-impact':
       case 'performance-metrics':
       case 'developer-productivity':
+      case 'team-pulse':
       case 'test-execution-timeline':
       case 'team-gamification':
       case 'pdf-report-generator':
@@ -281,7 +284,18 @@ function App() {
         onTabChange={setActiveTab}
         hideSidebar
       >
-        <TeamDetailView team={selectedTeam} onBack={() => setSelectedTeam(null)} onOpenTv={openTvMode} />
+        <TeamDetailView
+          team={selectedTeam}
+          onBack={() => setSelectedTeam(null)}
+          onOpenTv={openTvMode}
+          onOpenPulse={(teamId) => {
+            // Wellbeing pulse of this team (Analytics module, the team becomes the analytics scope).
+            analyticsScope.setTeamId(teamId);
+            window.history.pushState(null, '', `${VIEW_TO_PATH['team-pulse']}?${URL_TEAM_PARAM}=${encodeURIComponent(teamId)}`);
+            setSelectedTeam(null);
+            setCurrentView('team-pulse');
+          }}
+        />
       </Layout>
     );
   }
@@ -325,8 +339,8 @@ function App() {
   const analytics = (render: (teamId: string) => React.ReactNode, note?: React.ReactNode) =>
     renderLayout(<AnalyticsScopeGate note={note}>{(team) => render(team.id)}</AnalyticsScopeGate>);
   const individualsNote = analyticsScope.canViewIndividuals
-    ? 'Individual developer metrics: team members who have not opted out.'
-    : 'Individual developer metrics: only your own. Team figures cover what you can see.';
+    ? 'Individual developer metrics: team members who opted in. Team figures need at least 3 of them.'
+    : 'Individual developer metrics: only your own. Team figures are averages of at least 3 developers who opted in.';
 
   if (currentView === 'flaky-test-intelligence') return analytics((id) => <FlakyTestIntelligence onBack={toHub} teamId={id} />);
   if (currentView === 'technical-debt') return analytics((id) => <TechnicalDebtTracker onBack={toHub} teamId={id} />);
@@ -334,6 +348,7 @@ function App() {
   if (currentView === 'business-impact') return analytics((id) => <BusinessImpactAnalysisV2 onBack={toHub} teamId={id} />);
   if (currentView === 'performance-metrics') return analytics((id) => <PerformanceTesting onBack={toHub} teamId={id} />);
   if (currentView === 'developer-productivity') return analytics((id) => <DeveloperProductivity onBack={toHub} teamId={id} />, individualsNote);
+  if (currentView === 'team-pulse') return analytics((id) => <PulseSurvey teamId={id} />, 'Survey answers are anonymous; results are team averages with at least 3 responses.');
   if (currentView === 'test-execution-timeline') return analytics((id) => <TestExecutionTimeline onBack={toHub} teamId={id} />);
   if (currentView === 'team-gamification') return analytics((id) => <TeamGamification onBack={toHub} teamId={id} />, 'Rankings compare the teams of the selected department; the selected team is highlighted.');
   if (currentView === 'pdf-report-generator') return analytics((id) => <PDFReportGenerator onBack={toHub} teamId={id} />, 'The report covers the selected team.');

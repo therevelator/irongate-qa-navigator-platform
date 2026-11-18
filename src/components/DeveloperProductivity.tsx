@@ -20,6 +20,7 @@ import { toNum } from '../data/detailedKPIs';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { useAuth } from '../contexts/AuthContext';
 import ExportCsvButton from './ExportCsvButton';
+import { SuppressedNote, type PrivacyInfo } from './PrivacyNote';
 
 interface DeveloperProductivityProps {
   onBack?: () => void;
@@ -27,7 +28,7 @@ interface DeveloperProductivityProps {
   teamId: string;
 }
 
-type TeamSummary = { id: string; name: string };
+type TeamRef = { id: string; name: string };
 
 type DevRow = DeveloperInputs & {
   developer_id: string;
@@ -55,12 +56,22 @@ type DdpsHistory = {
   startDate?: string;
   endDate?: string;
   stats?: { totalSnapshots?: number };
-  chartData?: { date: string; ddps: number; developers: number }[];
+  chartData?: { date: string; ddps: number | null; developers: number | null; suppressed?: boolean }[];
+  /** 'team': aggregates over developers (k-anonymous); 'developer': one person's own data. */
+  mode?: 'team' | 'developer';
+  aggregatePrivacy?: PrivacyInfo | null;
+};
+
+/** Team figures from GET /analytics/developer-metrics (server/lib/developerAggregates.ts), k-anonymous. */
+type TeamSummary = {
+  privacy: PrivacyInfo;
+  averages: { ddps: number | null; prMergeHours: number | null; reviewHours: number | null; focusHours: number | null; meetingHours: number | null; contextSwitches: number | null; workloadBalance: number | null };
+  burnout: { high: number; moderate: number; low: number } | null;
+  basis: string;
 };
 
 const ENGINEER_ROLES = new Set(['engineer', 'qa_engineer', 'team_lead']);
 const fmt = (v: number | null | undefined, d = 1) => (v == null || Number.isNaN(v) ? '—' : v.toFixed(d));
-const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
 
 const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId }) => {
   const { isDark } = useTheme();
@@ -71,6 +82,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
   const ownRowOnly = !scope.canViewIndividuals;
   const { user: authUser } = useAuth();
   const [developers, setDevelopers] = useState<DevRow[]>([]);
+  const [teamSummary, setTeamSummary] = useState<TeamSummary | null>(null);
   const selectedTeam = teamId;
   const [selectedDeveloperId, setSelectedDeveloperId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
@@ -81,7 +93,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
 
   // Members + recorded metrics per team. Members without a metrics row are excluded (never zero-filled).
   useEffect(() => {
-    const fetchTeamDevelopers = async (team: TeamSummary): Promise<DevRow[]> => {
+    const fetchTeamDevelopers = async (team: TeamRef): Promise<{ rows: DevRow[]; summary: TeamSummary | null }> => {
       try {
         const [teamRes, metricsRes] = await Promise.all([
           fetch(`${API_URL}/teams/${team.id}`, { credentials: 'include' }),
@@ -89,10 +101,13 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         ]);
         const members: any[] = teamRes.ok ? (await teamRes.json()).team?.members || [] : [];
         const lookup: Record<string, any> = {};
+        let summary: TeamSummary | null = null;
         if (metricsRes.ok) {
-          ((await metricsRes.json()).developers || []).forEach((m: any) => { if (m.developer_id) lookup[String(m.developer_id)] = m; });
+          const body = await metricsRes.json();
+          (body.developers || []).forEach((m: any) => { if (m.developer_id) lookup[String(m.developer_id)] = m; });
+          summary = body.summary ?? null;
         }
-        return members.flatMap((member: any): DevRow[] => {
+        const rows = members.flatMap((member: any): DevRow[] => {
           const m = lookup[String(member.id)];
           if (!m) return [];
           const inputs = {
@@ -121,19 +136,21 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
             burnout: calculateBurnoutRisk(d),
           }];
         });
+        return { rows, summary };
       } catch (error) {
         console.error(`Error fetching developers for team ${team.name}`, error);
-        return [];
+        return { rows: [], summary: null };
       }
     };
 
     let cancelled = false;
     (async () => {
       setLoading(true);
-      const team: TeamSummary = { id: teamId, name: scope.team?.id === teamId ? scope.team.name : 'Selected team' };
-      const rows = await fetchTeamDevelopers(team);
+      const team: TeamRef = { id: teamId, name: scope.team?.id === teamId ? scope.team.name : 'Selected team' };
+      const { rows, summary } = await fetchTeamDevelopers(team);
       if (!cancelled) {
         setDevelopers(rows);
+        setTeamSummary(summary);
         setLoading(false);
       }
     })();
@@ -158,14 +175,22 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [eligible, selectedTeam]);
 
-  const avgDDPS = avg(filtered.map(d => d.ddps));
-  const avgPR = avg(filtered.map(d => d.pr_merge_time_avg));
-  const avgReview = avg(filtered.map(d => d.code_review_time_avg));
-  const avgFocus = avg(filtered.map(d => d.focus_time_hours));
-  const avgMeetings = avg(filtered.map(d => d.meeting_time_hours));
-  const burnoutCounts = { high: 0, moderate: 0, low: 0 } as Record<BurnoutRisk, number>;
-  filtered.forEach(d => { burnoutCounts[d.burnout]++; });
+  // Tiles: one developer's own values when one is selected (individual data the caller may see);
+  // otherwise the team figures computed by the API, which withholds them below 3 contributors.
+  const single = selectedDeveloperId !== 'all' ? filtered[0] ?? null : null;
+  const teamAvg = teamSummary?.averages;
+  const suppressed = !single && !!teamSummary?.privacy.suppressed;
+  const avgDDPS = single ? single.ddps : teamAvg?.ddps ?? null;
+  const avgPR = single ? single.pr_merge_time_avg : teamAvg?.prMergeHours ?? null;
+  const avgReview = single ? single.code_review_time_avg : teamAvg?.reviewHours ?? null;
+  const avgFocus = single ? single.focus_time_hours : teamAvg?.focusHours ?? null;
+  const avgMeetings = single ? single.meeting_time_hours : teamAvg?.meetingHours ?? null;
+  const burnoutCounts: Record<BurnoutRisk, number> | null = single
+    ? { high: single.burnout === 'high' ? 1 : 0, moderate: single.burnout === 'moderate' ? 1 : 0, low: single.burnout === 'low' ? 1 : 0 }
+    : teamSummary?.burnout ?? null;
+  const contributors = single ? 1 : teamSummary?.privacy.contributors ?? null;
   const band = ddpsBand(avgDDPS);
+  const privacyCaption = suppressed ? <SuppressedNote testId="dev-summary-suppressed" /> : undefined;
 
   const sorted = [...filtered].sort((a, b) =>
     sortBy === 'ddps' ? b.ddps - a.ddps : sortBy === 'pr' ? a.pr_merge_time_avg - b.pr_merge_time_avg : a.code_review_time_avg - b.code_review_time_avg,
@@ -188,7 +213,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
   }, [selectedTeam, selectedDeveloperId]);
 
   const historyData = (history?.chartData || [])
-    .map(p => ({ date: p.date, ddps: toNum(p.ddps), developers: p.developers }))
+    .map(p => ({ date: p.date, ddps: toNum(p.ddps), developers: p.developers ?? 0 }))
     .filter((p): p is { date: string; ddps: number; developers: number } => p.ddps != null)
     .map(p => ({ ...p, ddps: Math.round(p.ddps * 100) })); // API returns DDPS as a 0–1 fraction → 0–100
 
@@ -203,7 +228,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
     return () => { cancelled = true; };
   }, [selectedTeam]);
 
-  const count = filtered.length;
+  const scopeLabel = single ? single.name : 'Team';
 
   return (
     <Page className="space-y-6">
@@ -211,8 +236,8 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         title="Developer productivity"
         description={
           ownRowOnly
-            ? `Your own recorded workload metrics on ${scope.team?.name ?? 'your team'} and the derived Daily Developer Productivity Score (DDPS, 0–100). Other developers' individual metrics are not shown for your role.`
-            : `Recorded developer workload metrics for ${scope.team?.name ?? 'the selected team'} and the derived Daily Developer Productivity Score (DDPS, 0–100). Only developers with recorded metrics who have not opted out are included.`
+            ? `Your own recorded workload metrics on ${scope.team?.name ?? 'your team'} and the derived Daily Developer Productivity Score (DDPS, 0–100). Other developers' individual metrics are not shown for your role; team figures are averages of at least 3 developers who opted in.`
+            : `Recorded developer workload metrics for ${scope.team?.name ?? 'the selected team'} and the derived Daily Developer Productivity Score (DDPS, 0–100). Only developers with recorded metrics who opted in to developer insights are included; team figures need at least 3 of them.`
         }
         actions={
           ownRowOnly ? (
@@ -227,17 +252,18 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
       />
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <StatTile label="Avg DDPS" value={avgDDPS == null ? '—' : Math.round(avgDDPS)} unit={avgDDPS == null ? undefined : '/100'} tone={band.tone} caption={loading ? 'Loading…' : `${band.label} · ${count} developer${count === 1 ? '' : 's'}`} />
-        <StatTile label="Avg PR merge time" value={fmt(avgPR)} unit={avgPR == null ? undefined : 'h'} caption="Open to merge (elapsed)" />
-        <StatTile label="Avg review time" value={fmt(avgReview)} unit={avgReview == null ? undefined : 'h'} />
-        <StatTile label="Avg focus time" value={fmt(avgFocus)} unit={avgFocus == null ? undefined : 'h/day'} />
-        <StatTile label="Avg meeting time" value={fmt(avgMeetings)} unit={avgMeetings == null ? undefined : 'h/day'} />
+        <StatTile label={single ? 'DDPS' : 'Team avg DDPS'} value={avgDDPS == null ? '—' : Math.round(avgDDPS)} unit={avgDDPS == null ? undefined : '/100'} tone={suppressed ? 'neutral' : band.tone}
+          caption={loading ? 'Loading…' : suppressed ? privacyCaption : avgDDPS == null ? 'No data recorded' : `${band.label} · ${single ? scopeLabel : `${contributors} developers`}`} />
+        <StatTile label={single ? 'PR merge time' : 'Team avg PR merge time'} value={fmt(avgPR)} unit={avgPR == null ? undefined : 'h'} caption={suppressed ? privacyCaption : 'Open to merge (elapsed)'} />
+        <StatTile label={single ? 'Review time' : 'Team avg review time'} value={fmt(avgReview)} unit={avgReview == null ? undefined : 'h'} caption={privacyCaption} />
+        <StatTile label={single ? 'Focus time' : 'Team avg focus time'} value={fmt(avgFocus)} unit={avgFocus == null ? undefined : 'h/day'} caption={privacyCaption} />
+        <StatTile label={single ? 'Meeting time' : 'Team avg meeting time'} value={fmt(avgMeetings)} unit={avgMeetings == null ? undefined : 'h/day'} caption={privacyCaption} />
         <StatTile
           label="Burnout risk"
-          value={count ? burnoutCounts.high : '—'}
-          unit={count ? 'high' : undefined}
-          tone={!count ? 'neutral' : burnoutCounts.high ? 'bad' : burnoutCounts.moderate ? 'warn' : 'good'}
-          caption={count ? `${burnoutCounts.moderate} moderate · ${burnoutCounts.low} low` : 'No data recorded'}
+          value={burnoutCounts ? burnoutCounts.high : '—'}
+          unit={burnoutCounts ? 'high' : undefined}
+          tone={!burnoutCounts ? 'neutral' : burnoutCounts.high ? 'bad' : burnoutCounts.moderate ? 'warn' : 'good'}
+          caption={suppressed ? privacyCaption : burnoutCounts ? `${burnoutCounts.moderate} moderate · ${burnoutCounts.low} low` : 'No data recorded'}
         />
       </div>
 
@@ -267,10 +293,12 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         <Card>
           <CardHeader
             title="Recorded DDPS snapshots"
-            subtitle="Daily average DDPS over the last 6 months, recalculated by the API from each stored snapshot's inputs (0–100). Snapshots are only present where they were recorded (currently by a seed script); no job creates them."
+            subtitle={`${history?.mode === 'team' ? 'Daily team average DDPS (days with fewer than 3 opted-in developers are not shown)' : 'Daily DDPS'} over the last 6 months, recalculated by the API from each stored snapshot's inputs (0–100). Snapshots are only present where they were recorded (currently by a seed script); no job creates them.`}
           />
           {historyLoading ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+          ) : history?.aggregatePrivacy?.suppressed ? (
+            <div className="flex h-72 items-center justify-center"><SuppressedNote className="text-sm" testId="ddps-history-suppressed" /></div>
           ) : historyData.length === 0 ? (
             <EmptyState
               title="No snapshots recorded"
@@ -431,7 +459,8 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         </p>
         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
           Bands: 80–100 exceptional, 60–79 high, 40–59 moderate, 0–39 low. The maximum raw total is {DDPS_MAX_RAW} points, which maps to 100.
-          Workload balance (derived) is the stored workload-balance value calculated from the same inputs — it is not a survey result.
+          Workload balance (derived) is the stored workload-balance value calculated from the same inputs: a workload signal, not a survey result and not wellbeing.
+          Wellbeing comes from the anonymous Wellbeing pulse survey. {teamSummary?.basis}
         </p>
       </Card>
     </Page>

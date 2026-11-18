@@ -21,6 +21,8 @@ import { computeQaScore, computeDdps, TECH_DEBT_SEVERITY_WEIGHTS } from '../lib/
 import { calculateWorkloadBalance } from '../../src/data/advancedFeatures';
 import { DEFAULT_METRIC_INTERVALS } from '../lib/metricIntervals';
 import { savedViewsSql } from './demoSavedViews';
+import { K_ANONYMITY_MIN } from '../lib/privacy';
+import { DEFAULT_ANCHOR, PULSE_QUESTIONS, periodFor, wellbeingScore, type CadenceRow } from '../lib/pulseRules';
 
 // ============================================================================
 // Identity of the demo company
@@ -513,10 +515,11 @@ const DEV_NAMES: Array<[string, string]> = [['Aoife', 'Byrne'], ['Rohan', 'Iyer'
  */
 export function demoDevelopersFor(team: { id: string; departmentId: string }, domain: string, existingEngineers: number, taken: Map<string, string>, existingInsights = 3): Member[] {
   const out: Member[] = [];
-  // At least 3 QA engineers, and at least 2 developers who share their developer insights
-  // (the productivity pages only show those). An email is free when no other user has it
-  // (a demo developer keeps its own email on a re-run).
-  for (let i = 0; existingEngineers + out.length < 3 || existingInsights + out.length < 2; i++) {
+  // At least 3 QA engineers, and at least K_ANONYMITY_MIN (3) developers who share their developer
+  // insights (the productivity pages only show those, and team figures need 3 contributors,
+  // server/lib/privacy.ts). An email is free when no other user has it (a demo developer keeps
+  // its own email on a re-run).
+  for (let i = 0; existingEngineers + out.length < 3 || existingInsights + out.length < K_ANONYMITY_MIN; i++) {
     const id = did('u', team.id, i + 1);
     const start = Math.floor(rnd('devname', team.id) * DEV_NAMES.length);
     let email = '', first = '', last = '';
@@ -1683,6 +1686,11 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
   }
 
   // --------------------------------------------------------------------------
+  // Wellbeing pulse survey (anonymous): closed periods of the last ~16 weeks
+  // --------------------------------------------------------------------------
+  const pulse = emitPulse(ds, company);
+
+  // --------------------------------------------------------------------------
   // Company KPI snapshots: the dashboard's company metrics, one per day
   // --------------------------------------------------------------------------
   // Effective KPI row of a team on a day: generated, or the team's real (carried-forward) row.
@@ -1697,7 +1705,6 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
     return found ? team.realKpi!.get(found)! : null;
   };
   const meanOf = (xs: Array<number | null | undefined>) => mean(xs.filter((x): x is number => typeof x === 'number' && Number.isFinite(x)));
-  const devTeams = teams.filter(team => !team.groups || team.groups.has('dev'));
   const companyGuard = company.isDemo ? undefined : ds.guard(`company:${companyId}`, `EXISTS (SELECT 1 FROM companies WHERE id = ${literal(companyId)})`);
   for (let t = HISTORY_DAYS; t >= 0; t--) {
     const date = D(t);
@@ -1720,18 +1727,17 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       .filter(d => d.created <= date && !(d.resolved && d.resolved <= date))
       .reduce((s, d) => s + (TECH_DEBT_SEVERITY_WEIGHTS[d.severity as keyof typeof TECH_DEBT_SEVERITY_WEIGHTS] ?? 0), 0);
     const debtScore = Math.max(0, 100 - Math.min(100, openWeight / Math.max(1, company.teamCount)));
-    let wellnessDate = date;
-    while (!isWeekday(wellnessDate)) wellnessDate = addDays(wellnessDate, -1);
-    const wellnessValues = [...devTeams.flatMap(team => devsOf(team).map(u => {
-      const v = devDays.get(u.id)!.get(wellnessDate) ?? devAverage(u.id, wellnessDate, 1);
-      return v ? workloadBalance(v) : 0;
-    })), ...company.extraHappiness];
-    const wellness = wellnessValues.length ? mean(wellnessValues) : 50;
+    // Wellbeing (survey) as the company summary computes it (server/lib/pulse.ts
+    // wellbeingAcrossTeams): each team's latest closed period on that day with at least 3
+    // responses, weighted by responses; left out of engineering health when no team has one.
+    const wellness = pulse.companyOn(date);
     const delivery = meanOf(dora);
-    const health = delivery * 0.35 + pipeline * 0.25 + debtScore * 0.2 + wellness * 0.2;
+    const health = wellness === null
+      ? (delivery * 0.35 + pipeline * 0.25 + debtScore * 0.2) / 0.8
+      : delivery * 0.35 + pipeline * 0.25 + debtScore * 0.2 + wellness * 0.2;
     ds.add('company_kpi_snapshots', {
       id: demoIntId(companyId, date), company_id: companyId, snapshot_date: date,
-      engineering_health_score: Math.round(health), delivery_performance_score: Math.round(delivery), developer_wellness_index: Math.round(wellness),
+      engineering_health_score: Math.round(health), delivery_performance_score: Math.round(delivery), developer_wellness_index: wellness === null ? null : Math.round(wellness),
       tech_debt_status_score: round(debtScore, 1), pipeline_health_score: round(pipeline, 1), avg_qa_score: Math.round(meanOf(qa)),
       avg_test_coverage: round(meanOf(rows.map(k => k.test_coverage)), 1), avg_defect_escape_rate: round(meanOf(rows.map(k => k.defect_escape_rate)), 1),
       avg_flakiness_rate: round(meanOf(rows.map(k => k.test_flakiness_rate)), 1), automation_coverage: round(meanOf(rows.map(k => k.automation_coverage)), 1),
@@ -1745,6 +1751,91 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
     id: company.isDemo ? 'demo-seeder-run' : did('fill-run', companyId), seeder_name: company.isDemo ? 'demo-seed' : 'demo-fill-existing',
     company_id: companyId, last_run_at: ts(today, 0, 1), records_affected: total, status: 'success', error_message: null,
   }, companyGuard);
+}
+
+// ============================================================================
+// Wellbeing pulse survey (anonymous answers; server/lib/pulse.ts)
+// ============================================================================
+
+const PULSE_WEEKS = 16;
+const PULSE_COMMENTS = [
+  'Too many context switches this sprint.',
+  'Pairing sessions helped a lot.',
+  'On-call was heavy this period.',
+  'Release week was stressful but well organised.',
+  'More focus time would help.',
+  'Good support from the team when things broke.',
+  'Planning felt rushed.',
+  'Fewer meetings this period, much better.',
+];
+
+/**
+ * Anonymous pulse answers for every active team of the company (closed periods of the last
+ * PULSE_WEEKS weeks, none in the running period), and some teams on a weekly cadence. Per
+ * company one team (the smallest) gets only 2 answers per period, so its results show as
+ * suppressed. No participation rows: nobody is linked to an answer, and real users can still
+ * answer the running period. Returns the company wellbeing on a given day (as the API computes it).
+ */
+function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: string) => number | null } {
+  const today = ds.today;
+  const teams = company.teams;
+  const respondents = (team: TeamCtx) => team.members.length;
+  const low = [...teams].sort((a, b) => respondents(a) - respondents(b) || a.id.localeCompare(b.id))[0]?.id;
+  const results = new Map<string, Array<{ start: string; end: string; n: number; mean: number }>>();
+  const cadences = new Map<string, CadenceRow[]>();
+  for (const team of teams) {
+    const guard = G(ds, team, 'base', 'pulse',
+      `NOT EXISTS (SELECT 1 FROM pulse_responses WHERE team_id = ${literal(team.id)} AND id NOT LIKE ${literal(DEMO_PREFIX + '%')})`);
+    const rows: CadenceRow[] = rnd('pulse-cadence', team.id) < 0.35 ? [{ cadence: 'weekly', effective_from: DEFAULT_ANCHOR }] : [];
+    cadences.set(team.id, rows);
+    if (rows.length) {
+      ds.add('pulse_cadences', { id: did('pcad', team.key), company_id: company.id, team_id: team.id, cadence: 'weekly', effective_from: DEFAULT_ANCHOR, created_by: null, created_at: ts(DEFAULT_ANCHOR, 9) }, guard);
+    }
+    const list: Array<{ start: string; end: string; n: number; mean: number }> = [];
+    let p = periodFor(rows, today);
+    const since = addDays(today, -7 * PULSE_WEEKS);
+    for (;;) {
+      p = periodFor(rows, addDays(p.start, -1));
+      if (p.start < since || p.start < DEFAULT_ANCHOR) break;
+      const m = respondents(team);
+      const share = 0.6 + 0.35 * rnd('pulse-share', team.id, p.start);
+      const n = team.id === low ? Math.min(2, m) : Math.min(m, Math.max(K_ANONYMITY_MIN, Math.round(m * share)));
+      // Mood follows the team's health, with a slow drift and per-period noise.
+      const base = 2.4 + 2.0 * clamp(team.h + 0.15 * Math.sin(team.phase + Date.parse(p.start) / (DAY_MS * 20)), 0, 1);
+      let total = 0;
+      for (let i = 0; i < n; i++) {
+        const answers: Record<string, number> = {};
+        for (const [qi, q] of PULSE_QUESTIONS.entries()) {
+          const v = Math.round(clamp(base + (qi === 1 ? -0.3 : qi === 2 ? 0.3 : 0) + (rnd('pulse-a', team.id, p.start, i, q.key) - 0.5) * 2.2, 1, 5));
+          answers[q.column] = v;
+          total += v;
+        }
+        const comment = rnd('pulse-c', team.id, p.start, i) < 0.3
+          ? PULSE_COMMENTS[Math.floor(rnd('pulse-ct', team.id, p.start, i) * PULSE_COMMENTS.length)]
+          : null;
+        ds.add('pulse_responses', {
+          id: did('pulse', sha1(`${team.id}|${p.start}|${i}`).slice(0, 24)), company_id: company.id, team_id: team.id,
+          period_start: p.start, period_end: p.end, ...answers, comment,
+        }, guard);
+      }
+      if (n) list.push({ start: p.start, end: p.end, n, mean: total / (n * PULSE_QUESTIONS.length) });
+    }
+    results.set(team.id, list);
+  }
+  return {
+    companyOn: (date: string) => {
+      let sum = 0, n = 0;
+      for (const team of teams) {
+        const rows = cadences.get(team.id) ?? [];
+        const prev = periodFor(rows, addDays(periodFor(rows, date).start, -1));
+        const r = results.get(team.id)?.find(x => x.start === prev.start && x.end === prev.end);
+        if (!r || r.n < K_ANONYMITY_MIN) continue;
+        sum += r.mean * r.n;
+        n += r.n;
+      }
+      return n ? wellbeingScore(sum / n) : null;
+    },
+  };
 }
 
 // ============================================================================
@@ -1860,6 +1951,9 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
   { table: 'users (primary_team_id)', sql: `UPDATE users u SET primary_team_id = NULL FROM role_assignments ra
     WHERE ra.id LIKE '${DEMO_PREFIX}ral-%' AND ra.user_id = u.id AND u.primary_team_id = ra.scope_id AND u.id NOT LIKE ${D_}` },
   { table: 'saved_views', sql: `DELETE FROM saved_views WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'pulse_participation', sql: `DELETE FROM pulse_participation WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_}` },
+  { table: 'pulse_responses', sql: `DELETE FROM pulse_responses WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
+  { table: 'pulse_cadences', sql: `DELETE FROM pulse_cadences WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'metric_values', sql: `DELETE FROM metric_values WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR idempotency_key LIKE 'backfill:${DEMO_PREFIX}%'` },
   { table: 'ingestion_log', sql: `DELETE FROM ingestion_log WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'target_history', sql: `DELETE FROM target_history WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
@@ -1919,6 +2013,7 @@ export const ALL_TABLES = [
   'invitations', 'pipeline_runs', 'pipeline_stage_history', 'pipeline_stages', 'role_assignments', 'seeder_runs', 'sprint_velocity', 'team_analytics', 'team_members',
   'team_pipeline_metrics', 'team_test_executions', 'teams', 'technical_debt', 'test_case_tags', 'test_cases', 'test_execution_runs',
   'test_executions', 'users', 'metric_values', 'target_history', 'ingestion_log', 'saved_views',
+  'pulse_cadences', 'pulse_responses', 'pulse_participation',
 ];
 
 /** SQL condition selecting the demo rows of a table (for counts). */
@@ -1927,6 +2022,7 @@ export function demoRowCondition(table: string): string {
     case 'company_kpi_snapshots': return `(company_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN})`;
     case 'developer_productivity_snapshots': return `(developer_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN})`;
     case 'team_members': return `user_id LIKE ${D_}`;
+    case 'pulse_participation': return `(company_id LIKE ${D_} OR user_id LIKE ${D_})`;
     case 'metric_values': return `(company_id LIKE ${D_} OR idempotency_key LIKE 'backfill:${DEMO_PREFIX}%')`;
     default: return `id LIKE ${D_}`;
   }
