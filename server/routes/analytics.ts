@@ -9,7 +9,7 @@ import { demoSummary, todayUtc } from '../seeds/demoData';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues } from '../../src/config/metricsConfig';
-import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel } from '../lib/metricFormulas';
+import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel, computeBottleneckScores } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
 
@@ -549,6 +549,9 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
         td.downtime_minutes_monthly,
         td.revenue_impact_percent,
         td.sla_breaches_monthly,
+        td.source,
+        td.manually_edited,
+        td.updated_at,
         (u.first_name || ' ' || u.last_name) as assigned_to_name
       FROM technical_debt td
       LEFT JOIN users u ON td.assigned_to = u.id
@@ -595,6 +598,10 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
         downtime_minutes_monthly: num(d.downtime_minutes_monthly),
         revenue_impact_percent: num(d.revenue_impact_percent),
         sla_breaches_monthly: num(d.sla_breaches_monthly),
+        // Provenance: where the item came from (e.g. 'SonarQube') and whether its impact was edited by hand
+        source: d.source ?? null,
+        manually_edited: d.manually_edited === true,
+        updated_at: d.updated_at ?? null,
         // Calculated ROI fields (null when inputs are missing)
         investment_cost: roi.investment !== null ? Math.round(roi.investment) : null,
         monthly_cost_of_delay: monthlyCostOfDelay,
@@ -855,7 +862,7 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
             ps.id, ps.name, ps.stage_order,
             ps.avg_duration_seconds as duration, ps.success_rate,
             ps.cpu_usage, ps.memory_usage, ps.cost_per_run as cost, ps.bottleneck_score,
-            ps.updated_at
+            ps.manually_edited, ps.updated_at
           FROM pipeline_stages ps
           WHERE ${where}
           ORDER BY ps.name, ps.updated_at DESC NULLS LAST, ps.created_at DESC NULLS LAST, ps.id
@@ -882,29 +889,16 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
       );
     }
 
-    // Duration z-score over stages that have a recorded duration
-    const durations = stages.map((s: any) => num(s.duration)).filter((d): d is number => d !== null);
-    const meanDuration = durations.length
-      ? durations.reduce((sum: number, val: number) => sum + val, 0) / durations.length
-      : 0;
-    const variance = durations.length
-      ? durations.reduce((sum: number, val: number) => sum + Math.pow(val - meanDuration, 2), 0) / durations.length
-      : 0;
-    const stdDev = Math.sqrt(Math.max(variance, 1e-6));
-
-    // Bottleneck score = duration factor (0-60, from z-score) + failure factor (0-40).
-    // Null when duration or success rate is missing.
-    const result = stages.map((s: any) => {
+    // Bottleneck score = duration factor (0-60, from z-score) + failure factor (0-40);
+    // null when duration or success rate is missing. One definition: computeBottleneckScores()
+    // in server/lib/metricFormulas.ts (BOTTLENECK_SCORE_FORMULA).
+    const bottlenecks = computeBottleneckScores(
+      stages.map((s: any) => ({ duration: s.duration, success_rate: s.success_rate }))
+    ).results;
+    const result = stages.map((s: any, i: number) => {
       const duration = num(s.duration);
       const successRate = num(s.success_rate);
-      let bottleneck: number | null = null;
-      if (duration !== null && successRate !== null) {
-        const durationZ = stdDev > 0 ? (duration - meanDuration) / stdDev : 0;
-        const durationFactor = Math.min(60, Math.max(0, ((durationZ + 2) / 4) * 60));
-        const successDecimal = Math.max(0, Math.min(1, successRate / 100));
-        const failureFactor = (1 - successDecimal) * 40;
-        bottleneck = Math.round(Math.min(100, Math.max(0, durationFactor + failureFactor)) * 10) / 10;
-      }
+      const bottleneck = bottlenecks[i].score;
 
       return {
         id: s.id,
@@ -917,6 +911,7 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
           cost: num(s.cost)
         },
         bottleneck_score: bottleneck,
+        manually_edited: s.manually_edited === true,
         updated_at: s.updated_at ?? null
       };
     });

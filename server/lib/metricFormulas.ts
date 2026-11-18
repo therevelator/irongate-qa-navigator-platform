@@ -237,3 +237,62 @@ export function computeBurnoutRisk(input: {
 export function burnoutRiskLabel(level: BurnoutRiskLevel | null): 'High' | 'Moderate' | 'Low' | 'Unknown' {
   return level === 'high' ? 'High' : level === 'moderate' ? 'Moderate' : level === 'low' ? 'Low' : 'Unknown';
 }
+
+// ============================================================================
+// TECHNICAL DEBT ROI (per debt item)
+// ============================================================================
+
+/** ROI of fixing one technical-debt item (GET /api/analytics/technical-debt, Manual metrics). */
+export const TECH_DEBT_ROI_FORMULA =
+  'Investment = effort hours × developer hourly rate; ' +
+  'Monthly cost of delay = support tickets/mo × support ticket cost + downtime min/mo × downtime cost per minute + ' +
+  'affected users × revenue per user per month × revenue impact % ÷ 100 + SLA breaches/mo × SLA breach penalty; ' +
+  'Annual savings = monthly cost of delay × 12; ROI % = (annual savings − investment) ÷ investment × 100; ' +
+  'Payback months = investment ÷ monthly cost of delay.';
+
+// ============================================================================
+// PIPELINE BOTTLENECK SCORE (per stage, relative to the other stages)
+// ============================================================================
+
+export const BOTTLENECK_SCORE_FORMULA =
+  'Bottleneck score = min(100, duration factor + failure factor), rounded to 1 decimal. ' +
+  'Duration factor = min(60, max(0, (z + 2) ÷ 4 × 60)), where z = (stage duration − mean stage duration) ÷ standard deviation of the stage durations; ' +
+  'failure factor = (1 − success rate ÷ 100) × 40. No score when duration or success rate is missing.';
+
+export interface BottleneckStageResult {
+  score: number | null;
+  z: number | null;
+  durationFactor: number | null;
+  failureFactor: number | null;
+}
+
+/**
+ * The one bottleneck-score calculation, over a set of stages (population standard deviation
+ * of the recorded durations). Used by GET /api/analytics/pipeline-stages.
+ */
+export function computeBottleneckScores(stages: Array<{ duration: Num; success_rate: Num }>): {
+  meanDuration: number;
+  stdDev: number;
+  stagesWithDuration: number;
+  results: BottleneckStageResult[];
+} {
+  const durations = stages.map((s) => toNum(s.duration)).filter((d): d is number => d !== null);
+  const meanDuration = durations.length ? durations.reduce((sum, v) => sum + v, 0) / durations.length : 0;
+  const variance = durations.length
+    ? durations.reduce((sum, v) => sum + Math.pow(v - meanDuration, 2), 0) / durations.length
+    : 0;
+  const stdDev = Math.sqrt(Math.max(variance, 1e-6));
+
+  const results = stages.map((s): BottleneckStageResult => {
+    const duration = toNum(s.duration);
+    const successRate = toNum(s.success_rate);
+    if (duration === null || successRate === null) return { score: null, z: null, durationFactor: null, failureFactor: null };
+    const z = stdDev > 0 ? (duration - meanDuration) / stdDev : 0;
+    const durationFactor = Math.min(60, Math.max(0, ((z + 2) / 4) * 60));
+    const failureFactor = (1 - clamp(successRate / 100, 0, 1)) * 40;
+    const score = Math.round(Math.min(100, Math.max(0, durationFactor + failureFactor)) * 10) / 10;
+    return { score, z, durationFactor, failureFactor };
+  });
+
+  return { meanDuration, stdDev, stagesWithDuration: durations.length, results };
+}
