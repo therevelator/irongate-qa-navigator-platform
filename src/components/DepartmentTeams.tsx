@@ -288,7 +288,7 @@ export const MoveTeamDialog: React.FC<{
                 </div>
               </dl>
               <p className="border-t border-slate-200 px-4 py-2.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                QA managers and super admins never move with a team: they stay in their department, so a manager keeps managing it and loses this team. To give the team a manager in {plan.to.name}, assign one there. KPI history, metrics and team settings stay with the team; people for whom it is a secondary team keep their department.
+                QA managers and super admins never move with a team: they stay in their department, so a manager keeps managing it and loses this team (a membership of it ends; Undo on the Activity page restores it). To give the team a manager in {plan.to.name}, assign one there. KPI history, metrics and team settings stay with the team; people for whom it is a secondary team keep their department.
                 {!plan.team.is_active && ' This team is inactive; it stays inactive.'}
               </p>
             </div>

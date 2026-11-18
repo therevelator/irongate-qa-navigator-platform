@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import Login from './Login';
 import Register from './Register';
+import AcceptInvite from './AcceptInvite';
+
+const isAcceptInvitePath = () => window.location.pathname === '/accept-invite';
 
 interface AuthWrapperProps {
   children: React.ReactNode;
@@ -10,6 +13,15 @@ interface AuthWrapperProps {
 const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const { isAuthenticated, isLoading } = useAuth();
   const [showRegister, setShowRegister] = useState(false);
+  // /accept-invite is public (the invited person has no account yet).
+  const [acceptInvite, setAcceptInvite] = useState(isAcceptInvitePath);
+  useEffect(() => {
+    const onPop = () => setAcceptInvite(isAcceptInvitePath());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  if (acceptInvite && !isLoading) return <AcceptInvite />;
 
   // Show loading state
   if (isLoading) {

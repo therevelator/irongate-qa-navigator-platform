@@ -22,6 +22,8 @@ export interface CompanyUser {
   department_name: string | null;
   primary_team_id: string | null;
   team_name: string | null;
+  /** Teams the user is assigned to (role assignments). */
+  team_ids?: string[];
 }
 
 const ROLE_LABEL: Record<string, string> = {
@@ -225,7 +227,9 @@ export const AssignmentDialog: React.FC<{
     return users.filter((u) => u.is_active && !exclude.has(u.id));
   }, [request, users]);
   const teamMemberIds = useMemo(
-    () => new Set(request?.kind === 'assign_lead' ? users.filter((u) => u.primary_team_id === request.teamId).map((u) => u.id) : []),
+    () => new Set(request?.kind === 'assign_lead'
+      ? users.filter((u) => u.primary_team_id === request.teamId || (u.team_ids ?? []).includes(request.teamId)).map((u) => u.id)
+      : []),
     [request, users],
   );
 
@@ -321,7 +325,7 @@ export const AssignmentDialog: React.FC<{
                 ))}
               </ul>
               <p className="border-t border-slate-200 px-4 py-2.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                Takes effect on their next request; they do not need to sign in again.
+                Takes effect on their next request; they do not need to sign in again. Recorded under Activity, where it can be undone.
               </p>
             </div>
           )}

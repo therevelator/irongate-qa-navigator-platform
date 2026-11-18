@@ -8,6 +8,28 @@ interface AuthContextType extends AuthState {
   register: (data: RegisterData) => Promise<void>;
   logout: () => void;
   updateUser: (user: Partial<User>) => void;
+  /** Reload the signed-in user from the server (after accepting an invitation, or a role change). */
+  reloadUser: () => Promise<void>;
+}
+
+/** Map the API user (snake_case) to the app's User, including the role assignments. */
+export function mapApiUser(u: any): User {
+  return {
+    id: u.id,
+    email: u.email,
+    firstName: u.first_name || u.firstName,
+    lastName: u.last_name || u.lastName,
+    role: u.role,
+    companyId: u.company_id || u.companyId,
+    departmentId: u.department_id || u.departmentId,
+    primaryTeamId: u.primary_team_id || u.primaryTeamId,
+    assignedTeams: u.assignedTeams || [],
+    assignments: Array.isArray(u.assignments) ? u.assignments : [],
+    createdAt: u.created_at || u.createdAt,
+    lastLogin: u.last_login || u.lastLogin,
+    isActive: u.is_active ?? u.isActive ?? true,
+    emailVerified: u.email_verified ?? u.emailVerified ?? false,
+  };
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,61 +54,35 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     error: null,
   });
 
-  // Check for existing session on mount
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        // Try to get user from backend (checks cookie)
-        const response = await fetch(`${API_URL}/auth/me`, {
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include' // Send cookies
-        });
+  // Check for existing session on mount (and on reloadUser).
+  const checkAuth = async () => {
+    try {
+      // Try to get user from backend (checks cookie)
+      const response = await fetch(`${API_URL}/auth/me`, {
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include' // Send cookies
+      });
 
-        if (response.ok) {
-          const { user } = await response.json();
-          
-          // Map backend user to frontend User type (if needed, but structure matches closely)
-          const mappedUser: User = {
-            id: user.id,
-            email: user.email,
-            firstName: user.first_name || user.firstName,
-            lastName: user.last_name || user.lastName,
-            role: user.role,
-            companyId: user.company_id || user.companyId,
-            departmentId: user.department_id || user.departmentId,
-            primaryTeamId: user.primary_team_id || user.primaryTeamId,
-            assignedTeams: user.assignedTeams || [],
-            createdAt: user.created_at || user.createdAt,
-            lastLogin: user.last_login || user.lastLogin,
-            isActive: user.is_active ?? user.isActive ?? true,
-            emailVerified: user.email_verified ?? user.emailVerified ?? false
-          };
-
-          // Cache user info in localStorage for faster subsequent loads (optional, but keeps UI responsive)
-          localStorage.setItem('irongate_user', JSON.stringify(mappedUser));
-
-          setAuthState({
-            user: mappedUser,
-            isAuthenticated: true,
-            isLoading: false,
-            error: null,
-          });
-        } else {
-          // Session invalid or expired
-          localStorage.removeItem('irongate_user');
-          setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
-        }
-      } catch (error) {
-        console.error('Auth check failed:', error);
-        // Fallback to checking localStorage user if network fails? 
-        // No, safer to assume logged out if we can't verify session.
-        // But to prevent flashing logged out state on network glitch, maybe we could...
-        // For now, assume logged out.
+      if (response.ok) {
+        const { user } = await response.json();
+        const mappedUser = mapApiUser(user);
+        // Cache user info in localStorage for faster subsequent loads
+        localStorage.setItem('irongate_user', JSON.stringify(mappedUser));
+        setAuthState({ user: mappedUser, isAuthenticated: true, isLoading: false, error: null });
+      } else {
+        // Session invalid or expired
         localStorage.removeItem('irongate_user');
         setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
       }
-    };
+    } catch (error) {
+      console.error('Auth check failed:', error);
+      // Safer to assume logged out if the session cannot be verified.
+      localStorage.removeItem('irongate_user');
+      setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
+    }
+  };
 
+  useEffect(() => {
     checkAuth();
   }, []);
 
@@ -110,21 +106,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const { user: userData } = await response.json();
 
       // Map backend user to frontend User type
-      const user: User = {
-        id: userData.id,
-        email: userData.email,
-        firstName: userData.first_name,
-        lastName: userData.last_name,
-        role: userData.role,
-        companyId: userData.company_id,
-        departmentId: userData.department_id,
-        primaryTeamId: userData.primary_team_id,
-        assignedTeams: userData.assignedTeams || [],
-        createdAt: userData.created_at,
-        lastLogin: new Date().toISOString(),
-        isActive: userData.is_active,
-        emailVerified: userData.email_verified
-      };
+      const user: User = { ...mapApiUser(userData), lastLogin: new Date().toISOString() };
 
       // Store user info (but NOT token)
       localStorage.setItem('irongate_user', JSON.stringify(user));
@@ -173,20 +155,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const { user: apiUser } = await response.json();
       
       // Map API response to User type
-      const user: User = {
-        id: apiUser.id,
-        email: apiUser.email,
-        firstName: apiUser.first_name,
-        lastName: apiUser.last_name,
-        role: apiUser.role,
-        companyId: apiUser.company_id,
-        departmentId: apiUser.department_id,
-        primaryTeamId: apiUser.primary_team_id,
-        assignedTeams: apiUser.assignedTeams || [apiUser.primary_team_id],
-        createdAt: apiUser.created_at || new Date().toISOString(),
-        isActive: apiUser.is_active ?? true,
-        emailVerified: apiUser.email_verified ?? false,
-      };
+      const user: User = { ...mapApiUser(apiUser), assignedTeams: apiUser.assignedTeams || [apiUser.primary_team_id] };
       
       localStorage.setItem('irongate_user', JSON.stringify(user));
       // No token storage in localStorage
@@ -248,6 +217,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         register,
         logout,
         updateUser,
+        reloadUser: checkAuth,
       }}
     >
       {children}

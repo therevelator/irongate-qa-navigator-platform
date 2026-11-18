@@ -17,12 +17,24 @@ export interface User {
   departmentId: string;
   primaryTeamId: string; // User's main team
   assignedTeams: string[]; // All team IDs user has access to (for cross-team roles)
+  /** Active role assignments (role on a company / department / team): what access is decided on. */
+  assignments?: UserAssignment[];
   
   avatar?: string;
   createdAt: string;
   lastLogin?: string;
   isActive: boolean;
   emailVerified: boolean;
+}
+
+export interface UserAssignment {
+  id: string;
+  role: UserRole;
+  scopeType: 'company' | 'department' | 'team';
+  scopeId: string;
+  scopeName: string | null;
+  departmentId: string | null;
+  departmentName: string | null;
 }
 
 export interface AuthState {

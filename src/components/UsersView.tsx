@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Users, Search, Edit2, Key, Trash2, UserPlus, Save, UserCheck, UserX, Bot, ChevronDown, ChevronUp, GitPullRequest, Clock, Zap, TrendingUp, LayoutGrid, List } from 'lucide-react';
+import { Users, Search, Edit2, Key, Trash2, UserPlus, Save, UserCheck, UserX, Bot, ChevronDown, ChevronUp, GitPullRequest, Clock, Zap, TrendingUp, LayoutGrid, List, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import Modal from './Modal';
@@ -21,6 +21,9 @@ interface User {
   primary_team_id: string;
   is_active: boolean;
   developer_insights_enabled?: boolean;
+  team_ids?: string[];
+  department_ids?: string[];
+  assignments?: AssignmentRow[];
 }
 
 interface DeveloperMetrics {
@@ -71,7 +74,11 @@ const STATUS_META: Record<DeveloperStatus, { label: string; tone: 'good' | 'warn
 const fmtH = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}h`);
 
 import API_URL from '../config/api';
-import { canEditUser, canEditAssignment, canManageUser, canDeleteUser, canResetPassword, canAssignRole, canCreateUsers, TEAM_OPTIONAL_ROLES, type PolicyActor } from '../../server/lib/userPolicy';
+import { canEditUser, canEditAssignment, canManageUser, canDeleteUser, canResetPassword, canAssignRole, canCreateUsers, canInvite, highestRole, TEAM_OPTIONAL_ROLES, type PolicyActor } from '../../server/lib/userPolicy';
+import { policyActorOf, grantableOptions } from '../lib/policyActor';
+import { InviteDialog, InvitationsPanel } from './InviteDialog';
+import { AssignmentChips, type AssignmentRow } from './AssignmentChips';
+import { buttonClass } from './ui';
 
 interface UsersViewProps {
   is3DMode?: boolean;
@@ -97,6 +104,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   const [gridColumns, setGridColumns] = useState<2 | 3 | 4>(3);
   const [currentPage, setCurrentPage] = useState(1);
   const [showOnlyWithMetrics, setShowOnlyWithMetrics] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
+  const [invitationsKey, setInvitationsKey] = useState(0);
   const usersPerPage = gridColumns * 3; // 3 rows per page
   const [userForm, setUserForm] = useState({
     firstName: '',
@@ -244,11 +253,6 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
       .toLowerCase()
       .includes(searchTerm.toLowerCase())
   ).filter(u => {
-    if (user?.role === 'team_lead') {
-      return u.primary_team_id === user.primaryTeamId;
-    }
-    return true;
-  }).filter(u => {
     // Filter by metrics if checkbox is checked
     if (showOnlyWithMetrics) {
       return usersWithMetricsIds.has(u.id);
@@ -264,8 +268,15 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   );
 
   // One set of rules with the server (server/lib/userPolicy): only offer what will succeed.
-  const actor: PolicyActor = { id: user?.id ?? '', role: user?.role ?? '', departmentId: user?.departmentId ?? null, primaryTeamId: user?.primaryTeamId ?? null };
-  const asTarget = (u: User) => ({ id: u.id, role: u.role, department_id: u.department_id ?? null, primary_team_id: u.primary_team_id ?? null });
+  // The actor carries the signed-in user's role assignments (a manager of two departments, ...).
+  const actor: PolicyActor = policyActorOf(user);
+  const asTarget = (u: User) => ({
+    id: u.id, role: u.role, department_id: u.department_id ?? null, primary_team_id: u.primary_team_id ?? null,
+    department_ids: u.department_ids ?? null, team_ids: u.team_ids ?? null,
+  });
+  // Assignments the signed-in user may give (shared rule canGrant), for chips and invitations.
+  const grantOptions = grantableOptions(actor, user?.companyId ?? '', 'Organisation', departments, teams);
+  const mayInvite = !!user && canInvite(actor) && grantOptions.length > 0;
   const canEditTarget = (u: User) => !!user && canEditUser(actor, asTarget(u));
   const canManageTarget = (u: User) => !!user && canManageUser(actor, asTarget(u));
   const canDeleteTarget = (u: User) => !!user && canDeleteUser(actor, asTarget(u));
@@ -295,7 +306,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     return colors[role] || colors.viewer;
   };
 
-  const canManageUsers = !!user && canCreateUsers(user.role);
+  const canManageUsers = !!user && canCreateUsers(highestRole(actor));
 
   if (loading) {
     return (
@@ -365,8 +376,16 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
               </div>
             )}
 
+            {mayInvite && (
+              <button type="button" onClick={() => setShowInvite(true)} className={buttonClass.primary} data-testid="invite-user-btn">
+                <Send size={16} aria-hidden="true" />
+                <span>Invite</span>
+              </button>
+            )}
             {canManageUsers && (
               <button
+                type="button"
+                title="Creates the account with a password you choose (for demos and scripted setups). Prefer Invite."
                 onClick={() => {
                   setUserForm({
                     firstName: '',
@@ -379,18 +398,18 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                   });
                   setShowCreateModal(true);
                 }}
-                className={`flex items-center gap-2 px-4 py-2.5 text-white rounded-lg transition-all ${is3DMode
-                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 shadow-lg shadow-cyan-500/30 hover:shadow-cyan-500/50'
-                  : 'bg-cyan-600 hover:bg-cyan-700'
-                  }`}
+                className={buttonClass.secondary}
                 data-testid="add-user-btn"
               >
-                <UserPlus size={18} />
-                <span className="hidden sm:inline">Create User</span>
+                <UserPlus size={16} aria-hidden="true" />
+                <span className="hidden sm:inline">Add with password</span>
+                <span className="rounded bg-slate-100 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">Demo</span>
               </button>
             )}
           </div>
         </div>
+
+        {mayInvite && <InvitationsPanel reloadKey={invitationsKey} />}
 
         {/* Search */}
         <div className="mb-6 flex items-center gap-4 flex-wrap">
@@ -476,16 +495,11 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                         </div>
                       </div>
 
-                      {/* Role & Team Info */}
-                      <div className="mt-3 flex flex-wrap gap-2">
-                        <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${roleColors.bg} ${roleColors.text}`}>
-                          {getRoleDisplay(u.role)}
-                        </span>
-                        {u.team_name && (
-                          <span data-testid="user-team" className="px-2.5 py-1 text-xs font-medium rounded-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300">
-                            {u.team_name}
-                          </span>
-                        )}
+                      {/* Role assignments (role on an organisation / department / team) */}
+                      <div className="mt-3">
+                        <span className="sr-only" data-testid="user-role">{getRoleDisplay(u.role)}</span>
+                        {u.team_name && <span data-testid="user-team" className="sr-only">{u.team_name}</span>}
+                        <AssignmentChips actor={actor} user={u} teams={teams} options={grantOptions} onChanged={fetchUsers} />
                       </div>
 
                       {/* Department */}
@@ -809,8 +823,10 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
         )
       }
 
-      {/* Create User Modal */}
-      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Create New User" size="md">
+      <InviteDialog isOpen={showInvite} onClose={() => setShowInvite(false)} options={grantOptions} onSent={() => setInvitationsKey((k) => k + 1)} />
+
+      {/* Create User Modal (with a password: demos and scripted setups; Invite is the normal way) */}
+      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Add a user with a password" subtitle="For demos and scripted setups. To add a real person, use Invite: they choose their own password." size="md">
         <form onSubmit={async (e) => {
           e.preventDefault();
           try {
@@ -973,7 +989,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>
               {/* Roles the caller may assign (server: canAssignRole); the current role is kept as an option. */}
-              {canEditTargetAssignment(selectedUser) && selectedUser && canAssignRole(actor.role, selectedUser.role) ? (
+              {canEditTargetAssignment(selectedUser) && selectedUser && canAssignRole(highestRole(actor), selectedUser.role) ? (
                 <select value={userForm.role} onChange={(e) => setUserForm({ ...userForm, role: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500">
                   {roles.map(role => (<option key={role.id} value={role.id}>{role.name}</option>))}
                 </select>
@@ -1009,6 +1025,11 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 </div>
               )}
             </div>
+            {canEditTargetAssignment(selectedUser) && (
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Role, department and team set the primary assignment. Further assignments (another team, a second department) are added with the chips on the user card.
+              </p>
+            )}
             {/* Primary team (not editable for yourself; optional for TEAM_OPTIONAL_ROLES) */}
             {userForm.role && canEditTargetAssignment(selectedUser) && (
               <div>

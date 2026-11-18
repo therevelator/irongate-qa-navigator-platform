@@ -15,6 +15,7 @@ import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { canViewIndividualDevelopers, canViewTeamAnalytics } from '../../server/lib/userPolicy';
+import { policyActorOf } from '../lib/policyActor';
 import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay } from 'lucide-react';
 import BatteryIndicator from './BatteryIndicator';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
@@ -328,9 +329,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
   // Shared rules (server/lib/userPolicy.ts): other developers' stats and AI insights for
   // super_admin (any team), qa_manager (own department) and team_lead (own team); a
   // qa_engineer / viewer sees only their own row, on their own team. The API enforces both.
-  const policyActor = user
-    ? { id: String(user.id), role: user.role, departmentId: user.departmentId ?? null, primaryTeamId: user.primaryTeamId ?? null }
-    : null;
+  const policyActor = user ? policyActorOf(user) : null;
   const policyTeam = { id: String(team.id), department_id: (team as any).department_id != null ? String((team as any).department_id) : null };
   const canViewDeveloperInsights = !!policyActor && canViewIndividualDevelopers(policyActor, policyTeam);
   const canViewOwnRow = !canViewDeveloperInsights && !!policyActor && canViewTeamAnalytics(policyActor, policyTeam);

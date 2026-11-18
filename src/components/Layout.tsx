@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity,
-  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose,
+  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -69,6 +69,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
       { view: 'users', label: 'Users', icon: UsersIcon, roles: ['super_admin', 'qa_manager', 'team_lead'] },
       { view: 'teams', label: 'Teams', icon: UsersRound, roles: ['super_admin', 'qa_manager', 'team_lead'] },
       { view: 'departments', label: 'Departments', icon: Building2, roles: ['super_admin'] },
+      { view: 'activity', label: 'Activity', icon: History, roles: ADMIN_ROLES },
     ],
   },
   {
@@ -98,6 +99,7 @@ const PAGE_META: Record<string, { title: string; parent?: string }> = {
   users: { title: 'Users', parent: 'Organisation' },
   teams: { title: 'Teams', parent: 'Organisation' },
   departments: { title: 'Departments', parent: 'Organisation' },
+  activity: { title: 'Activity', parent: 'Organisation' },
   'admin-panel': { title: 'Admin console', parent: 'Administration' },
   'manual-metrics': { title: 'Manual metrics', parent: 'Administration' },
   'metric-intervals': { title: 'Expected update frequency', parent: 'Administration' },

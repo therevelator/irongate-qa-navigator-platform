@@ -8,13 +8,15 @@ import {
   type AnalyticsScopeLevel,
   type PolicyActor,
 } from '../../server/lib/userPolicy';
+import { policyActorOf } from '../lib/policyActor';
 
 /**
  * Analytics scope: the department + team every Analytics module shows.
  *
  * The list of selectable teams comes from GET /api/analytics/scope, which applies the shared
- * rule in server/lib/userPolicy.ts (super_admin: any team of the company; qa_manager: the
- * teams of their department; team_lead / qa_engineer / viewer: their own team). The server
+ * rule in server/lib/userPolicy.ts to the user's role assignments (super_admin: any team of
+ * the company; qa_manager: the teams of the departments they manage; team_lead / qa_engineer /
+ * viewer: the teams they are assigned to). The server
  * enforces the same rule on every analytics endpoint, so this context only decides what to
  * offer and remember.
  *
@@ -46,9 +48,9 @@ interface AnalyticsScopeValue {
   departmentId: string | null;
   teamId: string | null;
   team: AnalyticsScopeTeam | null;
-  /** Department selector editable (super_admin only). */
+  /** Department selector editable (more than one department in scope). */
   canChangeDepartment: boolean;
-  /** Team selector editable (super_admin, qa_manager). */
+  /** Team selector editable (more than one team in scope). */
   canChangeTeam: boolean;
   /** May the user see other developers' individual rows for the selected team? */
   canViewIndividuals: boolean;
@@ -149,7 +151,7 @@ export const AnalyticsScopeProvider: React.FC<{ children: ReactNode }> = ({ chil
       }
     })();
     return () => { cancelled = true; };
-  }, [user?.id, user?.role, user?.departmentId, user?.primaryTeamId, nonce]);
+  }, [user?.id, user?.role, user?.departmentId, user?.primaryTeamId, user?.assignments?.map((a) => a.id).join(','), nonce]);
 
   // Keep the URL in step with the selection; follow back/forward to a link with another team.
   useEffect(() => {
@@ -185,9 +187,7 @@ export const AnalyticsScopeProvider: React.FC<{ children: ReactNode }> = ({ chil
     setTeamId(preferred.id);
   }, [teams, user?.primaryTeamId, setTeamId]);
 
-  const actor: PolicyActor | null = user
-    ? { id: String(user.id), role: user.role, departmentId: user.departmentId ?? null, primaryTeamId: user.primaryTeamId ?? null }
-    : null;
+  const actor: PolicyActor | null = user ? policyActorOf(user) : null;
   const policyTeam = team ? { id: team.id, department_id: team.department_id } : null;
 
   const value: AnalyticsScopeValue = {
@@ -200,8 +200,10 @@ export const AnalyticsScopeProvider: React.FC<{ children: ReactNode }> = ({ chil
     departmentId,
     teamId: team ? team.id : null,
     team,
-    canChangeDepartment: level === 'company' && departments.length > 1,
-    canChangeTeam: (level === 'company' || level === 'department') && teams.length > 1,
+    // The selectors follow what is in scope: a QA manager of two departments or a lead of two
+    // teams can switch between them; with one team in scope the bar is read-only.
+    canChangeDepartment: departments.length > 1,
+    canChangeTeam: teams.length > 1,
     canViewIndividuals: !!(actor && policyTeam && canViewIndividualDevelopers(actor, policyTeam)),
     canWriteTeam: !!(actor && policyTeam && canWriteTeamData(actor, policyTeam)),
     setDepartmentId,

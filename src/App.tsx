@@ -17,6 +17,7 @@ import PDFReportGenerator from './components/PDFReportGenerator';
 import UsersView from './components/UsersView';
 import TeamsView from './components/TeamsView';
 import DepartmentsView from './components/DepartmentsView';
+import ActivityLog from './components/ActivityLog';
 import Layout from './components/Layout';
 import NewDashboard from './components/NewDashboard';
 import ManualMetricsInput from './components/ManualMetricsInput';
@@ -26,7 +27,8 @@ import TeamTvView from './components/TeamTvView';
 import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
-import { ANALYTICS_ROLES } from '../server/lib/userPolicy';
+import { ANALYTICS_ROLES, canViewActivity } from '../server/lib/userPolicy';
+import { policyActorOf } from './lib/policyActor';
 
 // Map views to URL paths
 const VIEW_TO_PATH: Record<string, string> = {
@@ -34,6 +36,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'users': '/users',
   'teams': '/teams',
   'departments': '/departments',
+  'activity': '/activity',
   'features': '/analytics',
   'admin-panel': '/admin-panel',
   'manual-metrics': '/manual-metrics',
@@ -121,6 +124,9 @@ function App() {
         return ['super_admin', 'qa_manager', 'team_lead'].includes(role);
       case 'departments':
         return role === 'super_admin';
+      case 'activity':
+        // Change history: super_admin (company) and QA managers (their departments), as GET /api/admin/audit.
+        return canViewActivity(policyActorOf(user));
       case 'features':
       case 'flaky-test-intelligence':
       case 'technical-debt':
@@ -324,6 +330,7 @@ function App() {
   if (currentView === 'team-gamification') return analytics((id) => <TeamGamification onBack={toHub} teamId={id} />, 'Rankings compare the teams of the selected department; the selected team is highlighted.');
   if (currentView === 'pdf-report-generator') return analytics((id) => <PDFReportGenerator onBack={toHub} teamId={id} />, 'The report covers the selected team.');
 
+  if (currentView === 'activity') return renderLayout(<ActivityLog />);
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
   if (currentView === 'manual-metrics') return renderLayout(<ManualMetricsInput onBack={() => handleViewChange('dashboard')} />);
   if (currentView === 'metric-intervals') return renderLayout(<MetricIntervalsConfig onBack={() => handleViewChange('dashboard')} />);

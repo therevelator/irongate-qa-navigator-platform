@@ -7,7 +7,8 @@ import { confirmDelete, showCannotDeleteWarning, showSuccess, showAlert } from '
 import API_URL from '../config/api';
 import { Page, PageIntro, Card, Badge, EmptyState, buttonClass, inputClass, scoreTone, toneText, cx } from './ui';
 import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
-import { canManageTeam, canWriteTeamData, type PolicyActor } from '../../server/lib/userPolicy';
+import { canManageTeam, canWriteTeamData, canManageCompanyConfig, ledTeamIds, type PolicyActor } from '../../server/lib/userPolicy';
+import { policyActorOf } from '../lib/policyActor';
 
 interface TeamMetrics {
   qa_score: number | null;
@@ -78,7 +79,7 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [teamMetrics, setTeamMetrics] = useState<Record<string, TeamMetrics>>({});
 
-  const actor: PolicyActor = { id: user?.id ?? '', role: user?.role ?? '', departmentId: user?.departmentId ?? null, primaryTeamId: user?.primaryTeamId ?? null };
+  const actor: PolicyActor = policyActorOf(user);
 
   const fetchData = async () => {
     try {
@@ -123,20 +124,18 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
 
   useEffect(() => { fetchData(); fetchTeamMetrics(); }, []);
 
-  // Members: same definition as the server's member_count (primary team or team_members).
+  // Members: same definition as the server's member_count (an assignment on the team).
   const membersOf = (teamId: string) =>
-    users.filter(u => u.primary_team_id === teamId || (u.team_ids || []).includes(teamId));
+    users.filter(u => u.is_active !== false && (u.team_ids || []).includes(teamId));
 
   const filteredTeams = useMemo(() => teams
     .filter(t => `${t.name} ${t.department_name || ''} ${t.platform || ''}`.toLowerCase().includes(searchTerm.toLowerCase()))
-    .filter(t => {
-      if (user?.role === 'super_admin') return true;
-      if (user?.role === 'qa_manager') return t.department_id === user.departmentId;
-      if (user?.role === 'team_lead') return t.id === user.primaryTeamId;
-      return true;
-    }), [teams, searchTerm, user]);
+    // The teams the user can manage or write (their role assignments); engineers and viewers see all.
+    .filter(t => canWriteTeamData(actor, t) || (!canManageCompanyConfig(actor) && !ledTeamIds(actor).length)),
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- actor is derived from user
+  [teams, searchTerm, user]);
 
-  const canCreateTeams = user?.role === 'super_admin' || user?.role === 'qa_manager';
+  const canCreateTeams = canManageCompanyConfig(actor);
 
   const toggleAi = async (team: Team) => {
     const response = await fetch(`${API_URL}/teams/${team.id}/ai-toggle`, {

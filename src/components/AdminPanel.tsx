@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Shield, X, ArrowLeft, Building2, Edit2, Trash2, ChevronDown, ChevronRight, Key, UserCheck, UserX, Bot, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { canEditUser, canResetPassword, type PolicyActor } from '../../server/lib/userPolicy';
+import { canEditUser, canResetPassword, managedDepartmentIds, type PolicyActor } from '../../server/lib/userPolicy';
 import toast from 'react-hot-toast';
 import { confirmDelete, showCannotDeleteWarning, confirmDeactivate, showSuccess } from '../utils/alerts';
 
@@ -42,13 +42,14 @@ interface Department {
 import API_URL from '../config/api';
 import ApiKeysPanel from './ApiKeysPanel';
 import SampleDataPanel from './SampleDataPanel';
+import { policyActorOf } from '../lib/policyActor';
 
 interface AdminPanelProps {}
 
 const AdminPanel: React.FC<AdminPanelProps> = () => {
   const { user } = useAuth();
   // Offer only what the server allows (server/lib/userPolicy, shared with the Users page).
-  const actor: PolicyActor = { id: user?.id ?? '', role: user?.role ?? '', departmentId: user?.departmentId ?? null, primaryTeamId: user?.primaryTeamId ?? null };
+  const actor: PolicyActor = policyActorOf(user);
   const asTarget = (u: User) => ({ id: u.id, role: u.role, department_id: u.department_id ?? null, primary_team_id: u.primary_team_id ?? null });
   const canEdit = (u: User) => canEditUser(actor, asTarget(u));
   const canReset = (u: User) => canResetPassword(actor, asTarget(u));
@@ -479,7 +480,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
   };
 
   const getUsersByTeam = (teamId: string) => {
-    return users.filter(u => u.primary_team_id === teamId);
+    return users.filter(u => u.primary_team_id === teamId || ((u as any).team_ids || []).includes(teamId));
   };
 
   const getVisibleDepartments = (): Department[] => {
@@ -487,19 +488,13 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       return departments;
     }
     if (user?.role === 'qa_manager') {
-      const deptId = user.departmentId;
-      if (!deptId) return [];
-      const deptTeams = teams.filter(t => t.department_id === deptId);
-      if (deptTeams.length === 0) return [];
-      return [
-        {
-          id: deptId,
-          name: 'My Department',
-          description: 'Teams in your department',
-          company_id: '',
-          created_at: new Date().toISOString()
-        }
-      ];
+      // The departments the manager manages (role assignments); one entry each, with teams.
+      return managedDepartmentIds(actor)
+        .filter((deptId) => teams.some(t => t.department_id === deptId))
+        .map((deptId) => {
+          const a = user.assignments?.find((x) => x.scopeType === 'department' && x.scopeId === deptId);
+          return { id: deptId, name: a?.scopeName ?? 'My department', description: 'Teams in your department', company_id: '', created_at: new Date().toISOString() };
+        });
     }
     return [];
   };
