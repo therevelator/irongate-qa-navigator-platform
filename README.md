@@ -9,6 +9,17 @@ Every number shown comes from the database. Missing data is shown as "—" or "N
 recorded", never as an invented value. Sample-data generators exist for demos but are off
 unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 
+## Documentation
+
+| Document | What it covers |
+|---|---|
+| [docs/PRODUCT_GUIDE.md](docs/PRODUCT_GUIDE.md) | What the product is and the need it addresses, roles, every metric with its formula, target, data source today and in production, how data gets in, every screen, privacy, alerts and operations |
+| [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) | Direct and adjacent competitors, gaps and positioning (sources checked 18 Nov 2026) |
+| [docs/pitch/](docs/pitch/) | Source of the 11-slide pitch deck, with speaker notes and the placeholders to fill |
+| [docs/release-r2/](docs/release-r2/) | The R2 release plan and its working rules |
+| [docs/reports/](docs/reports/) | The accuracy audits and the consistency report that led to the "no invented numbers" fixes |
+| [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md) | Older permission notes; where they differ, `server/lib/userPolicy.ts` and the Product guide are current |
+
 ## Stack
 
 - Frontend: React 19, TypeScript, Vite, Tailwind CSS 4, Recharts (`src/`)
@@ -245,7 +256,10 @@ Endpoints: `GET|POST /api/admin/users/:id/assignments`, `DELETE /api/admin/users
 ## Team TV mode
 
 A full-screen view of ONE team for a meeting-room screen or a team wall: `/tv?team=<id>`.
-Open it with **Open TV mode** on Team detail or in the Analytics scope bar.
+Open it from the team's page (Team detail): **Open TV mode**, **E-mail TV link** (opens your mail
+app with the team's TV link filled in) or **Copy link**. Whoever opens the link signs in and lands on
+that team's TV screen, if the team is in their scope (a signed-out visit keeps the address through
+sign-in). TV mode is not offered in the analytics scope bar.
 
 - Shows the team name, department, lead and member count, the QA score battery with its
   status and change since the previous snapshot, six key KPIs (value, target, status, change,
@@ -327,6 +341,13 @@ current targets; existing snapshot rows are not rewritten).
   its UTC day): team cards, team detail, `teamKpiTrack` / `teamAttentionIssues`, the company summary and
   TV (trend charts draw the target of each day). Company targets: super admins; department and team
   targets: super admins and that department's QA managers. Changes are in the Activity history.
+- **Apply to every department and team** (Parameters, company-wide scope, super admins, on by
+  default): saving the system configuration (`POST /api/admin/configs` with `applyToAll: true`)
+  removes the department and team values of those settings, and saving the KPI targets
+  (`PUT /api/targets` with `applyToAll: true`, allowed without changes) ends every department and team
+  target, so the company values apply everywhere. Earlier values keep the target valid at their date.
+  Each run is recorded in Activity (`config.apply_all` / `targets.apply_all`; an unchanged save is
+  `*.confirm`).
 - **Sample data banner**: "Includes sample data" appears (dismissible for the session) when a value on
   the screen comes from source `synthetic` (`field_sources` / `metric_values.source`), never from the
   company name; with "Show formulas & data sources" on, such values carry a "Sample" marker.
@@ -370,7 +391,10 @@ Migration: `supabase/migrations/20261121100000_saved_views_onboarding.sql` (tabl
   admins): create departments, add teams, invite people, set KPI targets, send the first data (API key
   or manual metrics; sample data does not count). Progress is computed from the real state on every
   load; the card shows while a step is open and can be hidden (`POST /api/onboarding/dismiss`, shown
-  again with `/restore`; both recorded in Activity).
+  again with `/restore`; both recorded in Activity). The KPI targets step is also done when a super
+  admin saves the company-wide settings or targets in Parameters, even unchanged. Once every step has
+  been done the checklist is never shown again (`onboarding_state.completed_at`, migration
+  `20261122100000_onboarding_completed.sql`), even if a step later reads as open.
 - Demo seed: every company gets sample views of its first super admin (two shared), ids `demo-sv-…`;
   `seed:demo:check` requires them, `seed:demo:clear` removes them.
 
