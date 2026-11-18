@@ -219,7 +219,7 @@ export const SavedViewsMenu: React.FC<{
           id={panelId}
           role="region"
           aria-label="Saved views"
-          className="absolute right-0 z-30 mt-1.5 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          className="absolute left-0 z-30 mt-1.5 w-[min(22rem,calc(100vw-2rem))] sm:left-auto sm:right-0 rounded-lg border border-slate-200 bg-white p-2 shadow-lg dark:border-slate-700 dark:bg-slate-900"
           data-testid="saved-views-panel"
         >
           {loading && !views ? (
