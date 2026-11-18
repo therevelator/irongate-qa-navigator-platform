@@ -2,9 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { basedOnText } from '../../server/lib/metricFormulas';
 import { showError } from '../utils/alerts';
 import { API_URL } from '../config/api';
 import { Page, PageIntro, Card, CardHeader, StatTile, EmptyState, buttonClass, cx } from './ui';
+import { ConfidenceNote } from './MetricQuality';
+import SampleDataBanner from './SampleDataBanner';
 
 interface PDFReportGeneratorProps {
   onBack?: () => void;
@@ -21,6 +24,11 @@ interface TeamDetail {
   snapshotDate?: string | null;
   technicalDebtScore?: number | null;
   kpiData?: Record<string, number | string | null> | null;
+  /** What the QA score is based on (stale and missing inputs left out). */
+  qaScoreConfidence?: { inputsUsed: number; inputsTotal: number; confidence: 'high' | 'medium' | 'low'; staleInputs?: string[] } | null;
+  /** camelCase KPI key -> staleness of its latest value. */
+  kpiStaleness?: Record<string, { stale: boolean; staleSince: string | null } | undefined>;
+  sampleData?: boolean;
 }
 
 const num = (v: unknown): number | null => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -54,6 +62,16 @@ const KPI_ROWS: Array<{ label: string; key: string; digits: number; suffix: stri
   { label: 'System availability', key: 'systemAvailability', digits: 3, suffix: '%' },
 ];
 const kpiValue = (t: TeamDetail, key: string) => (key === 'qaScore' ? t.qaScore : t.kpiData?.[key] ?? null);
+/** "Based on 3 of 4 inputs, medium confidence" for the QA score; "Stale since 12 Nov" for a stale value. */
+const kpiNote = (t: TeamDetail, key: string): string => {
+  if (key === 'qaScore') {
+    const c = t.qaScoreConfidence;
+    return c ? `${basedOnText(c).replace(/^b/, 'B')}, ${c.confidence} confidence` : '';
+  }
+  const st = t.kpiStaleness?.[key];
+  if (kpiValue(t, key) == null || !st?.stale) return '';
+  return `Stale since ${fmtDate(dayKey(st.staleSince))}`;
+};
 
 const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
   const [team, setTeam] = useState<TeamDetail | null>(null);
@@ -96,6 +114,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
   const asOf = dayKey(team?.snapshotDate ?? (team?.kpiData?.snapshotDate as string | undefined) ?? null);
   const summaryRows: Array<[string, string]> = useMemo(() => [
     ['QA score', fmt(team?.qaScore, 0)],
+    ['QA score basis', team?.qaScoreConfidence ? `${team.qaScoreConfidence.inputsUsed} of ${team.qaScoreConfidence.inputsTotal} inputs (${team.qaScoreConfidence.confidence})` : '—'],
     ['Test coverage', fmt(team?.kpiData?.testCoverage, 1, '%')],
     ['Defect escape rate', fmt(team?.kpiData?.defectEscapeRate, 2, '%')],
     ['Technical debt score', fmt(team?.technicalDebtScore, 0)],
@@ -164,8 +183,8 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
       autoTable(doc, {
         startY: afterSummary + 13,
         margin: { left: 14, right: 14 },
-        head: [['Metric', 'Value']],
-        body: KPI_ROWS.map(r => [r.label, fmt(kpiValue(team, r.key), r.digits, r.suffix)]),
+        head: [['Metric', 'Value', 'Note']],
+        body: KPI_ROWS.map(r => [r.label, fmt(kpiValue(team, r.key), r.digits, r.suffix), kpiNote(team, r.key)]),
         styles: { fontSize: 9, cellPadding: 2 },
         columnStyles: { 1: { halign: 'right' } },
         headStyles: { fillColor: [38, 83, 138], textColor: 255 },
@@ -174,7 +193,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
           doc.setFontSize(8);
           doc.setTextColor(148, 163, 184);
           doc.text(`Page ${data.pageNumber}`, pageWidth - 14, pageHeight - 8, { align: 'right' });
-          doc.text('"—" = not recorded. Team-level figures only; the report contains no individual developer data.', 14, pageHeight - 8);
+          doc.text(`"—" = not recorded. Stale values are left out of the QA score.${team.sampleData ? ' Includes sample data.' : ''} No individual developer data.`, 14, pageHeight - 8);
         },
       });
 
@@ -220,9 +239,13 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
         <Card><EmptyState title={error || 'Team not found'} description="Try reloading the page." /></Card>
       ) : (
         <>
-          <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
-            {summaryRows.map(([label, value]) => <StatTile key={label} label={label} value={value} />)}
+          <SampleDataBanner show={!!team.sampleData} />
+          <div className="mb-2 grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6">
+            {summaryRows.filter(([label]) => label !== 'QA score basis').map(([label, value]) => <StatTile key={label} label={label} value={value} />)}
           </div>
+          <p className="mb-6 text-xs text-slate-500 dark:text-slate-400">
+            QA score: <ConfidenceNote c={team.qaScoreConfidence ?? null} testId="report-qa-confidence" />
+          </p>
 
           <Card padded={false}>
             <div className="px-5 pt-5">
@@ -237,6 +260,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
                   <tr className="border-y border-slate-200 bg-slate-50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400">
                     <th className="px-5 py-2 text-left font-medium">Metric</th>
                     <th className="px-5 py-2 text-right font-medium">Value</th>
+                    <th className="px-5 py-2 text-left font-medium">Note</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -244,6 +268,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
                     <tr key={r.key}>
                       <td className="px-5 py-2 text-slate-900 dark:text-white">{r.label}</td>
                       <td className="px-5 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{fmt(kpiValue(team, r.key), r.digits, r.suffix)}</td>
+                      <td className={cx('px-5 py-2 text-xs', kpiNote(team, r.key).startsWith('Stale') ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>{kpiNote(team, r.key) || '—'}</td>
                     </tr>
                   ))}
                 </tbody>

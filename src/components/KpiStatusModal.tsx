@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { CalendarDays, ChevronRight, MonitorPlay } from 'lucide-react';
 import Modal from './Modal';
 import { cx } from './ui';
-import { getMetricStatus, KPI_TRACK_RULE_TEXT, type KpiTargetCheck, type KpiTrackBucket } from '../config/metricsConfig';
+import { KPI_TRACK_RULE_TEXT, type KpiTargetCheck, type KpiTrackBucket } from '../config/metricsConfig';
+import { ConfidenceNote, type ConfidenceInfo } from './MetricQuality';
 import { qaStatusFromScore } from '../../server/lib/metricFormulas';
 
 /**
@@ -21,6 +22,8 @@ export interface KpiStatusTeam {
   checks: KpiTargetCheck[];
   met: number;
   recorded: number;
+  /** What the team's QA score is based on (stale / missing inputs left out). */
+  qaScoreConfidence?: ConfidenceInfo | null;
 }
 
 export type KpiTab = Exclude<KpiTrackBucket, 'noData'>;
@@ -49,6 +52,16 @@ const worstFirst = (a: KpiStatusTeam, b: KpiStatusTeam) =>
   a.name.localeCompare(b.name);
 
 const CheckRow: React.FC<{ c: KpiTargetCheck }> = ({ c }) => {
+  if (c.value != null && c.stale) {
+    return (
+      <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-slate-500 dark:text-slate-400" data-testid="kpi-check-stale">
+        <span aria-hidden className="h-2 w-2 flex-shrink-0 rounded-full bg-slate-300 dark:bg-slate-600" />
+        <span className="font-medium">{c.label}</span>
+        <span className="tabular-nums">{c.value.toFixed(1)}%</span>
+        <span className="text-amber-700 dark:text-amber-400">· stale (not counted)</span>
+      </li>
+    );
+  }
   if (c.value == null) {
     return (
       <li className="flex items-center gap-2 text-sm text-slate-500 dark:text-slate-400">
@@ -57,7 +70,8 @@ const CheckRow: React.FC<{ c: KpiTargetCheck }> = ({ c }) => {
       </li>
     );
   }
-  const st = getMetricStatus(c.value, c.key);
+  // Judged with the team's target valid at the value's date (target history).
+  const st = c.met ? 'good' : 'critical';
   return (
     <li className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-sm text-slate-700 dark:text-slate-200">
       <span aria-hidden className={cx('h-2 w-2 flex-shrink-0 rounded-full', STATUS_DOT[st])} />
@@ -166,6 +180,7 @@ const KpiStatusModal: React.FC<{
                         <span className={cx('font-semibold tabular-nums', qaSt ? QA_TEXT[qaSt] : 'text-slate-400')}>{t.qaScore == null ? '—' : Math.round(t.qaScore)}</span>
                         {qaSt && <span className="sr-only">{qaSt}</span>}
                       </span>
+                      <ConfidenceNote c={t.qaScoreConfidence} compact testId="kpi-status-confidence" />
                       {onOpenTv && canOpenTv(t.teamId) && (
                         <button
                           type="button"

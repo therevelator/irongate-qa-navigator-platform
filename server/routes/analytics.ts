@@ -2509,6 +2509,13 @@ async function computeCompanyMetrics(companyId: string) {
     engineeringHealthConfidence,
     deliveryPerformanceConfidence,
     kpiAveragesUnweighted,
+    // The company-level KPI targets in force today (target history; the averages are compared with them).
+    companyKpiTargets: {
+      coverage: evalCtx.book.at({ id: '', department_id: null }, companyId, 'test_coverage', now).good,
+      automation: evalCtx.book.at({ id: '', department_id: null }, companyId, 'automation_coverage', now).good,
+      flakiness: evalCtx.book.at({ id: '', department_id: null }, companyId, 'test_flakiness_rate', now).good,
+      escapeRate: evalCtx.book.at({ id: '', department_id: null }, companyId, 'defect_escape_rate', now).good,
+    },
     sampleData,
     riskLevel,
     avgTestCoverage,

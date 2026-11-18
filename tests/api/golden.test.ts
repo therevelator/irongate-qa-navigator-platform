@@ -45,7 +45,7 @@ export async function collectGoldenOutputs(cookie: string, today: string) {
 
 /** Fields added by the metric-storage phase (confidence, staleness, targets, sample data): additive, checked separately. */
 const ADDED_TEAM_FIELDS = ['qaScoreConfidence', 'qaScoreRecorded', 'kpiStaleness', 'kpiThresholds', 'kpiTargets', 'staleKpis', 'sampleData', 'membersHidden'];
-const ADDED_SUMMARY_FIELDS = ['globalQaScoreConfidence', 'globalQaScoreDistribution', 'engineeringHealthConfidence', 'deliveryPerformanceConfidence', 'kpiAveragesUnweighted', 'sampleData'];
+const ADDED_SUMMARY_FIELDS = ['globalQaScoreConfidence', 'globalQaScoreDistribution', 'engineeringHealthConfidence', 'deliveryPerformanceConfidence', 'kpiAveragesUnweighted', 'companyKpiTargets', 'sampleData'];
 
 /** A copy of the outputs without the added fields, to compare with the baseline. */
 export function withoutAddedFields(o: any): any {
@@ -147,6 +147,7 @@ describe('Golden outputs for a fixed dataset', () => {
     expect(o.summary.globalQaScoreConfidence).toEqual({ value: 88, inputsUsed: 3, inputsTotal: 5, confidence: 'medium' });
     expect(o.summary.globalQaScoreDistribution).toMatchObject({ weightedMean: 88.3, unweightedMean: 86.3, median: 85, p25: 83, min: 81, count: 3 });
     expect(o.summary.engineeringHealthConfidence).toMatchObject({ inputsTotal: 4 });
+    expect(o.summary.companyKpiTargets).toEqual({ coverage: 80, automation: 70, flakiness: 2, escapeRate: 5 });
     expect(o.summary.kpiAveragesUnweighted).toEqual({ avgTestCoverage: 82, avgDefectEscapeRate: 8, automationCoverage: 71.3, avgFlakinessRate: 2.7 });
     // History: the QA score basis per day and the target periods (no stored targets: defaults).
     const hist = o.history['golden-team-stale'];

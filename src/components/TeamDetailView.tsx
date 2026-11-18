@@ -27,6 +27,8 @@ import { useShowFormulas } from '../hooks/useShowFormulas';
 import { SIZING_ACCURACY_TOLERANCE } from '../data/metricCatalog';
 import type { MetricCatalogKey } from '../data/metricCatalog';
 import { describeChange, type HistoryPoint } from '../data/kpiTrend';
+import { ConfidenceNote, SampleMarker, StaleNote, type ConfidenceInfo } from './MetricQuality';
+import SampleDataBanner from './SampleDataBanner';
 
 // Team as returned by GET /api/teams (NUMERIC columns may arrive as strings; missing values are null)
 interface TeamWithKPI extends Omit<Team, 'qaScore'> {
@@ -35,6 +37,12 @@ interface TeamWithKPI extends Omit<Team, 'qaScore'> {
   kpiThresholds?: Partial<Record<string, Partial<Threshold>>>;
   /** Per-field provenance from GET /api/teams: { column: { source, recorded_at } }. */
   kpiFieldSources?: Record<string, { source?: string; recorded_at?: string; carried_forward?: boolean } | undefined>;
+  /** What the QA score is based on: stale and missing inputs are left out (GET /api/teams). */
+  qaScoreConfidence?: ConfidenceInfo | null;
+  /** camelCase KPI key -> staleness of its latest value (server/lib/staleness.ts). */
+  kpiStaleness?: Record<string, { recordedAt: string | null; stale: boolean; staleSince: string | null; source: string | null } | undefined>;
+  /** Any value of the latest snapshot is generated sample data. */
+  sampleData?: boolean;
 }
 
 const INTERVAL_UNIT_MS: Record<string, number> = {
@@ -348,6 +356,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
   const [devMetricsUnavailable, setDevMetricsUnavailable] = useState<string | null>(null);
   const [metricIntervals, setMetricIntervals] = useState<Record<string, { interval_value: number; interval_unit: string }>>({});
   const [kpiHistory, setKpiHistory] = useState<Record<string, HistoryPoint[]>>({});
+  const [historyForbidden, setHistoryForbidden] = useState(false);
 
   const intervalLabel = (historyKey: string): string | null => {
     const interval = metricIntervals[historyKey];
@@ -362,19 +371,26 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
     return every ? `No snapshots in the last 90 days · expected every ${every}` : 'No snapshots in the last 90 days';
   };
 
-  /** Stale = the last recorded value (field_sources.recorded_at) is older than the expected update frequency. */
-  const staleText = (historyKey: string): string | null => {
-    const interval = metricIntervals[historyKey];
+  /**
+   * Stale = the latest value is older than its expected update frequency. The API decides
+   * (kpiStaleness, the same rule that leaves stale values out of the QA score); for a team
+   * object without it, the same rule is applied here to field_sources.recorded_at.
+   */
+  const staleOf = (k: { key: string; historyKey: string }): { staleSince: string | null; recordedAt: string | null } | null => {
+    const server = team.kpiStaleness?.[k.key];
+    if (team.kpiStaleness) return server?.stale ? { staleSince: server.staleSince, recordedAt: server.recordedAt } : null;
+    const interval = metricIntervals[k.historyKey];
     // Per-field recorded_at (ingestion provenance); for older snapshots without provenance,
     // the snapshot date is the latest date the value is known to be from.
-    const recordedAt = team.kpiFieldSources?.[historyKey]?.recorded_at ?? snapshotDate ?? undefined;
+    const recordedAt = team.kpiFieldSources?.[k.historyKey]?.recorded_at ?? snapshotDate ?? undefined;
     if (!interval || !recordedAt) return null;
     const t = new Date(recordedAt).getTime();
     if (!Number.isFinite(t)) return null;
     const ms = interval.interval_value * (INTERVAL_UNIT_MS[interval.interval_unit] ?? 0);
     if (!ms || Date.now() - t <= ms) return null;
-    return `Stale: expected every ${intervalLabel(historyKey)}, last updated ${formatAsOf(recordedAt)}`;
+    return { staleSince: new Date(t + ms).toISOString(), recordedAt: new Date(t).toISOString() };
   };
+  const isSample = (historyKey: string) => team.kpiFieldSources?.[historyKey]?.source === 'synthetic';
 
   useEffect(() => {
     fetch(`${API_URL}/settings/metric-intervals`, { credentials: 'include' })
@@ -389,8 +405,13 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
   }, []);
 
   useEffect(() => {
+    setHistoryForbidden(false);
     fetch(`${API_URL}/teams/${team.id}/kpi-history?days=90`, { credentials: 'include' })
-      .then(r => (r.ok ? r.json() : null))
+      .then(r => {
+        // KPI history follows the analytics scope: outside it the trends are not shown.
+        if (r.status === 403) setHistoryForbidden(true);
+        return r.ok ? r.json() : null;
+      })
       .then(data => setKpiHistory(data?.history || {}))
       .catch(() => setKpiHistory({}));
   }, [team.id]);
@@ -551,6 +572,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
   return (
     <Page className="space-y-6" >
       <div data-testid="team-detail">
+        <SampleDataBanner show={!!team.sampleData} />
         <nav className="mb-3 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400" aria-label="Breadcrumb">
           <button onClick={onBack} className="hover:text-slate-900 hover:underline dark:hover:text-white" data-testid="back-to-dashboard">
             Overview
@@ -601,9 +623,10 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <Badge tone={statusTone(qaStatus)}>{STATUS_BADGE[qaStatus].label}</Badge>
                 {qaChange ? <TrendLine change={qaChange} usePoints unit=" pts" /> : (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">No earlier snapshot to compare</span>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">{historyForbidden ? 'Trend shown to teams in your analytics scope' : 'No earlier snapshot to compare'}</span>
                 )}
               </div>
+              <ConfidenceNote c={team.qaScoreConfidence} className="mt-1.5" testId="team-qa-confidence" />
             </div>
           </div>, { value: shown(qaScore == null ? null : Math.round(qaScore), '/100') })}
           {info('technical_debt_score', <StatTile
@@ -625,13 +648,16 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
         <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
           {headline.map(h => {
             const k = kpiById(h.key);
+            const stale = k.value == null ? null : staleOf(k);
             return info(k.historyKey as MetricCatalogKey, (
               <StatTile
                 label={h.label}
-                value={k.value == null ? '—' : fmt(k.value, k.key === 'defectDensity' ? 2 : 1)}
+                value={k.value == null ? '—' : <span className={stale ? 'text-slate-400 dark:text-slate-500' : undefined}>{fmt(k.value, k.key === 'defectDensity' ? 2 : 1)}</span>}
                 unit={k.value == null ? undefined : k.unit}
-                tone={statusTone(k.status)}
-                caption={k.value == null ? 'No data recorded' : STATUS_BADGE[k.status].label}
+                tone={stale ? 'neutral' : statusTone(k.status)}
+                caption={k.value == null ? 'No data recorded' : stale
+                  ? <StaleNote staleSince={stale.staleSince} recordedAt={stale.recordedAt} testId={`kpi-headline-stale-${k.historyKey}`} />
+                  : <>{STATUS_BADGE[k.status].label}{showFormulas && isSample(k.historyKey) && <SampleMarker className="ml-1.5" />}</>}
               />
             ), { key: h.key, value: shown(k.value == null ? null : fmt(k.value, k.key === 'defectDensity' ? 2 : 1), k.unit) });
           })}
@@ -720,6 +746,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
               const history = kpiHistory[k.historyKey] || [];
               const change = describeChange(history, k.lowerIsBetter, !!k.threshold);
               const target = thresholdText(k.threshold, k.unit);
+              const stale = k.value == null ? null : staleOf(k);
               return info(k.historyKey as MetricCatalogKey, (
                 <Card>
                   <div className="flex items-start justify-between gap-3">
@@ -727,22 +754,26 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
                       <h4 className="text-sm font-medium text-slate-900 dark:text-white">{k.name}</h4>
                       <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{k.description}</p>
                     </div>
-                    <Badge tone={statusTone(k.status)} className="shrink-0">{STATUS_BADGE[k.status].label}</Badge>
+                    {stale
+                      ? <Badge tone="neutral" className="shrink-0">Stale</Badge>
+                      : <Badge tone={statusTone(k.status)} className="shrink-0">{STATUS_BADGE[k.status].label}</Badge>}
                   </div>
                   <p className="mt-3 flex items-baseline gap-1">
-                    <span className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+                    <span className={cx('text-2xl font-semibold tabular-nums', stale ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')} data-stale={stale ? 'true' : undefined}>
                       {k.value == null ? '—' : fmt(k.value, DIGITS[k.key] ?? 1)}
                     </span>
                     {k.value != null && k.unit && <span className="text-sm text-slate-500 dark:text-slate-400">{k.unit}</span>}
+                    {k.value != null && showFormulas && isSample(k.historyKey) && <SampleMarker className="ml-1.5 self-center" />}
                   </p>
                   {k.value != null && sourceCaption(team.kpiFieldSources?.[k.historyKey]) && (
                     <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400" data-testid={`kpi-source-${k.historyKey}`}>
                       {sourceCaption(team.kpiFieldSources?.[k.historyKey])}
                     </p>
                   )}
-                  {k.value != null && staleText(k.historyKey) && (
-                    <p className="mt-1 text-xs font-medium text-amber-700 dark:text-amber-400" data-testid={`kpi-stale-${k.historyKey}`}>
-                      {staleText(k.historyKey)}
+                  {stale && (
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400" data-testid={`kpi-stale-${k.historyKey}`}>
+                      <StaleNote staleSince={stale.staleSince} recordedAt={stale.recordedAt} />
+                      {intervalLabel(k.historyKey) && <> · expected every {intervalLabel(k.historyKey)}; not judged against the target</>}
                     </p>
                   )}
                   <div className="mt-1 min-h-[1.25rem]">
@@ -766,7 +797,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
                     </div>
                   ) : (
                     <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-                      {history.length === 1 ? `1 snapshot in the last 90 days (${formatAsOf(history[0].date)})` : getIntervalText(k.historyKey)}
+                      {historyForbidden ? 'Trends are shown for teams in your analytics scope.' : history.length === 1 ? `1 snapshot in the last 90 days (${formatAsOf(history[0].date)})` : getIntervalText(k.historyKey)}
                     </p>
                   )}
                   {change && target && <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{target}</p>}

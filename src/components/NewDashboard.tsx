@@ -13,6 +13,8 @@ import HeroBattery from './HeroBattery';
 import KpiStatusModal, { type KpiStatusTeam, type KpiTab } from './KpiStatusModal';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { openTvMode } from './tv/tvNavigation';
+import { ConfidenceNote, type ConfidenceInfo } from './MetricQuality';
+import SampleDataBanner from './SampleDataBanner';
 
 interface NewDashboardProps {
   teams: Team[];
@@ -50,6 +52,14 @@ interface CompanySummary {
   developerWellnessBasis?: { method: string; developers: number };
   pipelineHealthBasis?: { definition: string; successfulRuns: number; totalRuns: number; windowDays: number };
   techDebtBasis?: { openItems: number; totalItems: number };
+  /** Teams with a current QA score of the active teams (composite confidence). */
+  globalQaScoreConfidence?: ConfidenceInfo;
+  /** Distribution of the current team QA scores; the headline is the team-size weighted mean. */
+  globalQaScoreDistribution?: { weightedMean: number | null; unweightedMean: number | null; median: number | null; p25: number | null; min: number | null; count: number; weighting: string };
+  engineeringHealthConfidence?: ConfidenceInfo;
+  deliveryPerformanceConfidence?: ConfidenceInfo;
+  companyKpiTargets?: { coverage: number; automation: number; flakiness: number; escapeRate: number };
+  sampleData?: boolean;
 }
 
 type Filter = 'all' | 'high' | 'attention';
@@ -145,6 +155,12 @@ interface Row {
   members: number | null;
   snapshotDate: string | null;
   attention: boolean;
+  /** What the QA score is based on (stale / missing inputs left out). */
+  confidence: ConfidenceInfo | null;
+  /** KPI key -> staleness of its latest value (GET /api/teams kpiStaleness). */
+  staleness: Record<string, { stale: boolean; staleSince: string | null; recordedAt: string | null }>;
+  /** KPI key -> target valid at the value's date (target history). */
+  thresholds: Record<string, { good: number; warning: number; lowerIsBetter: boolean }> | null;
 }
 
 const SORT_OPTIONS: { value: SortKey; label: string }[] = [
@@ -237,8 +253,15 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
       deploys: num(k.deploymentFrequencyPerWeek),
       members: num(t.memberCount),
       snapshotDate: t.snapshotDate ?? null,
-      // Same rule as the server's "needs attention" list (teamAttentionIssues).
-      attention: qa != null && teamAttentionIssues({ qaScore: qa, testCoverage: coverage, testFlakinessRate: flakiness, defectEscapeRate: escapeRate, automationCoverage: automation }).length > 0,
+      // Same rule as the server's "needs attention" list (teamAttentionIssues, with the targets
+      // valid at the values' dates and stale values left out).
+      attention: qa != null && teamAttentionIssues(
+        { qaScore: qa, testCoverage: coverage, testFlakinessRate: flakiness, defectEscapeRate: escapeRate, automationCoverage: automation },
+        { targets: t.kpiTargets ?? undefined, stale: new Set(t.staleKpis ?? []) },
+      ).length > 0,
+      confidence: t.qaScoreConfidence ?? null,
+      staleness: t.kpiStaleness ?? {},
+      thresholds: t.kpiThresholds ?? null,
     };
   }), [teams]);
 
@@ -292,6 +315,8 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
             </button>
           )}
         />
+
+        <SampleDataBanner show={!!summary?.sampleData || teams.some((t: any) => t.sampleData)} />
 
         <CompanyHero summary={summary} state={summaryState} onOpenKpiStatus={setKpiModal} />
 
@@ -480,8 +505,11 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
   const pipe = s?.pipelineHealthBasis;
   const debt = s?.techDebtBasis;
   const happiness = METRICS_CONFIG.happinessScore;
+  const dist = s?.globalQaScoreDistribution;
+  // The company-level targets in force today (target history), else the defaults.
+  const companyTargets = s?.companyKpiTargets ?? KPI_TARGETS;
 
-  const gauges: { label: string; value: number | null; good: number; warn: number; caption: string; title: string }[] = [
+  const gauges: { label: string; value: number | null; good: number; warn: number; caption: string; title: string; confidence?: ConfidenceInfo; noun?: string }[] = [
     {
       label: 'Engineering health',
       value: num(s?.engineeringHealthScore),
@@ -492,6 +520,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
           ? `Excludes ${missingHealth.map((m) => HEALTH_PART_LABEL[m] ?? m).join(', ')} (no data)`
           : 'Delivery, pipeline, debt, workload',
       title: 'Weighted mean: delivery 35%, pipeline 25%, debt 20%, workload balance 20%. Components without data are excluded.',
+      confidence: s?.engineeringHealthConfidence, noun: 'components',
     },
     {
       label: 'Delivery (DORA)',
@@ -503,6 +532,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
           : 'No team has all 4 DORA inputs'
         : '',
       title: s?.deliveryPerformanceBasis?.method ?? '',
+      confidence: s?.deliveryPerformanceConfidence, noun: 'teams',
     },
     {
       label: 'Workload balance',
@@ -574,9 +604,16 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
                 )}
               </div>
               {s && (
-                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                  Mean of {s.teamsWithKpiData} of {s.teamCount} active teams with a QA score
-                </p>
+                <div className="mt-2 space-y-1">
+                  <ConfidenceNote c={s.globalQaScoreConfidence} noun="teams" testId="global-qa-confidence" />
+                  {dist && dist.count > 0 && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="global-qa-distribution" title={dist.weighting}>
+                      Weighted by team size · median <span className="font-medium tabular-nums text-slate-700 dark:text-slate-200">{fmt(dist.median, 0)}</span>
+                      {' · '}weakest 25% at or below <span className="font-medium tabular-nums text-slate-700 dark:text-slate-200">{fmt(dist.p25, 0)}</span>
+                      {' · '}lowest <span className="font-medium tabular-nums text-slate-700 dark:text-slate-200">{fmt(dist.min, 0)}</span>
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           </div>
@@ -610,6 +647,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
                       {g.value != null && <span className={cx('ml-1 h-1.5 w-1.5 self-center rounded-full', STATUS_META[st].dot)} aria-hidden="true" />}
                     </p>
                     {g.caption && <p className="mt-1 text-xs leading-snug text-slate-500 dark:text-slate-400">{g.caption}</p>}
+                    {g.confidence && g.value != null && <ConfidenceNote c={g.confidence} noun={g.noun} compact className="mt-1" testId={`confidence-${g.label}`} />}
                   </div>
                 </div>
               );
@@ -621,10 +659,10 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
       {/* Company averages + KPI status */}
       <div className="grid grid-cols-2 gap-px border-t border-slate-200 bg-slate-200 dark:border-slate-800 dark:bg-slate-800 sm:grid-cols-3 lg:grid-cols-5">
         {[
-          { label: 'Avg test coverage', v: num(s?.avgTestCoverage), target: KPI_TARGETS.coverage, higher: true },
-          { label: 'Avg automation', v: num(s?.automationCoverage), target: KPI_TARGETS.automation, higher: true },
-          { label: 'Avg flakiness', v: num(s?.avgFlakinessRate), target: KPI_TARGETS.flakiness, higher: false },
-          { label: 'Avg escape rate', v: num(s?.avgDefectEscapeRate), target: KPI_TARGETS.escapeRate, higher: false },
+          { label: 'Avg test coverage', v: num(s?.avgTestCoverage), target: companyTargets.coverage, higher: true },
+          { label: 'Avg automation', v: num(s?.automationCoverage), target: companyTargets.automation, higher: true },
+          { label: 'Avg flakiness', v: num(s?.avgFlakinessRate), target: companyTargets.flakiness, higher: false },
+          { label: 'Avg escape rate', v: num(s?.avgDefectEscapeRate), target: companyTargets.escapeRate, higher: false },
         ].map((m) => {
           const ok = m.v == null ? null : m.higher ? m.v >= m.target : m.v <= m.target;
           return (
@@ -698,7 +736,15 @@ const METRIC_DOT: Record<'good' | 'warning' | 'critical', string> = {
   critical: STATUS_META.critical.dot,
 };
 
+/** Status of a value against a target (good / warning thresholds); null without a target. */
+const statusAgainst = (v: number, t?: { good: number; warning: number; lowerIsBetter: boolean } | null): 'good' | 'warning' | 'critical' | null => {
+  if (!t) return null;
+  if (t.lowerIsBetter) return v <= t.good ? 'good' : v <= t.warning ? 'warning' : 'critical';
+  return v >= t.good ? 'good' : v >= t.warning ? 'warning' : 'critical';
+};
+
 const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen: () => void }> = ({ row: r, layout, primary, onOpen }) => {
+  const staleCount = Object.values(r.staleness).filter((x) => x.stale).length;
   const meta = STATUS_META[r.status];
   const asOf = fmtDate(r.snapshotDate);
   const isList = layout === 'list';
@@ -707,15 +753,22 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
     <dl className={cx('grid gap-x-4 gap-y-3', isList ? 'grid-cols-3 sm:grid-cols-5 lg:flex-1' : 'grid-cols-3 xl:grid-cols-5')}>
       {KPI_FIELDS.map((f) => {
         const v = r[f.key];
-        const st = v == null ? null : getMetricStatus(v, f.metric);
+        const stale = r.staleness[f.metric]?.stale ? r.staleness[f.metric] : null;
+        // Judged with the target valid at the value's date; a stale value is shown, not judged.
+        const st = v == null || stale ? null : statusAgainst(v, r.thresholds?.[f.metric]) ?? getMetricStatus(v, f.metric);
         return (
           <div key={f.key} className="min-w-0">
             <dt className="truncate text-xs text-slate-500 dark:text-slate-400">{f.label}</dt>
             <dd className="mt-0.5 flex items-center gap-1.5">
-              <span className={cx('text-sm font-semibold tabular-nums', v == null ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')}>
+              <span
+                className={cx('text-sm font-semibold tabular-nums', v == null || stale ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')}
+                title={stale ? `Stale since ${stale.staleSince ? fmtDate(stale.staleSince) : '—'}: not judged` : undefined}
+                data-stale={stale ? 'true' : undefined}
+              >
                 {fmt(v, f.digits, f.suffix)}
               </span>
               {st && <span className={cx('h-1.5 w-1.5 flex-shrink-0 rounded-full', METRIC_DOT[st])} title={`${st === 'good' ? 'On target' : st === 'warning' ? 'Below target' : 'Critical'}`} aria-hidden="true" />}
+              {stale && <span className="sr-only">(stale)</span>}
             </dd>
           </div>
         );
@@ -766,6 +819,7 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
                   {r.qa == null ? '—' : Math.round(r.qa)}
                   {r.qa != null && <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-400">/ 100</span>}
                 </p>
+                <ConfidenceNote c={r.confidence} compact testId="team-card-confidence" />
               </div>
             </div>
             <p className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
@@ -784,6 +838,7 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
           <span className="inline-flex items-center gap-1.5 truncate">
             <CalendarDays size={13} className="flex-shrink-0 text-slate-400" aria-hidden="true" />
             {asOf ? <>As of {asOf}</> : 'No snapshot recorded'}
+            {staleCount > 0 && <span className="ml-1 font-medium text-amber-700 dark:text-amber-400">· {staleCount} stale</span>}
           </span>
           <ChevronRight size={16} className="flex-shrink-0 text-slate-400 transition-transform group-hover:translate-x-0.5 group-hover:text-slate-600 dark:group-hover:text-slate-200" aria-hidden="true" />
         </footer>

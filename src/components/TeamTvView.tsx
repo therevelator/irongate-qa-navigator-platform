@@ -9,6 +9,15 @@ import { generateDetailedKPIs, getThreshold, statusFor } from '../data/detailedK
 import { describeChange } from '../data/kpiTrend';
 import { formatAsOf } from '../data/advancedFeatures';
 import { cx } from './ui';
+import { basedOnText } from '../../server/lib/metricFormulas';
+import { confidenceExplanation } from './MetricQuality';
+import type { TargetPeriod } from '../config/metricsConfig';
+
+const CONFIDENCE_TEXT = {
+  high: 'text-green-700 dark:text-green-400',
+  medium: 'text-amber-700 dark:text-amber-400',
+  low: 'text-red-700 dark:text-red-400',
+} as const;
 import { exitTvMode, replaceTvTeam } from './tv/tvNavigation';
 import { useTvSummary, useTvRecommendations, REFRESH_MS, type TvSummary, type TvRecommendations } from './tv/useTvData';
 import {
@@ -438,6 +447,14 @@ const TeamTvView: React.FC = () => {
               <p className="mt-1 text-[1.35rem] text-slate-500 dark:text-slate-400">
                 Target ≥ {model.qaThreshold.good} · watch ≥ {model.qaThreshold.warning}
               </p>
+              {latest?.qaScoreConfidence && (
+                <p className="mt-1 text-[1.35rem] text-slate-600 dark:text-slate-300" data-testid="tv-qa-confidence" title={confidenceExplanation(latest.qaScoreConfidence)}>
+                  {basedOnText(latest.qaScoreConfidence).replace(/^b/, 'B')}
+                  {' · '}
+                  <span className={cx('font-semibold', CONFIDENCE_TEXT[latest.qaScoreConfidence.confidence])}>{latest.qaScoreConfidence.confidence} confidence</span>
+                  {latest.qaScoreConfidence.staleInputs.length > 0 && <> · {latest.qaScoreConfidence.staleInputs.length} stale</>}
+                </p>
+              )}
             </div>
           </div>
           <div className="mt-[1.5rem] grid grid-cols-2 gap-4 border-t border-slate-200 pt-[1.5rem] text-[1.4rem] dark:border-slate-800">
@@ -486,7 +503,7 @@ const TeamTvView: React.FC = () => {
           ) : panel === 'trends' ? (
             <div className={cx('grid gap-[1.25rem]', wide ? 'min-h-0 flex-1 grid-cols-2 grid-rows-2' : 'auto-rows-[26rem] grid-cols-1')}>
               {model.trends.map((t) => (
-                <TrendChart key={t.key} title={t.title} history={t.history} unit={t.unit} target={t.target} digits={t.digits} isDark={isDark} rootPx={rootPx} current={t.current} />
+                <TrendChart key={t.key} title={t.title} history={t.history} unit={t.unit} target={t.target} digits={t.digits} isDark={isDark} rootPx={rootPx} current={t.current} targetPeriods={t.targetPeriods} />
               ))}
             </div>
           ) : (
@@ -530,7 +547,7 @@ interface TvModel {
   qaThreshold: { good: number; warning: number };
   qaChange: ReturnType<typeof describeChange>;
   kpis: TvKpi[];
-  trends: { key: string; title: string; history: { date: string; value: number }[]; unit: string; target: number | null; digits: number; current: React.ReactNode }[];
+  trends: { key: string; title: string; history: { date: string; value: number }[]; unit: string; target: number | null; digits: number; current: React.ReactNode; targetPeriods?: TargetPeriod[] }[];
   offTarget: { name: string; value: string; unit: string; target: string | null; status: 'warning' | 'critical' }[];
   onTarget: number;
   tracked: number;
@@ -548,7 +565,12 @@ const mostCommon = (xs: (string | null)[]) => {
 
 function buildModel(data: TvSummary): TvModel {
   const latest = data.latest;
-  const all = generateDetailedKPIs({ kpiData: latest?.kpiData ?? {} });
+  // Judged with the targets valid at the values' dates (target history); stale values are shown, not judged.
+  const all = generateDetailedKPIs({ kpiData: latest?.kpiData ?? {}, kpiThresholds: latest?.kpiThresholds });
+  const staleOf = (key: string) => {
+    const s = latest?.kpiStaleness?.[key];
+    return s?.stale ? { staleSince: s.staleSince, recordedAt: s.recordedAt } : null;
+  };
   const qaT = getThreshold('qaScore')!;
   const qaStatus = statusFor(latest?.qaScore ?? null, qaT);
   const hist = (k: string) => data.history[k] ?? [];
@@ -556,7 +578,7 @@ function buildModel(data: TvSummary): TvModel {
   const kpis: TvKpi[] = TV_KPIS.map((d) => {
     const kpi = all.find((k) => k.id === d.id)!;
     const history = hist(kpi.historyKey);
-    return { kpi, label: d.label, digits: d.digits, history, change: describeChange(history, kpi.lowerIsBetter, !!kpi.threshold) };
+    return { kpi, label: d.label, digits: d.digits, history, change: describeChange(history, kpi.lowerIsBetter, !!kpi.threshold), stale: kpi.value == null ? null : staleOf(kpi.key) };
   });
 
   const trends = TV_TRENDS.map((t) => {
@@ -566,11 +588,12 @@ function buildModel(data: TvSummary): TvModel {
     const kpi = all.find((k) => k.historyKey === t.historyKey)!;
     return {
       key: t.key, title: t.title, history: hist(t.historyKey), unit: kpi.unit, target: kpi.threshold?.good ?? null, digits: t.digits,
+      targetPeriods: data.targets?.[t.historyKey],
       current: kpi.value == null ? '—' : `${fmtValue(kpi.value, t.digits)}${unitSuffix(kpi.unit)}`,
     };
   });
 
-  const withTarget = all.filter((k) => k.threshold && k.value != null);
+  const withTarget = all.filter((k) => k.threshold && k.value != null && !staleOf(k.key));
   const offTarget = withTarget
     .filter((k) => k.status === 'warning' || k.status === 'critical')
     .sort((a, b) => Number(b.status === 'critical') - Number(a.status === 'critical'))

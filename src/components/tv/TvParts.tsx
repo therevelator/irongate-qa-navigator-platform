@@ -6,6 +6,7 @@ import { cx, type Tone } from '../ui';
 import type { DetailedKPI, KPIStatus } from '../../data/detailedKPIs';
 import type { HistoryPoint, KpiChange } from '../../data/kpiTrend';
 import { chartTheme, formatAsOf } from '../../data/advancedFeatures';
+import { targetOnDay, type TargetPeriod } from '../../config/metricsConfig';
 
 /* Presentation pieces of Team TV mode (TeamTvView.tsx). Sizes are in rem: TV mode scales the
    root font size with the screen, so everything grows together from 1366×768 to 3840×2160. */
@@ -144,23 +145,25 @@ export interface TvKpi {
   digits: number;
   history: HistoryPoint[];
   change: KpiChange | null;
+  /** The latest value is older than its expected update interval: shown, not judged. */
+  stale?: { staleSince: string | null; recordedAt: string | null } | null;
 }
 
 export const KpiTile: React.FC<{ item: TvKpi; isDark: boolean }> = ({ item, isDark }) => {
-  const { kpi, label, digits, history, change } = item;
-  const meta = STATUS_META[kpi.status];
+  const { kpi, label, digits, history, change, stale } = item;
+  const meta = stale ? { ...STATUS_META.neutral, label: 'Stale' } : STATUS_META[kpi.status];
   const target = targetText(kpi);
   return (
     <article
       className="relative flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white py-5 pl-8 pr-6 dark:border-slate-800 dark:bg-slate-900"
       aria-label={`${label}: ${kpi.value == null ? 'no data' : `${fmtValue(kpi.value, digits)}${unitSuffix(kpi.unit)}`}, ${meta.label}`}
       data-testid="tv-kpi"
-      data-status={kpi.status}
+      data-status={stale ? 'stale' : kpi.status}
     >
       <span aria-hidden className={cx('absolute inset-y-0 left-0 w-[0.6rem]', meta.bar)} />
       <h3 className="truncate pb-[0.1em] text-[1.6rem] font-medium leading-snug text-slate-700 dark:text-slate-200" title={label}>{label}</h3>
       <p className="mt-1 flex items-baseline gap-2">
-        <span className={cx('text-[4.25rem] font-semibold leading-none tracking-tight tabular-nums', kpi.value == null ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')}>
+        <span className={cx('text-[4.25rem] font-semibold leading-none tracking-tight tabular-nums', kpi.value == null || stale ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')}>
           {fmtValue(kpi.value, digits)}
         </span>
         {kpi.value != null && kpi.unit && <span className="whitespace-nowrap text-[1.9rem] font-medium text-slate-500 dark:text-slate-400">{unitSuffix(kpi.unit).trim()}</span>}
@@ -172,7 +175,11 @@ export const KpiTile: React.FC<{ item: TvKpi; isDark: boolean }> = ({ item, isDa
         </span>
         {target && <span className="whitespace-nowrap">{target}</span>}
       </p>
-      <p className="mt-1 text-[1.3rem]">{kpi.value == null ? <span className="text-slate-500 dark:text-slate-400">Not recorded</span> : <TrendText change={change} unit={kpi.unit} digits={digits} compact />}</p>
+      <p className="mt-1 text-[1.3rem]">
+        {kpi.value == null ? <span className="text-slate-500 dark:text-slate-400">Not recorded</span>
+          : stale ? <span className="font-medium text-amber-700 dark:text-amber-400" data-testid="tv-kpi-stale">Stale since {stale.staleSince ? shortDate(stale.staleSince) : '—'} · not judged</span>
+            : <TrendText change={change} unit={kpi.unit} digits={digits} compact />}
+      </p>
       <div className="mt-3 min-h-[2.5rem] flex-1">
         <Sparkline history={history} isDark={isDark} tone={meta.tone} />
       </div>
@@ -189,14 +196,21 @@ export const TrendChart: React.FC<{
   isDark: boolean;
   rootPx: number;
   current: React.ReactNode;
-}> = ({ title, history, unit, target, digits, isDark, rootPx, current }) => {
+  /** Target history in the window: each day is drawn with the target valid on that day. */
+  targetPeriods?: TargetPeriod[];
+}> = ({ title, history, unit, target, digits, isDark, rootPx, current, targetPeriods }) => {
   const ct = chartTheme(isDark);
+  // A target that changed inside the window is drawn as a step line (the target of each day).
+  const dayTargets = targetPeriods?.length ? history.map((p) => targetOnDay(targetPeriods, p.date)?.good ?? null) : [];
+  const changing = new Set(dayTargets.filter((v): v is number => v != null)).size > 1;
+  const data = changing ? history.map((p, i) => ({ ...p, target: dayTargets[i] })) : history;
+  const targetValues = changing ? dayTargets.filter((v): v is number => v != null) : [];
   const tick = { fill: isDark ? '#cbd5e1' : '#475569', fontSize: Math.round(rootPx * 1.05) };
   const fmtDay = (d: string) => {
     const t = new Date(`${String(d).slice(0, 10)}T00:00:00Z`);
     return Number.isNaN(t.getTime()) ? '' : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
   };
-  const values = history.map((p) => p.value).concat(target != null ? [target] : []);
+  const values = history.map((p) => p.value).concat(target != null ? [target] : []).concat(targetValues);
   const lo = values.length ? Math.min(...values) : 0;
   const hi = values.length ? Math.max(...values) : 1;
   const pad = Math.max((hi - lo) * 0.15, hi === lo ? Math.abs(hi) * 0.1 || 1 : 0);
@@ -206,14 +220,19 @@ export const TrendChart: React.FC<{
         <h3 className="text-[1.6rem] font-medium text-slate-700 dark:text-slate-200">{title}</h3>
         <div className="text-[1.6rem] font-semibold tabular-nums text-slate-900 dark:text-white">{current}</div>
       </div>
-      <div className="mt-3 min-h-0 flex-1" role="img" aria-label={`${title} over the last 90 days${target != null ? `, target ${target}${unitSuffix(unit)}` : ''}`}>
+      {changing && target != null && (
+        <p className="text-[1.15rem] text-green-800 dark:text-green-300" data-testid="tv-trend-target-changed">
+          Dashed line: the target of each day (changed in this period, now {target}{unitSuffix(unit)})
+        </p>
+      )}
+      <div className="mt-3 min-h-0 flex-1" role="img" aria-label={`${title} over the last 90 days${changing ? `, target changed in this period, now ${target}${unitSuffix(unit)}` : target != null ? `, target ${target}${unitSuffix(unit)}` : ''}`}>
         {history.length < 2 ? (
           <p className="flex h-full items-center justify-center text-[1.4rem] text-slate-500 dark:text-slate-400">
             {history.length === 1 ? 'Only one snapshot in the last 90 days' : 'No snapshots in the last 90 days'}
           </p>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={history} margin={{ top: rootPx * 0.6, right: rootPx * 0.8, bottom: 0, left: 0 }}>
+            <AreaChart data={data} margin={{ top: rootPx * 0.6, right: rootPx * 0.8, bottom: 0, left: 0 }}>
               <CartesianGrid stroke={ct.grid} vertical={false} />
               <XAxis dataKey="date" tickFormatter={fmtDay} tick={tick} stroke={ct.grid} minTickGap={rootPx * 4} tickMargin={rootPx * 0.4} />
               <YAxis
@@ -224,7 +243,10 @@ export const TrendChart: React.FC<{
                 tickFormatter={(v: number) => Number(v).toFixed(v >= 100 ? 0 : digits === 0 ? 0 : 1)}
                 tickCount={4}
               />
-              {target != null && (
+              {changing && (
+                <Area type="stepAfter" dataKey="target" name="Target" stroke={isDark ? '#4ade80' : '#15803d'} strokeDasharray="8 6" strokeWidth={2} fill="none" fillOpacity={0} dot={false} isAnimationActive={false} connectNulls />
+              )}
+              {!changing && target != null && (
                 <ReferenceLine
                   y={target}
                   stroke={isDark ? '#4ade80' : '#15803d'}

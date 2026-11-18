@@ -412,9 +412,10 @@ export interface KpiTargetCheck {
 export const KPI_TRACK_RULE = { onTrack: 0.75, atRisk: 0.5, minRecorded: 2 } as const;
 
 export const KPI_TRACK_RULE_TEXT =
-  `Based on 4 KPI targets (coverage ≥ ${KPI_TARGETS.coverage}%, automation ≥ ${KPI_TARGETS.automation}%, flakiness ≤ ${KPI_TARGETS.flakiness}%, escape rate ≤ ${KPI_TARGETS.escapeRate}%) ` +
-  `among those recorded: on track = at least ${KPI_TRACK_RULE.onTrack * 100}% met, at risk = ${KPI_TRACK_RULE.atRisk * 100}% to ${KPI_TRACK_RULE.onTrack * 100}%, off track = under ${KPI_TRACK_RULE.atRisk * 100}%. ` +
-  `Teams with fewer than ${KPI_TRACK_RULE.minRecorded} recorded are not classified.`;
+  `Based on 4 KPI targets (defaults: coverage ≥ ${KPI_TARGETS.coverage}%, automation ≥ ${KPI_TARGETS.automation}%, flakiness ≤ ${KPI_TARGETS.flakiness}%, escape rate ≤ ${KPI_TARGETS.escapeRate}%; ` +
+  `a team, department or company target applies where set, the one valid at the value's date) among those with a current value: ` +
+  `on track = at least ${KPI_TRACK_RULE.onTrack * 100}% met, at risk = ${KPI_TRACK_RULE.atRisk * 100}% to ${KPI_TRACK_RULE.onTrack * 100}%, off track = under ${KPI_TRACK_RULE.atRisk * 100}%. ` +
+  `Stale values are not counted; teams with fewer than ${KPI_TRACK_RULE.minRecorded} current values are not classified.`;
 
 /**
  * ONE definition of a team's "Teams vs KPI targets" bucket (company summary counts and the

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import API_URL from '../../config/api';
 import type { HistoryPoint } from '../../data/kpiTrend';
+import type { TargetPeriod } from '../../config/metricsConfig';
 import { METRICS_UPDATED_EVENT } from './tvNavigation';
 
 /** GET /api/tv/teams/:id (server/routes/tv.ts): team aggregates only, no individual data. */
@@ -13,10 +14,18 @@ export interface TvSummary {
     kpiData: Record<string, number | null>;
     lastRecordedAt: string | null;
     sampleData: boolean;
+    /** What the QA score is based on (stale and missing inputs left out). */
+    qaScoreConfidence?: { value: number | null; inputsUsed: number; inputsTotal: number; confidence: 'high' | 'medium' | 'low'; staleInputs: string[]; missingInputs: string[] };
+    /** camelCase KPI key -> staleness of its latest value. */
+    kpiStaleness?: Record<string, { recordedAt: string | null; stale: boolean; staleSince: string | null; source: string | null }>;
+    /** camelCase KPI key -> target valid at the value's date (target history). */
+    kpiThresholds?: Record<string, { good: number; warning: number; lowerIsBetter: boolean }>;
   } | null;
   technicalDebtScore: number | null;
   history: Record<string, HistoryPoint[]>;
   historyDays: number;
+  /** Target periods per KPI column in the history window (each day judged with its own target). */
+  targets?: Record<string, TargetPeriod[]>;
   generatedAt: string;
 }
 
