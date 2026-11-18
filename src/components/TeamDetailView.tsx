@@ -29,6 +29,7 @@ import type { MetricCatalogKey } from '../data/metricCatalog';
 import { describeChange, type HistoryPoint } from '../data/kpiTrend';
 import { ConfidenceNote, SampleMarker, StaleNote, type ConfidenceInfo } from './MetricQuality';
 import SampleDataBanner from './SampleDataBanner';
+import { PulseTeamSummary } from './PulseSurveyResults';
 
 // Team as returned by GET /api/teams (NUMERIC columns may arrive as strings; missing values are null)
 interface TeamWithKPI extends Omit<Team, 'qaScore'> {
@@ -196,7 +197,7 @@ export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: stri
   },
   'happinessScore': {
     short: 'Workload balance (derived) — not a survey',
-    detailed: 'Derived 0–100 workload-balance score calculated from focus time, meetings, context switches, PR and review time. It is not self-reported satisfaction.'
+    detailed: 'Derived 0–100 workload-balance score calculated from focus time, meetings, context switches, PR and review time. A workload signal: it is not self-reported satisfaction and not wellbeing (see Wellbeing (survey)).'
   }
 };
 
@@ -269,6 +270,8 @@ interface TeamDetailViewProps {
   onBack: () => void;
   /** Open this team in TV / meeting mode (/tv?team=…). */
   onOpenTv?: (teamId: string) => void;
+  /** Open this team's wellbeing pulse (answer the survey, full results). */
+  onOpenPulse?: (teamId: string) => void;
 }
 
 const STATUS_BADGE: Record<KPIStatus, { tone: Tone; label: string }> = {
@@ -314,7 +317,7 @@ const InfoTip: React.FC<{ text: string }> = ({ text }) => (
   </span>
 );
 
-const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv }) => {
+const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv, onOpenPulse }) => {
   const detailedKPIs = useMemo(() => generateDetailedKPIs(team), [team]);
   const { isDark } = useTheme();
   const { user } = useAuth();
@@ -736,6 +739,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv 
           )}
         </Card>
       ), { variant: 'section', value: membersLoading ? undefined : `${visibleMembers.length} ${visibleMembers.length === 1 ? 'member' : 'members'}` })}
+
+      {/* Wellbeing (survey): anonymous pulse results of the team (k-anonymous, closed periods only) */}
+      {info('wellbeing_survey', <PulseTeamSummary teamId={String(team.id)} onOpen={onOpenPulse ? () => onOpenPulse(String(team.id)) : undefined} />, { variant: 'section' })}
 
       {/* KPI categories */}
       {categories.map(category => (

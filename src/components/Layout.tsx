@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
-  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History,
+  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History, HeartPulse,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -58,6 +58,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
     items: [
       { view: 'pipeline-visualization', label: 'CI/CD pipeline', icon: GitBranch, roles: ANALYTICS_ROLES },
       { view: 'developer-productivity', label: 'Developer productivity', icon: Activity, roles: ANALYTICS_ROLES },
+      { view: 'team-pulse', label: 'Wellbeing pulse', icon: HeartPulse, roles: ANALYTICS_ROLES },
       { view: 'business-impact', label: 'Business impact', icon: TrendingUp, roles: ANALYTICS_ROLES },
       { view: 'team-gamification', label: 'Team rankings', icon: Trophy, roles: ANALYTICS_ROLES },
       { view: 'pdf-report-generator', label: 'Reports', icon: FileText, roles: ANALYTICS_ROLES },
@@ -94,6 +95,7 @@ const PAGE_META: Record<string, { title: string; parent?: string }> = {
   'performance-metrics': { title: 'Performance', parent: 'Quality' },
   'pipeline-visualization': { title: 'CI/CD pipeline', parent: 'Delivery' },
   'developer-productivity': { title: 'Developer productivity', parent: 'Delivery' },
+  'team-pulse': { title: 'Wellbeing pulse', parent: 'Delivery' },
   'business-impact': { title: 'Business impact', parent: 'Delivery' },
   'team-gamification': { title: 'Team rankings', parent: 'Delivery' },
   'pdf-report-generator': { title: 'Reports', parent: 'Delivery' },
