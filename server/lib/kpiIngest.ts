@@ -238,7 +238,18 @@ export async function recordKpiValues(teamId: string, rawValues: unknown, option
   const run = (client: pg.PoolClient) => recordInTransaction(client, teamId, values, source, recordedAt, options);
   const result = options.client ? await run(options.client) : await withTransaction(run);
   if (options.notify !== false && !result.duplicate) notifyKpisUpdated(result.updated, source);
+  // After the write committed (alerts, server/lib/alerts.ts); batch callers (options.client) run their own after their commit.
+  if (!options.client && !result.duplicate) await runKpiWrittenHooks([teamId]);
   return result;
+}
+
+/** Hooks run after a KPI write committed (registered by server/lib/alerts.ts: alert evaluation). Never throw. */
+const kpiWrittenHooks: Array<(teamIds: string[]) => Promise<void>> = [];
+export function onKpiWritten(hook: (teamIds: string[]) => Promise<void>): void {
+  kpiWrittenHooks.push(hook);
+}
+async function runKpiWrittenHooks(teamIds: string[]): Promise<void> {
+  for (const hook of kpiWrittenHooks) await hook(teamIds).catch((e) => console.error('[kpi] after-write hook failed:', e?.message ?? e));
 }
 
 async function recordInTransaction(

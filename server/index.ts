@@ -20,9 +20,13 @@ import ingestRoutes from './routes/ingest';
 import tvRoutes from './routes/tv';
 import targetsRoutes from './routes/targets';
 import ingestionLogRoutes from './routes/ingestionLog';
+import alertsRoutes from './routes/alerts';
+import notificationsRoutes from './routes/notifications';
+import actionsRoutes from './routes/actions';
 // import './jobs/syncMetrics'; // Start cron jobs (disabled temporarily)
 import './jobs/intervalSync'; // Interval-based metric sync
 import './jobs/analyticsSync'; // Analytics data sync
+import './jobs/alertsCron'; // Alert evaluation, notification outbox, weekly digest
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -107,6 +111,9 @@ app.use('/api/ingest', ingestRoutes);
 app.use('/api/tv', tvRoutes);
 app.use('/api/targets', targetsRoutes);
 app.use('/api/ingestion-log', ingestionLogRoutes);
+app.use('/api/alerts', alertsRoutes);
+app.use('/api/notifications', notificationsRoutes);
+app.use('/api/actions', actionsRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

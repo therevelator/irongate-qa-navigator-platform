@@ -17,6 +17,9 @@ import ingestRoutes from '../../server/routes/ingest';
 import tvRoutes from '../../server/routes/tv';
 import targetsRoutes from '../../server/routes/targets';
 import ingestionLogRoutes from '../../server/routes/ingestionLog';
+import alertsRoutes from '../../server/routes/alerts';
+import notificationsRoutes from '../../server/routes/notifications';
+import actionsRoutes from '../../server/routes/actions';
 
 const app = express();
 
@@ -85,6 +88,9 @@ router.use('/ingest', ingestRoutes);
 router.use('/tv', tvRoutes);
 router.use('/targets', targetsRoutes);
 router.use('/ingestion-log', ingestionLogRoutes);
+router.use('/alerts', alertsRoutes);
+router.use('/notifications', notificationsRoutes);
+router.use('/actions', actionsRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix

@@ -1,0 +1,44 @@
+import cron from 'node-cron';
+import { runScheduledEvaluation } from '../lib/alerts';
+import { runWeeklyDigest } from '../lib/digest';
+
+/**
+ * Local schedule of the long-running server (on Netlify the Scheduled Functions in
+ * netlify/functions/ do the same):
+ *   ALERTS_EVALUATE_CRON (default '15 * * * *', hourly)  evaluate every company's alerts, compute
+ *                                                        due action outcomes, send pending
+ *                                                        notifications (retries included)
+ *   DIGEST_CRON (default '0 7 * * 1', Monday 07:00 UTC)  weekly digest
+ * ALERTS_CRON=false turns both off (e.g. a second instance). Times are UTC.
+ */
+if (process.env.ALERTS_CRON !== 'false' && !process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  const evaluateAt = process.env.ALERTS_EVALUATE_CRON || '15 * * * *';
+  const digestAt = process.env.DIGEST_CRON || '0 7 * * 1';
+  let running = false;
+  const evaluate = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const r = await runScheduledEvaluation();
+      const opened = r.reduce((n, c) => n + c.opened, 0);
+      const resolved = r.reduce((n, c) => n + c.resolved, 0);
+      console.log(`[alerts] scheduled evaluation: ${r.length} companies, ${opened} opened, ${resolved} resolved`);
+    } catch (e) {
+      console.error('[alerts] scheduled evaluation failed:', (e as Error)?.message ?? e);
+    } finally {
+      running = false;
+    }
+  };
+  cron.schedule(evaluateAt, evaluate, { timezone: 'UTC' });
+  cron.schedule(digestAt, async () => {
+    try {
+      const r = await runWeeklyDigest();
+      console.log(`[digest] weekly digest: ${r.queued} messages queued for ${r.companies} companies`);
+    } catch (e) {
+      console.error('[digest] weekly digest failed:', (e as Error)?.message ?? e);
+    }
+  }, { timezone: 'UTC' });
+  // One evaluation shortly after start, so alerts reflect data loaded while the server was down.
+  setTimeout(evaluate, 20_000).unref?.();
+  console.log(`[alerts] schedule: evaluation "${evaluateAt}", weekly digest "${digestAt}" (UTC)`);
+}
