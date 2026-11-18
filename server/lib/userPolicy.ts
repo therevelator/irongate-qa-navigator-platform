@@ -396,3 +396,27 @@ export function canSetTargets(actor: PolicyActor, scope: { type: 'company' | 'de
   if (scope.type === 'company') return false;
   return !!scope.departmentId && managedDepartmentIds(actor).includes(scope.departmentId);
 }
+
+/* ------------------------------------------------------------------------------------------
+ * Wellbeing pulse survey (server/lib/pulse.ts, routes /api/pulse)
+ * ---------------------------------------------------------------------------------------- */
+
+/** May the actor answer the team's pulse survey? Anyone assigned to the team (any team-scoped role). */
+export function canTakePulseSurvey(actor: PolicyActor, team: ScopeTeam): boolean {
+  return assignedTeamIds(actor).includes(team.id);
+}
+
+/** May the actor see the team's survey results (aggregates only, never single answers)? The team's analytics scope. */
+export function canViewPulseResults(actor: PolicyActor, team: ScopeTeam): boolean {
+  return canViewTeamAnalytics(actor, team);
+}
+
+/** May the actor read the free-text comments (shown with the aggregate only)? Leads, managers and admins of the team. */
+export function canViewPulseComments(actor: PolicyActor, team: ScopeTeam): boolean {
+  return canViewIndividualDevelopers(actor, team);
+}
+
+/** May the actor set how often the team is asked (weekly / biweekly)? The team's lead, its department's QA managers, super_admin. */
+export function canSetPulseCadence(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
+  return canWriteTeamData(actor, team);
+}

@@ -20,6 +20,7 @@ import ingestRoutes from './routes/ingest';
 import tvRoutes from './routes/tv';
 import targetsRoutes from './routes/targets';
 import ingestionLogRoutes from './routes/ingestionLog';
+import pulseRoutes from './routes/pulse';
 // import './jobs/syncMetrics'; // Start cron jobs (disabled temporarily)
 import './jobs/intervalSync'; // Interval-based metric sync
 import './jobs/analyticsSync'; // Analytics data sync
@@ -107,6 +108,7 @@ app.use('/api/ingest', ingestRoutes);
 app.use('/api/tv', tvRoutes);
 app.use('/api/targets', targetsRoutes);
 app.use('/api/ingestion-log', ingestionLogRoutes);
+app.use('/api/pulse', pulseRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
