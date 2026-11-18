@@ -52,7 +52,7 @@ describe('Security regressions', () => {
   beforeAll(async () => {
     try {
       const health = await request(API_URL).get('/api/auth/me').timeout(3000);
-      if (health.status === 0 || health.error) throw new Error('no backend');
+      if (!health.status) throw new Error('no backend');
     } catch (e: any) {
       backendAvailable = false;
       console.warn('⚠️  Backend not running at', API_URL, '- security tests skipped');
@@ -172,7 +172,8 @@ describe('Security regressions', () => {
     expect(res.status).toBe(200);
   });
 
-  // C3: Analytics is limited to super_admin / qa_manager / team_lead (own team), like the UI.
+  // Analytics scope (server/lib/userPolicy.ts): every role may open team-level analytics,
+  // but viewer / engineer / team lead only for their own team. See analytics-scope.test.ts.
   it('SEC-010: analytics reads of another team are refused for viewer, engineer and team lead', async () => {
     if (guard() || !companyATeamId) return;
     const paths = [
@@ -193,14 +194,19 @@ describe('Security regressions', () => {
     }
   });
 
-  it('SEC-011: viewer and engineer cannot read company-wide analytics without a teamId either', async () => {
+  it('SEC-011: without a teamId analytics is never company-wide: own team, or 400 without one', async () => {
     if (guard()) return;
-    for (const cookie of [viewerCookie, engineerCookie]) {
+    // The engineer and the team lead have a team: the request is scoped to it.
+    for (const cookie of [engineerCookie, leadCookie]) {
       const res = await request(API_URL).get('/api/analytics/technical-debt').set('Cookie', cookie);
-      expect(res.status).toBe(403);
+      expect(res.status).toBe(200);
     }
-    const lead = await request(API_URL).get('/api/analytics/technical-debt').set('Cookie', leadCookie);
-    expect(lead.status).toBe(200);
+    // A user with no team in scope (the seeded viewer's team does not exist) must choose one.
+    const me = await request(API_URL).get('/api/analytics/scope').set('Cookie', viewerCookie);
+    if ((me.body.teams || []).length === 0) {
+      const res = await request(API_URL).get('/api/analytics/technical-debt').set('Cookie', viewerCookie);
+      expect(res.status).toBe(400);
+    }
   });
 
   // H2: authorisation uses the live user row, not the 7-day token snapshot.
@@ -238,14 +244,20 @@ describe('Security regressions', () => {
     const user = await login({ email, password: 'Passw0rd!' });
     const asLead = await request(API_URL).get('/api/analytics/technical-debt').set('Cookie', user.cookie!);
     expect(asLead.status).toBe(200);
+    const leadRows = await request(API_URL).get(`/api/analytics/developer-metrics?teamId=${companyATeamId}`).set('Cookie', user.cookie!);
+    expect(leadRows.body.individualScope).toBe('team');
 
     const demote = await request(API_URL).put(`/api/admin/users/${created.body.id}`).set('Cookie', adminCookie).send({
       firstName: 'Role', lastName: 'Check', email, role: 'viewer',
       departmentId: created.body.department_id, primaryTeamId: companyATeamId,
     });
     expect(demote.status).toBe(200);
-    const asViewer = await request(API_URL).get('/api/analytics/technical-debt').set('Cookie', user.cookie!);
-    expect(asViewer.status).toBe(403);
+    // As a viewer the user keeps team-level analytics for their own team, but loses other
+    // developers' individual rows (only their own row is returned).
+    const asViewer = await request(API_URL).get(`/api/analytics/developer-metrics?teamId=${companyATeamId}`).set('Cookie', user.cookie!);
+    expect(asViewer.status).toBe(200);
+    expect(asViewer.body.individualScope).toBe('self');
+    expect((asViewer.body.developers || []).every((d: any) => d.developer_id === created.body.id)).toBe(true);
     await request(API_URL).delete(`/api/admin/users/${created.body.id}`).set('Cookie', adminCookie);
   });
 });

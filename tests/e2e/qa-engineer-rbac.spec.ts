@@ -72,6 +72,18 @@ test.describe('QA Engineer Role-Based Access Control', () => {
     await expect(page.getByRole('heading', { name: 'Developer recommendations', exact: true })).toHaveCount(0);
   });
 
+  test('QA Engineer opens team analytics for their own team, with only their own developer row', async ({ page }) => {
+    await setupAuth(page, 'qa_engineer');
+    await page.goto('/analytics/productivity');
+    await page.waitForSelector('[data-testid="analytics-scope-bar"]', { timeout: 10000 });
+    // Read-only scope: their own department and team, no selectors.
+    await expect(page.locator('[data-testid="analytics-scope-bar"] select')).toHaveCount(0);
+    await expect(page.locator('[data-testid="analytics-scope-team-static"]')).toBeVisible();
+    await expect(page.locator('[data-testid="own-row-only"]')).toBeVisible();
+    // The URL carries the team, so a reload keeps it.
+    expect(new URL(page.url()).searchParams.get('team')).toBeTruthy();
+  });
+
   test('QA Engineer cannot access restricted pages directly', async ({ page }) => {
     await setupAuth(page, 'qa_engineer');
 

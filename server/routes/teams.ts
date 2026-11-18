@@ -1,7 +1,8 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { assertTeamRead, assertTeamWrite, getOwnedTeam, canManageCompanyData } from '../middleware/access';
+import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor } from '../middleware/access';
+import { canViewIndividualDevelopers } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { groqChatCompletion, parseGroqJson, isGroqConfigured } from '../lib/groq';
 import {
@@ -718,23 +719,15 @@ ${benchmarkText}`
   }
 });
 
-// Get AI suggestions for developers in a team
-// Only accessible by team_lead, manager, and super_admin
+// Get AI suggestions for developers in a team.
+// Scope: the team must be in the caller's analytics scope (assertTeamAnalytics). Rows:
+// super_admin / qa_manager / team_lead get every developer of the team who has not opted
+// out; qa_engineer / viewer get only their own row (canViewIndividualDevelopers).
 router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const userRole = req.user?.role;
-    
-    // Only leads, managers, and admins can see developer stats and AI insights
-    if (!['super_admin', 'qa_manager', 'team_lead'].includes(userRole || '')) {
-      return res.status(403).json({
-        error: 'Developer insights are only available to team leads, managers, and admins',
-        restricted: true
-      });
-    }
-    // A team lead may only view their own team's developer insights.
-    if (userRole === 'team_lead' && req.user?.primaryTeamId !== req.params.id) {
-      return res.status(403).json({ error: 'You can only view developer insights for your own team' });
-    }
+    const scopedTeam = await assertTeamAnalytics(req, res, req.params.id);
+    if (!scopedTeam) return;
+    const seeAll = canViewIndividualDevelopers(policyActor(req), scopedTeam);
 
     const team = await queryOne<any>(
       `SELECT t.*, t.ai_enabled FROM teams t WHERE t.id = ? AND t.company_id = ?`,
@@ -755,7 +748,9 @@ router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async 
     }
 
     // Get developer metrics for this team — only for users who have opted in
-    // to developer insights (respect the per-user opt-out).
+    // to developer insights (respect the per-user opt-out; everyone may see their own).
+    // Without canViewIndividualDevelopers only the caller's own row is read, so no other
+    // person's data reaches the response or the model.
     const developerMetrics = await query<any>(
       `SELECT dm.*,
               (u.first_name || ' ' || u.last_name) as name,
@@ -763,9 +758,11 @@ router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async 
               u.developer_insights_enabled
        FROM developer_metrics dm
        JOIN users u ON dm.developer_id = u.id
-       WHERE dm.team_id = ? AND u.developer_insights_enabled = true
+       WHERE dm.team_id = ? AND u.company_id = ?
+         AND (u.developer_insights_enabled = true OR u.id = ?)
+         ${seeAll ? '' : 'AND u.id = ?'}
        ORDER BY u.first_name`,
-      [req.params.id]
+      seeAll ? [req.params.id, req.companyId, req.user?.id] : [req.params.id, req.companyId, req.user?.id, req.user?.id]
     );
 
     if (!developerMetrics || developerMetrics.length === 0) {
@@ -867,6 +864,7 @@ Only give praise (e.g. "keep up the good work") when there are no concerns. When
           developers,
           teamInsight: summariseTeamDevelopers(ruleAssessments),
           rules: DEVELOPER_RULES_TEXT,
+          individualScope: seeAll ? 'team' : 'self',
           metrics: devMetricsPayload
         });
       } catch (groqError: any) {
@@ -883,6 +881,7 @@ Only give praise (e.g. "keep up the good work") when there are no concerns. When
       developers: ruleAssessments.map((a) => ({ ...a, source: 'rule-based' as const })),
       teamInsight: summariseTeamDevelopers(ruleAssessments),
       rules: DEVELOPER_RULES_TEXT,
+      individualScope: seeAll ? 'team' : 'self',
       metrics: devMetricsPayload
     });
   } catch (error) {

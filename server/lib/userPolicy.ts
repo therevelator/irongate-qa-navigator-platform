@@ -94,3 +94,90 @@ export function canManageTeam(actor: PolicyActor, team: { department_id?: string
 export function canWriteTeamData(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
   return canManageTeam(actor, team) || (actor.role === 'team_lead' && !!actor.primaryTeamId && actor.primaryTeamId === team.id);
 }
+
+/* ------------------------------------------------------------------------------------------
+ * Analytics scope: the ONE definition of which team's analytics a user may open, used by
+ * the server (server/middleware/access.ts assertTeamAnalytics, /api/analytics/*, the
+ * developer endpoints in teams.ts / metrics.ts) and by the Analytics scope bar in the UI
+ * (src/contexts/AnalyticsScopeContext.tsx). Pure functions; the company (tenant) boundary is
+ * checked separately by the server (a team outside the caller's company is never in scope).
+ *
+ *   super_admin  any department and team in their company
+ *   qa_manager   their own department and every team in it
+ *   team_lead    their own (primary) team
+ *   qa_engineer  their own (primary) team
+ *   viewer       their own (primary) team
+ *
+ * Every analytics module shows exactly one team. Individual developer rows (developer
+ * metrics, DDPS snapshots, developer recommendations, the team members' metrics):
+ *   super_admin / qa_manager / team_lead  every developer of an in-scope team who has not
+ *                                         opted out (developer_insights_enabled), plus themselves
+ *   qa_engineer / viewer                  only their own row
+ * Team aggregates are available to everyone for an in-scope team.
+ * ---------------------------------------------------------------------------------------- */
+
+export interface ScopeTeam {
+  id: string;
+  department_id?: string | null;
+}
+
+/** Every role may use the team-level Analytics modules (for the teams in their scope). */
+export const ANALYTICS_ROLES = ['super_admin', 'qa_manager', 'team_lead', 'qa_engineer', 'viewer'];
+
+/** Roles that may see other developers' individual metrics (within their scope). */
+export const DEVELOPER_INSIGHT_ROLES = ['super_admin', 'qa_manager', 'team_lead'];
+
+/** How far the user's analytics scope reaches; decides which selectors are editable. */
+export type AnalyticsScopeLevel = 'company' | 'department' | 'team' | 'none';
+
+export function analyticsScopeLevel(role?: string | null): AnalyticsScopeLevel {
+  if (role === 'super_admin') return 'company';
+  if (role === 'qa_manager') return 'department';
+  if (role === 'team_lead' || role === 'qa_engineer' || role === 'viewer') return 'team';
+  return 'none';
+}
+
+/** May the actor open analytics for this team (team in the actor's company)? */
+export function canViewTeamAnalytics(actor: PolicyActor, team: ScopeTeam): boolean {
+  switch (analyticsScopeLevel(actor.role)) {
+    case 'company':
+      return true;
+    case 'department':
+      return !!actor.departmentId && team.department_id === actor.departmentId;
+    case 'team':
+      return !!actor.primaryTeamId && actor.primaryTeamId === team.id;
+    default:
+      return false;
+  }
+}
+
+/** The teams (of the actor's company) whose analytics the actor may open. */
+export function analyticsTeamsInScope<T extends ScopeTeam>(actor: PolicyActor, teams: T[]): T[] {
+  return teams.filter((t) => canViewTeamAnalytics(actor, t));
+}
+
+/** Default team for the modules: the actor's primary team when in scope, else the first in scope. */
+export function defaultAnalyticsTeamId(actor: PolicyActor, teamsInScope: ScopeTeam[]): string | null {
+  if (actor.primaryTeamId && teamsInScope.some((t) => t.id === actor.primaryTeamId)) return actor.primaryTeamId;
+  return teamsInScope[0]?.id ?? null;
+}
+
+/** May the actor see other developers' individual metrics for this team? */
+export function canViewIndividualDevelopers(actor: PolicyActor, team: ScopeTeam): boolean {
+  return DEVELOPER_INSIGHT_ROLES.includes(actor.role) && canViewTeamAnalytics(actor, team);
+}
+
+/**
+ * May the actor see this developer's individual row for this team? Their own row always
+ * (when the team is in scope); someone else's only with canViewIndividualDevelopers and
+ * when that person has not opted out of developer insights.
+ */
+export function canViewDeveloperRow(
+  actor: PolicyActor,
+  team: ScopeTeam,
+  developer: { id: string; developer_insights_enabled?: boolean | null },
+): boolean {
+  if (!canViewTeamAnalytics(actor, team)) return false;
+  if (developer.id === actor.id) return true;
+  return canViewIndividualDevelopers(actor, team) && developer.developer_insights_enabled !== false;
+}

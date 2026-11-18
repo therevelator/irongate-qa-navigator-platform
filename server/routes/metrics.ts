@@ -3,7 +3,8 @@ import { randomUUID } from 'crypto';
 import { KpiValidationError, recordKpiValues } from '../lib/kpiIngest';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam } from '../middleware/access';
+import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
+import { canViewDeveloperRow } from '../lib/userPolicy';
 import {
   BURNOUT_DEFINITION,
   burnoutRiskLabel,
@@ -401,48 +402,62 @@ async function developerInCompany(req: AuthRequest, developerId: string): Promis
   return !!row;
 }
 
-// Get latest developer metrics for a user (same company only).
+/**
+ * Individual developer metric rows the caller may read for one developer: same company,
+ * and per row the shared rule canViewDeveloperRow (server/lib/userPolicy.ts) for the team
+ * the row was recorded for: your own rows on a team in your analytics scope; other
+ * people's rows only for super_admin / qa_manager (department) / team_lead (own team) and
+ * only when that person has not opted out of developer insights.
+ * Returns null after writing 404 (no rows) or 403 (rows exist but none visible).
+ */
+async function visibleDeveloperRows(req: AuthRequest, res: express.Response, developerId: string, sinceDays?: number): Promise<any[] | null> {
+  const params: any[] = [developerId, req.companyId, req.companyId];
+  let sql = `SELECT dm.*, t.department_id AS team_department_id, u.developer_insights_enabled
+       FROM developer_metrics dm
+       JOIN users u ON u.id = dm.developer_id
+       JOIN teams t ON t.id = dm.team_id
+      WHERE dm.developer_id = ? AND u.company_id = ? AND t.company_id = ?`;
+  sql += ' ORDER BY dm.created_at DESC';
+  const rows = await query<any>(sql, params);
+  if (!rows.length) {
+    res.status(404).json({ error: 'No metrics found for this developer' });
+    return null;
+  }
+  const actor = policyActor(req);
+  const visible = rows.filter((r: any) => canViewDeveloperRow(
+    actor,
+    { id: String(r.team_id), department_id: r.team_department_id },
+    { id: String(r.developer_id), developer_insights_enabled: r.developer_insights_enabled }
+  ));
+  if (!visible.length) {
+    res.status(403).json({ error: 'You can only view your own individual developer metrics.' });
+    return null;
+  }
+  const since = sinceDays === undefined ? null : Date.now() - sinceDays * 24 * 60 * 60 * 1000;
+  return visible
+    .filter((r: any) => since === null || new Date(r.created_at).getTime() >= since)
+    .map(({ team_department_id, developer_insights_enabled, ...row }: any) => row);
+}
+
+// Get latest developer metrics for a user (rows the caller may see; see visibleDeveloperRows).
 router.get('/developer/:userId', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    if (!(await developerInCompany(req, req.params.userId))) {
-      return res.status(404).json({ error: 'No metrics found for this developer' });
-    }
-    const metrics = await queryOne<any>(
-      `SELECT * FROM developer_metrics
-       WHERE developer_id = ?
-       ORDER BY created_at DESC
-       LIMIT 1`,
-      [req.params.userId]
-    );
-
-    if (!metrics) {
-      return res.status(404).json({ error: 'No metrics found for this developer' });
-    }
-
-    res.json({ metrics });
+    const rows = await visibleDeveloperRows(req, res, req.params.userId as string);
+    if (!rows) return;
+    res.json({ metrics: rows[0] });
   } catch (error) {
     console.error('Get developer metrics error:', error);
     res.status(500).json({ error: 'Failed to get developer metrics' });
   }
 });
 
-// Get developer metrics history (same company only).
+// Get developer metrics history (rows the caller may see; see visibleDeveloperRows).
 router.get('/developer/:userId/history', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    if (!(await developerInCompany(req, req.params.userId))) {
-      return res.status(404).json({ error: 'No metrics found for this developer' });
-    }
     const { days = '30' } = req.query;
-
-    const history = await query<any[]>(
-      `SELECT * FROM developer_metrics
-       WHERE developer_id = ?
-       AND created_at >= CURRENT_DATE - CAST(? AS INTEGER)
-       ORDER BY created_at DESC`,
-      [req.params.userId, Math.min(parseInt(days as string) || 30, 365)]
-    );
-
-    res.json({ history });
+    const rows = await visibleDeveloperRows(req, res, req.params.userId as string, Math.min(parseInt(days as string) || 30, 365));
+    if (!rows) return;
+    res.json({ history: rows });
   } catch (error) {
     console.error('Get developer history error:', error);
     res.status(500).json({ error: 'Failed to get developer history' });

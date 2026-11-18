@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { queryOne } from '../../src/lib/db';
 import { AuthRequest } from './auth';
+import { canViewTeamAnalytics, type PolicyActor } from '../lib/userPolicy';
 
 /**
  * Tenant / team access helpers.
@@ -71,6 +72,33 @@ export async function assertTeamWrite(req: AuthRequest, res: Response, teamId?: 
   if (role === 'team_lead' && req.user?.primaryTeamId === team.id) return team;
   res.status(403).json({ error: 'Insufficient permissions for this team' });
   return null;
+}
+
+/** The caller as a PolicyActor (live role, department and primary team from authenticateToken). */
+export function policyActor(req: AuthRequest): PolicyActor {
+  return {
+    id: req.user?.id ?? '',
+    role: req.user?.role ?? '',
+    departmentId: req.user?.departmentId ?? null,
+    primaryTeamId: req.user?.primaryTeamId ?? null,
+  };
+}
+
+/**
+ * Enforce ANALYTICS access to one team (the shared rule canViewTeamAnalytics in
+ * server/lib/userPolicy.ts): super_admin any team of their company, qa_manager the teams
+ * of their department, team_lead / qa_engineer / viewer their own primary team.
+ * A team of another company, an unknown id and an out-of-scope team all get the same
+ * 403, so the response does not reveal whether a team exists elsewhere.
+ * Writes the HTTP error and returns null when access is denied.
+ */
+export async function assertTeamAnalytics(req: AuthRequest, res: Response, teamId?: string | null): Promise<OwnedTeam | null> {
+  const team = await getOwnedTeam(req, teamId);
+  if (!team || !canViewTeamAnalytics(policyActor(req), team)) {
+    res.status(403).json({ error: 'Access denied. This team is outside your analytics scope.' });
+    return null;
+  }
+  return team;
 }
 
 /** True if the role may perform company-level write/config operations. */

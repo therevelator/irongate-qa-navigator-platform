@@ -50,7 +50,7 @@ describe('Admin API Endpoints', () => {
     try {
       const healthCheck = await request(API_URL).get('/api/auth/me').timeout(3000);
       // Any response (even 401) means backend is running
-      if (healthCheck.status === 0 || healthCheck.error) {
+      if (!healthCheck.status) {
         throw new Error('Backend not responding');
       }
     } catch (error: any) {

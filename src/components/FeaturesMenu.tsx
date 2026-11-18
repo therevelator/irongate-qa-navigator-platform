@@ -1,15 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React from 'react';
 import { Bug, CalendarClock, Wrench, Gauge, GitBranch, Activity, TrendingUp, Trophy, FileText, ChevronRight } from 'lucide-react';
-import API_URL from '../config/api';
-import { useAuth } from '../contexts/AuthContext';
-import { Page, PageIntro, inputClass, cx } from './ui';
-
-interface Department { id: string; name: string }
-interface Team { id: string; name: string; department_id?: string; department?: string }
+import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
+import { AnalyticsScopeBar, AnalyticsNoTeam } from './AnalyticsScopeBar';
+import { Page, PageIntro } from './ui';
 
 interface FeaturesMenuProps {
   onBack: () => void;
-  onSelectFeature: (featureId: string, teamId?: string) => void;
+  /** Opens a module; it shows the team selected in the shared analytics scope. */
+  onSelectFeature: (featureId: string) => void;
 }
 
 const MODULES: { group: string; items: { id: string; title: string; description: string; icon: React.ComponentType<{ size?: number }> }[] }[] = [
@@ -35,62 +33,27 @@ const MODULES: { group: string; items: { id: string; title: string; description:
 ];
 
 const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onSelectFeature }) => {
-  const { user } = useAuth();
-  const isLead = user?.role === 'team_lead';
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [teams, setTeams] = useState<Team[]>([]);
-  const [department, setDepartment] = useState('all');
-  const [team, setTeam] = useState<string>(isLead ? (user?.primaryTeamId ?? 'all') : 'all');
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const [d, t] = await Promise.all([
-          fetch(`${API_URL}/admin/departments`, { credentials: 'include' }),
-          fetch(`${API_URL}/teams`, { credentials: 'include' }),
-        ]);
-        if (d.ok) { const data = await d.json(); setDepartments(Array.isArray(data) ? data : data.departments || []); }
-        if (t.ok) { const data = await t.json(); setTeams(data.teams || []); }
-      } catch (e) {
-        console.error('Error loading analytics scope', e);
-      }
-    })();
-  }, []);
-
-  const teamsInScope = useMemo(
-    () => (department === 'all' ? teams : teams.filter((t) => String(t.department_id) === String(department))),
-    [teams, department],
-  );
-
-  const selectedTeamName = teams.find((t) => t.id === team)?.name;
-  const open = (id: string) => onSelectFeature(id, team !== 'all' ? team : undefined);
+  const scope = useAnalyticsScope();
+  const teamName = scope.team?.name;
 
   return (
     <Page>
       <div data-testid="features-menu">
+      <div className="mb-6">
+        <AnalyticsScopeBar />
+      </div>
       <PageIntro
         title="Analytics"
-        description={selectedTeamName ? `Modules open scoped to ${selectedTeamName}. Team rankings and Reports always cover all teams.` : 'Choose a team to scope the analytics modules. Without a team, modules show company-wide data.'}
-        actions={
-          isLead ? (
-            <span className="text-sm text-slate-600 dark:text-slate-300" data-testid="team-static-label">
-              Team: <span className="font-medium text-slate-900 dark:text-white">{selectedTeamName || 'Your team'}</span>
-            </span>
-          ) : (
-            <>
-              <select aria-label="Department" value={department} onChange={(e) => { setDepartment(e.target.value); setTeam('all'); }} className={cx(inputClass, 'pr-8')}>
-                <option value="all">All departments</option>
-                {departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-              <select aria-label="Team" value={team} onChange={(e) => setTeam(e.target.value)} className={cx(inputClass, 'pr-8 min-w-[12rem]')}>
-                <option value="all">All teams</option>
-                {teamsInScope.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
-              </select>
-            </>
-          )
+        description={
+          teamName
+            ? `Every module opens for ${teamName}. Team rankings compare the teams of ${scope.team?.department_name || 'its department'} and highlight ${teamName}; Reports are generated for ${teamName}.`
+            : 'Analytics modules show metrics for one team at a time.'
         }
       />
 
+      {!scope.loading && !scope.team ? (
+        <AnalyticsNoTeam error={scope.error} />
+      ) : (
       <div className="space-y-8">
         {MODULES.map((g) => (
           <section key={g.group}>
@@ -101,7 +64,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onSelectFeature }) => {
                 return (
                   <button
                     key={m.id}
-                    onClick={() => open(m.id)}
+                    onClick={() => onSelectFeature(m.id)}
                     data-testid={`feature-${m.id}`}
                     className="group flex items-start gap-4 rounded-lg border border-slate-200 bg-white p-4 text-left transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800/50"
                   >
@@ -120,6 +83,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onSelectFeature }) => {
           </section>
         ))}
       </div>
+      )}
       </div>
     </Page>
   );

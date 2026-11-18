@@ -32,7 +32,7 @@ describe('Consistency regressions', () => {
   beforeAll(async () => {
     try {
       const health = await request(API_URL).get('/api/auth/me').timeout(3000);
-      if (health.status === 0 || health.error) throw new Error('no backend');
+      if (!health.status) throw new Error('no backend');
     } catch {
       backendAvailable = false;
       return;

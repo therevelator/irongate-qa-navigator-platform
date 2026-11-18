@@ -80,15 +80,16 @@ test.describe('Team Lead Role-Based Access Control', () => {
     await page.goto('/analytics');
     await page.waitForSelector('[data-testid="features-menu"]', { timeout: 10000 });
 
-    // Should NOT see department/team dropdowns
-    await expect(page.locator('[data-testid="features-menu"] select')).toHaveCount(0);
+    // Should NOT see department/team dropdowns: the scope bar is read-only for a team lead
+    await expect(page.locator('[data-testid="analytics-scope-bar"] select')).toHaveCount(0);
 
-    // Should see static label showing their team name
-    const staticLabel = page.locator('[data-testid="team-static-label"]');
+    // Should see the read-only department and team (their own)
+    await expect(page.locator('[data-testid="analytics-scope-department-static"]')).toBeVisible();
+    const staticLabel = page.locator('[data-testid="analytics-scope-team-static"]');
     await expect(staticLabel).toBeVisible();
 
-    const labelText = await staticLabel.textContent();
-    expect(labelText).toContain('Team:');
+    const labelText = (await staticLabel.textContent())?.trim();
+    expect(labelText).toBeTruthy();
 
     console.log(`Team Lead sees static label: "${labelText}"`);
   });

@@ -14,6 +14,7 @@ import {
 import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
+import { canViewIndividualDevelopers, canViewTeamAnalytics } from '../../server/lib/userPolicy';
 import { TrendingUp, TrendingDown, Minus, Users, Info } from 'lucide-react';
 import BatteryIndicator from './BatteryIndicator';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
@@ -326,11 +327,15 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
     (user?.primaryTeamId != null && team?.id != null && String(user.primaryTeamId) === String(team.id)) ||
     (Array.isArray(user?.assignedTeams) && team?.id != null && user!.assignedTeams!.some(tid => String(tid) === String(team.id)));
 
-  // Only leads (own team), managers and admins can see developer stats and AI insights
-  const canViewDeveloperInsights =
-    user?.role === 'super_admin' ||
-    user?.role === 'qa_manager' ||
-    (user?.role === 'team_lead' && isOwnTeam);
+  // Shared rules (server/lib/userPolicy.ts): other developers' stats and AI insights for
+  // super_admin (any team), qa_manager (own department) and team_lead (own team); a
+  // qa_engineer / viewer sees only their own row, on their own team. The API enforces both.
+  const policyActor = user
+    ? { id: String(user.id), role: user.role, departmentId: user.departmentId ?? null, primaryTeamId: user.primaryTeamId ?? null }
+    : null;
+  const policyTeam = { id: String(team.id), department_id: (team as any).department_id != null ? String((team as any).department_id) : null };
+  const canViewDeveloperInsights = !!policyActor && canViewIndividualDevelopers(policyActor, policyTeam);
+  const canViewOwnRow = !canViewDeveloperInsights && !!policyActor && canViewTeamAnalytics(policyActor, policyTeam);
 
   const kpi: KPIData = team.kpiData || {};
   const [snapshotDate, setSnapshotDate] = useState<string | null>(team.snapshotDate ?? kpi.snapshotDate ?? null);
@@ -432,8 +437,18 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
                 : 'Developer metrics are not available for your role.',
             );
           }
+        } else if (canViewOwnRow) {
+          // Own row only: the API returns nothing but the caller's own developer metrics.
+          const metricsResponse = await fetch(`${API_URL}/analytics/developer-metrics?teamId=${encodeURIComponent(team.id)}`, { credentials: 'include' });
+          if (metricsResponse.ok) {
+            ((await metricsResponse.json()).developers || []).forEach((m: any) => {
+              const row = metricFromDeveloperMetricsRow(m);
+              if (row.developerId) byId[String(row.developerId)] = row;
+            });
+          }
+          if (!cancelled) setDevMetricsUnavailable(null);
         } else if (!cancelled) {
-          setDevMetricsUnavailable('Developer metrics are visible to team leads, managers and admins.');
+          setDevMetricsUnavailable('Individual developer metrics are visible to team leads, managers and admins within their scope.');
         }
 
         if (!cancelled) {
@@ -453,7 +468,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
     if (canViewDeveloperInsights) setDevAILoading(true);
     load();
     return () => { cancelled = true; };
-  }, [team.id, canViewDeveloperInsights]);
+  }, [team.id, canViewDeveloperInsights, canViewOwnRow]);
 
   useEffect(() => {
     if (!canViewDeveloperInsights) return;
@@ -502,10 +517,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack }) => {
     { id: 'reliability', name: 'Reliability & stability' },
   ] as const;
 
-  // Members visible to this viewer: QA engineers only see themselves
-  const visibleMembers = members.filter(m => (user?.role === 'qa_engineer' ? m.id === String(user.id) : true));
-  const showMembers =
-    canViewDeveloperInsights || (user?.role === 'qa_engineer' && String(team.id) === String(user?.primaryTeamId));
+  // Members visible to this viewer: without individual access only their own row.
+  const visibleMembers = members.filter(m => (canViewDeveloperInsights ? true : m.id === String(user?.id)));
+  const showMembers = canViewDeveloperInsights || canViewOwnRow;
 
   const metricsFor = (dev: DeveloperAISuggestion): DevMetricRow | undefined =>
     devAISuggestions?.metrics?.map(normalizeMetric).find(m =>

@@ -7,6 +7,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Toaster } from 'react-hot-toast';
+import { ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES } from '../../server/lib/userPolicy';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -31,7 +32,9 @@ interface NavItem {
   roles?: Role[]; // undefined = everyone
 }
 
-const ANALYTICS_ROLES: Role[] = ['super_admin', 'qa_manager', 'team_lead'];
+// Same list as the server (server/lib/userPolicy.ts): every role may open the team-level
+// Analytics modules; what each role sees inside them is limited by its analytics scope.
+const ANALYTICS_ROLES = POLICY_ANALYTICS_ROLES as Role[];
 const ADMIN_ROLES: Role[] = ['super_admin', 'qa_manager'];
 
 const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [

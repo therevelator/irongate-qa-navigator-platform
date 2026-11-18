@@ -22,6 +22,9 @@ import NewDashboard from './components/NewDashboard';
 import ManualMetricsInput from './components/ManualMetricsInput';
 import MetricIntervalsConfig from './components/MetricIntervalsConfig';
 import ParametersConfiguration from './components/ParametersConfiguration';
+import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
+import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
+import { ANALYTICS_ROLES } from '../server/lib/userPolicy';
 
 // Map views to URL paths
 const VIEW_TO_PATH: Record<string, string> = {
@@ -58,23 +61,17 @@ function App() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(1);
   const [userTeams, setUserTeams] = useState<any[]>([]);
-  const [analyticsTeamId, setAnalyticsTeamId] = useState<string | undefined>(undefined);
+  const analyticsScope = useAnalyticsScope();
   const [is3DMode, setIs3DMode] = useState(false);
 
   // Handle URL routing on mount and popstate
   useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
-      const searchParams = new URLSearchParams(window.location.search);
-      const teamIdFromUrl = searchParams.get('teamId') || undefined;
 
-      // Find exact match or best match
+      // Find exact match or best match. The analytics team (?team=) is read by
+      // AnalyticsScopeContext, which validates it against the user's scope.
       const view = PATH_TO_VIEW[path] || 'dashboard';
-
-      // Restore teamId from URL if present (for analytics views)
-      if (teamIdFromUrl) {
-        setAnalyticsTeamId(teamIdFromUrl);
-      }
 
       // Check permissions before setting view
       if (hasPermission(view)) {
@@ -96,11 +93,12 @@ function App() {
   }, [isLoading, user]); // Re-run when user loads to enforce permissions
 
   // Update URL when view changes
-  const handleViewChange = (view: string, teamId?: string) => {
+  const handleViewChange = (view: string) => {
     const path = VIEW_TO_PATH[view];
     if (path) {
-      // Include teamId in URL for analytics views
-      const url = teamId ? `${path}?teamId=${teamId}` : path;
+      // Analytics views carry the selected team in the URL (?team=), so links and reloads keep it.
+      const teamId = path.startsWith('/analytics') ? analyticsScope.teamId : null;
+      const url = teamId ? `${path}?${URL_TEAM_PARAM}=${encodeURIComponent(teamId)}` : path;
       window.history.pushState(null, '', url);
     }
     setCurrentView(view);
@@ -130,7 +128,9 @@ function App() {
       case 'test-execution-timeline':
       case 'team-gamification':
       case 'pdf-report-generator':
-        return !['qa_engineer', 'viewer'].includes(role);
+        // Every role (server/lib/userPolicy.ts ANALYTICS_ROLES); each sees only the teams
+        // in its analytics scope, enforced by the API.
+        return ANALYTICS_ROLES.includes(role);
       case 'admin-panel':
       case 'metric-intervals':
       case 'parameters-config':
@@ -216,9 +216,8 @@ function App() {
     filteredTeams = apiTeams.filter((t: any) => t.department_id === activeTab);
   }
 
-  const handleFeatureSelect = (featureId: string, teamId?: string) => {
-    setAnalyticsTeamId(teamId);
-    handleViewChange(featureId, teamId);
+  const handleFeatureSelect = (featureId: string) => {
+    handleViewChange(featureId);
   };
 
   // Enforce permissions on render
@@ -274,16 +273,23 @@ function App() {
     );
   }
 
-  if (currentView === 'flaky-test-intelligence') return renderLayout(<FlakyTestIntelligence onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'technical-debt') return renderLayout(<TechnicalDebtTracker onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'pipeline-visualization') return renderLayout(<PipelineVisualization onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'business-impact') return renderLayout(<BusinessImpactAnalysisV2 onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'performance-metrics') return renderLayout(<PerformanceTesting onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'developer-productivity') return renderLayout(<DeveloperProductivity onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'test-execution-timeline') return renderLayout(<TestExecutionTimeline onBack={() => handleViewChange('features')} teamId={analyticsTeamId} />);
-  if (currentView === 'team-gamification') return renderLayout(<TeamGamification onBack={() => handleViewChange('features')} />);
-  if (currentView === 'pdf-report-generator') return renderLayout(<PDFReportGenerator onBack={() => handleViewChange('features')} />);
+  // Analytics modules: the shared scope bar on top, each module for exactly one team.
+  const toHub = () => handleViewChange('features');
+  const analytics = (render: (teamId: string) => React.ReactNode, note?: React.ReactNode) =>
+    renderLayout(<AnalyticsScopeGate note={note}>{(team) => render(team.id)}</AnalyticsScopeGate>);
+  const individualsNote = analyticsScope.canViewIndividuals
+    ? 'Individual developer metrics: team members who have not opted out.'
+    : 'Individual developer metrics: only your own. Team figures cover what you can see.';
 
+  if (currentView === 'flaky-test-intelligence') return analytics((id) => <FlakyTestIntelligence onBack={toHub} teamId={id} />);
+  if (currentView === 'technical-debt') return analytics((id) => <TechnicalDebtTracker onBack={toHub} teamId={id} />);
+  if (currentView === 'pipeline-visualization') return analytics((id) => <PipelineVisualization onBack={toHub} teamId={id} />);
+  if (currentView === 'business-impact') return analytics((id) => <BusinessImpactAnalysisV2 onBack={toHub} teamId={id} />);
+  if (currentView === 'performance-metrics') return analytics((id) => <PerformanceTesting onBack={toHub} teamId={id} />);
+  if (currentView === 'developer-productivity') return analytics((id) => <DeveloperProductivity onBack={toHub} teamId={id} />, individualsNote);
+  if (currentView === 'test-execution-timeline') return analytics((id) => <TestExecutionTimeline onBack={toHub} teamId={id} />);
+  if (currentView === 'team-gamification') return analytics((id) => <TeamGamification onBack={toHub} teamId={id} />, 'Rankings compare the teams of the selected department; the selected team is highlighted.');
+  if (currentView === 'pdf-report-generator') return analytics((id) => <PDFReportGenerator onBack={toHub} teamId={id} />, 'The report covers the selected team.');
 
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
   if (currentView === 'manual-metrics') return renderLayout(<ManualMetricsInput onBack={() => handleViewChange('dashboard')} />);

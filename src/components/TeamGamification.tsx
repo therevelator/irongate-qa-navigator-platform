@@ -5,21 +5,27 @@ import type { Tone } from './ui';
 import { getThreshold, statusFor, toNum } from '../data/detailedKPIs';
 import type { KPIKey, KPIStatus } from '../data/detailedKPIs';
 import { formatAsOf } from '../data/advancedFeatures';
+import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 
 /**
  * Team rankings — built only from real data returned by GET /api/teams.
  * Teams are ranked by their latest recorded QA score; teams without a score are
  * listed after the ranked ones. No points, badges or achievements are invented.
+ * Rankings compare the teams of the selected team's DEPARTMENT (analytics scope) and
+ * highlight the selected team. Team-level KPIs only; no individual data.
  */
 
 interface TeamRankingsProps {
   onBack?: () => void;
+  /** Selected team (analytics scope); its department's teams are ranked. */
+  teamId: string;
 }
 
 interface RankedTeam {
   id: string;
   name: string;
   department: string;
+  departmentId: string | null;
   qaScore: number | null;
   coverage: number | null;
   flakiness: number | null;
@@ -40,8 +46,12 @@ const COLUMNS: { key: SortKey; label: string; short: string; metric: KPIKey; uni
 
 const toneFor = (s: KPIStatus): Tone => (s === 'good' ? 'good' : s === 'warning' ? 'warn' : s === 'critical' ? 'bad' : 'neutral');
 
-const TeamGamification: React.FC<TeamRankingsProps> = () => {
-  const [teams, setTeams] = useState<RankedTeam[]>([]);
+const TeamGamification: React.FC<TeamRankingsProps> = ({ teamId }) => {
+  const scope = useAnalyticsScope();
+  const departmentId = scope.team?.id === teamId ? scope.team.department_id : null;
+  const departmentName = scope.team?.department_name || 'the selected department';
+  const selectedName = scope.team?.name || 'the selected team';
+  const [allTeams, setTeams] = useState<RankedTeam[]>([]);
   const [thresholds, setThresholds] = useState<Partial<Record<string, any>> | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +70,7 @@ const TeamGamification: React.FC<TeamRankingsProps> = () => {
             id: String(t.id),
             name: t.name || 'Unnamed team',
             department: t.department || '—',
+            departmentId: t.department_id != null ? String(t.department_id) : null,
             qaScore: toNum(t.qaScore),
             coverage: toNum(k.testCoverage),
             flakiness: toNum(k.testFlakinessRate),
@@ -70,7 +81,7 @@ const TeamGamification: React.FC<TeamRankingsProps> = () => {
         });
 
         // The list endpoint may not carry the snapshot date; fall back to the team detail endpoint.
-        const missing = rows.filter(r => !r.asOf);
+        const missing = rows.filter(r => !r.asOf && (departmentId == null || r.departmentId === departmentId));
         if (missing.length) {
           const dates = await Promise.all(
             missing.map(r =>
@@ -94,7 +105,13 @@ const TeamGamification: React.FC<TeamRankingsProps> = () => {
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [departmentId]);
+
+  // Only the teams of the selected team's department are compared.
+  const teams = useMemo(
+    () => allTeams.filter(t => (departmentId == null ? t.id === teamId : t.departmentId === departmentId) || t.id === teamId),
+    [allTeams, departmentId, teamId],
+  );
 
   const column = COLUMNS.find(c => c.key === sortKey)!;
   const lowerIsBetter = getThreshold(column.metric, thresholds)?.lowerIsBetter ?? false;
@@ -129,7 +146,7 @@ const TeamGamification: React.FC<TeamRankingsProps> = () => {
         title="Team rankings"
         description={
           <>
-            Active teams ranked by their latest recorded KPI snapshot.
+            Active teams of <span className="font-medium text-slate-700 dark:text-slate-200">{departmentName}</span> ranked by their latest recorded KPI snapshot; <span className="font-medium text-slate-700 dark:text-slate-200">{selectedName}</span> is highlighted.
             {newest && <> Snapshots dated {oldest === newest ? newest : `${oldest} – ${newest}`}.</>}
             {' '}{scored} of {teams.length} teams have a QA score.
           </>
@@ -149,7 +166,7 @@ const TeamGamification: React.FC<TeamRankingsProps> = () => {
         ) : error ? (
           <EmptyState title="Could not load teams" description={error} />
         ) : teams.length === 0 ? (
-          <EmptyState title="No teams" description="No active teams are recorded for your company." />
+          <EmptyState title="No teams" description="No active teams are recorded for this department." />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -166,11 +183,24 @@ const TeamGamification: React.FC<TeamRankingsProps> = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {ranked.map(({ team, rank }) => (
-                  <tr key={team.id} className="text-slate-700 dark:text-slate-300">
-                    <td className="px-5 py-3 tabular-nums font-medium text-slate-900 dark:text-white">{rank ?? '—'}</td>
+                {ranked.map(({ team, rank }) => {
+                  const isSelected = team.id === teamId;
+                  return (
+                  <tr
+                    key={team.id}
+                    data-testid={isSelected ? 'ranking-selected-team' : undefined}
+                    aria-current={isSelected ? 'true' : undefined}
+                    className={cx(
+                      'text-slate-700 dark:text-slate-300',
+                      isSelected && 'bg-brand-50 dark:bg-brand-950/40',
+                    )}
+                  >
+                    <td className={cx('px-5 py-3 tabular-nums font-medium text-slate-900 dark:text-white border-l-2', isSelected ? 'border-brand-600 dark:border-brand-400' : 'border-transparent')}>{rank ?? '—'}</td>
                     <td className="px-3 py-3">
-                      <div className="font-medium text-slate-900 dark:text-white">{team.name}</div>
+                      <div className="flex items-center gap-2 font-medium text-slate-900 dark:text-white">
+                        {team.name}
+                        {isSelected && <Badge tone="brand">Selected</Badge>}
+                      </div>
                       <div className="text-xs text-slate-500 dark:text-slate-400">{team.department}</div>
                     </td>
                     {COLUMNS.map(c => {
@@ -194,7 +224,8 @@ const TeamGamification: React.FC<TeamRankingsProps> = () => {
                       {formatAsOf(team.asOf) ?? '—'}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

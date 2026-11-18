@@ -1,7 +1,8 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { assertTeamRead, assertTeamWrite, getOwnedTeam, canManageCompanyData } from '../middleware/access';
+import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor, type OwnedTeam } from '../middleware/access';
+import { ANALYTICS_ROLES, analyticsScopeLevel, analyticsTeamsInScope, canManageTeam, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
 import { runDemoSeed, runFillExisting, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
@@ -15,43 +16,39 @@ import { resolveConfigs } from '../lib/configResolver';
 
 const router = express.Router();
 
-/** Roles that may use the Analytics modules (same list as the UI: Layout ANALYTICS_ROLES / App.hasPermission). */
-const ANALYTICS_ROLES = ['super_admin', 'qa_manager', 'team_lead'];
-
 /**
- * Resolve which team an Analytics request may read.
- * - qa_engineer / viewer: 403 (the UI does not offer Analytics to them).
- * - team_lead: only their own primary team; with no teamId the request is scoped to it.
- * - super_admin / qa_manager: any team in their company (assertTeamRead), or company-wide
- *   when no teamId is given.
+ * Analytics scope (audited for the team-scoped Analytics modules).
+ *
+ * Every team-scoped Analytics endpoint resolves exactly ONE team and checks it with the
+ * shared rule canViewTeamAnalytics (server/lib/userPolicy.ts) through assertTeamAnalytics:
+ *   super_admin  any team of their company
+ *   qa_manager   the teams of their department
+ *   team_lead / qa_engineer / viewer  their own primary team
+ * A team out of scope, of another company or unknown gets 403.
+ *
+ * teamId: required in principle. When a request carries none, it defaults to the caller's
+ * own primary team (and is checked like any other team); a caller with no primary team
+ * gets 400 "teamId is required". There is no company-wide ("all teams") mode any more:
+ * company-wide figures are served only by /company-summary (dashboard), as before.
  * Writes the error response and returns null when access is denied.
  */
-async function resolveAnalyticsTeam(req: any, res: any, requestedTeamId: unknown): Promise<{ teamId: string | undefined } | null> {
-  const role = req.user?.role;
-  if (!ANALYTICS_ROLES.includes(role)) {
-    res.status(403).json({ error: 'Analytics is not available for your role.' });
-    return null;
-  }
+async function resolveAnalyticsTeam(req: any, res: any, requestedTeamId: unknown): Promise<{ teamId: string; team: OwnedTeam } | null> {
   const requested = typeof requestedTeamId === 'string' && requestedTeamId && requestedTeamId !== 'all' ? requestedTeamId : undefined;
-  if (role === 'team_lead') {
-    const own = req.user?.primaryTeamId as string | undefined;
-    if (requested && requested !== own) {
-      res.status(403).json({ error: 'Access denied. You can only view analytics for your own team.' });
+  const own = req.user?.primaryTeamId as string | undefined;
+  if (!requested) {
+    // No teamId: the caller's own team, if it exists and is in scope; otherwise 400.
+    const ownTeam = own ? await getOwnedTeam(req, own) : null;
+    if (!ownTeam || !canViewTeamAnalytics(policyActor(req), ownTeam)) {
+      res.status(400).json({ error: 'teamId is required. Choose a team for this analytics view.' });
       return null;
     }
-    if (!own) {
-      res.status(403).json({ error: 'You are not assigned to a team.' });
-      return null;
-    }
-    return (await assertTeamRead(req, res, own)) ? { teamId: own } : null;
   }
-  if (requested) {
-    return (await assertTeamRead(req, res, requested)) ? { teamId: requested } : null;
-  }
-  return { teamId: undefined };
+  const teamId = requested ?? (own as string);
+  const team = await assertTeamAnalytics(req, res, teamId);
+  return team ? { teamId: team.id, team } : null;
 }
 
-/** Role gate for Analytics endpoints that are not team-scoped. */
+/** Role gate for Analytics endpoints that are not team-scoped (company-level config). */
 function assertAnalyticsRole(req: any, res: any): boolean {
   if (ANALYTICS_ROLES.includes(req.user?.role)) return true;
   res.status(403).json({ error: 'Analytics is not available for your role.' });
@@ -91,6 +88,55 @@ function weightedMeanOf(parts: Array<{ value: number | null; weight: number }>):
   if (!avail.length || totalWeight <= 0) return null;
   return avail.reduce((s, p) => s + (p.value as number) * p.weight, 0) / totalWeight;
 }
+
+// ============================================================================
+// ANALYTICS SCOPE (department / team selectors of the Analytics pages)
+// ============================================================================
+
+/**
+ * The departments and teams the caller may choose on the Analytics pages, from the shared
+ * rule (analyticsTeamsInScope, server/lib/userPolicy.ts): super_admin every active team of
+ * their company, qa_manager the active teams of their department, everyone else their own
+ * primary team. `level` says which selectors are editable ('company': department + team,
+ * 'department': team only, 'team': read-only). `defaultTeamId` is the caller's primary team
+ * when in scope, else the first team in scope (null = nothing in scope: empty state).
+ */
+router.get('/scope', authenticateToken, async (req: any, res) => {
+  try {
+    if (!assertAnalyticsRole(req, res)) return;
+    const actor = policyActor(req);
+    const rows = await query<any>(
+      `SELECT t.id, t.name, t.department_id, d.name AS department_name
+         FROM teams t
+         LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.company_id = ? AND t.is_active = TRUE
+        ORDER BY d.name NULLS LAST, t.name`,
+      [req.user.companyId]
+    );
+    type ScopeRow = { id: string; name: string; department_id: string | null; department_name: string | null };
+    const teams = analyticsTeamsInScope<ScopeRow>(actor, rows.map((r: any): ScopeRow => ({
+      id: String(r.id),
+      name: r.name as string,
+      department_id: r.department_id ? String(r.department_id) : null,
+      department_name: (r.department_name as string | null) ?? null,
+    })));
+    const departments: Array<{ id: string; name: string }> = [];
+    for (const t of teams) {
+      if (t.department_id && !departments.some((d) => d.id === t.department_id)) {
+        departments.push({ id: t.department_id, name: t.department_name || 'Unnamed department' });
+      }
+    }
+    res.json({
+      level: analyticsScopeLevel(actor.role),
+      departments,
+      teams,
+      defaultTeamId: defaultAnalyticsTeamId(actor, teams),
+    });
+  } catch (error) {
+    console.error('Error fetching analytics scope:', error);
+    res.status(500).json({ error: 'Failed to fetch analytics scope' });
+  }
+});
 
 // ============================================================================
 // TEST EXECUTION TIMELINE
@@ -370,23 +416,16 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
 
 router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
   try {
-    const { companyId, role, primaryTeamId, id: userId } = req.user;
-    const requestedTeamId = typeof req.query.teamId === 'string' && req.query.teamId ? req.query.teamId : undefined;
+    const { companyId, id: userId } = req.user;
 
-    // Individual developer metrics: same gate as /teams/:id/developer-ai-suggestions.
-    // super_admin / qa_manager: any team in the company; team_lead: own team only;
-    // other roles: only their own row.
-    if (!assertAnalyticsRole(req, res)) return;
-    const privileged = ['super_admin', 'qa_manager', 'team_lead'].includes(role);
-    let scopeTeamId: string | undefined = requestedTeamId;
-
-    if (requestedTeamId) {
-      // Tenant check + team-lead/own-team restriction.
-      if (!(await assertTeamRead(req, res, requestedTeamId))) return;
-    } else if (role === 'team_lead') {
-      if (!primaryTeamId) return res.json({ developers: [] });
-      scopeTeamId = primaryTeamId;
-    }
+    // Individual developer metrics for ONE team in the caller's analytics scope (teamId
+    // defaults to the caller's own team). super_admin / qa_manager / team_lead see the
+    // team's developers who have not opted out (plus themselves); qa_engineer / viewer
+    // see only their own row (canViewIndividualDevelopers, server/lib/userPolicy.ts).
+    const scope = await resolveAnalyticsTeam(req, res, req.query.teamId);
+    if (!scope) return;
+    const scopeTeamId = scope.teamId;
+    const privileged = canViewIndividualDevelopers(policyActor(req), scope.team);
 
     // One row per (developer, team) recorded in developer_metrics; the team is the
     // team the metrics were recorded for (dm.team_id), not the user's primary team.
@@ -411,10 +450,8 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
     `;
     const params: any[] = [companyId, companyId, userId];
 
-    if (scopeTeamId) {
-      sql += ' AND dm.team_id = ?';
-      params.push(scopeTeamId);
-    }
+    sql += ' AND dm.team_id = ?';
+    params.push(scopeTeamId);
     if (!privileged) {
       sql += ' AND dm.developer_id = ?';
       params.push(userId);
@@ -438,7 +475,8 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
       updated_at: m.updated_at
     }));
 
-    res.json({ developers: result });
+    // individualScope: 'team' = every in-scope developer; 'self' = only the caller's own row.
+    res.json({ teamId: scopeTeamId, individualScope: privileged ? 'team' : 'self', developers: result });
   } catch (error) {
     console.error('Error fetching developer metrics:', error);
     res.status(500).json({ error: 'Failed to fetch developer metrics' });
@@ -643,12 +681,18 @@ router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res
 
     // Verify the debt item belongs to the company
     const existing = await queryOne<any>(
-      'SELECT id FROM technical_debt WHERE id = ? AND company_id = ?',
+      `SELECT td.id, td.team_id, t.department_id FROM technical_debt td
+         LEFT JOIN teams t ON t.id = td.team_id
+        WHERE td.id = ? AND td.company_id = ?`,
       [id, companyId]
     );
 
     if (!existing) {
       return res.status(404).json({ error: 'Technical debt item not found' });
+    }
+    // A qa_manager may only edit items of teams in their department (canManageTeam).
+    if (existing.team_id && !canManageTeam(policyActor(req), { department_id: existing.department_id })) {
+      return res.status(403).json({ error: 'Can only manage teams in your department' });
     }
 
     await query(
@@ -939,12 +983,18 @@ router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
 
     // Verify stage belongs to company
     const stage = await queryOne<any>(
-      'SELECT id, team_id FROM pipeline_stages WHERE id = ? AND company_id = ?',
+      `SELECT ps.id, ps.team_id, t.department_id FROM pipeline_stages ps
+         LEFT JOIN teams t ON t.id = ps.team_id
+        WHERE ps.id = ? AND ps.company_id = ?`,
       [id, companyId]
     );
 
     if (!stage) {
       return res.status(404).json({ error: 'Pipeline stage not found' });
+    }
+    // A qa_manager may only edit stages of teams in their department (canManageTeam).
+    if (stage.team_id && !canManageTeam(policyActor(req), { department_id: stage.department_id })) {
+      return res.status(403).json({ error: 'Can only manage teams in your department' });
     }
 
     // Update the stage and mark as manually edited
@@ -988,7 +1038,9 @@ router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
 // business_impact_metrics table (filled only by the synthetic analytics job) is not served.
 router.get('/business-impact', authenticateToken, async (req: any, res) => {
   try {
-    if (!assertAnalyticsRole(req, res)) return;
+    // One team in the caller's analytics scope (teamId defaults to the caller's own team).
+    const scope = await resolveAnalyticsTeam(req, res, req.query.teamId);
+    if (!scope) return;
     const { companyId } = req.user;
 
     const configuredMetrics = await query<any>(
@@ -996,9 +1048,9 @@ router.get('/business-impact', authenticateToken, async (req: any, res) => {
               bic.feature_adoption_rate, bic.correlation_strength
        FROM business_impact_config bic
        JOIN teams t ON t.id = bic.team_id
-       WHERE t.company_id = ? AND t.is_active = TRUE AND bic.manually_edited = TRUE
+       WHERE t.company_id = ? AND t.id = ? AND bic.manually_edited = TRUE
        ORDER BY bic.team_id, bic.metric_name`,
-      [companyId]
+      [companyId, scope.teamId]
     );
 
     const result = configuredMetrics.map((m: any) => ({
@@ -1991,8 +2043,8 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
 router.post('/business-impact-v2/:teamId/ai-analysis', aiLimiter, authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
-    // Tenant + role scope (also limits who can spend Groq budget).
-    if (!(await assertTeamRead(req, res, teamId))) return;
+    // Tenant + analytics scope (team-level statistics; also limits whose budget is spent).
+    if (!(await assertTeamAnalytics(req, res, teamId))) return;
 
     // Rebuild the correlation matrix from THIS team's stored monthly data (same
     // computation as the GET endpoint) rather than trusting the request body.
@@ -2562,13 +2614,9 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
     if (!scope) return;
     const teamId = scope.teamId;
-    // Tenant scope: if a team is requested it must belong to the caller's company.
-    if (teamId && !(await getOwnedTeam(req, teamId as string))) {
-      return res.status(404).json({ error: 'Team not found' });
-    }
-    // Individual productivity data: roles other than super_admin / qa_manager / team_lead
-    // may only see their own snapshots.
-    const privileged = ['super_admin', 'qa_manager', 'team_lead'].includes(role);
+    // Individual productivity data: only roles with canViewIndividualDevelopers see other
+    // developers' snapshots; qa_engineer / viewer see only their own.
+    const privileged = canViewIndividualDevelopers(policyActor(req), scope.team);
 
     // Build query
     let sql = `

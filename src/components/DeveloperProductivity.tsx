@@ -17,10 +17,12 @@ import {
 } from '../data/advancedFeatures';
 import type { BurnoutRisk, DeveloperInputs } from '../data/advancedFeatures';
 import { toNum } from '../data/detailedKPIs';
+import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 
 interface DeveloperProductivityProps {
   onBack?: () => void;
-  teamId?: string;
+  /** Team from the analytics scope; the page always shows exactly one team. */
+  teamId: string;
 }
 
 type TeamSummary = { id: string; name: string };
@@ -62,9 +64,11 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
   const { isDark } = useTheme();
   const ct = chartTheme(isDark);
   const [sortBy, setSortBy] = useState<'ddps' | 'pr' | 'review'>('ddps');
+  const scope = useAnalyticsScope();
+  // qa_engineer / viewer: the API returns only their own row (server/lib/userPolicy.ts).
+  const ownRowOnly = !scope.canViewIndividuals;
   const [developers, setDevelopers] = useState<DevRow[]>([]);
-  const [teams, setTeams] = useState<TeamSummary[]>([]);
-  const [selectedTeam, setSelectedTeam] = useState<string>(teamId || 'all');
+  const selectedTeam = teamId;
   const [selectedDeveloperId, setSelectedDeveloperId] = useState<string>('all');
   const [loading, setLoading] = useState(true);
   const [aiInsights, setAiInsights] = useState<AIInsights | null>(null);
@@ -120,26 +124,19 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
       }
     };
 
+    let cancelled = false;
     (async () => {
-      try {
-        setLoading(true);
-        const res = await fetch(`${API_URL}/teams`, { credentials: 'include' });
-        if (!res.ok) throw new Error('Failed to fetch teams');
-        const data = await res.json();
-        const summaries: TeamSummary[] = (data.teams || []).map((t: any) => ({ id: String(t.id), name: t.name || 'Unnamed team' }));
-        setTeams(summaries);
-        const results = await Promise.all(summaries.map(fetchTeamDevelopers));
-        setDevelopers(results.flat());
-      } catch (error) {
-        console.error('Error fetching developer productivity data:', error);
-        setDevelopers([]);
-      } finally {
+      setLoading(true);
+      const team: TeamSummary = { id: teamId, name: scope.team?.id === teamId ? scope.team.name : 'Selected team' };
+      const rows = await fetchTeamDevelopers(team);
+      if (!cancelled) {
+        setDevelopers(rows);
         setLoading(false);
       }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [teamId, scope.team?.name]);
 
-  useEffect(() => { setSelectedTeam(teamId || 'all'); }, [teamId]);
   useEffect(() => { setSelectedDeveloperId('all'); }, [selectedTeam]);
 
   const eligible = useMemo(
@@ -148,13 +145,13 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
   );
 
   const filtered = useMemo(() => eligible.filter(d =>
-    (selectedTeam === 'all' || d.team_id === selectedTeam) &&
+    d.team_id === selectedTeam &&
     (selectedDeveloperId === 'all' || d.developer_id === selectedDeveloperId),
   ), [eligible, selectedTeam, selectedDeveloperId]);
 
   const dropdownDevs = useMemo(() => {
     const map = new Map<string, DevRow>();
-    eligible.filter(d => selectedTeam === 'all' || d.team_id === selectedTeam).forEach(d => { if (!map.has(d.developer_id)) map.set(d.developer_id, d); });
+    eligible.filter(d => d.team_id === selectedTeam).forEach(d => { if (!map.has(d.developer_id)) map.set(d.developer_id, d); });
     return [...map.values()].sort((a, b) => a.name.localeCompare(b.name));
   }, [eligible, selectedTeam]);
 
@@ -177,8 +174,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
   useEffect(() => {
     let cancelled = false;
     setHistoryLoading(true);
-    const params = new URLSearchParams({ range: '6m' });
-    if (selectedTeam !== 'all') params.set('teamId', selectedTeam);
+    const params = new URLSearchParams({ range: '6m', teamId: selectedTeam });
     if (selectedDeveloperId !== 'all') params.set('developerId', selectedDeveloperId);
     fetch(`${API_URL}/analytics/ddps-history?${params}`, { credentials: 'include' })
       .then(r => (r.ok ? r.json() : null))
@@ -194,7 +190,6 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
     .map(p => ({ ...p, ddps: Math.round(p.ddps * 100) })); // API returns DDPS as a 0–1 fraction → 0–100
 
   useEffect(() => {
-    if (selectedTeam === 'all') { setAiInsights(null); return; }
     let cancelled = false;
     setAiLoading(true);
     fetch(`${API_URL}/teams/${selectedTeam}/developer-ai-suggestions`, { credentials: 'include' })
@@ -211,18 +206,20 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
     <Page className="space-y-6">
       <PageIntro
         title="Developer productivity"
-        description="Recorded developer workload metrics and the derived Daily Developer Productivity Score (DDPS, 0–100). Only developers with recorded metrics are included."
+        description={
+          ownRowOnly
+            ? `Your own recorded workload metrics on ${scope.team?.name ?? 'your team'} and the derived Daily Developer Productivity Score (DDPS, 0–100). Other developers' individual metrics are not shown for your role.`
+            : `Recorded developer workload metrics for ${scope.team?.name ?? 'the selected team'} and the derived Daily Developer Productivity Score (DDPS, 0–100). Only developers with recorded metrics who have not opted out are included.`
+        }
         actions={
-          <>
-            <select aria-label="Team" value={selectedTeam} onChange={e => setSelectedTeam(e.target.value)} className={`${inputClass} w-52`}>
-              <option value="all">All teams</option>
-              {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+          ownRowOnly ? (
+            <Badge tone="neutral" className="whitespace-nowrap"><span data-testid="own-row-only">Showing your own metrics only</span></Badge>
+          ) : (
             <select aria-label="Developer" value={selectedDeveloperId} onChange={e => setSelectedDeveloperId(e.target.value)} className={`${inputClass} w-52`}>
               <option value="all">All developers</option>
               {dropdownDevs.map(d => <option key={d.developer_id} value={d.developer_id}>{d.name}</option>)}
             </select>
-          </>
+          )
         }
       />
 
@@ -304,7 +301,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         {loading ? (
           <p className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-400">Loading…</p>
         ) : sorted.length === 0 ? (
-          <EmptyState title="No developer metrics recorded" description="No engineers in this selection have recorded metrics." />
+          <EmptyState title="No developer metrics recorded" description={ownRowOnly ? 'You have no recorded developer metrics on this team.' : 'No engineers in this team have recorded metrics.'} />
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
@@ -349,10 +346,10 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         )}
       </Card>
 
-      {selectedTeam !== 'all' && (
+      {(
         <Card>
           <CardHeader
-            title="Developer recommendations"
+            title={ownRowOnly ? 'Your recommendations' : 'Developer recommendations'}
             subtitle={aiInsights?.source === 'groq' ? 'Generated by an AI model. May contain inaccuracies.' : aiInsights?.source === 'rule-based' ? 'Rule-based analysis of recorded developer metrics.' : undefined}
             action={aiInsights?.source ? <Badge>{aiInsights.source === 'groq' ? 'AI' : 'Rule-based'}</Badge> : undefined}
           />

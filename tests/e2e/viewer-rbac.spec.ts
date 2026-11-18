@@ -10,8 +10,8 @@ test.describe('Viewer Role-Based Access Control', () => {
     // Wait for dashboard to load
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
-    // Check navigation menu - should ONLY see Dashboard (nav button)
-    // Should NOT see Users, Teams, Departments, Analytics, Admin, Manual Metrics, etc.
+    // Check navigation menu - should see Dashboard and the team-level Analytics modules
+    // (limited to the viewer's own team). Should NOT see Users, Teams, Departments, Admin, etc.
     // Navigation sits in a drawer behind the burger button in the top bar
     await page.click('[data-testid="nav-toggle"]');
     await expect(page.locator('[data-testid="nav-dashboard"]')).toBeVisible();
@@ -20,7 +20,7 @@ test.describe('Viewer Role-Based Access Control', () => {
     await expect(page.locator('[data-testid="nav-users"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="nav-teams"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="nav-departments"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="nav-analytics"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-analytics"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-admin"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="nav-manual-metrics"]')).toHaveCount(0);
     await expect(page.locator('[data-testid="nav-metric-intervals"]')).toHaveCount(0);
@@ -109,7 +109,7 @@ test.describe('Viewer Role-Based Access Control', () => {
 
     // Try to access restricted pages directly - should be redirected or show access denied
     const restrictedUrls = [
-      '/users', '/teams', '/departments', '/analytics', '/admin-panel',
+      '/users', '/teams', '/departments', '/admin-panel',
       '/manual-metrics', '/metric-intervals', '/parameters-config'
     ];
 
@@ -124,6 +124,19 @@ test.describe('Viewer Role-Based Access Control', () => {
       const hasLoginPage = await page.locator('text=Login').isVisible().catch(() => false);
 
       expect(isRedirected || hasAccessDenied || hasLoginPage).toBe(true);
+    }
+  });
+
+  test('Viewer opens Analytics read-only for their own team (or sees the no-team state)', async ({ page }) => {
+    await setupAuth(page, 'viewer');
+    await page.goto('/analytics');
+    await page.waitForSelector('[data-testid="features-menu"]', { timeout: 10000 });
+    await expect(page.locator('[data-testid="analytics-scope-bar"]')).toBeVisible();
+    // No editable department / team selector for a viewer.
+    await expect(page.locator('[data-testid="analytics-scope-bar"] select')).toHaveCount(0);
+    const noTeam = await page.locator('[data-testid="analytics-no-team"]').isVisible().catch(() => false);
+    if (!noTeam) {
+      await expect(page.locator('[data-testid="analytics-scope-team-static"]')).toBeVisible();
     }
   });
 

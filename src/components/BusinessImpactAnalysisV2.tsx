@@ -5,6 +5,7 @@ import DOMPurify from 'dompurify';
 import { API_URL } from '../config/api';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '../contexts/ThemeContext';
+import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, buttonClass, inputClass, cx } from './ui';
 
 // Renders the AI response (HTML produced by the LLM). Treated as untrusted: sanitized before rendering.
@@ -156,6 +157,9 @@ const toMonthly = (data: any): MonthlyData[] => {
 type Tab = 'overview' | 'data-entry' | 'correlations';
 
 const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ teamId: propTeamId }) => {
+  // Data entry and recalculation are team writes (canWriteTeamData, server/lib/userPolicy.ts):
+  // hidden for roles that can only read the team's analytics.
+  const canWrite = useAnalyticsScope().canWriteTeam;
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [loading, setLoading] = useState(true);
@@ -396,7 +400,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
               onChange={setActiveTab}
               options={[
                 { value: 'overview', label: 'Overview' },
-                { value: 'data-entry', label: 'Data entry' },
+                ...(canWrite ? [{ value: 'data-entry' as Tab, label: 'Data entry' }] : []),
                 { value: 'correlations', label: 'Correlations' },
               ]}
             />
@@ -473,7 +477,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
               </Card>
 
               <Card>
-                <CardHeader title="Strongest correlations" subtitle={calculatedNote} action={calcButton} />
+                <CardHeader title="Strongest correlations" subtitle={calculatedNote} action={canWrite ? calcButton : undefined} />
                 {sortedCorrelations.length === 0 ? (
                   <EmptyState
                     title="No correlations calculated"
@@ -496,7 +500,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
             </div>
           )}
 
-          {activeTab === 'data-entry' && (
+          {activeTab === 'data-entry' && canWrite && (
             <div className="space-y-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <p className="text-sm text-slate-500 dark:text-slate-400">
@@ -573,7 +577,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                   <CardHeader
                     title="Correlation matrix"
                     subtitle={`${calculatedNote} Exploratory: ${tested} pairs tested${sampleRange ? `, ${sampleRange} months each` : ''}.`}
-                    action={calcButton}
+                    action={canWrite ? calcButton : undefined}
                   />
                 </div>
                 {sortedCorrelations.length === 0 ? (
