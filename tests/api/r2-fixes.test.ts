@@ -84,6 +84,8 @@ describe('R2 Phase 4 fixes', () => {
     expect((await post('/api/metrics/developer', c.dev, { teamId: T.A1, developerId: ids.dev, focusTimeHours: 3 })).status).toBe(403);
     expect((await post('/api/metrics/developer', c.manager, { teamId: T.A1, developerId: ids.dev, focusTimeHours: 3 })).status).toBe(200);
     expect((await post('/api/metrics/developer', c.manager, { teamId: T.B1, developerId: ids.dev, focusTimeHours: 3 })).status).toBe(403);
+    // The developer must be assigned to the team.
+    expect((await post('/api/metrics/developer', c.admin, { teamId: T.B1, developerId: ids.dev, focusTimeHours: 3 })).status).toBe(400);
   });
 
   it('FIX-002: technical debt impact: omitted fields are kept; ranges are 400', async () => {

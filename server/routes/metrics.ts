@@ -8,7 +8,7 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
 import { canViewDeveloperRow } from '../lib/userPolicy';
 import { BI_CONFIG_FIELDS, DEVELOPER_METRIC_FIELDS, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
-import { teamMemberCountSql } from '../lib/teamMembership';
+import { isTeamMemberSql, teamMemberCountSql } from '../lib/teamMembership';
 import { teamDeveloperSummary } from '../lib/developerAggregates';
 import { K_ANONYMITY_MIN, K_ANONYMITY_RULE, SUPPRESSED_TEXT } from '../lib/privacy';
 import { WELLBEING_FORMULA, wellbeingAcrossTeams } from '../lib/pulse';
@@ -368,10 +368,13 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
 
     // Team must belong to the caller's company and be writable by them (canWriteTeamData).
     if (!(await assertTeamWrite(req, res, teamId))) return;
-    // The developer must belong to the same company (prevents cross-tenant ids).
+    // The developer must belong to the same company (prevents cross-tenant ids) and be assigned
+    // to the team (a lead cannot record metrics for someone of another team under theirs).
     if (!(await developerInCompany(req, developerId))) {
       return res.status(400).json({ error: 'Invalid developer ID' });
     }
+    const member = await queryOne<any>(`SELECT 1 AS ok FROM users u WHERE u.id = ? AND ${isTeamMemberSql('u', '?')}`, [developerId, teamId]);
+    if (!member) return res.status(400).json({ error: 'The developer is not assigned to this team' });
 
     // happiness_score is workload balance (derived), 0–100 (column numeric(4,1)).
     const parsed = parseRangedFields(req.body, DEVELOPER_METRIC_FIELDS);
