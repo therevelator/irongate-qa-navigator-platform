@@ -7,7 +7,11 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Toaster } from 'react-hot-toast';
-import { ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES } from '../../server/lib/userPolicy';
+import {
+  ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canWriteSomeTeamData, isCompanyAdmin,
+  type PolicyActor,
+} from '../../server/lib/userPolicy';
+import { policyActorOf } from '../lib/policyActor';
 import NotificationsBell from './NotificationsBell';
 import { NOTIFICATIONS_TAB_EVENT, NOTIFICATIONS_TAB_KEY } from './NotificationsCenter';
 
@@ -32,12 +36,13 @@ interface NavItem {
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
   roles?: Role[]; // undefined = everyone
+  /** Shared policy rule (server/lib/userPolicy.ts), the same one the server and App.tsx use; wins over roles. */
+  can?: (actor: PolicyActor) => boolean;
 }
 
 // Same list as the server (server/lib/userPolicy.ts): every role may open the team-level
 // Analytics modules; what each role sees inside them is limited by its analytics scope.
 const ANALYTICS_ROLES = POLICY_ANALYTICS_ROLES as Role[];
-const ADMIN_ROLES: Role[] = ['super_admin', 'qa_manager'];
 
 const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
   {
@@ -70,20 +75,20 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
   {
     title: 'Organisation',
     items: [
-      { view: 'users', label: 'Users', icon: UsersIcon, roles: ['super_admin', 'qa_manager', 'team_lead'] },
-      { view: 'teams', label: 'Teams', icon: UsersRound, roles: ['super_admin', 'qa_manager', 'team_lead'] },
-      { view: 'departments', label: 'Departments', icon: Building2, roles: ['super_admin'] },
-      { view: 'activity', label: 'Activity', icon: History, roles: ADMIN_ROLES },
+      { view: 'users', label: 'Users', icon: UsersIcon, can: canOpenUserAdmin },
+      { view: 'teams', label: 'Teams', icon: UsersRound, can: canOpenUserAdmin },
+      { view: 'departments', label: 'Departments', icon: Building2, can: isCompanyAdmin },
+      { view: 'activity', label: 'Activity', icon: History, can: canViewActivity },
     ],
   },
   {
     title: 'Administration',
     items: [
-      { view: 'admin-panel', label: 'Admin console', icon: Shield, roles: ADMIN_ROLES },
-      { view: 'manual-metrics', label: 'Manual metrics', icon: Calculator, roles: ['super_admin', 'qa_manager', 'team_lead'] },
-      { view: 'metric-intervals', label: 'Update frequency', icon: Clock, roles: ADMIN_ROLES },
-      { view: 'parameters-config', label: 'Parameters', icon: SlidersHorizontal, roles: ADMIN_ROLES },
-      { view: 'ingestion-log', label: 'Ingestion log', icon: Inbox, roles: ADMIN_ROLES },
+      { view: 'admin-panel', label: 'Admin console', icon: Shield, can: canManageCompanyConfig },
+      { view: 'manual-metrics', label: 'Manual metrics', icon: Calculator, can: canWriteSomeTeamData },
+      { view: 'metric-intervals', label: 'Update frequency', icon: Clock, can: canManageCompanyConfig },
+      { view: 'parameters-config', label: 'Parameters', icon: SlidersHorizontal, can: canManageCompanyConfig },
+      { view: 'ingestion-log', label: 'Ingestion log', icon: Inbox, can: canViewIngestionLog },
     ],
   },
 ];
@@ -222,7 +227,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
   }, []);
 
   const role = (user?.role || 'viewer') as Role;
-  const canSee = (item: NavItem) => !item.roles || item.roles.includes(role);
+  const actor = policyActorOf(user);
+  const canSee = (item: NavItem) => (item.can ? !!user && item.can(actor) : !item.roles || item.roles.includes(role));
 
   const go = (view: string) => {
     if (view === 'dashboard') onTabChange?.('all');

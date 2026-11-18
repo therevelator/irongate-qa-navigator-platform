@@ -257,21 +257,42 @@ export function canManageCompanyConfig(actor: PolicyActor): boolean {
 }
 
 /**
- * Per-team detail reads (team metrics history, velocity, team metric bundles): super_admin and
- * QA managers read any team of the company (the dashboards are company-wide by design); others
- * the teams they are assigned to.
+ * Per-team detail reads (team metrics history, velocity, team metric bundles): the team's
+ * analytics scope (canViewTeamAnalytics): super_admin any team of the company, QA managers the
+ * teams of the departments they manage, everyone else the teams they are assigned to. (Until
+ * R2 Phase 4 QA managers could read any team here, which contradicted the documented scope.)
  */
 export function canReadTeamDetail(actor: PolicyActor, team: ScopeTeam): boolean {
-  if (hasCompany(actor) || managedDepartmentIds(actor).length > 0) return true;
-  return assignedTeamIds(actor).includes(team.id);
+  return canViewTeamAnalytics(actor, team);
 }
 
 /**
- * Team AI insights (rule-based / LLM recommendations): super_admin and QA managers for any team
- * of the company (as the dashboards), team leads for the teams they lead.
+ * Team AI insights (rule-based / LLM recommendations): super_admin, the QA managers of the
+ * team's department and the team's leads (the roles that see individual developer data on it,
+ * canViewIndividualDevelopers).
  */
-export function canRequestTeamInsights(actor: PolicyActor, team: { id: string }): boolean {
-  return hasCompany(actor) || managedDepartmentIds(actor).length > 0 || ledTeamIds(actor).includes(team.id);
+export function canRequestTeamInsights(actor: PolicyActor, team: ScopeTeam): boolean {
+  return canViewIndividualDevelopers(actor, team);
+}
+
+/** Company executive briefing (AI summary of the company dashboard): super_admin, QA managers, team leads. */
+export function canRequestExecutiveBriefing(actor: PolicyActor): boolean {
+  return grantsOf(actor).some((g) => DEVELOPER_INSIGHT_ROLES.includes(g.role));
+}
+
+/** Manual metrics page (team KPIs, developer metrics): anyone who may write the data of at least one team. */
+export function canWriteSomeTeamData(actor: PolicyActor): boolean {
+  return hasCompany(actor) || managedDepartmentIds(actor).length > 0 || ledTeamIds(actor).length > 0;
+}
+
+/** Users / Teams admin pages: anyone who manages users of some scope (super_admin, QA managers, team leads). */
+export function canOpenUserAdmin(actor: PolicyActor): boolean {
+  return canWriteSomeTeamData(actor);
+}
+
+/** Loading or refreshing sample data (the demo seed): company administrators. */
+export function canManageSampleData(actor: PolicyActor): boolean {
+  return hasCompany(actor);
 }
 
 /* ------------------------------------------------------------------------------------------

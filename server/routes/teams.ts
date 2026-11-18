@@ -498,19 +498,14 @@ router.get('/:id/kpi-history', authenticateToken, async (req: AuthRequest, res) 
 // Only accessible by team_lead, manager, and super_admin
 router.get('/:id/ai-suggestions', aiLimiter, authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const userRole = req.user?.role;
-    
-    // Only leads, managers, and admins can see AI insights
-    if (!['super_admin', 'qa_manager', 'team_lead'].includes(userRole || '')) {
+    // Leads of the team, QA managers of its department and super admins (canRequestTeamInsights,
+    // server/lib/userPolicy.ts) — checked before any Groq call.
+    const owned = await getOwnedTeam(req, req.params.id as string);
+    if (!owned || !canRequestTeamInsights(policyActor(req), owned)) {
       return res.status(403).json({
-        error: 'AI insights are only available to team leads, managers, and admins',
+        error: 'AI insights are available to the team’s leads, its department’s QA managers and administrators',
         restricted: true
       });
-    }
-    // A team lead may only request insights (and trigger the Groq call) for a team they lead
-    // (canRequestTeamInsights, server/lib/userPolicy.ts).
-    if (!canRequestTeamInsights(policyActor(req), { id: req.params.id })) {
-      return res.status(403).json({ error: 'You can only view AI insights for your own team' });
     }
 
     const team = await queryOne<any>(

@@ -171,6 +171,8 @@ describe('Role matrix (regression)', () => {
     expect((await get(`/api/metrics/developer/${id.peer}`, c.engineerB)).status).toBe(403);
   });
 
+  // R2 Phase 4: per-team metric reads follow the analytics scope (a QA manager: their departments
+  // only); before, QA managers could read any team here (docs/reports/r2-final-review.md, H-1).
   it('MATRIX-004: team detail is company-wide; per-team metric reads follow assertTeamRead', async () => {
     if (skip()) return;
     const company = { A1: 200, A2: 200, B1: 200, F: 404 };
@@ -179,7 +181,7 @@ describe('Role matrix (regression)', () => {
     });
     await expectMatrix('GET /metrics/teams/:id/history', (w, t) => get(`/api/metrics/teams/${t}/history`, c[w]), {
       admin: { A1: 200, A2: 200, B1: 200, F: 404 },
-      manager: { A1: 200, A2: 200, B1: 200, F: 404 },
+      manager: { A1: 200, A2: 200, B1: 403, F: 404 },
       lead: { A1: 200, A2: 403, B1: 403, F: 404 },
       engineer: { A1: 200, A2: 403, B1: 403, F: 404 },
       viewer: { A1: 200, A2: 403, B1: 403, F: 404 },

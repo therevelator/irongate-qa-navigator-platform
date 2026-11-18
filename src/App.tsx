@@ -31,7 +31,7 @@ import CompareTeams from './components/CompareTeams';
 import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
-import { ANALYTICS_ROLES, canViewActivity, canViewIngestionLog } from '../server/lib/userPolicy';
+import { ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canWriteSomeTeamData, isCompanyAdmin } from '../server/lib/userPolicy';
 import { policyActorOf } from './lib/policyActor';
 
 // Map views to URL paths
@@ -131,9 +131,9 @@ function App() {
         return true;
       case 'users':
       case 'teams':
-        return ['super_admin', 'qa_manager', 'team_lead'].includes(role);
+        return canOpenUserAdmin(policyActorOf(user));
       case 'departments':
-        return role === 'super_admin';
+        return isCompanyAdmin(policyActorOf(user));
       case 'activity':
         // Change history: super_admin (company) and QA managers (their departments), as GET /api/admin/audit.
         return canViewActivity(policyActorOf(user));
@@ -159,10 +159,11 @@ function App() {
       case 'admin-panel':
       case 'metric-intervals':
       case 'parameters-config':
-        return ['super_admin', 'qa_manager'].includes(role);
+        // Company configuration (server: canManageCompanyData → canManageCompanyConfig).
+        return canManageCompanyConfig(policyActorOf(user));
       case 'manual-metrics':
-        // Same roles as POST /metrics/manual and /metrics/developer (team scope enforced server-side).
-        return ['super_admin', 'qa_manager', 'team_lead'].includes(role);
+        // Anyone who may write some team's data (server: assertTeamWrite → canWriteTeamData per team).
+        return canWriteSomeTeamData(policyActorOf(user));
       default:
         return true;
     }
