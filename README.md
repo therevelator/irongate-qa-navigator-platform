@@ -63,7 +63,20 @@ npm run seed:demo -- --sql out/demo-seed.sql   # demo company as SQL files (no D
 npm run seed:demo -- --fill-existing --sql out/demo-fill.sql   # fill as SQL (reads the local DB to plan)
 npm run seed:demo:clear -- --sql out/demo-clear.sql
 npm run seed:demo:check                        # coverage: every active team x analytics module, in its window
+npm run seed:demo -- --refresh-dates           # keep demo data current: add the missing recent days (sample teams only)
 ```
+
+**Keeping hosted demo data current** (`--refresh-dates`, optional `--today YYYY-MM-DD`): sample
+history stops at the day it was seeded, so a hosted demo turns stale a day later. The refresh adds
+the missing days up to today for the demo company (when it exists) and for the teams of existing
+companies that already hold sample (`demo-`) rows. It never changes or deletes a row, never gives
+sample data to a team that has none (a real team created after seeding stays empty), leaves every
+group with real data alone (the same checks as `--fill-existing`) and adds nothing when run twice on
+the same day. Like every seed command it refuses a database host other than localhost / 127.0.0.1
+unless `--allow-remote` is passed. To refresh a hosted demo database, the owner runs it from a
+trusted machine, once a day or before a demo, for example
+`DATABASE_URL=<hosted connection string> npm run seed:demo -- --refresh-dates --allow-remote`
+(check `seed:demo:check` afterwards). It was tested on local PostgreSQL 16 and 17 only.
 
 **Fill existing companies** (`--fill-existing`, optional `--company <id>`, repeatable): every
 active team of every non-demo company gets the same model wherever the analytics pages would

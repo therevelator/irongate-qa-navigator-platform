@@ -4,6 +4,9 @@
  * npm run seed:demo -- --sql out/demo-seed.sql         demo company as SQL files (no DB connection)
  * npm run seed:demo -- --fill-existing --sql out/demo-fill.sql
  *                                                      fill as SQL files (reads the local DB to plan, writes nothing)
+ * npm run seed:demo -- --refresh-dates                 keep demo data current: add the missing recent days
+ *                                                      for the demo company and for teams that already hold
+ *                                                      sample rows (never touches real data; idempotent)
  * npm run seed:demo:clear                              delete all demo rows (both modes)
  * npm run seed:demo:clear -- --sql out/demo-clear.sql  the removal as SQL
  *
@@ -38,6 +41,8 @@ function printFiles(files: string[]) {
 async function main() {
   const clear = has('--clear');
   const fill = has('--fill-existing');
+  const refresh = has('--refresh-dates');
+  if (refresh && (clear || fill || has('--sql'))) throw new Error('--refresh-dates cannot be combined with --clear, --fill-existing or --sql');
   const sqlFile = arg('--sql');
   const today = arg('--today');
   const companyIds = args('--company');
@@ -59,6 +64,15 @@ async function main() {
       const { plan, ds } = await seed.buildFill(pool, { today, companyIds });
       for (const c of seed.planSummary(plan)) console.log(`  ${c.id}: ${c.teamsFilled} of ${c.teams} active teams get sample data`);
       printFiles(writeDatasetSql(sqlFile, ds, 'fill'));
+      return;
+    }
+    if (refresh) {
+      const r = await seed.runRefreshDates({ today });
+      console.log(r.demoCompany.refreshed
+        ? `Demo company: ${r.demoCompany.insertedTotal} new rows (history up to ${r.today}).`
+        : 'Demo company: not seeded (nothing to refresh; run npm run seed:demo first).');
+      for (const c of r.companies) console.log(`  ${c.id}: ${c.teamsFilled} of ${c.teams} active teams hold sample data and were refreshed`);
+      console.log(`Refreshed sample data up to ${r.today}: ${r.insertedTotal} new rows.`);
       return;
     }
     if (clear) {

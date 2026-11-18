@@ -94,7 +94,32 @@ const toDay = (v: unknown): string | null => (v == null ? null : v instanceof Da
  * second run produces the same plan (and the same deterministic ids). The rendered SQL
  * re-checks each decision at apply time.
  */
-export async function planFillExisting(db: pg.Pool | pg.PoolClient, opts: { today: string; companyIds?: string[] }): Promise<CompanyInput[]> {
+/**
+ * Tables whose demo rows mark a team of an existing company as a sample-data team (one that
+ * --fill-existing filled before). --refresh-dates only adds rows for such teams.
+ */
+const SAMPLE_MARKER_TABLES = [
+  'kpi_snapshots', 'pipeline_runs', 'test_cases', 'flaky_tests', 'technical_debt', 'performance_metrics',
+  'business_impact_quality_metrics', 'developer_metrics', 'sprint_velocity', 'team_analytics',
+] as const;
+
+/** Active non-demo teams that already hold demo (sample) rows, per company. */
+export async function teamsWithSampleData(db: pg.Pool | pg.PoolClient): Promise<Map<string, string[]>> {
+  const union = SAMPLE_MARKER_TABLES.map((t) => `SELECT team_id FROM ${t} WHERE id LIKE 'demo-%'`).join(' UNION ');
+  const rows = (await db.query(
+    `SELECT t.company_id, t.id FROM teams t
+      WHERE t.is_active = TRUE AND t.id NOT LIKE 'demo-%' AND t.id IN (${union})
+      ORDER BY t.company_id, t.id`
+  )).rows as Array<{ company_id: string; id: string }>;
+  const out = new Map<string, string[]>();
+  for (const r of rows) out.set(r.company_id, [...(out.get(r.company_id) ?? []), r.id]);
+  return out;
+}
+
+export async function planFillExisting(
+  db: pg.Pool | pg.PoolClient,
+  opts: { today: string; companyIds?: string[]; onlyTeamIds?: string[] },
+): Promise<CompanyInput[]> {
   const q = async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query(sql, params)).rows as T[];
   const companies = await q<{ id: string; domain: string }>(
     `SELECT id, domain FROM companies WHERE id NOT LIKE 'demo-%' AND is_active IS NOT FALSE
@@ -215,25 +240,31 @@ export async function planFillExisting(db: pg.Pool | pg.PoolClient, opts: { toda
         groups, realKpi: realKpi.get(t.id), devsWithSnapshots, devsWithMetrics,
       };
     });
+    if (opts.onlyTeamIds) {
+      // --refresh-dates: only teams that already hold sample data get new rows; no new demo
+      // developers or assignments anywhere else.
+      const only = new Set(opts.onlyTeamIds);
+      for (const t of ctxs) if (!only.has(t.id)) { t.groups = new Set(); t.members = t.members.filter(m => !m.id.startsWith('demo-')); }
+    }
     const debt = realDebt.filter(d => d.company_id === c.id)
       .map(d => ({ severity: d.status === 'resolved' || d.status === 'wont_fix' ? 'low' : d.severity, created: toDay(d.created)!, resolved: d.status === 'resolved' || d.status === 'wont_fix' ? (toDay(d.resolved) ?? toDay(d.created)) : null }));
     const devTeams = new Set(ctxs.filter(t => t.groups?.has('dev')).map(t => t.id));
     const happiness = realHappiness.filter(h => h.company_id === c.id && !devTeams.has(h.team_id)).map(h => Number(h.h));
-    return { id: c.id, isDemo: false, teams: ctxs, teamCount: ctxs.length, realDebt: debt, extraHappiness: happiness, teamlessLogins };
+    return { id: c.id, isDemo: false, teams: ctxs, teamCount: ctxs.length, realDebt: debt, extraHappiness: happiness, teamlessLogins: opts.onlyTeamIds ? [] : teamlessLogins };
   });
 }
 
 /** Build the fill dataset for existing companies (reads the current state from `db`). */
-export async function buildFill(db: pg.Pool | pg.PoolClient, opts: { today?: string; companyIds?: string[] } = {}) {
+export async function buildFill(db: pg.Pool | pg.PoolClient, opts: { today?: string; companyIds?: string[]; onlyTeamIds?: string[] } = {}) {
   const today = opts.today ?? todayUtc();
-  const plan = await planFillExisting(db, { today, companyIds: opts.companyIds });
+  const plan = await planFillExisting(db, { today, companyIds: opts.companyIds, onlyTeamIds: opts.onlyTeamIds });
   return { today, plan, ds: buildFillDataset(plan, { today }) };
 }
 
 const planSummary = (plan: CompanyInput[]) =>
   plan.map(c => ({ id: c.id, teams: c.teams.length, teamsFilled: c.teams.filter(t => (t.groups?.size ?? 0) > 0).length }));
 
-export function runFillExisting(opts: { today?: string; companyIds?: string[] } = {}): Promise<FillResult> {
+export function runFillExisting(opts: { today?: string; companyIds?: string[]; onlyTeamIds?: string[] } = {}): Promise<FillResult> {
   return exclusive(async () => {
     const { today, plan, ds } = await buildFill(pool, opts);
     const r = await apply(ds);
@@ -242,6 +273,36 @@ export function runFillExisting(opts: { today?: string; companyIds?: string[] } 
 }
 
 export { planSummary };
+
+export interface RefreshResult {
+  today: string;
+  demoCompany: { refreshed: boolean; insertedTotal: number };
+  companies: Array<{ id: string; teams: number; teamsFilled: number }>;
+  insertedTotal: number;
+}
+
+/**
+ * --refresh-dates: keep hosted demo data current. Adds the missing recent days of sample data
+ * (history up to `today`) for the demo company, if it exists, and for the teams of existing
+ * companies that already hold sample (demo-) rows. Never changes or deletes a row, never adds
+ * sample data to a team without any, and leaves every group with real data alone (as
+ * --fill-existing). Idempotent: a second run on the same day adds nothing.
+ */
+export async function runRefreshDates(opts: { today?: string } = {}): Promise<RefreshResult> {
+  const today = opts.today ?? todayUtc();
+  const demo = (await isDemoSeeded()) ? await runDemoSeed({ today }) : null;
+  const sample = await teamsWithSampleData(pool);
+  const companyIds = [...sample.keys()];
+  const fill = companyIds.length
+    ? await runFillExisting({ today, companyIds, onlyTeamIds: [...sample.values()].flat() })
+    : null;
+  return {
+    today,
+    demoCompany: { refreshed: !!demo, insertedTotal: demo?.insertedTotal ?? 0 },
+    companies: fill?.companies ?? [],
+    insertedTotal: (demo?.insertedTotal ?? 0) + (fill?.insertedTotal ?? 0),
+  };
+}
 
 /** Delete every demo row (FK-safe order, one transaction). Returns rows affected per statement. */
 export function clearDemoData(): Promise<Record<string, number>> {
