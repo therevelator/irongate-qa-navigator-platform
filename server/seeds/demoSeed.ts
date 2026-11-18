@@ -17,7 +17,7 @@ import { pool } from '../../src/lib/db';
 import {
   buildDemoDataset, buildFillDataset, renderScript, CLEAR_STATEMENTS, ALL_TABLES, demoRowCondition, demoSummary, todayUtc,
   teamDefFor, demoDevelopersFor, TEAM_GROUPS, realDataExists, recentSnapshotSql, KPI_COLUMNS,
-  DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, TeamGroup, Member,
+  DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, TeamGroup, Member, DEMO_LOGIN_EMAILS,
 } from './demoData';
 
 export interface SeedRunResult {
@@ -165,7 +165,39 @@ export async function planFillExisting(db: pg.Pool | pg.PoolClient, opts: { toda
     [companyIds]
   );
 
+  // Demo logins with no team (no active team assignment and no existing primary team): each gets
+  // a demo assignment on the largest active team of their department (else of the company).
+  const teamless = await q<{ id: string; company_id: string; role: string; department_id: string | null }>(
+    `SELECT u.id, u.company_id, u.role, u.department_id FROM users u
+      WHERE lower(u.email) = ANY($1::text[]) AND u.is_active AND u.company_id = ANY($2::text[]) AND u.id NOT LIKE 'demo-%'
+        AND NOT EXISTS (SELECT 1 FROM role_assignments ra JOIN teams t ON t.id = ra.scope_id AND t.is_active
+                         WHERE ra.user_id = u.id AND ra.scope_type = 'team' AND ra.revoked_at IS NULL)
+        AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id = u.primary_team_id AND t.is_active)
+      ORDER BY u.id`,
+    [DEMO_LOGIN_EMAILS, companyIds]
+  );
+  const teamSize = new Map((await q<{ id: string; n: number; has_lead: boolean }>(
+    `SELECT t.id, (SELECT count(*)::int FROM role_assignments ra WHERE ra.scope_type = 'team' AND ra.scope_id = t.id AND ra.revoked_at IS NULL) AS n,
+            EXISTS (SELECT 1 FROM role_assignments ra WHERE ra.scope_type = 'team' AND ra.scope_id = t.id AND ra.role = 'team_lead' AND ra.revoked_at IS NULL) AS has_lead
+       FROM teams t WHERE t.id = ANY($1::text[])`, [teamIds]
+  )).map(r => [r.id, r] as [string, { id: string; n: number; has_lead: boolean }]));
+  const pickTeam = (companyId: string, departmentId: string | null) => {
+    const pool = teams.filter(t => t.company_id === companyId);
+    const inDept = pool.filter(t => t.department_id === departmentId);
+    const list = (inDept.length ? inDept : pool).slice().sort((a, b) =>
+      (teamSize.get(b.id)?.n ?? 0) - (teamSize.get(a.id)?.n ?? 0) || a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+    return list[0] ?? null;
+  };
+  const loginRole = (role: string, teamId: string) =>
+    role === 'viewer' || role === 'qa_engineer' ? role
+      : role === 'team_lead' ? (teamSize.get(teamId)?.has_lead ? 'qa_engineer' : 'team_lead')
+      : 'viewer'; // super_admin / qa_manager keep their wider role; the team assignment gives them a home team
+
   return companies.map(c => {
+    const teamlessLogins = teamless.filter(u => u.company_id === c.id).flatMap(u => {
+      const t = pickTeam(c.id, u.department_id);
+      return t ? [{ userId: u.id, teamId: t.id, role: loginRole(u.role, t.id) }] : [];
+    });
     const ctxs: TeamCtx[] = teams.filter(t => t.company_id === c.id).map(t => {
       const groups = new Set<Group>(TEAM_GROUPS.filter(g => !has[g]!.has(t.id)));
       const existing: Member[] = members.filter(m => m.team_id === t.id).map(m => ({
@@ -187,7 +219,7 @@ export async function planFillExisting(db: pg.Pool | pg.PoolClient, opts: { toda
       .map(d => ({ severity: d.status === 'resolved' || d.status === 'wont_fix' ? 'low' : d.severity, created: toDay(d.created)!, resolved: d.status === 'resolved' || d.status === 'wont_fix' ? (toDay(d.resolved) ?? toDay(d.created)) : null }));
     const devTeams = new Set(ctxs.filter(t => t.groups?.has('dev')).map(t => t.id));
     const happiness = realHappiness.filter(h => h.company_id === c.id && !devTeams.has(h.team_id)).map(h => Number(h.h));
-    return { id: c.id, isDemo: false, teams: ctxs, teamCount: ctxs.length, realDebt: debt, extraHappiness: happiness };
+    return { id: c.id, isDemo: false, teams: ctxs, teamCount: ctxs.length, realDebt: debt, extraHappiness: happiness, teamlessLogins };
   });
 }
 

@@ -40,7 +40,18 @@ const MODULES: Module[] = [
   { key: 'sprint', label: 'Sprint velocity', sql: `SELECT DISTINCT team_id FROM sprint_velocity WHERE end_date >= $1::date - 60` },
   { key: 'ta', label: 'Team analytics (14 d)', sql: `SELECT DISTINCT team_id FROM team_analytics WHERE period_end >= $1::date - 14` },
   { key: 'mlu', label: 'Metric last updated', sql: `SELECT DISTINCT team_id FROM metric_last_updated WHERE $1::date IS NOT NULL` },
+  // The stored values the KPI snapshots are derived from (metric_values, migration 20261120000000).
+  { key: 'mv', label: 'Metric values (30 d)', sql: `SELECT DISTINCT team_id FROM metric_values WHERE superseded_by IS NULL AND recorded_at >= $1::date - 30` },
 ];
+
+// Demo sign-ins (README) must each have a real team, so every demo role sees data.
+const DEMO_LOGINS_SQL = `
+  SELECT u.email, EXISTS (
+           SELECT 1 FROM role_assignments ra JOIN teams t ON t.id = ra.scope_id AND t.is_active
+            WHERE ra.user_id = u.id AND ra.scope_type = 'team' AND ra.revoked_at IS NULL) AS has_team,
+         EXISTS (SELECT 1 FROM teams t WHERE t.id = u.primary_team_id AND t.is_active) AS primary_ok
+    FROM users u WHERE lower(u.email) = ANY($1::text[]) AND u.is_active AND ($2::text IS NULL OR u.company_id = $2)
+   ORDER BY u.email`;
 
 async function main() {
   const { pool } = await import('../../src/lib/db');
@@ -71,6 +82,17 @@ async function main() {
           return has ? '✓' : '✗';
         });
         console.log(`  ${t.name.slice(0, 36).padEnd(36)} ${marks.join(' ')}`);
+      }
+    }
+    const { DEMO_LOGIN_EMAILS } = await import('./demoData');
+    const logins = (await pool.query(DEMO_LOGINS_SQL, [DEMO_LOGIN_EMAILS, only])).rows as Array<{ email: string; has_team: boolean; primary_ok: boolean }>;
+    if (logins.length) {
+      console.log('\nDemo sign-ins (team assignment / primary team):');
+      for (const l of logins) {
+        total++;
+        const good = l.has_team && l.primary_ok;
+        if (good) ok++; else missing.push(`Demo sign-in ${l.email}: no existing team (assignment ${l.has_team ? 'ok' : 'missing'}, primary team ${l.primary_ok ? 'ok' : 'missing'})`);
+        console.log(`  ${l.email.padEnd(36)} ${l.has_team ? '✓' : '✗'} ${l.primary_ok ? '✓' : '✗'}`);
       }
     }
     const pct = total ? (ok / total) * 100 : 100;

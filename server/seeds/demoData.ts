@@ -432,7 +432,17 @@ export interface CompanyInput {
   realDebt: Array<{ severity: string; created: string; resolved: string | null }>;
   /** Workload balance of developers whose real developer_metrics are kept. */
   extraHappiness: number[];
+  /**
+   * Demo logins (DEMO_LOGIN_EMAILS) of an existing company with no team: they get a demo team
+   * assignment on a real team (and primary team), so every demo role sees data.
+   */
+  teamlessLogins?: Array<{ userId: string; teamId: string; role: string }>;
 }
+
+/** The demo sign-ins of the IronGate development data (README); see CompanyInput.teamlessLogins. */
+export const DEMO_LOGIN_EMAILS = ['admin@irongate.com', 'manager@irongate.com', 'lead@irongate.com', 'engineer@irongate.com', 'viewer@irongate.com'];
+/** Id of the demo team assignment given to a teamless demo login (fits varchar(36)). */
+export const loginAssignmentId = (userId: string) => `${DEMO_PREFIX}ral-${sha1(userId).slice(0, 26)}`;
 
 const devsOf = (team: TeamCtx) => team.members.filter(u => u.role === 'qa_engineer' || u.role === 'team_lead');
 const engineersOf = (team: TeamCtx) => {
@@ -751,6 +761,69 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
   invite('accepted', { email: 'kenji.tanaka@northwind.example', role: 'qa_engineer', scope_type: 'team', scope_id: 'demo-team-ledger', created_at: ts(D(400), 9), last_sent_at: ts(D(400), 9), expires_at: ts(D(393), 9), accepted_at: ts(D(399), 16), accepted_user_id: 'demo-u-kenji-tanaka' });
   invite('revoked', { email: 'casey.lin@northwind.example', role: 'team_lead', scope_type: 'team', scope_id: 'demo-team-kyc', created_at: ts(D(60), 9), last_sent_at: ts(D(60), 9), expires_at: ts(D(53), 9), revoked_at: ts(D(58), 12), revoked_by: admin.id });
 
+  // KPI target history (sample): the company raised its coverage target from 75 % to 80 % 45 days
+  // ago (history before that is judged with 75 %), and Checkout Core tightened its escape-rate
+  // target 30 days ago. The other targets are the defaults (backfill_target_history, below).
+  const paymentsManager = USERS.find(u => u.dept === 'payments' && u.role === 'qa_manager')!;
+  // Where the migration already gave the (existing) demo company its default targets, the sample
+  // history replaces those default rows for the two metrics it changes (demo company rows only).
+  ds.sql('target_history (sample reset)', `DELETE FROM target_history WHERE company_id = ${literal(DEMO_COMPANY_ID)} AND id NOT LIKE ${literal(DEMO_PREFIX + '%')}
+  AND ((scope_type = 'company' AND scope_id = ${literal(DEMO_COMPANY_ID)} AND metric_key = 'test_coverage')
+    OR (scope_type = 'team' AND scope_id = 'demo-team-checkout' AND metric_key = 'defect_escape_rate'))
+  AND NOT EXISTS (SELECT 1 FROM target_history d WHERE d.id = ${literal(did('th', 'co-cov-2'))});`);
+  const target = (key: string, row: Record<string, SqlValue>) =>
+    ds.add('target_history', { id: did('th', key), company_id: DEMO_COMPANY_ID, created_at: row.valid_from, ...row });
+  target('co-cov-1', { scope_type: 'company', scope_id: DEMO_COMPANY_ID, metric_key: 'test_coverage', good: 75, warning: 65, valid_from: ts(D(HISTORY_DAYS + 30), 0), valid_to: ts(D(45), 9, 30), changed_by: admin.id });
+  target('co-cov-2', { scope_type: 'company', scope_id: DEMO_COMPANY_ID, metric_key: 'test_coverage', good: 80, warning: 70, valid_from: ts(D(45), 9, 30), valid_to: null, changed_by: admin.id });
+  target('chk-esc', { scope_type: 'team', scope_id: 'demo-team-checkout', metric_key: 'defect_escape_rate', good: 3, warning: 6, valid_from: ts(D(30), 10, 15), valid_to: null, changed_by: paymentsManager.id });
+  audit('targets-cov', 45, 9, { action: 'targets.update', entity_type: 'config', entity_id: DEMO_COMPANY_ID, summary: `Changed 1 KPI target (company ${DEMO_COMPANY_NAME}): test_coverage`, before: { json: { test_coverage: { good: 75, warning: 65 } } }, after: { json: { test_coverage: { good: 80, warning: 70 } } }, department_ids: { sql: "'{}'::varchar[]" }, subject_ids: { sql: `ARRAY['${DEMO_COMPANY_ID}']::varchar[]` } });
+  audit('targets-chk', 30, 10, { action: 'targets.update', entity_type: 'config', entity_id: 'demo-team-checkout', actor_id: paymentsManager.id, summary: 'Changed 1 KPI target (team Checkout Core): defect_escape_rate', before: { json: { defect_escape_rate: null } }, after: { json: { defect_escape_rate: { good: 3, warning: 6 } } }, department_ids: { sql: "ARRAY['demo-dept-payments']::varchar[]" }, subject_ids: { sql: "ARRAY['demo-team-checkout']::varchar[]" } });
+
+  // Ingestion log (sample): what Administration → Ingestion log lists. Accepted, partial and
+  // rejected API requests (with the revoked example key, before it was revoked) and a manual entry.
+  const leadUser = USERS.find(u => u.role === 'team_lead' && u.team === 'checkout')!;
+  const ilog = (key: string, row: Record<string, SqlValue>) =>
+    ds.add('ingestion_log', { id: did('ilog', key), company_id: DEMO_COMPANY_ID, api_key_id: null, actor_id: null, idempotency_key: null, request_hash: null, ...row });
+  const item = (o: Record<string, unknown>) => o;
+  ilog('jenkins', {
+    channel: 'api', api_key_id: 'demo-apikey-revoked', source: 'jenkins', received_at: ts(D(41), 3, 12), status: 'accepted', http_status: 200,
+    items: { json: [item({ index: 0, teamId: 'demo-team-checkout', source: 'jenkins', recordedAt: ts(D(41), 3, 0), snapshotDate: D(41), metrics: ['test_coverage', 'avg_build_time_minutes'], status: 'written' })] },
+    errors: { json: [] }, response: { json: { status: 'accepted' } }, team_ids: { sql: "ARRAY['demo-team-checkout']::varchar[]" },
+    department_ids: { sql: "ARRAY['demo-dept-payments']::varchar[]" }, item_count: 1, value_count: 2, idempotency_key: 'jenkins-build-4812',
+  });
+  ilog('sonarqube', {
+    channel: 'api', api_key_id: 'demo-apikey-revoked', source: 'sonarqube', received_at: ts(D(38), 4, 40), status: 'partial', http_status: 207,
+    items: { json: [
+      item({ index: 0, teamId: 'demo-team-ledger', source: 'sonarqube', recordedAt: ts(D(38), 4, 30), snapshotDate: D(38), metrics: ['code_quality_score'], status: 'written' }),
+      item({ index: 1, teamId: 'demo-team-ledger', source: 'sonarqube', recordedAt: ts(D(38), 4, 30), metrics: ['code_smells'], status: 'error', errors: ['Unknown metric "code_smells"'] }),
+    ] },
+    errors: { json: [{ index: 1, errors: ['Unknown metric "code_smells"'] }] }, response: { json: { status: 'partial' } },
+    team_ids: { sql: "ARRAY['demo-team-ledger']::varchar[]" }, department_ids: { sql: "ARRAY['demo-dept-payments']::varchar[]" }, item_count: 2, value_count: 1,
+  });
+  ilog('jira', {
+    channel: 'api', api_key_id: 'demo-apikey-revoked', source: 'jira', received_at: ts(D(36), 7, 5), status: 'rejected', http_status: 400,
+    items: { json: [item({ index: 0, teamId: 'demo-team-cards', source: 'jira', recordedAt: ts(D(34), 7, 0), metrics: ['sprint_velocity'], status: 'error', errors: ['recordedAt cannot be in the future'] })] },
+    errors: { json: [{ index: 0, errors: ['recordedAt cannot be in the future'] }] }, response: { json: { error: 'Validation failed' } },
+    team_ids: { sql: "ARRAY['demo-team-cards']::varchar[]" }, department_ids: { sql: "ARRAY['demo-dept-payments']::varchar[]" }, item_count: 1, value_count: 0,
+  });
+  ilog('manual', {
+    channel: 'manual', actor_id: leadUser.id, source: 'manual', received_at: ts(D(2), 15, 20), status: 'accepted', http_status: 200,
+    items: { json: [item({ index: 0, teamId: 'demo-team-checkout', source: 'manual', recordedAt: ts(D(2), 15, 20), snapshotDate: D(2), metrics: ['sprint_commitment_rate'], status: 'written' })] },
+    errors: { json: [] }, response: { json: { message: 'Metrics saved successfully' } }, team_ids: { sql: "ARRAY['demo-team-checkout']::varchar[]" },
+    department_ids: { sql: "ARRAY['demo-dept-payments']::varchar[]" }, item_count: 1, value_count: 1,
+  });
+
+  }
+
+  // Demo logins of an existing company that have no team get one (see CompanyInput.teamlessLogins).
+  for (const l of company.teamlessLogins ?? []) {
+    ds.add('role_assignments', {
+      id: loginAssignmentId(l.userId), company_id: companyId, user_id: l.userId, role: l.role, scope_type: 'team', scope_id: l.teamId,
+      created_at: ts(D(1), 9), created_by: null,
+    });
+    ds.sql('users.primary_team_id', `UPDATE users SET primary_team_id = ${literal(l.teamId)}, updated_at = NOW()
+WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id = users.primary_team_id AND t.is_active)
+  AND EXISTS (SELECT 1 FROM role_assignments ra WHERE ra.id = ${literal(loginAssignmentId(l.userId))} AND ra.revoked_at IS NULL);`);
   }
 
   // Demo developers created on existing teams (only those with fewer than 3 engineers).
@@ -846,6 +919,14 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
       }, G(ds, team, 'kpi'));
     }
   }
+
+  // The stored values the snapshots above are derived from (metric_values; migration
+  // 20261120000000), and the company's default KPI targets in the target history.
+  const kpiTeamIds = teams.filter(t => !t.groups || t.groups.has('kpi')).map(t => t.id);
+  if (kpiTeamIds.length) {
+    ds.sql('metric_values', `SELECT count(public.backfill_metric_values(t)) FROM unnest(ARRAY[${kpiTeamIds.map(literal).join(', ')}]::text[]) AS t;`);
+  }
+  ds.sql('target_history', `SELECT public.backfill_target_history(${literal(companyId)});`);
 
   // Last update per team and metric (today's snapshot); next update from the interval.
   const unitMs: Record<string, number> = { minutes: 60e3, hours: 3600e3, days: DAY_MS, weeks: 7 * DAY_MS, months: 30 * DAY_MS };
@@ -1770,6 +1851,12 @@ const D_ = `'${DEMO_PREFIX}%'`;
  * integer ids >= DEMO_INT_ID_MIN in the identity-keyed snapshot tables.
  */
 export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
+  // Demo logins given a team (teamlessLogins): their primary team goes back to none.
+  { table: 'users (primary_team_id)', sql: `UPDATE users u SET primary_team_id = NULL FROM role_assignments ra
+    WHERE ra.id LIKE '${DEMO_PREFIX}ral-%' AND ra.user_id = u.id AND u.primary_team_id = ra.scope_id AND u.id NOT LIKE ${D_}` },
+  { table: 'metric_values', sql: `DELETE FROM metric_values WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR idempotency_key LIKE 'backfill:${DEMO_PREFIX}%'` },
+  { table: 'ingestion_log', sql: `DELETE FROM ingestion_log WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'target_history', sql: `DELETE FROM target_history WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'role_assignments', sql: `DELETE FROM role_assignments WHERE id LIKE ${D_} OR user_id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'audit_log', sql: `DELETE FROM audit_log WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'invitations', sql: `DELETE FROM invitations WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
@@ -1825,7 +1912,7 @@ export const ALL_TABLES = [
   'kpi_snapshots', 'metric_last_updated', 'metric_update_intervals', 'performance_metrics', 'pipeline_config', 'pipeline_execution_summary',
   'invitations', 'pipeline_runs', 'pipeline_stage_history', 'pipeline_stages', 'role_assignments', 'seeder_runs', 'sprint_velocity', 'team_analytics', 'team_members',
   'team_pipeline_metrics', 'team_test_executions', 'teams', 'technical_debt', 'test_case_tags', 'test_cases', 'test_execution_runs',
-  'test_executions', 'users',
+  'test_executions', 'users', 'metric_values', 'target_history', 'ingestion_log',
 ];
 
 /** SQL condition selecting the demo rows of a table (for counts). */
@@ -1834,6 +1921,7 @@ export function demoRowCondition(table: string): string {
     case 'company_kpi_snapshots': return `(company_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN})`;
     case 'developer_productivity_snapshots': return `(developer_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN})`;
     case 'team_members': return `user_id LIKE ${D_}`;
+    case 'metric_values': return `(company_id LIKE ${D_} OR idempotency_key LIKE 'backfill:${DEMO_PREFIX}%')`;
     default: return `id LIKE ${D_}`;
   }
 }
