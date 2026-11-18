@@ -20,6 +20,8 @@ const CONFIDENCE_TEXT = {
 } as const;
 import { exitTvMode, replaceTvTeam } from './tv/tvNavigation';
 import { useTvSummary, useTvRecommendations, REFRESH_MS, type TvSummary, type TvRecommendations } from './tv/useTvData';
+import { useTvActions } from './tv/useTvActions';
+import type { TrackedAction } from './ActionsPanel';
 import {
   Clock, KpiTile, ScaledBattery, STATUS_META, TrendChart, TrendText, fmtValue, shortDate, targetText, unitSuffix, useRootPx, type TvKpi,
 } from './tv/TvParts';
@@ -166,6 +168,7 @@ const TeamTvView: React.FC = () => {
   const { data, state, offline, updatedAt } = useTvSummary(teamId);
   const canSeeRecommendations = !!user && DEVELOPER_INSIGHT_ROLES.includes(user.role) && state === 'ready';
   const recommendations = useTvRecommendations(state === 'ready' ? teamId : null, canSeeRecommendations);
+  const trackedActions = useTvActions(state === 'ready' ? teamId : null, true);
 
   useEffect(() => {
     if (data?.team.name) document.title = `${data.team.name} · TV mode · IronGate`;
@@ -507,7 +510,7 @@ const TeamTvView: React.FC = () => {
               ))}
             </div>
           ) : (
-            <FocusPanel model={model} recommendations={recommendations} wide={wide} />
+            <FocusPanel model={model} recommendations={recommendations} wide={wide} tracked={trackedActions} />
           )}
         </section>
       </div>
@@ -622,11 +625,13 @@ function buildModel(data: TvSummary): TvModel {
 /* Focus panel: KPIs off target + current action plan                  */
 /* ------------------------------------------------------------------ */
 
-const FocusPanel: React.FC<{ model: TvModel; recommendations: TvRecommendations | null; wide: boolean }> = ({ model, recommendations, wide }) => {
-  const actions = recommendations && recommendations.aiEnabled !== false ? (recommendations.actionPlan ?? []).slice(0, 3) : [];
+const FocusPanel: React.FC<{ model: TvModel; recommendations: TvRecommendations | null; wide: boolean; tracked?: TrackedAction[] | null }> = ({ model, recommendations, wide, tracked }) => {
+  // Tracked actions (the team's action plan) take the right column; else the recommendations.
+  const trackedShown = (tracked ?? []).slice(0, 4);
+  const actions = trackedShown.length ? [] : recommendations && recommendations.aiEnabled !== false ? (recommendations.actionPlan ?? []).slice(0, 3) : [];
   const shown = model.offTarget.slice(0, wide ? 5 : 8);
   return (
-    <div className={cx('grid min-h-0 flex-1 gap-[1.25rem]', wide && actions.length ? 'grid-cols-[minmax(0,11fr)_minmax(0,9fr)]' : 'grid-cols-1')}>
+    <div className={cx('grid min-h-0 flex-1 gap-[1.25rem]', wide && (actions.length || trackedShown.length) ? 'grid-cols-[minmax(0,11fr)_minmax(0,9fr)]' : 'grid-cols-1')}>
       <article className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-7 dark:border-slate-800 dark:bg-slate-900" data-testid="tv-off-target">
         <h3 className="text-[1.7rem] font-semibold">KPIs off target</h3>
         <p className="mt-1 text-[1.25rem] text-slate-600 dark:text-slate-300">
@@ -662,6 +667,7 @@ const FocusPanel: React.FC<{ model: TvModel; recommendations: TvRecommendations 
           <p className="mt-2 text-[1.2rem] text-slate-500 dark:text-slate-400">and {model.offTarget.length - shown.length} more on the Team detail page</p>
         )}
       </article>
+      {trackedShown.length > 0 && <TrackedActionsCard actions={trackedShown} total={(tracked ?? []).length} />}
       {actions.length > 0 && (
         <article className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-7 dark:border-slate-800 dark:bg-slate-900" data-testid="tv-actions">
           <h3 className="text-[1.7rem] font-semibold">Recommended actions</h3>
@@ -684,6 +690,49 @@ const FocusPanel: React.FC<{ model: TvModel; recommendations: TvRecommendations 
     </div>
   );
 };
+
+const TV_ACTION_STATUS: Record<TrackedAction['status'], string> = { open: 'Open', in_progress: 'In progress', done: 'Done', dropped: 'Dropped' };
+const TV_OUTCOME: Record<string, { label: string; cls: string }> = {
+  improved: { label: 'Improved', cls: 'text-green-700 dark:text-green-400' },
+  worse: { label: 'Worse', cls: 'text-red-700 dark:text-red-400' },
+  unchanged: { label: 'Unchanged', cls: 'text-slate-600 dark:text-slate-300' },
+  no_data: { label: 'No new data', cls: 'text-slate-600 dark:text-slate-300' },
+  pending: { label: 'Outcome pending', cls: 'text-slate-600 dark:text-slate-300' },
+};
+const tvDay = (d: string) => new Date(d.length === 10 ? `${d}T00:00:00Z` : d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', ...(d.length === 10 ? { timeZone: 'UTC' } : {}) });
+
+/** The team's tracked actions (no owner names on TV): status, due date, linked KPI, computed outcome. */
+const TrackedActionsCard: React.FC<{ actions: TrackedAction[]; total: number }> = ({ actions, total }) => (
+  <article className="flex min-h-0 flex-col rounded-2xl border border-slate-200 bg-white p-7 dark:border-slate-800 dark:bg-slate-900" data-testid="tv-tracked-actions">
+    <h3 className="text-[1.7rem] font-semibold">Action plan</h3>
+    <p className="mt-1 text-[1.25rem] text-slate-600 dark:text-slate-300">
+      {total > actions.length ? `${actions.length} of ${total} tracked actions` : `${total} tracked ${total === 1 ? 'action' : 'actions'}`}; outcomes computed from the stored values
+    </p>
+    <ol className="mt-4 min-h-0 flex-1 space-y-[1rem] overflow-hidden">
+      {actions.map((a) => {
+        const done = a.status === 'done';
+        const latest = done ? [...a.outcomes].reverse().find((o) => o.outcome !== 'pending') ?? a.outcomes[0] : null;
+        const outcome = latest ? TV_OUTCOME[latest.outcome] : null;
+        return (
+          <li key={a.id} className="rounded-xl border border-slate-200 p-[1rem] dark:border-slate-800">
+            <div className="flex items-center justify-between gap-4 text-[1.2rem]">
+              <span className={cx('font-semibold', a.overdue ? 'text-red-700 dark:text-red-400' : done ? 'text-green-700 dark:text-green-400' : a.status === 'in_progress' ? 'text-brand-700 dark:text-brand-300' : 'text-slate-600 dark:text-slate-300')}>
+                {a.overdue ? 'Overdue' : TV_ACTION_STATUS[a.status]}
+              </span>
+              <span className="text-slate-600 dark:text-slate-300">{done && a.completedAt ? `Done ${tvDay(a.completedAt)}` : a.dueDate ? `Due ${tvDay(a.dueDate)}` : 'No due date'}</span>
+            </div>
+            <p className="mt-1 text-[1.45rem] font-medium leading-snug">{a.title}</p>
+            {a.metric && (
+              <p className="mt-1 text-[1.15rem] text-slate-600 dark:text-slate-300">
+                {a.metric.label}{done && outcome && latest ? <>: <span className={cx('font-semibold', outcome.cls)}>{outcome.label}</span> ({latest.label.toLowerCase()})</> : ''}
+              </p>
+            )}
+          </li>
+        );
+      })}
+    </ol>
+  </article>
+);
 
 /* ------------------------------------------------------------------ */
 /* Controls (appear on mouse move / key press, hide after 4 s)          */
