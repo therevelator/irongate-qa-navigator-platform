@@ -99,15 +99,22 @@ const Details: React.FC<{ e: Entry }> = ({ e }) => {
     );
   }
   const rows = Object.keys({ ...(e.before ?? {}), ...(e.after ?? {}) })
-    .filter((k) => !['movedUserIds', 'revokedMemberships', 'grants'].includes(k))
+    .filter((k) => !['movedUserIds', 'revokedMemberships', 'grants', 'userId'].includes(k))
     .map((k) => [k, e.before?.[k], e.after?.[k]] as const);
   if (!rows.length) return <p className="text-xs text-slate-500 dark:text-slate-400">No further details recorded.</p>;
-  const show = (v: unknown) => (v === null || v === undefined || v === '' ? '—' : typeof v === 'object' ? JSON.stringify(v) : String(v));
+  const show = (v: unknown): string => {
+    if (v === null || v === undefined || v === '') return '—';
+    if (typeof v === 'object' && v && 'role' in v && 'scopeType' in v) return grantText(v as Grant);
+    if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) return fmt(v);
+    if (typeof v === 'boolean') return v ? 'yes' : 'no';
+    return typeof v === 'object' ? JSON.stringify(v) : String(v);
+  };
+  const label = (k: string) => k.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
   return (
     <dl className="grid grid-cols-[minmax(0,10rem)_1fr] gap-x-3 gap-y-1 text-xs">
       {rows.map(([k, b, a]) => (
         <React.Fragment key={k}>
-          <dt className="truncate text-slate-500 dark:text-slate-400">{k}</dt>
+          <dt className="truncate text-slate-500 dark:text-slate-400">{label(k)}</dt>
           <dd className="break-words text-slate-700 dark:text-slate-200">{e.before ? `${show(b)} → ${show(a)}` : show(a)}</dd>
         </React.Fragment>
       ))}
@@ -123,6 +130,7 @@ const ActivityLog: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState({ q: '', entityType: '', action: '', actorId: '', departmentId: '', from: '', to: '', reversible: false });
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [moreFilters, setMoreFilters] = useState(false);
   const [confirm, setConfirm] = useState<Entry | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [undoError, setUndoError] = useState<string | null>(null);
@@ -215,6 +223,11 @@ const ActivityLog: React.FC = () => {
               {(facets?.actions ?? []).map((a) => <option key={a.action} value={a.action}>{actionLabel(a.action)} ({a.n})</option>)}
             </select>
           </div>
+          <button type="button" onClick={() => setMoreFilters((v) => !v)} aria-expanded={moreFilters} aria-controls="act-more"
+            className="inline-flex items-center gap-1 justify-self-start text-sm font-medium text-brand-700 hover:text-brand-800 sm:hidden dark:text-brand-300">
+            {moreFilters ? 'Fewer filters' : 'More filters'} {moreFilters ? <ChevronUp size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+          </button>
+          <div id="act-more" className={cx('contents', !moreFilters && 'max-sm:hidden')}>
           <div>
             <label htmlFor="act-actor" className={labelCls}>By</label>
             <select id="act-actor" value={filters.actorId} onChange={(e) => set('actorId', e.target.value)} className={cx(inputClass, 'w-full')}>
@@ -243,6 +256,7 @@ const ActivityLog: React.FC = () => {
             <input type="checkbox" checked={filters.reversible} onChange={(e) => set('reversible', e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500 dark:border-slate-600" />
             Only changes that can be undone
           </label>
+          </div>
         </div>
       </Card>
 
@@ -281,7 +295,7 @@ const ActivityLog: React.FC = () => {
                           <RotateCcw size={14} aria-hidden="true" /> Undo
                         </button>
                       ) : (
-                        <span className="text-xs text-slate-400 dark:text-slate-500" title={e.undoBlockedReason ?? undefined}>{e.undoBlockedReason ? 'Undo not available' : ''}</span>
+                        e.undoBlockedReason ? <span className="max-w-[16rem] text-right text-xs text-slate-500 dark:text-slate-400">{e.undoBlockedReason}</span> : null
                       )
                     )}
                   </div>

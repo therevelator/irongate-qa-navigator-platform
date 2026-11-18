@@ -103,7 +103,8 @@ export const InviteDialog: React.FC<{
     setEmail(''); setError(null); setResult(null);
     setRole(first?.role ?? '');
     setScopeId(first?.scopes[0]?.id ?? '');
-  }, [isOpen, options]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the dialog opens
+  }, [isOpen]);
 
   const roleOption = options.find((o) => o.role === role);
   const scopes = roleOption?.scopes ?? [];

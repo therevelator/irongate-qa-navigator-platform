@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { Users, Search, Edit2, Key, Trash2, UserPlus, Save, UserCheck, UserX, Bot, ChevronDown, ChevronUp, GitPullRequest, Clock, Zap, TrendingUp, LayoutGrid, List, Send } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -275,7 +275,10 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     department_ids: u.department_ids ?? null, team_ids: u.team_ids ?? null,
   });
   // Assignments the signed-in user may give (shared rule canGrant), for chips and invitations.
-  const grantOptions = grantableOptions(actor, user?.companyId ?? '', 'Organisation', departments, teams);
+  const grantOptions = useMemo(
+    () => grantableOptions(policyActorOf(user), user?.companyId ?? '', 'Organisation', departments, teams),
+    [user, departments, teams],
+  );
   const mayInvite = !!user && canInvite(actor) && grantOptions.length > 0;
   const canEditTarget = (u: User) => !!user && canEditUser(actor, asTarget(u));
   const canManageTarget = (u: User) => !!user && canManageUser(actor, asTarget(u));

@@ -27,7 +27,8 @@ npm run dev                   # app on http://localhost:5173
 ```
 
 Registering creates a **new** organisation and makes you its super admin. People join an
-existing organisation only when one of its admins creates their account (Users page).
+existing organisation only by invitation (Users page → **Invite**), see
+[Organisation, roles and access](#organisation-roles-and-access).
 
 ## Sample (demo) data
 
@@ -37,7 +38,10 @@ One command fills every table with a fictional, internally consistent company fo
 trending), plus developer productivity, CI/CD pipeline runs, test cases, executions and flaky
 tests, performance metrics, technical debt with financial impact, 12 months of business-impact
 data and company KPI snapshots. KPI values are marked `field_sources.<column>.source =
-'synthetic'`. Business-impact rows have `data_source = 'synthetic'`.
+'synthetic'`. Business-impact rows have `data_source = 'synthetic'`. Organisation data
+includes the role assignments (one QA manager, Sofia Lindqvist, manages two departments; some
+engineers belong to two teams), a short change history (the department rename can be undone)
+and sample invitations (pending, expired, accepted, revoked; their links never work).
 
 ```bash
 npm run seed:demo                              # demo company -> DATABASE_URL (local hosts only)
@@ -137,6 +141,82 @@ One definition per metric, shared by server and UI:
   to 75%, off track = under 50%; fewer than two recorded = not classified. The counts and
   the list both come from `GET /api/analytics/company-summary` (`kpiStatus`,
   `kpiStatusTeams`), computed by the same function.
+
+## Organisation, roles and access
+
+Migration: `supabase/migrations/20261119000000_org_roles_audit_invitations.sql` (backfills
+everything from the existing data; nothing is dropped).
+
+**Role assignments.** Access comes from `role_assignments`: a role on a scope, and a person may
+have several.
+
+| Role | Assigned on | Sees / may |
+|---|---|---|
+| super_admin | the company | everything in the company |
+| qa_manager | a department (one or more) | the teams of those departments; manages their teams and users |
+| team_lead | a team (one or more; one lead per team) | those teams, other developers' rows there, team data writes |
+| qa_engineer / viewer | a team (one or more) | those teams; individual developer data only their own |
+
+- Every access decision reads the assignments through `server/lib/assignments.ts` (loaded per
+  request by the auth middleware) and the rules in `server/lib/userPolicy.ts`; the UI uses the
+  same rules. A change applies on the person's next request, without signing in again.
+- The team lead is the team's `team_lead` assignment (single source of truth).
+  `users.role` (highest role), `department_id`, `primary_team_id`, `teams.lead_id`,
+  `departments.manager_id` and `team_members` are kept in step for compatibility.
+- **Users page:** each person shows assignment chips (role · team / department); **Add** and the
+  chip's **×** give or remove an assignment (super admin: any; QA manager: team roles in their
+  departments; team lead: engineers / viewers of their teams; never your own, never someone of
+  your rank or above). The edit form still sets the primary assignment.
+- **Departments page:** "Assign QA manager" adds a department (other departments stay);
+  "Change lead" replaces the team's lead, who stays on the team as a QA engineer. Moving a team
+  to another department moves its members' departments; QA managers stay in theirs and lose the
+  team.
+
+**Change history (Activity page).** Every organisation, role, assignment, team, department,
+user and settings change is recorded in `audit_log` with who, when, what (before / after; secrets
+masked) and the departments it concerns. Super admins see the whole company, QA managers the
+changes of their departments, with filters. **Undo** exists for assignment and role changes,
+manager / lead changes, team moves, department renames and user deactivation. An undo restores
+the previous state in one transaction and is itself recorded; it is refused, with the reason,
+when a newer change touches the same people / team / department, or when the state was changed
+outside the history. QA managers may undo user changes inside their departments, not their own.
+
+**Invitations.** Users page → **Invite**: email, role and team / department (within the same
+rules as assignments). The person opens `APP_URL/accept-invite?token=…`, sets name and password
+(10+ characters, three of lower / upper / digit / symbol, not containing the email name; or uses
+SSO) and gets exactly that assignment. Tokens are 256-bit random, stored only as SHA-256, single
+use, expire after 7 days (`INVITE_TTL_HOURS`) and can be revoked; **Resend** issues a new link and
+the old one stops working. With SMTP configured the email is sent; otherwise the API returns the
+link and the dialog shows it to copy (nothing fails silently). "Add with password" remains for
+demos and scripted setups.
+
+**Single sign-on (Google, Microsoft).** Off unless configured; the login page asks
+`GET /api/auth/providers` and shows only the configured buttons. OpenID Connect with state,
+nonce and PKCE (S256); the ID token's signature (provider JWKS), issuer, audience and expiry are
+checked. A sign-in matches an existing **active** user by linked identity or verified email, or
+an **open invitation** for that verified email; anyone else is refused (no account is created).
+It sets the same session cookie as the password login.
+
+Setup: register a web application with the provider and add the redirect URI
+`<APP_URL>/api/auth/sso/google/callback` (Google Cloud console → APIs & Services → Credentials →
+OAuth client ID) or `<APP_URL>/api/auth/sso/microsoft/callback` (Microsoft Entra → App
+registrations; accounts in your organisation; add a client secret; optional claim `email`). Then set:
+
+| Variable | Purpose |
+|---|---|
+| `APP_URL` | public URL of the app, e.g. `https://qe.example.com` (invitation links, SSO redirect URI and return); on Netlify defaults to `URL` |
+| `API_PUBLIC_URL` | only when the API has its own origin (local development: `http://localhost:3000`, the default) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | enable Google sign-in |
+| `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_TENANT` | enable Microsoft sign-in; `MS_TENANT` = your tenant id or domain (a single tenant is recommended: its addresses are trusted; with `organizations` only verified email claims are accepted) |
+| `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | send invitation emails (without `SMTP_HOST` links are shown to copy) |
+| `INVITE_TTL_HOURS` | invitation lifetime, default 168 |
+| `DEMO_MODE` | `true` shows the demo account chips on the login page; default on locally, off in production / on Netlify |
+
+Endpoints: `GET|POST /api/admin/users/:id/assignments`, `DELETE /api/admin/users/:id/assignments/:assignmentId`,
+`GET /api/admin/audit`, `GET /api/admin/audit/facets`, `POST /api/admin/audit/:id/undo`,
+`GET|POST /api/admin/invitations`, `POST /api/admin/invitations/:id/resend|revoke`,
+`GET /api/auth/providers`, `GET /api/auth/sso/:provider/start|callback`,
+`GET /api/auth/invitations/:token`, `POST /api/auth/invitations/accept`.
 
 ## Team TV mode
 

@@ -111,7 +111,8 @@ const AddAssignmentDialog: React.FC<{
     if (!isOpen) return;
     const first = options.find((o) => o.role === 'qa_engineer') ?? options[0];
     setRole(first?.role ?? ''); setScopeId(first?.scopes[0]?.id ?? ''); setReplaceLead(false); setError(null);
-  }, [isOpen, options]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the dialog opens
+  }, [isOpen]);
 
   const opt = options.find((o) => o.role === role);
   const scope = opt?.scopes.find((s) => s.id === scopeId);

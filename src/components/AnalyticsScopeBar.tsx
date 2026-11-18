@@ -16,8 +16,8 @@ import { openTvMode } from './tv/tvNavigation';
 
 const LEVEL_HINT: Record<string, string> = {
   company: 'You can open any department and team of your company.',
-  department: 'You can open every team in your department.',
-  team: 'Analytics is limited to your own team.',
+  department: 'You can open every team in the departments you manage.',
+  team: 'Analytics is limited to the teams you belong to.',
 };
 
 const ReadOnlyField: React.FC<{ label: string; value: string; testId: string }> = ({ label, value, testId }) => (
