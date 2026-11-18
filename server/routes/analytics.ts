@@ -10,7 +10,7 @@ import { demoSummary, todayUtc } from '../seeds/demoData';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues, teamKpiTrack } from '../../src/config/metricsConfig';
-import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBurnoutRisk, burnoutRiskLabel, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT } from '../lib/metricFormulas';
+import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
@@ -19,6 +19,9 @@ import { evaluateSnapshot, qaConfidenceJson, type EvalContext, type SnapshotEval
 import { loadIntervals, referenceFor } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 import { teamMemberCountSql } from '../lib/teamMembership';
+import { multiTeamDeveloperSummary, teamDeveloperSummary } from '../lib/developerAggregates';
+import { K_ANONYMITY_MIN, privacyInfo } from '../lib/privacy';
+import { wellbeingAcrossTeams } from '../lib/pulse';
 
 const router = express.Router();
 
@@ -492,7 +495,10 @@ router.get('/developer-metrics', authenticateToken, async (req: any, res) => {
     }));
 
     // individualScope: 'team' = every in-scope developer; 'self' = only the caller's own row.
-    res.json({ teamId: scopeTeamId, individualScope: privileged ? 'team' : 'self', developers: result });
+    // summary: the team's averages and burnout counts (server/lib/developerAggregates.ts), only
+    // with at least 3 opted-in contributors (server/lib/privacy.ts), for every role in scope.
+    const summary = await teamDeveloperSummary(companyId, scopeTeamId);
+    res.json({ teamId: scopeTeamId, individualScope: privileged ? 'team' : 'self', developers: result, summary });
   } catch (error) {
     console.error('Error fetching developer metrics:', error);
     res.status(500).json({ error: 'Failed to fetch developer metrics' });
@@ -2213,9 +2219,10 @@ const ENGINEERING_HEALTH_WEIGHTS = {
   deliveryPerformance: 0.35,
   pipelineHealth: 0.25,
   techDebtStatus: 0.20,
-  // Workload balance (derived) already contains focus, meetings and context switches, so the
-  // burnout rule (built from the same inputs) is not weighted separately.
-  workloadBalance: 0.20
+  // Wellbeing (survey): the anonymous pulse survey (server/lib/pulse.ts). When no team has a
+  // shown result it is left out (never replaced by workload balance) and the confidence drops.
+  // Workload balance (derived) is a separate workload signal and is not part of this score.
+  wellbeingSurvey: 0.20
 };
 
 async function computeCompanyMetrics(companyId: string) {
@@ -2370,40 +2377,16 @@ async function computeCompanyMetrics(companyId: string) {
     ? Math.round(((techDebtTotalItems - techDebtOpenItems) / techDebtTotalItems) * 100)
     : null;
 
-  // Developer wellness: developer_metrics rows recorded for active teams (dm.team_id),
-  // averaged per developer first so a developer on several teams counts once.
-  const dev = await queryOne<any>(`
-    SELECT COUNT(*) AS developers,
-           AVG(d.h) AS avg_happiness, AVG(d.f) AS avg_focus,
-           AVG(d.m) AS avg_meetings, AVG(d.s) AS avg_switches
-    FROM (
-      SELECT dm.developer_id,
-             AVG(dm.happiness_score) AS h, AVG(dm.focus_time_hours) AS f,
-             AVG(dm.meeting_time_hours) AS m, AVG(dm.context_switches_per_day) AS s
-      FROM developer_metrics dm
-      JOIN teams t ON t.id = dm.team_id
-      JOIN users u ON u.id = dm.developer_id
-      WHERE t.company_id = ? AND t.is_active = TRUE AND u.company_id = ? AND u.is_active = TRUE
-      GROUP BY dm.developer_id
-    ) d
-  `, [companyId, companyId]);
-  const developerCount = num(dev?.developers) ?? 0;
-  const happiness = developerCount > 0 ? num(dev?.avg_happiness) : null;
-  const focusTime = developerCount > 0 ? num(dev?.avg_focus) : null;
-  const meetingTime = developerCount > 0 ? num(dev?.avg_meetings) : null;
-  const contextSwitches = developerCount > 0 ? num(dev?.avg_switches) : null;
+  // Workload balance (derived) and burnout risk: k-anonymous company aggregates of developer
+  // metrics (server/lib/developerAggregates.ts): only teams with at least 3 opted-in contributing
+  // developers count, each developer once. A separate workload signal, not wellbeing.
+  const devSummary = await multiTeamDeveloperSummary(companyId, activeTeams.map((t: any) => String(t.id)));
+  const workloadBalanceIndex = devSummary.averages.workloadBalance !== null ? Math.round(devSummary.averages.workloadBalance) : null;
 
-  // Burnout risk: the shared rule (metricFormulas.computeBurnoutRisk / BURNOUT_DEFINITION),
-  // applied to the company averages; reported in developerWellnessBasis, not scored.
-  const burnoutRisk = burnoutRiskLabel(computeBurnoutRisk({
-    focus_time_hours: focusTime, meeting_time_hours: meetingTime, context_switches_per_day: contextSwitches
-  }));
-  // Workload balance (derived): the mean of each developer's stored happiness_score, which
-  // is calculateWorkloadBalance() of focus, meetings, context switches, PR and review times.
-  // It is used on its own: adding burnout risk or separate focus/meeting bands on top would
-  // count the same inputs twice. (Field name kept as developerWellnessIndex for the API.)
-  const wellnessRaw = happiness;
-  const developerWellnessIndex = wellnessRaw !== null ? Math.round(wellnessRaw) : null;
+  // Wellbeing (survey): the teams' latest closed pulse-survey period with at least 3 responses
+  // (server/lib/pulse.ts wellbeingAcrossTeams). Field name developerWellnessIndex kept for the API.
+  const wellbeing = await wellbeingAcrossTeams(activeTeams.map((t: any) => String(t.id)));
+  const developerWellnessIndex = wellbeing.value !== null ? Math.round(wellbeing.value) : null;
 
   // Delivery performance (DORA): mean of per-team level scores over classified teams, weighted
   // by team size. A team with a stale DORA input is 'Unknown' (left out), like a missing one.
@@ -2445,7 +2428,7 @@ async function computeCompanyMetrics(companyId: string) {
     deliveryPerformance: deliveryPerformanceScore,
     pipelineHealth: pipelineHealthScore,
     techDebtStatus: techDebtStatusScore,
-    workloadBalance: happiness
+    wellbeingSurvey: wellbeing.value
   };
   const healthRaw = weightedMeanOf(
     (Object.keys(ENGINEERING_HEALTH_WEIGHTS) as Array<keyof typeof ENGINEERING_HEALTH_WEIGHTS>)
@@ -2545,13 +2528,25 @@ async function computeCompanyMetrics(companyId: string) {
       levels: doraLevels
     },
     developerWellnessBasis: {
-      method: 'Workload balance (derived): mean of developer_metrics.happiness_score per developer, which is calculated from focus, meetings, context switches, PR and review times. Not a survey score.',
-      developers: developerCount,
-      avgHappiness: roundTo(happiness, 1),
-      avgFocusHours: roundTo(focusTime, 1),
-      avgMeetingHours: roundTo(meetingTime, 1),
-      avgContextSwitches: roundTo(contextSwitches, 1),
-      burnoutRisk
+      method: wellbeing.method,
+      teamsReporting: wellbeing.teamsReporting,
+      teamsTotal: wellbeing.teamsTotal,
+      teamsSuppressed: wellbeing.teamsSuppressed,
+      responses: wellbeing.responses,
+      minResponses: K_ANONYMITY_MIN
+    },
+    // Workload balance (derived): a separate workload signal from developer metrics, not wellbeing.
+    workloadBalanceIndex,
+    workloadBalanceBasis: {
+      method: 'Workload balance (derived): mean of developer_metrics.happiness_score, calculated from focus, meetings, context switches, PR and review times. Not a survey score and not wellbeing.',
+      basis: devSummary.basis,
+      ...devSummary.privacy,
+      teamsIncluded: devSummary.teamsIncluded,
+      teamsSuppressed: devSummary.teamsSuppressed,
+      avgFocusHours: roundTo(devSummary.averages.focusHours, 1),
+      avgMeetingHours: roundTo(devSummary.averages.meetingHours, 1),
+      avgContextSwitches: roundTo(devSummary.averages.contextSwitches, 1),
+      burnoutRisk: devSummary.burnoutOfAverages
     },
     pipelineHealthBasis: {
       definition: 'Successful pipeline runs / (successful + failed) runs, last 30 days',
@@ -2645,7 +2640,8 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
 Current Metrics (team KPI snapshots as of ${m.asOf ?? 'unknown date'}; "no data" means not measured, do not guess a value):
 - Engineering Health: ${fmt(m.engineeringHealthScore)} (components without data are excluded: ${m.engineeringHealthBasis.missing.join(', ') || 'none'})
 - Delivery (DORA): ${fmt(m.deliveryPerformanceScore)}
-- Workload balance (derived from focus/meeting/context-switch/PR/review inputs): ${fmt(m.developerWellnessIndex)}
+- Wellbeing (anonymous pulse survey, teams with at least 3 responses): ${fmt(m.developerWellnessIndex)}
+- Workload balance (derived from focus/meeting/context-switch/PR/review inputs; a workload signal, not wellbeing): ${fmt(m.workloadBalanceIndex)}
 - Tech Debt Status: ${fmt(m.techDebtStatusScore)}
 - Pipeline Health (successful pipeline runs, last 30 days): ${m.pipelineHealthScore === null ? 'no data' : `${m.pipelineHealthScore}%`}
 
@@ -2669,6 +2665,7 @@ Provide a concise executive summary (3-4 sentences) highlighting the biggest ris
         engineeringHealthScore: m.engineeringHealthScore,
         deliveryPerformanceScore: m.deliveryPerformanceScore,
         developerWellnessIndex: m.developerWellnessIndex,
+        workloadBalanceIndex: m.workloadBalanceIndex,
         techDebtStatusScore: m.techDebtStatusScore,
         pipelineHealthScore: m.pipelineHealthScore
       },
@@ -2731,7 +2728,9 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
         dps.pr_time_norm,
         dps.review_time_norm,
         dps.meeting_time_norm,
-        dps.context_switches_norm
+        dps.context_switches_norm,
+        u.developer_insights_enabled AS insights_enabled,
+        u.is_active AS user_active
       FROM developer_productivity_snapshots dps
       JOIN users u ON dps.developer_id = u.id
       WHERE u.company_id = ?
@@ -2766,12 +2765,22 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     // One DDPS definition: computeDdps (0-100) from each snapshot's inputs, returned as
     // a 0-1 fraction (score / 100) like the ddps_score column. Snapshots with missing
     // inputs have no score and are left out.
-    const snapshots = rawSnapshots
+    const scored = rawSnapshots
       .map((s: any) => {
         const { score } = computeDdps(s);
         return score === null ? null : { ...s, ddps_score: Math.round(score * 100) / 10000 };
       })
       .filter((s: any) => s !== null) as any[];
+
+    // Team mode (several developers): every statistic below is an aggregate of individual data,
+    // so only opted-in, active developers contribute and each figure needs at least 3 of them
+    // (server/lib/privacy.ts); a day with fewer is not shown. Single-developer mode (your own
+    // snapshots, or one developer a lead may see) is individual data under the row rules above.
+    const teamMode = privileged && !(developerId && developerId !== 'all');
+    const snapshots = teamMode ? scored.filter((s: any) => s.insights_enabled === true && s.user_active !== false) : scored;
+    const distinctDevs = (rows: any[]) => new Set(rows.map((r: any) => String(r.developer_id))).size;
+    const aggregatePrivacy = teamMode ? privacyInfo(distinctDevs(snapshots)) : null;
+    const shown = (rows: any[]) => !teamMode || distinctDevs(rows) >= K_ANONYMITY_MIN;
 
     // Aggregate data by date for chart
     const dailyAverages: Record<string, { count: number; totalDDPS: number; date: string }> = {};
@@ -2785,15 +2794,19 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
     });
 
     const chartData = Object.values(dailyAverages)
-      .map(d => ({
-        date: d.date,
-        ddps: Math.round((d.totalDDPS / d.count) * 100) / 100,
-        developers: d.count
-      }))
+      .map(d => {
+        const ok = !teamMode || d.count >= K_ANONYMITY_MIN;
+        return {
+          date: d.date,
+          ddps: ok ? Math.round((d.totalDDPS / d.count) * 100) / 100 : null,
+          developers: ok ? d.count : null,
+          suppressed: !ok
+        };
+      })
       .sort((a, b) => a.date.localeCompare(b.date));
 
     // Calculate overall stats (null when there are no snapshots in the range)
-    const allDDPS = snapshots.map((s: any) => parseFloat(s.ddps_score)).filter((v: number) => Number.isFinite(v));
+    const allDDPS = (shown(snapshots) ? snapshots : []).map((s: any) => parseFloat(s.ddps_score)).filter((v: number) => Number.isFinite(v));
     const hasData = allDDPS.length > 0;
     const avgDDPS = hasData ? allDDPS.reduce((a: number, b: number) => a + b, 0) / allDDPS.length : null;
     const minDDPS = hasData ? Math.min(...allDDPS) : null;
@@ -2811,10 +2824,10 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
       return dateStr >= fourteenDaysAgo && dateStr < sevenDaysAgo;
     });
 
-    const recentAvg = recent.length > 0
+    const recentAvg = recent.length > 0 && shown(recent)
       ? recent.reduce((a: number, s: any) => a + parseFloat(s.ddps_score), 0) / recent.length
       : null;
-    const previousAvg = previous.length > 0
+    const previousAvg = previous.length > 0 && shown(previous)
       ? previous.reduce((a: number, s: any) => a + parseFloat(s.ddps_score), 0) / previous.length
       : null;
     const trend = recentAvg !== null && previousAvg !== null && previousAvg > 0
@@ -2874,9 +2887,13 @@ router.get('/ddps-history', authenticateToken, async (req: any, res) => {
         totalSnapshots: snapshots.length,
         latestSnapshotDate: chartData.length ? chartData[chartData.length - 1].date : null
       },
+      // 'team': aggregates over developers (k-anonymous, see aggregatePrivacy); 'developer': one person's own data.
+      mode: teamMode ? 'team' : 'developer',
+      aggregatePrivacy,
       executiveSummary,
       chartData,
-      snapshots: snapshots.slice(-100) // Last 100 for detail view
+      // Individual rows the caller may see (last 100 for the detail view).
+      snapshots: scored.slice(-100).map(({ insights_enabled, user_active, ...row }: any) => row)
     });
 
   } catch (error) {

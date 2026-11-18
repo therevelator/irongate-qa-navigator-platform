@@ -7,10 +7,11 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
 import { canViewDeveloperRow } from '../lib/userPolicy';
 import { teamMemberCountSql } from '../lib/teamMembership';
+import { teamDeveloperSummary } from '../lib/developerAggregates';
+import { K_ANONYMITY_MIN, K_ANONYMITY_RULE, SUPPRESSED_TEXT } from '../lib/privacy';
+import { WELLBEING_FORMULA, wellbeingAcrossTeams } from '../lib/pulse';
 import {
   BURNOUT_DEFINITION,
-  burnoutRiskLabel,
-  computeBurnoutRisk,
   computeQaScore,
   QA_SCORE_FORMULA,
   QA_SCORE_WEIGHTS,
@@ -528,16 +529,13 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       [teamId]
     );
 
-    // Get developer metrics averages
+    // Developer metrics team averages: k-anonymous (server/lib/developerAggregates.ts; at least 3
+    // opted-in contributing developers, else null). The 30-day head count is not an aggregate of
+    // anyone's values.
+    const devSummary = await teamDeveloperSummary(req.companyId!, teamId as string);
+    const devAvg = devSummary.averages;
     const devMetrics = await queryOne<any>(
-      `SELECT 
-        AVG(pr_merge_time_avg) as avg_pr_merge_time,
-        AVG(code_review_time_avg) as avg_code_review_time,
-        AVG(focus_time_hours) as avg_focus_time,
-        AVG(meeting_time_hours) as avg_meeting_time,
-        AVG(context_switches_per_day) as avg_context_switches,
-        AVG(happiness_score) as avg_happiness_score,
-        COUNT(DISTINCT developer_id) as developer_count,
+      `SELECT
         COUNT(DISTINCT CASE WHEN COALESCE(updated_at, created_at) >= NOW() - INTERVAL '30 days' THEN developer_id END) as developer_count_30d
       FROM developer_metrics
       WHERE team_id = ?`,
@@ -567,6 +565,11 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
     );
 
     const technicalDebtScore = techDebtScoreFromWeight(debtSummary?.open_weight);
+
+    // Privacy of the developer averages (suppressed: true when fewer than 3 contributors).
+    const devPrivacy = { privacy: devSummary.privacy };
+    // Wellbeing (survey): the team's latest closed pulse period (k-anonymous, server/lib/pulse.ts).
+    const wellbeing = await wellbeingAcrossTeams([teamId as string]);
 
     // Primary metrics (directly stored/input) - show ALL even if null
     const primaryMetrics = [
@@ -602,11 +605,11 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
       { id: 'infrastructure_failures', name: 'Infrastructure Failures', value: kpi?.infrastructure_failures, unit: 'count', category: 'reliability', source: 'kpi_snapshots' },
       
       // Developer Metrics (team averages)
-      { id: 'avg_pr_merge_time', name: 'Avg PR Merge Time', value: roundOrNull(devMetrics?.avg_pr_merge_time, 2), unit: 'hours', category: 'developer', source: 'developer_metrics' },
-      { id: 'avg_code_review_time', name: 'Avg Code Review Time', value: roundOrNull(devMetrics?.avg_code_review_time, 2), unit: 'hours', category: 'developer', source: 'developer_metrics' },
-      { id: 'avg_focus_time', name: 'Avg Focus Time', value: roundOrNull(devMetrics?.avg_focus_time, 2), unit: 'hours/day', category: 'developer', source: 'developer_metrics' },
-      { id: 'avg_meeting_time', name: 'Avg Meeting Time', value: roundOrNull(devMetrics?.avg_meeting_time, 2), unit: 'hours/day', category: 'developer', source: 'developer_metrics' },
-      { id: 'avg_context_switches', name: 'Avg Context Switches', value: roundOrNull(devMetrics?.avg_context_switches, 1), unit: '/day', category: 'developer', source: 'developer_metrics' },
+      { id: 'avg_pr_merge_time', name: 'Avg PR Merge Time', value: devAvg.prMergeHours, unit: 'hours', category: 'developer', source: 'developer_metrics', ...devPrivacy },
+      { id: 'avg_code_review_time', name: 'Avg Code Review Time', value: devAvg.reviewHours, unit: 'hours', category: 'developer', source: 'developer_metrics', ...devPrivacy },
+      { id: 'avg_focus_time', name: 'Avg Focus Time', value: devAvg.focusHours, unit: 'hours/day', category: 'developer', source: 'developer_metrics', ...devPrivacy },
+      { id: 'avg_meeting_time', name: 'Avg Meeting Time', value: devAvg.meetingHours, unit: 'hours/day', category: 'developer', source: 'developer_metrics', ...devPrivacy },
+      { id: 'avg_context_switches', name: 'Avg Context Switches', value: devAvg.contextSwitches, unit: '/day', category: 'developer', source: 'developer_metrics', ...devPrivacy },
       
       // Pipeline Metrics
       { id: 'pipeline_stages_count', name: 'Pipeline Stages', value: pipelineMetrics?.total_stages, unit: 'count', category: 'pipeline', source: 'pipeline_stages' },
@@ -628,16 +631,14 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
     // and the stored snapshot value is returned alongside for transparency.
     const qa = computeQaScore(kpi);
 
-    // Workload balance (derived) average, 0–100; null when nobody has a value
-    const avgHappiness = toNum(devMetrics?.avg_happiness_score);
+    // Workload balance (derived) average, 0–100; null when suppressed or nobody has a value
+    const avgHappiness = devAvg.workloadBalance;
 
-    // Burnout risk calculation (requires all three team averages)
-    const focusTime = toNum(devMetrics?.avg_focus_time);
-    const meetingTime = toNum(devMetrics?.avg_meeting_time);
-    const contextSwitches = toNum(devMetrics?.avg_context_switches);
-    const burnoutRisk = burnoutRiskLabel(computeBurnoutRisk({
-      focus_time_hours: focusTime, meeting_time_hours: meetingTime, context_switches_per_day: contextSwitches
-    }));
+    // Burnout risk of the team averages (shared rule; 'Unknown' when the averages are not shown)
+    const focusTime = devAvg.focusHours;
+    const meetingTime = devAvg.meetingHours;
+    const contextSwitches = devAvg.contextSwitches;
+    const burnoutRisk = devSummary.burnoutOfAverages;
     const pipelineSuccess = toNum(pipelineMetrics?.avg_success_rate);
     const totalDebtItems = Number(debtSummary?.total_items ?? 0);
     const openDebtItems = Number(debtSummary?.open_items ?? 0);
@@ -688,9 +689,21 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
         value: avgHappiness === null ? null : Number(avgHappiness.toFixed(1)),
         unit: '/100',
         category: 'composite',
-        formula: 'AVG(happiness_score) over the team’s developers with a recorded value (0–100). happiness_score = workload balance calculated from focus, meetings, context switches, PR and review times; not a survey score',
-        components: { avg_happiness_score: avgHappiness, developer_count: Number(devMetrics?.developer_count ?? 0) },
-        source: 'calculated from developer_metrics'
+        formula: `AVG(happiness_score) over the team’s contributing developers (0–100). happiness_score = workload balance calculated from focus, meetings, context switches, PR and review times; a workload signal, not a survey and not wellbeing. ${K_ANONYMITY_RULE}`,
+        components: { avg_happiness_score: avgHappiness, developer_count: devSummary.privacy.contributors },
+        source: 'calculated from developer_metrics',
+        privacy: devSummary.privacy
+      },
+      {
+        id: 'wellbeing_survey',
+        name: 'Wellbeing (survey)',
+        value: wellbeing.value,
+        unit: '/100',
+        category: 'composite',
+        formula: WELLBEING_FORMULA,
+        components: { responses: wellbeing.teamsReporting ? wellbeing.responses : null, latest_period_shown: wellbeing.teamsReporting > 0 },
+        source: 'calculated from pulse_responses (anonymous)',
+        privacy: { suppressed: wellbeing.teamsSuppressed > 0, contributors: wellbeing.teamsReporting ? wellbeing.responses : null, reason: wellbeing.teamsSuppressed > 0 ? SUPPRESSED_TEXT : null, minContributors: K_ANONYMITY_MIN }
       },
       {
         id: 'team_burnout_risk',
@@ -698,9 +711,10 @@ router.get('/team/:teamId/all', authenticateToken, async (req: AuthRequest, res)
         value: burnoutRisk,
         unit: 'level',
         category: 'composite',
-        formula: BURNOUT_DEFINITION,
+        formula: `${BURNOUT_DEFINITION} Applied to the team averages. ${K_ANONYMITY_RULE}`,
         components: { avg_focus_time: focusTime, avg_meeting_time: meetingTime, avg_context_switches: contextSwitches },
-        source: 'calculated from developer_metrics'
+        source: 'calculated from developer_metrics',
+        privacy: devSummary.privacy
       },
       {
         id: 'pipeline_health',
