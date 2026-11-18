@@ -4,9 +4,24 @@
  */
 import { K_ANONYMITY_MIN } from './privacy';
 
-export type PulseCadence = 'weekly' | 'biweekly';
-export const PULSE_CADENCES: PulseCadence[] = ['weekly', 'biweekly'];
-export const CADENCE_DAYS: Record<PulseCadence, number> = { weekly: 7, biweekly: 14 };
+/**
+ * How often a team is asked: every week or two weeks (whole days counted from the cadence's
+ * start), every calendar month or every calendar quarter (Jan-Mar, Apr-Jun, Jul-Sep, Oct-Dec).
+ */
+export type PulseCadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+export const PULSE_CADENCES: PulseCadence[] = ['weekly', 'biweekly', 'monthly', 'quarterly'];
+/** Fixed-length cadences (days). Monthly and quarterly follow the calendar. */
+export const CADENCE_DAYS: Record<'weekly' | 'biweekly', number> = { weekly: 7, biweekly: 14 };
+/** Labels (UI and e-mails). */
+export const CADENCE_LABELS: Record<PulseCadence, string> = {
+  weekly: 'Every week', biweekly: 'Every two weeks', monthly: 'Every month', quarterly: 'Every three months',
+};
+/** Calendar months per period of a calendar cadence. */
+const CALENDAR_MONTHS: Partial<Record<PulseCadence, number>> = { monthly: 1, quarterly: 3 };
+/** A first calendar period shorter than this (days) runs on to the end of the following month / quarter. */
+export const MIN_FIRST_PERIOD_DAYS = 7;
+/** Longest period (days, a quarter) — for history windows. */
+export const MAX_PERIOD_DAYS = 92;
 export const DEFAULT_CADENCE: PulseCadence = 'biweekly';
 /** Monday; periods of teams without a cadence row are counted from here. */
 export const DEFAULT_ANCHOR = '2026-01-05';
@@ -54,13 +69,74 @@ export function cadenceAt(rows: CadenceRow[], day: string): CadenceRow {
   return best ?? { cadence: DEFAULT_CADENCE, effective_from: DEFAULT_ANCHOR };
 }
 
-/** The period containing `day`: [start, end) with end exclusive. */
+export const isCalendarCadence = (c: PulseCadence) => CALENDAR_MONTHS[c] !== undefined;
+
+/** First day of the calendar month / quarter (months = 1 / 3) containing `day`. */
+export function calendarUnitStart(day: string, months: number): string {
+  const y = Number(day.slice(0, 4));
+  const m = Number(day.slice(5, 7)) - 1;
+  const um = m - (m % months);
+  return `${y}-${String(um + 1).padStart(2, '0')}-01`;
+}
+
+/** The first of the month `n` months after the first-of-month `first`. */
+export function addMonths(first: string, n: number): string {
+  const y = Number(first.slice(0, 4));
+  const m = Number(first.slice(5, 7)) - 1 + n;
+  const yy = y + Math.floor(m / 12);
+  const mm = ((m % 12) + 12) % 12;
+  return `${yy}-${String(mm + 1).padStart(2, '0')}-01`;
+}
+
+/** The first calendar boundary (month / quarter start) strictly after `day`. */
+export function nextCalendarBoundary(day: string, months: number): string {
+  return addMonths(calendarUnitStart(day, months), months);
+}
+
+/**
+ * The period containing `day`: [start, end) with end exclusive.
+ *   weekly / biweekly: blocks of 7 / 14 days counted from the cadence row's effective_from;
+ *   monthly / quarterly: calendar months / quarters. When the row starts inside a month or
+ *   quarter (a change takes effect when the running period ends), the first period runs from
+ *   effective_from to the end of that month / quarter, or, if that leaves fewer than
+ *   MIN_FIRST_PERIOD_DAYS days, to the end of the following one.
+ * A period never starts before its row's effective_from.
+ */
 export function periodFor(rows: CadenceRow[], day: string): PulsePeriod {
   const c = cadenceAt(rows, day);
-  const len = CADENCE_DAYS[c.cadence];
+  const months = CALENDAR_MONTHS[c.cadence];
+  if (months !== undefined) {
+    const from = c.effective_from;
+    let firstEnd = nextCalendarBoundary(from, months);
+    if (dayNum(firstEnd) - dayNum(from) < MIN_FIRST_PERIOD_DAYS) firstEnd = addMonths(firstEnd, months);
+    if (day < firstEnd) return { start: from, end: firstEnd, cadence: c.cadence };
+    const start = calendarUnitStart(day, months);
+    return { start, end: addMonths(start, months), cadence: c.cadence };
+  }
+  const len = CADENCE_DAYS[c.cadence as 'weekly' | 'biweekly'];
   const k = Math.floor((dayNum(day) - dayNum(c.effective_from)) / len);
   const start = dayNum(c.effective_from) + k * len;
   return { start: dayStr(start), end: dayStr(start + len), cadence: c.cadence };
+}
+
+/** Length of a period in days. */
+export const periodDays = (p: { start: string; end: string }) => dayNum(p.end) - dayNum(p.start);
+
+/**
+ * What a cadence change does (pure): the change takes effect when the running period ends, so
+ * the running period keeps its length. Asking for the cadence in force cancels a waiting change.
+ * Returns the row to write (null = none; any waiting row is always replaced).
+ */
+export function planCadenceChange(rows: CadenceRow[], today: string, cadence: PulseCadence):
+  { current: PulseCadence; insert: CadenceRow | null } {
+  const now = cadenceAt(rows, today);
+  if (cadence === now.cadence) return { current: now.cadence, insert: null };
+  return { current: now.cadence, insert: { cadence, effective_from: periodFor(rows, today).end } };
+}
+
+/** The period after the one containing `day` (with the rows known now, waiting changes included). */
+export function nextPeriod(rows: CadenceRow[], day: string): PulsePeriod {
+  return periodFor(rows, periodFor(rows, day).end);
 }
 
 /** The period before the one containing `day`. */

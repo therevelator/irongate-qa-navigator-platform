@@ -378,7 +378,11 @@ describe('Pulse survey: access and answering', () => {
     if (!up) return;
     for (const who of ['priv-admin', 'priv-mgr', 'priv-lead', 'priv-a1']) {
       const res = await get(`/api/pulse/teams/${A}`, c[who]);
-      const text = JSON.stringify(res.body);
+      // Senders (lead, managers, admins) get the members NOT YET E-MAILED the survey: here every
+      // member, whether they answered or not, so it is not a list of respondents.
+      const { sending, ...rest } = res.body;
+      if (sending) expect(sending.notSent.map((m: any) => m.id).sort()).toEqual(['priv-a1', 'priv-a2', 'priv-a3', 'priv-a4', 'priv-lead', 'priv-viewer']);
+      const text = JSON.stringify(rest);
       for (const uid of ['priv-a1', 'priv-a2', 'priv-viewer']) expect(text).not.toContain(uid);
       expect(text).not.toContain('Good sprint'); // running-period comment
       expect(res.body.periods.some((p: any) => p.start === res.body.currentPeriod.start)).toBe(false);
@@ -461,16 +465,19 @@ describe('Pulse survey: results with at least 3 responses', () => {
 });
 
 describe('Pulse survey: cadence', () => {
-  it('PULSE-010: lead, manager and admin may set the cadence; it starts with the next period; others get 403', async () => {
+  it('PULSE-010: managers (QA manager of the department) and admins set the cadence, not the lead; it starts with the next period; others get 403', async () => {
     if (!up) return;
     const cur = periodFor([], today);
+    // Managers decide how often the team is asked (since migration 20261122200000); the lead may not.
+    expect((await put(`/api/pulse/teams/${A}/cadence`, c['priv-lead'], { cadence: 'weekly' })).status).toBe(403);
+    expect((await get(`/api/pulse/teams/${A}`, c['priv-lead'])).body.canSetCadence).toBe(false);
     expect((await put(`/api/pulse/teams/${A}/cadence`, c['priv-a1'], { cadence: 'weekly' })).status).toBe(403);
     expect((await put(`/api/pulse/teams/${A}/cadence`, c['priv-viewer'], { cadence: 'weekly' })).status).toBe(403);
     expect((await put(`/api/pulse/teams/${A}/cadence`, c['priv-mgr2'], { cadence: 'weekly' })).status).toBe(403);
     expect((await put(`/api/pulse/teams/${A}/cadence`, c.foreign, { cadence: 'weekly' })).status).toBe(403);
-    expect((await put(`/api/pulse/teams/${A}/cadence`, c['priv-lead'], { cadence: 'daily' })).status).toBe(400);
+    expect((await put(`/api/pulse/teams/${A}/cadence`, c['priv-mgr'], { cadence: 'daily' })).status).toBe(400);
 
-    const res = await put(`/api/pulse/teams/${A}/cadence`, c['priv-lead'], { cadence: 'weekly' });
+    const res = await put(`/api/pulse/teams/${A}/cadence`, c['priv-mgr'], { cadence: 'weekly' });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({ cadence: 'biweekly', pendingCadence: { cadence: 'weekly', from: cur.end } });
     const st = await get(`/api/pulse/teams/${A}`, c['priv-lead']);

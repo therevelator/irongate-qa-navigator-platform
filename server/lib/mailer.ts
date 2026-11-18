@@ -8,8 +8,11 @@
  *          and the caller gets delivered: false, so the UI shows the link to copy instead.
  *          A message is never dropped silently.
  *
- * setMailerForTests() swaps the transport (unit tests).
+ * setMailerForTests() swaps the transport (unit tests). MAIL_CAPTURE_FILE (ignored when
+ * NODE_ENV=production): the log channel also appends each message as one JSON line to that file,
+ * so end-to-end tests can follow links; delivery is still reported as not delivered.
  */
+import { appendFileSync } from 'fs';
 
 export interface MailMessage {
   to: string;
@@ -83,6 +86,10 @@ export const logMailer: Mailer = {
     const dev = process.env.NODE_ENV !== 'production';
     // Links carry one-time tokens: only printed in development.
     console.log(`[mailer] SMTP not configured; email to ${message.to} not sent: "${message.subject}"${dev ? `\n${message.text}` : ''}`);
+    const capture = process.env.MAIL_CAPTURE_FILE;
+    if (capture && dev) {
+      try { appendFileSync(capture, `${JSON.stringify({ to: message.to, subject: message.subject, text: message.text })}\n`); } catch { /* test aid only */ }
+    }
     return { delivered: false, channel: 'log', error: 'Email is not configured on this server (SMTP_HOST is not set). Copy the link and send it yourself.' };
   },
 };

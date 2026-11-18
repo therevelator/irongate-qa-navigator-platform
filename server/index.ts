@@ -31,6 +31,7 @@ import actionsRoutes from './routes/actions';
 import './jobs/intervalSync'; // Interval-based metric sync
 import './jobs/analyticsSync'; // Analytics data sync
 import './jobs/alertsCron'; // Alert evaluation, notification outbox, weekly digest
+import './jobs/pulseCron'; // Automatic wellbeing pulse e-mail per team cadence
 
 const app = express();
 const PORT = process.env.PORT || 3000;

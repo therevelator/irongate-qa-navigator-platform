@@ -460,7 +460,19 @@ export function canViewPulseComments(actor: PolicyActor, team: ScopeTeam): boole
   return canViewIndividualDevelopers(actor, team);
 }
 
-/** May the actor set how often the team is asked (weekly / biweekly)? The team's lead, its department's QA managers, super_admin. */
+/**
+ * May the actor set how often the team is asked (every week / two weeks / month / three months)
+ * and whether it is e-mailed automatically? Managers decide: the QA managers of the team's
+ * department and super_admin. Team leads do not (they can still send the survey).
+ */
 export function canSetPulseCadence(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
-  return canWriteTeamData(actor, team);
+  return canManageTeam(actor, team);
+}
+
+/**
+ * May the actor e-mail the survey (and reminders) to the team's members? Whoever may see the
+ * team's results and is its lead, a QA manager of its department or super_admin.
+ */
+export function canSendPulseSurvey(actor: PolicyActor, team: ScopeTeam): boolean {
+  return canViewPulseResults(actor, team) && canWriteTeamData(actor, team);
 }
