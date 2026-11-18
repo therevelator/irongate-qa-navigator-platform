@@ -406,6 +406,19 @@ export function canCompareTeams(actor: PolicyActor, teams: ScopeTeam[]): boolean
   return teams.length > 0 && teams.every((t) => canViewTeamAnalytics(actor, t));
 }
 
+/* ------------------------------------------------------------------------------------------
+ * Revenue impact roll-up
+ * ---------------------------------------------------------------------------------------- */
+
+/**
+ * May the actor see the revenue impact roll-up (sum of team figures)? Super admins (company) and
+ * QA managers (their departments); the teams summed are those of analyticsTeamsInScope.
+ */
+export function canViewRevenueRollup(actor: PolicyActor): boolean {
+  const level = analyticsScopeLevelOf(actor);
+  return level === 'company' || level === 'department';
+}
+
 export interface SavedViewRef {
   owner_id: string;
   shared: boolean;
