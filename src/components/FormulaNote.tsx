@@ -9,16 +9,18 @@ import { formatAsOf } from '../data/advancedFeatures';
 
 export type FormulaNoteRow = [label: string, value: React.ReactNode] | null | false | undefined;
 
-export const FormulaNote: React.FC<{ rows: FormulaNoteRow[]; className?: string }> = ({ rows, className }) => (
+/** Definition list in small print. `stacked` puts each label above its value (narrow tiles). */
+export const FormulaNote: React.FC<{ rows: FormulaNoteRow[]; className?: string; stacked?: boolean }> = ({ rows, className, stacked }) => (
   <dl
     className={cx(
-      'grid grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 border-l-2 border-slate-200 pl-3 text-[11px] leading-snug text-slate-500 dark:border-slate-700 dark:text-slate-400',
+      'grid border-l-2 border-slate-200 pl-3 text-[11px] leading-snug text-slate-500 dark:border-slate-700 dark:text-slate-400',
+      stacked ? 'grid-cols-1 gap-y-0.5' : 'grid-cols-[5.5rem_minmax(0,1fr)] gap-x-3 gap-y-1',
       className,
     )}
   >
     {rows.filter((r): r is [string, React.ReactNode] => Boolean(r)).map(([label, value]) => (
       <React.Fragment key={label}>
-        <dt className="font-medium text-slate-600 dark:text-slate-300">{label}</dt>
+        <dt className={cx('font-medium text-slate-600 dark:text-slate-300', stacked && 'mt-1 first:mt-0')}>{label}</dt>
         <dd className="min-w-0 break-words">{value}</dd>
       </React.Fragment>
     ))}

@@ -4,7 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import API_URL from '../config/api';
-import { METRICS_CONFIG, getMetricStatus, metricTargetText } from '../config/metricsConfig';
+import { METRICS_CONFIG, KPI_TARGETS, getMetricStatus, metricTargetText } from '../config/metricsConfig';
 import type { MetricsConfig } from '../config/metricsConfig';
 import { Page, PageIntro, Badge, buttonClass, cx } from './ui';
 import {
@@ -17,6 +17,21 @@ import {
   formatAsOf,
 } from '../data/advancedFeatures';
 import type { BurnoutRisk, DeveloperInputs } from '../data/advancedFeatures';
+import {
+  BOTTLENECK_SCORE_FORMULA,
+  DDPS_FORMULA,
+  QA_SCORE_THRESHOLDS,
+  QA_SCORE_WEIGHTS,
+  TECH_DEBT_ROI_FORMULA,
+  TECH_DEBT_SCORE_FORMULA,
+  computeBottleneckScores,
+  computeDdps,
+  computeQaScore,
+  toNum,
+} from '../../server/lib/metricFormulas';
+import { useShowFormulas } from '../hooks/useShowFormulas';
+import { Code as Col, FormulaNote, FormulaSwitch, describeFieldSource } from './FormulaNote';
+import type { FieldSource, FormulaNoteRow } from './FormulaNote';
 
 // Mapping from metric ID to database field name
 const METRIC_DB_MAPPING: Record<string, string> = {
@@ -69,6 +84,7 @@ interface ExistingMetrics {
   mtbfHours?: number;
   systemAvailability?: number;
   infrastructureFailures?: number;
+  sizingAccuracy?: number | null;
 }
 
 interface MetricDefinition {
@@ -125,6 +141,11 @@ interface TechnicalDebtItem {
   downtime_minutes_monthly: number;
   revenue_impact_percent: number;
   sla_breaches_monthly: number;
+  status?: string;
+  // Provenance (GET /api/analytics/technical-debt)
+  source?: string | null;
+  manually_edited?: boolean;
+  updated_at?: string | null;
   // Calculated fields
   investment_cost?: number;
   monthly_cost_of_delay?: number;
@@ -143,6 +164,8 @@ interface PipelineStageItem {
   memory_usage: number;
   cost_per_run: number;
   bottleneck_score?: number;
+  manually_edited?: boolean;
+  updated_at?: string | null;
 }
 
 // Derived developer values use the shared definitions in src/data/advancedFeatures.ts
@@ -306,7 +329,7 @@ const METRICS: MetricDefinition[] = [
     name: 'Mean Time to Repair',
     category: 'speed',
     description: 'Time to restore service after incident (DORA metric)',
-    formula: 'Avg(resolved_date - detected_date)',
+    formula: 'Total repair time (hours) ÷ Number of incidents',
     inputs: [
       { id: 'totalRepairTime', label: 'Total Repair Time (hours)', type: 'number', placeholder: 'e.g., 24', min: 0 },
       { id: 'incidentCount', label: 'Number of Incidents', type: 'number', placeholder: 'e.g., 5', min: 1 }
@@ -341,7 +364,7 @@ const METRICS: MetricDefinition[] = [
     name: 'Sprint Velocity',
     category: 'agile',
     description: 'Story points completed per sprint',
-    formula: 'Sum(story_points) WHERE status=Done',
+    formula: 'Direct input: Sum(story_points) WHERE status = Done',
     inputs: [
       { id: 'completedPoints', label: 'Completed Story Points', type: 'number', placeholder: 'e.g., 45', min: 0 }
     ],
@@ -397,7 +420,7 @@ const METRICS: MetricDefinition[] = [
     name: 'Blocked Time',
     category: 'agile',
     description: 'Hours tickets spend blocked per sprint',
-    formula: 'Sum(unblock_time - block_time)',
+    formula: 'Direct input: Sum(unblock_time − block_time), in hours',
     inputs: [
       { id: 'blockedHours', label: 'Total Blocked Hours', type: 'number', placeholder: 'e.g., 12', min: 0 }
     ],
@@ -470,7 +493,7 @@ const METRICS: MetricDefinition[] = [
     name: 'Mean Time Between Failures',
     category: 'reliability',
     description: 'Average time system operates without failure',
-    formula: 'Total_operational_hours ÷ Failures',
+    formula: 'Total_operational_hours ÷ Failures (= operational hours when there are 0 failures)',
     inputs: [
       { id: 'operationalHours', label: 'Total Operational Hours', type: 'number', placeholder: 'e.g., 720', min: 0 },
       { id: 'failures', label: 'Number of Failures', type: 'number', placeholder: 'e.g., 3', min: 1 }
@@ -498,7 +521,7 @@ const METRICS: MetricDefinition[] = [
     name: 'Infrastructure Failures',
     category: 'reliability',
     description: 'Test failures from infrastructure issues',
-    formula: 'Count of infra-caused test failures',
+    formula: 'Direct input: Count of infra-caused test failures',
     inputs: [
       { id: 'infraFailures', label: 'Infrastructure Failure Count', type: 'number', placeholder: 'e.g., 3', min: 0 }
     ],
@@ -516,7 +539,111 @@ const CATEGORY_INFO = {
   reliability: { name: 'Reliability & Stability', short: 'R' }
 };
 
-// Quality level definitions for random data generation
+// ---------------------------------------------------------------------------
+// "Show formulas & data sources" (super admin demo aid): where each value is
+// stored and where it is used. Formulas come from the shared definitions above.
+// ---------------------------------------------------------------------------
+
+/** Metric id -> kpi_snapshots column written by POST /api/metrics/manual. */
+const METRIC_COLUMN: Record<string, string> = {
+  'test-coverage': 'test_coverage',
+  'flakiness-rate': 'test_flakiness_rate',
+  'defect-density': 'defect_density',
+  'defect-escape-rate': 'defect_escape_rate',
+  'code-quality-score': 'code_quality_score',
+  'build-time': 'avg_build_time_minutes',
+  'test-execution-time': 'test_execution_time_minutes',
+  'deployment-frequency': 'deployment_frequency_per_week',
+  'lead-time': 'lead_time_days',
+  'mttr': 'mttr_hours',
+  'parallel-efficiency': 'parallel_test_efficiency',
+  'sprint-velocity': 'sprint_velocity',
+  'sprint-commitment': 'sprint_commitment_rate',
+  'sprint-carryover': 'sprint_carryover',
+  'first-time-pass': 'first_time_pass_rate',
+  'blocked-time': 'blocked_time_hours',
+  'automation-coverage': 'automation_coverage',
+  'automation-roi': 'automation_roi',
+  'change-failure-rate': 'change_failure_rate',
+  'mtbf': 'mtbf_hours',
+  'availability': 'system_availability',
+  'infra-failures': 'infrastructure_failures',
+  'sizing-accuracy': 'sizing_accuracy',
+};
+
+/** Key of the stored value in ExistingMetrics (GET /api/teams/:id). */
+const storedKeyFor = (metricId: string): keyof ExistingMetrics | undefined =>
+  metricId === 'sizing-accuracy' ? 'sizingAccuracy' : (METRIC_DB_MAPPING[metricId] as keyof ExistingMetrics | undefined);
+
+const PAGE_OVERVIEW = 'Overview';
+const PAGE_TEAM_DETAIL = 'Team detail';
+const PAGE_RANKINGS = 'Team rankings';
+const PAGE_REPORTS = 'Reports';
+
+/** Pages that display each team KPI (besides this one). */
+const METRIC_SHOWN_ON: Record<string, string[]> = {
+  'test-coverage': [PAGE_OVERVIEW, PAGE_TEAM_DETAIL, PAGE_RANKINGS, PAGE_REPORTS],
+  'flakiness-rate': [PAGE_OVERVIEW, PAGE_TEAM_DETAIL, PAGE_RANKINGS, PAGE_REPORTS],
+  'defect-escape-rate': [PAGE_OVERVIEW, PAGE_TEAM_DETAIL, PAGE_RANKINGS, PAGE_REPORTS],
+  'automation-coverage': [PAGE_OVERVIEW, PAGE_TEAM_DETAIL, PAGE_RANKINGS, PAGE_REPORTS],
+  'deployment-frequency': [PAGE_OVERVIEW, PAGE_TEAM_DETAIL, PAGE_REPORTS],
+  'mttr': [PAGE_TEAM_DETAIL, PAGE_REPORTS],
+  'change-failure-rate': [PAGE_TEAM_DETAIL, PAGE_REPORTS],
+  'first-time-pass': [],
+};
+
+/** Columns checked against KPI_TARGETS by the Overview "needs attention" rule. */
+const ATTENTION_TARGET: Record<string, number> = {
+  test_coverage: KPI_TARGETS.coverage,
+  automation_coverage: KPI_TARGETS.automation,
+  test_flakiness_rate: KPI_TARGETS.flakiness,
+  defect_escape_rate: KPI_TARGETS.escapeRate,
+};
+
+const weightPct = (w: number) => `${Math.round(w * 100)}%`;
+
+function usedInText(metricId: string): string {
+  const col = METRIC_COLUMN[metricId];
+  const parts: string[] = [];
+  const w = (QA_SCORE_WEIGHTS as Record<string, number>)[col];
+  if (w !== undefined) parts.push(`QA score (weight ${weightPct(w)})`);
+  if (ATTENTION_TARGET[col] !== undefined) parts.push('Overview "needs attention" rule (KPI_TARGETS)');
+  const pages = METRIC_SHOWN_ON[metricId] ?? [PAGE_TEAM_DETAIL];
+  parts.push(pages.length ? `shown on ${pages.join(', ')}` : 'not shown on another page yet');
+  return parts.join(' · ');
+}
+
+const unitSuffix = (unit?: string) => (unit ? (unit.startsWith('%') || unit.startsWith('/') ? unit : ` ${unit}`) : '');
+
+/** "good ≥ 80%, warning ≥ 70%, below that critical" from METRICS_CONFIG. */
+function thresholdText(key: keyof MetricsConfig): string {
+  const c = METRICS_CONFIG[key];
+  const u = unitSuffix(c.unit);
+  return c.lowerIsBetter
+    ? `good ≤ ${c.good}${u}, warning ≤ ${c.warning}${u}, above that critical`
+    : `good ≥ ${c.good}${u}, warning ≥ ${c.warning}${u}, below that critical`;
+}
+
+const fmtNum = (v: number | null | undefined, digits = 2) =>
+  v === null || v === undefined || !Number.isFinite(v) ? '—' : Number(v.toFixed(digits)).toLocaleString('en-US');
+const fmtMoney = (v: number | null | undefined) =>
+  v === null || v === undefined || !Number.isFinite(v) ? '—' : `$${Math.round(v).toLocaleString('en-US')}`;
+
+const QA_INPUT_METRICS: Array<{ metricId: string; column: keyof typeof QA_SCORE_WEIGHTS; term: string }> = [
+  { metricId: 'test-coverage', column: 'test_coverage', term: 'Test Coverage' },
+  { metricId: 'defect-escape-rate', column: 'defect_escape_rate', term: '100 − Defect Escape Rate' },
+  { metricId: 'change-failure-rate', column: 'change_failure_rate', term: '100 − Change Failure Rate' },
+  { metricId: 'code-quality-score', column: 'code_quality_score', term: 'Code Quality Score' },
+];
+
+const FINANCIAL_LABELS: Record<string, string> = {
+  developer_hourly_rate: 'developer hourly rate',
+  support_ticket_cost: 'support ticket cost',
+  revenue_per_user_monthly: 'revenue per user per month',
+  downtime_cost_per_minute: 'downtime cost per minute',
+  sla_breach_penalty: 'SLA breach penalty',
+};
+
 const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const { user } = useAuth();
   const [teams, setTeams] = useState<Team[]>([]);
@@ -589,6 +716,16 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const [loadingBusinessImpact, setLoadingBusinessImpact] = useState(false);
   const [savingBusinessImpact, setSavingBusinessImpact] = useState(false);
 
+  // Formulas & data sources (super admin demo aid; preference shared app-wide).
+  const [showFormulasPref, setShowFormulas] = useShowFormulas();
+  const canShowFormulas = user?.role === 'super_admin';
+  const showFormulas = canShowFormulas && showFormulasPref;
+  const [fieldSources, setFieldSources] = useState<Record<string, FieldSource>>({});
+  const [teamDebtScore, setTeamDebtScore] = useState<number | null>(null);
+  const [financialDefaultsUsed, setFinancialDefaultsUsed] = useState<string[]>([]);
+  const [stagesSource, setStagesSource] = useState<'team' | 'company_default' | null>(null);
+  const [pipelineConfigIsDefault, setPipelineConfigIsDefault] = useState(false);
+
   useEffect(() => {
     fetchTeams();
   }, []);
@@ -655,11 +792,14 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
           setExistingMetrics({
             qaScore: team.qaScore,
             snapshotDate: team.kpiData.snapshotDate,
-            ...team.kpiData
+            ...team.kpiData,
+            sizingAccuracy: team.taskSizingAccuracy ?? null
           });
         } else {
           setExistingMetrics(null);
         }
+        setFieldSources(team?.kpiFieldSources && typeof team.kpiFieldSources === 'object' ? team.kpiFieldSources : {});
+        setTeamDebtScore(toNum(team?.technicalDebtScore));
         
         // Also fetch team members
         if (team?.members) {
@@ -682,6 +822,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     } catch (error) {
       console.error('Error fetching existing metrics:', error);
       setExistingMetrics(null);
+      setFieldSources({});
+      setTeamDebtScore(null);
     } finally {
       setLoadingMetrics(false);
     }
@@ -700,6 +842,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         if (data.financial_config) {
           setFinancialConfig(data.financial_config);
         }
+        setFinancialDefaultsUsed(Array.isArray(data.financial_config_defaults_used) ? data.financial_config_defaults_used : []);
       }
     } catch (error) {
       console.error('Error fetching technical debt:', error);
@@ -727,9 +870,13 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
           cpu_usage: s.resource_usage?.cpu || 0,
           memory_usage: s.resource_usage?.memory || 0,
           cost_per_run: s.resource_usage?.cost || 0,
-          bottleneck_score: s.bottleneck_score || 0
+          bottleneck_score: s.bottleneck_score || 0,
+          manually_edited: s.manually_edited === true,
+          updated_at: s.updated_at ?? null
         }));
         setPipelineStages(stages);
+        setStagesSource(data.stages_source === 'team' || data.stages_source === 'company_default' ? data.stages_source : null);
+        setPipelineConfigIsDefault(data.config?.is_default === true);
         
         // Also get config from response
         if (data.config) {
@@ -1282,33 +1429,11 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     setSaving(true);
 
     try {
-      // Map calculated values to database column names
-      const metricsPayload = {
-        teamId: selectedTeamId,
-        test_coverage: calculatedValues['test-coverage'],
-        test_flakiness_rate: calculatedValues['flakiness-rate'],
-        defect_density: calculatedValues['defect-density'],
-        defect_escape_rate: calculatedValues['defect-escape-rate'],
-        code_quality_score: calculatedValues['code-quality-score'],
-        avg_build_time_minutes: calculatedValues['build-time'],
-        test_execution_time_minutes: calculatedValues['test-execution-time'],
-        deployment_frequency_per_week: calculatedValues['deployment-frequency'],
-        lead_time_days: calculatedValues['lead-time'],
-        mttr_hours: calculatedValues['mttr'],
-        parallel_test_efficiency: calculatedValues['parallel-efficiency'],
-        sprint_velocity: calculatedValues['sprint-velocity'],
-        sprint_commitment_rate: calculatedValues['sprint-commitment'],
-        sprint_carryover: calculatedValues['sprint-carryover'],
-        first_time_pass_rate: calculatedValues['first-time-pass'],
-        blocked_time_hours: calculatedValues['blocked-time'],
-        automation_coverage: calculatedValues['automation-coverage'],
-        automation_roi: calculatedValues['automation-roi'],
-        change_failure_rate: calculatedValues['change-failure-rate'],
-        mtbf_hours: calculatedValues['mtbf'],
-        system_availability: calculatedValues['availability'],
-        infrastructure_failures: calculatedValues['infra-failures'],
-        sizing_accuracy: calculatedValues['sizing-accuracy']
-      };
+      // Map calculated values to database column names (METRIC_COLUMN)
+      const metricsPayload: Record<string, unknown> = { teamId: selectedTeamId };
+      for (const [metricId, column] of Object.entries(METRIC_COLUMN)) {
+        metricsPayload[column] = calculatedValues[metricId];
+      }
 
       const response = await fetch(`${API_URL}/metrics/manual`, {
         method: 'POST',
@@ -1367,6 +1492,53 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     return 'text-slate-700 dark:text-slate-300';
   };
 
+  // ---- Formulas & data sources notes (shown when showFormulas is on) ----
+  const snapshotDate = existingMetrics?.snapshotDate ?? null;
+  const storedValue = (metricId: string): number | null => {
+    const key = storedKeyFor(metricId);
+    return key && existingMetrics ? toNum(existingMetrics[key] as number | null | undefined) : null;
+  };
+  const muted = 'text-slate-400 dark:text-slate-500';
+  const targetNode = (metric: MetricDefinition): React.ReactNode => {
+    const key = METRIC_DB_MAPPING[metric.id];
+    return key && key in METRICS_CONFIG
+      ? <>{thresholdText(key as keyof MetricsConfig)} <span className={muted}>(metricsConfig.{key})</span></>
+      : <>{metric.target} <span className={muted}>(set on this page; not colour-coded)</span></>;
+  };
+  const storedText = (metric: MetricDefinition) => {
+    const v = storedValue(metric.id);
+    return v === null ? '— (not recorded)' : `${Number(v.toFixed(3))}${metric.unit}`;
+  };
+  const kpiCardNoteRows = (metric: MetricDefinition): FormulaNoteRow[] => {
+    const column = METRIC_COLUMN[metric.id];
+    return [
+      ['Inputs', <>{metric.inputs.map(i => i.label).join(' · ')} <span className={muted}>(typed on this card; only the result is saved)</span></>],
+      ['Stored as', <><Col>kpi_snapshots.{column}</Col> via POST /api/metrics/manual, recorded with source "manual"</>],
+      ['Stored value', storedText(metric)],
+      ['Source', describeFieldSource(fieldSources[column], snapshotDate)],
+      ['Target', targetNode(metric)],
+      ['Used in', usedInText(metric.id)],
+    ];
+  };
+  const kpiTileNoteRows = (metric: MetricDefinition): FormulaNoteRow[] => [
+    ['Formula', metric.formula],
+    ['Stored as', <Col>kpi_snapshots.{METRIC_COLUMN[metric.id]}</Col>],
+    ['Source', describeFieldSource(fieldSources[METRIC_COLUMN[metric.id]], snapshotDate)],
+  ];
+  const storedQa = computeQaScore(Object.fromEntries(QA_INPUT_METRICS.map(q => [q.column, storedValue(q.metricId)])));
+
+  const DEV_INPUT_COLUMNS: Array<[string, string]> = [
+    ['PR Time', 'pr_merge_time_avg'],
+    ['Review Time', 'code_review_time_avg'],
+    ['Focus Time', 'focus_time_hours'],
+    ['Meetings', 'meeting_time_hours'],
+    ['Context Switches', 'context_switches_per_day'],
+  ];
+  const financialRate = (key: string) => (
+    <>{fmtMoney(financialConfig[key])} {FINANCIAL_LABELS[key]} <span className={muted}>({financialDefaultsUsed.includes(key) ? 'built-in default' : 'set in Parameters'})</span></>
+  );
+  const pipelineStats = computeBottleneckScores(pipelineStages.map(st => ({ duration: st.duration, success_rate: st.success_rate })));
+
   const groupedMetrics = METRICS.reduce((acc, metric) => {
     if (!acc[metric.category]) acc[metric.category] = [];
     acc[metric.category].push(metric);
@@ -1411,14 +1583,17 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
           title="Manual metrics"
           description="Enter raw data to calculate and save team, developer, technical-debt and pipeline metrics. Values saved here are recorded as manually entered."
           actions={
-            <button
-              onClick={handleSaveMetrics}
-              disabled={saving || Object.keys(calculatedValues).length === 0}
-              className={cx(buttonClass.primary, 'whitespace-nowrap')}
-            >
-              <Save className="w-4 h-4" />
-              {saving ? 'Saving…' : 'Save team metrics'}
-            </button>
+            <>
+              {canShowFormulas && <FormulaSwitch checked={showFormulas} onChange={setShowFormulas} />}
+              <button
+                onClick={handleSaveMetrics}
+                disabled={saving || Object.keys(calculatedValues).length === 0}
+                className={cx(buttonClass.primary, 'whitespace-nowrap')}
+              >
+                <Save className="w-4 h-4" />
+                {saving ? 'Saving…' : 'Save team metrics'}
+              </button>
+            </>
           }
         />
 
@@ -1429,6 +1604,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
             <p className="font-medium text-brand-700 dark:text-brand-300 mb-1">When to use manual entry</p>
             <p>For values that are not sent through the KPI ingestion API (POST /api/ingest/kpis). Enter the raw values for each
             formula; the calculated results are saved as manual entries and shown on the dashboard.</p>
+            {showFormulas && (
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                Formulas &amp; data sources are on. Under each value: the formula used by the code, its inputs, the database column it is stored in,
+                the source of the stored value (from <Col>kpi_snapshots.field_sources</Col> of the team's latest snapshot), the target it is judged against and where it is used.
+              </p>
+            )}
           </div>
         </div>
 
@@ -1487,11 +1668,36 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/50 rounded px-3 py-2 font-mono">
                       <span className="text-brand-700 dark:text-brand-300">Formula:</span> {QA_SCORE_FORMULA}
                     </div>
+                    {showFormulas && (
+                      <FormulaNote
+                        className="mt-3"
+                        rows={[
+                          ['Inputs', (
+                            <ul className="space-y-0.5">
+                              {QA_INPUT_METRICS.map(q => {
+                                const metric = METRICS.find(m => m.id === q.metricId)!;
+                                return (
+                                  <li key={q.column}>
+                                    {q.term} × {QA_SCORE_WEIGHTS[q.column].toFixed(2)}: stored {storedText(metric)} · <Col>kpi_snapshots.{q.column}</Col> · {describeFieldSource(fieldSources[q.column], snapshotDate)}
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )],
+                          ['Check', storedQa.score === null
+                            ? `computeQaScore() on the stored inputs gives no score (missing: ${storedQa.missingInputs.join(', ') || 'none'})`
+                            : `computeQaScore() on the stored inputs = ${storedQa.score} (weights recorded: ${weightPct(storedQa.weightCoverage)}${storedQa.missingInputs.length ? `; missing: ${storedQa.missingInputs.join(', ')}` : ''})`],
+                          ['Stored as', <><Col>kpi_snapshots.qa_score</Col> and <Col>kpi_snapshots.status</Col>, set by the database trigger <Col>kpi_snapshots_qa_score</Col> whenever an input is saved (same formula as computeQaScore in server/lib/metricFormulas.ts)</>],
+                          ['Thresholds', `good ≥ ${QA_SCORE_THRESHOLDS.good}, warning ≥ ${QA_SCORE_THRESHOLDS.warning}, below that critical (QA_SCORE_THRESHOLDS)`],
+                          ['Used in', `shown on ${PAGE_OVERVIEW}, ${PAGE_TEAM_DETAIL}, ${PAGE_RANKINGS}, ${PAGE_REPORTS} · Overview "needs attention" when below ${QA_SCORE_THRESHOLDS.warning}`],
+                        ]}
+                      />
+                    )}
                   </div>
                 )}
                 
                 {/* Metrics Grid - Only show metrics that have values */}
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                <div className={showFormulas ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3' : 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3'}>
                   {METRICS.map(metric => {
                     const dbField = METRIC_DB_MAPPING[metric.id] as keyof ExistingMetrics;
                     const value = existingMetrics[dbField];
@@ -1507,6 +1713,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         <div className={`text-lg font-bold ${getStatusColor(metric.id, Number(value))}`}>
                           {typeof value === 'number' ? value.toFixed(2) : value}{metric.unit}
                         </div>
+                        {showFormulas && <FormulaNote stacked className="mt-2" rows={kpiTileNoteRows(metric)} />}
                       </div>
                     );
                   }).filter(Boolean)}
@@ -1539,7 +1746,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
               <CheckCircle className="w-5 h-5 text-green-700 dark:text-green-400" />
               Calculated Metrics ({Object.keys(calculatedValues).length})
             </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+            <div className={showFormulas ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3' : 'grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3'}>
               {Object.entries(calculatedValues).map(([metricId, value]) => {
                 const metric = METRICS.find(m => m.id === metricId);
                 if (!metric) return null;
@@ -1549,6 +1756,17 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                     <div className={`text-lg font-bold ${getStatusColor(metricId, value)}`}>
                       {value.toFixed(2)}{metric.unit}
                     </div>
+                    {showFormulas && (
+                      <FormulaNote
+                        stacked
+                        className="mt-2"
+                        rows={[
+                          ['Formula', metric.formula],
+                          ['Inputs', metric.inputs.map(i => `${i.label} = ${metricInputs[metricId]?.[i.id] ?? '—'}`).join(' · ')],
+                          ['Saves to', <><Col>kpi_snapshots.{METRIC_COLUMN[metricId]}</Col> (source "manual")</>],
+                        ]}
+                      />
+                    )}
                   </div>
                 );
               })}
@@ -1634,6 +1852,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       <div className="mt-3 text-xs text-slate-500">
                         Target: <span className="text-green-700 dark:text-green-400">{metric.target}</span>
                       </div>
+                      {showFormulas && <FormulaNote className="mt-3" rows={kpiCardNoteRows(metric)} />}
                     </div>
                   ))}
                 </div>
@@ -1676,6 +1895,18 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       Enter productivity metrics for each developer. <strong>Workload balance (derived)</strong> and <strong>Burnout risk</strong> are calculated from these inputs — they are not survey results. Workload balance = {WORKLOAD_BALANCE_FORMULA}. Burnout risk: {BURNOUT_DEFINITION}
                     </p>
                   </div>
+                  {showFormulas && (
+                    <FormulaNote
+                      className="mt-3"
+                      rows={[
+                        ['Inputs', <>{DEV_INPUT_COLUMNS.map(([label, col], i) => <React.Fragment key={col}>{i > 0 && ' · '}{label} → <Col>developer_metrics.{col}</Col></React.Fragment>)}</>],
+                        ['Source', 'typed on this form and saved by POST /api/metrics/developer (one row per team and developer, overwritten on each save; no per-field source is recorded). Stored values are not loaded back into this form.'],
+                        ['Workload', <>stored as <Col>developer_metrics.happiness_score</Col> · target {thresholdText('happinessScore')} <span className={muted}>(metricsConfig.happinessScore)</span> · shown on Developer productivity, Team detail, Users</>],
+                        ['Burnout', 'not stored: computed on read by computeBurnoutRisk() from focus, meetings and context switches · shown on Developer productivity, Team detail'],
+                        ['DDPS', <>{DDPS_FORMULA} Not stored: computed on read by computeDdps() · shown on Developer productivity.</>],
+                      ]}
+                    />
+                  )}
                 </div>
 
                 {teamMembers.map(member => {
@@ -1780,6 +2011,25 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           />
                         </div>
                       </div>
+                      {showFormulas && (() => {
+                        const d = toDeveloperInputs(metrics as DeveloperMetricsInput);
+                        const inputsText = `focus ${d.focus_time_hours} h, meetings ${d.meeting_time_hours} h, context switches ${d.context_switches_per_day}/day, PR ${d.pr_merge_time_avg} h, review ${d.code_review_time_avg} h`;
+                        const ddps = calculated ? computeDdps(d).score : null;
+                        return (
+                          <FormulaNote
+                            className="mt-3"
+                            rows={[
+                              ['Workload', calculated
+                                ? <>{WORKLOAD_BALANCE_FORMULA} = <strong className="font-semibold text-slate-700 dark:text-slate-200">{calculated.happinessScore.toFixed(0)}</strong> from {inputsText} → <Col>developer_metrics.happiness_score</Col></>
+                                : '— (calculated once focus or meeting time is entered; formula in the section note above)'],
+                              ['Burnout', calculated
+                                ? <>{BURNOUT_DEFINITION} Here: focus {d.focus_time_hours} h, meetings {d.meeting_time_hours} h, switches {d.context_switches_per_day}/day → <strong className="font-semibold text-slate-700 dark:text-slate-200">{calculated.burnoutRisk}</strong> (not stored)</>
+                                : '— (calculated once focus or meeting time is entered)'],
+                              ['DDPS', ddps === null ? '— (formula in the section note above)' : <>computeDdps() of these inputs = <strong className="font-semibold text-slate-700 dark:text-slate-200">{ddps}</strong> (not stored; formula in the section note above)</>],
+                            ]}
+                          />
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -1834,6 +2084,18 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       Configure business impact metrics for each technical debt item. <strong>ROI</strong>, <strong>Annual Savings</strong>, and <strong>Payback Period</strong> are calculated automatically based on financial settings.
                     </p>
                   </div>
+                  {showFormulas && (
+                    <FormulaNote
+                      className="mt-3"
+                      rows={[
+                        ['Formula', TECH_DEBT_ROI_FORMULA],
+                        ['Rates', <ul className="space-y-0.5">{Object.keys(FINANCIAL_LABELS).map(k => <li key={k}>{financialRate(k)}</li>)}</ul>],
+                        ['Computed', 'on read by GET /api/analytics/technical-debt (and live on this page as you type); ROI figures are not stored'],
+                        ['Team score', <>{TECH_DEBT_SCORE_FORMULA} This team: <strong className="font-semibold text-slate-700 dark:text-slate-200">{teamDebtScore === null ? '—' : `${teamDebtScore}/100`}</strong> · target {thresholdText('technicalDebtScore')} <span className={muted}>(metricsConfig.technicalDebtScore)</span> · computed on read from <Col>technical_debt.severity</Col> and <Col>status</Col> · shown on Team detail</>],
+                        ['Used in', 'Technical debt page (ROI, annual savings, payback)'],
+                      ]}
+                    />
+                  )}
                 </div>
 
                 {technicalDebtItems.map(item => {
@@ -1978,6 +2240,31 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           Payback period: <span className="text-green-700 dark:text-green-400 font-medium">{(item.payback_months ?? 0).toFixed(1)} months</span>
                         </div>
                       )}
+                      {showFormulas && (() => {
+                        const fc = financialConfig;
+                        const n = (v: number | null | undefined) => fmtNum(v ?? null, 2);
+                        // Unrounded monthly cost (same terms as calculateDebtROI) so the arithmetic reads exactly.
+                        const monthlyExact = (item.support_tickets_monthly || 0) * (fc.support_ticket_cost || 0)
+                          + (item.downtime_minutes_monthly || 0) * (fc.downtime_cost_per_minute || 0)
+                          + (item.affected_users || 0) * (fc.revenue_per_user_monthly || 0) * ((item.revenue_impact_percent || 0) / 100)
+                          + (item.sla_breaches_monthly || 0) * (fc.sla_breach_penalty || 0);
+                        const money2 = (v: number) => `$${v.toLocaleString('en-US', { minimumFractionDigits: Number.isInteger(v) ? 0 : 2, maximumFractionDigits: 2 })}`;
+                        const monthlyText = item.monthly_cost_of_delay == null ? '—' : money2(Math.round(monthlyExact * 100) / 100);
+                        return (
+                          <FormulaNote
+                            className="mt-3"
+                            rows={[
+                              ['Investment', `${n(item.estimated_effort_hours)} h × ${fmtMoney(fc.developer_hourly_rate)} = ${fmtMoney(item.investment_cost)}`],
+                              ['Monthly loss', `${n(item.support_tickets_monthly)} tickets × ${fmtMoney(fc.support_ticket_cost)} + ${n(item.downtime_minutes_monthly)} min × ${fmtMoney(fc.downtime_cost_per_minute)} + ${n(item.affected_users)} users × ${fmtMoney(fc.revenue_per_user_monthly)} × ${n(item.revenue_impact_percent)}% + ${n(item.sla_breaches_monthly)} breaches × ${fmtMoney(fc.sla_breach_penalty)} = ${monthlyText}`],
+                              ['Annual / ROI', `${monthlyText} × 12 = ${fmtMoney(item.annual_savings)}; ROI = (${fmtMoney(item.annual_savings)} − ${fmtMoney(item.investment_cost)}) ÷ ${fmtMoney(item.investment_cost)} × 100 = ${item.roi_percentage == null ? '—' : `${Math.round(item.roi_percentage).toLocaleString('en-US')}%`}`],
+                              ['Payback', `${fmtMoney(item.investment_cost)} ÷ ${monthlyText} = ${item.payback_months == null ? '—' : `${item.payback_months.toFixed(1)} months`}`],
+                              ['Stored as', <><Col>technical_debt.effort_hours</Col>, <Col>affected_users</Col>, <Col>support_tickets_monthly</Col>, <Col>downtime_minutes_monthly</Col>, <Col>revenue_impact_percent</Col>, <Col>sla_breaches_monthly</Col> (PUT /api/analytics/technical-debt/:id/impact)</>],
+                              ['Source', `item origin: ${item.source ? item.source : 'not recorded'} (technical_debt.source) · impact edited by hand: ${item.manually_edited ? 'yes' : 'no'}${formatAsOf(item.updated_at ?? null) ? ` · updated ${formatAsOf(item.updated_at ?? null)}` : ''}`],
+                              ['Colour', 'ROI > 100% green, > 0% amber, otherwise red (this page)'],
+                            ]}
+                          />
+                        );
+                      })()}
                     </div>
                   );
                 })}
@@ -2025,10 +2312,21 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                   <div className="flex items-start gap-2">
                     <Info className="w-4 h-4 text-brand-700 dark:text-brand-300 flex-shrink-0 mt-0.5" />
                     <p className="text-sm text-slate-700 dark:text-slate-300">
-                      Configure pipeline stage metrics. <strong>Bottleneck Score</strong> is calculated automatically: 
-                      <code className="text-xs bg-white dark:bg-slate-900 px-1 rounded ml-1">min(60, max(0, (z + 2) ÷ 4 × 60)) + (1 − success_rate ÷ 100) × 40</code>, where z = (duration − mean stage duration) ÷ standard deviation; capped at 100
+                      Configure pipeline stage metrics. <strong>Bottleneck Score</strong> is calculated automatically. {BOTTLENECK_SCORE_FORMULA}
                     </p>
                   </div>
+                  {showFormulas && (
+                    <FormulaNote
+                      className="mt-3"
+                      rows={[
+                        ['Statistics', `over the ${pipelineStats.stagesWithDuration} stages with a duration: mean ${fmtNum(pipelineStats.meanDuration, 1)} s, standard deviation ${fmtNum(pipelineStats.stdDev, 1)} s (values in the form)`],
+                        ['Stages', stagesSource === 'team' ? "this team's own stages (pipeline_stages.team_id = team)" : stagesSource === 'company_default' ? 'company default stages (pipeline_stages.team_id is empty): the team has none of its own' : 'not recorded'],
+                        ['Computed', 'on read by GET /api/analytics/pipeline-stages with computeBottleneckScores() (server/lib/metricFormulas.ts); the score is recalculated after saving'],
+                        ['Colour', 'score > 70 red, > 40 amber, otherwise green (this page)'],
+                        ['Used in', 'CI/CD pipeline page (bottleneck badges and stage details)'],
+                      ]}
+                    />
+                  )}
                 </div>
 
                 {/* Pipeline Configuration */}
@@ -2090,9 +2388,20 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       {savingPipelineConfig ? 'Saving...' : 'Save Config'}
                     </button>
                   </div>
+                  {showFormulas && (
+                    <FormulaNote
+                      className="mt-3"
+                      rows={[
+                        ['Time savings', <><Col>pipeline_config.time_savings_percent</Col> · CI/CD pipeline: time saving per stage = duration × {pipelineConfig.time_savings_percent}% ÷ 100</>],
+                        ['Cost savings', <><Col>pipeline_config.cost_savings_percent</Col> · CI/CD pipeline: cost saving per run = cost/run × {pipelineConfig.cost_savings_percent}% ÷ 100</>],
+                        ['Cost / minute', <><Col>pipeline_config.cost_per_minute</Col> · stored for the company; not used in a displayed calculation</>],
+                        ['Source', pipelineConfigIsDefault ? 'built-in default assumptions (no pipeline configuration saved for the company yet)' : 'pipeline configuration saved for the company (PUT /api/analytics/pipeline-config)'],
+                      ]}
+                    />
+                  )}
                 </div>
 
-                {pipelineStages.map(stage => (
+                {pipelineStages.map((stage, stageIndex) => (
                   <div key={stage.id} className="bg-slate-50 dark:bg-slate-800/40 rounded-lg p-5">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
@@ -2194,6 +2503,21 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         />
                       </div>
                     </div>
+                    {showFormulas && (() => {
+                      const r = pipelineStats.results[stageIndex];
+                      return (
+                        <FormulaNote
+                          className="mt-3"
+                          rows={[
+                            ['Calculation', r.score === null
+                              ? '— (needs duration and success rate)'
+                              : `z = (${fmtNum(stage.duration, 1)} − ${fmtNum(pipelineStats.meanDuration, 1)}) ÷ ${fmtNum(pipelineStats.stdDev, 1)} = ${fmtNum(r.z, 2)}; duration factor = ${fmtNum(r.durationFactor, 1)}; failure factor = (1 − ${fmtNum(stage.success_rate, 2)} ÷ 100) × 40 = ${fmtNum(r.failureFactor, 1)}; score = ${fmtNum(r.score, 1)} (values in the form)`],
+                            ['Stored as', <><Col>pipeline_stages.avg_duration_seconds</Col>, <Col>success_rate</Col> (score inputs); <Col>cpu_usage</Col>, <Col>memory_usage</Col>, <Col>cost_per_run</Col> (shown on CI/CD pipeline, not in the score)</>],
+                            ['Source', `${stagesSource === 'team' ? 'team stage' : stagesSource === 'company_default' ? 'company default stage' : 'stage'} · edited by hand: ${stage.manually_edited ? 'yes' : 'no'}${formatAsOf(stage.updated_at ?? null) ? ` · updated ${formatAsOf(stage.updated_at ?? null)}` : ''}`],
+                          ]}
+                        />
+                      );
+                    })()}
                   </div>
                 ))}
 
@@ -2248,6 +2572,16 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         {/* Business Impact Metrics Configuration */}
         <div className="space-y-4 mb-6">
           <h3 className="text-md font-semibold text-slate-900 dark:text-white">Impact Correlations</h3>
+          {showFormulas && (
+            <FormulaNote
+              rows={[
+                ['Formula', 'none: each value is entered directly (demo configuration), nothing is calculated here'],
+                ['Stored as', <><Col>business_impact_config.quality_score</Col>, <Col>revenue_impact</Col>, <Col>customer_satisfaction</Col> (NPS), <Col>correlation_strength</Col>, one row per team and <Col>metric_name</Col> (test_coverage, defect_escape_rate, code_quality_score)</>],
+                ['Source', 'manual configuration (POST /api/metrics/business-impact-config/:teamId); empty fields are not saved'],
+                ['Used in', 'Business impact page (served with source "manual_config")'],
+              ]}
+            />
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Test Coverage */}
             <div className="bg-white dark:bg-slate-900 rounded-lg p-4">
@@ -2413,6 +2747,15 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         {/* Historical Trends Configuration */}
         <div className="space-y-4 mb-6">
           <h3 className="text-md font-semibold text-slate-900 dark:text-white">Historical Trends (12 Months)</h3>
+          {showFormulas && (
+            <FormulaNote
+              rows={[
+                ['Formula', 'none: monthly values are entered directly (demo configuration)'],
+                ['Stored as', <><Col>business_impact_history.quality_score</Col>, <Col>revenue_impact</Col> ($K), <Col>customer_satisfaction</Col> (NPS), <Col>churn_rate</Col>, one row per team and <Col>month_year</Col></>],
+                ['Used in', 'Business impact page (historical trend)'],
+              ]}
+            />
+          )}
           <div className="overflow-x-auto">
             <table className="w-full bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
               <thead>
@@ -2498,6 +2841,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
             <div>
               <h2 className="text-lg font-semibold text-slate-900 dark:text-white">All Team Metrics (JSON)</h2>
               <p className="text-sm text-slate-500 dark:text-slate-400">View all primary and composite metrics with formulas</p>
+              {showFormulas && (
+                <FormulaNote
+                  className="mt-2"
+                  rows={[['Source', 'GET /api/metrics/team/:teamId/all: primary metrics from the latest kpi_snapshots row, composite metrics computed by the server with the shared formulas (computeQaScore and others)']]}
+                />
+              )}
             </div>
           </div>
           <button
