@@ -9,6 +9,7 @@ import { API_URL, NEW_PW, backendUp, del, get, localDb, login, post, put } from 
  *   FIX-003  business-impact month / bulk / config endpoints: out-of-range values → 400
  *   FIX-004  a body over the JSON limit → 413 { error: 'Payload too large' }
  *   FIX-005  QA managers read team detail and AI insights only for teams of their departments
+ *   FIX-006  /api/metrics/dashboard and /api/metrics/analytics/{teams,history} leave stale values out
  */
 
 let up = true;
@@ -148,5 +149,29 @@ describe('R2 Phase 4 fixes', () => {
     const ok = await get(`/api/teams/${T.A1}/ai-suggestions`, c.manager);
     expect(ok.status).not.toBe(403);
     expect(ok.status).toBeLessThan(500);
+  });
+
+  it('FIX-006: company metric reads leave stale values out', async () => {
+    if (skip()) return;
+    // A1: every QA input recorded 20 days ago (coverage is expected daily → stale), B1: today.
+    const old = new Date(Date.now() - 20 * 86400000).toISOString();
+    const inputs = { test_coverage: 91, defect_escape_rate: 3, change_failure_rate: 4, code_quality_score: 90, automation_coverage: 80 };
+    expect((await post('/api/metrics/manual', c.admin, { teamId: T.A1, recordedAt: old, ...inputs })).status).toBe(200);
+    expect((await post('/api/metrics/manual', c.admin, { teamId: T.B1, ...inputs, test_coverage: 70 })).status).toBe(200);
+    const teams = (await get('/api/metrics/analytics/teams', c.admin)).body.teams as any[];
+    const a1 = teams.find((t) => t.id === T.A1);
+    const b1 = teams.find((t) => t.id === T.B1);
+    expect(a1.test_coverage).toBeNull();
+    expect(a1.stale_metrics).toContain('test_coverage');
+    expect(a1.qa_score).toBeNull();
+    expect(a1.qa_score_recorded).not.toBeNull();
+    expect(b1.test_coverage).toBe(70);
+    expect(b1.qa_score).not.toBeNull();
+    const dash = (await get('/api/metrics/dashboard', c.admin)).body;
+    expect(typeof dash.aggregate).toBe('string');
+    expect((dash.topTeams as any[]).some((t) => t.id === T.A1)).toBe(false);
+    const hist = (await get('/api/metrics/analytics/history?days=3', c.admin)).body;
+    expect(Array.isArray(hist.history)).toBe(true);
+    expect(typeof hist.staleness).toBe('string');
   });
 });

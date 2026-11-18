@@ -21,8 +21,13 @@ import {
   TECH_DEBT_OPEN_WEIGHT_SQL,
   TECH_DEBT_SCORE_FORMULA,
   techDebtScoreFromWeight,
-  toNum
+  toNum,
+  COMPANY_AGGREGATE_TEXT,
+  distributionOf,
 } from '../lib/metricFormulas';
+import { evaluateSnapshot, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { loadIntervals, referenceFor, STALENESS_RULE_TEXT } from '../lib/staleness';
+import { loadTargetBook } from '../lib/targets';
 
 /** Round a DB numeric (often a string) to `digits` decimals; null stays null. */
 function roundOrNull(value: unknown, digits: number): number | null {
@@ -32,89 +37,106 @@ function roundOrNull(value: unknown, digits: number): number | null {
 
 const router = express.Router();
 
-// Get aggregated metrics history for analytics (across all teams in company)
+/* ------------------------------------------------------------------------------------------
+ * Company-level metric reads. Staleness-aware (R2 Phase 4): a value older than its expected
+ * update interval is left out (server/lib/kpiEvaluation.ts), and the QA score is the composite
+ * with stale inputs left out (qaScoreComposite), as on the dashboard and team detail.
+ * ---------------------------------------------------------------------------------------- */
+
+/** Snapshot columns averaged by GET /analytics/history (column → response key, digits). */
+const HISTORY_COLUMNS: Array<[string, string, number]> = [
+  ['test_coverage', 'testCoverage', 2], ['defect_density', 'defectDensity', 3], ['automation_coverage', 'automationCoverage', 2],
+  ['code_quality_score', 'codeQuality', 2], ['deployment_frequency_per_week', 'deploymentFrequency', 2], ['mttr_hours', 'mttr', 2],
+  ['lead_time_days', 'leadTime', 2], ['change_failure_rate', 'changeFailureRate', 2], ['sprint_velocity', 'sprintVelocity', 2],
+  ['first_time_pass_rate', 'firstTimePassRate', 2],
+];
+const meanOf = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : null);
+
+async function evalContext(companyId: string): Promise<EvalContext> {
+  return { companyId, intervals: await loadIntervals(companyId), book: await loadTargetBook(companyId) };
+}
+
+/** Latest snapshot of every active team of the company, evaluated now (stale values flagged). */
+async function latestEvaluated(companyId: string): Promise<Array<{ row: any; ev: SnapshotEvaluation | null }>> {
+  const rows: any[] = await query<any>(
+    `SELECT t.id, t.name, t.department_id, d.name AS department_name, ${teamMemberCountSql('t')} AS member_count, k.*,
+            t.id AS id, t.name AS name
+       FROM teams t
+       LEFT JOIN departments d ON d.id = t.department_id
+       LEFT JOIN LATERAL (SELECT * FROM kpi_snapshots ks WHERE ks.team_id = t.id ORDER BY ks.snapshot_date DESC LIMIT 1) k ON TRUE
+      WHERE t.company_id = ? AND t.is_active = TRUE`,
+    [companyId]
+  );
+  const ctx = await evalContext(companyId);
+  const now = Date.now();
+  return rows.map((r: any) => ({
+    row: r,
+    ev: r.snapshot_date ? evaluateSnapshot(r, { id: String(r.id), department_id: r.department_id }, ctx, now) : null,
+  }));
+}
+
+// Get aggregated metrics history for analytics (across all teams in company): per day, the
+// mean of the teams' values that were current on that day (stale values left out).
 router.get('/analytics/history', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    const { days = '30', metric } = req.query;
+    const { days = '30' } = req.query;
     const numDays = Math.min(parseInt(days as string) || 30, 90);
 
-    let sql = `
-      SELECT 
-        k.snapshot_date,
-        AVG(k.test_coverage) as avg_test_coverage,
-        AVG(k.defect_density) as avg_defect_density,
-        AVG(k.automation_coverage) as avg_automation_coverage,
-        AVG(k.code_quality_score) as avg_code_quality_score,
-        AVG(k.qa_score) as avg_qa_score,
-        AVG(k.deployment_frequency_per_week) as avg_deployment_frequency,
-        AVG(k.mttr_hours) as avg_mttr,
-        AVG(k.lead_time_days) as avg_lead_time,
-        AVG(k.change_failure_rate) as avg_change_failure_rate,
-        AVG(k.sprint_velocity) as avg_sprint_velocity,
-        AVG(k.first_time_pass_rate) as avg_first_time_pass_rate,
-        COUNT(DISTINCT k.team_id) as team_count
-      FROM kpi_snapshots k
-      JOIN teams t ON k.team_id = t.id
-      WHERE t.company_id = ? 
-        AND t.is_active = true
-        AND k.snapshot_date >= CURRENT_DATE - CAST(? AS INTEGER)
-      GROUP BY k.snapshot_date
-      ORDER BY k.snapshot_date ASC
-    `;
+    const rows = await query<any>(
+      `SELECT k.*, t.department_id
+         FROM kpi_snapshots k
+         JOIN teams t ON k.team_id = t.id
+        WHERE t.company_id = ? AND t.is_active = true
+          AND k.snapshot_date >= CURRENT_DATE - CAST(? AS INTEGER)
+        ORDER BY k.snapshot_date ASC`,
+      [companyId, numDays]
+    );
+    const ctx = await evalContext(companyId);
+    const byDay = new Map<string, any[]>();
+    for (const r of rows) {
+      const day = String(r.snapshot_date);
+      if (!byDay.has(day)) byDay.set(day, []);
+      byDay.get(day)!.push(r);
+    }
+    const chartData = [...byDay.entries()].map(([day, list]) => {
+      const evs = list.map((r) => ({ r, ev: evaluateSnapshot(r, { id: String(r.team_id), department_id: r.department_id }, ctx, referenceFor(day)) }));
+      const out: Record<string, any> = { date: day };
+      for (const [col, key, digits] of HISTORY_COLUMNS) {
+        const vals = evs.filter((x) => x.ev.values[col] && !x.ev.values[col].stale).map((x) => toNum(x.r[col])).filter((v): v is number => v !== null);
+        out[key] = roundOrNull(meanOf(vals), digits);
+      }
+      out.qaScore = roundOrNull(meanOf(evs.map((x) => x.ev.qa.value).filter((v): v is number => v !== null)), 2);
+      out.teamCount = new Set(list.map((r) => r.team_id)).size;
+      return out;
+    });
 
-    const history = await query<any>(sql, [companyId, numDays]);
-
-    // Transform to chart-friendly format
-    // pg returns NUMERIC/AVG as strings; convert before rounding. Missing averages stay null.
-    const chartData = history.map((row: any) => ({
-      date: String(row.snapshot_date), // DATE → 'YYYY-MM-DD' (db.ts type parser)
-      testCoverage: roundOrNull(row.avg_test_coverage, 2),
-      defectDensity: roundOrNull(row.avg_defect_density, 3),
-      automationCoverage: roundOrNull(row.avg_automation_coverage, 2),
-      codeQuality: roundOrNull(row.avg_code_quality_score, 2),
-      qaScore: roundOrNull(row.avg_qa_score, 2),
-      deploymentFrequency: roundOrNull(row.avg_deployment_frequency, 2),
-      mttr: roundOrNull(row.avg_mttr, 2),
-      leadTime: roundOrNull(row.avg_lead_time, 2),
-      changeFailureRate: roundOrNull(row.avg_change_failure_rate, 2),
-      sprintVelocity: roundOrNull(row.avg_sprint_velocity, 2),
-      firstTimePassRate: roundOrNull(row.avg_first_time_pass_rate, 2),
-      teamCount: Number(row.team_count)
-    }));
-
-    res.json({ history: chartData, days: numDays });
+    res.json({ history: chartData, days: numDays, staleness: STALENESS_RULE_TEXT });
   } catch (error) {
     console.error('Error fetching analytics history:', error);
     res.status(500).json({ error: 'Failed to fetch analytics history' });
   }
 });
 
-// Get per-team metrics comparison for analytics
+// Get per-team metrics comparison for analytics (latest snapshot per active team). Stale values
+// are null (listed in stale_metrics); qa_score leaves stale inputs out (qa_score_recorded = stored).
 router.get('/analytics/teams', authenticateToken, async (req: any, res) => {
   try {
-    const { companyId } = req.user;
+    const cols = ['test_coverage', 'defect_density', 'automation_coverage', 'deployment_frequency_per_week', 'mttr_hours', 'change_failure_rate', 'sprint_velocity'];
+    const teams = (await latestEvaluated(req.user.companyId)).map(({ row, ev }): Record<string, any> => {
+      const stale = cols.filter((c) => ev?.values[c]?.stale);
+      const t: Record<string, any> = {
+        id: row.id, name: row.name,
+        qa_score: ev ? ev.qa.value : null,
+        qa_score_recorded: toNum(row.qa_score),
+        snapshot_date: row.snapshot_date ?? null,
+        stale_metrics: stale,
+      };
+      for (const c of cols) t[c] = stale.includes(c) ? null : toNum(row[c]);
+      return t;
+    }).sort((a, b) => (b.qa_score ?? -1) - (a.qa_score ?? -1) || String(a.name).localeCompare(String(b.name)));
 
-    const teams = await query<any>(`
-      SELECT 
-        t.id,
-        t.name,
-        k.qa_score,
-        k.test_coverage,
-        k.defect_density,
-        k.automation_coverage,
-        k.deployment_frequency_per_week,
-        k.mttr_hours,
-        k.change_failure_rate,
-        k.sprint_velocity
-      FROM teams t
-      LEFT JOIN kpi_snapshots k ON t.id = k.team_id 
-        AND k.snapshot_date = (SELECT MAX(snapshot_date) FROM kpi_snapshots WHERE team_id = t.id)
-      WHERE t.company_id = ? AND t.is_active = true
-      ORDER BY k.qa_score DESC NULLS LAST
-    `, [companyId]);
-
-    res.json({ teams });
+    res.json({ teams, staleness: STALENESS_RULE_TEXT });
   } catch (error) {
     console.error('Error fetching team analytics:', error);
     res.status(500).json({ error: 'Failed to fetch team analytics' });
@@ -196,21 +218,11 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
     );
     const totalTeams = Number(totalTeamsResult?.count) || 0;
 
-    // Company-wide average QA score from the latest snapshot per team.
-    const passRateResult = await queryOne<any>(
-      `SELECT AVG(latest.qa_score) as avg_pass_rate
-       FROM teams t
-       JOIN LATERAL (
-         SELECT qa_score FROM kpi_snapshots ks
-         WHERE ks.team_id = t.id
-         ORDER BY ks.snapshot_date DESC
-         LIMIT 1
-       ) latest ON true
-       WHERE t.company_id = ? AND t.is_active = true`,
-      [companyId]
-    );
-    // Average QA score (latest snapshot per active team); null when no team has a score.
-    const overallPassRate = toNum(passRateResult?.avg_pass_rate);
+    // Company QA score: team-size weighted mean of the teams' current QA scores (stale inputs
+    // left out), the same definition as the dashboard hero (distributionOf, COMPANY_AGGREGATE_TEXT).
+    const evaluated = await latestEvaluated(companyId as string);
+    const scored = evaluated.filter((e) => e.ev && e.ev.qa.value !== null);
+    const overallPassRate = distributionOf(scored.map((e) => ({ value: e.ev!.qa.value, weight: e.row.member_count }))).weightedMean;
 
     // Open / critical technical-debt items act as the "defects" signal.
     const openDefectsResult = await queryOne<any>(
@@ -231,22 +243,11 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
     );
     const criticalDefects = Number(criticalDefectsResult?.count) || 0;
 
-    // Top teams by latest QA score.
-    const topTeams = await query<any[]>(
-      `SELECT t.id, t.name, d.name as department_name, latest.qa_score as pass_rate
-       FROM teams t
-       LEFT JOIN departments d ON t.department_id = d.id
-       JOIN LATERAL (
-         SELECT qa_score FROM kpi_snapshots ks
-         WHERE ks.team_id = t.id
-         ORDER BY ks.snapshot_date DESC
-         LIMIT 1
-       ) latest ON true
-       WHERE t.company_id = ? AND t.is_active = true
-       ORDER BY latest.qa_score DESC NULLS LAST
-       LIMIT 5`,
-      [companyId]
-    );
+    // Top teams by current QA score (stale inputs left out).
+    const topTeams = scored
+      .sort((a, b) => b.ev!.qa.value! - a.ev!.qa.value! || String(a.row.name).localeCompare(String(b.row.name)))
+      .slice(0, 5)
+      .map((e) => ({ id: e.row.id, name: e.row.name, department_name: e.row.department_name, pass_rate: e.ev!.qa.value }));
 
     res.json({
       stats: {
@@ -255,6 +256,7 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
         openDefects,
         criticalDefects
       },
+      aggregate: COMPANY_AGGREGATE_TEXT,
       topTeams: topTeams.map(team => ({
         id: team.id,
         name: team.name,
