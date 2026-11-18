@@ -68,7 +68,7 @@ router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyReques
 
   const reject = async (httpStatus: number, response: any, summaries: ItemSummary[], errors: Array<{ index: number | null; errors: string[] }>, teamIds: string[] = []) => {
     const id = await logRejected(caller, { key, hash }, { httpStatus, response, items: summaries, errors, teamIds, source: sourcesOf(summaries) });
-    await afterIngestionRejected(caller.companyId, teamIds);
+    await afterIngestionRejected(caller.companyId, [...teamIds, ...summaries.map((s) => s.teamId).filter((t): t is string => !!t)]);
     return res.status(httpStatus).json({ ...response, status: 'rejected', ingestionId: id });
   };
 

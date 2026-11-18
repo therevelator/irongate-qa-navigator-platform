@@ -160,7 +160,9 @@ export async function refreshActionOutcomes(companyId: string, opts: { teamIds?:
     const keys = Object.keys(set);
     if (!keys.length) continue;
     await query(
-      `UPDATE team_actions SET ${keys.map((k) => `${k} = ?`).join(', ')} WHERE id = ? AND status = 'done' AND completed_at = ?::timestamptz`,
+      // Only while it is still the same completion (not reopened / completed again meanwhile).
+      `UPDATE team_actions SET ${keys.map((k) => `${k} = ?`).join(', ')}
+        WHERE id = ? AND status = 'done' AND abs(extract(epoch FROM completed_at - ?::timestamptz)) < 0.001`,
       [...keys.map((k) => set[k]), r.id, completedAt]
     );
     updated++;

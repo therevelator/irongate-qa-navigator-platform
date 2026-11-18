@@ -175,6 +175,27 @@ const fmtNum = (v: number) => (Math.abs(v) >= 100 ? String(Math.round(v * 10) / 
 export const metricLabel = (col: string) => (KPI_COLUMNS as Record<string, { label: string; unit?: string }>)[col]?.label ?? (col === 'qa_score' ? 'QA score' : col);
 export const metricUnit = (col: string) => (KPI_COLUMNS as Record<string, { label: string; unit?: string }>)[col]?.unit ?? '';
 
+/**
+ * The threshold_breach condition of one KPI value against its target (status as on Team detail:
+ * statusFor), or null when it is on target or below the rule's minimum severity. Pure: also used
+ * by the demo seed, so sample alerts read exactly like evaluated ones.
+ */
+export function thresholdCondition(
+  teamId: string, m: TargetMetric, value: number, t: { good: number; warning: number; lowerIsBetter: boolean; scope?: string },
+  min: Severity = 'warning', recordedAt: string | null = null,
+): Condition | null {
+  const status = statusFor(value, t);
+  if (status !== 'warning' && status !== 'critical') return null;
+  if (!atLeast(status, min)) return null;
+  const u = unitText(metricUnit(m));
+  const cmp = t.lowerIsBetter ? '≤' : '≥';
+  return {
+    teamId, rule: 'threshold_breach', metricKey: m, severity: status,
+    message: `${metricLabel(m)} is ${status === 'critical' ? 'off target' : 'at watch level'}: ${fmtNum(value)}${u} (target ${cmp} ${t.good}${u}, watch ${cmp} ${t.warning}${u})`,
+    details: { value, recordedAt, good: t.good, warning: t.warning, lowerIsBetter: t.lowerIsBetter, targetScope: t.scope ?? null },
+  };
+}
+
 interface TeamRow { id: string; name: string; department_id: string | null }
 
 /** The team's QA score composite on the latest snapshot on or before `day` (within `toleranceDays`), or null. */
@@ -208,17 +229,8 @@ async function teamConditions(team: TeamRow, companyId: string, latest: any | nu
       if (!info || info.stale) continue;
       const value = Number(latest[m]);
       if (!Number.isFinite(value)) continue;
-      const t = ev.thresholds[TARGET_METRICS[m]];
-      const status = statusFor(value, t);
-      if (status !== 'warning' && status !== 'critical') continue;
-      if (!atLeast(status, min)) continue;
-      const u = unitText(metricUnit(m));
-      const cmp = t.lowerIsBetter ? '≤' : '≥';
-      out.push({
-        teamId: team.id, rule: 'threshold_breach', metricKey: m, severity: status,
-        message: `${metricLabel(m)} is ${status === 'critical' ? 'off target' : 'at watch level'}: ${fmtNum(value)}${u} (target ${cmp} ${t.good}${u}, watch ${cmp} ${t.warning}${u})`,
-        details: { value, recordedAt: info.recordedAt, good: t.good, warning: t.warning, lowerIsBetter: t.lowerIsBetter, targetScope: t.scope },
-      });
+      const c = thresholdCondition(team.id, m, value, ev.thresholds[TARGET_METRICS[m]], min, info.recordedAt);
+      if (c) out.push(c);
     }
   }
 
@@ -262,11 +274,18 @@ async function ingestionConditions(companyId: string, teams: TeamRow[], book: Ru
   const company = book.resolve('ingestion_failure', { companyId });
   const maxHours = Math.max(Number(company.params.hours) || 24, ...settings.map((x) => Number(x.s.params.hours) || 24));
   const rows = await query<any[]>(
-    `SELECT id, status, received_at, team_ids, source FROM ingestion_log
+    `SELECT id, status, received_at, team_ids, items, source FROM ingestion_log
       WHERE company_id = ? AND channel = 'api' AND status IN ('rejected', 'partial') AND received_at >= to_timestamp(?::double precision / 1000) - (CAST(? AS INTEGER) * INTERVAL '1 hour')
       ORDER BY received_at DESC`,
     [companyId, now, maxHours]
   );
+  // Teams a request concerns: those it wrote to (team_ids) and those its items named (a request
+  // rejected by validation wrote nothing). Only this company's teams count.
+  const companyTeams = new Set((await query<any[]>('SELECT id FROM teams WHERE company_id = ?', [companyId])).map((t: any) => t.id));
+  const teamsOf = (r: any): string[] => [...new Set([
+    ...(r.team_ids ?? []),
+    ...(Array.isArray(r.items) ? r.items.map((i: any) => (i && typeof i.teamId === 'string' ? i.teamId : null)) : []),
+  ].filter((t): t is string => !!t && companyTeams.has(t)))];
   const describe = (list: any[], hours: number) => {
     const rejected = list.filter((r) => r.status === 'rejected').length;
     const partial = list.length - rejected;
@@ -277,7 +296,7 @@ async function ingestionConditions(companyId: string, teams: TeamRow[], book: Ru
     if (!s.enabled) continue;
     const hours = Number(s.params.hours) || 24;
     const since = now - hours * 3_600_000;
-    const list = rows.filter((r) => (r.team_ids ?? []).includes(team.id) && new Date(r.received_at).getTime() >= since);
+    const list = rows.filter((r) => teamsOf(r).includes(team.id) && new Date(r.received_at).getTime() >= since);
     if (list.length >= (Number(s.params.count) || 1)) {
       out.push({
         teamId: team.id, rule: 'ingestion_failure', metricKey: null, severity: 'warning', message: describe(list, hours),
@@ -288,7 +307,7 @@ async function ingestionConditions(companyId: string, teams: TeamRow[], book: Ru
   if (includeCompany && company.enabled) {
     const hours = Number(company.params.hours) || 24;
     const since = now - hours * 3_600_000;
-    const list = rows.filter((r) => !(r.team_ids ?? []).length && new Date(r.received_at).getTime() >= since);
+    const list = rows.filter((r) => !teamsOf(r).length && new Date(r.received_at).getTime() >= since);
     if (list.length >= (Number(company.params.count) || 1)) {
       out.push({
         teamId: null, rule: 'ingestion_failure', metricKey: null, severity: 'warning', message: `${describe(list, hours)} that named no team of this company`,

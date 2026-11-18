@@ -187,8 +187,11 @@ async function slackSummary(companyId: string, now: number): Promise<string> {
 }
 
 /** Weekly run for every company: evaluate, then queue and send the digests. */
-export async function runWeeklyDigest(now = Date.now()): Promise<{ companies: number; queued: number }> {
-  const companies = await query<any[]>('SELECT id FROM companies WHERE is_active IS NOT FALSE ORDER BY id');
+export async function runWeeklyDigest(now = Date.now(), opts: { companyIds?: string[] } = {}): Promise<{ companies: number; queued: number }> {
+  const companies = await query<any[]>(
+    'SELECT id FROM companies WHERE is_active IS NOT FALSE AND (?::text[] IS NULL OR id = ANY(?::text[])) ORDER BY id',
+    [opts.companyIds ?? null, opts.companyIds ?? null]
+  );
   const week = isoWeek(now);
   let queued = 0;
   for (const c of companies) {
@@ -211,7 +214,7 @@ export async function runWeeklyDigest(now = Date.now()): Promise<{ companies: nu
       console.error('[digest] weekly digest failed for a company:', (e as Error)?.message ?? e);
     }
   }
-  await processDeliveries({ budgetMs: 20_000 });
+  for (const c of companies) await processDeliveries({ companyId: c.id, budgetMs: 20_000 });
   return { companies: companies.length, queued };
 }
 
