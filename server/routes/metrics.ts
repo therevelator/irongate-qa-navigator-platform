@@ -1,5 +1,6 @@
 import express from 'express';
 import { randomUUID } from 'crypto';
+import { afterKpiWrite } from '../lib/alerts';
 import { KpiValidationError, normaliseIdempotencyKey, notifyKpisUpdated, parseRecordedAt, recordKpiValues, validateKpiValues } from '../lib/kpiIngest';
 import { findReplay, logRejected, requestHash, runLogged, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 import { query, queryOne } from '../../src/lib/db';
@@ -340,6 +341,7 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     });
     if ('replay' in out) return sendReplay(res, out.replay, hash);
     notifyKpisUpdated(out.outcome.response.updated, 'manual');
+    await afterKpiWrite(caller.companyId, [teamId]);
     res.json(out.outcome.response);
   } catch (error) {
     if (error instanceof KpiValidationError) {

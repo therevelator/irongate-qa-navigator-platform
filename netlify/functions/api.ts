@@ -21,6 +21,9 @@ import compareRoutes from '../../server/routes/compare';
 import savedViewsRoutes from '../../server/routes/savedViews';
 import onboardingRoutes from '../../server/routes/onboarding';
 import pulseRoutes from '../../server/routes/pulse';
+import alertsRoutes from '../../server/routes/alerts';
+import notificationsRoutes from '../../server/routes/notifications';
+import actionsRoutes from '../../server/routes/actions';
 
 const app = express();
 
@@ -93,6 +96,9 @@ router.use('/compare', compareRoutes);
 router.use('/saved-views', savedViewsRoutes);
 router.use('/onboarding', onboardingRoutes);
 router.use('/pulse', pulseRoutes);
+router.use('/alerts', alertsRoutes);
+router.use('/notifications', notificationsRoutes);
+router.use('/actions', actionsRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix

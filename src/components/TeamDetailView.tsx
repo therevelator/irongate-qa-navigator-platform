@@ -30,6 +30,8 @@ import { describeChange, type HistoryPoint } from '../data/kpiTrend';
 import { ConfidenceNote, SampleMarker, StaleNote, type ConfidenceInfo } from './MetricQuality';
 import SampleDataBanner from './SampleDataBanner';
 import { PulseTeamSummary } from './PulseSurveyResults';
+import ActionsPanel, { type ActionDraft } from './ActionsPanel';
+import { canWriteTeamData } from '../../server/lib/userPolicy';
 
 // Team as returned by GET /api/teams (NUMERIC columns may arrive as strings; missing values are null)
 interface TeamWithKPI extends Omit<Team, 'qaScore'> {
@@ -352,6 +354,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [aiSuggestions, setAISuggestions] = useState<TeamAISuggestions | null>(null);
+  // Tracked actions (ActionsPanel): "Create action" on a recommendation opens its form pre-filled.
+  const [actionDraft, setActionDraft] = useState<ActionDraft | null>(null);
+  const clearActionDraft = React.useCallback(() => setActionDraft(null), []);
   const [aiLoading, setAILoading] = useState(false);
   const [aiError, setAIError] = useState<string | null>(null);
   const [devAISuggestions, setDevAISuggestions] = useState<DeveloperAISuggestions | null>(null);
@@ -814,6 +819,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
         </section>
       ))}
 
+      <ActionsPanel teamId={String(team.id)} teamName={team.name} draft={actionDraft} onDraftUsed={clearActionDraft} />
+
       {/* Team recommendations */}
       {canViewDeveloperInsights && info('team_recommendations', (
         <Card>
@@ -851,6 +858,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
                       </div>
                       <p className="text-sm font-medium text-slate-900 dark:text-white">{item.initiative}</p>
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Owner: {item.owner} · KPI: {item.kpi}</p>
+                      {policyActor && canWriteTeamData(policyActor, policyTeam) && (
+                        <button type="button" onClick={() => setActionDraft({ title: item.initiative, description: `${item.priority} · ${item.timebox} · suggested owner: ${item.owner}`, kpi: item.kpi, origin: 'recommendation' })} className="mt-2 text-xs font-medium text-brand-700 hover:underline dark:text-brand-300" data-testid="recommendation-create-action">
+                          Create action
+                        </button>
+                      )}
                     </div>
                   )) : <p className="text-sm text-slate-500 dark:text-slate-400">No action items</p>}
                 </div>

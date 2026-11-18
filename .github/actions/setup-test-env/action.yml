@@ -34,6 +34,7 @@ runs:
         DATABASE_URL=${DATABASE_URL}
         JWT_SECRET=${JWT_SECRET}
         PORT=3000
+        NOTIFY_SLACK_ALLOW_LOCAL=true
         ENV
 
     - name: Prepare database

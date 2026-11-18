@@ -13,6 +13,7 @@ import {
   RecordResult,
   validateKpiValues,
 } from '../lib/kpiIngest';
+import { afterIngestionRejected, afterKpiWrite } from '../lib/alerts';
 import { logRejected, requestHash, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 
 const router = express.Router();
@@ -67,6 +68,7 @@ router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyReques
 
   const reject = async (httpStatus: number, response: any, summaries: ItemSummary[], errors: Array<{ index: number | null; errors: string[] }>, teamIds: string[] = []) => {
     const id = await logRejected(caller, { key, hash }, { httpStatus, response, items: summaries, errors, teamIds, source: sourcesOf(summaries) });
+    await afterIngestionRejected(caller.companyId, [...teamIds, ...summaries.map((s) => s.teamId).filter((t): t is string => !!t)]);
     return res.status(httpStatus).json({ ...response, status: 'rejected', ingestionId: id });
   };
 
@@ -184,6 +186,7 @@ router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyReques
     if (written.length) {
       notifyKpisUpdated(Array.from(new Set(written.flatMap((i) => i.metrics))), outcome.outcome.source ?? 'api');
     }
+    await afterKpiWrite(caller.companyId, ownedTeamIds);
     res.status(outcome.outcome.httpStatus).json(outcome.outcome.response);
   } catch (error) {
     if (error instanceof KpiValidationError) {

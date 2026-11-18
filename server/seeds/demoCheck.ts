@@ -44,6 +44,8 @@ const MODULES: Module[] = [
   // Anonymous wellbeing pulse answers (migration 20261121200000): a closed period in the last 12 weeks.
   { key: 'pulse', label: 'Pulse survey (closed period, 12 w)', sql: `SELECT DISTINCT team_id FROM pulse_responses WHERE period_end <= $1::date AND period_end > $1::date - 84` },
   { key: 'mv', label: 'Metric values (30 d)', sql: `SELECT DISTINCT team_id FROM metric_values WHERE superseded_by IS NULL AND recorded_at >= $1::date - 30` },
+  // Tracked actions (Team detail → Action plan, TV focus panel, digest; migration 20261121000000).
+  { key: 'actions', label: 'Tracked actions', sql: `SELECT DISTINCT team_id FROM team_actions WHERE $1::date IS NOT NULL` },
 ];
 
 // Demo sign-ins (README) must each have a real team, so every demo role sees data.
