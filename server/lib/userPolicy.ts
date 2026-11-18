@@ -396,3 +396,47 @@ export function canSetTargets(actor: PolicyActor, scope: { type: 'company' | 'de
   if (scope.type === 'company') return false;
   return !!scope.departmentId && managedDepartmentIds(actor).includes(scope.departmentId);
 }
+
+/* ------------------------------------------------------------------------------------------
+ * Team comparison, saved views, onboarding (Phase 3B)
+ * ---------------------------------------------------------------------------------------- */
+
+/** May the actor compare these teams side by side? Every team must be in their analytics scope. */
+export function canCompareTeams(actor: PolicyActor, teams: ScopeTeam[]): boolean {
+  return teams.length > 0 && teams.every((t) => canViewTeamAnalytics(actor, t));
+}
+
+export interface SavedViewRef {
+  owner_id: string;
+  shared: boolean;
+}
+
+/** Saved views: your own, and the ones shared with the company (the server checks the company). */
+export function canSeeSavedView(actor: PolicyActor, view: SavedViewRef): boolean {
+  return view.owner_id === actor.id || view.shared;
+}
+
+/** Rename or overwrite a saved view: its owner only (a shared view is read-only for everyone else). */
+export function canEditSavedView(actor: PolicyActor, view: SavedViewRef): boolean {
+  return view.owner_id === actor.id;
+}
+
+/** Delete: the owner, or a company administrator for a view shared with the company. */
+export function canDeleteSavedView(actor: PolicyActor, view: SavedViewRef): boolean {
+  return view.owner_id === actor.id || (view.shared && hasCompany(actor));
+}
+
+/** Share a view with the company: a company administrator, for their own views. */
+export function canShareSavedView(actor: PolicyActor, view: SavedViewRef): boolean {
+  return hasCompany(actor) && view.owner_id === actor.id;
+}
+
+/** Stop sharing a view: a company administrator (any shared view of the company). */
+export function canUnshareSavedView(actor: PolicyActor, view: SavedViewRef): boolean {
+  return hasCompany(actor) && view.shared;
+}
+
+/** The onboarding checklist of a new organisation: company administrators. */
+export function canViewOnboarding(actor: PolicyActor): boolean {
+  return hasCompany(actor);
+}
