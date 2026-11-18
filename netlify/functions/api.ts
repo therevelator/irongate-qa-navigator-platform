@@ -25,6 +25,7 @@ import pulseRoutes from '../../server/routes/pulse';
 import alertsRoutes from '../../server/routes/alerts';
 import notificationsRoutes from '../../server/routes/notifications';
 import actionsRoutes from '../../server/routes/actions';
+import { apiErrorHandler } from '../../server/middleware/errorHandler';
 
 const app = express();
 
@@ -114,14 +115,8 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Error handling. Log the detail server-side but never return it to the client.
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
-  const status = err.status || err.statusCode || 500;
-  res.status(status).json({
-    error: status === 400 ? 'Bad request' : 'Internal server error'
-  });
-});
+// Error handling (server/middleware/errorHandler.ts): never returns the detail to the client.
+app.use(apiErrorHandler);
 
 // Test DB connection on cold start
 testConnection().catch(err => {

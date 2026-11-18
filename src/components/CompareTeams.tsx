@@ -118,7 +118,7 @@ const CellView: React.FC<{ cell: Cell; metric: Metric; isBest: boolean; isWorst:
         <span className={cx('text-base font-semibold tabular-nums', valueCls)} data-testid="compare-value">{cell.display}</span>
         {cell.status && !cell.stale && <span className="sr-only">{STATUS_LABEL[cell.status]}</span>}
         {isBest && <Badge tone="brand" className="!py-0 text-[10px] uppercase tracking-wide">Best</Badge>}
-        {isWorst && <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Lowest</span>}
+        {isWorst && <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" title="The weakest value of the compared teams (direction-aware: the highest value for lower-is-better metrics)">Weakest</span>}
         {cell.sample && <SampleMarker />}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">

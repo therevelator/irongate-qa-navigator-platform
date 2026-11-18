@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor, type OwnedTeam } from '../middleware/access';
-import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageTeam, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
+import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageSampleData, canManageTeam, canRequestExecutiveBriefing, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
 import { runDemoSeed, runFillExisting, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
@@ -24,6 +24,7 @@ import { K_ANONYMITY_MIN, privacyInfo } from '../lib/privacy';
 import { wellbeingAcrossTeams } from '../lib/pulse';
 import { benjaminiHochberg, studentTTwoSidedP } from '../lib/stats';
 import { getFinancialConfig } from '../lib/financialConfig';
+import { BI_CONTEXT_RANGES, BI_KPI_RANGES, BI_QUALITY_RANGES, DEBT_IMPACT_FIELDS, bulkMonthErrors, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 
 const router = express.Router();
 
@@ -630,14 +631,12 @@ router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     const { id } = req.params;
-    const {
-      affected_users,
-      support_tickets_monthly,
-      downtime_minutes_monthly,
-      revenue_impact_percent,
-      sla_breaches_monthly,
-      estimated_effort_hours
-    } = req.body;
+    // Partial update: only the fields present in the body change (an omitted field keeps its
+    // value, an explicit null clears it); every value is range-checked.
+    const parsed = parseRangedFields(req.body, DEBT_IMPACT_FIELDS);
+    if (parsed.errors.length) return res.status(400).json({ error: parsed.errors[0], details: parsed.errors });
+    const given = DEBT_IMPACT_FIELDS.filter((fld) => parsed.values[fld.key] !== undefined);
+    if (!given.length) return res.status(400).json({ error: 'Nothing to update' });
 
     // Verify the debt item belongs to the company
     const existing = await queryOne<any>(
@@ -657,28 +656,16 @@ router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res
 
     await query(
       `UPDATE technical_debt SET
-        affected_users = ?,
-        support_tickets_monthly = ?,
-        downtime_minutes_monthly = ?,
-        revenue_impact_percent = ?,
-        sla_breaches_monthly = ?,
-        effort_hours = ?,
+        ${given.map((fld) => `${fld.column} = ?`).join(',\n        ')},
         manually_edited = TRUE,
         updated_at = NOW()
       WHERE id = ?`,
-      [
-        num(affected_users),
-        num(support_tickets_monthly),
-        num(downtime_minutes_monthly),
-        num(revenue_impact_percent),
-        num(sla_breaches_monthly),
-        num(estimated_effort_hours),
-        id
-      ]
+      [...given.map((fld) => parsed.values[fld.key]), id]
     );
 
     res.json({ message: 'Impact metrics updated successfully' });
   } catch (error) {
+    if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Error updating technical debt impact:', error);
     res.status(500).json({ error: 'Failed to update impact metrics' });
   }
@@ -1047,7 +1034,7 @@ router.get('/business-impact', authenticateToken, async (req: any, res) => {
 // on the same day. super_admin only; off unless ENABLE_SYNTHETIC_DATA=true.
 router.get('/seed-data/status', authenticateToken, async (req: any, res) => {
   try {
-    if (req.user.role !== 'super_admin') {
+    if (!canManageSampleData(policyActor(req))) {
       return res.status(403).json({ error: 'Only super admin can load sample data' });
     }
     const enabled = isSyntheticDataEnabled();
@@ -1073,9 +1060,7 @@ router.get('/seed-data/status', authenticateToken, async (req: any, res) => {
 
 router.post('/seed-data', authenticateToken, async (req: any, res) => {
   try {
-    const { role } = req.user;
-
-    if (role !== 'super_admin') {
+    if (!canManageSampleData(policyActor(req))) {
       return res.status(403).json({ error: 'Only super admin can load sample data' });
     }
     if (!isSyntheticDataEnabled()) {
@@ -1109,9 +1094,7 @@ router.post('/seed-data', authenticateToken, async (req: any, res) => {
 // Manually trigger daily update
 router.post('/update-daily', authenticateToken, async (req: any, res) => {
   try {
-    const { role } = req.user;
-
-    if (role !== 'super_admin') {
+    if (!canManageSampleData(policyActor(req))) {
       return res.status(403).json({ error: 'Only super admin can trigger updates' });
     }
     // updateDailyAnalytics applies random drift / random rows: synthetic only.
@@ -1388,6 +1371,8 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
     if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
       return res.status(400).json({ error: 'Invalid month_year format. Use YYYY-MM' });
     }
+    const rangeErrors = parseRangedFields(metrics, BI_QUALITY_RANGES).errors;
+    if (rangeErrors.length) return res.status(400).json({ error: rangeErrors[0], details: rangeErrors });
 
     const id = randomUUID();
 
@@ -1423,6 +1408,7 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
 
     res.json({ success: true, message: 'Quality metrics saved' });
   } catch (error) {
+    if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Error saving quality metrics:', error);
     res.status(500).json({ error: 'Failed to save quality metrics' });
   }
@@ -1438,6 +1424,8 @@ router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, asyn
     if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
       return res.status(400).json({ error: 'Invalid month_year format. Use YYYY-MM' });
     }
+    const rangeErrors = parseRangedFields(kpis, BI_KPI_RANGES).errors;
+    if (rangeErrors.length) return res.status(400).json({ error: rangeErrors[0], details: rangeErrors });
 
     const id = randomUUID();
 
@@ -1478,6 +1466,7 @@ router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, asyn
 
     res.json({ success: true, message: 'Business KPIs saved' });
   } catch (error) {
+    if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Error saving business KPIs:', error);
     res.status(500).json({ error: 'Failed to save business KPIs' });
   }
@@ -1493,6 +1482,8 @@ router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req
     if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
       return res.status(400).json({ error: 'Invalid month_year format. Use YYYY-MM' });
     }
+    const rangeErrors = parseRangedFields(context, BI_CONTEXT_RANGES).errors;
+    if (rangeErrors.length) return res.status(400).json({ error: rangeErrors[0], details: rangeErrors });
 
     const id = randomUUID();
 
@@ -1539,6 +1530,7 @@ router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req
 
     res.json({ success: true, message: 'Context data saved' });
   } catch (error) {
+    if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Error saving context data:', error);
     res.status(500).json({ error: 'Failed to save context data' });
   }
@@ -1671,6 +1663,8 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
     if (isSyntheticPayload && !isSyntheticDataEnabled()) {
       return res.status(409).json({ error: 'Sample (synthetic) data cannot be saved. ' + SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
+    const monthErrors = bulkMonthErrors(monthlyData);
+    if (monthErrors.length) return res.status(400).json({ error: monthErrors[0], details: monthErrors });
     const dataSource = isSyntheticPayload ? 'synthetic' : 'manual';
     const manuallyEdited = !isSyntheticPayload;
 
@@ -1773,6 +1767,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
 
     res.json({ success: true, monthsSaved: saved, dataSource });
   } catch (error) {
+    if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Error bulk saving:', error);
     res.status(500).json({ error: 'Failed to bulk save data' });
   }
@@ -2451,9 +2446,9 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { companyId, role } = user;
+    const { companyId } = user;
 
-    if (!['super_admin', 'qa_manager', 'team_lead'].includes(role)) {
+    if (!canRequestExecutiveBriefing(policyActor(req))) {
       return res.status(403).json({ error: 'Executive insights are restricted.' });
     }
 

@@ -33,6 +33,7 @@ import './jobs/intervalSync'; // Interval-based metric sync
 import './jobs/analyticsSync'; // Analytics data sync
 import './jobs/alertsCron'; // Alert evaluation, notification outbox, weekly digest
 import './jobs/pulseCron'; // Automatic wellbeing pulse e-mail per team cadence
+import { apiErrorHandler } from './middleware/errorHandler';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -156,14 +157,8 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Error handling. Log the detail server-side but never return it to the client.
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Error:', err);
-  const status = err.status || err.statusCode || 500;
-  res.status(status).json({
-    error: status === 400 ? 'Bad request' : 'Internal server error'
-  });
-});
+// Error handling (server/middleware/errorHandler.ts): never returns the detail to the client.
+app.use(apiErrorHandler);
 
 // Start server
 async function start() {

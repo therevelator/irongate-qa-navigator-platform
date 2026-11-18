@@ -7,6 +7,7 @@ import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
 import { canViewDeveloperRow } from '../lib/userPolicy';
+import { BI_CONFIG_FIELDS, DEVELOPER_METRIC_FIELDS, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 import { teamMemberCountSql } from '../lib/teamMembership';
 import { teamDeveloperSummary } from '../lib/developerAggregates';
 import { K_ANONYMITY_MIN, K_ANONYMITY_RULE, SUPPRESSED_TEXT } from '../lib/privacy';
@@ -283,11 +284,7 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     metrics: Object.keys(metricValues).slice(0, 40), status, ...extra,
   });
   try {
-    const allowedRoles = ['super_admin', 'qa_manager', 'team_lead'];
-    if (!allowedRoles.includes(req.userRole || '')) {
-      return res.status(403).json({ error: 'Access denied. Requires Super Admin, QA Manager, or Team Lead role.' });
-    }
-
+    // Who may write is the shared team-write rule (assertTeamWrite → canWriteTeamData).
     if (!teamId) {
       return res.status(400).json({ error: 'Team ID is required' });
     }
@@ -357,80 +354,46 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
-// Save developer metrics (super_admin, qa_manager, team_lead)
+// Save developer metrics (team data writers: super_admin, the department's QA managers, the team's leads).
+// Partial update: only the fields present in the body change; an omitted field keeps its stored
+// value and an explicit null clears it. Every value is range-checked (400, never a database error).
 router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const allowedRoles = ['super_admin', 'qa_manager', 'team_lead'];
-    if (!allowedRoles.includes(req.userRole || '')) {
-      return res.status(403).json({ error: 'Access denied. Requires Super Admin, QA Manager, or Team Lead role.' });
-    }
-
-    const {
-      teamId,
-      developerId,
-      prMergeTimeAvg,
-      codeReviewTimeAvg,
-      focusTimeHours,
-      meetingTimeHours,
-      contextSwitchesPerDay,
-      happinessScore
-    } = req.body;
-
+    const { teamId, developerId } = req.body ?? {};
     if (!teamId || !developerId) {
       return res.status(400).json({ error: 'Team ID and developer ID are required' });
     }
 
-    // Team must belong to the caller's company and be writable by them.
+    // Team must belong to the caller's company and be writable by them (canWriteTeamData).
     if (!(await assertTeamWrite(req, res, teamId))) return;
     // The developer must belong to the same company (prevents cross-tenant ids).
     if (!(await developerInCompany(req, developerId))) {
       return res.status(400).json({ error: 'Invalid developer ID' });
     }
 
-    // happiness_score is workload balance (derived), 0–100, from focus/meeting/context-switch/PR/review inputs (column numeric(4,1)).
-    if (happinessScore !== undefined && happinessScore !== null && happinessScore !== '') {
-      const h = Number(happinessScore);
-      if (!Number.isFinite(h) || h < 0 || h > 100) {
-        return res.status(400).json({ error: 'Happiness score must be between 0 and 100' });
-      }
-    }
+    // happiness_score is workload balance (derived), 0–100 (column numeric(4,1)).
+    const parsed = parseRangedFields(req.body, DEVELOPER_METRIC_FIELDS);
+    if (parsed.errors.length) return res.status(400).json({ error: parsed.errors[0], details: parsed.errors });
+    const given = DEVELOPER_METRIC_FIELDS.filter((f) => parsed.values[f.key] !== undefined);
+    const value = (key: string) => (parsed.values[key] === undefined ? null : parsed.values[key]);
+    const cols = DEVELOPER_METRIC_FIELDS.map((f) => f.column);
 
     await query(
-      `INSERT INTO developer_metrics (
-        team_id,
-        developer_id,
-        pr_merge_time_avg,
-        code_review_time_avg,
-        focus_time_hours,
-        meeting_time_hours,
-        context_switches_per_day,
-        happiness_score
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (team_id, developer_id) DO UPDATE SET
-        pr_merge_time_avg = EXCLUDED.pr_merge_time_avg,
-        code_review_time_avg = EXCLUDED.code_review_time_avg,
-        focus_time_hours = EXCLUDED.focus_time_hours,
-        meeting_time_hours = EXCLUDED.meeting_time_hours,
-        context_switches_per_day = EXCLUDED.context_switches_per_day,
-        happiness_score = EXCLUDED.happiness_score` ,
-      [
-        teamId,
-        developerId,
-        prMergeTimeAvg ?? null,
-        codeReviewTimeAvg ?? null,
-        focusTimeHours ?? null,
-        meetingTimeHours ?? null,
-        contextSwitchesPerDay ?? null,
-        happinessScore ?? null
-      ]
+      `INSERT INTO developer_metrics (team_id, developer_id, ${cols.join(', ')})
+       VALUES (?, ?, ${cols.map(() => '?').join(', ')})
+       ON CONFLICT (team_id, developer_id) DO UPDATE SET
+         ${given.length ? given.map((f) => `${f.column} = EXCLUDED.${f.column}`).join(', ') : 'team_id = EXCLUDED.team_id'}`,
+      [teamId, developerId, ...DEVELOPER_METRIC_FIELDS.map((f) => value(f.key))]
     );
 
-    res.json({ 
+    res.json({
       message: 'Developer metrics saved successfully',
       teamId,
-      developerId
+      developerId,
+      updated: given.map((f) => f.key),
     });
   } catch (error) {
+    if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Developer metrics error:', error);
     res.status(500).json({ error: 'Failed to save developer metrics' });
   }
@@ -807,6 +770,9 @@ router.post('/business-impact-config/:teamId', authenticateToken, async (req: Au
     if (!Array.isArray(impactConfigs) || !Array.isArray(historicalConfigs)) {
       return res.status(400).json({ error: 'Invalid data format' });
     }
+    const configErrors = [...impactConfigs, ...historicalConfigs]
+      .flatMap((c: any) => parseRangedFields(c && typeof c === 'object' ? c : {}, BI_CONFIG_FIELDS).errors);
+    if (configErrors.length) return res.status(400).json({ error: configErrors[0], details: configErrors.slice(0, 20) });
 
     // Save impact configurations
     for (const config of impactConfigs) {
@@ -864,6 +830,7 @@ router.post('/business-impact-config/:teamId', authenticateToken, async (req: Au
 
     res.json({ success: true, message: 'Business impact configuration saved successfully' });
   } catch (error) {
+    if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Save business impact config error:', error);
     res.status(500).json({ error: 'Failed to save business impact configuration' });
   }
