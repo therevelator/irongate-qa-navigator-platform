@@ -53,6 +53,8 @@ function fmtMoney(v: number | null | undefined): string {
 }
 const fmtRange = (lo: number | null, hi: number | null) => (lo === null || hi === null ? null : `${fmtMoney(lo)} to ${fmtMoney(hi)}`);
 const fmtNum = (v: number | null | undefined, dp = 2) => (v === null || v === undefined ? '—' : Number(v.toFixed(dp)).toString());
+/** Payback: days under a month, else months with one decimal. */
+const fmtPayback = (m: number | null) => (m === null ? '—' : m < 1 ? `${Math.max(1, Math.round(m * 30))} day${Math.round(m * 30) <= 1 ? '' : 's'}` : `${fmtNum(m, 1)} months`);
 const fmtP = (p: number | null) => (p === null ? '—' : p < 0.001 ? '< 0.001' : p.toFixed(3));
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const fmtMonth = (ym: string | null) => {
@@ -234,8 +236,8 @@ const GainDetail: React.FC<{ g: GainItem; data: TeamRevenueData }> = ({ g, data 
       {g.movesWith.length > 0 && <p>Moves together with {g.movesWith.join(', ')} (|r| ≥ 0.7): reaching this target is the same movement, so they are not added again.</p>}
       {g.fixCost !== null && (
         <p>
-          Fix cost = effort hours × developer hourly rate = {fmtMoney(g.fixCost)}; return = yearly gain ÷ fix cost = {fmtNum(g.returnPerDollar, 1)}; pays back in{' '}
-          {fmtNum(g.paybackMonths, 1)} months.
+          Fix cost = effort hours × developer hourly rate = {fmtMoney(g.fixCost)}; return = yearly gain ÷ fix cost = {fmtNum(g.returnPerDollar, (g.returnPerDollar ?? 0) >= 10 ? 0 : 1)}; pays back in{' '}
+          {fmtPayback(g.paybackMonths)}.
         </p>
       )}
       {g.kind !== 'quality' && <Params params={data.financialParameters.filter((p) => g.kind === 'downtime' ? p.key === 'downtime_cost_per_minute' : true)} />}
@@ -351,7 +353,7 @@ export const RevenueMoneyView: React.FC<{ data: TeamRevenueData; showFormulas: b
                   <span className="flex-shrink-0 text-xs tabular-nums text-slate-600 dark:text-slate-300">
                     <span className="font-semibold text-slate-900 dark:text-white">+{fmtMoney(g.monthly)}/month</span>
                     {g.fixCost !== null
-                      ? ` · costs ${fmtMoney(g.fixCost)} · returns ${fmtNum(g.returnPerDollar, 1)}× a year · pays back in ${fmtNum(g.paybackMonths, 1)} months`
+                      ? ` · costs ${fmtMoney(g.fixCost)} · returns ${fmtNum(g.returnPerDollar, (g.returnPerDollar ?? 0) >= 10 ? 0 : 1)}× a year · pays back in ${fmtPayback(g.paybackMonths)}`
                       : ' · fix cost not estimated'}
                   </span>
                 </li>
