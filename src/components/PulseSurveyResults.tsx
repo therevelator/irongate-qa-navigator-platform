@@ -64,7 +64,7 @@ export const CADENCE_LABEL: Record<PulseCadence, string> = CADENCE_LABELS;
 
 /** "12 of 15 members (80%)" — response rate of a shown period, or null. */
 export const responseRateText = (p: { responses: number | null; sent: number; responseRate: number | null }) =>
-  p.responseRate == null || p.responses == null ? null : `${p.responses} of ${p.sent} members sent the survey (${p.responseRate}%)`;
+  p.responseRate == null || p.responses == null ? null : `${p.responseRate}% (${p.responses} responses, survey e-mailed to ${p.sent} members)`;
 
 /** "16 Nov – 22 Nov 2026" */
 export const periodLabel = (p: { start: string; lastDay: string }) => {
@@ -213,7 +213,7 @@ export const PulseTeamSummary: React.FC<{ teamId: string; onOpen?: () => void }>
         subtitle="Anonymous team pulse survey: averages of closed periods only, never single answers. Workload balance (derived) above is a separate workload signal."
         action={onOpen && data ? (
           <button type="button" className={cx(buttonClass.secondary, 'shrink-0 whitespace-nowrap')} onClick={onOpen} data-testid="open-pulse">
-            <HeartPulse size={15} aria-hidden /> {data.canRespond && !data.currentPeriod.responded ? 'Answer' : 'Open'}<span className="hidden sm:inline">{data.canRespond && !data.currentPeriod.responded ? ' the survey' : ' pulse'}</span>
+            <HeartPulse size={15} aria-hidden /> <span>{data.canRespond && !data.currentPeriod.responded ? 'Answer' : 'Open'}<span className="hidden sm:inline">{data.canRespond && !data.currentPeriod.responded ? ' the survey' : ' pulse'}</span></span>
           </button>
         ) : undefined}
       />
@@ -235,7 +235,7 @@ export const PulseTeamSummary: React.FC<{ teamId: string; onOpen?: () => void }>
               </p>
             )}
             {latest.responseRate != null && (
-              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Response rate {latest.responseRate}% ({latest.responses} of {latest.sent} sent)</p>
+              <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Response rate {latest.responseRate}% ({latest.responses} of {latest.sent} e-mailed)</p>
             )}
             <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
               Asked {CADENCE_LABEL[data.cadence].toLowerCase()}

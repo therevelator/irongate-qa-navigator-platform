@@ -138,14 +138,14 @@ export const PulseSendPanel: React.FC<{ data: TeamPulseData; sending: PulseSendS
         )}
 
         <div className="flex flex-wrap gap-2">
-          <button type="button" className={buttonClass.primary} disabled={busy !== null || allSent || sending.members === 0 || !data.team.isActive}
+          <button type="button" className={cx(buttonClass.primary, 'w-full sm:w-auto')} disabled={busy !== null || allSent || sending.members === 0 || !data.team.isActive}
             onClick={() => run('send')} data-testid="pulse-send-button">
-            <Send size={15} aria-hidden /> {busy === 'send' ? 'Sending…' : allSent ? 'Sent to every member' : sending.sent ? 'Send to the rest of the team' : 'Send survey to the team'}
+            <Send size={15} aria-hidden /> <span>{busy === 'send' ? 'Sending…' : allSent ? 'Sent to every member' : sending.sent ? 'Send to the rest of the team' : 'Send survey to the team'}</span>
           </button>
-          <button type="button" className={buttonClass.secondary} disabled={busy !== null || sending.members === 0 || answeredAll || !!sending.reminderAvailableAt || !data.team.isActive}
+          <button type="button" className={cx(buttonClass.secondary, 'h-auto min-h-9 w-full py-1.5 sm:w-auto')} disabled={busy !== null || sending.sent === 0 || answeredAll || !!sending.reminderAvailableAt || !data.team.isActive}
             onClick={() => run('remind')} data-testid="pulse-remind-button"
-            title={sending.reminderAvailableAt ? `One reminder per 24 hours; next from ${when(sending.reminderAvailableAt)}` : undefined}>
-            <BellRing size={15} aria-hidden /> {busy === 'remind' ? 'Sending…' : <>Send reminder<span className={compact ? 'hidden sm:inline' : undefined}> to those who haven’t answered</span></>}
+            title={sending.sent === 0 ? 'Send the survey first' : sending.reminderAvailableAt ? `One reminder per 24 hours; next from ${when(sending.reminderAvailableAt)}` : undefined}>
+            <BellRing size={15} className="shrink-0" aria-hidden /> <span>{busy === 'remind' ? 'Sending…' : 'Send reminder to those who haven’t answered'}</span>
           </button>
         </div>
         {sending.reminderAvailableAt && (
@@ -175,9 +175,9 @@ export const PulseSendPanel: React.FC<{ data: TeamPulseData; sending: PulseSendS
             <p className="text-xs font-medium text-slate-500 dark:text-slate-400">Recent sends</p>
             <ul className="mt-1.5 space-y-1" data-testid="pulse-send-log">
               {sending.log.slice(0, 5).map((e) => (
-                <li key={e.id} className="flex flex-wrap justify-between gap-x-3 text-xs">
+                <li key={e.id} className="grid grid-cols-1 gap-x-3 text-xs sm:grid-cols-[minmax(0,1fr)_auto]">
                   <span className="text-slate-700 dark:text-slate-300">{logLine(e)}</span>
-                  <span className="tabular-nums text-slate-500 dark:text-slate-400">{when(e.at)}</span>
+                  <span className="tabular-nums text-slate-500 sm:text-right dark:text-slate-400">{when(e.at)}</span>
                 </li>
               ))}
             </ul>
