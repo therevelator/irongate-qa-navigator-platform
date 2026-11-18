@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
 import API_URL from '../config/api';
 import { METRICS_CONFIG, KPI_TARGETS, getMetricStatus, metricTargetText } from '../config/metricsConfig';
+import { SIZING_ACCURACY_TOLERANCE } from '../data/metricCatalog';
 import type { MetricsConfig } from '../config/metricsConfig';
 import { Page, PageIntro, Badge, buttonClass, cx, inputClass } from './ui';
 import {
@@ -457,7 +458,8 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.timeInvested > 0 ? ((inputs.timeSaved - inputs.timeInvested) / inputs.timeInvested) * 100 : 0,
     unit: '%',
-    target: '>200%'
+    // No target (PRODUCT_GUIDE section 3.1): automation ROI is compared with the team's own history.
+    target: 'No target'
   },
   {
     id: 'sizing-accuracy',
@@ -471,7 +473,8 @@ const METRICS: MetricDefinition[] = [
     ],
     calculate: (inputs) => inputs.estimatedPoints > 0 ? inputs.actualPoints / inputs.estimatedPoints : 0,
     unit: 'x',
-    target: '0.9-1.1x (±10%)'
+    // Same tolerance as Team detail (SIZING_ACCURACY_TOLERANCE in metricCatalog.ts).
+    target: `${(1 - SIZING_ACCURACY_TOLERANCE.good).toFixed(2)}–${(1 + SIZING_ACCURACY_TOLERANCE.good).toFixed(2)}x (±${Math.round(SIZING_ACCURACY_TOLERANCE.good * 100)}%)`
   },
 
   // Reliability Metrics
@@ -1492,7 +1495,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     // Same good / warning thresholds as Team detail (METRICS_CONFIG).
     if (key && key in METRICS_CONFIG) {
       const status = getMetricStatus(value, key as keyof MetricsConfig);
-      return status === 'good' ? 'text-green-700 dark:text-green-400'
+      return status === 'none' ? 'text-slate-700 dark:text-slate-300'
+        : status === 'good' ? 'text-green-700 dark:text-green-400'
         : status === 'warning' ? 'text-amber-700 dark:text-amber-400'
         : 'text-red-700 dark:text-red-400';
     }

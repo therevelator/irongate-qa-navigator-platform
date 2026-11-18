@@ -26,6 +26,13 @@ export type QaStatus = 'good' | 'warning' | 'critical';
 
 export const QA_SCORE_THRESHOLDS = { good: 85, warning: 70 } as const;
 
+/**
+ * Colour bands of the company composite indices on the dashboard gauges (engineering health,
+ * delivery performance, tech debt health, pipeline health): green ≥ good, amber ≥ warning, else red.
+ * The wellbeing gauge uses WELLBEING_BANDS (server/lib/pulseRules.ts).
+ */
+export const COMPOSITE_INDEX_BANDS = { good: 80, warning: 60 } as const;
+
 export const QA_SCORE_WEIGHTS = {
   test_coverage: 0.30,
   defect_escape_rate: 0.25,

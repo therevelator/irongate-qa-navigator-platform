@@ -23,6 +23,11 @@ export interface MetricThreshold {
   lowerIsBetter: boolean;
   unit?: string;
   description?: string;
+  /**
+   * No target: the value is compared only with the team's own history (sprint velocity). Such
+   * a metric is never coloured good / warning / critical and shows "No target".
+   */
+  noTarget?: boolean;
 }
 
 export interface MetricsConfig {
@@ -177,12 +182,14 @@ export const METRICS_CONFIG: MetricsConfig = {
   // AGILE & PROCESS
   // ============================================
   
+  // No target (story points are not comparable between teams): good / warning are unused.
   sprintVelocity: {
-    good: 40,
-    warning: 25,
+    good: 0,
+    warning: 0,
     lowerIsBetter: false,
     unit: 'points',
-    description: 'Story points completed per sprint'
+    description: 'Story points completed per sprint (compare with the team’s own history)',
+    noTarget: true
   },
   
   sprintCommitmentRate: {
@@ -467,6 +474,7 @@ export function targetOnDay(periods: TargetPeriod[] | undefined | null, day: str
 /** Short target text for a metric, e.g. "≥ 80%" or "≤ 4 hours". */
 export function metricTargetText(metricKey: keyof MetricsConfig): string {
   const c = METRICS_CONFIG[metricKey];
+  if (c.noTarget) return 'No target';
   const unit = c.unit ? (c.unit.startsWith('%') || c.unit.startsWith('/') ? c.unit : ` ${c.unit}`) : '';
   return `${c.lowerIsBetter ? '≤' : '≥'} ${c.good}${unit}`;
 }
@@ -477,9 +485,10 @@ export function metricTargetText(metricKey: keyof MetricsConfig): string {
  * @param metricKey - The key of the metric in METRICS_CONFIG
  * @returns Tailwind color class (text-emerald-*, text-amber-*, text-red-*)
  */
-export function getMetricStatus(value: number, metricKey: keyof MetricsConfig): 'good' | 'warning' | 'critical' {
+export function getMetricStatus(value: number, metricKey: keyof MetricsConfig): 'good' | 'warning' | 'critical' | 'none' {
   const config = METRICS_CONFIG[metricKey];
   if (!config) return 'warning';
+  if (config.noTarget) return 'none';
   
   if (config.lowerIsBetter) {
     if (value <= config.good) return 'good';
@@ -497,6 +506,7 @@ export function getMetricStatus(value: number, metricKey: keyof MetricsConfig): 
  */
 export function getMetricTextColor(value: number, metricKey: keyof MetricsConfig, darkMode = true): string {
   const status = getMetricStatus(value, metricKey);
+  if (status === 'none') return darkMode ? 'text-slate-300' : 'text-slate-700';
   if (darkMode) {
     return status === 'good' ? 'text-emerald-400' : 
            status === 'warning' ? 'text-amber-400' : 'text-red-400';
@@ -510,6 +520,7 @@ export function getMetricTextColor(value: number, metricKey: keyof MetricsConfig
  */
 export function getMetricBgColor(value: number, metricKey: keyof MetricsConfig): string {
   const status = getMetricStatus(value, metricKey);
+  if (status === 'none') return 'bg-slate-500/10';
   return status === 'good' ? 'bg-emerald-500/20' : 
          status === 'warning' ? 'bg-amber-500/20' : 'bg-red-500/20';
 }
@@ -519,6 +530,7 @@ export function getMetricBgColor(value: number, metricKey: keyof MetricsConfig):
  */
 export function getMetricStatusLabel(value: number, metricKey: keyof MetricsConfig): string {
   const status = getMetricStatus(value, metricKey);
+  if (status === 'none') return 'No target';
   return status === 'good' ? 'Good' : 
          status === 'warning' ? 'Needs Attention' : 'Critical';
 }

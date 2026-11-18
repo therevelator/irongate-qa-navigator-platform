@@ -6,7 +6,7 @@ import {
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
 import { KPI_TARGETS, METRICS_CONFIG, getMetricStatus, teamAttentionIssues, type MetricsConfig } from '../config/metricsConfig';
-import { QA_SCORE_THRESHOLDS, qaStatusFromScore } from '../../server/lib/metricFormulas';
+import { COMPOSITE_INDEX_BANDS, QA_SCORE_THRESHOLDS, qaStatusFromScore } from '../../server/lib/metricFormulas';
 import { WELLBEING_BANDS } from '../../server/lib/pulseRules';
 import { useAuth } from '../contexts/AuthContext';
 import { Page, PageIntro, Card, Badge, SegmentedControl, EmptyState, buttonClass, inputClass, cx, type Tone } from './ui';
@@ -102,9 +102,9 @@ const fmtDate = (d: string | null | undefined) => {
 
 const QA_GOOD = QA_SCORE_THRESHOLDS.good;
 const QA_WARN = QA_SCORE_THRESHOLDS.warning;
-// Composite 0–100 indices use the platform's standard score bands (ui.scoreTone defaults).
-const INDEX_GOOD = 80;
-const INDEX_WARN = 60;
+// Composite 0–100 indices: the shared bands (COMPOSITE_INDEX_BANDS in server/lib/metricFormulas.ts).
+const INDEX_GOOD = COMPOSITE_INDEX_BANDS.good;
+const INDEX_WARN = COMPOSITE_INDEX_BANDS.warning;
 
 const RISK: Record<CompanySummary['riskLevel'], { label: string; tone: Tone }> = {
   stable: { label: 'Stable', tone: 'good' },
@@ -796,7 +796,8 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
         const v = r[f.key];
         const stale = r.staleness[f.metric]?.stale ? r.staleness[f.metric] : null;
         // Judged with the target valid at the value's date; a stale value is shown, not judged.
-        const st = v == null || stale ? null : statusAgainst(v, r.thresholds?.[f.metric]) ?? getMetricStatus(v, f.metric);
+        const judged = v == null || stale ? null : statusAgainst(v, r.thresholds?.[f.metric]) ?? getMetricStatus(v, f.metric);
+        const st = judged === 'none' ? null : judged;
         return (
           <div key={f.key} className="min-w-0">
             <dt className="truncate text-xs text-slate-500 dark:text-slate-400">{f.label}</dt>

@@ -440,7 +440,8 @@ weights are re-normalised; it is never replaced by another signal (in particular
 in for the survey). Confidence: "based on n of 4 components". Rounded to a whole number.
 
 The dashboard colours the company gauges (engineering health, delivery, tech debt health, pipeline health) green
-at ≥ 80 and amber at ≥ 60 (`INDEX_GOOD` / `INDEX_WARN` in [`NewDashboard.tsx`](../src/components/NewDashboard.tsx));
+at ≥ 80 and amber at ≥ 60 (`COMPOSITE_INDEX_BANDS` in [`metricFormulas.ts`](../server/lib/metricFormulas.ts), used by
+[`NewDashboard.tsx`](../src/components/NewDashboard.tsx));
 the wellbeing gauge uses the wellbeing bands (≥ 70, ≥ 50).
 
 ### 3.9 Company aggregates
