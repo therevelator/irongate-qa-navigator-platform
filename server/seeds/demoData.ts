@@ -20,6 +20,8 @@ import { createHash } from 'crypto';
 import { computeQaScore, computeDdps, TECH_DEBT_SEVERITY_WEIGHTS } from '../lib/metricFormulas';
 import { calculateWorkloadBalance } from '../../src/data/advancedFeatures';
 import { DEFAULT_METRIC_INTERVALS } from '../lib/metricIntervals';
+import { thresholdCondition, dedupeKey } from '../lib/alerts';
+import { defaultTarget, TARGET_METRIC_KEYS, type TargetMetric } from '../lib/targets';
 
 // ============================================================================
 // Identity of the demo company
@@ -927,6 +929,11 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
     ds.sql('metric_values', `SELECT count(public.backfill_metric_values(t)) FROM unnest(ARRAY[${kpiTeamIds.map(literal).join(', ')}]::text[]) AS t;`);
   }
   ds.sql('target_history', `SELECT public.backfill_target_history(${literal(companyId)});`);
+
+  // --------------------------------------------------------------------------
+  // Alerts, notifications and tracked actions (migration 20261121000000)
+  // --------------------------------------------------------------------------
+  emitAlertsAndActions(ds, company, kpiOf);
 
   // Last update per team and metric (today's snapshot); next update from the interval.
   const unitMs: Record<string, number> = { minutes: 60e3, hours: 3600e3, days: DAY_MS, weeks: 7 * DAY_MS, months: 30 * DAY_MS };
@@ -1841,6 +1848,169 @@ function benjaminiHochberg(p: number[]): number[] {
 }
 
 // ============================================================================
+// Alerts, notifications and tracked actions (sample)
+// ============================================================================
+
+/** Demo company targets that differ from the defaults (target_history above). */
+const DEMO_TARGET_OVERRIDES: Record<string, Partial<Record<TargetMetric, { good: number; warning: number }>>> = {
+  '*': { test_coverage: { good: 80, warning: 70 } },
+  'demo-team-checkout': { defect_escape_rate: { good: 3, warning: 6 } },
+};
+
+/**
+ * Sample alerts, notifications, preferences, rules and tracked actions.
+ *  - Alerts: the KPIs of teams with generated KPIs that are at watch / off target today, judged
+ *    exactly as the evaluator does (thresholdCondition, same dedupe key), so the next evaluation
+ *    adopts them (and resolves any that no longer hold).
+ *  - Tracked actions on every team (unless it has real ones): one in progress, one open (overdue
+ *    on some teams), one done 20 days ago and, on the demo company, one done 35 days ago.
+ *    Baselines are read from metric_values at apply time (SQL), never invented; outcomes are left
+ *    empty and computed by the server (server/lib/actions.ts) from the stored values.
+ *  - Demo company only: notification preferences, company alert rules (and a team override),
+ *    company notification settings without a Slack webhook (no secret in sample data).
+ */
+function emitAlertsAndActions(ds: Dataset, company: CompanyInput, kpiOf: (team: TeamDef, t: number) => Record<string, number>): void {
+  const today = ds.today;
+  const D = (t: number) => addDays(today, -t);
+  const admin = USERS.find(u => u.role === 'super_admin')!;
+  // Parents before children (notifications reference alerts and actions).
+  ds.reserve(undefined, 'alerts', 'team_actions', 'notifications');
+  const existing = (team: TeamCtx) => team.members.filter(m => !m.newUser);
+  const ownerOf = (team: TeamCtx, prefer: Array<Member['role']>) => {
+    const list = existing(team);
+    for (const r of prefer) { const m = list.find(x => x.role === r); if (m) return m; }
+    return list[0] ?? null;
+  };
+  const guardFor = (team: TeamCtx, what: 'actions' | 'alerts') => {
+    if (!team.guarded) return undefined;
+    const T = literal(team.id);
+    const cond = what === 'actions'
+      ? `EXISTS (SELECT 1 FROM teams WHERE id = ${T} AND is_active) AND NOT EXISTS (SELECT 1 FROM team_actions WHERE team_id = ${T} AND id NOT LIKE '${DEMO_PREFIX}%')`
+      : `EXISTS (SELECT 1 FROM teams WHERE id = ${T} AND is_active) AND NOT ${realDataExists('kpi', T, `'${today}'`)}`;
+    return ds.guard(`${team.id}|${what}`, cond);
+  };
+  const baselineSql = (teamId: string, metric: string, at: string, col: 'value' | 'recorded_at') => ({
+    sql: `(SELECT mv.${col} FROM metric_values mv WHERE mv.team_id = ${literal(teamId)} AND mv.metric_key = ${literal(metric)} AND mv.superseded_by IS NULL AND mv.recorded_at <= ${literal(at)}::timestamptz ORDER BY mv.recorded_at DESC, mv.received_at DESC LIMIT 1)`,
+  });
+  const targetFor = (team: TeamCtx, m: TargetMetric) => {
+    const d = defaultTarget(m);
+    const o = company.isDemo ? (DEMO_TARGET_OVERRIDES[team.id]?.[m] ?? DEMO_TARGET_OVERRIDES['*'][m]) : undefined;
+    return { good: o?.good ?? d.good, warning: o?.warning ?? d.warning, lowerIsBetter: d.lowerIsBetter, scope: o ? 'company' : 'default' };
+  };
+
+  for (const [ti, team] of company.teams.entries()) {
+    const generatedKpi = !team.groups || team.groups.has('kpi');
+    const lead = ownerOf(team, ['team_lead', 'qa_engineer']);
+    const engineer = ownerOf(team, ['qa_engineer', 'team_lead']);
+    const manager = company.isDemo ? USERS.find(u => u.role === 'qa_manager' && `demo-dept-${u.dept}` === team.deptId) : undefined;
+
+    // Alerts of today's generated KPIs (as the evaluator would open them).
+    const offTarget: Array<{ metric: TargetMetric; severity: string }> = [];
+    if (generatedKpi) {
+      const row = kpiOf(team, 0);
+      const ag = guardFor(team, 'alerts');
+      // Values are recorded at 00:00 today: metrics expected more often than daily are already
+      // stale, and stale values are not judged (the evaluator opens a "metric stale" alert instead).
+      const subDaily = new Set(DEFAULT_METRIC_INTERVALS.filter(i => i.interval_unit === 'minutes' || i.interval_unit === 'hours').map(i => i.metric_key));
+      for (const m of TARGET_METRIC_KEYS) {
+        const v = row[m];
+        if (typeof v !== 'number' || subDaily.has(m)) continue;
+        const c = thresholdCondition(team.id, m, v, targetFor(team, m), 'warning', ts(today, 0, 0));
+        if (!c) continue;
+        offTarget.push({ metric: m, severity: c.severity });
+        const created = ts(D(m.length % 3), 6 + (m.length % 5), 10);
+        ds.add('alerts', {
+          id: did('alert', team.key, m), company_id: team.companyId, team_id: team.id, rule: c.rule, metric_key: m, severity: c.severity, message: c.message,
+          details: { json: c.details }, dedupe_key: dedupeKey(c), created_at: created, last_seen_at: ts(today, 6, 15),
+          acknowledged_at: null, acknowledged_by: null, resolved_at: null,
+        }, ag);
+        if (company.isDemo) {
+          // The lead (and the department's QA manager for critical ones) got it in the bell.
+          const to = [lead?.id, c.severity === 'critical' ? manager?.id : undefined].filter((x): x is string => !!x);
+          for (const uid of to) {
+            ds.add('notifications', {
+              id: did('ntf', team.key, m, uid.slice(-8)), company_id: team.companyId, user_id: uid, kind: 'alert', severity: c.severity,
+              // The open alert of this condition: this sample one, or the one the server opened before.
+              title: `KPI off target · ${team.name}`, body: c.message, team_id: team.id, action_id: null,
+              alert_id: { sql: `(SELECT id FROM alerts WHERE company_id = ${literal(team.companyId)} AND dedupe_key = ${literal(dedupeKey(c))} AND resolved_at IS NULL LIMIT 1)` },
+              created_at: created, read_at: (hash32(uid + m) % 3 === 0) ? ts(today, 9, 0) : null,
+            }, ag);
+          }
+        }
+      }
+    }
+
+    // Tracked actions: on the worst KPIs where known, else the core QA KPIs.
+    const ag = guardFor(team, 'actions');
+    const ranked = offTarget.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'critical' ? -1 : 1)).map(o => o.metric);
+    const pick = [...new Set([...ranked, 'test_coverage', 'test_flakiness_rate', 'defect_escape_rate', 'automation_coverage'] as TargetMetric[])];
+    const overdue = ti % 2 === 0;
+    const actions: Array<{ key: string; title: string; metric: TargetMetric; owner: Member | null; status: string; created: number; due: number; completed?: number; description: string }> = [
+      { key: 'a1', title: ACTION_TITLES[pick[0]] ?? 'Improve the weakest KPI', metric: pick[0], owner: lead, status: 'in_progress', created: 12, due: -9, description: 'Agreed at the sprint review; progress reviewed weekly.' },
+      { key: 'a2', title: ACTION_TITLES[pick[1]] ?? 'Improve the second weakest KPI', metric: pick[1], owner: engineer, status: 'open', created: 10, due: overdue ? 3 : -14, description: 'Owner to propose a plan at the next stand-up.' },
+      { key: 'a3', title: ACTION_TITLES[pick[2]] ?? 'Close the gap on a QA KPI', metric: pick[2], owner: lead, status: 'done', created: 50, due: 22, completed: 20, description: 'Finished; outcome measured from the stored values.' },
+    ];
+    if (company.isDemo) actions.push({ key: 'a4', title: ACTION_TITLES[pick[3]] ?? 'Raise automation coverage', metric: pick[3], owner: engineer, status: 'done', created: 70, due: 36, completed: 35, description: 'Finished; 30-day outcome available.' });
+    for (const a of actions) {
+      const createdAt = ts(D(a.created), 10, 30);
+      const id = did('act', team.key, a.key);
+      ds.add('team_actions', {
+        id, company_id: team.companyId, team_id: team.id, title: a.title, description: a.description, origin: a.key === 'a1' ? 'recommendation' : 'manual',
+        alert_id: null, owner_id: a.owner?.id ?? null, due_date: D(a.due), status: a.status, metric_key: a.metric,
+        baseline_value: baselineSql(team.id, a.metric, createdAt, 'value'), baseline_at: baselineSql(team.id, a.metric, createdAt, 'recorded_at'),
+        created_by: company.isDemo ? admin.id : null, created_at: createdAt, updated_at: a.completed !== undefined ? ts(D(a.completed), 16) : createdAt,
+        completed_at: a.completed !== undefined ? ts(D(a.completed), 16) : null,
+      }, ag);
+      if (company.isDemo && a.owner && a.status !== 'done') {
+        ds.add('notifications', {
+          id: did('ntf', team.key, a.key), company_id: team.companyId, user_id: a.owner.id, kind: 'action', severity: 'info',
+          title: `Action assigned to you · ${team.name}`, body: `${a.title} · due ${D(a.due)}`, team_id: team.id, alert_id: null, action_id: id,
+          created_at: createdAt, read_at: a.status === 'in_progress' ? ts(D(a.created - 1), 9) : null,
+        }, ag);
+      }
+    }
+  }
+
+  if (!company.isDemo) return;
+  // Preferences of some demo users (others use the defaults), company rules and settings.
+  const pref = (uid: string, row: Record<string, SqlValue>) =>
+    ds.add('notification_preferences', { user_id: uid, company_id: DEMO_COMPANY_ID, in_app: true, email_immediate: false, weekly_digest: true, min_severity: 'warning', updated_at: ts(D(30), 9), ...row });
+  pref(admin.id, { min_severity: 'critical' });
+  const priya = USERS.find(u => u.role === 'qa_manager' && u.dept === 'payments')!;
+  pref(priya.id, { email_immediate: true, min_severity: 'critical' });
+  const viewer = USERS.find(u => u.role === 'viewer')!;
+  pref(viewer.id, { in_app: false, weekly_digest: false });
+  ds.add('alert_rules', { id: did('arule', 'co', 'score_drop'), company_id: DEMO_COMPANY_ID, scope_type: 'company', scope_id: DEMO_COMPANY_ID, rule: 'score_drop', enabled: true, params: { json: { points: 8, days: 7 } }, updated_by: admin.id, created_at: ts(D(40), 11), updated_at: ts(D(40), 11) });
+  ds.add('alert_rules', { id: did('arule', 'checkout', 'threshold'), company_id: DEMO_COMPANY_ID, scope_type: 'team', scope_id: 'demo-team-checkout', rule: 'threshold_breach', enabled: true, params: { json: { minSeverity: 'warning' } }, updated_by: priya.id, created_at: ts(D(25), 15), updated_at: ts(D(25), 15) });
+  ds.add('alert_rules', { id: did('arule', 'data', 'stale'), company_id: DEMO_COMPANY_ID, scope_type: 'team', scope_id: 'demo-team-data', rule: 'metric_stale', enabled: false, params: { json: {} }, updated_by: admin.id, created_at: ts(D(25), 15), updated_at: ts(D(25), 15) });
+  ds.add('company_notification_settings', { company_id: DEMO_COMPANY_ID, slack_webhook_enc: null, slack_webhook_hint: null, slack_enabled: false, slack_min_severity: 'critical', slack_digest: false, updated_by: admin.id, updated_at: ts(D(40), 11) });
+}
+
+/** Sample action titles per KPI. */
+const ACTION_TITLES: Partial<Record<TargetMetric, string>> = {
+  test_coverage: 'Add tests for the least-covered critical modules',
+  test_flakiness_rate: 'Quarantine and fix the ten flakiest tests',
+  defect_escape_rate: 'Post-mortem escaped defects and add regression tests',
+  defect_density: 'Refactor the two modules with the most defects',
+  automation_coverage: 'Automate the highest-value manual regression cases',
+  code_quality_score: 'Fix the top static-analysis findings and gate CI on them',
+  avg_build_time_minutes: 'Cache dependencies and parallelise the build',
+  test_execution_time_minutes: 'Split the slow end-to-end suite across runners',
+  deployment_frequency_per_week: 'Automate the release pipeline for small changes',
+  lead_time_days: 'Remove waiting steps between merge and deploy',
+  mttr_hours: 'Write runbooks for the most common incidents',
+  parallel_test_efficiency: 'Rebalance test shards by duration',
+  sprint_commitment_rate: 'Plan sprints to measured capacity',
+  sprint_carryover: 'Limit work in progress and review carry-over at planning',
+  first_time_pass_rate: 'Run the fast suite before every push',
+  blocked_time_hours: 'Daily blocker review with a same-day escalation path',
+  change_failure_rate: 'Add pre-merge checks and staged rollouts',
+  mtbf_hours: 'Add redundancy to the least reliable component',
+  system_availability: 'Alert on the weakest dependencies before they fail',
+  infrastructure_failures: 'Replace the flaky build agents',
+};
+
+// ============================================================================
 // Removal (FK-safe order): only rows that belong to the demo company
 // ============================================================================
 
@@ -1854,6 +2024,14 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
   // Demo logins given a team (teamlessLogins): their primary team goes back to none.
   { table: 'users (primary_team_id)', sql: `UPDATE users u SET primary_team_id = NULL FROM role_assignments ra
     WHERE ra.id LIKE '${DEMO_PREFIX}ral-%' AND ra.user_id = u.id AND u.primary_team_id = ra.scope_id AND u.id NOT LIKE ${D_}` },
+  // Alerts, notifications and tracked actions (also rows the server created for demo teams).
+  { table: 'notification_deliveries', sql: `DELETE FROM notification_deliveries WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'notifications', sql: `DELETE FROM notifications WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_} OR alert_id LIKE ${D_} OR action_id LIKE ${D_}` },
+  { table: 'team_actions', sql: `DELETE FROM team_actions WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
+  { table: 'alerts', sql: `DELETE FROM alerts WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
+  { table: 'alert_rules', sql: `DELETE FROM alert_rules WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'notification_preferences', sql: `DELETE FROM notification_preferences WHERE user_id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'company_notification_settings', sql: `DELETE FROM company_notification_settings WHERE company_id LIKE ${D_}` },
   { table: 'metric_values', sql: `DELETE FROM metric_values WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR idempotency_key LIKE 'backfill:${DEMO_PREFIX}%'` },
   { table: 'ingestion_log', sql: `DELETE FROM ingestion_log WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'target_history', sql: `DELETE FROM target_history WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
@@ -1913,6 +2091,7 @@ export const ALL_TABLES = [
   'invitations', 'pipeline_runs', 'pipeline_stage_history', 'pipeline_stages', 'role_assignments', 'seeder_runs', 'sprint_velocity', 'team_analytics', 'team_members',
   'team_pipeline_metrics', 'team_test_executions', 'teams', 'technical_debt', 'test_case_tags', 'test_cases', 'test_execution_runs',
   'test_executions', 'users', 'metric_values', 'target_history', 'ingestion_log',
+  'alerts', 'alert_rules', 'notifications', 'notification_preferences', 'company_notification_settings', 'notification_deliveries', 'team_actions',
 ];
 
 /** SQL condition selecting the demo rows of a table (for counts). */
@@ -1922,6 +2101,8 @@ export function demoRowCondition(table: string): string {
     case 'developer_productivity_snapshots': return `(developer_id LIKE ${D_} OR id >= ${DEMO_INT_ID_MIN})`;
     case 'team_members': return `user_id LIKE ${D_}`;
     case 'metric_values': return `(company_id LIKE ${D_} OR idempotency_key LIKE 'backfill:${DEMO_PREFIX}%')`;
+    case 'notification_preferences': return `user_id LIKE ${D_}`;
+    case 'company_notification_settings': return `company_id LIKE ${D_}`;
     default: return `id LIKE ${D_}`;
   }
 }
