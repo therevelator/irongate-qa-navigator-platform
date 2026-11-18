@@ -33,6 +33,10 @@ interface RankedTeam {
   escapeRate: number | null;
   automation: number | null;
   asOf: string | null;
+  /** Columns whose latest value is stale (older than its expected update interval): staleSince or null. */
+  stale: Partial<Record<SortKey, string | null>>;
+  /** The team's targets valid at its values' dates (target history), from GET /api/teams kpiThresholds. */
+  thresholds: Partial<Record<string, any>> | undefined;
 }
 
 type SortKey = 'qaScore' | 'coverage' | 'flakiness' | 'escapeRate' | 'automation';
@@ -78,6 +82,9 @@ const TeamGamification: React.FC<TeamRankingsProps> = ({ teamId }) => {
             escapeRate: toNum(k.defectEscapeRate),
             automation: toNum(k.automationCoverage),
             asOf: t.snapshotDate ?? t.asOf ?? k.snapshotDate ?? null,
+            stale: Object.fromEntries(COLUMNS.filter((c) => c.key !== 'qaScore' && t.kpiStaleness?.[c.metric]?.stale)
+              .map((c) => [c.key, t.kpiStaleness[c.metric].staleSince ?? null])),
+            thresholds: t.kpiThresholds ?? undefined,
           };
         });
 
@@ -117,9 +124,12 @@ const TeamGamification: React.FC<TeamRankingsProps> = ({ teamId }) => {
   const column = COLUMNS.find(c => c.key === sortKey)!;
   const lowerIsBetter = getThreshold(column.metric, thresholds)?.lowerIsBetter ?? false;
 
+  // A stale value (older than its expected update interval) is shown greyed but not ranked; the
+  // QA score from GET /api/teams already leaves stale inputs out.
+  const rankable = (t: RankedTeam) => t[sortKey] != null && !(sortKey in t.stale);
   const ranked = useMemo(() => {
-    const withValue = teams.filter(t => t[sortKey] != null);
-    const without = teams.filter(t => t[sortKey] == null).sort((a, b) => a.name.localeCompare(b.name));
+    const withValue = teams.filter(rankable);
+    const without = teams.filter(t => !rankable(t)).sort((a, b) => a.name.localeCompare(b.name));
     withValue.sort((a, b) => {
       const d = (a[sortKey] as number) - (b[sortKey] as number);
       return (lowerIsBetter ? d : -d) || a.name.localeCompare(b.name);
@@ -223,11 +233,17 @@ const TeamGamification: React.FC<TeamRankingsProps> = ({ teamId }) => {
                     </td>
                     {COLUMNS.map(c => {
                       const v = team[c.key];
-                      const status = statusFor(v, getThreshold(c.metric, thresholds));
+                      const isStale = c.key in team.stale;
+                      const status = statusFor(v, getThreshold(c.metric, team.thresholds ?? thresholds));
+                      const staleSince = team.stale[c.key];
                       return (
                         <td key={c.key} className="px-3 py-3 text-right tabular-nums">
                           {v == null ? (
                             <span className="text-slate-400 dark:text-slate-500">—</span>
+                          ) : isStale ? (
+                            <span className="text-slate-400 dark:text-slate-500" title={`Stale${staleSince ? ` since ${formatAsOf(staleSince)}` : ''}: shown, not ranked or judged`} data-stale="true">
+                              {v.toFixed(c.digits)}{c.unit}<span className="ml-1 text-[10px] uppercase">stale</span>
+                            </span>
                           ) : c.key === 'qaScore' ? (
                             <Badge tone={toneFor(status)}>{v.toFixed(c.digits)}{c.unit}</Badge>
                           ) : (
@@ -250,8 +266,9 @@ const TeamGamification: React.FC<TeamRankingsProps> = ({ teamId }) => {
         )}
       </Card>
       <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-        Ranking uses the selected column ({lowerIsBetter ? 'lower is better' : 'higher is better'}); teams with no recorded value are listed last without a rank.
-        Colours use the platform thresholds in metrics configuration. Snapshots of different dates are not directly comparable.
+        Ranking uses the selected column ({lowerIsBetter ? 'lower is better' : 'higher is better'}); teams with no recorded value, or a stale one (older than its
+        expected update interval), are listed last without a rank. Colours use each team’s targets valid at the value’s date (target history). The QA score
+        leaves stale inputs out. Snapshots of different dates are not directly comparable.
       </p>
     </Page>
   );
