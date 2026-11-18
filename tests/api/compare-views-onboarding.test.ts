@@ -330,8 +330,12 @@ describe('Compare, saved views, onboarding API', () => {
       expect(st).toMatchObject({ completed: 2, total: 5, show: true, dismissed: false });
       expect(await steps()).toEqual({ departments: true, teams: true, people: false, targets: false, data: false });
 
-      expect((await put('/api/targets', cookie, { scopeType: 'company', scopeId: companyId, targets: { test_coverage: { good: 82, warning: 72 } } })).status).toBe(200);
+      // Saving the company-wide targets unchanged ("Save for all departments") confirms them.
+      const confirm = await put('/api/targets', cookie, { scopeType: 'company', scopeId: companyId, targets: {}, applyToAll: true });
+      expect(confirm.status).toBe(200);
+      expect(confirm.body).toMatchObject({ changed: [], replaced: 0 });
       expect((await steps()).targets).toBe(true);
+      expect((await put('/api/targets', cookie, { scopeType: 'company', scopeId: companyId, targets: { test_coverage: { good: 82, warning: 72 } } })).status).toBe(200);
 
       expect((await post('/api/metrics/manual', cookie, { teamId, test_coverage: 71.5 })).status).toBeLessThan(300);
       expect((await steps()).data).toBe(true);
@@ -339,6 +343,15 @@ describe('Compare, saved views, onboarding API', () => {
       expect((await post('/api/admin/invitations', cookie, { email: `onb-invitee-${s}@onb${s}.test`, role: 'qa_engineer', scopeId: teamId })).status).toBe(201);
       st = (await get('/api/onboarding', cookie)).body;
       expect(st).toMatchObject({ completed: 5, complete: true, show: false });
+      expect(st.completedAt).toBeTruthy();
+
+      // Completed once = never shown again, even when a step reads as open later.
+      const inv = (await get('/api/admin/invitations', cookie)).body;
+      const invId = (inv.invitations ?? inv)[0]?.id;
+      if (invId) expect((await post(`/api/admin/invitations/${invId}/revoke`, cookie)).status).toBeLessThan(300);
+      st = (await get('/api/onboarding', cookie)).body;
+      expect(st).toMatchObject({ show: false });
+      expect(st.completedAt).toBeTruthy();
 
       const dis = await post('/api/onboarding/dismiss', cookie);
       expect(dis.status).toBe(200);

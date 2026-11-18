@@ -37,7 +37,11 @@ const SCOPE_LABEL: Record<Effective['scope'], { label: string; tone: Tone }> = {
 const unitText = (u: string) => (!u ? '' : u === '%' || u.startsWith('/') ? u : ` ${u}`);
 const when = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
-const KpiTargetsConfig: React.FC<{ scopeType: 'company' | 'department' | 'team'; scopeId: string | null; scopeLabel: string }> = ({ scopeType, scopeId, scopeLabel }) => {
+const KpiTargetsConfig: React.FC<{
+  scopeType: 'company' | 'department' | 'team'; scopeId: string | null; scopeLabel: string;
+  /** Company scope: saving also ends every department and team target, so the company targets apply everywhere. */
+  applyToAll?: boolean;
+}> = ({ scopeType, scopeId, scopeLabel, applyToAll = false }) => {
   const [data, setData] = useState<TargetsResponse | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [draft, setDraft] = useState<Record<string, { good: string; warning: string }>>({});
@@ -89,19 +93,22 @@ const KpiTargetsConfig: React.FC<{ scopeType: 'company' | 'department' | 'team';
   };
   const invalid = (data?.metrics ?? []).some((m) => problem(m));
 
+  const applyAll = applyToAll && scopeType === 'company';
   const save = async () => {
-    if (!changeCount || invalid) return;
+    if ((!changeCount && !applyAll) || invalid) return;
     setSaving(true);
     try {
       const res = await fetch(`${API_URL}/targets`, {
         method: 'PUT',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scopeType, scopeId, targets: changes }),
+        body: JSON.stringify({ scopeType, scopeId, targets: changes, ...(applyAll ? { applyToAll: true } : {}) }),
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body?.details?.join('; ') || body?.error || 'Failed to save the KPI targets');
-      toast.success(`KPI targets saved (${scopeLabel}). Earlier values keep their old targets.`);
+      toast.success(applyAll
+        ? `KPI targets saved and applied to every department and team${body?.replaced ? ` (${body.replaced} department/team target${body.replaced === 1 ? '' : 's'} replaced)` : ''}. Earlier values keep their old targets.`
+        : `KPI targets saved (${scopeLabel}). Earlier values keep their old targets.`);
       await load();
     } catch (e: any) {
       toast.error(e.message || 'Failed to save the KPI targets');
@@ -119,8 +126,10 @@ const KpiTargetsConfig: React.FC<{ scopeType: 'company' | 'department' | 'team';
         title="KPI targets"
         subtitle={<>Target (good) and watch levels per metric for <span className="font-medium text-slate-700 dark:text-slate-200">{scopeLabel}</span>. A change applies from now on; values recorded earlier are still judged with the target valid at their date. Empty fields inherit from the level above.</>}
         action={data?.canEdit ? (
-          <button type="button" className={cx(buttonClass.primary, "whitespace-nowrap")} onClick={save} disabled={saving || !changeCount || invalid} data-testid="kpi-targets-save">
-            <Save size={15} aria-hidden /> {saving ? 'Saving…' : changeCount ? `Save ${changeCount} change${changeCount === 1 ? '' : 's'}` : 'No changes'}
+          <button type="button" className={cx(buttonClass.primary, "whitespace-nowrap")} onClick={save} disabled={saving || (!changeCount && !applyAll) || invalid || !data?.canEdit} data-testid="kpi-targets-save">
+            <Save size={15} aria-hidden /> {saving ? 'Saving…'
+              : applyAll ? (changeCount ? `Save ${changeCount} change${changeCount === 1 ? '' : 's'} for all departments` : 'Save for all departments')
+              : changeCount ? `Save ${changeCount} change${changeCount === 1 ? '' : 's'}` : 'No changes'}
           </button>
         ) : undefined}
       />

@@ -107,7 +107,11 @@ class TargetError extends Error {
 router.put('/', authenticateToken, async (req: any, res) => {
   try {
     const companyId = req.user.companyId;
-    const { scopeType, scopeId, targets } = req.body ?? {};
+    const { scopeType, scopeId, targets: rawTargets, applyToAll } = req.body ?? {};
+    // applyToAll (company scope only): after saving, every department and team target is ended,
+    // so the company targets apply everywhere. Allowed with no target changes.
+    const applyAll = applyToAll === true;
+    const targets = applyAll && (rawTargets === undefined || rawTargets === null) ? {} : rawTargets;
     const scope = await resolveScope(companyId, scopeType, scopeId);
     if (!scope) return res.status(404).json({ error: 'Scope not found' });
     const actor = policyActor(req);
@@ -118,7 +122,10 @@ router.put('/', authenticateToken, async (req: any, res) => {
           : 'You can only set targets for the departments you manage and their teams',
       });
     }
-    if (!targets || typeof targets !== 'object' || Array.isArray(targets) || Object.keys(targets).length === 0) {
+    if (applyAll && scope.type !== 'company') {
+      return res.status(400).json({ error: 'applyToAll is only valid for company-wide targets' });
+    }
+    if (!targets || typeof targets !== 'object' || Array.isArray(targets) || (Object.keys(targets).length === 0 && !applyAll)) {
       return res.status(400).json({ error: 'targets must be an object of { metric: { good, warning } | null }' });
     }
 
@@ -179,6 +186,27 @@ router.put('/', authenticateToken, async (req: any, res) => {
         }
       }
       const metrics = Object.keys(after);
+      let replaced = 0;
+      if (applyAll) {
+        const ended = await exec<any>(
+          `UPDATE target_history SET valid_to = GREATEST(now(), valid_from + interval '1 millisecond')
+            WHERE company_id = ? AND scope_type IN ('department', 'team') AND valid_to IS NULL
+            RETURNING metric_key`,
+          [companyId]
+        );
+        replaced = ended.length;
+      }
+      if (applyAll || !metrics.length) {
+        // Recorded even without a change: confirming the company-wide targets completes that
+        // onboarding step (server/lib/onboarding.ts).
+        await recordAudit({
+          companyId, actorId: req.user.id, action: replaced > 0 ? 'targets.apply_all' : 'targets.confirm', entityType: 'config', entityId: scope.id,
+          summary: replaced > 0
+            ? `Applied company-wide KPI targets to every department and team (ended ${replaced} department/team target${replaced === 1 ? '' : 's'})`
+            : `Confirmed the KPI targets (${scope.type} ${scope.name})`,
+          departmentIds: [], subjectIds: [scope.id],
+        }, exec);
+      }
       if (metrics.length) {
         await recordAudit({
           companyId, actorId: req.user.id, action: 'targets.update', entityType: 'config', entityId: scope.id,
@@ -188,10 +216,10 @@ router.put('/', authenticateToken, async (req: any, res) => {
           subjectIds: [scope.id],
         }, exec);
       }
-      return metrics;
+      return { metrics, replaced };
     });
 
-    res.json({ success: true, changed });
+    res.json({ success: true, changed: changed.metrics, replaced: changed.replaced });
   } catch (error) {
     if (error instanceof TargetError) return res.status(error.status).json({ error: error.message });
     console.error('Update targets error:', error);

@@ -1060,7 +1060,7 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    const { departmentId, teamId, configs } = req.body;
+    const { departmentId, teamId, configs, applyToAll } = req.body;
 
     if (!configs || typeof configs !== 'object') {
       return res.status(400).json({ error: 'Invalid configs format' });
@@ -1079,6 +1079,10 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
     }
     if (scopeDept && !canManageDepartment(actor, scopeDept)) {
       return res.status(403).json({ error: 'Can only change settings of your department' });
+    }
+    const applyAll = applyToAll === true && !deptId && !tmId;
+    if (applyAll && !isCompanyAdmin(actor)) {
+      return res.status(403).json({ error: 'Only a super admin can apply settings to every department' });
     }
     const changes: Record<string, { from: string | null; to: string | null }> = {};
 
@@ -1129,6 +1133,33 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
       }
     }
 
+    // Company level with "apply to all": the department and team values of the saved settings are
+    // removed, so every department and team follows the company value (super admins only).
+    let replaced = 0;
+    const replacedKeys: string[] = [];
+    if (applyAll) {
+      for (const key of Object.keys(configs)) {
+        const rows = await query<any>(
+          `DELETE FROM configs WHERE company_id = ? AND config_key = ? AND (department_id IS NOT NULL OR team_id IS NOT NULL)
+           RETURNING id`,
+          [companyId, key]
+        );
+        if (rows.length) { replaced += rows.length; replacedKeys.push(key); }
+      }
+    }
+
+    if (!deptId && !tmId && (replaced > 0 || !Object.keys(changes).length)) {
+      // Recorded even without a change: confirming the company-wide settings completes that
+      // onboarding step (server/lib/onboarding.ts).
+      await recordAudit({
+        companyId, actorId: actor.id, action: replaced > 0 ? 'config.apply_all' : 'config.confirm', entityType: 'config', entityId: companyId,
+        summary: replaced > 0
+          ? `Applied company-wide settings to every department and team (replaced ${replaced} department/team value${replaced === 1 ? '' : 's'}: ${replacedKeys.slice(0, 4).join(', ')})`
+          : 'Confirmed the company-wide settings',
+        departmentIds: [], subjectIds: [`company:${companyId}`],
+      });
+    }
+
     if (Object.keys(changes).length) {
       await recordAudit({
         companyId, actorId: actor.id, action: 'config.update', entityType: 'config', entityId: tmId ?? deptId ?? companyId,
@@ -1138,7 +1169,7 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
         departmentIds: [scopeDept], subjectIds: [tmId ?? deptId ?? `company:${companyId}`],
       });
     }
-    res.json({ message: 'Configs saved successfully' });
+    res.json({ message: 'Configs saved successfully', replaced });
   } catch (error) {
     console.error('Error saving configs:', error);
     res.status(500).json({ error: 'Failed to save configs' });

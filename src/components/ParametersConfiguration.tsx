@@ -52,6 +52,9 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [configs, setConfigs] = useState<Record<string, string>>({});
+  // Company-wide: saving also replaces department and team values, so the company settings apply everywhere.
+  const [applyToAll, setApplyToAll] = useState(true);
+  const companyScope = selectedDepartment === 'all';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -110,11 +113,14 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ departmentId: selectedDepartment, teamId: selectedTeam, configs: payload }),
+        body: JSON.stringify({ departmentId: selectedDepartment, teamId: selectedTeam, configs: payload, ...(companyScope && applyToAll ? { applyToAll: true } : {}) }),
       });
       if (!response.ok) throw new Error();
       window.dispatchEvent(new CustomEvent('slaConfigUpdated'));
-      toast.success(`Configuration saved (${scopeLabel})`);
+      const body = await response.json().catch(() => ({}));
+      toast.success(companyScope && applyToAll
+        ? `Configuration saved and applied to every department and team${body?.replaced ? ` (${body.replaced} department/team value${body.replaced === 1 ? '' : 's'} replaced)` : ''}`
+        : `Configuration saved (${scopeLabel})`);
     } catch {
       toast.error('Failed to save configuration');
     } finally {
@@ -129,7 +135,7 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
         description="Team settings override department settings, which override company-wide settings. Empty fields inherit from the level above."
         actions={
           <button onClick={handleSave} disabled={saving || loading} className={buttonClass.primary}>
-            <Save size={15} /> {saving ? 'Saving…' : 'Save configuration'}
+            <Save size={15} /> {saving ? 'Saving…' : companyScope && applyToAll ? 'Save for all departments' : 'Save configuration'}
           </button>
         }
       />
@@ -162,6 +168,23 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
               </select>
             </label>
           </div>
+          {companyScope && (
+            <label className="mt-4 flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={applyToAll}
+                onChange={(e) => setApplyToAll(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500 dark:border-slate-600 dark:bg-slate-900"
+                data-testid="apply-to-all"
+              />
+              <span>
+                <span className="font-medium text-slate-900 dark:text-white">Apply to every department and team</span>
+                <span className="block text-xs text-slate-500 dark:text-slate-400">
+                  Saving the configuration or the KPI targets replaces the values departments and teams set for themselves, so these company-wide values apply everywhere. Each change is recorded in Activity.
+                </span>
+              </span>
+            </label>
+          )}
         </Card>
 
         {loading ? (
@@ -194,6 +217,7 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
           scopeType={selectedTeam !== 'all' ? 'team' : selectedDepartment !== 'all' ? 'department' : 'company'}
           scopeId={selectedTeam !== 'all' ? selectedTeam : selectedDepartment !== 'all' ? selectedDepartment : null}
           scopeLabel={scopeLabel}
+          applyToAll={companyScope && applyToAll}
         />
 
         <AlertSettings
