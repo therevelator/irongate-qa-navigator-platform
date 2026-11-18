@@ -364,27 +364,42 @@ export const DEMO_LOGINS = (['super_admin', 'qa_manager', 'team_lead', 'qa_engin
 // Team contexts: the demo company's teams, or existing teams being filled
 // ============================================================================
 
-export type Group = 'base' | 'kpi' | 'sprint' | 'mlu' | 'dev' | 'tests' | 'suites' | 'tte' | 'pipeline' | 'perf' | 'debt' | 'bi' | 'analytics';
-/**
- * Per group: the table whose (non-demo) rows mean "this team already has this data", and for
- * time series the date column: only rows from the last RECENT_DAYS days count (older data
- * would leave the windowed pages empty, so such a team is filled).
- */
-export const GROUP_CHECK: Record<Exclude<Group, 'base'>, { table: string; recent?: string }> = {
-  kpi: { table: 'kpi_snapshots', recent: 'snapshot_date' }, sprint: { table: 'sprint_velocity' }, mlu: { table: 'metric_last_updated' },
-  dev: { table: 'developer_metrics' }, tests: { table: 'test_cases' }, suites: { table: 'test_execution_runs', recent: 'start_time' },
-  tte: { table: 'team_test_executions', recent: 'execution_date' }, pipeline: { table: 'pipeline_runs', recent: 'started_at' },
-  perf: { table: 'performance_metrics', recent: 'recorded_date' }, debt: { table: 'technical_debt' },
-  bi: { table: 'business_impact_quality_metrics' }, analytics: { table: 'team_analytics', recent: 'period_end' },
-};
+export type Group = 'base' | 'kpi' | 'sprint' | 'mlu' | 'dev' | 'tests' | 'flaky' | 'suites' | 'tte' | 'pipeline' | 'perf' | 'debt' | 'bi' | 'analytics';
+/** Groups decided per team by a "real data exists" check ('dev' is decided per developer). */
+export type TeamGroup = Exclude<Group, 'base' | 'dev'>;
 /** A team with real rows at most this many days old keeps that data (e.g. its KPI history). */
 export const RECENT_DAYS = 30;
+/** Days of developer productivity snapshots (covers the 6-month DDPS range). */
+export const DEV_DAYS = 180;
 
-/** SQL: the team has real (non-demo) rows of a group. */
-export function realDataExists(group: Exclude<Group, 'base'>, teamIdSql: string, todaySql: string): string {
-  const c = GROUP_CHECK[group];
-  return `EXISTS (SELECT 1 FROM ${c.table} WHERE team_id = ${teamIdSql} AND id NOT LIKE '${DEMO_PREFIX}%'${c.recent ? ` AND ${c.recent} >= ${todaySql}::date - ${RECENT_DAYS}` : ''})`;
+/**
+ * SQL condition: the team already has real (non-demo) data for a group *in the window the
+ * analytics page shows*. Older data would leave the page empty, so such a team is filled.
+ * `todaySql` is a SQL date expression ('2026-11-18' or $2).
+ */
+export function realDataExists(group: TeamGroup, teamIdSql: string, todaySql: string): string {
+  const day = (n: number) => `${todaySql}::date - ${n}`;
+  const real = (table: string, extra = '') => `EXISTS (SELECT 1 FROM ${table} WHERE team_id = ${teamIdSql} AND id NOT LIKE '${DEMO_PREFIX}%'${extra})`;
+  switch (group) {
+    case 'kpi': return real('kpi_snapshots', ` AND snapshot_date >= ${day(RECENT_DAYS)}`);
+    case 'sprint': return real('sprint_velocity', ` AND end_date >= ${day(60)}`);
+    case 'mlu': return real('metric_last_updated');
+    case 'tests': return real('test_cases');
+    case 'flaky': return real('flaky_tests');
+    case 'suites': return real('test_execution_runs', ` AND start_time >= ${day(7)}`);
+    case 'tte': return real('team_test_executions', ` AND execution_date >= ${day(7)}`);
+    case 'pipeline': return `(${real('pipeline_runs', ` AND started_at >= ${day(7)}`)} AND ${real('pipeline_execution_summary', ` AND execution_date >= ${day(7)}`)})`;
+    case 'perf': return real('performance_metrics', ` AND recorded_date >= ${day(7)}`);
+    case 'debt': return real('technical_debt');
+    case 'bi': return `(SELECT COUNT(*) FROM business_impact_quality_metrics WHERE team_id = ${teamIdSql} AND id NOT LIKE '${DEMO_PREFIX}%' AND month_year >= to_char(${day(365)}, 'YYYY-MM')) >= 6`;
+    case 'analytics': return real('team_analytics', ` AND period_end >= ${day(14)}`);
+  }
 }
+export const TEAM_GROUPS: TeamGroup[] = ['kpi', 'sprint', 'mlu', 'tests', 'flaky', 'suites', 'tte', 'pipeline', 'perf', 'debt', 'bi', 'analytics'];
+
+/** SQL: the developer has a real productivity snapshot in the last RECENT_DAYS days. */
+export const recentSnapshotSql = (userSql: string, todaySql: string) =>
+  `EXISTS (SELECT 1 FROM developer_productivity_snapshots WHERE developer_id = ${userSql} AND id < 1000000000 AND snapshot_date >= ${todaySql}::date - ${RECENT_DAYS})`;
 
 export interface Member {
   id: string; first: string; last: string; role: UserDef['role']; insights: boolean;
@@ -402,8 +417,10 @@ export interface TeamCtx extends TeamDef {
   groups: Set<Group> | null;
   /** Real KPI rows by date (teams that keep their real KPI history), for company snapshots. */
   realKpi?: Map<string, Record<string, number | null>>;
-  /** Existing developers who already have productivity snapshots (not generated again). */
+  /** Developers with a recent real productivity snapshot (none generated for them). */
   devsWithSnapshots?: Set<string>;
+  /** Developers that already have a developer_metrics row for this team. */
+  devsWithMetrics?: Set<string>;
 }
 
 export interface CompanyInput {
@@ -430,7 +447,7 @@ function G(ds: Dataset, team: TeamCtx, group: Group, extraKey?: string, extraCon
   if (!team.guarded) return undefined;
   const T = literal(team.id);
   let cond = `EXISTS (SELECT 1 FROM teams WHERE id = ${T} AND is_active)`;
-  if (group !== 'base') cond += ` AND NOT ${realDataExists(group, T, `'${ds.today}'`)}`;
+  if (group !== 'base' && group !== 'dev') cond += ` AND NOT ${realDataExists(group, T, `'${ds.today}'`)}`;
   if (extraCond) cond += ` AND ${extraCond}`;
   return ds.guard(`${team.id}|${group}${extraKey ? `|${extraKey}` : ''}`, cond);
 }
@@ -483,19 +500,24 @@ const DEV_NAMES: Array<[string, string]> = [['Aoife', 'Byrne'], ['Rohan', 'Iyer'
  * Demo developers for an existing team with fewer than 3 engineers: deterministic ids/names,
  * emails in the company's domain that are not taken (`taken` is updated).
  */
-export function demoDevelopersFor(team: { id: string; departmentId: string }, domain: string, existingEngineers: number, taken: Set<string>): Member[] {
+export function demoDevelopersFor(team: { id: string; departmentId: string }, domain: string, existingEngineers: number, taken: Map<string, string>, existingInsights = 3): Member[] {
   const out: Member[] = [];
-  for (let i = 0; existingEngineers + out.length < 3; i++) {
+  // At least 3 QA engineers, and at least 2 developers who share their developer insights
+  // (the productivity pages only show those). An email is free when no other user has it
+  // (a demo developer keeps its own email on a re-run).
+  for (let i = 0; existingEngineers + out.length < 3 || existingInsights + out.length < 2; i++) {
+    const id = did('u', team.id, i + 1);
     const start = Math.floor(rnd('devname', team.id) * DEV_NAMES.length);
     let email = '', first = '', last = '';
-    for (let k = 0; k < DEV_NAMES.length * 3; k++) {
+    for (let k = 0; k < DEV_NAMES.length * 100; k++) {
       [first, last] = DEV_NAMES[(start + i * 7 + k) % DEV_NAMES.length];
       const n = Math.floor(k / DEV_NAMES.length);
       email = `${first}.${last}${n ? n + 1 : ''}@${domain}`.toLowerCase();
-      if (!taken.has(email)) break;
+      const owner = taken.get(email);
+      if (!owner || owner === id) break;
     }
-    taken.add(email);
-    out.push({ id: did('u', team.id, i + 1), first, last, role: 'qa_engineer', insights: true, newUser: { email, departmentId: team.departmentId } });
+    taken.set(email, id);
+    out.push({ id, first, last, role: 'qa_engineer', insights: true, newUser: { email, departmentId: team.departmentId } });
   }
   return out;
 }
@@ -805,7 +827,7 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
       const jitter = (rnd('devjit', u.id) - 0.5) * 0.3;
       const isLead = u.role === 'team_lead';
       const byDate = new Map<string, DevDay>();
-      for (let t = HISTORY_DAYS; t >= 0; t--) {
+      for (let t = DEV_DAYS; t >= 0; t--) {
         const date = D(t);
         if (!isWeekday(date)) continue;
         const n = (k: string) => (rnd('dev', u.id, k, date) - 0.5) * 2;
@@ -820,7 +842,7 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
       }
       devDays.set(u.id, byDate);
       const dpsGuard = team.devsWithSnapshots?.has(u.id) ? SKIP : G(ds, team, 'dev', `dps:${u.id}`,
-        `EXISTS (SELECT 1 FROM users WHERE id = ${literal(u.id)}) AND NOT EXISTS (SELECT 1 FROM developer_productivity_snapshots WHERE developer_id = ${literal(u.id)} AND id < ${DEMO_INT_ID_MIN})`);
+        `EXISTS (SELECT 1 FROM users WHERE id = ${literal(u.id)}) AND NOT ${recentSnapshotSql(literal(u.id), `'${today}'`)}`);
       for (const [date, v] of byDate) {
         const { score } = computeDdps({ focus_time_hours: v.focus, meeting_time_hours: v.meetings, context_switches_per_day: v.switches, pr_merge_time_avg: v.pr, code_review_time_avg: v.review });
         ds.add('developer_productivity_snapshots', {
@@ -856,7 +878,8 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
         pr_merge_time_avg: cur.pr, code_review_time_avg: cur.review, focus_time_hours: cur.focus, meeting_time_hours: cur.meetings,
         context_switches_per_day: cur.switches, happiness_score: round(workloadBalance(cur), 1),
         created_at: ts(D(HISTORY_DAYS), 18), updated_at: ts(yesterday, 18),
-      }, G(ds, team, 'dev', `dm:${u.id}`, `EXISTS (SELECT 1 FROM users WHERE id = ${literal(u.id)})`));
+      }, team.devsWithMetrics?.has(u.id) ? SKIP : G(ds, team, 'dev', `dm:${u.id}`,
+        `EXISTS (SELECT 1 FROM users WHERE id = ${literal(u.id)}) AND NOT EXISTS (SELECT 1 FROM developer_metrics WHERE team_id = ${literal(team.id)} AND developer_id = ${literal(u.id)})`));
     }
   }
 
@@ -889,8 +912,12 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
   const casesByTeam = new Map<string, CaseInfo[]>();
   for (const team of teams) {
     const rng = new Rng('cases', team.key);
-    const gTests = G(ds, team, 'tests');
-    ds.reserve(gTests, 'test_cases', 'test_case_tags', 'test_executions', 'flaky_tests');
+    const gTestsAll = G(ds, team, 'tests');
+    // A team with real test cases but no flaky tests gets demo flaky test cases (with their
+    // executions) under the 'flaky' guard.
+    const gFlaky = gTestsAll === SKIP ? G(ds, team, 'flaky') : SKIP;
+    ds.reserve(gTestsAll, 'test_cases', 'test_case_tags', 'test_executions', 'flaky_tests');
+    ds.reserve(gFlaky, 'test_cases', 'test_case_tags', 'test_executions', 'flaky_tests');
     const lead = leadOf(team);
     const engineers = engineersOf(team);
     const cases: CaseInfo[] = [];
@@ -916,6 +943,7 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
     const passBase = 0.975 + 0.02 * team.h;
     for (const c of cases) {
       const meta = c;
+      const gTests = gTestsAll !== SKIP ? gTestsAll : c.flaky ? gFlaky : SKIP;
       const execs: Array<{ id: string; status: string; dur: number; at: string; err: [string, string] | null }> = [];
       const total = meta.status === 'draft' ? 0 : !c.active ? 6 : c.flaky ? 20 : 16;
       const span = c.active ? EVENT_DAYS : 90;

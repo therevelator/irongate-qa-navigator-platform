@@ -16,8 +16,8 @@ import type pg from 'pg';
 import { pool } from '../../src/lib/db';
 import {
   buildDemoDataset, buildFillDataset, renderScript, CLEAR_STATEMENTS, ALL_TABLES, demoRowCondition, demoSummary, todayUtc,
-  teamDefFor, demoDevelopersFor, GROUP_CHECK, realDataExists, KPI_COLUMNS, DEMO_INT_ID_MIN,
-  DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, Member,
+  teamDefFor, demoDevelopersFor, TEAM_GROUPS, realDataExists, recentSnapshotSql, KPI_COLUMNS,
+  DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, TeamGroup, Member,
 } from './demoData';
 
 export interface SeedRunResult {
@@ -117,19 +117,24 @@ export async function planFillExisting(db: pg.Pool | pg.PoolClient, opts: { toda
       ORDER BY t.id, u.id`,
     [teamIds]
   );
-  const taken = new Set((await q<{ e: string }>(`SELECT lower(email) AS e FROM users WHERE id NOT LIKE 'demo-%'`)).map(r => r.e));
+  // email -> user id, for every user (demo developers keep their own email on a re-run).
+  const taken = new Map((await q<{ e: string; id: string }>(`SELECT lower(email) AS e, id FROM users`)).map(r => [r.e, r.id] as [string, string]));
 
-  const has: Partial<Record<Group, Set<string>>> = {};
-  for (const group of Object.keys(GROUP_CHECK) as Array<Exclude<Group, 'base'>>) {
+  const has: Partial<Record<TeamGroup, Set<string>>> = {};
+  for (const group of TEAM_GROUPS) {
     const rows = await q<{ id: string }>(
-      `SELECT t.id FROM teams t WHERE t.id = ANY($1::text[]) AND ${realDataExists(group, 't.id', '$2')}`,
-      GROUP_CHECK[group].recent ? [teamIds, opts.today] : [teamIds]
+      `SELECT t.id FROM teams t WHERE t.id = ANY($1::text[]) AND $2::date IS NOT NULL AND ${realDataExists(group, 't.id', '$2')}`,
+      [teamIds, opts.today]
     );
     has[group] = new Set(rows.map(r => r.id));
   }
+  // Developers with a recent real productivity snapshot, and existing (team, developer) metrics.
   const devsWithSnapshots = new Set((await q<{ d: string }>(
-    `SELECT DISTINCT developer_id AS d FROM developer_productivity_snapshots WHERE id < ${DEMO_INT_ID_MIN}`
+    `SELECT u.id AS d FROM users u WHERE u.id NOT LIKE 'demo-%' AND ${recentSnapshotSql('u.id', '$1')}`, [opts.today]
   )).map(r => r.d));
+  const metricPairs = await q<{ team_id: string; developer_id: string }>(
+    `SELECT team_id, developer_id FROM developer_metrics WHERE team_id = ANY($1::text[]) AND id NOT LIKE 'demo-%'`, [teamIds]
+  );
 
   // Real KPI rows of teams that keep their KPI history (company snapshots use them).
   const keepKpi = teamIds.filter(id => has.kpi!.has(id));
@@ -162,20 +167,26 @@ export async function planFillExisting(db: pg.Pool | pg.PoolClient, opts: { toda
 
   return companies.map(c => {
     const ctxs: TeamCtx[] = teams.filter(t => t.company_id === c.id).map(t => {
-      const groups = new Set<Group>((Object.keys(GROUP_CHECK) as Group[]).filter(g => !has[g as Exclude<Group, 'base'>]!.has(t.id)));
+      const groups = new Set<Group>(TEAM_GROUPS.filter(g => !has[g]!.has(t.id)));
       const existing: Member[] = members.filter(m => m.team_id === t.id).map(m => ({
         id: m.id, first: m.first_name, last: m.last_name, role: m.role, insights: !!m.developer_insights_enabled,
       }));
+      const isDev = (m: Member) => m.role === 'qa_engineer' || m.role === 'team_lead';
       const engineers = existing.filter(m => m.role === 'qa_engineer').length;
-      const extra = groups.size ? demoDevelopersFor({ id: t.id, departmentId: t.department_id }, c.domain, engineers, taken) : [];
+      const sharing = existing.filter(m => isDev(m) && m.insights).length;
+      const extra = demoDevelopersFor({ id: t.id, departmentId: t.department_id }, c.domain, engineers, taken, sharing);
+      const all = [...existing, ...extra];
+      const devsWithMetrics = new Set(metricPairs.filter(p => p.team_id === t.id).map(p => p.developer_id));
+      if (all.some(m => isDev(m) && (!devsWithSnapshots.has(m.id) || !devsWithMetrics.has(m.id)))) groups.add('dev');
       return {
-        ...teamDefFor(t), companyId: c.id, deptId: t.department_id, members: [...existing, ...extra], guarded: true,
-        groups, realKpi: realKpi.get(t.id), devsWithSnapshots,
+        ...teamDefFor(t), companyId: c.id, deptId: t.department_id, members: all, guarded: true,
+        groups, realKpi: realKpi.get(t.id), devsWithSnapshots, devsWithMetrics,
       };
     });
     const debt = realDebt.filter(d => d.company_id === c.id)
       .map(d => ({ severity: d.status === 'resolved' || d.status === 'wont_fix' ? 'low' : d.severity, created: toDay(d.created)!, resolved: d.status === 'resolved' || d.status === 'wont_fix' ? (toDay(d.resolved) ?? toDay(d.created)) : null }));
-    const happiness = realHappiness.filter(h => h.company_id === c.id && has.dev!.has(h.team_id)).map(h => Number(h.h));
+    const devTeams = new Set(ctxs.filter(t => t.groups?.has('dev')).map(t => t.id));
+    const happiness = realHappiness.filter(h => h.company_id === c.id && !devTeams.has(h.team_id)).map(h => Number(h.h));
     return { id: c.id, isDemo: false, teams: ctxs, teamCount: ctxs.length, realDebt: debt, extraHappiness: happiness };
   });
 }

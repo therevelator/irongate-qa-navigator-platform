@@ -44,20 +44,39 @@ npm run seed:demo:clear                        # remove all demo rows again (bot
 npm run seed:demo -- --sql out/demo-seed.sql   # demo company as SQL files (no DB connection)
 npm run seed:demo -- --fill-existing --sql out/demo-fill.sql   # fill as SQL (reads the local DB to plan)
 npm run seed:demo:clear -- --sql out/demo-clear.sql
+npm run seed:demo:check                        # coverage: every active team x analytics module, in its window
 ```
 
-**Fill existing companies** (`--fill-existing`, optional `--company <id>`): every active team
-of every non-demo company gets the same model wherever it has no real data yet. The data is
-grouped: KPI snapshots, sprints, metric update times, developer metrics, test cases,
-suite runs, daily test totals, pipeline, performance, technical debt, business impact and
-weekly analytics. A group is skipped for a team that already has real rows there (for time
-series, rows from the last 30 days; so a team with a recent KPI snapshot keeps its real KPI
-history). A team with fewer than 3 QA engineers gets demo developer users (password `demo123`).
-Each company also gets company KPI snapshots. All of these rows have `demo-` ids; the
+**Fill existing companies** (`--fill-existing`, optional `--company <id>`, repeatable): every
+active team of every non-demo company gets the same model wherever the analytics pages would
+otherwise be empty. Data is grouped, and a group is skipped only when the team already has real
+rows *in the window the page shows*:
+
+| Group | Counts as present when the team has real… |
+|---|---|
+| KPI snapshots | a snapshot in the last 30 days (then the team keeps its real KPI history) |
+| Test executions, daily test totals, performance | rows in the last 7 days |
+| Pipeline | runs and daily summaries in the last 7 days |
+| Team analytics | a week ending in the last 14 days |
+| Sprints | a sprint ending in the last 60 days |
+| Business impact | at least 6 of the last 12 months |
+| Test cases, flaky tests, tech debt, metric update times | any rows (a team with real test cases but no flaky tests gets demo flaky test cases) |
+
+Developers are handled one by one. Every developer of an active team whose latest real
+productivity snapshot is older than 30 days gets 180 days of snapshots, and every developer
+without a `developer_metrics` row for the team gets one. A team with fewer than 3 QA engineers,
+or fewer than 2 developers who share developer insights, gets demo developer users (password
+`demo123`). Each company also gets company KPI snapshots. Every added row has a `demo-` id; the
 integer-keyed snapshot tables use ids of 1,000,000,000 or more. `seed:demo:clear` removes them.
 In the SQL output, each group is wrapped in a `DO` block that checks again, when it runs, that
 the team exists and still lacks that data. That makes it safe to apply on a copy of the
 database that differs from the one it was planned on.
+
+`npm run seed:demo:check [-- --company <id>]` prints, per company and team, which modules have
+data in their windows. It covers KPI, developer metrics, DDPS (30 days and 6 months), test cases,
+flaky tests, test executions (7 days), pipeline history (14 days), runs (30 days) and stages,
+performance (7, 30 and 90 days), tech debt, business impact, sprints, team analytics and metric
+update times. It exits with code 1 below 100 %.
 
 Seeded flaky tests have no stored root cause, so the API reports their pattern guidance as
 unverified.
