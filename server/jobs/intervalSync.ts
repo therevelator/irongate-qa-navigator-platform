@@ -3,6 +3,7 @@ import { query, queryOne } from '../../src/lib/db';
 import { runPipelineSeederForAllCompanies } from '../seeders/pipelineSeeder';
 import { emitJobNotification } from '../eventBus';
 import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+import { recordKpiValues } from '../lib/kpiIngest';
 
 // NOTE: every KPI value this job writes comes from the random generators below or
 // from simulated pipeline runs. The whole sync therefore only runs when
@@ -159,37 +160,15 @@ const metricGenerators: Record<string, () => number> = {
 // CORE FUNCTIONS
 // ============================================================================
 
-// Ensure today's snapshot exists for a team
-async function ensureTodaySnapshot(teamId: string): Promise<string> {
-  const existing = await queryOne<any>(
-    'SELECT id FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURRENT_DATE',
-    [teamId]
-  );
-
-  if (existing) {
-    return existing.id;
-  }
-
-  // Create new snapshot for today
-  const snapshotId = `kpi-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  // No placeholder values: qa_score/status are computed by the DB trigger from real inputs.
-  await query(
-    `INSERT INTO kpi_snapshots (id, team_id, snapshot_date)
-     VALUES (?, ?, CURRENT_DATE)`,
-    [snapshotId, teamId]
-  );
-  return snapshotId;
-}
-
-// Update specific metrics for a team
+// Update specific metrics for a team (generated sample values: source 'synthetic', through the
+// one write path so they are stored in metric_values and marked as sample data).
 async function updateMetrics(teamId: string, metrics: string[]): Promise<number> {
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('KPI sync (intervalSync generators)');
     return 0;
   }
-  await ensureTodaySnapshot(teamId);
 
-  let updated = 0;
+  const values: Record<string, number> = {};
   for (const metric of metrics) {
     let value: number | null;
 
@@ -203,14 +182,16 @@ async function updateMetrics(teamId: string, metrics: string[]): Promise<number>
       if (!generator) continue;
       value = generator();
     }
-
-    await query(
-      `UPDATE kpi_snapshots SET ${metric} = ? WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
-      [value, teamId]
-    );
-    updated++;
+    if (value !== null && Number.isFinite(value)) values[metric] = value;
   }
-  return updated;
+  if (Object.keys(values).length === 0) return 0;
+  try {
+    const result = await recordKpiValues(teamId, values, { source: 'synthetic', actorId: null });
+    return result.updated.length;
+  } catch (error) {
+    console.error(`[intervalSync] could not record generated values for ${teamId}:`, (error as Error).message);
+    return 0;
+  }
 }
 
 // qa_score / status are computed by the database trigger kpi_snapshots_qa_score

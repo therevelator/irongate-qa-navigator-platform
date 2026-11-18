@@ -1,6 +1,7 @@
 import express from 'express';
 import { randomUUID } from 'crypto';
-import { KpiValidationError, recordKpiValues } from '../lib/kpiIngest';
+import { KpiValidationError, normaliseIdempotencyKey, notifyKpisUpdated, parseRecordedAt, recordKpiValues, validateKpiValues } from '../lib/kpiIngest';
+import { findReplay, logRejected, requestHash, runLogged, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
@@ -265,14 +266,25 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
 });
 
 // Manual metrics input (super_admin, qa_manager, team_lead)
+// Body: { teamId, recordedAt?, <column>: number, … }. recordedAt = the time the values are for
+// (default now; backdating updates that day's snapshot and later days without a newer value).
+// Header Idempotency-Key: a retried submit returns the stored result without writing twice.
+// Recorded in the ingestion log (channel 'manual').
 router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
+  const caller: IngestCaller = { companyId: req.companyId as string, channel: 'manual', actorId: req.userId ?? null };
+  const hash = requestHash(req.body ?? null);
+  let key: string | null = null;
+  const { teamId, recordedAt: rawRecordedAt, ...metricValues } = req.body ?? {};
+  const summary = (status: ItemSummary['status'], extra: Partial<ItemSummary> = {}): ItemSummary => ({
+    index: 0, teamId: typeof teamId === 'string' ? teamId : null, source: 'manual',
+    recordedAt: typeof rawRecordedAt === 'string' ? rawRecordedAt.slice(0, 40) : null,
+    metrics: Object.keys(metricValues).slice(0, 40), status, ...extra,
+  });
   try {
     const allowedRoles = ['super_admin', 'qa_manager', 'team_lead'];
     if (!allowedRoles.includes(req.userRole || '')) {
       return res.status(403).json({ error: 'Access denied. Requires Super Admin, QA Manager, or Team Lead role.' });
     }
-
-    const { teamId, ...metricValues } = req.body ?? {};
 
     if (!teamId) {
       return res.status(400).json({ error: 'Team ID is required' });
@@ -282,32 +294,59 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     // caller must be allowed to write it (team_lead -> own team only).
     if (!(await assertTeamWrite(req, res, teamId))) return;
 
-    // The shared ingestion path: validates against the KPI whitelist, upserts today's
-    // snapshot, carries other KPIs forward from the previous snapshot, records
-    // provenance (source 'manual') and notifies open dashboards. qa_score/status are
-    // computed by the database trigger from the stored inputs.
-    const result = await recordKpiValues(teamId, metricValues, {
-      source: 'manual',
-      actorId: req.userId ?? null,
-    });
-    const qa = await queryOne<any>(
-      `SELECT test_coverage, defect_escape_rate, change_failure_rate, code_quality_score
-         FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURRENT_DATE`,
-      [teamId]
-    );
+    key = normaliseIdempotencyKey(req.get('Idempotency-Key'), 'Idempotency-Key');
+    if (key) {
+      const replay = await findReplay(caller, key);
+      if (replay) return sendReplay(res, replay, hash);
+    }
+    const recordedAt = parseRecordedAt(rawRecordedAt);
+    validateKpiValues(metricValues);
 
-    res.json({
-      message: 'Metrics saved successfully',
-      qaScore: result.qaScore,
-      status: result.status ?? 'insufficient-data',
-      qaScoreFormula: QA_SCORE_FORMULA,
-      qaScoreMissingInputs: computeQaScore(qa).missingInputs,
-      snapshotDate: result.snapshotDate,
-      updated: result.updated,
-      carriedForward: result.carriedForward
+    // The shared ingestion path: validates against the KPI whitelist, stores the values
+    // (metric_values) and re-derives the snapshots of that day and later, records provenance
+    // (source 'manual') and notifies open dashboards. qa_score/status are computed by the
+    // database trigger from the stored inputs.
+    const out = await runLogged(caller, { key, hash, source: 'manual' }, async (client, ingestionId) => {
+      const result = await recordKpiValues(teamId, metricValues, {
+        source: 'manual',
+        actorId: req.userId ?? null,
+        recordedAt,
+        client,
+        notify: false,
+        ingestionId,
+      });
+      const [qa] = (await client.query(
+        `SELECT test_coverage, defect_escape_rate, change_failure_rate, code_quality_score
+           FROM kpi_snapshots WHERE team_id = $1 AND snapshot_date = $2::date`,
+        [teamId, result.snapshotDate]
+      )).rows;
+      const response = {
+        message: 'Metrics saved successfully',
+        qaScore: result.qaScore,
+        status: result.status ?? 'insufficient-data',
+        qaScoreFormula: QA_SCORE_FORMULA,
+        qaScoreMissingInputs: computeQaScore(qa).missingInputs,
+        snapshotDate: result.snapshotDate,
+        recordedAt: result.recordedAt,
+        updated: result.updated,
+        carriedForward: result.carriedForward
+      };
+      return {
+        status: 'accepted' as const, httpStatus: 200, response,
+        items: [summary('written', { snapshotDate: result.snapshotDate, recordedAt: result.recordedAt, qaScore: result.qaScore })],
+        errors: [], teamIds: [teamId], valueCount: result.updated.length, source: 'manual',
+      };
     });
+    if ('replay' in out) return sendReplay(res, out.replay, hash);
+    notifyKpisUpdated(out.outcome.response.updated, 'manual');
+    res.json(out.outcome.response);
   } catch (error) {
     if (error instanceof KpiValidationError) {
+      await logRejected(caller, { key, hash }, {
+        httpStatus: 400, response: { error: error.message, details: error.errors },
+        items: [summary('error', { errors: error.errors })], errors: [{ index: 0, errors: error.errors }],
+        teamIds: typeof teamId === 'string' ? [teamId] : [], source: 'manual',
+      });
       return res.status(400).json({ error: error.message, details: error.errors });
     }
     console.error('Manual metrics error:', error);

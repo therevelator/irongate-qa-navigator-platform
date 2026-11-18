@@ -1,21 +1,23 @@
 /**
- * Source-agnostic KPI ingestion: the one write path for team KPIs (kpi_snapshots).
+ * Source-agnostic KPI ingestion: the one write path for team KPIs.
  *
- * Manual entry (POST /api/metrics/manual) and machine ingestion (POST /api/ingest/kpis)
- * both call recordKpiValues(). It
+ * Manual entry (POST /api/metrics/manual), machine ingestion (POST /api/ingest/kpis) and the
+ * synthetic generators all call recordKpiValues(). It
  *   - validates column names and ranges against KPI_COLUMNS (the single whitelist),
- *   - upserts today's snapshot for the team,
- *   - when today's row is new, carries every KPI column forward from the team's most
- *     recent earlier snapshot (with that value's original provenance), so a partial
- *     update never wipes the other metrics,
- *   - records per-field provenance in kpi_snapshots.field_sources:
- *       { column: { source, recorded_at, recorded_by } }.
+ *   - stores each value in metric_values with recorded_at = the time the value is FOR
+ *     (recordedAt; default now; backfill up to MAX_BACKFILL_DAYS),
+ *   - re-derives the team's kpi_snapshots for that day and the later days (metricValues.ts):
+ *     a snapshot day holds the latest value of each metric as of that day, with its
+ *     provenance in kpi_snapshots.field_sources: { column: { source, recorded_at, recorded_by,
+ *     carried_forward? } }, so a partial update never wipes the other metrics,
+ *   - with a per-item idempotency key, never writes the same item twice.
  * qa_score / status are never accepted as inputs: the database trigger
  * kpi_snapshots_qa_score computes them from the stored inputs.
  */
 import type pg from 'pg';
 import { pool, toPgPlaceholders } from '../../src/lib/db';
 import { emitJobNotification } from '../eventBus';
+import { existingForKey, writeMetricValues } from './metricValues';
 
 export interface KpiColumnSpec {
   label: string;
@@ -129,13 +131,40 @@ export function normaliseSource(source: unknown): string {
   return s;
 }
 
-/** Parse recordedAt (ISO 8601); defaults to now; rejects times more than 5 minutes in the future. */
-export function parseRecordedAt(value: unknown): Date {
-  if (value === undefined || value === null || value === '') return new Date();
+/** Oldest recordedAt accepted (days before now): values can be backfilled up to a year. */
+export const MAX_BACKFILL_DAYS = 365;
+
+/**
+ * Parse recordedAt (ISO 8601, the time the value is for); defaults to now. Rejects times more
+ * than 5 minutes in the future or more than MAX_BACKFILL_DAYS in the past.
+ */
+export function parseRecordedAt(value: unknown, now = Date.now()): Date {
+  if (value === undefined || value === null || value === '') return new Date(now);
   const d = new Date(typeof value === 'string' || typeof value === 'number' ? value : NaN);
   if (Number.isNaN(d.getTime())) throw new KpiValidationError(['recordedAt must be an ISO 8601 timestamp']);
-  if (d.getTime() > Date.now() + 5 * 60 * 1000) throw new KpiValidationError(['recordedAt cannot be in the future']);
+  if (d.getTime() > now + 5 * 60 * 1000) throw new KpiValidationError(['recordedAt cannot be in the future']);
+  if (d.getTime() < now - MAX_BACKFILL_DAYS * 86_400_000) {
+    throw new KpiValidationError([`recordedAt cannot be more than ${MAX_BACKFILL_DAYS} days in the past`]);
+  }
   return d;
+}
+
+const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.:\-]{0,199}$/;
+
+/** Validate an idempotency key (header or per item): 1–200 characters, letters, digits, "_", "-", ".", ":". */
+export function normaliseIdempotencyKey(value: unknown, field = 'idempotencyKey'): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || !KEY_RE.test(value.trim())) {
+    throw new KpiValidationError([`${field} must be 1–200 characters: letters, digits, "_", "-", "." or ":"`]);
+  }
+  return value.trim();
+}
+
+/** Optional free-text reference to the source record (build id, URL): at most 500 characters. */
+export function normaliseSourceRef(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || value.length > 500) throw new KpiValidationError(['sourceRef must be a string of at most 500 characters']);
+  return value;
 }
 
 export interface RecordOptions {
@@ -147,15 +176,24 @@ export interface RecordOptions {
   client?: pg.PoolClient;
   /** Emit the dashboard refresh event after the write (default true; batch callers emit once). */
   notify?: boolean;
+  /** Per-item idempotency key: a second write with the same key for the team writes nothing. */
+  idempotencyKey?: string | null;
+  sourceRef?: string | null;
+  /** ingestion_log row of the request (links the stored values to it). */
+  ingestionId?: string | null;
 }
 
 export interface RecordResult {
   teamId: string;
+  /** The snapshot day the values belong to (the UTC day of recordedAt). */
   snapshotDate: string;
+  recordedAt: string;
   qaScore: number | null;
   status: string | null;
   updated: KpiColumn[];
   carriedForward: KpiColumn[];
+  /** true when the per-item idempotency key was already used: nothing was written. */
+  duplicate: boolean;
 }
 
 async function q<T = any>(client: pg.PoolClient, sql: string, params: any[] = []): Promise<T[]> {
@@ -197,9 +235,9 @@ export async function recordKpiValues(teamId: string, rawValues: unknown, option
   const values = validateKpiValues(rawValues);
   const source = normaliseSource(options.source);
   const recordedAt = (options.recordedAt ?? new Date()).toISOString();
-  const run = (client: pg.PoolClient) => recordInTransaction(client, teamId, values, source, recordedAt, options.actorId ?? null);
+  const run = (client: pg.PoolClient) => recordInTransaction(client, teamId, values, source, recordedAt, options);
   const result = options.client ? await run(options.client) : await withTransaction(run);
-  if (options.notify !== false) notifyKpisUpdated(result.updated, source);
+  if (options.notify !== false && !result.duplicate) notifyKpisUpdated(result.updated, source);
   return result;
 }
 
@@ -209,71 +247,52 @@ async function recordInTransaction(
   values: KpiValues,
   source: string,
   recordedAt: string,
-  actorId: string | null
+  options: RecordOptions
 ): Promise<RecordResult> {
-  // Serialise writers for this team so carry-forward and the upsert see a consistent state.
+  // Serialise writers for this team so the derived snapshots see a consistent state.
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`kpi_snapshots:${teamId}`]);
 
-  const cols = KPI_COLUMN_NAMES;
-  let carriedForward: KpiColumn[] = [];
-
-  const [today] = await q(client, 'SELECT id FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = CURRENT_DATE', [teamId]);
-  if (!today) {
-    const [prev] = await q<any>(
-      client,
-      `SELECT ${cols.join(', ')}, field_sources, to_char(snapshot_date, 'YYYY-MM-DD') AS snapshot_day
-         FROM kpi_snapshots
-        WHERE team_id = ? AND snapshot_date < CURRENT_DATE
-        ORDER BY snapshot_date DESC
-        LIMIT 1`,
-      [teamId]
-    );
-    const carried: Record<string, unknown> = {};
-    const carriedSources: Record<string, FieldSource> = {};
-    if (prev) {
-      const prevSources: Record<string, FieldSource> = prev.field_sources && typeof prev.field_sources === 'object' ? prev.field_sources : {};
-      for (const c of cols) {
-        if (prev[c] === null || prev[c] === undefined) continue;
-        carried[c] = prev[c];
-        carriedForward.push(c);
-        // Keep the value's original provenance so staleness stays visible.
-        carriedSources[c] = prevSources[c]
-          ? { ...prevSources[c], carried_forward: true }
-          : { source: 'unknown', recorded_at: prev.snapshot_day, recorded_by: null, carried_forward: true };
-      }
-    }
-    const insertCols = Object.keys(carried);
-    await q(
-      client,
-      `INSERT INTO kpi_snapshots (team_id, snapshot_date, field_sources${insertCols.map((c) => `, ${c}`).join('')})
-       VALUES (?, CURRENT_DATE, ?::jsonb${insertCols.map(() => ', ?').join('')})
-       ON CONFLICT (team_id, snapshot_date) DO NOTHING`,
-      [teamId, JSON.stringify(carriedSources), ...insertCols.map((c) => carried[c])]
-    );
-  }
-
+  const [team] = await q<{ company_id: string }>(client, 'SELECT company_id FROM teams WHERE id = ?', [teamId]);
+  if (!team) throw new KpiValidationError([`Unknown team ${teamId}`]);
   const updated = Object.keys(values) as KpiColumn[];
-  carriedForward = carriedForward.filter((c) => !updated.includes(c));
-  const newSources: Record<string, FieldSource> = {};
-  for (const c of updated) newSources[c] = { source, recorded_at: recordedAt, recorded_by: actorId };
+  const key = options.idempotencyKey ?? null;
+
+  let day: string;
+  let duplicate = false;
+  if (key && (await existingForKey(client, teamId, key)).length > 0) {
+    duplicate = true;
+    const [{ d }] = await q<{ d: string }>(client, `SELECT to_char((?::timestamptz AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS d`, [recordedAt]);
+    day = d;
+  } else {
+    ({ day } = await writeMetricValues(client, {
+      teamId,
+      companyId: team.company_id,
+      values: values as Record<string, number>,
+      recordedAt,
+      source,
+      actorId: options.actorId ?? null,
+      idempotencyKey: key,
+      sourceRef: options.sourceRef ?? null,
+      ingestionId: options.ingestionId ?? null,
+    }));
+  }
 
   const [row] = await q<any>(
     client,
-    `UPDATE kpi_snapshots
-        SET ${updated.map((c) => `${c} = ?`).join(', ')},
-            field_sources = COALESCE(field_sources, '{}'::jsonb) || ?::jsonb,
-            manually_edited = COALESCE(manually_edited, FALSE) OR ?
-      WHERE team_id = ? AND snapshot_date = CURRENT_DATE
-      RETURNING qa_score, status, to_char(snapshot_date, 'YYYY-MM-DD') AS snapshot_day`,
-    [...updated.map((c) => values[c]), JSON.stringify(newSources), source === 'manual', teamId]
+    `SELECT qa_score, status, field_sources FROM kpi_snapshots WHERE team_id = ? AND snapshot_date = ?::date`,
+    [teamId, day]
   );
+  const sources: Record<string, FieldSource> = row?.field_sources && typeof row.field_sources === 'object' ? row.field_sources : {};
+  const carriedForward = KPI_COLUMN_NAMES.filter((c) => !updated.includes(c) && sources[c]?.carried_forward === true);
 
   return {
     teamId,
-    snapshotDate: row.snapshot_day,
-    qaScore: row.qa_score === null || row.qa_score === undefined ? null : Number(row.qa_score),
-    status: row.status ?? null,
-    updated,
+    snapshotDate: day,
+    recordedAt,
+    qaScore: row?.qa_score === null || row?.qa_score === undefined ? null : Number(row.qa_score),
+    status: row?.status ?? null,
+    updated: duplicate ? [] : updated,
     carriedForward,
+    duplicate,
   };
 }
