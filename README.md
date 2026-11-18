@@ -319,6 +319,46 @@ current targets; existing snapshot rows are not rewritten).
   people who may see that team's people (`canViewTeamMembers`: super admin, the department's QA
   manager, people assigned to the team); KPI history follows the analytics scope.
 
+## Compare teams, saved views, CSV export and onboarding
+
+Migration: `supabase/migrations/20261121100000_saved_views_onboarding.sql` (tables `saved_views` and
+`onboarding_state`; additive, idempotent).
+
+- **Compare teams** (`/compare`, navigation **Compare teams**; `server/lib/compare.ts`,
+  `GET /api/compare/teams?ids=a,b[,c,d]&days=7..90`): two to four teams of your analytics scope side by
+  side. Per metric (QA score, technical debt score and every KPI with a target): the latest value, the
+  target valid at the value's date (target history) and the status against it, the change over the
+  window with a sparkline, stale values greyed (not judged, not compared) and sample-data markers; the
+  QA score shows "based on n of 4 inputs". The best value of each row is marked; a row is highlighted
+  when the teams are in different status bands or the gap is at least 10 % of the target ("Only rows
+  that differ" filters to those). The choice lives in the URL (`?teams=…&days=…&diff=1`). Scope: every
+  team must pass `canCompareTeams` (= `canViewTeamAnalytics`); otherwise one 403 (also for another
+  company's team or an unknown id). Team aggregates only.
+- **Saved views** (`/api/saved-views`, `server/lib/savedViews.ts`, the **Views** switcher on the
+  dashboard, in the Analytics scope bar of every module and on Compare teams): a named set of choices,
+  never data: dashboard filter, search, department, sort, layout and cards per row; the analytics
+  module's department and team; the compared teams, window and "only differences". Views are per
+  user; a super admin can share their views with the whole company and stop sharing any shared view
+  (recorded in Activity). Shared views are read-only for everyone else. Team ids in a view must be in
+  the saver's scope; applying a view leaves out teams outside the viewer's scope, and the API refuses
+  them anyway.
+- **CSV export** (`src/lib/csv.ts`, `ExportCsvButton`): on the dashboard team list, Compare teams
+  (server-built: `GET /api/compare/teams.csv`, one row per team and metric), Users, Teams, Departments,
+  Activity, Ingestion log and the analytics modules (flaky tests, technical debt, pipeline stages,
+  performance records, test runs, developer productivity, team rankings, business-impact
+  correlations). Values exactly as shown plus a "(raw)" column with the unrounded number; filters and
+  sort as on screen; UTF-8 with BOM. Text cells starting with `= + - @`, TAB or CR get a leading `'`
+  (CSV formula injection); plain numbers are left alone. Exports contain only what the screen received
+  from the API (same scope and privacy rules); developer productivity exports only your own row when
+  your role may not see other developers, and no export contains developer e-mail addresses.
+- **Onboarding checklist** (`server/lib/onboarding.ts`, `GET /api/onboarding`, dashboard of super
+  admins): create departments, add teams, invite people, set KPI targets, send the first data (API key
+  or manual metrics; sample data does not count). Progress is computed from the real state on every
+  load; the card shows while a step is open and can be hidden (`POST /api/onboarding/dismiss`, shown
+  again with `/restore`; both recorded in Activity).
+- Demo seed: every company gets sample views of its first super admin (two shared), ids `demo-sv-…`;
+  `seed:demo:check` requires them, `seed:demo:clear` removes them.
+
 ## Tests
 
 ```bash
