@@ -290,6 +290,14 @@ export function canOpenUserAdmin(actor: PolicyActor): boolean {
   return canWriteSomeTeamData(actor);
 }
 
+/**
+ * Formula mode ("Show formulas & data sources" on Team detail, Manual metrics, Business impact):
+ * company administrators (a demo and audit aid; product decision in docs/PRODUCT_GUIDE.md).
+ */
+export function canUseFormulaMode(actor: PolicyActor): boolean {
+  return hasCompany(actor);
+}
+
 /** Loading or refreshing sample data (the demo seed): company administrators. */
 export function canManageSampleData(actor: PolicyActor): boolean {
   return hasCompany(actor);

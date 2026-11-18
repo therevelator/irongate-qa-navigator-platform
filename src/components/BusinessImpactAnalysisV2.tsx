@@ -11,7 +11,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useShowFormulas } from '../hooks/useShowFormulas';
 import { FormulaSwitch } from './FormulaNote';
 import { policyActorOf } from '../lib/policyActor';
-import { canViewRevenueRollup } from '../../server/lib/userPolicy';
+import { canViewRevenueRollup, canUseFormulaMode } from '../../server/lib/userPolicy';
 import {
   RevenueMoneyView, RevenueWhatIf, RevenueSensitivityTable, RevenueRollupView, RevenueLoadState, Section, useRevenueImpact,
 } from './RevenueImpact';
@@ -174,7 +174,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
   const { user } = useAuth();
   // "Show formulas & data sources" (super admin demo aid, same preference as Team detail).
   const [showFormulasPref, setShowFormulas] = useShowFormulas();
-  const canShowFormulas = user?.role === 'super_admin';
+  const canShowFormulas = !!user && canUseFormulaMode(policyActorOf(user));
   const showFormulas = canShowFormulas && showFormulasPref;
   // Company / department roll-up: super admins and QA managers (canViewRevenueRollup).
   const canRollup = !!user && canViewRevenueRollup(policyActorOf(user));

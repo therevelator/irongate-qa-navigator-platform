@@ -6,6 +6,8 @@ import {
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
 import { KPI_TARGETS, METRICS_CONFIG, getMetricStatus, teamAttentionIssues, type MetricsConfig } from '../config/metricsConfig';
+import { canRequestExecutiveBriefing } from '../../server/lib/userPolicy';
+import { policyActorOf } from '../lib/policyActor';
 import { COMPOSITE_INDEX_BANDS, QA_SCORE_THRESHOLDS, qaStatusFromScore } from '../../server/lib/metricFormulas';
 import { WELLBEING_BANDS } from '../../server/lib/pulseRules';
 import { useAuth } from '../contexts/AuthContext';
@@ -335,7 +337,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
     { header: 'Snapshot date', value: (r) => r.snapshotDate ?? '' },
   ];
 
-  const canBrief = user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead';
+  const canBrief = !!user && canRequestExecutiveBriefing(policyActorOf(user)); // as POST /api/analytics/company-insights
   const hour = new Date().getHours();
   const greeting = `Good ${hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening'}${user?.firstName ? `, ${user.firstName}` : ''}`;
 

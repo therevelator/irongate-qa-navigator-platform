@@ -4,7 +4,8 @@ import { Maximize, Minimize, Moon, Sun, LogOut, Repeat, Loader2, MonitorX } from
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { DEVELOPER_INSIGHT_ROLES } from '../../server/lib/userPolicy';
+import { canRequestTeamInsights } from '../../server/lib/userPolicy';
+import { policyActorOf } from '../lib/policyActor';
 import { generateDetailedKPIs, getThreshold, statusFor } from '../data/detailedKPIs';
 import { describeChange } from '../data/kpiTrend';
 import { formatAsOf } from '../data/advancedFeatures';
@@ -166,7 +167,9 @@ const TeamTvView: React.FC = () => {
   };
 
   const { data, state, offline, updatedAt } = useTvSummary(teamId);
-  const canSeeRecommendations = !!user && DEVELOPER_INSIGHT_ROLES.includes(user.role) && state === 'ready';
+  // Recommendations: the team's leads, its department's QA managers and admins (as GET /api/teams/:id/ai-suggestions).
+  const tvTeam = scope.teams.find((t) => t.id === teamId);
+  const canSeeRecommendations = !!user && !!tvTeam && canRequestTeamInsights(policyActorOf(user), { id: tvTeam.id, department_id: tvTeam.department_id ?? null }) && state === 'ready';
   const recommendations = useTvRecommendations(state === 'ready' ? teamId : null, canSeeRecommendations);
   const trackedActions = useTvActions(state === 'ready' ? teamId : null, true);
 

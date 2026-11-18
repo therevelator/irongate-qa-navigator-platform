@@ -14,7 +14,7 @@ import {
 import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { canViewIndividualDevelopers, canViewTeamAnalytics } from '../../server/lib/userPolicy';
+import { canViewIndividualDevelopers, canViewTeamAnalytics, canUseFormulaMode } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
 import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay, Mail, Link2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -329,7 +329,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
 
   // "Show formulas & data sources" (super admin demo aid; same preference as Manual metrics).
   const [showFormulasPref, setShowFormulas] = useShowFormulas();
-  const canShowFormulas = user?.role === 'super_admin';
+  const canShowFormulas = !!user && canUseFormulaMode(policyActorOf(user));
   const showFormulas = canShowFormulas && showFormulasPref;
 
   // Opening a team keeps the same app view, so start the detail page at the top.

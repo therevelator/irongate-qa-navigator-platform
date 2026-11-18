@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { policyActorOf } from '../lib/policyActor';
+import { canManageCompanyConfig, canUseFormulaMode, canWriteSomeTeamData, canWriteTeamData } from '../../server/lib/userPolicy';
 import { Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap, Wrench, DollarSign, TrendingUp, Headphones, GitBranch, Code, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -726,7 +728,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
   // Formulas & data sources (super admin demo aid; preference shared app-wide).
   const [showFormulasPref, setShowFormulas] = useShowFormulas();
-  const canShowFormulas = user?.role === 'super_admin';
+  const canShowFormulas = !!user && canUseFormulaMode(policyActorOf(user));
   const showFormulas = canShowFormulas && showFormulasPref;
   const [fieldSources, setFieldSources] = useState<Record<string, FieldSource>>({});
   const [teamDebtScore, setTeamDebtScore] = useState<number | null>(null);
@@ -758,20 +760,10 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         const data = await response.json();
         let filteredTeams = data.teams || [];
         
-        // Filter teams based on user role
-        if (user?.role === 'qa_manager') {
-          // Manager: only teams in their department
-          filteredTeams = filteredTeams.filter((t: Team) => 
-            t.department_id === user.departmentId
-          );
-        } else if (user?.role === 'team_lead') {
-          // Team Lead: only their own team
-          filteredTeams = filteredTeams.filter((t: Team) => 
-            t.id === user.primaryTeamId ||
-            user.assignedTeams?.includes(t.id)
-          );
-        }
-        // super_admin sees all teams (no filter)
+        // Only the teams the caller may write (shared rule canWriteTeamData, as POST /metrics/manual):
+        // super_admin every team, a QA manager the teams of every department they manage, a lead every team they lead.
+        const actor = policyActorOf(user);
+        filteredTeams = filteredTeams.filter((t: Team) => canWriteTeamData(actor, { id: String(t.id), department_id: t.department_id ?? null }));
         
         setTeams(filteredTeams);
         if (filteredTeams.length > 0) {
@@ -1559,9 +1551,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   // Same roles as the server: team KPIs and developer metrics for super_admin, qa_manager
   // (own department) and team_lead (own team); debt impact and pipeline settings are
   // company data, edited by super_admin and qa_manager only.
-  const allowedRoles = ['super_admin', 'qa_manager', 'team_lead'];
-  const canEditCompanyData = user?.role === 'super_admin' || user?.role === 'qa_manager';
-  if (!user || !allowedRoles.includes(user.role)) {
+  const canEditCompanyData = !!user && canManageCompanyConfig(policyActorOf(user));
+  if (!user || !canWriteSomeTeamData(policyActorOf(user))) {
     return (
       <Page>
         <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
