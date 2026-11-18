@@ -48,6 +48,15 @@ interface CompanySummary {
 }
 
 type Filter = 'all' | 'high' | 'attention';
+
+/**
+ * The two filters are mutually exclusive:
+ *  - Needs attention: QA score below 70, or any recorded KPI off its target (same rule as the server).
+ *  - High performing: QA score at or above 85 AND no KPI off target.
+ * A team with a high QA score but a KPI off target (e.g. coverage below 80%) is "Needs attention" only.
+ */
+const isHighPerforming = (r: { qa: number | null; attention: boolean }) =>
+  r.qa != null && r.qa >= QA_SCORE_THRESHOLDS.good && !r.attention;
 type SortKey = 'qa' | 'name' | 'department' | 'coverage' | 'flakiness' | 'escapeRate' | 'automation' | 'deploys';
 type ViewMode = 'grid' | 'list';
 type Status = 'good' | 'warning' | 'critical' | 'none';
@@ -217,14 +226,14 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
 
   const counts = useMemo(() => ({
     all: inDepartment.length,
-    high: inDepartment.filter((r) => r.qa != null && r.qa >= QA_GOOD).length,
+    high: inDepartment.filter(isHighPerforming).length,
     attention: inDepartment.filter((r) => r.attention).length,
   }), [inDepartment]);
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = inDepartment.filter((r) => {
-      if (filter === 'high' && !(r.qa != null && r.qa >= QA_GOOD)) return false;
+      if (filter === 'high' && !isHighPerforming(r)) return false;
       if (filter === 'attention' && !r.attention) return false;
       return !q || r.name.toLowerCase().includes(q) || r.department.toLowerCase().includes(q);
     });
@@ -264,7 +273,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
             <div>
               <h2 id="team-overview-title" className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">Team performance</h2>
               <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                Latest KPI snapshot per team. Colour shows QA status: green ≥ {QA_GOOD}, amber ≥ {QA_WARN}, red below; grey has no data.
+                Latest KPI snapshot per team. Colour shows QA status: green ≥ {QA_GOOD}, amber ≥ {QA_WARN}, red below; grey has no data. High performing = QA ≥ {QA_GOOD} with every KPI on target; Needs attention = QA below {QA_WARN} or any KPI off target.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
