@@ -2482,7 +2482,9 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
     `, [companyId]);
 
     // 4. Generate AI Analysis (retries + smaller-model fallback)
-    let aiAnalysis = "AI analysis unavailable.";
+    let aiAnalysis = isGroqConfigured()
+      ? "AI analysis unavailable: the AI service did not respond. Try again in a minute."
+      : "AI analysis unavailable: no AI key is configured on the server (set GROQ_API_KEY).";
     const fmt = (v: number | null) => (v === null ? 'no data' : `${v}/100`);
 
     if (isGroqConfigured()) {
