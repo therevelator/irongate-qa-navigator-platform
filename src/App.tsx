@@ -200,6 +200,24 @@ function App() {
     return () => { clearTimeout(timer); ws?.close(); };
   }, [user?.id]);
 
+  // Open a team's detail view by id (Departments page). The list may be stale after a team
+  // moved department, so a miss refetches it once.
+  const openTeamById = async (teamId: string) => {
+    let team = teams.find((t) => t.id === teamId);
+    if (!team) {
+      try {
+        const res = await fetch(`${API_URL}/teams`, { credentials: 'include' });
+        if (res.ok) {
+          const { teams: list } = await res.json();
+          setTeams(list);
+          setUserTeams(list);
+          team = (list as Team[]).find((t) => t.id === teamId);
+        }
+      } catch { /* handled below */ }
+    }
+    if (team) setSelectedTeam(team);
+  };
+
   // Keep an open team detail view in sync with refreshed team data.
   useEffect(() => {
     setSelectedTeam(prev => (prev ? (teams.find(t => t.id === prev.id) ?? prev) : prev));
@@ -265,7 +283,14 @@ function App() {
   // Views
   if (currentView === 'users') return renderLayout(<UsersView is3DMode={is3DMode} />);
   if (currentView === 'teams') return renderLayout(<TeamsView is3DMode={is3DMode} />);
-  if (currentView === 'departments') return renderLayout(<DepartmentsView />);
+  if (currentView === 'departments') {
+    return renderLayout(
+      <DepartmentsView
+        onOpenTeam={openTeamById}
+        onTeamsChanged={() => { fetchDepartmentsAndTeams(); analyticsScope.reload(); }}
+      />
+    );
+  }
 
   if (currentView === 'features') {
     return renderLayout(

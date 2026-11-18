@@ -10,6 +10,7 @@ import {
 } from '../lib/userPolicy';
 import { syncPrimaryTeamMembership, teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 import { resolveConfigs, isSecretConfigKey } from '../lib/configResolver';
+import { planTeamDepartmentMove, applyTeamDepartmentMove } from '../lib/teamDepartment';
 
 const router = express.Router();
 
@@ -449,6 +450,32 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
   }
 });
 
+// Move a team to another department (super_admin only). Body: { departmentId, dryRun? }.
+// The target must be an active department of the caller's company. In one transaction the
+// team, the members who follow it and its team-level configs move (server/lib/teamDepartment).
+// dryRun: true validates and returns the same plan without writing (the confirm dialog).
+router.put('/teams/:id/department', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, companyId } = req.user;
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only Super Admins can move teams between departments' });
+    }
+    const { departmentId, dryRun } = req.body ?? {};
+    const result = await planTeamDepartmentMove(companyId, req.params.id, departmentId);
+    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    const { plan } = result;
+    if (dryRun === true) return res.json({ dryRun: true, ...plan });
+
+    const movedUserIds = await applyTeamDepartmentMove(companyId, plan);
+    res.json({ ...plan, movedUserIds, message: `${plan.team.name} moved to ${plan.to.name}` });
+  } catch (error: any) {
+    if (error?.status === 409) return res.status(409).json({ error: 'The team was changed by someone else. Refresh and try again.' });
+    if (error?.code === '23505') return res.status(409).json({ error: 'The target department already has a team with this name' });
+    console.error('Error moving team:', error);
+    res.status(500).json({ error: 'Failed to move team' });
+  }
+});
+
 // Delete team
 router.delete('/teams/:id', authenticateToken, async (req: any, res) => {
   try {
@@ -556,8 +583,16 @@ router.get('/departments/all', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Only Super Admins can access all departments' });
     }
 
+    // Counts follow the same columns the rest of the app keys off: teams.department_id
+    // (active teams; inactive ones counted separately) and users.department_id (active users).
     const departments = await query<any>(
-      'SELECT id, name, description, company_id, created_at FROM departments WHERE company_id = ? AND is_active = true ORDER BY name',
+      `SELECT d.id, d.name, d.description, d.company_id, d.created_at,
+              (SELECT COUNT(*)::int FROM teams t WHERE t.department_id = d.id AND t.company_id = d.company_id AND t.is_active = TRUE) AS team_count,
+              (SELECT COUNT(*)::int FROM teams t WHERE t.department_id = d.id AND t.company_id = d.company_id AND t.is_active = FALSE) AS inactive_team_count,
+              (SELECT COUNT(*)::int FROM users u WHERE u.department_id = d.id AND u.company_id = d.company_id AND u.is_active = TRUE) AS user_count
+         FROM departments d
+        WHERE d.company_id = ? AND d.is_active = true
+        ORDER BY d.name`,
       [companyId]
     );
 
@@ -565,6 +600,52 @@ router.get('/departments/all', authenticateToken, async (req: any, res) => {
   } catch (error) {
     console.error('Error fetching all departments:', error);
     res.status(500).json({ error: 'Failed to fetch departments' });
+  }
+});
+
+// A department's teams (active and inactive) for the Departments page detail (Super Admin only):
+// member count and lead from the shared membership definition, the latest QA score, and the
+// department's active QA managers (who see these teams' analytics).
+router.get('/departments/:id/teams', authenticateToken, async (req: any, res) => {
+  try {
+    const { role, companyId } = req.user;
+    if (role !== 'super_admin') {
+      return res.status(403).json({ error: 'Only Super Admins can view department details' });
+    }
+    const department = await queryOne<any>(
+      'SELECT id, name, description, is_active FROM departments WHERE id = ? AND company_id = ?',
+      [req.params.id, companyId]
+    );
+    if (!department) return res.status(404).json({ error: 'Department not found' });
+
+    const teams = await query<any>(
+      `SELECT t.id, t.name, t.description, t.is_active, t.department_id,
+              ${teamMemberCountSql('t')}::int AS member_count,
+              ${teamLeadNameSql('t')} AS team_lead_name,
+              k.qa_score, k.snapshot_date
+         FROM teams t
+         LEFT JOIN LATERAL (
+           SELECT ks.qa_score, ks.snapshot_date FROM kpi_snapshots ks
+            WHERE ks.team_id = t.id ORDER BY ks.snapshot_date DESC LIMIT 1
+         ) k ON TRUE
+        WHERE t.company_id = ? AND t.department_id = ?
+        ORDER BY t.is_active DESC, t.name`,
+      [companyId, department.id]
+    );
+    const managers = await query<any>(
+      `SELECT id, TRIM(first_name || ' ' || last_name) AS name, email FROM users
+        WHERE company_id = ? AND department_id = ? AND role = 'qa_manager' AND is_active = TRUE
+        ORDER BY first_name, last_name`,
+      [companyId, department.id]
+    );
+    res.json({
+      department,
+      managers,
+      teams: teams.map((t: any) => ({ ...t, qa_score: t.qa_score == null ? null : Number(t.qa_score) })),
+    });
+  } catch (error) {
+    console.error('Error fetching department teams:', error);
+    res.status(500).json({ error: 'Failed to fetch department teams' });
   }
 });
 
