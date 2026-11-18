@@ -1565,7 +1565,9 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
   for (const team of teams) {
     const gBi = G(ds, team, 'bi');
     const arpu = 18 + rnd('arpu', team.key) * 30;
-    const growth = 0.006 + rnd('growth', team.key) * 0.02;
+    // Modest underlying growth; most of the revenue movement follows the team's quality (health h),
+    // so the revenue impact analysis has a plausible association to find in the sample data.
+    const growth = 0.001 + rnd('growth', team.key) * 0.004;
     let prevRevenue: number | null = null;
     let prevUsers: number | null = null;
     const qSeries: Record<string, number>[] = [];
@@ -1579,7 +1581,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
         code_quality_score: round(avg('code_quality_score'), 2), change_failure_rate: round(avg('change_failure_rate'), 2),
       };
       const holiday = ym.endsWith('-11') || ym.endsWith('-12');
-      const revenue = round(team.revenue * Math.pow(1 + growth, mi) * (1 + 0.18 * (h - 0.6)) * (holiday ? 1.08 : 1) * (1 + n('rev') * 0.025), 2);
+      const revenue = round(team.revenue * Math.pow(1 + growth, mi) * (1 + 0.35 * (h - 0.6)) * (holiday ? 1.03 : 1) * (1 + n('rev') * 0.02), 2);
       const users = Math.round(revenue / arpu);
       const churn = round(clamp(5.2 - 4 * h + n('churn') * 0.35, 0.4, 12), 2);
       const kpis = {

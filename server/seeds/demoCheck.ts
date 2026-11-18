@@ -37,6 +37,10 @@ const MODULES: Module[] = [
   { key: 'bi', label: 'Business impact (>= 6 paired months in 12)', sql: `
       SELECT q.team_id FROM business_impact_quality_metrics q JOIN business_impact_business_kpis k ON k.team_id = q.team_id AND k.month_year = q.month_year
        WHERE q.month_year >= to_char($1::date - 365, 'YYYY-MM') GROUP BY q.team_id HAVING COUNT(*) >= 6` },
+  // Revenue impact (Business impact → Money): at least 12 paired months with monthly revenue in the last year.
+  { key: 'rev', label: 'Revenue impact (>= 12 months with revenue)', sql: `
+      SELECT q.team_id FROM business_impact_quality_metrics q JOIN business_impact_business_kpis k ON k.team_id = q.team_id AND k.month_year = q.month_year
+       WHERE k.monthly_revenue IS NOT NULL AND q.month_year >= to_char($1::date - 365, 'YYYY-MM') GROUP BY q.team_id HAVING COUNT(*) >= 12` },
   { key: 'sprint', label: 'Sprint velocity', sql: `SELECT DISTINCT team_id FROM sprint_velocity WHERE end_date >= $1::date - 60` },
   { key: 'ta', label: 'Team analytics (14 d)', sql: `SELECT DISTINCT team_id FROM team_analytics WHERE period_end >= $1::date - 14` },
   { key: 'mlu', label: 'Metric last updated', sql: `SELECT DISTINCT team_id FROM metric_last_updated WHERE $1::date IS NOT NULL` },
