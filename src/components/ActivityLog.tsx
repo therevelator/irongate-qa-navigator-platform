@@ -46,7 +46,7 @@ interface Facets {
 
 const ENTITY_LABEL: Record<string, string> = {
   user: 'People', team: 'Teams', department: 'Departments', assignment: 'Assignments', invitation: 'Invitations',
-  config: 'Settings', api_key: 'API keys', company: 'Organisation',
+  config: 'Settings', api_key: 'API keys', company: 'Organisation', alert: 'Alerts', action: 'Tracked actions',
 };
 
 /** Plain-language action names (the raw action is the key). */
@@ -61,6 +61,9 @@ const ACTION_LABEL: Record<string, string> = {
   'invitation.create': 'Invitation sent', 'invitation.resend': 'Invitation re-sent', 'invitation.revoke': 'Invitation revoked', 'invitation.accept': 'Invitation accepted',
   'config.update': 'Settings changed', 'targets.update': 'KPI targets', 'config.metric_interval': 'Update frequency', 'config.pipeline': 'Pipeline settings',
   'api_key.create': 'API key created', 'api_key.revoke': 'API key revoked', 'sso.link': 'Single sign-on linked', 'company.create': 'Organisation created',
+  'alert.acknowledge': 'Alert acknowledged', 'alert_rules.update': 'Alert rules', 'notification_settings.update': 'Slack notifications',
+  'notification_prefs.update': 'Notification preferences', 'action.create': 'Action created', 'action.update': 'Action changed',
+  'action.status': 'Action status', 'action.delete': 'Action deleted',
   undo: 'Undo',
 };
 const actionLabel = (a: string) => ACTION_LABEL[a] ?? a;
