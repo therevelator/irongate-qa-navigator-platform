@@ -3,6 +3,7 @@ import { Save, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { API_URL } from '../config/api';
 import { Page, PageIntro, Card, CardHeader, buttonClass, inputClass, cx } from './ui';
+import KpiTargetsConfig from './KpiTargetsConfig';
 
 interface ParametersConfigurationProps {
   onBack?: () => void;
@@ -187,6 +188,12 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
             </Card>
           ))
         )}
+
+        <KpiTargetsConfig
+          scopeType={selectedTeam !== 'all' ? 'team' : selectedDepartment !== 'all' ? 'department' : 'company'}
+          scopeId={selectedTeam !== 'all' ? selectedTeam : selectedDepartment !== 'all' ? selectedDepartment : null}
+          scopeLabel={scopeLabel}
+        />
 
         <Card>
           <div className="flex items-start gap-3">

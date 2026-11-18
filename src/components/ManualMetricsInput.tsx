@@ -6,7 +6,7 @@ import Swal from 'sweetalert2';
 import API_URL from '../config/api';
 import { METRICS_CONFIG, KPI_TARGETS, getMetricStatus, metricTargetText } from '../config/metricsConfig';
 import type { MetricsConfig } from '../config/metricsConfig';
-import { Page, PageIntro, Badge, buttonClass, cx } from './ui';
+import { Page, PageIntro, Badge, buttonClass, cx, inputClass } from './ui';
 import {
   BURNOUT_DEFINITION,
   WORKLOAD_BALANCE_FORMULA,
@@ -657,6 +657,9 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const [calculatedValues, setCalculatedValues] = useState<Record<string, number>>({});
   const [existingMetrics, setExistingMetrics] = useState<ExistingMetrics | null>(null);
   const [saving, setSaving] = useState(false);
+  // The day the team values are for (recordedAt). Empty = now. An earlier day updates that day's
+  // snapshot and the later days that have no newer value (the same rule as the ingestion API).
+  const [valuesFor, setValuesFor] = useState('');
   const [loading, setLoading] = useState(true);
   const [loadingMetrics, setLoadingMetrics] = useState(false);
   
@@ -1433,6 +1436,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     try {
       // Map calculated values to database column names (METRIC_COLUMN)
       const metricsPayload: Record<string, unknown> = { teamId: selectedTeamId };
+      const todayUtc = new Date().toISOString().slice(0, 10);
+      if (valuesFor && valuesFor < todayUtc) metricsPayload.recordedAt = `${valuesFor}T12:00:00.000Z`;
       for (const [metricId, column] of Object.entries(METRIC_COLUMN)) {
         metricsPayload[column] = calculatedValues[metricId];
       }
@@ -1451,7 +1456,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         Swal.fire({
           icon: 'success',
           title: 'Team Metrics Saved',
-          html: `<p><strong>${selectedTeam?.name || 'Team'}</strong> metrics saved successfully!</p><p>QA Score: <strong>${result.qaScore == null ? '—' : `${result.qaScore}/100`}</strong> (${result.status === 'insufficient-data' ? 'insufficient data' : result.status})</p>${result.qaScore == null && Array.isArray(result.qaScoreMissingInputs) && result.qaScoreMissingInputs.length ? `<p>Missing inputs: ${result.qaScoreMissingInputs.join(', ')}</p>` : ''}`,
+          html: `<p><strong>${selectedTeam?.name || 'Team'}</strong> metrics saved successfully${result.snapshotDate ? ` for ${result.snapshotDate}` : ''}.</p><p>QA Score: <strong>${result.qaScore == null ? '—' : `${result.qaScore}/100`}</strong> (${result.status === 'insufficient-data' ? 'insufficient data' : result.status})</p>${result.qaScore == null && Array.isArray(result.qaScoreMissingInputs) && result.qaScoreMissingInputs.length ? `<p>Missing inputs: ${result.qaScoreMissingInputs.join(', ')}</p>` : ''}`,
           confirmButtonColor: '#3b82f6',
         });
         
@@ -1630,6 +1635,24 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
               </option>
             ))}
           </select>
+          <label className="mt-4 block text-sm font-medium text-slate-700 dark:text-slate-300" htmlFor="manual-values-for">Team values are for</label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row sm:items-center">
+            <input
+              id="manual-values-for"
+              type="date"
+              value={valuesFor}
+              max={new Date().toISOString().slice(0, 10)}
+              min={new Date(Date.now() - 365 * 86_400_000).toISOString().slice(0, 10)}
+              onChange={(e) => setValuesFor(e.target.value)}
+              className={cx(inputClass, 'sm:w-48')}
+              data-testid="manual-values-for"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+              {valuesFor && valuesFor < new Date().toISOString().slice(0, 10)
+                ? `Saved as values for ${valuesFor}: that day's snapshot and the later days without a newer value are updated.`
+                : 'Empty or today: the values are for now. Pick an earlier day (up to a year back) to record a past measurement.'}
+            </p>
+          </div>
         </div>
 
         {/* Existing Metrics History */}

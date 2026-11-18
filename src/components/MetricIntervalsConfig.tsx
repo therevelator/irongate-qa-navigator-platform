@@ -107,7 +107,7 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = () => {
     <Page>
       <PageIntro
         title="Expected update frequency"
-        description="How often each metric is expected to receive a new value. Metrics arrive through the KPI ingestion API or Manual metrics; this setting does not fetch or generate data. Team detail marks a metric as stale when its last recorded value is older than this interval."
+        description="How often each metric is expected to receive a new value. Metrics arrive through the KPI ingestion API or Manual metrics; this setting does not fetch or generate data. A value older than its interval is shown as stale (greyed, with the time it became stale) and is left out of composite scores: QA score, KPI targets and company averages."
         actions={
           <>
             {hasChanges && <button className={buttonClass.secondary} onClick={() => setIntervals(original)}>Discard changes</button>}

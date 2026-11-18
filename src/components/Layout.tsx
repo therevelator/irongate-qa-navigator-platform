@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
-  Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity,
+  Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
   CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -79,6 +79,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
       { view: 'manual-metrics', label: 'Manual metrics', icon: Calculator, roles: ['super_admin', 'qa_manager', 'team_lead'] },
       { view: 'metric-intervals', label: 'Update frequency', icon: Clock, roles: ADMIN_ROLES },
       { view: 'parameters-config', label: 'Parameters', icon: SlidersHorizontal, roles: ADMIN_ROLES },
+      { view: 'ingestion-log', label: 'Ingestion log', icon: Inbox, roles: ADMIN_ROLES },
     ],
   },
 ];
@@ -104,6 +105,7 @@ const PAGE_META: Record<string, { title: string; parent?: string }> = {
   'manual-metrics': { title: 'Manual metrics', parent: 'Administration' },
   'metric-intervals': { title: 'Expected update frequency', parent: 'Administration' },
   'parameters-config': { title: 'Parameters', parent: 'Administration' },
+  'ingestion-log': { title: 'Ingestion log', parent: 'Administration' },
 };
 
 const ROLE_LABEL: Record<string, string> = {
