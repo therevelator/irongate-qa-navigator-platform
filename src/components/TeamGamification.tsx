@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { API_URL } from '../config/api';
+import ExportCsvButton from './ExportCsvButton';
 import { Page, PageIntro, Card, Badge, EmptyState, SegmentedControl, cx } from './ui';
 import type { Tone } from './ui';
 import { getThreshold, statusFor, toNum } from '../data/detailedKPIs';
@@ -152,11 +153,28 @@ const TeamGamification: React.FC<TeamRankingsProps> = ({ teamId }) => {
           </>
         }
         actions={
+          <>
           <SegmentedControl
             value={sortKey}
             onChange={setSortKey}
             options={COLUMNS.map(c => ({ value: c.key, label: c.short }))}
           />
+          <ExportCsvButton
+            what="Team rankings"
+            rows={ranked}
+            columns={[
+              { header: 'Rank', value: (r) => r.rank },
+              { header: 'Team', value: (r) => r.team.name },
+              { header: 'Department', value: (r) => r.team.department },
+              ...COLUMNS.map((c) => ({
+                header: c.label,
+                value: (r: (typeof ranked)[number]) => { const v = r.team[c.key]; return v == null ? '—' : `${v.toFixed(c.digits)}${c.unit}`; },
+                raw: (r: (typeof ranked)[number]) => r.team[c.key],
+              })),
+              { header: 'As of', value: (r) => r.team.asOf ?? '' },
+            ]}
+          />
+          </>
         }
       />
 

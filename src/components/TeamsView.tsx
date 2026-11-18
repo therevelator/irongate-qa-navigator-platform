@@ -9,6 +9,7 @@ import { Page, PageIntro, Card, Badge, EmptyState, buttonClass, inputClass, scor
 import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
 import { canManageTeam, canWriteTeamData, canManageCompanyConfig, ledTeamIds, type PolicyActor } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
+import ExportCsvButton from './ExportCsvButton';
 
 interface TeamMetrics {
   qa_score: number | null;
@@ -166,7 +167,28 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
         <PageIntro
           title="Teams"
           description={`${filteredTeams.length} team${filteredTeams.length !== 1 ? 's' : ''} · QA score colours: ≥${QA_SCORE_THRESHOLDS.good} good, ${QA_SCORE_THRESHOLDS.warning}–${QA_SCORE_THRESHOLDS.good - 1} watch, <${QA_SCORE_THRESHOLDS.warning} critical`}
-          actions={canCreateTeams && (
+          actions={<>
+            <ExportCsvButton
+              what="Teams"
+              rows={filteredTeams}
+              columns={[
+                { header: 'Team', value: (t) => t.name },
+                { header: 'Department', value: (t) => t.department_name || '' },
+                { header: 'Lead', value: (t) => t.team_lead_name ?? '' },
+                { header: 'Members', value: (t) => toNum(t.member_count) },
+                { header: 'Platform', value: (t) => t.platform || '' },
+                { header: 'QA score', value: (t) => fmt(teamMetrics[t.id]?.qa_score), raw: (t) => toNum(teamMetrics[t.id]?.qa_score) },
+                { header: 'Coverage', value: (t) => fmt(teamMetrics[t.id]?.test_coverage, 1, '%'), raw: (t) => toNum(teamMetrics[t.id]?.test_coverage) },
+                { header: 'Automation', value: (t) => fmt(teamMetrics[t.id]?.automation_coverage, 1, '%'), raw: (t) => toNum(teamMetrics[t.id]?.automation_coverage) },
+                { header: 'Defects / KLOC', value: (t) => fmt(teamMetrics[t.id]?.defect_density, 2), raw: (t) => toNum(teamMetrics[t.id]?.defect_density) },
+                { header: 'Deploys / week', value: (t) => fmt(teamMetrics[t.id]?.deployment_frequency_per_week, 1), raw: (t) => toNum(teamMetrics[t.id]?.deployment_frequency_per_week) },
+                { header: 'MTTR', value: (t) => fmt(teamMetrics[t.id]?.mttr_hours, 1, ' h'), raw: (t) => toNum(teamMetrics[t.id]?.mttr_hours) },
+                { header: 'Change failure', value: (t) => fmt(teamMetrics[t.id]?.change_failure_rate, 1, '%'), raw: (t) => toNum(teamMetrics[t.id]?.change_failure_rate) },
+                { header: 'Velocity', value: (t) => fmt(teamMetrics[t.id]?.sprint_velocity), raw: (t) => toNum(teamMetrics[t.id]?.sprint_velocity) },
+                { header: 'Active', value: (t) => (t.is_active ? 'yes' : 'no') },
+              ]}
+            />
+            {canCreateTeams && (
             <button
               onClick={() => { setEditForm({ name: '', description: '', departmentId: user?.departmentId || '' }); setShowCreateModal(true); }}
               className={buttonClass.primary}
@@ -174,7 +196,8 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
             >
               <Plus size={15} /> Create team
             </button>
-          )}
+            )}
+          </>}
         />
 
         <div className="relative mb-4">

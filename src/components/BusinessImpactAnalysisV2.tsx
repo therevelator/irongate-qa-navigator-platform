@@ -6,6 +6,7 @@ import { API_URL } from '../config/api';
 import { toast } from 'react-hot-toast';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
+import ExportCsvButton from './ExportCsvButton';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, buttonClass, inputClass, cx } from './ui';
 
 // Renders the AI response (HTML produced by the LLM). Treated as untrusted: sanitized before rendering.
@@ -577,7 +578,26 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                   <CardHeader
                     title="Correlation matrix"
                     subtitle={`${calculatedNote} Exploratory: ${tested} pairs tested${sampleRange ? `, ${sampleRange} months each` : ''}.`}
-                    action={canWrite ? calcButton : undefined}
+                    action={
+                      <div className="flex flex-wrap items-center gap-2">
+                        <ExportCsvButton
+                          what="Business impact correlations"
+                          compact
+                          rows={sortedCorrelations}
+                          columns={[
+                            { header: 'Quality metric', value: (cr) => labelOf(cr.quality_metric) },
+                            { header: 'Business KPI', value: (cr) => labelOf(cr.business_kpi) },
+                            { header: 'r', value: (cr) => fmtR(Number(cr.pearson_correlation)), raw: (cr) => Number(cr.pearson_correlation) },
+                            { header: 'p', value: (cr) => fmtP(num(cr.p_value)), raw: (cr) => num(cr.p_value) },
+                            { header: 'q (BH-FDR)', value: (cr) => fmtP(qOf(cr)), raw: (cr) => qOf(cr) },
+                            { header: 'Strength', value: (cr) => cr.correlation_strength },
+                            { header: 'n', value: (cr) => cr.sample_size },
+                            { header: 'Significant', value: (cr) => (cr.is_significant ? 'yes' : 'no') },
+                          ]}
+                        />
+                        {canWrite ? calcButton : null}
+                      </div>
+                    }
                   />
                 </div>
                 {sortedCorrelations.length === 0 ? (

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Inbox, RefreshCw } from 'lucide-react';
 import API_URL from '../config/api';
+import ExportCsvButton from './ExportCsvButton';
 import { Badge, Card, CardHeader, EmptyState, Page, PageIntro, buttonClass, cx, inputClass, type Tone } from './ui';
 
 /**
@@ -133,9 +134,28 @@ const IngestionLog: React.FC = () => {
           title="Ingestion log"
           description="Every KPI write from the ingestion API and Manual metrics: what arrived, what was written, what was rejected and why. Retried requests with the same Idempotency-Key are answered from here without writing twice."
           actions={
+            <>
+            <ExportCsvButton
+              what="Ingestion log"
+              rows={entries}
+              columns={[
+                { header: 'Received', value: (e) => when(e.received_at), raw: (e) => e.received_at },
+                { header: 'Channel', value: (e) => (e.channel === 'api' ? 'API' : 'Manual') },
+                { header: 'Source', value: (e) => e.source ?? '' },
+                { header: 'Sent by', value: (e) => e.api_key_name ? `API key ${e.api_key_name}${e.api_key_prefix ? ` (${e.api_key_prefix}…)` : ''}` : e.actor_name ?? '' },
+                { header: 'Status', value: (e) => STATUS[e.status]?.label ?? e.status },
+                { header: 'HTTP status', value: (e) => e.http_status },
+                { header: 'Items', value: (e) => e.item_count },
+                { header: 'Values', value: (e) => e.value_count },
+                { header: 'Teams', value: (e) => e.teams.map((t) => t.name).join('; ') },
+                { header: 'Errors', value: (e) => e.errors.flatMap((x) => x.errors.map((m) => (x.index === null ? m : `item ${x.index + 1}: ${m}`))).join('; ') },
+                { header: 'Idempotency key', value: (e) => e.idempotency_key ?? '' },
+              ]}
+            />
             <button type="button" className={buttonClass.secondary} onClick={() => load()}>
               <RefreshCw size={15} aria-hidden /> Refresh
             </button>
+            </>
           }
         />
 

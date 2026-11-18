@@ -18,6 +18,8 @@ import {
 import type { BurnoutRisk, DeveloperInputs } from '../data/advancedFeatures';
 import { toNum } from '../data/detailedKPIs';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
+import { useAuth } from '../contexts/AuthContext';
+import ExportCsvButton from './ExportCsvButton';
 
 interface DeveloperProductivityProps {
   onBack?: () => void;
@@ -67,6 +69,7 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
   const scope = useAnalyticsScope();
   // qa_engineer / viewer: the API returns only their own row (server/lib/userPolicy.ts).
   const ownRowOnly = !scope.canViewIndividuals;
+  const { user: authUser } = useAuth();
   const [developers, setDevelopers] = useState<DevRow[]>([]);
   const selectedTeam = teamId;
   const [selectedDeveloperId, setSelectedDeveloperId] = useState<string>('all');
@@ -292,11 +295,33 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
       <Card padded={false}>
         <div className="flex flex-col gap-3 p-5 pb-3 sm:flex-row sm:items-start sm:justify-between">
           <CardHeader title="Developers" subtitle={<>Burnout risk: {BURNOUT_DEFINITION}</>} />
+          <div className="flex flex-wrap items-center gap-2">
           <SegmentedControl
             value={sortBy}
             onChange={setSortBy}
             options={[{ value: 'ddps', label: 'DDPS' }, { value: 'pr', label: 'PR' }, { value: 'review', label: 'Review' }]}
           />
+          {/* Rows as the API returned them (individual rows only where the role may see them);
+              without that right only the caller's own row is exported. No e-mail addresses. */}
+          <ExportCsvButton
+            what="Developer productivity"
+            compact
+            rows={ownRowOnly ? sorted.filter((d) => String(d.developer_id) === String(authUser?.id)) : sorted}
+            columns={[
+              { header: 'Developer', value: (d) => d.name },
+              { header: 'Team', value: (d) => d.team_name },
+              { header: 'DDPS', value: (d) => `${Math.round(d.ddps)}/100`, raw: (d) => d.ddps },
+              { header: 'PR merge (h)', value: (d) => fmt(d.pr_merge_time_avg), raw: (d) => d.pr_merge_time_avg ?? null },
+              { header: 'Review (h)', value: (d) => fmt(d.code_review_time_avg), raw: (d) => d.code_review_time_avg ?? null },
+              { header: 'Focus (h/day)', value: (d) => fmt(d.focus_time_hours), raw: (d) => d.focus_time_hours ?? null },
+              { header: 'Meetings (h/day)', value: (d) => fmt(d.meeting_time_hours), raw: (d) => d.meeting_time_hours ?? null },
+              { header: 'Context switches', value: (d) => fmt(d.context_switches_per_day, 0), raw: (d) => d.context_switches_per_day ?? null },
+              { header: 'Focus + meetings (h/day)', value: (d) => fmt(d.estimatedHours), raw: (d) => d.estimatedHours },
+              { header: 'Workload balance (derived)', value: (d) => (d.wellbeing == null ? '—' : String(Math.round(d.wellbeing))), raw: (d) => d.wellbeing },
+              { header: 'Burnout risk', value: (d) => d.burnout[0].toUpperCase() + d.burnout.slice(1) },
+            ]}
+          />
+          </div>
         </div>
         {loading ? (
           <p className="px-5 pb-5 text-sm text-slate-500 dark:text-slate-400">Loading…</p>

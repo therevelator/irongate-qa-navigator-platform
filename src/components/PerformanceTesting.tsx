@@ -4,6 +4,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import { API_URL } from '../config/api';
 import { fetchSLAConfig, invalidateSLACache, type SLAConfig } from '../utils/slaConfig';
 import { useTheme } from '../contexts/ThemeContext';
+import ExportCsvButton from './ExportCsvButton';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, inputClass, cx } from './ui';
 
 interface PerformanceTestingProps {
@@ -160,11 +161,28 @@ const PerformanceTesting: React.FC<PerformanceTestingProps> = ({ teamId }) => {
             : `Daily response-time, throughput and error-rate records per endpoint, ${rangeLabel}.`
         }
         actions={
+          <>
           <SegmentedControl
             value={range}
             onChange={setRange}
             options={[{ value: '7', label: '7 days' }, { value: '30', label: '30 days' }, { value: '90', label: '90 days' }]}
           />
+          <ExportCsvButton
+            what="Performance records"
+            rows={rows}
+            columns={[
+              { header: 'Date', value: (r) => dayKey(r.timestamp) },
+              { header: 'Endpoint', value: (r) => r.endpoint },
+              { header: 'Method', value: (r) => r.method ?? '' },
+              { header: 'p50 (ms)', value: (r) => num(r.response_time_p50) },
+              { header: 'p95 (ms)', value: (r) => num(r.response_time_p95) },
+              { header: 'p99 (ms)', value: (r) => num(r.response_time_p99) },
+              { header: 'Throughput (req/min)', value: (r) => num(r.throughput) },
+              { header: 'Error rate (%)', value: (r) => num(r.error_rate) },
+              { header: 'SLA', value: (r) => ({ within: 'Within SLA', outside: 'Outside SLA', unknown: 'No SLA data' }[slaStatus(r, slaConfig)]) },
+            ]}
+          />
+          </>
         }
       />
 

@@ -4,6 +4,7 @@ import type { FlakyTest } from '../data/advancedFeatures';
 import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { API_URL } from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
+import ExportCsvButton from './ExportCsvButton';
 import { Page, PageIntro, Card, Badge, StatTile, EmptyState, SegmentedControl, cx } from './ui';
 
 interface FlakyTestIntelligenceProps {
@@ -92,6 +93,21 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId })
       <PageIntro
         title="Flaky tests"
         description="Tests recorded as flaky, with their most recent executions. Failure patterns are stored classifications and have not been verified against logs."
+        actions={
+          <ExportCsvButton
+            what="Flaky tests"
+            rows={filteredTests}
+            columns={[
+              { header: 'Test', value: (t) => t.test_name },
+              { header: 'Pattern (unverified)', value: (t) => t.failure_pattern || 'unknown' },
+              { header: 'Flakiness score', value: (t) => (t.flakiness_score != null ? Number(t.flakiness_score) : null) },
+              { header: 'Recorded failures', value: (t) => t.occurrences ?? null },
+              { header: 'Total runs', value: (t) => totalRunsOf(t) },
+              { header: 'First detected', value: (t) => t.first_detected ?? '' },
+              { header: 'Root cause (verified)', value: (t) => verifiedRootCause(t) ?? '' },
+            ]}
+          />
+        }
       />
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">

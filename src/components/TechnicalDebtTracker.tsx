@@ -5,6 +5,7 @@ import { API_URL } from '../config/api';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { useTheme } from '../contexts/ThemeContext';
+import ExportCsvButton from './ExportCsvButton';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, buttonClass, inputClass, cx } from './ui';
 import type { Tone } from './ui';
 
@@ -306,9 +307,28 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ teamId }) =
         title="Technical debt"
         description="Open debt items with effort, monthly cost of delay and ROI estimates calculated from entered impact data."
         actions={
+          <>
+          <ExportCsvButton
+            what="Technical debt"
+            rows={sortedDebt}
+            columns={[
+              { header: 'Title', value: (d) => d.title },
+              { header: 'Category', value: (d) => d.category },
+              { header: 'Severity', value: (d) => d.severity },
+              { header: 'Status', value: (d) => d.status },
+              { header: 'Effort (h)', value: (d) => num(d.estimated_effort_hours) },
+              { header: 'Investment', value: (d) => money(num(d.investment_cost)), raw: (d) => num(d.investment_cost) },
+              { header: 'Cost of delay / month', value: (d) => money(num(d.monthly_cost_of_delay)), raw: (d) => num(d.monthly_cost_of_delay) },
+              { header: 'Annual savings', value: (d) => money(num(d.annual_savings)), raw: (d) => num(d.annual_savings) },
+              { header: 'ROI', value: (d) => (num(d.roi_percentage) == null ? '—' : `${Math.round(num(d.roi_percentage)!)}%`), raw: (d) => num(d.roi_percentage) },
+              { header: 'Payback (months)', value: (d) => num(d.payback_months) },
+              { header: 'Created', value: (d) => d.created_date },
+            ]}
+          />
           <button onClick={handleExportPdf} disabled={sortedDebt.length === 0} className={cx(buttonClass.secondary, 'disabled:cursor-not-allowed disabled:opacity-50')}>
             <FileText className="h-4 w-4" /> Export PDF
           </button>
+          </>
         }
       />
 

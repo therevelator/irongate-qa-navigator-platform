@@ -9,6 +9,7 @@ import {
   DepartmentTeamsPanel, MoveTeamDialog,
   type CandidateTeam, type DepartmentDetail, type MoveRequest,
 } from './DepartmentTeams';
+import ExportCsvButton from './ExportCsvButton';
 import { AssignmentDialog, type AssignmentRequest, type CompanyUser } from './RoleAssignment';
 
 interface Department {
@@ -159,6 +160,19 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
         title="Departments"
         description={`${filteredDepartments.length} department${filteredDepartments.length === 1 ? '' : 's'} · open one to see its teams and reassign them`}
         actions={
+          <>
+          <ExportCsvButton
+            what="Departments"
+            rows={filteredDepartments}
+            columns={[
+              { header: 'Department', value: (d) => d.name },
+              { header: 'Description', value: (d) => d.description ?? '' },
+              { header: 'Active teams', value: (d) => Number(d.team_count) || 0 },
+              { header: 'Inactive teams', value: (d) => Number(d.inactive_team_count) || 0 },
+              { header: 'Active users', value: (d) => Number(d.user_count) || 0 },
+              { header: 'Created', value: (d) => d.created_at },
+            ]}
+          />
           <button
             onClick={() => {
               setDeptForm({ name: '', description: '' });
@@ -169,6 +183,7 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
             <Plus size={16} aria-hidden="true" />
             Create department
           </button>
+          </>
         }
       />
 

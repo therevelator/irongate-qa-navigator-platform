@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { ChevronDown, ChevronUp, History, RotateCcw, Search } from 'lucide-react';
 import API_URL from '../config/api';
 import Modal from './Modal';
+import ExportCsvButton from './ExportCsvButton';
 import { Badge, Card, EmptyState, Page, PageIntro, buttonClass, cx, inputClass, type Tone } from './ui';
 import { ROLE_LABELS } from '../lib/policyActor';
 
@@ -46,11 +47,13 @@ interface Facets {
 
 const ENTITY_LABEL: Record<string, string> = {
   user: 'People', team: 'Teams', department: 'Departments', assignment: 'Assignments', invitation: 'Invitations',
-  config: 'Settings', api_key: 'API keys', company: 'Organisation',
+  config: 'Settings', api_key: 'API keys', company: 'Organisation', saved_view: 'Saved views',
 };
 
 /** Plain-language action names (the raw action is the key). */
 const ACTION_LABEL: Record<string, string> = {
+  'saved_view.share': 'View shared', 'saved_view.unshare': 'View unshared', 'saved_view.delete': 'Shared view deleted',
+  'onboarding.dismiss': 'Onboarding hidden', 'onboarding.restore': 'Onboarding shown',
   'assignment.grant': 'Assignment added', 'assignment.revoke': 'Assignment removed',
   'user.create': 'User added', 'user.update': 'User changed', 'user.deactivate': 'User deactivated', 'user.activate': 'User reactivated',
   'user.password_reset': 'Password reset', 'user.developer_insights': 'Developer insights',
@@ -198,6 +201,20 @@ const ActivityLog: React.FC = () => {
       <PageIntro
         title="Activity"
         description="Changes to the organisation, roles, teams, departments, people and settings. Reversible changes can be undone while nothing newer touches the same thing."
+        actions={
+          <ExportCsvButton
+            what="Activity"
+            rows={entries}
+            columns={[
+              { header: 'When', value: (e) => fmt(e.created_at), raw: (e) => e.created_at },
+              { header: 'Who', value: (e) => e.actor_name ?? e.actor_email ?? 'System' },
+              { header: 'What', value: (e) => ENTITY_LABEL[e.entity_type] ?? e.entity_type },
+              { header: 'Change', value: (e) => actionLabel(e.action), raw: (e) => e.action },
+              { header: 'Summary', value: (e) => e.summary ?? '' },
+              { header: 'Undone', value: (e) => (e.undone_at ? `${fmt(e.undone_at)}${e.undone_by_name ? ` by ${e.undone_by_name}` : ''}` : '') },
+            ]}
+          />
+        }
       />
 
       <Card className="mb-4" padded>

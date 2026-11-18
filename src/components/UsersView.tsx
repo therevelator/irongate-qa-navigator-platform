@@ -79,6 +79,8 @@ import { policyActorOf, grantableOptions } from '../lib/policyActor';
 import { InviteDialog, InvitationsPanel } from './InviteDialog';
 import { AssignmentChips, type AssignmentRow } from './AssignmentChips';
 import { buttonClass } from './ui';
+import ExportCsvButton from './ExportCsvButton';
+import { ROLE_LABELS } from '../lib/policyActor';
 
 interface UsersViewProps {
   is3DMode?: boolean;
@@ -379,6 +381,21 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
               </div>
             )}
 
+            {/* The listed people as shown (search and filters applied); no individual developer metrics. */}
+            <ExportCsvButton
+              what="Users"
+              rows={filteredUsers}
+              columns={[
+                { header: 'First name', value: (u) => u.first_name },
+                { header: 'Last name', value: (u) => u.last_name },
+                { header: 'Email', value: (u) => u.email },
+                { header: 'Role', value: (u) => ROLE_LABELS[u.role] ?? u.role },
+                { header: 'Department', value: (u) => u.department_name ?? '' },
+                { header: 'Team', value: (u) => u.team_name ?? '' },
+                { header: 'Assignments', value: (u) => (u.assignments ?? []).map((a) => `${ROLE_LABELS[a.role] ?? a.role}: ${a.scope_name ?? a.scope_id}`).join('; ') },
+                { header: 'Active', value: (u) => (u.is_active ? 'yes' : 'no') },
+              ]}
+            />
             {mayInvite && (
               <button type="button" onClick={() => setShowInvite(true)} className={buttonClass.primary} data-testid="invite-user-btn">
                 <Send size={16} aria-hidden="true" />

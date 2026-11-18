@@ -6,6 +6,7 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import type { TestExecution } from '../data/advancedFeatures';
 import { API_URL } from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
+import ExportCsvButton from './ExportCsvButton';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, buttonClass, inputClass, cx } from './ui';
 import type { Tone } from './ui';
 
@@ -252,9 +253,23 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
         description={`Test suite runs recorded in the last ${FETCH_DAYS} days${truncated ? ` (showing the ${API_ROW_LIMIT} most recent; counts below cover only these)` : ''}.`}
         actions={
           executions.length > 0 ? (
+            <>
+            <ExportCsvButton
+              what="Test runs"
+              rows={filteredExecutions}
+              columns={[
+                { header: 'Test suite', value: (e) => e.test_suite },
+                { header: 'Status', value: (e) => e.status },
+                { header: 'Start', value: (e) => e.start_time },
+                { header: 'End', value: (e) => e.end_time },
+                { header: 'Duration', value: (e) => formatDuration(e.duration), raw: (e) => (e.duration == null ? null : Number(e.duration)) },
+                { header: 'Assigned to', value: (e) => e.assigned_to ?? '' },
+              ]}
+            />
             <button onClick={handleExportPdf} className={buttonClass.secondary} disabled={!timelineExecutionsSource.length}>
               <FileText className="h-4 w-4" /> Export PDF
             </button>
+            </>
           ) : undefined
         }
       />

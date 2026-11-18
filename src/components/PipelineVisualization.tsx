@@ -3,6 +3,7 @@ import { Loader2, ChevronDown, ChevronRight, ArrowRight } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, Line, ComposedChart, CartesianGrid, Legend } from 'recharts';
 import { API_URL } from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
+import ExportCsvButton from './ExportCsvButton';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, ProgressBar, cx } from './ui';
 import type { Tone } from './ui';
 
@@ -232,6 +233,22 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ teamId })
               : ' for the selected team'
             : ' for the company default pipeline'
         }.`}
+        actions={
+          <ExportCsvButton
+            what="Pipeline stages"
+            rows={stages}
+            columns={[
+              { header: 'Stage', value: (st) => st.name },
+              { header: 'Duration (s)', value: (st) => st.duration },
+              { header: 'Success rate (%)', value: (st) => st.success_rate },
+              { header: 'CPU', value: (st) => st.cpu },
+              { header: 'Memory', value: (st) => st.memory },
+              { header: 'Cost per run ($)', value: (st) => st.cost },
+              { header: 'Bottleneck score', value: (st) => st.bottleneck_score },
+              { header: 'Source', value: () => (stagesSource === 'company_default' ? 'Company default pipeline' : 'Team pipeline') },
+            ]}
+          />
+        }
       />
 
       {loading ? (
