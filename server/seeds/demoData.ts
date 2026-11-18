@@ -678,6 +678,21 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
   const contributors: Array<[string, string]> = [['demo-u-chloe-martin', 'checkout'], ['demo-u-hugo-laurent', 'mobile'], ['demo-u-lily-evans', 'fraud'], ['demo-u-kenji-tanaka', 'cards']];
   for (const [uid, team] of contributors) ds.add('team_members', { user_id: uid, team_id: `demo-team-${team}`, role: 'contributor', joined_at: ts(D(200), 10) });
 
+  // Role assignments (what access is decided on): one per scope, as users / team_members say.
+  // A second department for one manager shows a QA manager of two departments.
+  for (const [i, u] of USERS.entries()) {
+    const at = ts(D(600 - i * 7), 9, 35);
+    const by = u.role === 'super_admin' ? null : admin.id;
+    if (u.role === 'super_admin') ds.add('role_assignments', { id: did('ra', u.id, 'co'), company_id: DEMO_COMPANY_ID, user_id: u.id, role: 'super_admin', scope_type: 'company', scope_id: DEMO_COMPANY_ID, created_at: at, created_by: by });
+    if (u.role === 'qa_manager') ds.add('role_assignments', { id: did('ra', u.id, u.dept), company_id: DEMO_COMPANY_ID, user_id: u.id, role: 'qa_manager', scope_type: 'department', scope_id: `demo-dept-${u.dept}`, created_at: at, created_by: by });
+    if (u.team) ds.add('role_assignments', { id: did('ra', u.id, u.team), company_id: DEMO_COMPANY_ID, user_id: u.id, role: u.role, scope_type: 'team', scope_id: `demo-team-${u.team}`, created_at: at, created_by: by });
+  }
+  for (const [uid, team] of contributors) {
+    ds.add('role_assignments', { id: did('ra', uid, team), company_id: DEMO_COMPANY_ID, user_id: uid, role: 'qa_engineer', scope_type: 'team', scope_id: `demo-team-${team}`, created_at: ts(D(200), 10), created_by: admin.id });
+  }
+  const sofia = USERS.find(u => u.id === 'demo-u-sofia-lindqvist')!;
+  ds.add('role_assignments', { id: did('ra', 'sofia-lindqvist', 'platform'), company_id: DEMO_COMPANY_ID, user_id: sofia.id, role: 'qa_manager', scope_type: 'department', scope_id: 'demo-dept-platform', created_at: ts(D(45), 11), created_by: admin.id });
+
   // --------------------------------------------------------------------------
   // Settings: configs, pipeline config, metric intervals, an example (revoked) API key
   // --------------------------------------------------------------------------
@@ -712,6 +727,30 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
     created_by: admin.id, created_at: ts(D(90), 11), last_used_at: ts(D(40), 3, 12), revoked_at: ts(D(35), 16, 5),
   });
 
+  // Change history (sample): what the Activity page lists. The department rename matches the
+  // current name, so its Undo works; the others are history only.
+  const person = (id: string) => USERS.find(u => u.id === id)!;
+  const pname = (id: string) => `${person(id).first} ${person(id).last}`;
+  const audit = (key: string, day: number, hour: number, row: Record<string, SqlValue>) =>
+    ds.add('audit_log', { id: did('audit', key), company_id: DEMO_COMPANY_ID, actor_id: admin.id, created_at: ts(D(day), hour, 12), undone_at: null, undone_by: null, undo_of: null, ...row });
+  audit('apikey-create', 90, 11, { action: 'api_key.create', entity_type: 'api_key', entity_id: 'demo-apikey-revoked', summary: 'Created API key Example CI key (revoked sample) (igk_demo0000…)', before: null, after: { json: { name: 'Example CI key (revoked sample)' } }, department_ids: { sql: "'{}'::varchar[]" }, subject_ids: { sql: "ARRAY['demo-apikey-revoked']::varchar[]" } });
+  audit('apikey-revoke', 35, 16, { action: 'api_key.revoke', entity_type: 'api_key', entity_id: 'demo-apikey-revoked', summary: 'Revoked API key Example CI key (revoked sample) (igk_demo0000…)', before: null, after: null, department_ids: { sql: "'{}'::varchar[]" }, subject_ids: { sql: "ARRAY['demo-apikey-revoked']::varchar[]" } });
+  audit('sofia-platform', 45, 11, { action: 'assignment.grant', entity_type: 'user', entity_id: 'demo-u-sofia-lindqvist', summary: `${pname('demo-u-sofia-lindqvist')}: added QA manager of Platform Engineering`, before: null, after: null, department_ids: { sql: "ARRAY['demo-dept-risk','demo-dept-platform']::varchar[]" }, subject_ids: { sql: "ARRAY['demo-u-sofia-lindqvist']::varchar[]" } });
+  audit('contrib-kenji', 200, 10, { action: 'assignment.grant', entity_type: 'user', entity_id: 'demo-u-kenji-tanaka', summary: `${pname('demo-u-kenji-tanaka')}: added QA engineer of Card Issuing`, before: null, after: null, department_ids: { sql: "ARRAY['demo-dept-payments']::varchar[]" }, subject_ids: { sql: "ARRAY['demo-u-kenji-tanaka']::varchar[]" } });
+  audit('cfg-risk', 300, 12, { action: 'config.update', entity_type: 'config', entity_id: 'demo-dept-risk', summary: 'Changed 1 setting (department level): sla_response_time_ms', before: { json: { sla_response_time_ms: null } }, after: { json: { sla_response_time_ms: '800' } }, department_ids: { sql: "ARRAY['demo-dept-risk']::varchar[]" }, subject_ids: { sql: "ARRAY['demo-dept-risk']::varchar[]" } });
+  audit('rename-risk', 20, 9, { action: 'department.rename', entity_type: 'department', entity_id: 'demo-dept-risk', summary: 'Renamed department Risk to Risk & Compliance', before: { json: { name: 'Risk', description: 'Fraud detection, KYC and regulatory reporting' } }, after: { json: { name: 'Risk & Compliance', description: 'Fraud detection, KYC and regulatory reporting' } }, department_ids: { sql: "ARRAY['demo-dept-risk']::varchar[]" }, subject_ids: { sql: "ARRAY['demo-dept-risk']::varchar[]" } });
+  audit('invite-open', 3, 14, { action: 'invitation.create', entity_type: 'invitation', entity_id: 'demo-invite-open', summary: 'Invited jordan.reyes@northwind.example as QA engineer of Checkout Core', before: null, after: null, department_ids: { sql: "ARRAY['demo-dept-payments']::varchar[]" }, subject_ids: { sql: "ARRAY['demo-invite-open']::varchar[]" } });
+  audit('invite-expired', 21, 10, { action: 'invitation.create', entity_type: 'invitation', entity_id: 'demo-invite-expired', summary: 'Invited sam.okoro@northwind.example as Viewer of Mobile Banking App', before: null, after: null, department_ids: { sql: "ARRAY['demo-dept-digital']::varchar[]" }, subject_ids: { sql: "ARRAY['demo-invite-expired']::varchar[]" } });
+
+  // Invitations (sample): tokens are hashes of values nobody holds, so no link ever works.
+  const invHash = (k: string) => createHash('sha256').update(`demo-invitation-${k}-not-a-real-token`).digest('hex');
+  const invite = (key: string, row: Record<string, SqlValue>) =>
+    ds.add('invitations', { id: `demo-invite-${key}`, company_id: DEMO_COMPANY_ID, token_hash: invHash(key), invited_by: admin.id, send_count: 1, accepted_at: null, accepted_user_id: null, revoked_at: null, revoked_by: null, ...row });
+  invite('open', { email: 'jordan.reyes@northwind.example', role: 'qa_engineer', scope_type: 'team', scope_id: 'demo-team-checkout', created_at: ts(D(3), 14), last_sent_at: ts(D(3), 14), expires_at: ts(addDays(today, 4), 14) });
+  invite('expired', { email: 'sam.okoro@northwind.example', role: 'viewer', scope_type: 'team', scope_id: 'demo-team-mobile', created_at: ts(D(21), 10), last_sent_at: ts(D(21), 10), expires_at: ts(D(14), 10) });
+  invite('accepted', { email: 'kenji.tanaka@northwind.example', role: 'qa_engineer', scope_type: 'team', scope_id: 'demo-team-ledger', created_at: ts(D(400), 9), last_sent_at: ts(D(400), 9), expires_at: ts(D(393), 9), accepted_at: ts(D(399), 16), accepted_user_id: 'demo-u-kenji-tanaka' });
+  invite('revoked', { email: 'casey.lin@northwind.example', role: 'team_lead', scope_type: 'team', scope_id: 'demo-team-kyc', created_at: ts(D(60), 9), last_sent_at: ts(D(60), 9), expires_at: ts(D(53), 9), revoked_at: ts(D(58), 12), revoked_by: admin.id });
+
   }
 
   // Demo developers created on existing teams (only those with fewer than 3 engineers).
@@ -730,6 +769,10 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
       }, userGuard);
       ds.add('team_members', { user_id: u.id, team_id: team.id, role: 'member', joined_at: ts(created, 10) },
         G(ds, team, 'base', `tm:${u.id}`, `EXISTS (SELECT 1 FROM users WHERE id = ${U})`));
+      ds.add('role_assignments', {
+        id: did('ra', u.id), company_id: companyId, user_id: u.id, role: 'qa_engineer', scope_type: 'team', scope_id: team.id,
+        created_at: ts(created, 10), created_by: null,
+      }, G(ds, team, 'base', `ra:${u.id}`, `EXISTS (SELECT 1 FROM users WHERE id = ${U})`));
     }
   }
 
@@ -1727,6 +1770,10 @@ const D_ = `'${DEMO_PREFIX}%'`;
  * integer ids >= DEMO_INT_ID_MIN in the identity-keyed snapshot tables.
  */
 export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
+  { table: 'role_assignments', sql: `DELETE FROM role_assignments WHERE id LIKE ${D_} OR user_id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'audit_log', sql: `DELETE FROM audit_log WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'invitations', sql: `DELETE FROM invitations WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
+  { table: 'user_identities', sql: `DELETE FROM user_identities WHERE user_id LIKE ${D_}` },
   { table: 'team_members', sql: `DELETE FROM team_members WHERE user_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'test_case_tags', sql: `DELETE FROM test_case_tags WHERE id LIKE ${D_} OR test_case_id IN (SELECT id FROM test_cases WHERE team_id LIKE ${D_})` },
   { table: 'flaky_tests', sql: `DELETE FROM flaky_tests WHERE id LIKE ${D_} OR team_id LIKE ${D_} OR company_id LIKE ${D_}` },
@@ -1772,11 +1819,11 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
 
 /** All application tables (for the per-table row count report). */
 export const ALL_TABLES = [
-  'api_keys', 'business_impact_business_kpis', 'business_impact_config', 'business_impact_context', 'business_impact_correlations',
+  'api_keys', 'audit_log', 'business_impact_business_kpis', 'business_impact_config', 'business_impact_context', 'business_impact_correlations',
   'business_impact_data_status', 'business_impact_history', 'business_impact_metrics', 'business_impact_quality_metrics', 'business_metrics',
   'companies', 'company_kpi_snapshots', 'configs', 'departments', 'developer_metrics', 'developer_productivity_snapshots', 'flaky_tests',
   'kpi_snapshots', 'metric_last_updated', 'metric_update_intervals', 'performance_metrics', 'pipeline_config', 'pipeline_execution_summary',
-  'pipeline_runs', 'pipeline_stage_history', 'pipeline_stages', 'seeder_runs', 'sprint_velocity', 'team_analytics', 'team_members',
+  'invitations', 'pipeline_runs', 'pipeline_stage_history', 'pipeline_stages', 'role_assignments', 'seeder_runs', 'sprint_velocity', 'team_analytics', 'team_members',
   'team_pipeline_metrics', 'team_test_executions', 'teams', 'technical_debt', 'test_case_tags', 'test_cases', 'test_execution_runs',
   'test_executions', 'users',
 ];
