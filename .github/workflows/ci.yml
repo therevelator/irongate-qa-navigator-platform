@@ -28,12 +28,12 @@ env:
 jobs:
   quality:
     name: Typecheck, lint, build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright 1.57 has no browser builds for ubuntu-latest (26.04) yet
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: npm
@@ -57,7 +57,7 @@ jobs:
 
   api-and-db:
     name: API and database tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright 1.57 has no browser builds for ubuntu-latest (26.04) yet
     timeout-minutes: 25
     services:
       postgres:
@@ -74,7 +74,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up database and API
         uses: ./.github/actions/setup-test-env
@@ -87,7 +87,7 @@ jobs:
 
       - name: Upload API log
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: api-and-db-logs
           path: /tmp/irongate-ci-logs/
@@ -95,7 +95,7 @@ jobs:
 
   e2e:
     name: End-to-end tests (Playwright)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # Playwright 1.57 has no browser builds for ubuntu-latest (26.04) yet
     timeout-minutes: 40
     services:
       postgres:
@@ -112,7 +112,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up database, API and web app
         uses: ./.github/actions/setup-test-env
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: playwright-report
           path: playwright-report/
@@ -135,7 +135,7 @@ jobs:
 
       - name: Upload test results and service logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: e2e-results-and-logs
           path: |
