@@ -1,33 +1,93 @@
-import React from 'react';
-import { clampScore, gaugeStatus, GAUGE_FILL, useMountedFill } from './BatteryIndicator';
+import React, { useEffect, useState } from 'react';
+import { clampScore, gaugeStatus, type GaugeStatus } from './BatteryIndicator';
 
 /**
- * Vertical battery gauge for headline 0–100 scores (company status hero).
- * Flat fill in the status colour — no glow or gloss. Null renders an empty, dashed
- * grey battery; the caller shows "—" as the value.
+ * The original glossy 3D battery: a glass body with metallic highlights, a nib on top
+ * and a charge level that fills from the bottom in the status colour.
+ * Null renders an empty (dark) battery; the caller shows "—" as the value.
  */
 interface HeroBatteryProps {
   value: number | string | null | undefined;
-  /** value at/above which the fill is green */
+  /** value at/above which the charge is green */
   good?: number;
-  /** value at/above which the fill is amber */
+  /** value at/above which the charge is amber */
   warn?: number;
-  size?: 'sm' | 'lg';
+  size?: 'xs' | 'sm' | 'lg';
   label: string;
   className?: string;
 }
 
+// Five-stop palettes from the original battery: bottom edge, base, body, top highlight, top edge.
+const PALETTES: Record<Exclude<GaugeStatus, 'none'>, string[]> = {
+  good: ['#316d08', '#60b939', '#51aa31', '#64ce11', '#255405'],
+  warning: ['#754f00', '#f2bb00', '#dbb300', '#df8f00', '#593c00'],
+  critical: ['#750900', '#c6462b', '#b74424', '#df0a00', '#590700'],
+};
+
 const SIZES = {
-  sm: { w: 26, h: 46, nibW: 10, nibH: 4, border: 'border-2', pad: 'p-[2px]', radius: 'rounded-[5px]', inner: 'rounded-[2px]' },
-  lg: { w: 64, h: 112, nibW: 24, nibH: 7, border: 'border-[3px]', pad: 'p-[4px]', radius: 'rounded-[12px]', inner: 'rounded-[6px]' },
+  xs: { w: 24, h: 46, nibW: 12, nibH: 5, radius: 7, band: 2, inset: 5 },
+  sm: { w: 32, h: 62, nibW: 16, nibH: 6, radius: 9, band: 3, inset: 6 },
+  lg: { w: 76, h: 148, nibW: 36, nibH: 11, radius: 18, band: 4, inset: 10 },
+};
+
+const GLASS =
+  'linear-gradient(to right, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0.4) 4%, rgba(255,255,255,0.2) 7%, rgba(255,255,255,0.2) 14%, ' +
+  'rgba(255,255,255,0.8) 14%, rgba(255,255,255,0.2) 40%, rgba(255,255,255,0) 41%, rgba(255,255,255,0) 80%, rgba(255,255,255,0.2) 80%, ' +
+  'rgba(255,255,255,0.4) 86%, rgba(255,255,255,0.6) 90%, rgba(255,255,255,0.1) 92%, rgba(255,255,255,0.1) 95%, rgba(255,255,255,0.5) 98%)';
+
+const NIB =
+  'linear-gradient(to right, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 14%, rgba(255,255,255,0.8) 14%, rgba(255,255,255,0.3) 40%, ' +
+  'rgba(255,255,255,0) 41%, rgba(255,255,255,0) 80%, rgba(255,255,255,0.2) 80%, rgba(255,255,255,0.4) 86%, rgba(255,255,255,0.6) 90%, ' +
+  'rgba(255,255,255,0.1) 92%, rgba(255,255,255,0.1) 95%, rgba(255,255,255,0.5) 98%), linear-gradient(#64748b, #334155)';
+
+const OVERLAY =
+  'linear-gradient(to right, rgba(255,255,255,0.3) 4%, rgba(255,255,255,0.2) 5%, transparent 5%, transparent 14%, rgba(255,255,255,0.3) 14%, ' +
+  'rgba(255,255,255,0.12) 40%, rgba(0,0,0,0.05) 42%, rgba(0,0,0,0.05) 48%, transparent 60%, transparent 80%, rgba(255,255,255,0.3) 87%, ' +
+  'rgba(255,255,255,0.3) 92%, transparent 92%, transparent 97%, rgba(255,255,255,0.4) 97%)';
+
+const prefersReducedMotion = () =>
+  typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+/** Charge animates up from empty to the target level (instant with reduced motion). */
+const useAnimatedCharge = (target: number) => {
+  const [charge, setCharge] = useState(() => (prefersReducedMotion() ? target : 12));
+  useEffect(() => {
+    if (prefersReducedMotion()) { setCharge(target); return; }
+    let raf = 0;
+    const start = performance.now();
+    const from = 12;
+    const duration = 900;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / duration);
+      const eased = 1 - Math.pow(1 - k, 3);
+      setCharge(from + (target - from) * eased);
+      if (k < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target]);
+  return charge;
 };
 
 const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, good, warn, size = 'lg', label, className = '' }) => {
   const value = clampScore(raw);
   const status = gaugeStatus(value, good, warn);
   const s = SIZES[size];
-  const fill = useMountedFill(value ?? 0);
   const empty = value == null;
+
+  // 0–100 maps to the battery's visible window (12%–89% of the body height).
+  const target = empty ? 12 : 12 + (value / 100) * 77;
+  const c = useAnimatedCharge(target);
+
+  const body = empty
+    ? `linear-gradient(to top, transparent 5%, #1e293b 5%, #0f172a 95%, transparent 95%), ${GLASS}`
+    : (() => {
+        const col = PALETTES[status as Exclude<GaugeStatus, 'none'>];
+        return (
+          `linear-gradient(to top, transparent 5%, ${col[0]} 5%, ${col[0]} 7%, ${col[1]} 8%, ${col[1]} 10%, ${col[2]} 11%, ` +
+          `${col[2]} ${c - 3}%, ${col[3]} ${c - 2}%, ${col[3]} ${c}%, ${col[4]} ${c}%, black ${c + 5}%, black 95%, transparent 95%), ${GLASS}`
+        );
+      })();
 
   return (
     <div
@@ -37,26 +97,43 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, good, warn, size 
     >
       <div
         aria-hidden="true"
-        className={`rounded-t-[3px] ${empty ? 'bg-slate-300 dark:bg-slate-600' : 'bg-slate-400 dark:bg-slate-500'}`}
-        style={{ width: s.nibW, height: s.nibH }}
+        style={{
+          width: s.nibW,
+          height: s.nibH,
+          borderTopLeftRadius: s.nibH * 0.6,
+          borderTopRightRadius: s.nibH * 0.6,
+          backgroundImage: NIB,
+          marginBottom: -1,
+        }}
       />
       <div
         aria-hidden="true"
-        className={`relative ${s.border} ${s.pad} ${s.radius} ${empty ? 'border-dashed border-slate-300 dark:border-slate-600' : 'border-slate-400 dark:border-slate-500'}`}
-        style={{ width: s.w, height: s.h }}
+        style={{
+          position: 'relative',
+          width: s.w,
+          height: s.h,
+          borderRadius: `${s.radius}px ${s.radius}px ${s.radius / 2}px ${s.radius / 2}px`,
+          borderTop: '2px solid rgba(255,255,255,0.2)',
+          borderBottom: '2px solid rgba(255,255,255,0.2)',
+          backgroundImage: body,
+          boxShadow: '0 4px 10px rgba(15,23,42,0.18)',
+          opacity: empty ? 0.55 : 1,
+        }}
       >
-        <div className={`relative h-full w-full overflow-hidden ${s.inner} bg-slate-100 dark:bg-slate-800`}>
-          <div
-            className={`absolute inset-x-0 bottom-0 ${s.inner} ${GAUGE_FILL[status]} transition-[height] duration-700 ease-out motion-reduce:transition-none`}
-            style={{ height: `${fill}%` }}
-          />
-          {size === 'lg' && (
-            // quarter marks so the level reads like a gauge
-            [25, 50, 75].map((m) => (
-              <div key={m} className="absolute inset-x-0 h-px bg-white/70 dark:bg-slate-950/50" style={{ bottom: `${m}%` }} />
-            ))
-          )}
-        </div>
+        <div
+          style={{
+            position: 'absolute',
+            width: s.w,
+            height: s.h - s.inset * 2,
+            top: s.inset,
+            left: 0,
+            borderRadius: s.radius / 2,
+            borderTop: `${s.band}px solid black`,
+            borderBottom: `${s.band}px solid black`,
+            backgroundImage: OVERLAY,
+            pointerEvents: 'none',
+          }}
+        />
       </div>
     </div>
   );

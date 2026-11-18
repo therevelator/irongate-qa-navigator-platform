@@ -10,7 +10,6 @@ import { QA_SCORE_THRESHOLDS, qaStatusFromScore } from '../../server/lib/metricF
 import { useAuth } from '../contexts/AuthContext';
 import { Page, PageIntro, Card, Badge, SegmentedControl, EmptyState, buttonClass, inputClass, cx, type Tone } from './ui';
 import HeroBattery from './HeroBattery';
-import BatteryIndicator from './BatteryIndicator';
 
 interface NewDashboardProps {
   teams: Team[];
@@ -661,9 +660,15 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
         <div className={cx('flex flex-1 gap-4 px-4 py-4', isList ? 'flex-col sm:flex-row sm:items-center' : 'flex-col')}>
           {/* QA score gauge + team size */}
           <div className={cx('flex items-center justify-between gap-3', isList && 'sm:w-48 sm:flex-shrink-0 sm:flex-col sm:items-start sm:justify-center sm:gap-2')}>
-            <div>
-              <p className="text-xs text-slate-500 dark:text-slate-400">QA score</p>
-              <BatteryIndicator percentage={r.qa} size="lg" label={`${r.name} QA score`} className="mt-1" />
+            <div className="flex items-center gap-3">
+              <HeroBattery value={r.qa} good={QA_GOOD} warn={QA_WARN} size="xs" label={`${r.name} QA score`} />
+              <div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">QA score</p>
+                <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+                  {r.qa == null ? '—' : Math.round(r.qa)}
+                  {r.qa != null && <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-400">/ 100</span>}
+                </p>
+              </div>
             </div>
             <p className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <Users size={13} className="text-slate-400" aria-hidden="true" />
