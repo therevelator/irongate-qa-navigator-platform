@@ -9,11 +9,11 @@
 
 ## 1. Executive summary
 
-- **Yes, there is direct competition**, but it is fragmented. No vendor I found sells the same bundle: a QA-leadership product with a company/department/team hierarchy, a transparent composite QA score, about 20 QA and DORA KPIs tracked against targets, and k-anonymous wellbeing data.
+- **Yes, there is direct competition**, but it is fragmented. No vendor I found sells the same bundle: a quality product for the whole engineering organisation (quality as a shared responsibility of managers, team leads and software engineers) with a company/department/team hierarchy, a transparent composite QA score, about 20 QA and DORA KPIs tracked against targets, and k-anonymous wellbeing data.
 - **The closest direct competitor is BrowserStack Quality Engineering Insights (QEI).** It has a weighted composite "Net Quality Score" built from Coverage, Quality, Automation and Velocity, with pre-built dashboards and connectors for Jira, TestRail and Jenkins. The docs still label it Beta. It is the clearest sign that a big testing vendor sees "one QA score for leadership" as a product category.
 - **Test-management suites are adding QA analytics for leaders.** These include PractiTest ("QA Intelligence" and release readiness), Katalon True Platform (release readiness, AI briefings), Tricentis (qTest Insights plus SeaLights) and Testlio LeoInsights. They own the raw test data, which QE Navigator currently has to be sent.
 - **Engineering-intelligence (SEI) platforms overlap on DORA, productivity, burnout and surveys.** These include LinearB, Jellyfish, Swarmia, DX (now Atlassian), Plandek, Oobeya, Haystack, Hatica and Uplevel. They are mostly not QA-leadership-centric. The market is consolidating: DX was bought by Atlassian, Flow was bought by Appfire and reportedly faces end of life, and Sleuth has pivoted toward AI governance.
-- **QE Navigator's real edge is its focus:** built for QA leadership, consultancy-led, with transparent and confidence-aware scoring, and wellbeing data protected by k-anonymity. **Its biggest weakness is having no native connectors.** Every serious competitor ingests from Jira, Git and CI out of the box.
+- **QE Navigator's real edge is its focus:** built around shared quality ownership across engineering (not a QA silo), consultancy-led, with transparent and confidence-aware scoring, and wellbeing data protected by k-anonymity. **Its biggest weakness is having no native connectors.** Every serious competitor ingests from Jira, Git and CI out of the box.
 
 ---
 
@@ -99,7 +99,7 @@ Legend: Y = confirmed in sources; P = partial or analogous; N = no evidence foun
 
 | Capability | **QE Navigator** | BrowserStack QEI | PractiTest | Katalon | Tricentis qTest+SeaLights | Plandek | Oobeya | LinearB | Swarmia | Jellyfish | DX |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| QA-leadership as primary buyer | Y | Y | Y | Y | Y | P | P | N | N | N | N |
+| Quality as the primary buying reason (QA or engineering leadership) | Y | Y | Y | Y | Y | P | P | N | N | N | N |
 | Composite QA score (0–100) | Y (transparent, confidence, staleness) | Y (NQS, documented weights; Beta) | P (AI scoring) | N (threshold readiness) | N | N | N | N | N | N | P (DXI is a DevEx index, not QA) |
 | QA KPIs vs targets with target history | Y | ? | P (readiness) | P (release criteria thresholds) | N | P | P | P (goals) | P (working agreements, unverified) | ? | ? |
 | DORA metrics | Y (via API/manual) | P (velocity) | N | N | N | Y | Y | Y | Y | Y | Y |
@@ -142,9 +142,9 @@ Legend: Y = confirmed in sources; P = partial or analogous; N = no evidence foun
 
 ## 6. Verdict
 
-**Is there direct competition at this stage?** **Yes, partial but real.** No competitor found replicates the full proposition: a hierarchy built for QA leadership, a transparent confidence-aware composite score, QA and DORA KPIs against targets, k-anonymous wellbeing, and consultancy delivery. But each major component is sold by someone. A buyer could approximate QE Navigator with *BrowserStack QEI (or PractiTest/Katalon) + an SEI tool (Plandek/LinearB/Swarmia)*, or simply hire a consultancy that builds a bespoke dashboard.
+**Is there direct competition at this stage?** **Yes, partial but real.** No competitor found replicates the full proposition: a hierarchy built for shared quality ownership, a transparent confidence-aware composite score, QA and DORA KPIs against targets, k-anonymous wellbeing, and consultancy delivery. But each major component is sold by someone. A buyer could approximate QE Navigator with *BrowserStack QEI (or PractiTest/Katalon) + an SEI tool (Plandek/LinearB/Swarmia)*, or simply hire a consultancy that builds a bespoke dashboard.
 
-The product is not yet competing head-on with SEI platforms because it lacks connectors. Its realistic near-term arena is **consultancy-led engagements with QA leaders**. There, the competition is other QA consultancies with dashboards and the analytics bundled into test-tool vendors.
+The product is not yet competing head-on with SEI platforms because it lacks connectors. Its realistic near-term arena is **consultancy-led engagements with engineering leaders and managers who own quality**. There, the competition is other QA consultancies with dashboards and the analytics bundled into test-tool vendors.
 
 ### Closest threats (top 5)
 
@@ -160,7 +160,7 @@ The product is not yet competing head-on with SEI platforms because it lacks con
 
 ## 7. Positioning recommendations
 
-1. **Own "the QA leader's operating system", not "engineering intelligence".** Lead with the QA org hierarchy (QA manager per department), QA KPIs against targets with history, and improvement actions with measured outcomes. Avoid head-to-head DORA/productivity messaging against LinearB, Swarmia and Jellyfish. Treat DORA as supporting context.
+1. **Own "the operating system for shared quality ownership", not "engineering intelligence".** Lead with the organisation hierarchy (a manager per department, team leads, software engineers), quality KPIs against targets with history, and improvement actions with measured outcomes. Avoid head-to-head DORA/productivity messaging against LinearB, Swarmia and Jellyfish. Treat DORA as supporting context.
 2. **Make score transparency and honesty the wedge against BrowserStack NQS.** Publish the formula, show "based on n of m inputs" confidence and staleness, and let customers tune weights per department. Position it as an audit-ready, explainable score versus a "proprietary" one. BrowserStack's own docs call NQS "a proprietary scoring mechanism" ([NQS docs](https://www.browserstack.com/docs/quality-engineering-insights/features/net-quality-score)).
 3. **Ship 3–4 connectors before broad marketing, and position as vendor-neutral.** Build Jira (defects/escapes), GitHub Actions or Jenkins (build, flakiness, DORA), and one test-management tool (Xray or TestRail). Pitch as a neutral layer over a mixed toolchain, which test-tool vendors' own analytics cannot honestly claim. Until then, sell the API plus consultancy-run ingestion as a "managed onboarding" feature, not a gap.
 4. **Package as consultancy + product (the Testlio/Resillion model), but sell the platform on its own too.** Offer a QA-maturity engagement that leaves the client on QE Navigator, with a self-serve or low-touch tier after that. Testlio bundles LeoInsights free with services ([Testlio](https://testlio.com/blog/leoinsights-announcement)), so expect price pressure in bundles. Differentiate on outcomes measured through tracked improvement actions.

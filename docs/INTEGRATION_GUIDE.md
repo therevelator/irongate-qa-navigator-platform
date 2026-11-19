@@ -159,6 +159,12 @@ them by **batching** (many teams and days in one request, section 6.5).
 - Call the API **server to server** only. Never put an API key in browser code, a mobile app or a public repository.
   (Browser calls from other origins are not allowed by CORS anyway.)
 
+### Role values
+
+Role values in API payloads and responses stay **`super_admin`, `qa_manager`, `team_lead`, `qa_engineer`,
+`viewer`**. The app shows them as Super admin, **Manager** (`qa_manager`), Team lead, **Software
+engineer** (`qa_engineer`) and Viewer. Only the names on screen changed; send and expect the keys.
+
 ### 3.6 Session authentication (internal endpoints only)
 
 The endpoints in section 5 that are marked **Session** authenticate a **user**, not an API key:
@@ -177,7 +183,7 @@ Caveats, read them before you automate anything this way:
 
 - These endpoints are **what the web app calls**. They are not a public, versioned API and may change with any release.
 - They run with the **permissions of that user** (role and scope, section 5 names the roles). Use a dedicated account with the
-  smallest role that works (usually a QA manager of the department, or a team lead for one team), a long random password from
+  smallest role that works (usually a manager of the department, or a team lead for one team), a long random password from
   your secret store, and nothing else on it.
 - Writes through them are **not** recorded in the ingestion log and are **not** idempotent. Developer metrics, debt impact and
   business impact values are range-checked: an out-of-range or non-numeric value is `400` with the field named (since R2 Phase 4).
@@ -421,7 +427,7 @@ Every ingestion request (accepted, partial or rejected; except malformed JSON, a
 rate-limited requests and 422 key conflicts, which are refused before logging) and every Manual metrics save is recorded in `ingestion_log` with its
 per-item summary, errors and the response returned.
 
-- **UI:** **Administration → Ingestion log** (`/ingestion-log`). Super admins see the whole company; QA managers see entries that
+- **UI:** **Administration → Ingestion log** (`/ingestion-log`). Super admins see the whole company; managers see entries that
   touched teams of their departments. Filters: status, channel (API / Manual metrics), source, team, date. Each entry shows who sent
   it (API key name and prefix, or the person), the teams, item and value counts, errors and the full response. The **per-source
   overview** shows *last received*, *last accepted*, the last status and 7-day counts: this is where you notice an integration that
@@ -429,7 +435,7 @@ per-item summary, errors and the response returned.
 - **API (session):** `GET /api/ingestion-log?status=&channel=api|manual&source=&teamId=&from=YYYY-MM-DD&to=YYYY-MM-DD&limit=≤200&before=<id>`
   → `{ entries: [...], nextBefore }`; `GET /api/ingestion-log/sources`; `GET /api/ingestion-log/:id` (with `response`).
 - **Alerts:** the *Ingestion failures* alert rule raises an alert for rejected or partial requests in the last hours, per team named in
-  them (Parameters → Alert rules), so the team lead and QA manager are notified when an integration breaks.
+  them (Parameters → Alert rules), so the team lead and manager are notified when an integration breaks.
 
 ---
 
@@ -453,8 +459,8 @@ None of the following goes through the ingestion API. Each subsection says plain
 
 How to send:
 
-- **UI:** **Administration → Manual metrics → Developer Productivity Metrics** (super admin, QA manager, team lead for their team).
-- **Session:** `POST /api/metrics/developer` (roles super admin, QA manager, team lead; team must be writable by the caller) →
+- **UI:** **Administration → Manual metrics → Developer Productivity Metrics** (super admin, manager, team lead for their team).
+- **Session:** `POST /api/metrics/developer` (roles super admin, manager, team lead; team must be writable by the caller) →
   `200 {"message":"Developer metrics saved successfully","teamId":…,"developerId":…}`; `400 Invalid developer ID`;
   `400 Workload balance score must be between 0 and 100`, and the same for every input (PR merge and review time 0–10,000 hours, focus and
   meeting time 0–24 hours a day, context switches a whole number 0–1,000). **Partial update: only the fields you send change; an omitted
@@ -462,7 +468,7 @@ How to send:
   when you send its inputs. Example: `docs/integration-examples/session_upload.py developer`.
 - **API key: not possible.**
 
-To appear in team figures a developer must be an **active QA engineer or team lead assigned to the team**, have
+To appear in team figures a developer must be an **active software engineer or team lead assigned to the team**, have
 **developer insights enabled** (`users.developer_insights_enabled`, **off by default**; switched on the Users page by someone who
 can manage that user) and have **all five inputs** recorded; team averages are shown only with **at least 3** such developers
 (k-anonymity, section 11). The **DDPS history** chart reads `developer_productivity_snapshots`, which nothing but sample data
@@ -488,7 +494,7 @@ How to send:
 
 - **UI:** the **Business impact** page (enter monthly quality metrics, business KPIs and context; "save").
 - **Session** (`server/routes/analytics.ts`; caller must be allowed to write the team: `assertTeamWrite`, i.e. super admin, the
-  department's QA manager or the team's lead):
+  department's manager or the team's lead):
   - `POST /api/analytics/business-impact-v2/:teamId/bulk-save` `{ "monthlyData": [ { "month_year": "2026-10", "quality": {…}, "kpis": {…}, "context": {…} } ] }`
     → `{"success":true,"monthsSaved":n,"dataSource":"manual"}`. Months with a malformed `month_year` are silently skipped (check `monthsSaved`).
   - `POST …/:teamId/quality-metrics`, `…/business-kpis`, `…/context` — one month each, body `{ "month_year": "YYYY-MM", <fields> }`;
@@ -511,7 +517,7 @@ How to send:
   sample data today. This blocks the technical debt score, tech debt health (20 % of engineering health) and the debt part of revenue
   impact for real companies (section 12).
 - **ROI inputs and effort of an existing item:** **UI** Administration → Manual metrics → *Technical Debt ROI Impact*;
-  **Session** `PUT /api/analytics/technical-debt/:id/impact` (super admin or QA manager of the item's department) with
+  **Session** `PUT /api/analytics/technical-debt/:id/impact` (super admin or manager of the item's department) with
   `{ affected_users, support_tickets_monthly, downtime_minutes_monthly, revenue_impact_percent, sla_breaches_monthly, estimated_effort_hours }`.
   **Partial update: only the fields you send change** (an omitted one keeps its value, `null` clears it); ranges are checked (`400`), an
   empty body is `400 Nothing to update`. Item ids come from `GET /api/analytics/technical-debt?teamId=`.
@@ -522,10 +528,10 @@ How to send:
 
 | Table | Shown in | Write path |
 |---|---|---|
-| `pipeline_stages` (name, order, `avg_duration_seconds`, `success_rate` %, `cpu_usage` %, `memory_usage` %, `cost_per_run`) | Stage flow and bottleneck score | **Edit existing stages only**: UI Manual metrics → *CI/CD pipeline stages*; Session `PUT /api/analytics/pipeline-stages/:id` `{ duration (seconds), success_rate, cpu_usage, memory_usage, cost_per_run }` (super admin or QA manager; omitted fields are kept; writes a `pipeline_stage_history` row). **No way to create a stage.** A team without stages shows the company-level stages. |
+| `pipeline_stages` (name, order, `avg_duration_seconds`, `success_rate` %, `cpu_usage` %, `memory_usage` %, `cost_per_run`) | Stage flow and bottleneck score | **Edit existing stages only**: UI Manual metrics → *CI/CD pipeline stages*; Session `PUT /api/analytics/pipeline-stages/:id` `{ duration (seconds), success_rate, cpu_usage, memory_usage, cost_per_run }` (super admin or manager; omitted fields are kept; writes a `pipeline_stage_history` row). **No way to create a stage.** A team without stages shows the company-level stages. |
 | `pipeline_runs` (status success/failed/running/cancelled, duration, commit, branch, times) | **Pipeline health** gauge (dashboard; 25 % of engineering health) | **None** |
 | `pipeline_execution_summary` (per stage and day: runs, successes, failures, durations, cost) | "Stage executions over 14 days" | **None** |
-| `pipeline_config` (time / cost savings %, cost per minute) | Savings estimates on the pipeline page | UI Manual metrics; Session `PUT /api/analytics/pipeline-config` (super admin / QA manager) |
+| `pipeline_config` (time / cost savings %, cost per minute) | Savings estimates on the pipeline page | UI Manual metrics; Session `PUT /api/analytics/pipeline-config` (super admin / manager) |
 
 What you *can* send for CI today: the KPIs `avg_build_time_minutes`, `test_execution_time_minutes`, `parallel_test_efficiency`,
 `infrastructure_failures`, `test_flakiness_rate` (API).
@@ -557,11 +563,11 @@ answers are stored without user id or time. Integration work here is limited to 
 
 | Setting | UI | Session endpoint | Who |
 |---|---|---|---|
-| KPI targets (good / warning) per company, department, team, with history | Parameters → KPI targets | `PUT /api/targets` `{ "scopeType": "company"\|"department"\|"team", "scopeId", "targets": { "<metric key>": { "good", "warning" } \| null } }` | company: super admin; department / team: super admin or the department's QA manager |
-| Update frequency (staleness) per metric | Administration → Update frequency (`/metric-intervals`) | `PUT /api/settings/metric-intervals/:metricKey` `{ "interval_value": ≥1, "interval_unit": "minutes"\|"hours"\|"days"\|"weeks"\|"months" }` | super admin, QA manager |
-| Financial and ROI settings: `developer_hourly_rate` (default 75), `support_ticket_cost` (25), `revenue_per_user_monthly` (50), `downtime_cost_per_minute` (100), `sla_breach_penalty` (1000) | Parameters → Financial and ROI settings | `POST /api/admin/configs` `{ "teamId"?, "departmentId"?, "configs": { "<key>": "<value>" } }` (team overrides department overrides company; empty value deletes) | super admin, QA manager (own departments) |
+| KPI targets (good / warning) per company, department, team, with history | Parameters → KPI targets | `PUT /api/targets` `{ "scopeType": "company"\|"department"\|"team", "scopeId", "targets": { "<metric key>": { "good", "warning" } \| null } }` | company: super admin; department / team: super admin or the department's manager |
+| Update frequency (staleness) per metric | Administration → Update frequency (`/metric-intervals`) | `PUT /api/settings/metric-intervals/:metricKey` `{ "interval_value": ≥1, "interval_unit": "minutes"\|"hours"\|"days"\|"weeks"\|"months" }` | super admin, manager |
+| Financial and ROI settings: `developer_hourly_rate` (default 75), `support_ticket_cost` (25), `revenue_per_user_monthly` (50), `downtime_cost_per_minute` (100), `sla_breach_penalty` (1000) | Parameters → Financial and ROI settings | `POST /api/admin/configs` `{ "teamId"?, "departmentId"?, "configs": { "<key>": "<value>" } }` (team overrides department overrides company; empty value deletes) | super admin, manager (own departments) |
 | Performance SLA: `sla_response_time_ms`, `sla_error_rate_percent` | Parameters → Performance SLA | same as above | same |
-| Pipeline cost settings | Manual metrics | `PUT /api/analytics/pipeline-config` | super admin, QA manager |
+| Pipeline cost settings | Manual metrics | `PUT /api/analytics/pipeline-config` | super admin, manager |
 | Alert rules | Parameters → Alert rules | `PUT /api/alerts/rules` | as KPI targets |
 
 Unconfigured financial values use built-in defaults and are labelled "(default)" on screen: set real rates before you show money
@@ -1100,7 +1106,7 @@ run it against a test team, or overwrite the values with real ones (the latest v
 
 - It is personal data about named employees. Agree its use with your works council / data protection officer before collecting it, and
   record only the five workload inputs; no keystrokes, screen time or message content.
-- Visibility (`canViewDeveloperRow`, `server/lib/userPolicy.ts`): QA engineers and viewers see only their own row; team leads, QA managers
+- Visibility (`canViewDeveloperRow`, `server/lib/userPolicy.ts`): software engineers and viewers see only their own row; team leads, managers
   and super admins see people in their scope **who enabled developer insights** (`developer_insights_enabled`, off by default). The scores are
   meant to show where the environment gets in the way, not to rank people (no ranking of individuals exists in the app).
 

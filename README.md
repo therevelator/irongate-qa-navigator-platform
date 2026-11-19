@@ -52,7 +52,7 @@ trending), plus developer productivity, CI/CD pipeline runs, test cases, executi
 tests, performance metrics, technical debt with financial impact, 12 months of business-impact
 data and company KPI snapshots. KPI values are marked `field_sources.<column>.source =
 'synthetic'`. Business-impact rows have `data_source = 'synthetic'`. Organisation data
-includes the role assignments (one QA manager, Sofia Lindqvist, manages two departments; some
+includes the role assignments (one manager, Sofia Lindqvist, manages two departments; some
 engineers belong to two teams), a short change history (the department rename can be undone)
 and sample invitations (pending, expired, accepted, revoked; their links never work).
 
@@ -97,7 +97,7 @@ rows *in the window the page shows*:
 
 Developers are handled one by one. Every developer of an active team whose latest real
 productivity snapshot is older than 30 days gets 180 days of snapshots, and every developer
-without a `developer_metrics` row for the team gets one. A team with fewer than 3 QA engineers,
+without a `developer_metrics` row for the team gets one. A team with fewer than 3 software engineers,
 or fewer than 3 developers who share developer insights (team figures need 3, see
 [Privacy and wellbeing](#privacy-and-wellbeing)), gets demo developer users (password
 `demo123`). Every active team gets anonymous pulse-survey answers for the closed periods of the
@@ -137,8 +137,8 @@ Seeded flaky tests have no stored root cause, so the API reports their pattern g
 unverified.
 
 - **Sign in**: password `demo123` for every demo user. For example, `alex.morgan@northwind.example`
-  (super admin), `priya.raman@…` (QA manager), `olivia.bennett@…` (team lead),
-  `mia.thompson@…` (QA engineer) and `hannah.brooks@…` (viewer).
+  (super admin), `priya.raman@…` (manager), `olivia.bennett@…` (team lead),
+  `mia.thompson@…` (software engineer) and `hannah.brooks@…` (viewer).
 - **Additive and idempotent**: every row has an id starting with `demo-`, or belongs to the
   demo company or its users (for tables with integer or composite keys). Every insert is
   `ON CONFLICT DO NOTHING`, and the values come from a seeded PRNG, so a second run on the
@@ -200,7 +200,10 @@ Migration: `supabase/migrations/20261119000000_org_roles_audit_invitations.sql` 
 everything from the existing data; nothing is dropped).
 
 **Role assignments.** Access comes from `role_assignments`: a role on a scope, and a person may
-have several.
+have several. Quality is a shared responsibility, so the names on screen are Super admin,
+**Manager** (key `qa_manager`), Team lead, **Software engineer** (key `qa_engineer`) and Viewer. The
+keys did not change (database, API, integrations); the names come from one map,
+`server/lib/roleLabels.ts`.
 
 | Role | Assigned on | Sees / may |
 |---|---|---|
@@ -216,22 +219,22 @@ have several.
   `users.role` (highest role), `department_id`, `primary_team_id`, `teams.lead_id`,
   `departments.manager_id` and `team_members` are kept in step for compatibility.
 - **Users page:** each person shows assignment chips (role · team / department); **Add** and the
-  chip's **×** give or remove an assignment (super admin: any; QA manager: team roles in their
+  chip's **×** give or remove an assignment (super admin: any; manager: team roles in their
   departments; team lead: engineers / viewers of their teams; never your own, never someone of
   your rank or above). The edit form still sets the primary assignment.
-- **Departments page:** "Assign QA manager" adds a department (other departments stay);
-  "Change lead" replaces the team's lead, who stays on the team as a QA engineer. Moving a team
-  to another department moves its members' departments; QA managers stay in theirs and lose the
+- **Departments page:** "Assign department manager" adds a department (other departments stay);
+  "Change lead" replaces the team's lead, who stays on the team as a software engineer. Moving a team
+  to another department moves its members' departments; managers stay in theirs and lose the
   team.
 
 **Change history (Activity page).** Every organisation, role, assignment, team, department,
 user and settings change is recorded in `audit_log` with who, when, what (before / after; secrets
-masked) and the departments it concerns. Super admins see the whole company, QA managers the
+masked) and the departments it concerns. Super admins see the whole company, managers the
 changes of their departments, with filters. **Undo** exists for assignment and role changes,
 manager / lead changes, team moves, department renames and user deactivation. An undo restores
 the previous state in one transaction and is itself recorded; it is refused, with the reason,
 when a newer change touches the same people / team / department, or when the state was changed
-outside the history. QA managers may undo user changes inside their departments, not their own.
+outside the history. Managers may undo user changes inside their departments, not their own.
 
 **Invitations.** Users page → **Invite**: email, role and team / department (within the same
 rules as assignments). The person opens `APP_URL/accept-invite?token=…`, sets name and password
@@ -283,7 +286,7 @@ sign-in). TV mode is not offered in the analytics scope bar.
   90-day sparkline), "data as of", a clock, and two more panels: 90-day trends with target
   lines, and focus areas (KPIs off target, plus recommended actions for team leads and up).
   Team aggregates only: no member list and no individual developer data.
-- Scope: the analytics rule. Admins any team, QA managers the teams of their department,
+- Scope: the analytics rule. Admins any team, managers the teams of their department,
   team leads / engineers / viewers their own team. `GET /api/tv/teams/:id` answers 403 for
   any other team (also another company's team or an unknown id).
 - Refreshes every 60 s, on the live "metrics updated" event and when the tab becomes
@@ -311,7 +314,7 @@ Manual entry in the app uses the same server path (`server/lib/kpiIngest.ts`), s
 - **Storage:** every value is stored in `metric_values` (team, metric, value, `recorded_at`, `received_at`, source, actor, keys). `kpi_snapshots` is derived from it per day: a day holds the latest value of each metric recorded before the end of that day (UTC). A backdated value updates that day and the later days on which no newer value exists; a day without a snapshot gets one. The same team, metric and `recorded_at` sent again is a correction (the earlier value is marked superseded).
 - **Provenance:** each field's `{source, recorded_at, recorded_by, carried_forward}` is in `kpi_snapshots.field_sources`. The team page shows "source · as of date".
 - **QA score:** `qa_score` and `status` cannot be supplied. A database trigger computes them from the stored inputs using the same rules as `computeQaScore` in `server/lib/metricFormulas.ts`.
-- **Ingestion log:** every request (accepted, partial or rejected; API and Manual metrics) is recorded with its items, errors and response: **Administration → Ingestion log** (super admins; QA managers see requests that touched their departments' teams), with per-source "last received".
+- **Ingestion log:** every request (accepted, partial or rejected; API and Manual metrics) is recorded with its items, errors and response: **Administration → Ingestion log** (super admins; managers see requests that touched their departments' teams), with per-source "last received".
 - **Rate limit:** 60 requests per minute per key. Open dashboards refresh automatically after each write.
 
 ```bash
@@ -357,7 +360,7 @@ current targets; existing snapshot rows are not rewritten).
   (`METRICS_CONFIG`). Every judgement of a value uses the target valid at that value's date (the end of
   its UTC day): team cards, team detail, `teamKpiTrack` / `teamAttentionIssues`, the company summary and
   TV (trend charts draw the target of each day). Company targets: super admins; department and team
-  targets: super admins and that department's QA managers. Changes are in the Activity history.
+  targets: super admins and that department's managers. Changes are in the Activity history.
 - **Apply to every department and team** (Parameters, company-wide scope, super admins, on by
   default): saving the system configuration (`POST /api/admin/configs` with `applyToAll: true`)
   removes the department and team values of those settings, and saving the KPI targets
@@ -426,7 +429,7 @@ security on, no policies.
   developer data is returned only when at least **3** people contribute; otherwise its values are
   `null` with `privacy: { suppressed: true, contributors: null, reason: "Not shown: fewer than 3
   contributors" }` (the count is not revealed; 0 contributors is plain "no data"). Contributors are
-  active QA engineers and team leads assigned to the team who opted in to developer insights and have
+  active software engineers and team leads assigned to the team who opted in to developer insights and have
   all five inputs recorded (`server/lib/developerAggregates.ts`). Applied to: the team summary of
   `GET /api/analytics/developer-metrics` (team averages, DDPS, workload balance, burnout counts; the
   Developer productivity tiles now come from it), `GET /api/analytics/ddps-history` (team statistics and
@@ -434,18 +437,18 @@ security on, no policies.
   burnout risk), the status counts of `GET /api/teams/:id/developer-ai-suggestions`, and the company
   summary (workload balance and burnout of the averages: only teams that reach 3 themselves, so a
   suppressed team can never be worked out from the total). Individual rows keep the existing rules
-  (QA engineers and viewers see only their own; leads, managers and admins see people who opted in).
+  (software engineers and viewers see only their own; leads, managers and admins see people who opted in).
 - **Pulse survey** (**Delivery → Wellbeing pulse**, also from Team detail): five statements on a 1–5
   scale plus an optional comment (≤ 500 characters), once per person, team and period. A team is asked
   **every week, every two weeks, every month or every three months** (team-wide; default every two
-  weeks, counted from Monday 2026-01-05). **Managers decide**: the department's QA managers and super
+  weeks, counted from Monday 2026-01-05). **Managers decide**: the department's managers and super
   admins (not team leads) change it, effective from the next period (Activity log). Weeks are counted
   from the day the cadence starts; months and quarters are calendar months and quarters (Jan–Mar,
   Apr–Jun, …). A change to monthly or quarterly starts when the running period ends; that first period
   runs to the end of the month / quarter (or, if that leaves fewer than 7 days, to the end of the next
   one). Pure rules in `server/lib/pulseRules.ts` (`periodFor`, `planCadenceChange`).
   - **Send survey to the team** (pulse page and Team detail → Wellbeing (survey); the team lead, the
-    department's QA managers and super admins): e-mails every active member assigned to the team who
+    department's managers and super admins): e-mails every active member assigned to the team who
     has not been sent it yet a **personal single-use link** for the running period
     (`APP_URL/pulse/answer?token=igp_…`). Only the token's sha256 is stored (`pulse_links`); a link is
     bound to one user, team and period, expires when the period ends, and is used up by answering
@@ -503,9 +506,9 @@ security on, no policies.
   (`canViewPulseResults`: the team's analytics scope; send status only with `canSendPulseSurvey`),
   `POST /api/pulse/teams/:teamId/responses` (`canTakePulseSurvey`: assigned to the team),
   `PUT /api/pulse/teams/:teamId/cadence` and `PUT /api/pulse/teams/:teamId/auto-send` (`canSetPulseCadence`:
-  QA manager of the department, super admin), `POST /api/pulse/teams/:teamId/send` and `…/remind`
-  (`canSendPulseSurvey`: the team lead, QA manager of the department, super admin),
-  `PUT /api/pulse/teams/:teamId/settings` (`canSetPulseReminders`: the team lead, QA manager of the
+  manager of the department, super admin), `POST /api/pulse/teams/:teamId/send` and `…/remind`
+  (`canSendPulseSurvey`: the team lead, manager of the department, super admin),
+  `PUT /api/pulse/teams/:teamId/settings` (`canSetPulseReminders`: the team lead, manager of the
   department, super admin) and `GET /api/pulse/pending` (the caller's own pending surveys). Without a session, the
   token being the credential: `POST /api/pulse/link` `{ token }` (what the answer page shows; no personal
   data) and `POST /api/pulse/link/respond` `{ token, answers, comment }`. Cadence changes, sends, reminders
@@ -528,17 +531,17 @@ Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (table
   in the last H hours, per team named in them; company-level when none). Team settings override
   department settings, which override company settings, which override the defaults. Who may change
   them follows KPI targets (company: super admins; department / team: super admins and that
-  department's QA managers); QA managers can read them.
+  department's managers); managers can read them.
 - **Evaluation**: after every KPI write (Manual metrics, ingestion API, generators) and every hour
   (`server/jobs/alertsCron.ts` locally, `netlify/functions/alerts-evaluate.ts` on Netlify; super admins
   also have **Evaluate alerts now**). One open alert per condition; it is refreshed while the condition
-  holds and resolved when it is gone. Team leads, the department's QA managers and super admins can
+  holds and resolved when it is gone. Team leads, the department's managers and super admins can
   **acknowledge** an alert (recorded in the Activity history).
 - **Notifications**: the **bell** in the top bar (unread count, latest, mark read, acknowledge) and the
   **Notifications** page (`/notifications`: alerts of your scope, inbox, preferences). People assigned
-  to a team (and its department's QA managers) are told about its alerts at the severity they chose;
+  to a team (and its department's managers) are told about its alerts at the severity they chose;
   company-wide roles about critical team alerts only. **Preferences** per person: in-app on/off, an email
-  for each alert, the weekly digest (super admins, QA managers, team leads), minimum severity
+  for each alert, the weekly digest (super admins, managers, team leads), minimum severity
   (defaults: in-app, no immediate email, digest on for leads and above, from warning). Email goes
   through the one mailer (SMTP when `SMTP_*` is set, otherwise written to the server log).
 - **Slack** (super admins, Parameters → Notification channels): one incoming webhook per company,
@@ -554,7 +557,7 @@ Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (table
   the next 7 days / completed with their outcome. At most one per person and ISO week. **Send test
   digest** (Notifications → Preferences, and Parameters for super admins) sends yours now.
 - **Tracked actions** (`server/lib/actions.ts`, `/api/actions`, **Team detail → Action plan**, TV
-  focus panel, digest): created by team leads, the department's QA managers and super admins, by hand
+  focus panel, digest): created by team leads, the department's managers and super admins, by hand
   or with **Create action** on a recommendation; an owner who has the team in scope, a due date, a
   status (open, in progress, done, dropped) and optionally a linked KPI. The **baseline** is the latest
   stored value of that KPI when the action is created; the **outcome** is computed from the stored
@@ -617,7 +620,7 @@ together: when both exist only the months with the source of the latest month ar
 **What-if**: change × b with the range and ×12; disabled (with the reason) without a significant slope;
 values outside the recorded range are flagged as extrapolation. **Details** also holds the monthly trend chart,
 the correlation matrix (Pearson, BH-FDR), the AI summary and the metric definitions, collapsed.
-**All teams** (super admins: company; QA managers: their departments; `GET /api/revenue-impact/rollup
+**All teams** (super admins: company; managers: their departments; `GET /api/revenue-impact/rollup
 [?departmentId=]`, `canViewRevenueRollup`): the sum of the team figures with the teams that have none and why;
 CSV export. Every endpoint checks the analytics scope (`assertTeamAnalytics`). No migration.
 

@@ -12,13 +12,17 @@ Access comes from **role assignments** (`role_assignments`, loaded on every requ
 `server/lib/assignments.ts`, so a change applies on the person's next request). A grant is a role on
 a scope; a person may hold several:
 
-| Role | Assigned on | Analytics scope (`canViewTeamAnalytics`) |
-|---|---|---|
-| `super_admin` | the company | every team of the company |
-| `qa_manager` | a department (one or more) | the teams of those departments |
-| `team_lead` | a team (one or more; one lead per team) | those teams |
-| `qa_engineer` | a team (one or more) | those teams |
-| `viewer` | a team (one or more) | those teams (read-only) |
+| Role (key) | Name on screen | Assigned on | Analytics scope (`canViewTeamAnalytics`) |
+|---|---|---|---|
+| `super_admin` | Super admin | the company | every team of the company |
+| `qa_manager` | Manager (Department manager where it needs saying) | a department (one or more) | the teams of those departments |
+| `team_lead` | Team lead | a team (one or more; one lead per team) | those teams |
+| `qa_engineer` | Software engineer | a team (one or more) | those teams |
+| `viewer` | Viewer | a team (one or more) | those teams (read-only) |
+
+So: **Software engineer (`qa_engineer`)** and **Manager (`qa_manager`)**. The keys stay as they are in
+the database, the API, tokens and integrations; only the names shown change (one map:
+`server/lib/roleLabels.ts`). Below, the tables use the keys as column headings.
 
 `users.role` (highest role), `department_id` and `primary_team_id` are display columns kept in step by
 the server; access never depends on them alone.
@@ -68,17 +72,17 @@ individual developer data needs at least 3 such contributors (k-anonymity, `serv
 
 ## Managing people
 
-"Can manage" a user (`manageUserVia`): super_admin any user of the company; a QA manager users of a
-department they manage whose highest role is below QA manager; a team lead users of a team they lead
+"Can manage" a user (`manageUserVia`): super_admin any user of the company; a manager users of a
+department they manage whose highest role is below manager; a team lead users of a team they lead
 whose highest role is below team lead. Nobody manages themselves.
 
 | Action (helper) | Rule |
 |---|---|
 | Activate / deactivate, developer-insights toggle (`canManageUser`) | users you can manage |
-| Edit another user's profile and assignments (`canEditUser`, `canEditAssignment`) | super_admin, and QA managers for users they manage |
+| Edit another user's profile and assignments (`canEditUser`, `canEditAssignment`) | super_admin, and managers for users they manage |
 | Delete (= deactivate, history kept) (`canDeleteUser`) | as editing assignments |
 | Reset a password (`canResetPassword`) | yourself, or a user you can manage |
-| Grant / revoke an assignment, send invitations (`canGrant`, `canInvite`) | super_admin any grant; a QA manager team lead / QA engineer / viewer on teams of their departments; a team lead QA engineer / viewer on teams they lead; never your own assignments |
+| Grant / revoke an assignment, send invitations (`canGrant`, `canInvite`) | super_admin any grant; a manager team lead / software engineer / viewer on teams of their departments; a team lead software engineer / viewer on teams they lead; never your own assignments |
 | Edit yourself | name and e-mail only |
 
 The last active super admin of a company cannot lose that role or be deactivated.

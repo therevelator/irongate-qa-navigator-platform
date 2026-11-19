@@ -27,8 +27,8 @@ Contents
 
 ### The problem
 
-QA and engineering leaders in organisations with more than a handful of teams usually face the same
-four problems:
+Engineering leaders and managers in organisations with more than a handful of teams usually face the
+same four problems:
 
 1. **No single, trustworthy view of quality across teams.** Coverage lives in SonarQube, defects in
    Jira, build times in Jenkins or GitHub Actions, incidents in PagerDuty. Every team reports in its own
@@ -45,8 +45,8 @@ four problems:
 
 ### What IronGate QE Navigator is
 
-A web application that gives QA and engineering leadership one place to see the quality, delivery and
-wellbeing of every team, from a company overview down to a single team, with every number traceable to
+A web application that gives engineering leaders, managers and teams one place to see the quality, delivery and
+wellbeing of every team (quality is a shared responsibility, not a separate QA function), from a company overview down to a single team, with every number traceable to
 its formula, its inputs, its source system and its age.
 
 It collects team KPIs (pushed from CI, issue trackers, code analysis and other tools through an
@@ -56,12 +56,15 @@ history, and rolls the results up into team and company scores.
 
 ### Who uses it
 
+Role names on screen: Super admin, Manager (`qa_manager`), Team lead, Software engineer (`qa_engineer`), Viewer. The keys in
+brackets are what the database and the API use; they did not change.
+
 | Person | Typical questions |
 |---|---|
-| Head of QA / VP Engineering (super admin) | How healthy is engineering overall? Which teams are off target, and on what? Is it improving? |
-| QA manager (one or more departments) | How do the teams in my departments compare? Where should I spend coaching time? |
+| VP Engineering / head of quality (super admin) | How healthy is engineering overall? Which teams are off target, and on what? Is it improving? |
+| Manager (one or more departments) | How do the teams in my departments compare? Where should I spend coaching time? |
 | Team lead | How is my team doing against its targets? Is anyone overloaded? What should we work on next? |
-| QA engineer | How is my team doing? What is my own workload picture? |
+| Software engineer | How is my team doing? What is my own workload picture? |
 | Viewer (stakeholder, product manager) | Read-only view of the team's quality status. |
 
 ### Design principles (and where they are enforced)
@@ -83,7 +86,7 @@ history, and rolls the results up into team and company scores.
 
 - **Company** (organisation, tenant). Registering creates a new company and makes the registrant its
   super admin. Data never crosses companies: every endpoint is scoped to the caller's company.
-- **Department**: a group of teams (for example "Payments", "Platform"). Managed by one or more QA managers.
+- **Department**: a group of teams (for example "Payments", "Platform"). Managed by one or more managers.
 - **Team**: the unit metrics are recorded for. Has one team lead and any number of members. A team can be
   moved to another department.
 
@@ -94,7 +97,7 @@ Tables: `companies`, `departments`, `teams`, `users`, `team_members`, `role_assi
 ### Roles and assignments
 
 Access comes from **role assignments** (table `role_assignments`): a role on a scope. A person can hold
-several assignments, for example QA manager of two departments, or QA engineer on two teams. Every access
+several assignments, for example manager of two departments, or software engineer on two teams. Every access
 decision on the server and in the UI goes through the same rules in
 [`server/lib/userPolicy.ts`](../server/lib/userPolicy.ts), with assignments loaded per request by
 [`server/lib/assignments.ts`](../server/lib/assignments.ts), so a change takes effect on the person's next
@@ -116,9 +119,9 @@ What each role may do (from `userPolicy.ts`; the navigation in [`src/components/
 | Overview (company dashboard; team KPIs are company-visible) | yes | yes | yes | yes | yes |
 | Analytics modules, Compare teams, TV mode, per-team metric detail (history, velocity) | all teams | their departments' teams | their teams | their teams | their teams |
 | Team member names and e-mails (`canViewTeamMembers`) | any team | their departments | assigned teams | assigned teams | assigned teams |
-| Manage users (activate / deactivate, reset password, developer-insights toggle) | anyone in the company except themselves | users of their departments ranked below QA manager | users of teams they lead ranked below team lead | no | no |
+| Manage users (activate / deactivate, reset password, developer-insights toggle) | anyone in the company except themselves | users of their departments ranked below manager | users of teams they lead ranked below team lead | no | no |
 | Edit another user's profile and assignments; delete (= deactivate) | yes | users they manage | no | no | no |
-| Grant / revoke assignments and send invitations | any grant | team lead, QA engineer, viewer on teams of their departments | QA engineer, viewer on teams they lead | no | no |
+| Grant / revoke assignments and send invitations | any grant | team lead, software engineer, viewer on teams of their departments | Software engineer, viewer on teams they lead | no | no |
 | Create / edit / delete teams | any | in their departments | no | no | no |
 | Departments page, API keys, move teams, assign managers and leads | yes | no | no | no | no |
 | Team data writes: Manual metrics, AI toggle (`canWriteTeamData`) | any team | their departments | teams they lead | no | no |
@@ -165,12 +168,12 @@ verified e-mail) or an **open invitation** for that verified e-mail; nobody else
 
 Every organisation, role, assignment, team, department, user and settings change is recorded in
 `audit_log` with who, when, what (before and after; secrets masked) and which departments it concerns.
-Super admins see the whole company, QA managers their departments' entries.
+Super admins see the whole company, managers their departments' entries.
 
 **Undo** exists for assignment and role changes, manager and lead changes, team moves, department renames
 and user deactivation. It restores the previous state in one transaction and is itself recorded. It is
 refused, with the reason, when a newer change touches the same people / team / department, or when the
-state was changed outside the history. QA managers may undo only user and assignment changes inside their
+state was changed outside the history. Managers may undo only user and assignment changes inside their
 departments (not their own access, not manager or lead changes). Code: [`server/lib/audit.ts`](../server/lib/audit.ts).
 
 ### User activity log (super admins)
@@ -187,7 +190,7 @@ matched to the anonymous answer. Not recorded either: the session check, this sc
 requests (opening it and exporting it are recorded) and platform support requests (they go to the
 Activity log, below).
 
-Only super admins of the company see it (`canViewUserActivity`); QA managers do not. Filters: user,
+Only super admins of the company see it (`canViewUserActivity`); managers do not. Filters: user,
 dates, action type (sign-in, view, change, export, API ingestion, failed), team, errors only, request
 id. CSV export of the filtered list (at most 10 000 rows), itself recorded.
 
@@ -244,7 +247,7 @@ Code: [`server/routes/operator.ts`](../server/routes/operator.ts),
 
 ### Demo mode
 
-`DEMO_MODE=true` shows demo-account chips on the login page (admin, QA manager, lead, engineer, viewer of
+`DEMO_MODE=true` shows demo-account chips on the login page (admin, manager, lead, engineer, viewer of
 the IronGate demo company). Default: on for local development, off when `NODE_ENV=production` or on
 Netlify ([`server/routes/authSso.ts`](../server/routes/authSso.ts), `demoModeEnabled`). Demo mode is
 independent of sample data (section 4.7).
@@ -551,7 +554,7 @@ turnaround (hours), focus time (hours/day), meeting time (hours/day), context sw
 | Context switches | lower | ≤ 3/day / ≤ 6/day |
 
 Today: entered in **Manual metrics → Developer Productivity Metrics** (`POST /api/metrics/developer`; super admin,
-QA manager, team lead) or sample data. The KPI ingestion API does not accept developer metrics. Production:
+manager, team lead) or sample data. The KPI ingestion API does not accept developer metrics. Production:
 GitHub / GitLab (PR opened → merged, review requested → first review), Google Calendar / Microsoft 365 (meeting
 hours, free blocks of focus time), issue tracker / IDE activity (context switches).
 
@@ -603,7 +606,7 @@ praise only when there are no concerns and every input was measured. Workload ba
 always comes from the rules.
 
 **Team averages** of all of the above (team DDPS, average inputs, average workload balance, burnout counts) are subject to
-the k-anonymity rule (section 6): contributors are active QA engineers and team leads assigned to the team who opted in to
+the k-anonymity rule (section 6): contributors are active software engineers and team leads assigned to the team who opted in to
 developer insights and have all five inputs recorded ([`server/lib/developerAggregates.ts`](../server/lib/developerAggregates.ts)).
 
 ### 3.11 Wellbeing (survey)
@@ -785,7 +788,7 @@ and whether the item was a duplicate.
 
 ### 4.3 Manual metrics
 
-**Administration → Manual metrics** (super admin, QA manager, team lead; team scope enforced by the server). Sections: current
+**Administration → Manual metrics** (super admin, manager, team lead; team scope enforced by the server). Sections: current
 metrics, team KPIs by category (with calculators such as the code-quality rating calculator), developer productivity metrics per
 member, technical-debt ROI impact per item, and CI/CD pipeline stages. Team KPIs go through the same path as the API with source
 `manual`, can be backdated with a "recorded at" time, and appear in the ingestion log.
@@ -793,7 +796,7 @@ member, technical-debt ROI impact per item, and CI/CD pipeline stages. Team KPIs
 ### 4.4 Ingestion log
 
 Every request (accepted, partial or rejected; API and Manual metrics) is recorded in `ingestion_log` with its items, errors and
-response: **Administration → Ingestion log** (super admins; QA managers see requests that touched their departments' teams), with a
+response: **Administration → Ingestion log** (super admins; managers see requests that touched their departments' teams), with a
 per-source "last received" overview. This is where you check whether CI integrations are still sending. Code:
 [`server/lib/ingestionLog.ts`](../server/lib/ingestionLog.ts).
 
@@ -858,7 +861,7 @@ Why: everything about one team in one place, with each number explained
 - Header tiles: QA score (with confidence), technical debt score, task sizing accuracy and key KPIs.
 - KPI sections Quality & testing, Speed & efficiency, Agile & process, Reliability & stability: each KPI with value, target valid at
   its date, status, "source · as of date", stale marker and history chart.
-- Wellbeing (survey) result with its response rate and a link to the pulse survey; for the lead, QA managers and admins the **Send the
+- Wellbeing (survey) result with its response rate and a link to the pulse survey; for the lead, managers and admins the **Send the
   survey** panel (send, remind, sent N of M, automatic sending); Team members with their latest workload metrics (only for people who may see
   the team's people, and with metrics only for those who opted in to developer insights); Team recommendations (rule-based or AI); Developer recommendations.
 - **Action plan**: the team's tracked actions with owner, due date, status, linked KPI, baseline and computed outcome; **Create action**
@@ -927,31 +930,31 @@ All roles can open them, each for the teams in their analytics scope, chosen in 
 | Performance | Response times per endpoint, SLA breaches (section 3.12) | Catch performance regressions before customers do |
 | CI/CD pipeline | Stage flow, average duration and success rate per stage, bottleneck score, stage executions over 14 days (section 3.7) | Find the stage that slows delivery |
 | Developer productivity | Team tiles (k-anonymous), DDPS by developer, recorded DDPS snapshots, developer list and recommendations (section 3.10) | Spot overload and slow review loops; fix the environment, not the person |
-| Wellbeing pulse | Answer the survey; results of closed periods with response rate and trend; for the lead, QA managers and admins **Send survey to the team**, **Send reminder to those who haven't answered**, the send log and, for managers, how often it goes out and whether automatically (sections 3.11 and 6) | Ask the team directly how it is doing, and make sure everyone is asked |
-| Business impact | **Money** first: where the money is going now, what you gain when issues are fixed, where to put the money first; **What-if**; **Details** (revenue per metric, monthly trends, correlation matrix, AI summary); **All teams** roll-up for super admins and QA managers (section 3.13) | Say in money what quality problems cost and what fixing them is worth, with honest statistics |
+| Wellbeing pulse | Answer the survey; results of closed periods with response rate and trend; for the lead, managers and admins **Send survey to the team**, **Send reminder to those who haven't answered**, the send log and, for managers, how often it goes out and whether automatically (sections 3.11 and 6) | Ask the team directly how it is doing, and make sure everyone is asked |
+| Business impact | **Money** first: where the money is going now, what you gain when issues are fixed, where to put the money first; **What-if**; **Details** (revenue per metric, monthly trends, correlation matrix, AI summary); **All teams** roll-up for super admins and managers (section 3.13) | Say in money what quality problems cost and what fixing them is worth, with honest statistics |
 | Team rankings | Department teams ranked by a chosen KPI (section 3.14) | Friendly comparison inside a department |
 | Reports | A PDF report for the selected team: QA score with confidence and 14 KPIs (coverage, automation, escape rate, defect density, change failure rate, flakiness, code quality, deployments, lead time, MTTR, build time, first-time pass rate, commitment rate, availability) | A shareable snapshot for reviews and steering meetings |
 
 ### Developer productivity and individual data
 
-QA engineers and viewers see only their own row. Team leads, QA managers and super admins see the rows of developers in their scope who
+Software engineers and viewers see only their own row. Team leads, managers and super admins see the rows of developers in their scope who
 opted in to developer insights (off by default; an unset value counts as off). Team tiles come from the k-anonymous team summary. Only your own row is exported when you may not see others.
 
 ### Administration
 
 | Page | Who | What |
 |---|---|---|
-| Admin console | super admin, QA manager | Organisation structure, team members, create users / teams; **API keys** and **Sample data** (super admin) |
-| Manual metrics | super admin, QA manager, team lead | Section 4.3 |
-| Update frequency | super admin, QA manager | Expected interval per metric (staleness) |
-| Parameters | super admin, QA manager | **KPI targets** (with history), **Alert rules**, **Notification channels** (Slack, test digest, evaluate now; super admin), **Performance SLA** (p95 response time, error-rate threshold), **Financial and ROI settings**; each field says which page reads it |
-| Ingestion log | super admin, QA manager (their departments) | Section 4.4 |
-| Activity | super admin, QA manager (their departments) | Change history with filters and undo (section 2) |
+| Admin console | super admin, manager | Organisation structure, team members, create users / teams; **API keys** and **Sample data** (super admin) |
+| Manual metrics | super admin, manager, team lead | Section 4.3 |
+| Update frequency | super admin, manager | Expected interval per metric (staleness) |
+| Parameters | super admin, manager | **KPI targets** (with history), **Alert rules**, **Notification channels** (Slack, test digest, evaluate now; super admin), **Performance SLA** (p95 response time, error-rate threshold), **Financial and ROI settings**; each field says which page reads it |
+| Ingestion log | super admin, manager (their departments) | Section 4.4 |
+| Activity | super admin, manager (their departments) | Change history with filters and undo (section 2) |
 | Users, Teams, Departments | see section 2 | Assignments (chips), invitations, team lead / manager changes, team moves |
 
 ### Executive AI briefing
 
-**Executive briefing** on the dashboard (super admin, QA manager, team lead): a side panel with a short executive summary (biggest risk,
+**Executive briefing** on the dashboard (super admin, manager, team lead): a side panel with a short executive summary (biggest risk,
 biggest win) and three recommendations, written by a language model (Groq) from the same numbers as the company summary and the company
 snapshots of the last 30 days. It is told that "no data" means not measured. Requires `GROQ_API_KEY`; without it the panel says so. Opening
 it also stores today's company snapshot in `company_kpi_snapshots`. Team recommendations and the business-impact summary use the same AI
@@ -969,7 +972,7 @@ Defined once in [`server/lib/privacy.ts`](../server/lib/privacy.ts):
 > `privacy: { suppressed: true, contributors: null, reason: "Not shown: fewer than 3 contributors" }` and does not reveal how many people
 > there were. Zero contributors is plain "no data".
 
-**Who contributes** to developer aggregates: active QA engineers and team leads assigned to the team, who opted in to developer insights
+**Who contributes** to developer aggregates: active software engineers and team leads assigned to the team, who opted in to developer insights
 (`users.developer_insights_enabled`, off by default) and have all five inputs recorded. Someone who has not opted in is left out of every
 aggregate, including the ones they can see themselves.
 
@@ -984,7 +987,7 @@ aggregate, including the ones they can see themselves.
   worked out by subtracting visible teams from the total.
 - Pulse survey results and comments (at least 3 responses per period).
 
-Individual rows follow the role rules of section 2 (own row for QA engineers and viewers; leads, managers and admins see people who opted in).
+Individual rows follow the role rules of section 2 (own row for software engineers and viewers; leads, managers and admins see people who opted in).
 
 ### Survey anonymity design
 
@@ -1007,7 +1010,7 @@ Individual rows follow the role rules of section 2 (own row for QA engineers and
 
 ### How often the survey goes out (managers decide)
 
-The cadence is **team-wide** and set by the **department's QA managers and super admins** (team leads see it but cannot change it), on the
+The cadence is **team-wide** and set by the **department's managers and super admins** (team leads see it but cannot change it), on the
 Wellbeing pulse page. Four options ([`server/lib/pulseRules.ts`](../server/lib/pulseRules.ts) `periodFor`):
 
 | Cadence | Periods |
@@ -1023,7 +1026,7 @@ fewer than 7 days, to the end of the following one. Every change is in Activity.
 
 ### Sending the survey
 
-- **Send survey to the team** (Wellbeing pulse page and Team detail → Wellbeing (survey); the team lead, the department's QA managers and
+- **Send survey to the team** (Wellbeing pulse page and Team detail → Wellbeing (survey); the team lead, the department's managers and
   super admins): every active member assigned to the team who has not been sent it yet gets an e-mail with a **personal link** for the
   running period. Only the sha256 of the link's token is stored. The link is bound to that person, team and period, works **once**
   (answering through it or in the app uses it up) and **expires when the period ends**. It authenticates only that one answer: it gives no
@@ -1044,7 +1047,7 @@ fewer than 7 days, to the end of the following one. Every change is in Activity.
 
 ### Members who have not answered: warning, reminders, escalation
 
-Set per team on the Wellbeing pulse page by the **team lead, the department's QA managers and super admins** (`canSetPulseReminders`),
+Set per team on the Wellbeing pulse page by the **team lead, the department's managers and super admins** (`canSetPulseReminders`),
 recorded in Activity. Days count from the day the period's survey went out (no survey sent: nothing happens).
 
 | Setting | Default | What happens |
@@ -1091,7 +1094,7 @@ the loop by checking, from stored data, whether an action actually moved the met
 
 Set in **Administration → Parameters → Alert rules** (`GET/PUT /api/alerts/rules`). Team settings override department settings, which override
 company settings, which override the defaults. Company rules: super admins; department and team rules: super admins and that department's QA
-managers (QA managers can read them).
+managers (managers can read them).
 
 | Rule | Fires when | Severity | Defaults |
 |---|---|---|---|
@@ -1102,16 +1105,16 @@ managers (QA managers can read them).
 
 **Evaluation:** after every KPI write (Manual metrics, ingestion API, generators) and every hour (local `server/jobs/alertsCron.ts`, default
 `15 * * * *`; Netlify Scheduled Function `netlify/functions/alerts-evaluate.ts`); super admins also have **Evaluate alerts now**. Exactly one open
-alert per condition: refreshed while the condition holds, resolved when it is gone. Team leads, the department's QA managers and super admins can
+alert per condition: refreshed while the condition holds, resolved when it is gone. Team leads, the department's managers and super admins can
 **acknowledge** an alert (recorded in Activity).
 
 ### Notifications
 
 - **Bell** in the top bar (unread count, latest, mark read, acknowledge) and a **Notifications** page (`/notifications`: alerts of your scope,
   inbox, preferences).
-- People assigned to a team, and its department's QA managers, are told about its alerts at the severity they chose; company-wide roles about
+- People assigned to a team, and its department's managers, are told about its alerts at the severity they chose; company-wide roles about
   critical team alerts only.
-- **Preferences** per person: in-app on/off, an e-mail for each alert, the weekly digest (super admins, QA managers, team leads), minimum
+- **Preferences** per person: in-app on/off, an e-mail for each alert, the weekly digest (super admins, managers, team leads), minimum
   severity. Defaults: in-app on, no immediate e-mail, digest on for leads and above, from warning.
 - E-mail goes through the one mailer (SMTP when configured, otherwise written to the server log). Every e-mail and Slack message goes through
   an outbox (`notification_deliveries`) with a dedupe key and up to 3 attempts.
@@ -1134,7 +1137,7 @@ admins) sends yours immediately.
 
 **Team detail → Action plan**, TV focus panel and the digest (`/api/actions`):
 
-- Created by team leads, the department's QA managers and super admins, by hand or with **Create action** on a recommendation.
+- Created by team leads, the department's managers and super admins, by hand or with **Create action** on a recommendation.
 - Owner (someone who has the team in scope), due date, status (open, in progress, done, dropped), optionally a linked KPI. The owner may change
   the status.
 - **Baseline:** the latest stored value of the linked KPI when the action is created.
@@ -1293,7 +1296,7 @@ Still open:
 
 | Term | Meaning |
 |---|---|
-| Analytics scope | The teams a person may open in analytics, compare, TV and member lists: all (super admin), their departments' teams (QA manager), their assigned teams (others) |
+| Analytics scope | The teams a person may open in analytics, compare, TV and member lists: all (super admin), their departments' teams (manager), their assigned teams (others) |
 | Assignment | A role on a scope (company, department or team) in `role_assignments`; a person can hold several |
 | Automation coverage | Share of test cases that run automatically |
 | Carried forward | A snapshot value that was recorded on an earlier day and is still the latest value |

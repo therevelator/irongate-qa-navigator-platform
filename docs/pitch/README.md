@@ -13,4 +13,6 @@ per-contributor prices and an assumed €900 consultant day rate) is in the spea
 
 Placeholders to fill before presenting: presenter, date and audience (cover); client, start date and
 contact (the ask).
+Role names follow the product: Managers, Team leads and Software engineers (quality is a shared
+responsibility, not a separate QA function).
 Competitive claims come from `docs/COMPETITIVE_ANALYSIS.md` (sources checked 18 Nov 2026).
