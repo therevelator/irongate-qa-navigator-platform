@@ -1,7 +1,7 @@
 import { Response } from 'express';
 import { queryOne } from '../../src/lib/db';
 import { AuthRequest } from './auth';
-import { canViewTeamAnalytics, canReadTeamDetail, canWriteTeamData, canManageTeam, canManageCompanyConfig, type PolicyActor } from '../lib/userPolicy';
+import { canViewTeamAnalytics, canReadTeamDetail, canWriteTeamData, canWriteSomeTeamData, canManageTeam, canManageCompanyConfig, type PolicyActor } from '../lib/userPolicy';
 
 /**
  * Tenant / team access helpers.
@@ -55,6 +55,8 @@ export async function assertTeamRead(req: AuthRequest, res: Response, teamId?: s
  * Writes the HTTP error and returns null when access is denied.
  */
 export async function assertTeamWrite(req: AuthRequest, res: Response, teamId?: string | null): Promise<OwnedTeam | null> {
+  // Someone who may write no team's data is refused before the team (or anything else) is looked up.
+  if (!assertSomeTeamWrite(req, res)) return null;
   const team = await getOwnedTeam(req, teamId);
   if (!team) {
     res.status(404).json({ error: 'Team not found' });
@@ -107,4 +109,15 @@ export async function assertTeamAnalytics(req: AuthRequest, res: Response, teamI
 export function canManageCompanyData(reqOrRole?: AuthRequest | string): boolean {
   if (typeof reqOrRole === 'object' && reqOrRole) return canManageCompanyConfig(policyActor(reqOrRole));
   return reqOrRole === 'super_admin' || reqOrRole === 'qa_manager';
+}
+
+/**
+ * Permission gate that runs before a team-data write looks at its body (FI-15): the caller must be
+ * allowed to write the data of at least one team (canWriteSomeTeamData), else 403. Answers and
+ * returns false when refused.
+ */
+export function assertSomeTeamWrite(req: AuthRequest, res: Response): boolean {
+  if (canWriteSomeTeamData(policyActor(req))) return true;
+  res.status(403).json({ error: 'Insufficient permissions for this team' });
+  return false;
 }

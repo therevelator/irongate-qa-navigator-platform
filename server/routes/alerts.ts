@@ -8,6 +8,7 @@ import {
   ALERT_RULES, evaluateCompany, isAlertRule, loadRuleBook, metricLabel, normaliseParams, RULE_DEFS, SEVERITY_RANK, type AlertRule,
 } from '../lib/alerts';
 import { refreshActionOutcomes } from '../lib/actions';
+import { canManageCompanyConfig } from '../lib/userPolicy';
 import { canAcknowledgeAlert, canEditAlertRules, canReadAlertRules, canRunEvaluation, canSeeAlert } from '../lib/alertPolicy';
 
 /**
@@ -175,6 +176,10 @@ router.put('/rules', authenticateToken, async (req: AuthRequest, res) => {
     const actor = policyActor(req);
     const companyId = req.companyId as string;
     const { scopeType, scopeId, rules } = req.body ?? {};
+    // Permission before the body is looked at (FI-15): only super admins and managers edit alert rules.
+    if (!canManageCompanyConfig(actor)) {
+      return res.status(403).json({ error: 'Only administrators and department managers can change alert rules' });
+    }
     const scope = await resolveScope(companyId, scopeType, scopeId);
     if (!scope) return res.status(404).json({ error: 'Scope not found' });
     if (!canEditAlertRules(actor, { type: scope.type, departmentId: scope.departmentId })) {

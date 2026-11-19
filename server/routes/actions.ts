@@ -116,11 +116,10 @@ router.patch('/:id', authenticateToken, async (req: AuthRequest, res) => {
     const body = req.body ?? {};
     const writer = canManageActions(actor, team);
     const fields = Object.keys(body).filter((k) => ['title', 'description', 'ownerId', 'dueDate', 'status', 'metricKey'].includes(k));
+    // Permission before the body is checked (FI-15).
+    if (!writer && !canUpdateActionStatus(actor, team, row)) return res.status(403).json({ error: 'Only the team’s leads, its department’s managers, administrators and the action’s owner can change it' });
     if (!fields.length) return res.status(400).json({ error: 'Nothing to change' });
-    if (!writer) {
-      if (!canUpdateActionStatus(actor, team, row)) return res.status(403).json({ error: 'Only the team’s leads, its department’s managers, administrators and the action’s owner can change it' });
-      if (fields.some((f) => f !== 'status')) return res.status(403).json({ error: 'As the owner you can change the status of this action' });
-    }
+    if (!writer && fields.some((f) => f !== 'status')) return res.status(403).json({ error: 'As the owner you can change the status of this action' });
     const patch: ActionPatch = {};
     if ('title' in body) patch.title = cleanTitle(body.title);
     if ('description' in body) patch.description = cleanDescription(body.description);

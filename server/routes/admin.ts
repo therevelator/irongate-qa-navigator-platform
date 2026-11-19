@@ -7,7 +7,7 @@ import { generateApiKey } from '../middleware/apiKey';
 import { randomUUID } from 'crypto';
 import {
   ROLE_HIERARCHY, TEAM_OPTIONAL_ROLES, canAssignRole, canManageUser, canEditUser, canEditAssignment,
-  canResetPassword, canDeleteUser, canGrant, canManageTeam, canManageDepartment, canManageCompanyConfig,
+  canResetPassword, canDeleteUser, canGrant, canCreateUsers, canManageTeam, canManageDepartment, canManageCompanyConfig,
   isCompanyAdmin, highestRole, managedDepartmentIds, ledTeamIds, holdsRole, type PolicyActor,
 } from '../lib/userPolicy';
 import { teamMemberCountSql, teamLeadNameSql, teamLeadIdSql } from '../lib/teamMembership';
@@ -19,10 +19,11 @@ import { recordAudit, auditedUserChange } from '../lib/audit';
 import orgAdminRoutes from './orgAdmin';
 import { loadResetTarget, sendResetLinkByAdmin, RESET_TTL_MINUTES } from '../lib/passwordReset';
 import {
-  endUserSessions, issueSessionCookie, isAllowedLifetime, lifetimeHours, lifetimeLabel,
+  currentSessionPersistent, endUserSessions, issueSessionCookie, isAllowedLifetime, lifetimeHours, lifetimeLabel,
   DEFAULT_SESSION_HOURS, SESSION_LIFETIME_CHOICES, SESSION_LIFETIME_KEY,
 } from '../lib/sessions';
 import { resolveConfigs, isSecretConfigKey } from '../lib/configResolver';
+import { configValueProblem } from '../../src/lib/configRules';
 import { planTeamDepartmentMove, applyTeamDepartmentMove } from '../lib/teamDepartment';
 import {
   planAssignManager, applyAssignManager, planRemoveManager, applyRemoveManager, planAssignLead, applyAssignLead,
@@ -107,6 +108,10 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     let teamId: string | null = req.body?.teamId || null;
     let departmentId: string | null = req.body?.departmentId || null;
 
+    // Permission before the body is looked at (FI-15): who cannot create anyone gets 403, not 400.
+    if (!canCreateUsers(actorRole)) {
+      return res.status(403).json({ error: 'You cannot create users' });
+    }
     if (!email || !password || !firstName || !lastName || !role) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
@@ -381,19 +386,19 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
   try {
     const { companyId } = req.user;
     const { newPassword } = req.body ?? {};
-    if (typeof newPassword !== 'string' || newPassword.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
     const target = await loadTarget(req.params.id, companyId);
     if (!target) return res.status(404).json({ error: 'User not found' });
     if (!canResetPassword(actorOf(req), target)) {
       return res.status(403).json({ error: 'You cannot reset this user\'s password' });
     }
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [passwordHash, target.id, companyId]);
     // Existing sessions of that person end. Changing your own password keeps this browser signed in.
     await endUserSessions(target.id);
-    if (target.id === req.user.id) await issueSessionCookie(res, req.user.id, JWT_SECRET);
+    if (target.id === req.user.id) await issueSessionCookie(res, req.user.id, JWT_SECRET, { persistent: currentSessionPersistent(req) });
     await recordAudit({
       companyId, actorId: req.user.id, action: 'user.password_reset', entityType: 'user', entityId: target.id,
       summary: target.id === req.user.id ? 'Changed own password' : `Reset the password of ${fullName(target)}`,
@@ -426,7 +431,7 @@ router.post('/users/:id/sign-out-everywhere', authenticateToken, async (req: any
         departmentIds: [target.department_id, ...(target.department_ids ?? [])], subjectIds: [target.id],
       }, exec);
     });
-    if (self) await issueSessionCookie(res, req.user.id, JWT_SECRET);
+    if (self) await issueSessionCookie(res, req.user.id, JWT_SECRET, { persistent: currentSessionPersistent(req) });
     res.json({ message: self ? 'You were signed out on all other devices.' : `${fullName(target)} was signed out on every device.` });
   } catch (error) {
     console.error('Error signing a user out:', (error as any)?.code ?? (error as Error)?.name ?? 'error');
@@ -1178,7 +1183,7 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
 
     const { departmentId, teamId, configs, applyToAll } = req.body;
 
-    if (!configs || typeof configs !== 'object') {
+    if (!configs || typeof configs !== 'object' || Array.isArray(configs)) {
       return res.status(400).json({ error: 'Invalid configs format' });
     }
 
@@ -1206,6 +1211,13 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
     if (Object.prototype.hasOwnProperty.call(configs, SESSION_LIFETIME_KEY)) {
       return res.status(400).json({ error: 'Change how long sign-ins last under Parameters → Sign-in (super admins only).' });
     }
+    // The same rules as the Parameters page (src/lib/configRules.ts): numbers of 0 or more within
+    // their range for the SLA and financial settings; short plain text under a valid key otherwise.
+    // Nothing is stored when one value is refused.
+    const entries = Object.entries(configs);
+    if (entries.length > 100) return res.status(400).json({ error: 'Too many settings in one request (at most 100).' });
+    const problems = entries.filter(([, v]) => v !== SECRET_MASK).map(([k, v]) => configValueProblem(k, v)).filter((p): p is string => !!p);
+    if (problems.length) return res.status(400).json({ error: problems[0], errors: problems });
 
     // Upsert each config key. The secret mask means "unchanged" and is never stored.
     for (const [key, value] of Object.entries(configs)) {

@@ -5,7 +5,7 @@ import { KpiValidationError, normaliseIdempotencyKey, notifyKpisUpdated, parseRe
 import { findReplay, logRejected, requestHash, runLogged, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
+import { assertSomeTeamWrite, assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
 import { canViewDeveloperRow } from '../lib/userPolicy';
 import { BI_CONFIG_FIELDS, DEVELOPER_METRIC_FIELDS, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 import { isTeamMemberSql, teamMemberCountSql } from '../lib/teamMembership';
@@ -286,7 +286,9 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     metrics: Object.keys(metricValues).slice(0, 40), status, ...extra,
   });
   try {
-    // Who may write is the shared team-write rule (assertTeamWrite → canWriteTeamData).
+    // Who may write is the shared team-write rule (assertTeamWrite → canWriteTeamData); someone who
+    // may write no team at all is refused before the body is checked.
+    if (!assertSomeTeamWrite(req, res)) return;
     if (!teamId) {
       return res.status(400).json({ error: 'Team ID is required' });
     }
@@ -362,6 +364,7 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
 router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { teamId, developerId } = req.body ?? {};
+    if (!assertSomeTeamWrite(req, res)) return;
     if (!teamId || !developerId) {
       return res.status(400).json({ error: 'Team ID and developer ID are required' });
     }

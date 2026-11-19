@@ -158,8 +158,12 @@ router.post('/:id/share', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const view = await loadVisible(req, String(req.params.id));
     if (!view) return res.status(404).json({ error: 'View not found' });
-    if (typeof req.body?.shared !== 'boolean') return res.status(400).json({ error: 'shared must be true or false' });
     const actor = policyActor(req);
+    // Permission before the body is checked (FI-15): only an administrator shares or stops sharing.
+    if (!canShareSavedView(actor, view) && !canUnshareSavedView(actor, view)) {
+      return res.status(403).json({ error: 'Only an administrator can share their views with the company' });
+    }
+    if (typeof req.body?.shared !== 'boolean') return res.status(400).json({ error: 'shared must be true or false' });
     const shared = req.body.shared as boolean;
     if (shared === view.shared) return res.json({ view: toJson(actor, view) });
     const allowed = shared ? canShareSavedView(actor, view) : canUnshareSavedView(actor, view);

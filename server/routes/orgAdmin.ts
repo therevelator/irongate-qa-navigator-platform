@@ -45,6 +45,8 @@ const errorOut = (res: any, e: any, fallback: string) => {
 /** May the actor change this user's assignments at all (company, not self, lower rank unless super admin)? */
 async function loadAssignable(req: any, res: any): Promise<any | null> {
   const actor = policyActor(req);
+  // Permission before anything else (FI-15): someone who can give no assignment at all gets 403.
+  if (!canInvite(actor)) { res.status(403).json({ error: 'You cannot change role assignments' }); return null; }
   const target = await queryOne<any>(
     'SELECT id, first_name, last_name, email, role, is_active FROM users WHERE id = ? AND company_id = ?',
     [req.params.id, req.user.companyId]

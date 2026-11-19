@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne, transaction } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
 import { policyActor } from '../middleware/access';
-import { canSetTargets } from '../lib/userPolicy';
+import { canManageCompanyConfig, canSetTargets } from '../lib/userPolicy';
 import { recordAudit } from '../lib/audit';
 import { execOn } from '../lib/assignments';
 import { defaultTarget, isTargetMetric, loadTargetBook, TARGET_METRICS, TARGET_METRIC_KEYS, type TargetMetric, type TargetScope } from '../lib/targets';
@@ -112,9 +112,13 @@ router.put('/', authenticateToken, async (req: any, res) => {
     // so the company targets apply everywhere. Allowed with no target changes.
     const applyAll = applyToAll === true;
     const targets = applyAll && (rawTargets === undefined || rawTargets === null) ? {} : rawTargets;
+    const actor = policyActor(req);
+    // Permission before the body is looked at (FI-15): only super admins and managers set targets.
+    if (!canManageCompanyConfig(actor)) {
+      return res.status(403).json({ error: 'You can only set targets for the departments you manage and their teams' });
+    }
     const scope = await resolveScope(companyId, scopeType, scopeId);
     if (!scope) return res.status(404).json({ error: 'Scope not found' });
-    const actor = policyActor(req);
     if (!canSetTargets(actor, { type: scope.type, departmentId: scope.departmentId })) {
       return res.status(403).json({
         error: scope.type === 'company'
