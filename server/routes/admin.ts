@@ -17,6 +17,7 @@ import {
 } from '../lib/assignments';
 import { recordAudit, auditedUserChange } from '../lib/audit';
 import orgAdminRoutes from './orgAdmin';
+import { loadResetTarget, sendResetLinkByAdmin, RESET_TTL_MINUTES } from '../lib/passwordReset';
 import { resolveConfigs, isSecretConfigKey } from '../lib/configResolver';
 import { planTeamDepartmentMove, applyTeamDepartmentMove } from '../lib/teamDepartment';
 import {
@@ -398,6 +399,31 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
   }
 });
 
+// Send a password reset link by e-mail (the same e-mail as "Forgot password?"): same permission
+// as resetting the password directly (userPolicy.canResetPassword). Never returns the link.
+router.post('/users/:id/send-reset-link', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId } = req.user;
+    const target = await loadTarget(req.params.id, companyId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (!canResetPassword(actorOf(req), target)) {
+      return res.status(403).json({ error: 'You cannot reset this user\'s password' });
+    }
+    if (!target.is_active) return res.status(409).json({ error: 'This user is deactivated. Reactivate the account first.' });
+    const full = await loadResetTarget(target.id, companyId);
+    if (!full) return res.status(404).json({ error: 'User not found' });
+    const me = await queryOne<any>('SELECT first_name, last_name, email FROM users WHERE id = ?', [req.user.id]);
+    const mail = await sendResetLinkByAdmin(full, { id: req.user.id, name: me ? fullName(me) : 'Your administrator' });
+    res.json({
+      delivered: mail.delivered, channel: mail.channel, error: mail.error ?? null,
+      message: mail.delivered ? `A reset link was sent to ${target.email}. It works once and expires in ${RESET_TTL_MINUTES} minutes.` : mail.error ?? 'The e-mail could not be sent.',
+    });
+  } catch (error) {
+    console.error('Error sending reset link:', (error as any)?.code ?? (error as Error)?.name ?? 'error');
+    res.status(500).json({ error: 'Failed to send the reset link' });
+  }
+});
+
 // Get all teams (with department names) - everyone can view for dashboard
 router.get('/teams', authenticateToken, async (req: any, res) => {
   try {
@@ -557,7 +583,7 @@ router.put('/teams/:id/department', authenticateToken, async (req: any, res) => 
     }
     const { departmentId, dryRun } = req.body ?? {};
     const result = await planTeamDepartmentMove(companyId, req.params.id, departmentId);
-    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    if (result.ok === false) return res.status(result.status).json({ error: result.error });
     const { plan } = result;
     if (dryRun === true) return res.json({ dryRun: true, ...plan });
 
@@ -583,7 +609,7 @@ async function runAssignment(
       return res.status(403).json({ error: 'Only Super Admins can assign managers and team leads' });
     }
     const result = await plan();
-    if (!result.ok) return res.status(result.status).json({ error: result.error });
+    if (result.ok === false) return res.status(result.status).json({ error: result.error });
     if (req.body?.dryRun === true) return res.json({ dryRun: true, ...result.plan });
     await apply(req.user.companyId, req.user.id, result.plan);
     res.json(result.plan);

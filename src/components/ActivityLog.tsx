@@ -56,7 +56,7 @@ const ACTION_LABEL: Record<string, string> = {
   'onboarding.dismiss': 'Onboarding hidden', 'onboarding.restore': 'Onboarding shown',
   'assignment.grant': 'Assignment added', 'assignment.revoke': 'Assignment removed',
   'user.create': 'User added', 'user.update': 'User changed', 'user.deactivate': 'User deactivated', 'user.activate': 'User reactivated',
-  'user.password_reset': 'Password reset', 'user.developer_insights': 'Developer insights',
+  'user.password_reset': 'Password reset', 'user.password_reset_request': 'Password reset requested', 'user.password_reset_email': 'Password changed via e-mail link', 'user.developer_insights': 'Developer insights',
   'department.manager_assign': 'Manager assigned', 'department.manager_remove': 'Manager removed',
   'department.create': 'Department created', 'department.rename': 'Department renamed', 'department.deactivate': 'Department deleted', 'department.activate': 'Department reactivated',
   'team.create': 'Team created', 'team.update': 'Team changed', 'team.move': 'Team moved', 'team.lead_change': 'Team lead changed',

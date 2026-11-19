@@ -73,3 +73,39 @@ export const inviteLimiter = rateLimit({
   skipSuccessfulRequests: true,
   message: { error: 'Too many attempts, please try again later.' },
 });
+
+// "Forgot password?" (public): every request counts, per client address and per e-mail address
+// (its sha256, never the address itself). The answer is the same whether or not the account exists,
+// so a limit reached says nothing about the account either.
+export const forgotPasswordIpLimiter = rateLimit({
+  keyGenerator: byClientIp,
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many reset requests from this address. Try again in 15 minutes.' },
+});
+
+export const forgotPasswordEmailLimiter = rateLimit({
+  keyGenerator: (req) => {
+    const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase().slice(0, 255) : '';
+    return `email:${createHash('sha256').update(email).digest('hex')}`;
+  },
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many reset requests for this e-mail address. Try again in an hour.' },
+});
+
+// Choosing the new password with a reset link (public): failed attempts per client address.
+// Tokens are 256-bit random values, so this only blunts scanning.
+export const resetPasswordLimiter = rateLimit({
+  keyGenerator: byClientIp,
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: 'Too many attempts. Try again in 15 minutes.' },
+});

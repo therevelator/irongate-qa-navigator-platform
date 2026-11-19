@@ -51,7 +51,7 @@ export function scrubMessage(msg: unknown): string | null {
   return cut(
     msg
       .replace(/(https?:\/\/[^\s?#]+)\?[^\s#]*/g, '$1?…')
-      .replace(/\b(igk|igp)_[A-Za-z0-9_-]{8,}/g, '$1_…')
+      .replace(/\b(igk|igp|igi|igr)_[A-Za-z0-9_-]{8,}/g, '$1_…')
       .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt]'),
     1000,
   );
@@ -89,7 +89,7 @@ function scrubStack(stack: unknown): string | null {
   return stack
     .slice(0, STACK_MAX)
     .replace(/(https?:\/\/[^\s?#]+)\?[^\s#]*/g, '$1?…')
-    .replace(/\b(igk|igp)_[A-Za-z0-9_-]{8,}/g, '$1_…')
+    .replace(/\b(igk|igp|igi|igr)_[A-Za-z0-9_-]{8,}/g, '$1_…')
     .replace(/\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g, '[jwt]');
 }
 

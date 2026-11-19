@@ -8,6 +8,9 @@ import { inBackground, onFlush } from './opsLog';
  * sign-in, failed sign-in, API-key ingestion request and screen view, per company. Visible to the
  * company's super admins (canViewUserActivity) and to the platform operator.
  *
+ * Public requests are recorded only when they concern a known user: sign-in, failed sign-in and the
+ * forgot / reset password requests (noteActivityUser).
+ *
  * Stored per row: who (user or API key; name / email at the time), category, method, the route
  * PATTERN (never the raw URL or query string), the main entity ids taken from the path
  * parameters, status, duration, client IP, user agent (200 characters) and request id.
@@ -174,6 +177,14 @@ export function noteFailedSignIn(res: express.Response, email: unknown): void {
   if (typeof email === 'string' && email.length <= 255) res.locals.activityFailedEmail = email.trim();
 }
 
+/**
+ * A public request that concerns a known user (forgot / reset password): recorded as that user's
+ * change, under the route pattern only. Never called for an unknown e-mail, so nothing is stored for it.
+ */
+export function noteActivityUser(res: express.Response, userId: string): void {
+  res.locals.activityUser = userId;
+}
+
 /** The handler recorded its own rows (screen views): skip the request itself. */
 export function skipActivity(res: express.Response): void {
   res.locals.activitySkip = true;
@@ -204,6 +215,9 @@ export function activityRowFor(req: express.Request, res: express.Response, ctx:
   }
   if (typeof res.locals.activityFailedEmail === 'string') {
     return { ...common, companyId: null, userId: null, apiKeyId: null, email: res.locals.activityFailedEmail, category: 'sign_in_failed' };
+  }
+  if (typeof res.locals.activityUser === 'string' && !user?.id) {
+    return { ...common, companyId: null, userId: res.locals.activityUser, apiKeyId: null, email: null, category: categoryOf(req.method, ctx.route) };
   }
   if (apiKey?.companyId) {
     return { ...common, companyId: apiKey.companyId, userId: null, apiKeyId: apiKey.id, email: null, category: 'ingest' };

@@ -3,12 +3,15 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
-import { authLimiter } from '../middleware/rateLimit';
+import { authLimiter, forgotPasswordIpLimiter, forgotPasswordEmailLimiter, resetPasswordLimiter } from '../middleware/rateLimit';
 import { execOn, grantAssignment, listAssignments } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
 import { transaction } from '../../src/lib/db';
 import ssoRoutes, { setSessionCookie } from './authSso';
-import { noteFailedSignIn } from '../lib/userActivity';
+import { noteActivityUser, noteFailedSignIn } from '../lib/userActivity';
+import { requestPasswordReset, completePasswordReset, PasswordResetError } from '../lib/passwordReset';
+import { clientIp } from '../lib/requestContext';
+import { recordServerError } from '../lib/opsLog';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -218,6 +221,42 @@ router.post('/login', authLimiter, async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+/* ------------------------------------------------------------------------------------------
+ * Forgot / reset password by e-mail (server/lib/passwordReset.ts)
+ * ---------------------------------------------------------------------------------------- */
+
+export const FORGOT_PASSWORD_MESSAGE = "If an account exists for that e-mail, we've sent a link.";
+/** Every answer takes at least this long, so the time does not tell whether an e-mail was sent. */
+const FORGOT_MIN_MS = 900;
+
+// The same 200 answer for every e-mail address (unknown, inactive or active): no account enumeration.
+router.post('/forgot-password', forgotPasswordIpLimiter, forgotPasswordEmailLimiter, async (req, res) => {
+  const started = Date.now();
+  try {
+    const userId = await requestPasswordReset(req.body?.email, clientIp(req) || null);
+    if (userId) noteActivityUser(res, userId);
+  } catch (error) {
+    // Logged for the operator; the caller still gets the same answer.
+    console.error('Forgot password error:', (error as any)?.code ?? (error as Error)?.name ?? 'error');
+    recordServerError({ error, method: 'POST', route: '/api/auth/forgot-password', status: 200 });
+  }
+  const wait = FORGOT_MIN_MS + Math.floor(Math.random() * 100) - (Date.now() - started);
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  res.json({ message: FORGOT_PASSWORD_MESSAGE });
+});
+
+// Choose the new password with the link's token. Never signs in: the person signs in afterwards.
+router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
+  try {
+    await completePasswordReset(req.body?.token, req.body?.password, (userId) => noteActivityUser(res, userId));
+    res.json({ message: 'Your password was changed. Sign in with your new password.' });
+  } catch (error) {
+    if (error instanceof PasswordResetError) return res.status(error.status).json({ error: error.message, code: error.code });
+    console.error('Reset password error:', (error as any)?.code ?? (error as Error)?.name ?? 'error');
+    res.status(500).json({ error: 'The password could not be changed. Try again in a moment.' });
   }
 });
 
