@@ -1260,7 +1260,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ### TC-AUTH-121: Right after signing in with the form, a company that hides sample-data notices shows no 'Includes sample data' banner
 
-**Type:** Positive · **Priority:** Medium · **Role:** Super admin
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F1.14
 
 **Preconditions**
 
