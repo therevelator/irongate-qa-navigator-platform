@@ -27,32 +27,48 @@ test.describe('Navigation per role', { tag: [TAG.area('navigation')] }, () => {
 
     const forbidden = RESTRICTED_PAGES.filter((p) => !p.allowed.includes(role));
     if (forbidden.length) {
-      test(`NAV-03 ${role}: pages of other roles typed in the address bar lead to the overview`, { tag: [TAG.negative, TAG.role(role)] }, async ({ signInAs, page, app }) => {
+      test(`NAV-03 ${role}: pages of other roles typed in the address bar lead to the overview with an access message`, { tag: [TAG.negative, TAG.role(role)] }, async ({ signInAs, page, app }) => {
         await signInAs(role);
         for (const p of forbidden) {
           await page.goto(p.path);
           await expect(page.getByTestId('dashboard'), p.path).toBeVisible();
           await expect(app.title).toHaveText('Overview');
           await expect(page, p.path).toHaveURL(/\/$/);
+          const notice = page.getByTestId('access-denied');
+          await expect(notice, p.path).toHaveRole('alert');
+          await expect(notice, p.path).toContainText(`You don't have access to ${p.title}.`);
+          await expect(notice).toBeFocused();
         }
+        // The message goes when it is dismissed, and when another page is opened.
+        await page.getByTestId('access-denied').getByRole('button', { name: 'Dismiss' }).click();
+        await expect(page.getByTestId('access-denied')).toHaveCount(0);
+        await page.goto(forbidden[0].path);
+        await expect(page.getByTestId('access-denied')).toBeVisible();
+        await app.go('nav-compare', 'Compare teams');
+        await app.go('nav-dashboard', 'Overview');
+        await expect(page.getByTestId('access-denied')).toHaveCount(0);
       });
     }
   }
 
-  test('NAV-04 the API refuses what the navigation hides, even when called directly', { tag: [TAG.negative, TAG.role('viewer'), TAG.role('engineer')] }, async ({ signInAs, page }) => {
-    const newUser = { email: 'uit-nope@uitest.example', password: 'Ui-Tests-Passw0rd!', firstName: 'No', lastName: 'Pe', role: 'viewer', teamId: DEMO.leadTeam.id };
+  test('NAV-04 the API refuses what the navigation hides, even when called directly (403 before the body is checked)', { tag: [TAG.negative, TAG.role('viewer'), TAG.role('engineer')] }, async ({ signInAs, page }) => {
     const checks: Array<[Role, string, string]> = [
       ['viewer', 'GET', '/admin/audit'],
       ['viewer', 'GET', '/activity/log'],
       ['engineer', 'GET', '/ingestion-log'],
       ['engineer', 'PUT', '/targets'],
       ['viewer', 'POST', '/admin/users'],
+      ['engineer', 'POST', '/admin/users'],
+      ['viewer', 'POST', '/admin/configs'],
+      ['engineer', 'PUT', '/alerts/rules'],
+      ['viewer', 'POST', '/metrics/manual'],
     ];
     for (const [role, method, path] of checks) {
       await page.context().clearCookies();
       await signInAs(role);
-      const res = await page.request.fetch(`${API_URL}${path}`, { method, data: method === 'GET' ? undefined : path === '/admin/users' ? newUser : {} });
-      expect([401, 403, 404], `${role} ${method} ${path}`).toContain(res.status());
+      // An empty body: the refusal must not depend on (or describe) what a valid body looks like.
+      const res = await page.request.fetch(`${API_URL}${path}`, { method, data: method === 'GET' ? undefined : {} });
+      expect(res.status(), `${role} ${method} ${path}`).toBe(403);
     }
   });
 

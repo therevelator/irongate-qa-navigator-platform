@@ -24,7 +24,8 @@ import OperatorPanel from './components/operator/OperatorPanel';
 import { trackScreen } from './lib/activityTracker';
 import IngestionLog from './components/IngestionLog';
 import NotificationsCenter from './components/NotificationsCenter';
-import Layout from './components/Layout';
+import Layout, { PAGE_META } from './components/Layout';
+import AccessDeniedNotice from './components/AccessDeniedNotice';
 import NewDashboard from './components/NewDashboard';
 import ManualMetricsInput from './components/ManualMetricsInput';
 import MetricIntervalsConfig from './components/MetricIntervalsConfig';
@@ -84,6 +85,15 @@ function App() {
   const [teamsError, setTeamsError] = useState<string | null>(null);
   const analyticsScope = useAnalyticsScope();
   const [is3DMode, setIs3DMode] = useState(false);
+  // A page this role may not open (typed address, old link, rights changed): the overview opens
+  // with a message naming that page, instead of a silent redirect. Cleared on the next page change.
+  const [deniedPage, setDeniedPage] = useState<string | null>(null);
+  const denyAccess = (view: string) => {
+    window.history.replaceState(null, '', '/');
+    setCurrentView('dashboard');
+    setSelectedTeam(null);
+    setDeniedPage(PAGE_META[view]?.title ?? 'this page');
+  };
 
   // Handle URL routing on mount and popstate
   useEffect(() => {
@@ -99,10 +109,10 @@ function App() {
       // Check permissions before setting view
       if (hasPermission(view)) {
         setCurrentView(view);
+        if (view !== 'dashboard') setDeniedPage(null);
       } else {
-        // Redirect to dashboard if not authorized
-        window.history.replaceState(null, '', '/');
-        setCurrentView('dashboard');
+        // Not for this role: the overview, with a message naming the page.
+        denyAccess(view);
       }
     };
 
@@ -124,6 +134,7 @@ function App() {
       const url = teamId ? `${path}?${URL_TEAM_PARAM}=${encodeURIComponent(teamId)}` : path;
       window.history.pushState(null, '', url);
     }
+    setDeniedPage(null);
     setCurrentView(view);
   };
 
@@ -301,9 +312,10 @@ function App() {
 
   // Enforce permissions on render
   if (!hasPermission(currentView) && !isLoading) {
-    // If somehow we are in a restricted view, redirect to dashboard
-    // This handles cases where permission changes or initial state is wrong
-    setTimeout(() => handleViewChange('dashboard'), 0);
+    // A restricted view (rights changed while open, or a wrong initial state): the overview, with
+    // the same message as a typed address.
+    const view = currentView;
+    setTimeout(() => denyAccess(view), 0);
     return null; // Or loading spinner
   }
 
@@ -418,6 +430,7 @@ function App() {
         on3DModeChange={setIs3DMode}
         onOpenPulse={openPulse}
       >
+        {deniedPage && <AccessDeniedNotice page={deniedPage} onDismiss={() => setDeniedPage(null)} />}
         <NewDashboard teams={filteredTeams} teamsError={teamsError} onTeamClick={setSelectedTeam} gridColumns={gridColumns} is3DMode={is3DMode} />
       </Layout>
     </>
