@@ -6,6 +6,9 @@ import { Page, PageIntro, Card, CardHeader, buttonClass, inputClass, cx } from '
 import KpiTargetsConfig from './KpiTargetsConfig';
 import AlertSettings from './AlertSettings';
 import SessionSettings from './SessionSettings';
+import { useAuth } from '../contexts/AuthContext';
+import { isCompanyAdmin } from '../../server/lib/userPolicy';
+import { policyActorOf } from '../lib/policyActor';
 
 interface ParametersConfigurationProps {
   onBack?: () => void;
@@ -54,7 +57,11 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [configs, setConfigs] = useState<Record<string, string>>({});
   // Company-wide: saving also replaces department and team values, so the company settings apply everywhere.
-  const [applyToAll, setApplyToAll] = useState(true);
+  // Only a super admin may do that (the API refuses it from managers), so only they get the option.
+  const { user } = useAuth();
+  const canApplyToAll = !!user && isCompanyAdmin(policyActorOf(user));
+  const [applyToAllChoice, setApplyToAll] = useState(true);
+  const applyToAll = canApplyToAll && applyToAllChoice;
   const companyScope = selectedDepartment === 'all';
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -106,6 +113,15 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
   })();
 
   const handleSave = async () => {
+    // Every value on this page is a number of 0 or more (the API stores what it is given).
+    const bad = CONFIG_SECTIONS.flatMap((sec) => sec.fields).find((f) => {
+      const v = (configs[f.key] ?? '').trim();
+      return v !== '' && !(Number.isFinite(Number(v)) && Number(v) >= 0);
+    });
+    if (bad) {
+      toast.error(`${bad.label}: enter a number of 0 or more, or leave it empty to inherit.`);
+      return;
+    }
     setSaving(true);
     try {
       const payload: Record<string, string> = {};
@@ -169,7 +185,7 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
               </select>
             </label>
           </div>
-          {companyScope && (
+          {companyScope && canApplyToAll && (
             <label className="mt-4 flex items-start gap-2.5 text-sm text-slate-700 dark:text-slate-300">
               <input
                 type="checkbox"
