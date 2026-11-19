@@ -1,6 +1,6 @@
 # Manual test cases
 
-345 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+347 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -12,7 +12,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (24)
 - [Accessibility](#accessibility) (13)
 - [Theme and phone layout](#theme-and-phone-layout) (23)
-- [Overview (dashboard)](#overview-dashboard) (15)
+- [Overview (dashboard)](#overview-dashboard) (16)
 - [Executive briefing](#executive-briefing) (3)
 - [Team detail](#team-detail) (17)
 - [Team TV mode](#team-tv-mode) (8)
@@ -41,7 +41,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Activity](#activity) (4)
 - [User activity](#user-activity) (4)
 - [Invitations](#invitations) (1)
-- [Platform support](#platform-support) (12)
+- [Platform support](#platform-support) (13)
 - [Navigation and access control](#navigation-and-access-control) (12)
 - [Users and teams](#users-and-teams) (6)
 - [Analytics](#analytics) (4)
@@ -3335,6 +3335,36 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** Requires DevTools: open Chrome DevTools > Network > Network request blocking (More tools > Network request blocking), tick "Enable network request blocking" and add the pattern given in the steps. Fixed issue FI-07.
 
 *Automated:* `tests/e2e/dashboard/overview.spec.ts › Overview › DASH-10 the overview survives an offline network with a message`
+
+### TC-DASH-083: Data older than a day: overview, team detail and TV mode show the latest snapshot with "Last updated"
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin (of a new organisation) · **Flow:** F5.12
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) on a LOCAL test database you may change (psql access)
+- A new organisation registered through "Create an account" (its owner is its super admin), team "Core Team"
+- Two KPI snapshots of Core Team dated three and two days ago, added with psql (see test data); no newer snapshot
+
+**Test data**
+
+- SQL (replace <team id> with Core Team's id: SELECT id FROM teams WHERE name = 'Core Team' ORDER BY created_at DESC LIMIT 1):
+- INSERT INTO kpi_snapshots (team_id, snapshot_date, test_coverage, defect_escape_rate, change_failure_rate, code_quality_score, automation_coverage, test_flakiness_rate) VALUES ('<team id>', CURRENT_DATE - 3, 80, 4, 6, 80, 72, 1.5), ('<team id>', CURRENT_DATE - 2, 82, 4, 6, 80, 72, 1.5);
+- <date> below = the date two days ago, written like 17 Nov 2026
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the new organisation's owner and look at the "Company status" card on the overview. | The card header reads "Data as of" with that date (written like Nov 17, 2026) and "Last updated <date>" (amber). The Global QA score shows a number; "No KPI snapshots recorded" and "No KPI data available" do not appear. |
+| 2 | Look at the Core Team card in "Team performance". | It shows a QA score and a status (not "No data") and "As of" that date; test coverage 82% is judged (not "stale"). |
+| 3 | Click the Core Team card. | Team detail opens; under the name: "… · KPI snapshot as of <date> · Last updated <date>". The QA score card shows "Based on 4 of 4 inputs". |
+| 4 | Open /tv?team=<team id> (or click "Open TV mode"). | TV mode shows the QA score (not "No QA score recorded"); under "Data as of <date>" it reads "Last updated <date>". |
+| 5 | With psql add a current snapshot: INSERT INTO kpi_snapshots (team_id, snapshot_date, test_coverage, defect_escape_rate, change_failure_rate, code_quality_score) VALUES ('<team id>', CURRENT_DATE, 83, 4, 6, 80); then reload the overview. | "Last updated" is gone everywhere; data as of today. |
+
+**After the test:** Delete the test organisation (or leave it: it is separate from the demo data).
+
+**Notes:** FI-22: before the fix every daily input of such a snapshot was stale at now, so the screens showed "No data" although the snapshots were there (the live site on 19 Nov 2026, before the first nightly sample-data refresh).
+
+*Automated:* `tests/e2e/dashboard/latest-data.spec.ts › Latest data older than a day › LATEST-01 overview, team detail and TV mode show the latest snapshot with "Last updated"`
 
 ## Executive briefing
 
@@ -8049,8 +8079,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) and open /operator. | The "Platform support" page shows the amber banner "Platform support mode — your access is recorded in this company's Activity log." and the card "Confirm it is you". |
 | 2 | Enter password demo123 in "Password" of "Confirm it is you" and click "Enter platform support". | The platform overview opens: tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
 | 3 | Set up the DevTools override for */api/operator/actions/* as described in the preconditions. | The override is active. |
-| 4 | In "Scheduled jobs" click "Re-run demo refresh". | A dialog "Re-run the demo refresh" opens with "Reason (shown in the company's Activity log)", the checkbox "I want to do this now" and the "Run" button. |
-| 5 | Enter the reason "UI test of a failing action", tick "I want to do this now" and click "Run". | The dialog shows the error "Internal server error (request id rid-op-500)". |
+| 4 | In "Scheduled jobs" click "Refresh sample data now". | A dialog "Refresh sample data now" opens with "Reason (shown in the company's Activity log)", the checkbox "I want to do this now" and the "Refresh now" button. |
+| 5 | Enter the reason "UI test of a failing action", tick "I want to do this now" and click "Refresh now". | The dialog shows the error "Internal server error (request id rid-op-500)". |
 
 **After the test:** Remove the DevTools override.
 
@@ -8174,6 +8204,33 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 3 | Enter /operator in the address bar and press Enter. | The page says "This area is not available for your account." |
 
 *Automated:* `tests/e2e/platform-operator.spec.ts › Platform support panel › other roles have no Platform entry and /operator says it is not available`
+
+### TC-ORG-059: Refresh sample data now: started in the background on the hosted site, run directly on a local server
+
+**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.7
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- DEMO_REFRESH_ENABLED is not set to false.
+
+**Test data**
+
+- Operator: admin@irongate.com / demo123
+- Reason: Sample data is a day behind
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123), open /operator, enter password demo123 in "Confirm it is you" and click "Enter platform support". | The platform overview opens with the "Scheduled jobs" table and the button "Refresh sample data now" above it. |
+| 2 | Click "Refresh sample data now". | A dialog "Refresh sample data now" explains that it adds the missing recent days of sample data, never changes or deletes a row, never touches real data, and on the hosted site runs in the background for a few minutes. "Refresh now" is disabled. |
+| 3 | Enter the reason "Sample data is a day behind", tick "I want to do this now" and click "Refresh now". | Local server: the message "Sample data refreshed: <n> new rows." appears (n is 0 when the data is already current). Hosted (Netlify) site: within a second the message "Sample data refresh started. It runs in the background for a few minutes." appears. |
+| 4 | Look at the row "demo-refresh" in "Scheduled jobs" (reload the panel and step up again if needed). | Last run is now; Result OK; Summary ends with "(manual, platform support)" (hosted: "background job requested (202) (manual, platform support)"). |
+| 5 | Hosted site only: after a few minutes, reload the panel, step up and look at the row "demo-refresh-background". | A new run with Result OK and a summary "up to <today>: <n> new rows …". The overview of NovaTech then shows data as of today without "Last updated". |
+
+**Notes:** On Netlify the API function may not run as long as the refresh takes, so it only starts the background function (signed call, as the nightly 02:17 UTC run). The automated test mocks both answers; the API test platform-operator.test.ts OP-011 covers the signed call, a failed start (502, recorded as failed) and DEMO_REFRESH_ENABLED=false (409).
+
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-07 "Refresh sample data now": started in the background on the hosted site, run directly elsewhere`
 
 ## Navigation and access control
 

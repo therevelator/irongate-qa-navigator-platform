@@ -287,6 +287,9 @@ matched to the anonymous answer. Not recorded either: the session check, this sc
 requests (opening it and exporting it are recorded) and platform support requests (they go to the
 Activity log, below).
 
+Rows are written in batches in the background; the Netlify function writes a request's rows before it
+returns (an instance is frozen as soon as it has answered), waiting at most 2.5 seconds.
+
 Only super admins of the company see it (`canViewUserActivity`); managers do not. Filters: user,
 dates, action type (sign-in, view, change, export, API ingestion, failed), team, errors only, request
 id. CSV export of the filtered list (at most 10 000 rows), itself recorded.
@@ -325,7 +328,9 @@ across all companies.
 aggregates with at least 3 responses), and developer metrics of people who have not opted in (the
 same opt-in rule as everywhere else).
 
-**Repair actions.** Re-run the demo refresh, recompute KPI snapshots of a company or team, re-run
+**Repair actions.** Refresh sample data now (on Netlify it starts the background refresh function and
+reports "started", the result appears under `demo-refresh-background` in Scheduled jobs; elsewhere it runs
+directly), recompute KPI snapshots of a company or team, re-run
 the alert evaluation, resend a pending invitation, deactivate or reactivate a user, clear a sign-in
 lockout. Each asks for a confirmation and a reason. There is no impersonation, no SQL and no delete.
 
@@ -368,6 +373,13 @@ independent of sample data (section 4.7).
 - **Stale.** A value older than its expected update interval is greyed, labelled "Stale since …", not
   judged against its target and left out of composites ([`server/lib/staleness.ts`](../server/lib/staleness.ts)).
   For a past day, staleness is measured at the end of that UTC day.
+- **Last updated.** When a team's newest value is over a day old (no data import, or the sample data
+  not refreshed overnight), its latest snapshot is read as it stood at the end of the day of that value
+  (what was current at the last update) instead of at now, so the overview, team detail, TV mode,
+  compare and team rankings still show its latest values and QA score, with "Last updated <date>"
+  (`latestReference` in [`server/lib/kpiEvaluation.ts`](../server/lib/kpiEvaluation.ts); the API adds
+  `lastUpdated` and `dataOutdated`). Nothing is invented. While the data is current nothing changes: a value
+  older than its interval is still stale.
 - **Confidence.** Every composite returns `{ value, inputsUsed, inputsTotal, confidence }` and the UI shows
   "based on n of m inputs" (or teams, or components). Confidence = inputs used ÷ inputs expected:
   **high** at 90 % or more, **medium** at 50 % or more, otherwise **low** (also low when there is no
@@ -471,7 +483,8 @@ QA Score = [ Test Coverage × 0.30
 - Rounded to a whole number.
 - **Status:** ≥ 85 good, ≥ 70 warning, otherwise critical (`QA_SCORE_THRESHOLDS = { good: 85, warning: 70 }`).
 - **Confidence:** "based on n of 4 inputs". On screens that show current values, stale inputs are treated
-  as not recorded (`qaScoreComposite`), so a team whose coverage is stale has no current QA score.
+  as not recorded (`qaScoreComposite`), so a team whose coverage is stale has no current QA score
+  (unless the team's newest value is over a day old: then "Last updated", section 3.1).
 - **Stored** in `kpi_snapshots.qa_score` and `status` by the database trigger `kpi_snapshots_qa_score`
   (function `compute_qa_score`, migration
   [`20261117000000_kpi_integrity_and_ingestion.sql`](../supabase/migrations/20261117000000_kpi_integrity_and_ingestion.sql)),
@@ -1265,7 +1278,8 @@ runs at 02:17 UTC and starts `demo-refresh-background.ts`, which adds the missin
 `npm run seed:demo -- --refresh-dates`: only the demo company and teams that already hold sample rows, never a change or deletion, never real
 data, nothing on a second run the same day. A scheduled function may only run for 30 seconds, so the work runs in a background function (up to
 15 minutes); the call carries an HMAC of `DEMO_REFRESH_SECRET` (falling back to `JWT_SECRET`) and anything else is ignored. It logs counts only.
-`DEMO_REFRESH_ENABLED=false` turns it off.
+`DEMO_REFRESH_ENABLED=false` turns it off. The platform support panel's **Refresh sample data now** starts the same
+background function on demand (recorded in `job_runs` as a manual `demo-refresh`).
 
 ### Configuration
 

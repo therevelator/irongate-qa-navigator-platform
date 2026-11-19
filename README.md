@@ -676,7 +676,12 @@ Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (table
   functions because a scheduled function may run 30 seconds and the refresh takes longer (a
   background function may run 15 minutes). The call is signed with an HMAC of `DEMO_REFRESH_SECRET`
   (or `JWT_SECRET`), so a request to the public URL without it does nothing. Logs counts only. Turn it
-  off with `DEMO_REFRESH_ENABLED=false`, for a deployment with no demo data.
+  off with `DEMO_REFRESH_ENABLED=false`, for a deployment with no demo data. The platform support
+  panel's **Refresh sample data now** starts the same background function on demand (on a
+  long-running server it runs directly).
+- **Data older than a day**: when a team's newest value is over a day old, its latest snapshot is
+  shown as it stood then, with "Last updated <date>", instead of every daily input turning stale and
+  the dashboards showing "No data" (`latestReference`, `server/lib/kpiEvaluation.ts`).
 
 Environment (all optional; the Slack webhook is entered in the app, not in the environment):
 `SETTINGS_ENCRYPTION_KEY` (recommended in production, a long random string; otherwise `JWT_SECRET` is
@@ -743,7 +748,8 @@ request id. Request and response bodies, query strings, headers, cookies, tokens
 never stored. Answering the wellbeing pulse is not recorded at all (its time could be matched to an
 anonymous answer). Filters: user, dates, action type, team, errors only, request id; CSV export
 (itself recorded). Tell your staff about it (for example in your privacy notice for employees).
-Code: `server/lib/userActivity.ts`, `server/routes/activity.ts`; migration
+The Netlify function writes a request's rows (and any server error) before it returns, waiting at
+most 2.5 s (`netlify/functions/api.ts`). Code: `server/lib/userActivity.ts`, `server/routes/activity.ts`; migration
 `supabase/migrations/20261123100000_user_activity.sql`.
 
 **Request ids and the server error log.** Every API response has an `X-Request-Id` header; 5xx JSON
@@ -757,7 +763,7 @@ is set. The owner re-enters the password and gets a 30-minute operator session (
 to see every company: overview with health per company, scheduled jobs, errors and database size;
 per company the organisation, users and invitations, settings and targets, metric data with staleness,
 alerts and actions, wellbeing pulse aggregates, the Activity log, the user activity log and server
-errors; and search by request id. A few repair actions (demo refresh, recompute KPI snapshots, re-run
+errors; and search by request id. A few repair actions (refresh sample data now, recompute KPI snapshots, re-run
 alerts, resend an invitation, deactivate / reactivate a user, clear a lockout) need a reason and a
 confirmation. Every company opened and every action is written to that company's own Activity log
 ("Platform support viewed …"). Protected data stays hidden: password and API key hashes, the Slack
