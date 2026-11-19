@@ -110,6 +110,15 @@ test.describe('Overview', { tag: [TAG.area('dashboard')] }, () => {
     await expect(page.getByTestId('dashboard')).toBeVisible();
   });
 
+  test('DASH-11 a company with sample data shows the "Includes sample data" banner; a new one without data does not', async ({ freshCompany, signInAs, page, app }) => {
+    await signInAs({ email: 'alex.morgan@northwind.example', password: 'demo123' });
+    await expect(page.getByTestId('sample-data-banner')).toBeVisible();
+    await app.signOut();
+    await signInAs(freshCompany);
+    await expect(page.getByTestId('team-card').first()).toBeVisible();
+    await expect(page.getByTestId('sample-data-banner')).toHaveCount(0);
+  });
+
   test('DASH-08 a missing company summary does not hide the teams', { tag: [TAG.negative] }, async ({ signInAs, page }) => {
     await page.route(`${API_URL}/analytics/company-summary`, (r) => r.fulfill({ status: 500, json: { error: 'Internal server error', requestId: 'rid-dash' } }));
     await signInAs('admin');

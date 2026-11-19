@@ -97,6 +97,30 @@ test.describe('Wellbeing pulse: changes on a fixture team', { tag: [TAG.area('pu
     await expect(page.getByTestId('pulse-non-responders')).toHaveCount(0);
   });
 
+  test('PUL-17 the lead sends the survey; without e-mail configured nothing is e-mailed and reminders stay off', { tag: [TAG.role('lead')] }, async ({ signInAs, page }) => {
+    await signInAs({ email: team.leadEmail!, password: 'demo123' }, `/analytics/pulse?team=${team.id}`);
+    const panel = page.getByTestId('pulse-send').first();
+    await panel.getByTestId('pulse-send-button').click();
+    await expect(page.getByText(/E-mail is not configured on this server|Survey sent to \d+ members?/).first()).toBeVisible();
+    await expect(panel.getByTestId('pulse-send-log')).toBeVisible();
+    // Reminders count e-mails delivered: with the log mailer (CI, local runs) none were, so no reminder.
+    await expect(panel.getByTestId('pulse-remind-button')).toBeDisabled();
+    expect(await page.content()).not.toMatch(/igp_[A-Za-z0-9_-]{10,}/);
+  });
+
+  test('PUL-18 "Send reminder" reports how many were reminded (delivery stubbed: e-mail is not configured in tests)', { tag: [TAG.role('lead')] }, async ({ signInAs, page }) => {
+    await page.route(`${API_URL}/pulse/teams/${team.id}`, async (r) => {
+      const res = await r.fetch();
+      const body = await res.json();
+      if (body.sending) body.sending = { ...body.sending, sent: Math.max(1, body.sending.sent ?? 0), reminderAvailableAt: null, emailConfigured: true };
+      await r.fulfill({ response: res, json: body });
+    });
+    await page.route(`${API_URL}/pulse/teams/${team.id}/remind`, (r) => r.fulfill({ json: { emailConfigured: true, recipients: 2, delivered: 2 } }));
+    await signInAs({ email: team.leadEmail!, password: 'demo123' }, `/analytics/pulse?team=${team.id}`);
+    await page.getByTestId('pulse-remind-button').first().click();
+    await expect(page.getByText('Reminder sent to 2 members who have not answered.')).toBeVisible();
+  });
+
   test('PUL-14 an expired personal link says the survey has closed', { tag: [TAG.negative] }, async ({ page }) => {
     const token = `igp_${randomBytes(32).toString('base64url')}`;
     await sql(

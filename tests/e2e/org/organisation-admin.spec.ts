@@ -69,6 +69,33 @@ test.describe('Departments', { tag: [TAG.area('org')] }, () => {
   });
 });
 
+test.describe('Moving teams and the Admin console', { tag: [TAG.area('org')] }, () => {
+  test('ORG-03 a team moves to another department after the move plan is shown', { tag: [TAG.role('admin')] }, async ({ freshCompany, signInAs, page }) => {
+    await signInAs(freshCompany, '/departments');
+    await createDepartment(page, 'Second Department');
+    await expect(page.getByText('Department created successfully!')).toBeVisible();
+    await page.getByRole('button', { name: freshCompany.departmentName, exact: true }).click();
+    await page.getByLabel(`Move ${freshCompany.teamName} to another department`).selectOption({ label: 'Second Department' });
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText(`What moves with ${freshCompany.teamName}`);
+    await dialog.getByRole('button', { name: 'Move to Second Department' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole('row', { name: /Second Department/ })).toContainText('1');
+  });
+
+  test('ORG-04 the Admin console creates a team that then appears on the Teams page', { tag: [TAG.role('admin')] }, async ({ freshCompany, signInAs, page, app }) => {
+    await signInAs(freshCompany, '/admin-panel');
+    const name = `Console Team ${uid().slice(-5)}`;
+    await page.getByRole('button', { name: 'Create Team' }).first().click();
+    await page.getByTestId('create-team-name').fill(name);
+    const dept = page.getByTestId('create-team-department');
+    if (await dept.count()) await dept.selectOption({ label: freshCompany.departmentName });
+    await page.locator('form').getByRole('button', { name: 'Create Team' }).click();
+    await app.go('nav-teams', 'Teams');
+    await expect(page.locator(`[data-testid="team-row"][data-team-name="${name}"]`)).toBeVisible();
+  });
+});
+
 test.describe('Teams', { tag: [TAG.area('org')] }, () => {
   test('ORG-10 create, edit and delete a team', { tag: [TAG.role('admin')] }, async ({ freshCompany, signInAs, page }) => {
     await signInAs(freshCompany, '/teams');
