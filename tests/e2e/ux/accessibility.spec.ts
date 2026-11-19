@@ -1,0 +1,63 @@
+import { test, expect, TAG } from '../support/fixtures';
+import { checkA11y } from '../support/a11y';
+import { DEMO } from '../support/roles';
+
+/**
+ * Accessibility smoke check with axe-core on the main pages: serious and critical violations fail.
+ * Violations that already exist are listed per page in `known` and in docs/testing/E2E_FLOWS.md
+ * ("Known accessibility issues"), and show up as annotations in the report.
+ */
+
+test.describe('Accessibility', { tag: [TAG.a11y, TAG.area('ux')] }, () => {
+  test('A11Y-01 sign-in screen', async ({ page }, testInfo) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await checkA11y(page, testInfo, { known: [] });
+  });
+
+  test('A11Y-02 forgot password and registration', async ({ page }, testInfo) => {
+    await page.goto('/forgot-password');
+    await expect(page.getByRole('heading', { name: 'Forgot your password?' })).toBeVisible();
+    await checkA11y(page, testInfo, { known: [] });
+    await page.goto('/');
+    await page.getByRole('button', { name: 'Create an account' }).click();
+    await expect(page.getByRole('heading', { name: 'Create your organisation' })).toBeVisible();
+    await checkA11y(page, testInfo, { known: [] });
+  });
+
+  const pages: Array<{ id: string; path: string; title: string; known: string[] }> = [
+    { id: 'A11Y-03', path: '/', title: 'Overview', known: [] },
+    { id: 'A11Y-04', path: '/compare', title: 'Compare teams', known: ['color-contrast'] /* KA11Y-01 */ },
+    { id: 'A11Y-05', path: `/analytics/pulse?team=${DEMO.leadTeam.id}`, title: 'Wellbeing pulse', known: [] },
+    { id: 'A11Y-06', path: `/analytics/technical-debt?team=${DEMO.leadTeam.id}`, title: 'Technical debt', known: [] },
+    { id: 'A11Y-07', path: '/notifications', title: 'Notifications', known: [] },
+    { id: 'A11Y-08', path: '/users', title: 'Users', known: ['color-contrast'] /* KA11Y-02 */ },
+    { id: 'A11Y-09', path: '/parameters-config', title: 'Parameters', known: [] },
+    { id: 'A11Y-10', path: '/activity', title: 'Activity', known: [] },
+  ];
+  for (const p of pages) {
+    test(`${p.id} ${p.title}`, async ({ signInAs, app }, testInfo) => {
+      await signInAs('admin', p.path);
+      await expect(app.title).toHaveText(p.title);
+      await app.page.waitForLoadState('networkidle').catch(() => undefined);
+      await checkA11y(app.page, testInfo, { known: p.known });
+    });
+  }
+
+  test('A11Y-11 team detail', async ({ signInAs, page }, testInfo) => {
+    await signInAs('admin');
+    await page.getByTestId('team-card').filter({ hasText: DEMO.leadTeam.name }).first().click();
+    await expect(page.getByTestId('team-detail')).toBeVisible();
+    await page.waitForLoadState('networkidle').catch(() => undefined);
+    await checkA11y(page, testInfo, { known: ['color-contrast'] /* KA11Y-03 */ });
+  });
+
+  test('A11Y-12 navigation drawer and dark mode overview', async ({ signInAs, page, app }, testInfo) => {
+    await signInAs('admin');
+    await app.toggleTheme();
+    await app.openNav();
+    await checkA11y(page, testInfo, { known: ['color-contrast'] /* KA11Y-04 */ });
+    await app.closeNav();
+    await app.toggleTheme();
+  });
+});
