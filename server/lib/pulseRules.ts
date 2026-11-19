@@ -169,3 +169,84 @@ export function parseAnswers(body: any): { answers: Record<PulseQuestionKey, num
   return { answers, comment };
 }
 
+
+/* ------------------------------------------------------------------------------------------
+ * Non-response warning, reminders and escalation (pure)
+ * ---------------------------------------------------------------------------------------- */
+
+export type EscalateTo = 'team_lead' | 'department_managers' | 'both';
+export const ESCALATE_TO: EscalateTo[] = ['team_lead', 'department_managers', 'both'];
+export const ESCALATE_TO_LABELS: Record<EscalateTo, string> = {
+  team_lead: 'The team lead', department_managers: 'The department managers', both: 'The team lead and the department managers',
+};
+
+export interface ReminderSettings {
+  /** Days after the survey went out before a member who has not answered sees an in-app warning. */
+  warningAfterDays: number;
+  /** Automatic reminder e-mails to members who have not answered. */
+  reminderEmails: boolean;
+  reminderEveryDays: number;
+  /** Days after the survey went out before the names of members who have not answered are sent on. */
+  escalateAfterDays: number;
+  escalateTo: EscalateTo;
+}
+
+export const DEFAULT_REMINDER_SETTINGS: ReminderSettings = {
+  warningAfterDays: 2, reminderEmails: true, reminderEveryDays: 3, escalateAfterDays: 5, escalateTo: 'both',
+};
+
+export const REMINDER_LIMITS = {
+  warningAfterDays: { min: 0, max: 30 },
+  reminderEveryDays: { min: 1, max: 30 },
+  escalateAfterDays: { min: 1, max: 60 },
+} as const;
+
+/** Validate a settings change (missing fields keep the current value). */
+export function validateReminderSettings(input: any, current: ReminderSettings): { settings: ReminderSettings } | { error: string } {
+  const out: ReminderSettings = { ...current };
+  for (const k of ['warningAfterDays', 'reminderEveryDays', 'escalateAfterDays'] as const) {
+    if (input?.[k] === undefined) continue;
+    const v = input[k];
+    const { min, max } = REMINDER_LIMITS[k];
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) return { error: `${k} must be a whole number from ${min} to ${max}` };
+    out[k] = v;
+  }
+  if (input?.reminderEmails !== undefined) {
+    if (typeof input.reminderEmails !== 'boolean') return { error: 'reminderEmails must be true or false' };
+    out.reminderEmails = input.reminderEmails;
+  }
+  if (input?.escalateTo !== undefined) {
+    if (!ESCALATE_TO.includes(input.escalateTo)) return { error: `escalateTo must be one of: ${ESCALATE_TO.join(', ')}` };
+    out.escalateTo = input.escalateTo;
+  }
+  if (out.warningAfterDays >= out.escalateAfterDays) return { error: 'The warning must come before the escalation (fewer days).' };
+  return { settings: out };
+}
+
+export interface EffectiveReminderSettings {
+  warningAfterDays: number;
+  reminderEveryDays: number;
+  escalateAfterDays: number;
+  /** True when a value was shortened to fit the period. */
+  shortened: boolean;
+}
+
+/**
+ * The values that apply in a period with `daysAvailable` days from the day the survey went out to
+ * the period's end (exclusive): the escalation always lands before the period ends, and the
+ * warning before the escalation. A weekly period (7 days) with the defaults keeps 2 / 3 / 5; a
+ * setting of 10 days becomes 6.
+ */
+export function effectiveReminderSettings(s: ReminderSettings, daysAvailable: number): EffectiveReminderSettings {
+  const lastDay = Math.max(0, daysAvailable - 1);
+  const escalateAfterDays = Math.min(s.escalateAfterDays, lastDay);
+  const warningAfterDays = Math.max(0, Math.min(s.warningAfterDays, escalateAfterDays - 1));
+  const reminderEveryDays = Math.max(1, Math.min(s.reminderEveryDays, Math.max(1, lastDay)));
+  return {
+    warningAfterDays, reminderEveryDays, escalateAfterDays,
+    shortened: escalateAfterDays !== s.escalateAfterDays || warningAfterDays !== s.warningAfterDays || reminderEveryDays !== s.reminderEveryDays,
+  };
+}
+
+/** Whole days from `from` to `to` (YYYY-MM-DD). */
+export const daysBetween = (from: string, to: string) => dayNum(to) - dayNum(from);

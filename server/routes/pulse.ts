@@ -1,13 +1,15 @@
 import express from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { getOwnedTeam, policyActor } from '../middleware/access';
-import { canSendPulseSurvey, canSetPulseCadence, canTakePulseSurvey, canViewPulseComments, canViewPulseResults } from '../lib/userPolicy';
+import { canSendPulseSurvey, canSetPulseCadence, canSetPulseReminders, canTakePulseSurvey, canViewPulseComments, canViewPulseResults } from '../lib/userPolicy';
 import {
   CADENCE_LABELS, PULSE_CADENCES, PULSE_COMMENT_MAX, PULSE_QUESTIONS, PULSE_SCALE, PulseError, WELLBEING_FORMULA,
+  ESCALATE_TO, ESCALATE_TO_LABELS, REMINDER_LIMITS, validateReminderSettings, addDays,
   loadCadences, parseAnswers, periodFor, setPulseCadence, submitPulseResponse, teamPulse, todayUtc, type PulseCadence,
 } from '../lib/pulse';
 import {
   ensureAutoSendDefault, inspectLink, remindPulseSurvey, respondWithLink, responseRate, sendPulseSurvey, sendStatus, sentCounts, setAutoSend,
+  reminderState, saveReminderSettings, escalationRecipients, currentEscalation, nonResponders, pendingSurveysFor,
 } from '../lib/pulseSend';
 import { K_ANONYMITY_RULE, SUPPRESSED_TEXT } from '../lib/privacy';
 import { recordAudit } from '../lib/audit';
@@ -29,16 +31,43 @@ import { recordAudit } from '../lib/audit';
  *                                            canSendPulseSurvey (lead, QA manager, super_admin in scope)
  *   POST /api/pulse/teams/:teamId/remind     e-mail the members who have not answered (counts only back)
  *                                            canSendPulseSurvey; at most once per 24 hours
+ *   PUT  /api/pulse/teams/:teamId/settings   { warningAfterDays, reminderEmails, reminderEveryDays,
+ *                                            escalateAfterDays, escalateTo } non-response handling
+ *                                            canSetPulseReminders (managers, the team lead, super_admin)
+ *   GET  /api/pulse/pending                  the caller's own pending surveys (app-wide banner)
  *   POST /api/pulse/link                     { token } what the answer page shows for a personal link
  *   POST /api/pulse/link/respond             { token, answers, comment } answer through the link
  *       The two link routes need no session: the token (sha256 stored, single use, bound to one
  *       user, team and period, expires at period end) authenticates that one submission only.
  * A team of another company or an unknown id gets the same 403 as an out-of-scope team.
- * No route returns a single answer, a respondent, who answered, or a personal link.
+ * No route returns a single answer, a respondent, the time of an answer, or a personal link. After
+ * the escalation of a period, the people it went to see the names of members who have NOT
+ * answered yet (participation only, never anything about an answer).
  */
 const router = express.Router();
 
 const denied = (res: express.Response, message = 'Access denied. This team is outside your scope.') => res.status(403).json({ error: message });
+
+/** The caller's own pending surveys (warning delay passed, not answered): the banner. */
+router.get('/pending', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    res.json({ pending: await pendingSurveysFor(policyActor(req), req.companyId!) });
+  } catch (error) {
+    console.error('Pulse pending error:', error);
+    res.status(500).json({ error: 'Failed to load your pending surveys' });
+  }
+});
+
+/** Non-response settings and what they mean this period (for the people who may change them). */
+async function reminderInfo(companyId: string, team: { id: string; department_id: string | null }) {
+  const st = await reminderState(team.id);
+  const rec = await escalationRecipients(companyId, team, st.settings.escalateTo);
+  return {
+    settings: st.settings, effective: st.effective, sentDay: st.sentDay, limits: REMINDER_LIMITS,
+    escalateToOptions: ESCALATE_TO.map((v) => ({ value: v, label: ESCALATE_TO_LABELS[v] })),
+    recipients: rec.users.map((u) => u.name), fallbackToAdmins: rec.fallback, periodLastDay: addDays(st.period.end, -1),
+  };
+}
 
 router.get('/teams/:teamId', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -66,6 +95,14 @@ router.get('/teams/:teamId', authenticateToken, async (req: AuthRequest, res) =>
       canSend,
       canRespond: team.is_active && canTakePulseSurvey(actor, team),
       canSetCadence: canSetPulseCadence(actor, team),
+      canSetReminders: canSetPulseReminders(actor, team),
+      reminders: canSetPulseReminders(actor, team) ? await reminderInfo(req.companyId!, team) : null,
+      // After the escalation of the running period, the people it went to see who has not answered yet.
+      nonResponders: await (async () => {
+        const esc = await currentEscalation(team.id, pulse.currentPeriod.start);
+        if (!esc || !esc.escalatedTo.includes(req.user!.id)) return null;
+        return { escalatedAt: esc.at, members: (await nonResponders(team.id, pulse.currentPeriod.start)).map((m) => ({ id: m.id, name: m.name })) };
+      })(),
       cadences: PULSE_CADENCES.map((c) => ({ value: c, label: CADENCE_LABELS[c] })),
       canViewComments: canViewPulseComments(actor, team),
       questions: PULSE_QUESTIONS.map((q) => ({ key: q.key, text: q.text })),
@@ -152,6 +189,30 @@ router.put('/teams/:teamId/auto-send', authenticateToken, async (req: AuthReques
   } catch (error) {
     console.error('Pulse auto-send error:', error);
     res.status(500).json({ error: 'Failed to change automatic sending' });
+  }
+});
+
+router.put('/teams/:teamId/settings', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const team = await getOwnedTeam(req, req.params.teamId as string);
+    const actor = policyActor(req);
+    if (!team || !canViewPulseResults(actor, team)) return denied(res);
+    if (!canSetPulseReminders(actor, team)) return denied(res, 'The team lead, a QA manager of its department or an administrator sets the reminders.');
+    const before = (await reminderState(team.id)).settings;
+    const v = validateReminderSettings(req.body ?? {}, before);
+    if ('error' in v) return res.status(400).json({ error: v.error });
+    await saveReminderSettings({ companyId: req.companyId!, teamId: team.id, settings: v.settings, actorId: req.user!.id });
+    const s = v.settings;
+    await recordAudit({
+      companyId: req.companyId!, actorId: req.user!.id, action: 'team.pulse_reminders', entityType: 'team', entityId: team.id,
+      summary: `Pulse reminders of ${team.name}: warning after ${s.warningAfterDays} days, reminder e-mails ${s.reminderEmails ? `every ${s.reminderEveryDays} days` : 'off'}, `
+        + `escalation after ${s.escalateAfterDays} days to ${ESCALATE_TO_LABELS[s.escalateTo].toLowerCase()}`,
+      before, after: s, departmentIds: [team.department_id], subjectIds: [team.id],
+    });
+    res.json({ success: true, reminders: await reminderInfo(req.companyId!, team) });
+  } catch (error) {
+    console.error('Pulse reminder settings error:', error);
+    res.status(500).json({ error: 'Failed to save the reminder settings' });
   }
 });
 

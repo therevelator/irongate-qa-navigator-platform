@@ -11,9 +11,16 @@
  * Links are never returned by the API, so nobody (a manager included) can answer as someone else.
  *
  * Anonymity: answers go through submitPulseResponse (server/lib/pulse.ts), which stores them
- * without a user id; participation is recorded separately. Reminders use the participation list
- * server-side only to skip people who answered; the API returns counts only, and a reminder
- * count is withheld when it would reveal that 1 or 2 people answered.
+ * without a user id; participation (who answered, no time) is recorded separately. Participation
+ * decides who gets reminders and, after the escalation delay, whose NAMES (members who have not
+ * answered) go to the team lead / department managers. Nothing here ever reads or returns an
+ * answer, its time, or anything derived from answer content.
+ *
+ * Non-response handling (per team, pulse_settings; defaults in pulseRules.ts): an in-app warning
+ * for the member after warning_after_days, automatic reminder e-mails every reminder_every_days
+ * (at most one per person per day, never after the period ends), and one escalation per team and
+ * period after escalate_after_days (notifications + pulse_sends kind 'escalation'). Days count from
+ * the first survey send of the period; without a send there is no warning, reminder or escalation.
  *
  * Automatic sending (runPulseAutoSend, hourly: server/jobs/pulseCron.ts locally,
  * netlify/functions/pulse-auto-send.ts on Netlify): for every active team with auto_send on,
@@ -21,7 +28,7 @@
  */
 import { createHash, randomBytes } from 'crypto';
 import { query, queryOne } from '../../src/lib/db';
-import { execOn, loadGrants, teamMembers, type Exec } from './assignments';
+import { execOn, loadGrants, teamMembers, departmentManagers, teamLeadOf, type Exec } from './assignments';
 import { recordAudit } from './audit';
 import { escapeHtml, getMailer, sendMail } from './mailer';
 import { appBaseUrl } from './sso';
@@ -29,9 +36,11 @@ import { canTakePulseSurvey } from './userPolicy';
 import { K_ANONYMITY_MIN, meetsKAnonymity } from './privacy';
 import { PulseError, loadCadences, submitPulseResponse } from './pulse';
 import {
-  PULSE_COMMENT_MAX, PULSE_QUESTIONS, PULSE_SCALE, addDays, periodDays, periodFor, todayUtc,
-  type PulsePeriod, type PulseQuestionKey,
+  PULSE_COMMENT_MAX, PULSE_QUESTIONS, PULSE_SCALE, addDays, periodDays, periodFor, todayUtc, daysBetween,
+  DEFAULT_REMINDER_SETTINGS, ESCALATE_TO_LABELS, effectiveReminderSettings,
+  type PulsePeriod, type PulseQuestionKey, type ReminderSettings, type EffectiveReminderSettings, type EscalateTo,
 } from './pulseRules';
+import { assignedTeamIds, type PolicyActor } from './userPolicy';
 
 /* ------------------------------------------------------------------------------------------
  * Tokens
@@ -71,16 +80,48 @@ export interface PulseSettings { autoSend: boolean; autoSendFrom: string | null;
 
 export async function loadPulseSettings(teamId: string, exec: Exec = execOn()): Promise<PulseSettings> {
   const [r] = await exec<any>(
-    `SELECT auto_send, to_char(auto_send_from, 'YYYY-MM-DD') AS auto_send_from FROM pulse_settings WHERE team_id = ?`, [teamId]
+    `SELECT auto_send, auto_send_decided, to_char(auto_send_from, 'YYYY-MM-DD') AS auto_send_from FROM pulse_settings WHERE team_id = ?`, [teamId]
   );
-  return r ? { autoSend: !!r.auto_send, autoSendFrom: r.auto_send_from ?? null, configured: true } : { autoSend: false, autoSendFrom: null, configured: false };
+  return r && r.auto_send_decided !== false
+    ? { autoSend: !!r.auto_send, autoSendFrom: r.auto_send_from ?? null, configured: true }
+    : { autoSend: false, autoSendFrom: null, configured: false };
+}
+
+/** Warning / reminder / escalation settings of a team (defaults when none saved). */
+export async function loadReminderSettings(teamId: string): Promise<ReminderSettings> {
+  const r = await queryOne<any>(
+    `SELECT warning_after_days, reminder_emails, reminder_every_days, escalate_after_days, escalate_to FROM pulse_settings WHERE team_id = ?`, [teamId]
+  );
+  if (!r) return { ...DEFAULT_REMINDER_SETTINGS };
+  return {
+    warningAfterDays: Number(r.warning_after_days), reminderEmails: !!r.reminder_emails, reminderEveryDays: Number(r.reminder_every_days),
+    escalateAfterDays: Number(r.escalate_after_days), escalateTo: r.escalate_to as EscalateTo,
+  };
+}
+
+/** Save the warning / reminder / escalation settings (a new row leaves automatic sending undecided). */
+export async function saveReminderSettings(args: { companyId: string; teamId: string; settings: ReminderSettings; actorId: string }): Promise<void> {
+  const s = args.settings;
+  await query(
+    `INSERT INTO pulse_settings (team_id, company_id, auto_send, auto_send_decided, warning_after_days, reminder_emails, reminder_every_days,
+                                 escalate_after_days, escalate_to, updated_by, updated_at)
+     VALUES (?, ?, FALSE, FALSE, ?, ?, ?, ?, ?, ?, now())
+     ON CONFLICT (team_id) DO UPDATE SET warning_after_days = EXCLUDED.warning_after_days, reminder_emails = EXCLUDED.reminder_emails,
+       reminder_every_days = EXCLUDED.reminder_every_days, escalate_after_days = EXCLUDED.escalate_after_days,
+       escalate_to = EXCLUDED.escalate_to, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+    [args.teamId, args.companyId, s.warningAfterDays, s.reminderEmails, s.reminderEveryDays, s.escalateAfterDays, s.escalateTo, args.actorId]
+  );
 }
 
 /** A manager set the cadence: switch automatic sending on from `from` unless the team already has a setting. */
 export async function ensureAutoSendDefault(args: { companyId: string; teamId: string; from: string; actorId: string }): Promise<boolean> {
+  // A row saved only for the reminder settings has not decided automatic sending yet.
   const rows = await query<any[]>(
     `INSERT INTO pulse_settings (team_id, company_id, auto_send, auto_send_from, updated_by) VALUES (?, ?, TRUE, ?::date, ?)
-     ON CONFLICT (team_id) DO NOTHING RETURNING team_id`,
+     ON CONFLICT (team_id) DO UPDATE SET auto_send = TRUE, auto_send_from = EXCLUDED.auto_send_from, auto_send_decided = TRUE,
+       updated_by = EXCLUDED.updated_by, updated_at = now()
+       WHERE pulse_settings.auto_send_decided = FALSE
+     RETURNING team_id`,
     [args.teamId, args.companyId, args.from, args.actorId]
   );
   return rows.length > 0;
@@ -95,7 +136,7 @@ export async function setAutoSend(args: { companyId: string; teamId: string; ena
   const from = before.autoSend && args.enabled ? before.autoSendFrom : periodFor(cadences, today).end;
   await query(
     `INSERT INTO pulse_settings (team_id, company_id, auto_send, auto_send_from, updated_by, updated_at) VALUES (?, ?, ?, ?::date, ?, now())
-     ON CONFLICT (team_id) DO UPDATE SET auto_send = EXCLUDED.auto_send, auto_send_from = EXCLUDED.auto_send_from,
+     ON CONFLICT (team_id) DO UPDATE SET auto_send = EXCLUDED.auto_send, auto_send_from = EXCLUDED.auto_send_from, auto_send_decided = TRUE,
        updated_by = EXCLUDED.updated_by, updated_at = now()`,
     [args.teamId, args.companyId, args.enabled, args.enabled ? from : null, args.actorId]
   );
@@ -118,7 +159,7 @@ export function renderSurveyEmail(args: {
   const lead = args.kind === 'reminder'
     ? `A reminder: the wellbeing pulse of ${args.teamName} is open until ${fmt(last)}.`
     : `The wellbeing pulse of ${args.teamName} for ${fmt(args.period.start)} – ${fmt(last)} is open.`;
-  const body = 'Five statements on a 1–5 scale and an optional comment; it takes about a minute. Your answers are stored without your name, and results are only shown as team averages when at least 3 people answered.';
+  const body = 'Five statements on a 1–5 scale and an optional comment; it takes about a minute. Your answers are anonymous. Your manager can see whether you have responded, not what you answered. Results are only shown as team averages when at least 3 people answered.';
   const fine = `This link is personal and works once, until ${fmt(last)}. Do not forward it. You can also answer in the app under Analytics, Wellbeing pulse.`;
   const text = `${hello}\n\n${lead}\n\n${body}\n\nAnswer the survey:\n${args.link}\n\n${fine}`;
   const html = `<p>${escapeHtml(hello)}</p><p>${escapeHtml(lead)}</p><p>${escapeHtml(body)}</p>
@@ -249,6 +290,7 @@ export async function remindPulseSurvey(args: {
   );
   let delivered = 0;
   for (const m of targets) if (await mailMember({ companyId: args.companyId, team: args.team, period, member: m, kind: 'reminder' })) delivered++;
+  await markReminded(args.team.id, period, targets.map((m) => m.id), today);
   await query(`UPDATE pulse_sends SET recipients = ?, delivered = ? WHERE id = ?`, [targets.length, delivered, row.id]);
   const shown = reminderCountShown(answered);
   await recordAudit({
@@ -437,15 +479,228 @@ export async function respondWithLink(args: {
 }
 
 /* ------------------------------------------------------------------------------------------
+ * Non-response: warning, automatic reminders, escalation (names of non-responders only)
+ * ---------------------------------------------------------------------------------------- */
+
+/** Day (UTC) of the period's first survey send (any channel, at least one recipient), else null. */
+export async function surveySentDay(teamId: string, periodStart: string): Promise<string | null> {
+  const r = await queryOne<any>(
+    `SELECT to_char(MIN(created_at) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day FROM pulse_sends
+      WHERE team_id = ? AND period_start = ?::date AND kind = 'survey' AND recipients > 0`,
+    [teamId, periodStart]
+  );
+  return r?.day ?? null;
+}
+
+export interface ReminderState {
+  settings: ReminderSettings;
+  period: PulsePeriod;
+  /** Day the survey went out this period (null: not sent yet). */
+  sentDay: string | null;
+  /** Values that apply this period (clamped to the period; from the period start when not sent yet). */
+  effective: EffectiveReminderSettings;
+  /** Whole days since the survey went out (null when not sent). */
+  daysSinceSent: number | null;
+}
+
+export async function reminderState(teamId: string, today = todayUtc()): Promise<ReminderState> {
+  const cadences = (await loadCadences([teamId])).get(teamId) ?? [];
+  const period = periodFor(cadences, today);
+  const settings = await loadReminderSettings(teamId);
+  const sent = await surveySentDay(teamId, period.start);
+  // A send is never earlier than its period (the send row's time is the server clock).
+  const sentDay = sent && sent < period.start ? period.start : sent;
+  const from = sentDay ?? period.start;
+  return {
+    settings, period, sentDay,
+    effective: effectiveReminderSettings(settings, daysBetween(from, period.end)),
+    daysSinceSent: sentDay ? daysBetween(sentDay, today) : null,
+  };
+}
+
+/** Active members of the team who have not answered the period (participation only; never answers). */
+export async function nonResponders(teamId: string, periodStart: string): Promise<Array<{ id: string; name: string; email: string; first_name: string | null }>> {
+  const members = await activeMembers(teamId);
+  const answered = new Set((await query<any[]>(
+    `SELECT user_id FROM pulse_participation WHERE team_id = ? AND period_start = ?::date`, [teamId, periodStart]
+  )).map((r: any) => r.user_id));
+  return members.filter((m) => !answered.has(m.id)).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function markReminded(teamId: string, period: PulsePeriod, userIds: string[], today: string): Promise<void> {
+  if (!userIds.length) return;
+  await query(
+    `UPDATE pulse_recipients SET last_reminder_on = ?::date WHERE team_id = ? AND period_start = ?::date AND user_id = ANY(?::varchar[])`,
+    [today, teamId, period.start, userIds]
+  );
+}
+
+/**
+ * Who hears about the members who have not answered: the team lead and / or the department's
+ * managers (escalateTo); when nobody holds that role, the company's super admins (fallback).
+ */
+export async function escalationRecipients(companyId: string, team: { id: string; department_id?: string | null }, to: EscalateTo):
+  Promise<{ users: Array<{ id: string; name: string; email: string }>; fallback: boolean }> {
+  const ids = new Set<string>();
+  if (to !== 'department_managers') { const lead = await teamLeadOf(team.id); if (lead) ids.add(lead); }
+  if (to !== 'team_lead') for (const m of await departmentManagers(companyId, team.department_id ?? null)) ids.add(m.id);
+  let fallback = false;
+  if (!ids.size) {
+    fallback = true;
+    const admins = await query<any[]>(
+      `SELECT DISTINCT ra.user_id FROM role_assignments ra JOIN users u ON u.id = ra.user_id AND u.is_active = TRUE AND u.company_id = ?
+        WHERE ra.company_id = ? AND ra.role = 'super_admin' AND ra.scope_type = 'company' AND ra.revoked_at IS NULL`,
+      [companyId, companyId]
+    );
+    for (const a of admins) ids.add(a.user_id);
+  }
+  const users = ids.size
+    ? await query<any[]>(
+      `SELECT id, email, COALESCE(NULLIF(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')), ''), email) AS name
+         FROM users WHERE id = ANY(?::varchar[]) AND company_id = ? ORDER BY 3`, [[...ids], companyId])
+    : [];
+  return { users, fallback };
+}
+
+/** The current escalation of the period, if any (who was told). */
+export async function currentEscalation(teamId: string, periodStart: string): Promise<{ at: string; escalatedTo: string[] } | null> {
+  const r = await queryOne<any>(
+    `SELECT created_at, escalated_to FROM pulse_sends WHERE team_id = ? AND period_start = ?::date AND kind = 'escalation'`, [teamId, periodStart]
+  );
+  return r ? { at: new Date(r.created_at).toISOString(), escalatedTo: r.escalated_to ?? [] } : null;
+}
+
+/**
+ * The signed-in member's own pending surveys (the app-wide banner): teams they are assigned to
+ * whose survey went out at least warning_after_days ago and that they have not answered.
+ * Only ever about the caller.
+ */
+export async function pendingSurveysFor(actor: PolicyActor, companyId: string, today = todayUtc()):
+  Promise<Array<{ teamId: string; teamName: string; period: { start: string; end: string; lastDay: string } }>> {
+  const teamIds = assignedTeamIds(actor);
+  if (!teamIds.length) return [];
+  const teams = await query<any[]>(
+    `SELECT id, name FROM teams WHERE company_id = ? AND is_active = TRUE AND id = ANY(?::varchar[]) ORDER BY name`, [companyId, teamIds]
+  );
+  const out = [];
+  for (const t of teams) {
+    const st = await reminderState(t.id, today);
+    if (st.sentDay === null || (st.daysSinceSent ?? 0) < st.effective.warningAfterDays) continue;
+    const answered = await queryOne<any>(
+      `SELECT 1 AS x FROM pulse_participation WHERE team_id = ? AND user_id = ? AND period_start = ?::date`, [t.id, actor.id, st.period.start]
+    );
+    if (answered) continue;
+    out.push({ teamId: t.id, teamName: t.name, period: { start: st.period.start, end: st.period.end, lastDay: addDays(st.period.end, -1) } });
+  }
+  return out;
+}
+
+const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : 0);
+
+/** Automatic reminders of one team (members who have not answered, due today). Returns how many were reminded. */
+async function autoRemindTeam(team: { id: string; name: string; company_id: string; department_id: string | null }, st: ReminderState, today: string): Promise<number> {
+  if (!st.settings.reminderEmails || st.sentDay === null || (st.daysSinceSent ?? 0) < st.effective.reminderEveryDays) return 0;
+  if (today >= st.period.end) return 0; // never after the period ends
+  const every = st.effective.reminderEveryDays;
+  const pending = await nonResponders(team.id, st.period.start);
+  if (!pending.length) return 0;
+  const last = new Map((await query<any[]>(
+    `SELECT user_id, to_char(last_reminder_on, 'YYYY-MM-DD') AS d FROM pulse_recipients WHERE team_id = ? AND period_start = ?::date`,
+    [team.id, st.period.start]
+  )).map((r: any) => [r.user_id, r.d as string | null]));
+  const targets = pending.filter((m) => { const d = last.get(m.id); return !d || (d < today && daysBetween(d, today) >= every); });
+  if (!targets.length) return 0;
+  const members = (await activeMembers(team.id)).length;
+  const answered = members - pending.length;
+  const channel = getMailer().channel;
+  const [row] = await query<any[]>(
+    `INSERT INTO pulse_sends (company_id, team_id, period_start, period_end, kind, trigger, actor_id, channel, answered)
+     VALUES (?, ?, ?::date, ?::date, 'reminder', 'auto', NULL, ?, ?) RETURNING id`,
+    [team.company_id, team.id, st.period.start, st.period.end, channel, answered]
+  );
+  let delivered = 0;
+  for (const m of targets) if (await mailMember({ companyId: team.company_id, team, period: st.period, member: m, kind: 'reminder' })) delivered++;
+  await markReminded(team.id, st.period, targets.map((m) => m.id), today);
+  await query(`UPDATE pulse_sends SET recipients = ?, delivered = ? WHERE id = ?`, [targets.length, delivered, row.id]);
+  const shown = reminderCountShown(answered);
+  await recordAudit({
+    companyId: team.company_id, actorId: null, action: 'team.pulse_reminder', entityType: 'team', entityId: team.id,
+    summary: `Automatic pulse reminder for ${team.name} (${st.period.start} – ${addDays(st.period.end, -1)}) sent to the members who had not answered${shown ? ` (${targets.length})` : ''}`,
+    after: { period: { start: st.period.start, end: st.period.end }, trigger: 'auto', recipients: shown ? targets.length : null, channel },
+    departmentIds: [team.department_id], subjectIds: [team.id],
+  });
+  return targets.length;
+}
+
+/** The escalation of one team, once per period. Returns true when it was sent now. */
+async function escalateTeam(team: { id: string; name: string; company_id: string; department_id: string | null }, st: ReminderState, today: string): Promise<boolean> {
+  if (st.sentDay === null || (st.daysSinceSent ?? 0) < st.effective.escalateAfterDays || today >= st.period.end) return false;
+  const pending = await nonResponders(team.id, st.period.start);
+  if (!pending.length) return false;
+  const members = (await activeMembers(team.id)).length;
+  const answered = members - pending.length;
+  const { users, fallback } = await escalationRecipients(team.company_id, team, st.settings.escalateTo);
+  if (!users.length) return false;
+  const [row] = await query<any[]>(
+    `INSERT INTO pulse_sends (company_id, team_id, period_start, period_end, kind, trigger, actor_id, channel, recipients, delivered, answered, escalated_to)
+     VALUES (?, ?, ?::date, ?::date, 'escalation', 'auto', NULL, 'app', ?, 0, ?, ?::varchar[]) ON CONFLICT DO NOTHING RETURNING id`,
+    [team.company_id, team.id, st.period.start, st.period.end, users.length, answered, users.map((u) => u.id)]
+  );
+  if (!row) return false; // already escalated this period
+  const names = pending.map((m) => m.name);
+  const rate = `${pct(answered, members)}% (${answered} of ${members} members)`;
+  const title = `Wellbeing pulse: ${pending.length} not answered yet · ${team.name}`;
+  const body = `Not answered yet: ${names.join(', ')}. Response rate so far: ${rate}. The survey closes after ${addDays(st.period.end, -1)}. `
+    + 'This list says only who has not answered; answers stay anonymous.';
+  const { notifyPulseEscalation } = await import('./notifications');
+  const delivered = await notifyPulseEscalation({ companyId: team.company_id, teamId: team.id, recipients: users, title, body, dedupe: `pulse-escalation:${team.id}:${st.period.start}` });
+  await query(`UPDATE pulse_sends SET delivered = ? WHERE id = ?`, [Math.min(delivered, users.length), row.id]);
+  await recordAudit({
+    companyId: team.company_id, actorId: null, action: 'team.pulse_escalation', entityType: 'team', entityId: team.id,
+    summary: `Pulse survey of ${team.name}: ${pending.length} member${pending.length === 1 ? '' : 's'} had not answered after ${st.effective.escalateAfterDays} days; `
+      + `${fallback ? 'super admins (no one holds the chosen role)' : ESCALATE_TO_LABELS[st.settings.escalateTo].toLowerCase()} told: ${users.map((u) => u.name).join(', ')}`,
+    after: { period: { start: st.period.start, end: st.period.end }, notResponded: pending.length, members, escalatedTo: users.map((u) => u.id), fallback },
+    departmentIds: [team.department_id], subjectIds: [team.id],
+  });
+  return true;
+}
+
+/** Reminders and escalations of every team whose survey went out this period (hourly with the auto send). */
+export async function runPulseReminders(today = todayUtc(), opts: { teamIds?: string[] } = {}): Promise<{ teams: number; reminded: number; escalated: number }> {
+  const teams = await query<any[]>(
+    `SELECT DISTINCT t.id, t.name, t.company_id, t.department_id
+       FROM pulse_sends s
+       JOIN teams t ON t.id = s.team_id AND t.is_active
+       JOIN companies c ON c.id = t.company_id AND c.is_active IS NOT FALSE
+      WHERE s.kind = 'survey' AND s.recipients > 0 AND s.period_end > ?::date AND s.period_start <= ?::date
+        AND (?::varchar[] IS NULL OR t.id = ANY(?::varchar[]))
+      ORDER BY t.company_id, t.id`,
+    [today, today, opts.teamIds ?? null, opts.teamIds ?? null]
+  );
+  let reminded = 0, escalated = 0;
+  for (const t of teams) {
+    try {
+      const st = await reminderState(t.id, today);
+      reminded += await autoRemindTeam(t, st, today);
+      if (await escalateTeam(t, st, today)) escalated++;
+    } catch (e) {
+      console.error(`[pulse] reminders for team ${t.id} failed:`, (e as Error)?.message ?? e);
+    }
+  }
+  return { teams: teams.length, reminded, escalated };
+}
+
+/* ------------------------------------------------------------------------------------------
  * Scheduled run
  * ---------------------------------------------------------------------------------------- */
 
 /**
  * Send the survey of every team with automatic sending on whose period just started (once per
- * team and period), and delete links that expired more than 30 days ago. opts.teamIds limits the
+ * team and period), send the due reminders and escalations (runPulseReminders), and delete links
+ * that expired more than 30 days ago. opts.teamIds limits the
  * run to those teams (tests).
  */
-export async function runPulseAutoSend(today = todayUtc(), opts: { teamIds?: string[] } = {}): Promise<{ teams: number; sent: number; skipped: number }> {
+export async function runPulseAutoSend(today = todayUtc(), opts: { teamIds?: string[] } = {}): Promise<{ teams: number; sent: number; skipped: number; reminded: number; escalated: number }> {
   const teams = await query<any[]>(
     `SELECT t.id, t.name, t.company_id, t.department_id, to_char(s.auto_send_from, 'YYYY-MM-DD') AS auto_send_from
        FROM pulse_settings s
@@ -467,7 +722,9 @@ export async function runPulseAutoSend(today = todayUtc(), opts: { teamIds?: str
       console.error(`[pulse] automatic send for team ${t.id} failed:`, (e as Error)?.message ?? e);
     }
   }
+  // Reminders and escalations (members who have not answered) of the running periods.
+  const r = await runPulseReminders(today, opts);
   await query(`DELETE FROM pulse_links WHERE expires_at < now() - interval '30 days'`);
-  return { teams: teams.length, sent, skipped };
+  return { teams: teams.length, sent, skipped, reminded: r.reminded, escalated: r.escalated };
 }
 

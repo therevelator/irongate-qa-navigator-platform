@@ -181,7 +181,7 @@ const SEVERITY_LABEL: Record<Severity, string> = { info: 'Info', warning: 'Warni
 export const alertTitle = (a: Pick<AlertRow, 'rule' | 'severity'>, teamName: string | null, reason: 'new' | 'escalated') =>
   `${reason === 'escalated' ? 'Escalated: ' : ''}${RULE_DEFS[a.rule]?.label ?? a.rule}${teamName ? ` · ${teamName}` : ''}`;
 
-async function enqueue(row: { companyId: string; channel: 'email' | 'slack'; kind: 'alert' | 'digest' | 'test'; userId?: string | null; recipient: string; alertId?: string | null; subject?: string | null; payload: object; dedupeKey: string | null }): Promise<string | null> {
+async function enqueue(row: { companyId: string; channel: 'email' | 'slack'; kind: 'alert' | 'digest' | 'test' | 'pulse'; userId?: string | null; recipient: string; alertId?: string | null; subject?: string | null; payload: object; dedupeKey: string | null }): Promise<string | null> {
   const r = await queryOne<any>(
     `INSERT INTO notification_deliveries (company_id, channel, kind, user_id, recipient, alert_id, subject, payload, dedupe_key)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)
@@ -247,6 +247,40 @@ export async function notifyActionOwner(companyId: string, action: { id: string;
     `INSERT INTO notifications (company_id, user_id, kind, severity, title, body, team_id, action_id) VALUES (?, ?, 'action', 'info', ?, ?, ?, ?)`,
     [companyId, action.owner_id, `Action assigned to you · ${teamName}`, `${action.title}${due}`, action.team_id, action.id]
   );
+}
+
+/**
+ * The wellbeing pulse escalation (server/lib/pulseSend.ts): names of members who have not answered
+ * and the response rate, to the chosen recipients. In-app when their preferences allow it, e-mail
+ * when immediate e-mails are on. Never anything about what anyone answered. Returns how many
+ * people were told (in-app or e-mail).
+ */
+export async function notifyPulseEscalation(args: {
+  companyId: string; teamId: string; recipients: Array<{ id: string; email: string; name: string }>; title: string; body: string; dedupe: string;
+}): Promise<number> {
+  const actors = (await loadCompanyActors(args.companyId)).filter((a) => args.recipients.some((r) => r.id === a.id));
+  const prefs = await prefsFor(actors);
+  const link = appUrl() ? `${appUrl()}/analytics/pulse?team=${encodeURIComponent(args.teamId)}` : '';
+  let told = 0, queued = 0;
+  for (const a of actors) {
+    const p = prefs.get(a.id)!;
+    let reached = false;
+    if (p.inApp) {
+      await query(
+        `INSERT INTO notifications (company_id, user_id, kind, severity, title, body, team_id) VALUES (?, ?, 'pulse', 'warning', ?, ?, ?)`,
+        [args.companyId, a.id, args.title, args.body, args.teamId]
+      );
+      reached = true;
+    }
+    if (p.emailImmediate && a.email) {
+      const text = `${args.title}\n\n${args.body}\n\n${link ? `Open the team's pulse: ${link}\n\n` : ''}You receive this because immediate e-mails are on in your notification preferences.`;
+      const html = `<p><strong>${escapeHtml(args.title)}</strong></p><p>${escapeHtml(args.body)}</p>${link ? `<p><a href="${escapeHtml(link)}">Open the team's pulse</a></p>` : ''}<p style="color:#64748b;font-size:12px">You receive this because immediate e-mails are on in your notification preferences.</p>`;
+      if (await enqueue({ companyId: args.companyId, channel: 'email', kind: 'pulse', userId: a.id, recipient: a.email, subject: `[IronGate] ${args.title}`, payload: { text, html }, dedupeKey: `${args.dedupe}:${a.id}` })) { queued++; reached = true; }
+    }
+    if (reached) told++;
+  }
+  if (queued) await processDeliveries({ companyId: args.companyId, budgetMs: 5_000 });
+  return told;
 }
 
 /* ------------------------------------------------------------------------------------------

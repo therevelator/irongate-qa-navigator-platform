@@ -522,6 +522,15 @@ export function canSetPulseCadence(actor: PolicyActor, team: { id: string; depar
 }
 
 /**
+ * May the actor set the team's non-response handling (in-app warning, automatic reminders,
+ * escalation of the names of members who have not answered)? The managers who set the cadence
+ * (canSetPulseCadence: QA managers of the team's department, super_admin) and the team's lead.
+ */
+export function canSetPulseReminders(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
+  return canSetPulseCadence(actor, team) || ledTeamIds(actor).includes(team.id);
+}
+
+/**
  * May the actor e-mail the survey (and reminders) to the team's members? Whoever may see the
  * team's results and is its lead, a QA manager of its department or super_admin.
  */
