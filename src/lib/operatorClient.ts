@@ -3,8 +3,8 @@ import API_URL from '../config/api';
 /**
  * Platform operator API client (/operator, IronGate platform support). The operator signs in with
  * their own account (platform_operators, not a company user); the session is the httpOnly cookie
- * irongate_operator (8 hours), separate from any company session. Company views carry the reason
- * the operator gave for opening the company (X-Operator-Reason).
+ * irongate_operator (8 hours), separate from any company session. Operators give no reason and
+ * nothing they do is logged.
  */
 
 export interface OperatorSession { email: string; name: string; expiresAt: string }
@@ -32,16 +32,18 @@ export class OperatorError extends Error {
   }
 }
 
-export async function opFetch<T = any>(path: string, opts: { method?: string; body?: unknown; reason?: string } = {}): Promise<T> {
+export async function opFetch<T = any>(path: string, opts: { method?: string; body?: unknown } = {}): Promise<T> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (opts.reason) headers['X-Operator-Reason'] = opts.reason;
   const res = await fetch(`${API_URL}/operator${path}`, {
     method: opts.method ?? 'GET', credentials: 'include', headers,
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
   });
   const body = await res.json().catch(() => ({}));
   if (res.status === 401 && body?.code === 'operator_session_required') setOperatorSession(null);
-  if (!res.ok) throw new OperatorError(res.status, body?.error || `Request failed (${res.status})`, body?.requestId);
+  if (!res.ok) {
+    const details = Array.isArray(body?.details) ? `: ${body.details.join('; ')}` : Array.isArray(body?.errors) && body.errors.length > 1 ? `: ${body.errors.join('; ')}` : '';
+    throw new OperatorError(res.status, `${body?.error || `Request failed (${res.status})`}${details}`, body?.requestId);
+  }
   return body as T;
 }
 
@@ -71,4 +73,23 @@ export async function operatorSignIn(email: string, password: string): Promise<O
 export async function operatorSignOut(): Promise<void> {
   try { await opFetch('/logout', { method: 'POST' }); } catch { /* the session is dropped anyway */ }
   setOperatorSession(null);
+}
+
+/** Download a CSV export of the operator API (the browser saves the file). */
+export async function opDownload(path: string, fallbackName = 'export.csv'): Promise<void> {
+  const res = await fetch(`${API_URL}/operator${path}`, { credentials: 'include' });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new OperatorError(res.status, body?.error || `Export failed (${res.status})`, body?.requestId);
+  }
+  const blob = await res.blob();
+  const name = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }

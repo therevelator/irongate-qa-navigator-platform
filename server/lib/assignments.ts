@@ -120,20 +120,31 @@ export interface AccessContext {
   /** Session limits (server/lib/sessions.ts). */
   sessions_valid_after: string | Date | null;
   session_lifetime: string | null;
+  /** 'active' | 'suspended' (companies.status). */
+  company_status: string | null;
+  /** The token's user_sessions row (null without a jti or without a row). */
+  session_revoked_at: string | Date | null;
+  session_last_seen_at: string | Date | null;
 }
 
-/** The caller's live row and active grants (auth middleware, every request). */
-export async function loadAccessContext(userId: string): Promise<AccessContext | null> {
+/**
+ * The caller's live row, company status, session row and active grants (auth middleware, every
+ * request): ONE query, so the session checks add no database round trip.
+ */
+export async function loadAccessContext(userId: string, sessionId: string | null = null): Promise<AccessContext | null> {
   const row = await queryOne<any>(
     `SELECT u.id, u.role, u.company_id, u.department_id, u.primary_team_id, u.is_active,
             u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime,
+            (SELECT c.status FROM companies c WHERE c.id = u.company_id) AS company_status,
+            s.revoked_at AS session_revoked_at, s.last_seen_at AS session_last_seen_at,
             COALESCE((
               SELECT json_agg(json_build_object('role', ra.role, 'scopeType', ra.scope_type, 'scopeId', ra.scope_id) ORDER BY ra.created_at)
                 FROM role_assignments ra
                WHERE ra.user_id = u.id AND ra.company_id = u.company_id AND ra.revoked_at IS NULL
             ), '[]'::json) AS grants
-       FROM users u WHERE u.id = ?`,
-    [userId]
+       FROM users u LEFT JOIN user_sessions s ON s.id = ?::text AND s.user_id = u.id
+      WHERE u.id = ?`,
+    [sessionId, userId]
   );
   if (!row) return null;
   return { ...row, grants: (row.grants as Grant[]) ?? [] };

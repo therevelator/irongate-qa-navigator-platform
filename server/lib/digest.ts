@@ -189,7 +189,7 @@ async function slackSummary(companyId: string, now: number): Promise<string> {
 /** Weekly run for every company: evaluate, then queue and send the digests. */
 export async function runWeeklyDigest(now = Date.now(), opts: { companyIds?: string[] } = {}): Promise<{ companies: number; queued: number }> {
   const companies = await query<any[]>(
-    'SELECT id FROM companies WHERE is_active IS NOT FALSE AND (?::text[] IS NULL OR id = ANY(?::text[])) ORDER BY id',
+    "SELECT id FROM companies WHERE is_active IS NOT FALSE AND status <> 'suspended' AND (?::text[] IS NULL OR id = ANY(?::text[])) ORDER BY id",
     [opts.companyIds ?? null, opts.companyIds ?? null]
   );
   const week = isoWeek(now);

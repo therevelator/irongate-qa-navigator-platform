@@ -1,4 +1,5 @@
 import { transaction } from '../../src/lib/db';
+import { platformSupportContext } from './platformContext';
 import {
   execOn, snapshotUser, sameGrants, revokeGrantsNotIn, addGrantsMissing, syncUserDisplay, lastSuperAdminGuard, grantAssignment,
   AssignmentError, type Exec, type UserSnapshot,
@@ -42,6 +43,9 @@ const clean = (xs?: Array<string | null | undefined>) => [...new Set((xs ?? []).
 
 /** Record one change. Pass the transaction's exec when the change runs in one. Returns the entry id. */
 export async function recordAudit(input: AuditInput, exec: Exec = execOn()): Promise<string> {
+  // Changes made by IronGate platform support are not part of the company's history
+  // (server/lib/platformContext.ts): operator activity is not logged anywhere.
+  if (platformSupportContext()) return '';
   const [row] = await exec<any>(
     `INSERT INTO audit_log (company_id, actor_id, action, entity_type, entity_id, summary, before, after, department_ids, subject_ids, undo_of)
      VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::varchar[], ?::varchar[], ?) RETURNING id`,

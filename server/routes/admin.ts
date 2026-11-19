@@ -400,7 +400,7 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
     await query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [passwordHash, target.id, companyId]);
     // Existing sessions of that person end. Changing your own password keeps this browser signed in.
     await endUserSessions(target.id);
-    if (target.id === req.user.id) await issueSessionCookie(res, req.user.id, JWT_SECRET, { persistent: currentSessionPersistent(req) });
+    if (target.id === req.user.id) await issueSessionCookie(res, req.user.id, JWT_SECRET, { persistent: currentSessionPersistent(req), method: 'reissue' });
     await recordAudit({
       companyId, actorId: req.user.id, action: 'user.password_reset', entityType: 'user', entityId: target.id,
       summary: target.id === req.user.id ? 'Changed own password' : `Reset the password of ${fullName(target)}`,
@@ -433,7 +433,7 @@ router.post('/users/:id/sign-out-everywhere', authenticateToken, async (req: any
         departmentIds: [target.department_id, ...(target.department_ids ?? [])], subjectIds: [target.id],
       }, exec);
     });
-    if (self) await issueSessionCookie(res, req.user.id, JWT_SECRET, { persistent: currentSessionPersistent(req) });
+    if (self) await issueSessionCookie(res, req.user.id, JWT_SECRET, { persistent: currentSessionPersistent(req), method: 'reissue' });
     res.json({ message: self ? 'You were signed out on all other devices.' : `${fullName(target)} was signed out on every device.` });
   } catch (error) {
     console.error('Error signing a user out:', (error as any)?.code ?? (error as Error)?.name ?? 'error');

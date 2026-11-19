@@ -220,10 +220,10 @@ password keep your choice.
   browser stays signed in; every other one is signed out;
 - **Sign out everywhere** for a user in **Users** (key button). Allowed to whoever may reset that person's
   password. For yourself it works like "Sign out my other devices";
-- the platform support repair action **Sign out everywhere** (needs a reason; recorded in the platform log
-  and in the company's Activity log).
+- the platform support action **Sign out everywhere** (or **Revoke** of a single session), and a
+  suspension of the whole company.
 
-The person's platform support sessions end too. Deactivating a user still blocks them at once.
+The person's sessions show as revoked in the platform support panel (their `user_sessions` rows). Deactivating a user still blocks them at once.
 Technically: `users.sessions_valid_after` is set to the current second, and a session issued before it is
 refused. A session started within that same second stays valid.
 
@@ -284,8 +284,8 @@ team Payments – KPIs", "Changed targets"), status, duration, IP address, brows
 What it never stores: request or response bodies, query strings, headers, cookies, tokens or
 passwords. Answering the wellbeing pulse is never recorded, because the time of an answer could be
 matched to the anonymous answer. Not recorded either: the session check, this screen's own list
-requests (opening it and exporting it are recorded) and platform support requests (they go to the
-Activity log, below).
+requests (opening it and exporting it are recorded) and platform support requests (not logged at
+all, below).
 
 Rows are written in batches in the background; the Netlify function writes a request's rows before it
 returns (an instance is frozen as soon as it has answered), waiting at most 2.5 seconds.
@@ -320,36 +320,80 @@ can limit it to known addresses (on Netlify the client address comes from Netlif
 `x-nf-client-connection-ip` header, elsewhere from the trusted proxy). **Sign out** ends the session
 at once.
 
-**What it shows.** Overview: every company with users, teams, last data received, share of stale
-metric values, open alerts, errors in the last 24 hours, last activity and a demo / sample flag;
-the last run of each scheduled job; database size and the main tables. Per company: organisation
-(departments, teams, members and their roles), users (last sign-in, status, lockouts, invitations
-with status, API keys by name and prefix), settings and targets (with history), data per team
-(metric values, KPI snapshots with staleness and sample / real source, ingestion log, every person's
-developer metrics with whether they opted in), every analytics module's stored rows per team
-(Modules: test runs, flaky tests, technical debt, pipelines, performance, sprints, developer
-productivity, business metrics, company snapshots), alerts and actions, wellbeing pulse (cadence,
-send log, response rates, the aggregates the team sees, every single answer with its comment, and who
-answered in each period; the app never stores which person gave which answer), user details
-(department, team, phone, time zone, opt-ins), invitations with who invited, the Activity log, the
-user activity log and server errors. Errors can be searched by request id across all companies.
+**What it shows.** Overview: every company with its status (**Active** / **Suspended** badge),
+users, teams, sessions valid now, sign-ins and failed sign-ins of the last 7 days, the countries
+sign-ins came from (30 days), last data received, share of stale metric values, open alerts, errors in
+the last 24 hours, last activity and a demo / sample flag; the last run of each scheduled job ("No runs
+recorded yet" on a database without any); database size and the main tables (exact row counts below
+200 000 rows); the **Sign-ins** of every company, including failed sign-ins with an e-mail that belongs
+to nobody (only a keyed hash of that e-mail is kept). Per company:
+
+- **Organisation**: departments, teams, members and their roles;
+- **Users**: each person's status, assignments, last sign-in (time, IP, country and city, browser,
+  OS and device), sessions now, last seen, failed sign-ins (7 days), invitations with status;
+- a **person's page**: profile, role assignments and teams, every sign-in (successful and failed),
+  every session (issued, expires, last seen, IP and country at issue and last seen, kept signed in or
+  browser session, status **Valid / Expired / Ended / Revoked**, who revoked it) with **Revoke**, and
+  the latest 100 requests;
+- **Sessions** (all, or valid only), **Sign-ins** (filters: user, outcome, type, IP, country, dates,
+  request id; CSV export), **Last views** (for each team and department: when it was last looked at
+  and by whom, its views in 30 days and the three most active viewers; the most active viewers of the
+  company), **Access log** (the company's user activity: every request and screen of its people and API
+  keys, filters including IP, CSV export);
+- settings and targets (with history), data per team (metric values, KPI snapshots with staleness and
+  sample / real source, ingestion log, every person's developer metrics with whether they opted in),
+  every analytics module's stored rows per team, alerts and actions, the wellbeing pulse (every single
+  answer with its comment, and who answered; the app never stores which person gave which answer), the
+  Activity log and server errors. Errors can be searched by request id across all companies.
+
 Customer access by IronGate support is covered by the customer's written contract.
 
-**Never shown (secrets, not customer data).** Password hashes, API key hashes, invitation, survey
-link and password reset tokens, session tokens, the Slack webhook (only whether one is set) and
-integration credentials such as API tokens (shown as "set" / "not set").
+**What it changes.** Everything in any company, with the company app's own rules (the server runs the
+company app's handler as a super admin of that company, without a user id):
 
-**Repair actions.** Refresh sample data now (on Netlify it starts the background refresh function and
-reports "started", the result appears under `demo-refresh-background` in Scheduled jobs; elsewhere it runs
-directly), recompute KPI snapshots of a company or team, re-run
-the alert evaluation, resend a pending invitation, deactivate or reactivate a user, clear a sign-in
-lockout. Each asks for a confirmation and a reason. There is no impersonation, no SQL and no delete.
+- **Companies**: create (first department and team, and a first super admin with a password or an
+  invitation), edit the name, e-mail domain and "hide the sample-data notices", how long sign-ins last,
+  **Suspend** / **Reactivate**, **Delete** (type the company's name; every table of the company goes);
+- **Departments**: add, edit, add / remove managers, delete (refused while it has active teams or people);
+- **Teams**: add, edit, move to another department, set the lead, archive / restore, delete for good
+  (type the team's name; its data goes, its members keep their accounts);
+- **People**: add with a password (any role, also super admin) or invite by e-mail, edit name and
+  e-mail, role and primary team, add / remove role assignments (company, department, team), set a new
+  password, send a reset link, sign out everywhere, deactivate / reactivate, clear a lockout, delete for
+  good (type the e-mail address; the last super admin cannot be deleted);
+- **Invitations** (create, resend, revoke; the link is never shown), **API keys** (create: the key is
+  shown once; afterwards only its prefix; revoke), **KPI targets**, **configuration values**, **update
+  intervals** and **alert rules** at company, department or team scope, **saved views** (rename, share,
+  delete), single **sessions** (revoke);
+- repairs: refresh sample data now (on Netlify it starts the background refresh function and reports
+  "started"; the result appears under `demo-refresh-background`), recompute KPI snapshots, re-run the
+  alert evaluation.
 
-**Transparency.** Opening a company section writes an entry to that company's own Activity log:
-"Platform support viewed users and invitations. Reason: …" (at most once per section per 30
-minutes). Every repair action writes "Platform support: … Reason: …". A deactivation is also the usual
-reversible user change, so the company's super admin can undo it. All operator access, including
-failed password attempts, is also kept in a platform-level log (`platform_access_log`).
+Destructive actions (delete, deactivate, archive, suspend, revoke, sign out everywhere, set a password,
+remove an assignment) are confirmed in the page; deletes need the typed name or e-mail. Nothing asks for a
+reason. There is no impersonation and no SQL.
+
+**Suspending a company** (until it pays, for example). Suspend asks for the reason (for operators),
+optionally a "suspended until" date and a billing note. While suspended: its people cannot sign in (the
+sign-in page says "Your organisation's access is suspended. Contact your administrator." after the right
+password); every open session is refused on its next request with that message (the app returns to the
+sign-in page); API keys and data ingestion are refused (`403 company_suspended`); invitations cannot be
+accepted; the scheduled jobs (alerts, pulse sends and reminders, weekly digest, sample data refresh) skip
+it. Nothing is deleted. Reactivate lets everyone sign in again; sessions ended by the suspension stay ended.
+
+**Not logged.** Nothing an operator does is logged anywhere: not in the company's Activity log, not in
+its user activity log, and not in a platform log (the former `platform_access_log` table is no longer
+written). Support tickets are tracked in a separate system.
+
+**Never shown (secrets, not customer data).** Password hashes, API key hashes (a new key once, at
+creation), invitation, survey link and password reset tokens and links, session tokens, the Slack
+webhook (only whether one is set) and integration credentials such as API tokens ("set" / "not set").
+
+**Sign-in records.** Every sign-in of a company user (password, registration, invitation, Google or
+Microsoft, password reset) and every failed sign-in is kept 180 days with the client IP, the country,
+region and city (from Netlify's location header on the hosted site; nothing locally) and the browser,
+OS and device. Every session the app issues is kept 180 days too (its id is in the session token), so
+support can see whether a session is still valid and revoke it on its own.
 
 **Request ids.** Every API response has an `X-Request-Id` header and every server error message
 (5xx) includes `requestId`. A customer can quote it; support finds the error in `server_errors` (kept

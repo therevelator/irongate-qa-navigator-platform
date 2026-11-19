@@ -297,8 +297,8 @@ server checks two limits on every request, from the user row it loads anyway:
   set by a reset with the e-mail link, an administrator's direct reset, changing your own password,
   **Sign out my other devices** (the screen icon next to Sign out, in the navigation: this browser gets a
   new cookie and stays signed in), the administrator's **Sign out everywhere** (Users, key button; same
-  permission as resetting the password) and the platform support repair action of the same name. It
-  also ends that person's platform support sessions. Deactivating a user still blocks at once.
+  permission as resetting the password) and the platform support action of the same name. It
+  also marks the person's session rows revoked. Deactivating a user still blocks at once.
   The value is truncated to the second, so a session started in that same second stays valid.
 - **Sign-in lasts** (Parameters → Sign-in, super admins only): 1 hour, 8 hours, 1 day, 7 days
   (default), 14 days or 30 days. A session older than the current value is refused, so shortening it
@@ -315,7 +315,8 @@ sign-in removes it.
 Migration: `supabase/migrations/20261123500000_sessions_valid_after.sql`. Endpoints:
 `POST /api/auth/sessions/sign-out-others`, `POST /api/admin/users/:id/sign-out-everywhere`,
 `GET|PUT /api/admin/session-settings { lifetimeHours }`,
-`POST /api/operator/companies/:companyId/users/:userId/sign-out-everywhere { reason }`.
+`POST /api/operator/companies/:companyId/users/:userId/sign-out-everywhere { confirm: true }`,
+`POST /api/operator/companies/:companyId/sessions/:sessionId/revoke { confirm: true }` (one session).
 
 **E-mail.** All e-mail of the app (invitations, password resets, pulse surveys, alerts, the weekly
 digest) goes through one mailer. The first configured channel wins: **Resend** (`RESEND_API_KEY`),
@@ -765,19 +766,67 @@ Retention runs in `db-keepalive` (Netlify) or `server/jobs/cleanupCron.ts` (long
 accounts (`platform_operators`, migration `20261125000000_platform_operators.sql`), never users of a
 company; create one with `npm run operator:create -- --email … --name "…"` (bcrypt cost 12). Off while
 no operator exists. Own sign-in at `/operator` (8-hour session in the httpOnly cookie
-`irongate_operator`, its own token audience, lockout after 5 failures, rate limited per IP) to see
-every company: overview with health per company, scheduled jobs, errors and database size; per
-company the organisation, users and invitations, settings and targets, metric data with staleness and
-every developer's metrics, every analytics module's rows, alerts and actions, the wellbeing pulse
-(aggregates, single answers with comments, who answered), the Activity log, the user activity log
-and server errors; and search by request id. A few repair actions (refresh sample data now, recompute KPI snapshots, re-run
-alerts, resend an invitation, deactivate / reactivate a user, clear a lockout) need a reason and a
-confirmation. Every company opened and every action is written to that company's own Activity log
-("Platform support viewed …"). Secrets are never shown: password, API key and token hashes, link
-tokens, the Slack webhook and integration credentials ("set" / "not set"). No impersonation, no SQL,
-no deletes. Code:
-`server/routes/operator.ts`, `server/lib/operator.ts`, `src/components/operator/`; migration
-`supabase/migrations/20261123000000_platform_operator_errors_jobs.sql`.
+`irongate_operator`, its own token audience, lockout after 5 failures, rate limited per IP).
+
+*What it shows.* Overview: every company with its status (active / suspended), users, teams, sessions
+valid now, sign-ins and failed sign-ins of the last 7 days, countries seen (30 days), last data,
+stale share, open alerts, errors; scheduled jobs ("No runs recorded yet" while `job_runs` is empty);
+database size and the main tables (exact `count(*)` below 200 000 rows, else the live-row
+statistic, so a TRUNCATE and reload never shows 0); sign-in events of every company (also failed
+sign-ins of unknown e-mails); search by request id. Per company: organisation, users (last sign-in
+with time, IP, country, city, browser / OS / device, sessions now, last seen, failed sign-ins),
+each person's page (profile, role assignments, teams, every sign-in, every session with its status
+valid / expired / ended / revoked and a **Revoke** button, recent activity), sessions, sign-ins
+(filters: user, outcome, type, IP, country, dates, request id; CSV), **Last views** (latest view of
+each team and department from the user activity log, by whom, and the most active viewers), the
+access log (the company's user activity: every request and screen, filters incl. IP; CSV), settings
+and targets, data, modules, alerts and actions, the wellbeing pulse, the Activity log and server errors.
+
+*What it changes.* Everything in any company: create a company (first department, team and super
+admin with a password or an invitation), rename it, its e-mail domain, "hide the sample-data
+notices", how long sign-ins last, **suspend / reactivate**, delete it (type its name); departments
+(create, edit, managers, delete); teams (create, edit, move, lead, archive / restore, delete for good
+with the typed name); people (create with a password or invite, edit name / e-mail, role and primary
+team, role assignments at company / department / team scope, set a password, send a reset link, sign
+out everywhere, deactivate / reactivate, clear a lockout, delete with the typed e-mail); invitations
+(create, resend, revoke); KPI targets, configuration values, update intervals and alert rules at
+company, department or team scope; API keys (create: the key is shown once; then the prefix only;
+revoke); saved views (rename, share, delete); single sessions (revoke). Changes the company app also
+offers run **the company app's own handler** on the server (same validation and rules, as a super
+admin of that company without a user id: `forward()` in `server/routes/operator.ts`). Destructive
+actions are confirmed in the page; the API wants `{ confirm: true }`. No reason is asked for.
+
+*Not logged.* Nothing an operator does is logged: no entry in the company's Activity log
+(`recordAudit` is a no-op inside an operator request, `server/lib/platformContext.ts`), no user
+activity row, and `platform_access_log` is no longer written (the table stays, unused). Support
+tickets are tracked in a separate system. Secrets are never shown: password, API key and token
+hashes, invitation and reset links, the Slack webhook and integration credentials ("set" / "not set").
+Code: `server/routes/operator.ts`, `server/lib/operator.ts`, `src/components/operator/`.
+
+**Suspending a company** (e.g. until an invoice is paid; `companies.status`, `suspended_reason`,
+`suspended_at`, `suspended_by`, `suspended_until`, `billing_note`): its people cannot sign in (after
+the right password: `403 { code: "company_suspended", error: "Your organisation's access is
+suspended. Contact your administrator." }`, shown on the sign-in page); every open session is refused
+on its next request with the same 403 and the header `X-Session-Ended: company_suspended` (the app
+shows the sign-in page with the message) and its session rows are marked revoked; API keys and
+ingestion answer 403 `company_suspended`; invitations cannot be accepted; the scheduled jobs (alert
+evaluation, pulse sends and reminders, weekly digest, sample data refresh) skip it. Reactivating lets
+people sign in again (sessions ended by the suspension stay ended).
+
+**Sign-in events and sessions** (migration `20261127000000_company_suspension_auth_events_sessions.sql`).
+`auth_events`: every sign-in (password, registration, invitation, SSO Google / Microsoft, password
+reset) and every failed one (unknown e-mail: only a keyed hash of the e-mail, no company; wrong
+password; deactivated; suspended company), with the client IP (`clientIp`), the location from
+Netlify's `x-nf-geo` header (base64 JSON: city, country, subdivision) or `x-country`, trusted only
+inside the Netlify function (nothing when absent, e.g. locally), the user agent and its browser / OS /
+device. `user_sessions`: one row per issued company session, its id is the token's `jti` (issued,
+expires by the company lifetime, persistent or browser session, method, IP / country / city at issue,
+last seen with IP and country, revoked when / by whom / why). The per-request check reads the row in
+the same query as the user (`loadAccessContext`, no extra round trip); a revoked row is refused like
+"signed out everywhere" (401 `session_ended`). `last_seen_at` is updated at most every 5 minutes, in
+the background. Sign out everywhere, a password change or reset, "sign out my other devices" and a
+suspension mark the rows revoked. Tokens from before this change have no `jti` and keep working.
+Both tables are kept 180 days (daily cleanup in `db-keepalive` / `server/jobs/cleanupCron.ts`).
 
 | Variable | Purpose |
 |---|---|

@@ -704,7 +704,7 @@ export async function runPulseReminders(today = todayUtc(), opts: { teamIds?: st
     `SELECT DISTINCT t.id, t.name, t.company_id, t.department_id
        FROM pulse_sends s
        JOIN teams t ON t.id = s.team_id AND t.is_active
-       JOIN companies c ON c.id = t.company_id AND c.is_active IS NOT FALSE
+       JOIN companies c ON c.id = t.company_id AND c.is_active IS NOT FALSE AND c.status <> 'suspended'
       WHERE s.kind = 'survey' AND s.recipients > 0 AND s.period_end > ?::date AND s.period_start <= ?::date
         AND (?::varchar[] IS NULL OR t.id = ANY(?::varchar[]))
       ORDER BY t.company_id, t.id`,
@@ -740,7 +740,7 @@ export async function runPulseAutoSend(today = todayUtc(), opts: { teamIds?: str
     `SELECT t.id, t.name, t.company_id, t.department_id, to_char(s.auto_send_from, 'YYYY-MM-DD') AS auto_send_from
        FROM pulse_settings s
        JOIN teams t ON t.id = s.team_id AND t.is_active
-       JOIN companies c ON c.id = t.company_id AND c.is_active IS NOT FALSE
+       JOIN companies c ON c.id = t.company_id AND c.is_active IS NOT FALSE AND c.status <> 'suspended'
       WHERE s.auto_send AND (?::varchar[] IS NULL OR t.id = ANY(?::varchar[]))
       ORDER BY t.company_id, t.id`,
     [opts.teamIds ?? null, opts.teamIds ?? null]

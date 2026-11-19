@@ -15,7 +15,9 @@ import { clientIp } from '../lib/requestContext';
 import { recordServerError } from '../lib/opsLog';
 import {
   clearSessionCookie, currentSessionPersistent, endUserSessions, issueSessionCookie, wantsPersistentSession, lifetimeHours, lifetimeSettingSql, refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE,
+  companyProblem, companyStatusSql, sessionIdOf, COMPANY_SUSPENDED, COMPANY_SUSPENDED_MESSAGE,
 } from '../lib/sessions';
+import { recordAuthEvent } from '../lib/authEvents';
 import { authenticateToken, type AuthRequest } from '../middleware/auth';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
 import { emailDomainOf, isPublicEmailDomain } from '../../src/lib/emailDomains';
@@ -187,7 +189,7 @@ router.post('/register', authLimiter, async (req, res) => {
       data: user
     });
 
-    await setSessionCookie(res, user.id);
+    await setSessionCookie(res, user.id, { method: 'registration' });
     user.assignments = await assignmentsOf(user);
 
     res.status(201).json({ user });
@@ -214,12 +216,16 @@ router.post('/login', authLimiter, async (req, res) => {
     // Get user
     const user = await queryOne<any>(
       `SELECT id, email, password_hash, first_name, last_name, role, 
-              company_id, department_id, primary_team_id, is_active
+              company_id, department_id, primary_team_id, is_active, ${companyStatusSql('users')} AS company_status
        FROM users WHERE LOWER(email) = LOWER(?)`,
       [email]
     );
 
+    // Sign-in events (server/lib/authEvents.ts): every failure with its reason; an unknown e-mail
+    // only as a keyed hash.
+    const failed = (reason: string) => recordAuthEvent(req, { outcome: 'failure', method: 'password', userId: user?.id ?? null, email, failureReason: reason });
     if (!user) {
+      await failed('unknown_email');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
     // From here the email belongs to a user: a failure is recorded in their company's user activity.
@@ -227,13 +233,20 @@ router.post('/login', authLimiter, async (req, res) => {
 
     // Check if user is inactive - return same error as invalid credentials for security
     if (!user.is_active) {
+      await failed('inactive');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // Verify password
-    const validPassword = await bcrypt.compare(password, user.password_hash);
+    const validPassword = typeof password === 'string' && !!user.password_hash && await bcrypt.compare(password, user.password_hash);
     if (!validPassword) {
+      await failed('wrong_password');
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    // A suspended organisation (companies.status): said only after the right password.
+    if (user.company_status === 'suspended') {
+      await failed('company_suspended');
+      return res.status(403).json({ error: COMPANY_SUSPENDED_MESSAGE, code: COMPANY_SUSPENDED.code });
     }
 
     // Update last login
@@ -250,7 +263,7 @@ router.post('/login', authLimiter, async (req, res) => {
     user.assignedTeams = teams.map(t => t.team_id);
 
     // "Keep me signed in": a persistent cookie; otherwise a browser-session cookie (server/lib/sessions.ts).
-    await setSessionCookie(res, user.id, { persistent });
+    await setSessionCookie(res, user.id, { persistent, method: 'password' });
     user.assignments = await assignmentsOf(user);
 
     res.json({ user });
@@ -287,7 +300,8 @@ router.post('/forgot-password', forgotPasswordIpLimiter, forgotPasswordEmailLimi
 // Choose the new password with the link's token. Never signs in: the person signs in afterwards.
 router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
   try {
-    await completePasswordReset(req.body?.token, req.body?.password, (userId) => noteActivityUser(res, userId));
+    const { userId } = await completePasswordReset(req.body?.token, req.body?.password, (id) => noteActivityUser(res, id));
+    await recordAuthEvent(req, { outcome: 'success', method: 'reset', userId });
     res.json({ message: 'Your password was changed. Sign in with your new password.' });
   } catch (error) {
     if (error instanceof PasswordResetError) return res.status(error.status).json({ error: error.message, code: error.code });
@@ -311,7 +325,7 @@ router.post('/sessions/sign-out-others', authenticateToken, async (req: AuthRequ
         departmentIds: [u?.department_id], subjectIds: [me.id],
       }, exec);
     });
-    await issueSessionCookie(res, me.id, JWT_SECRET, { persistent: currentSessionPersistent(req) });
+    await issueSessionCookie(res, me.id, JWT_SECRET, { persistent: currentSessionPersistent(req), method: 'reissue' });
     res.json({ message: 'You were signed out on all other devices. This device stays signed in.' });
   } catch (error) {
     console.error('Sign out other devices error:', (error as any)?.code ?? (error as Error)?.name ?? 'error');
@@ -346,10 +360,11 @@ router.get('/me', async (req, res) => {
       `SELECT u.id, u.email, u.first_name, u.last_name, u.role,
               u.company_id, u.department_id, u.primary_team_id, u.avatar_url,
               u.created_at, u.last_login, u.is_active, u.email_verified,
-              u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime,
+              u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime, ${companyStatusSql('u')} AS company_status,
+              (SELECT s.revoked_at FROM user_sessions s WHERE s.id = ?::text AND s.user_id = u.id) AS session_revoked_at,
               (SELECT COALESCE((c.settings->>'hideSampleDataNotice')::boolean, false) FROM companies c WHERE c.id = u.company_id) AS hide_sample_notice
        FROM users u WHERE u.id = ?`,
-      [decoded.userId]
+      [sessionIdOf(decoded), decoded.userId]
     );
 
     if (!user) {
@@ -363,8 +378,10 @@ router.get('/me', async (req, res) => {
     }
 
     // Signed out everywhere, or older than the company's sign-in lifetime.
-    const problem = sessionProblem(decoded, user);
+    const problem = companyProblem(user) ?? sessionProblem(decoded, user);
     if (problem) return refuseSession(res, problem);
+    delete user.company_status;
+    delete user.session_revoked_at;
     const sessionHours = lifetimeHours(user.session_lifetime);
     delete user.sessions_valid_after;
     delete user.session_lifetime;

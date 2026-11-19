@@ -30,10 +30,15 @@ export async function authenticateApiKey(req: ApiKeyRequest, res: Response, next
       return res.status(401).json({ error: 'API key required (Authorization: Bearer igk_…)' });
     }
     const row = await queryOne<any>(
-      'SELECT id, company_id, name FROM api_keys WHERE key_hash = ? AND revoked_at IS NULL',
+      `SELECT k.id, k.company_id, k.name, c.status AS company_status
+         FROM api_keys k JOIN companies c ON c.id = k.company_id WHERE k.key_hash = ? AND k.revoked_at IS NULL`,
       [hashApiKey(token)]
     );
     if (!row) return res.status(401).json({ error: 'Invalid or revoked API key' });
+    // A suspended organisation (companies.status): its keys are refused until it is reactivated.
+    if (row.company_status === 'suspended') {
+      return res.status(403).json({ error: "Your organisation's access is suspended. Contact your administrator.", code: 'company_suspended' });
+    }
     req.apiKey = { id: row.id, companyId: row.company_id, name: row.name };
     // Best effort; never blocks the request.
     query('UPDATE api_keys SET last_used_at = now() WHERE id = ?', [row.id]).catch(() => undefined);

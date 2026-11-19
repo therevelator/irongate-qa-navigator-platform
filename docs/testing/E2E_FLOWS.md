@@ -232,20 +232,25 @@ Derived from the code, then checked against the documentation:
 | F13.2 | Undo a reversible change (once) | A, M (within rules) | L E V | ORG-30 | ORG-30 (no second undo) |
 | F13.3 | Activity CSV export | A M | L E V | API tests (`audit.test.ts`) and the shared export button (F5.8) | — |
 | F13.4 | User activity: list, filters, request id search, CSV | A | M L E V | ORG-32, legacy:platform-operator "super admins see the user activity…" | ORG-32 unknown request id, ORG-33, legacy:platform-operator (manager refused, API 403) |
-| F13.5 | Platform support entries in the company's Activity log | A (reads) | — | OPS-06 | — |
+| F13.5 | Platform support visits and changes do NOT appear in the company's Activity log | A (reads) | — | OPS-06 | — |
 
 ## 14. Platform support (operator)
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
 | F14.1 | Own sign-in at /operator (8-hour session, survives a reload) | P | Every company user | legacy:platform-operator, OPS-02 | legacy:platform-operator (wrong password; a company admin's credentials refused), OPS-01 (A M L E V: no entry, sign-in asked) |
-| F14.2 | Overview tabs: overview, error search by request id, access log | P | — | OPS-03 | OPS-03 unknown request id |
-| F14.3 | Open a company with a reason (≥ 3 characters), sections | P | — | legacy:platform-operator, OPS-06 | OPS-04 short reason, Cancel |
-| F14.4 | Repair actions (reason + confirmation), errors with request id | P | — | legacy:platform-operator | OPS-05 failed action shows the request id |
+| F14.2 | Overview tabs: overview (status badges, sessions, sign-ins, jobs or "No runs recorded yet", exact table counts), platform sign-ins, error search by request id; no access log tab | P | — | legacy:platform-operator, OPS-03 | OPS-03 unknown request id |
+| F14.3 | Open a company (no reason asked), sections | P | — | legacy:platform-operator, OPS-06 | — |
+| F14.4 | Repairs run at once; destructive actions wait for the in-page confirmation; errors with request id | P | — | legacy:platform-operator | OPS-04 confirmation tick / Cancel, OPS-05 failed action shows the request id |
 | F14.5 | Sign out | P | — | legacy:platform-operator, OPS-02 | — |
 | F14.6 | Phone layout | P | — | legacy:platform-operator "works at 390 px…" | — |
 | F14.7 | Refresh sample data now (started in the background on Netlify, run directly elsewhere) | P | — | OPS-07 | OPS-05 failed action; API `platform-operator.test.ts` OP-011 (failed start, off) |
 | F14.8 | Every module of a company in detail (all developer rows, single pulse answers and who answered, module rows); secrets never shown | P | — | OPS-08 | API `platform-operator.test.ts` OP-007 (no hash, token, webhook or credential) |
+| F14.9 | Create a company (first super admin by password), add a department, a team and a person | P | — | OPC-01 | OPC-01 duplicate e-mail refused with the company app's message; API `operator-crud.test.ts` |
+| F14.10 | A person's page: sign-in history, sessions with status, Revoke one session | P | — | OPC-02 | API `auth-events-sessions.test.ts` AE-005 (other sessions stay; another company's session 404) |
+| F14.11 | Suspend a company: Suspended badge; its people see "access is suspended" at sign-in and on their open session; reactivate | P | — | OPC-03 | API `auth-events-sessions.test.ts` SU-001 (API keys, invitations), SU-002 (jobs skip) |
+| F14.12 | Delete a team / a company only with the typed name | P | — | OPC-04 | OPC-04 wrong name keeps the button disabled |
+| F14.13 | Last views per team, sessions, access log with CSV, sign-ins filtered | P | — | OPC-05 | — |
 
 ## 15. Accessibility
 

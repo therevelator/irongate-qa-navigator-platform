@@ -16,6 +16,8 @@ export interface ActivityFilters {
   entityId?: string | null;
   errorsOnly?: boolean;
   requestId?: string | null;
+  /** Client IP (exact). */
+  ip?: string | null;
   /** Cursor: the id of the last row of the previous page. */
   before?: string | null;
 }
@@ -32,6 +34,7 @@ export function filtersFromQuery(q: any): ActivityFilters {
     teamId: id(q?.teamId), entityId: id(q?.entityId), errorsOnly: q?.errors === 'true',
     requestId: str(q?.requestId) && /^[A-Za-z0-9._:-]{4,64}$/.test(String(q.requestId).trim()) ? String(q.requestId).trim() : null,
     before: id(q?.before),
+    ip: str(q?.ip) && /^[0-9A-Fa-f:.]{2,64}$/.test(String(q.ip).trim()) ? String(q.ip).trim() : null,
   };
 }
 
@@ -56,6 +59,7 @@ export async function listUserActivity(companyId: string, f: ActivityFilters, li
   if (f.entityId) { where += ' AND (a.entity_id = ? OR a.team_id = ?)'; params.push(f.entityId, f.entityId); }
   if (f.errorsOnly) where += ' AND a.status >= 400';
   if (f.requestId) { where += ' AND a.request_id = ?'; params.push(f.requestId); }
+  if (f.ip) { where += ' AND a.ip = ?'; params.push(f.ip); }
   if (f.before) {
     where += ' AND (a.created_at, a.id) < (SELECT created_at, id FROM user_activity WHERE id = ? AND company_id = ?)';
     params.push(f.before, companyId);

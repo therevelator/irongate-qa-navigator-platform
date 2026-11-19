@@ -25,7 +25,7 @@ test.describe('Platform support panel', { tag: ['@area:operator'] }, () => {
   test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
-  test('the operator signs in at /operator, opens a company with a reason, runs an action and signs out', async ({ page }) => {
+  test('the operator signs in at /operator, opens a company, runs an action and signs out', async ({ page }) => {
     await ensureOperator();
     await page.goto('http://localhost:5173/operator');
     await expect(page.locator('[data-testid="operator-banner"]')).toContainText('IronGate platform support');
@@ -40,24 +40,21 @@ test.describe('Platform support panel', { tag: ['@area:operator'] }, () => {
     await page.click('[data-testid="operator-enter"]');
     await expect(page.locator('[data-testid="operator-overview"]')).toBeVisible({ timeout: 30000 });
     await expect(page.locator('[data-testid="operator-who"]')).toHaveText(OPERATOR.name);
-    await expect(page.locator('[data-testid="operator-jobs"]')).toContainText('db-keepalive');
+    // Scheduled jobs: their last runs, or "No runs recorded yet" on a database without any.
+    await expect(page.locator('[data-testid="operator-jobs"]').or(page.locator('[data-testid="operator-jobs-empty"]'))).toBeVisible();
+    await expect(page.locator('[data-testid="operator-tables"]')).toContainText('companies');
 
+    // No reason is asked for: the company opens at once.
     await page.locator('[data-testid="operator-open-company"]').first().click();
-    await expect(page.locator('[data-testid="operator-open-confirm"]')).toBeDisabled();
-    await page.fill('[data-testid="operator-open-reason"]', 'E2E smoke test');
-    await page.click('[data-testid="operator-open-confirm"]');
     await expect(page.locator('[data-testid="operator-company"]')).toBeVisible();
     await expect(page.locator('[data-testid="op-organisation"]')).toBeVisible({ timeout: 30000 });
     await page.getByRole('button', { name: 'Users', exact: true }).click();
     await expect(page.locator('[data-testid="op-users"]')).toBeVisible({ timeout: 30000 });
 
-    // A repair action needs a reason and a confirmation.
+    // A harmless repair runs at once (no dialog); only destructive actions are confirmed in the page.
     await page.click('[data-testid="op-evaluate-alerts"]');
-    await expect(page.locator('[data-testid="op-action-run"]')).toBeDisabled();
-    await page.fill('[data-testid="op-action-reason"]', 'E2E smoke test');
-    await page.check('[data-testid="op-action-confirm-check"]');
-    await page.click('[data-testid="op-action-run"]');
-    await expect(page.locator('[data-testid="op-action-run"]')).toHaveCount(0, { timeout: 30000 });
+    await expect(page.getByText(/Alerts evaluated/)).toBeVisible({ timeout: 30000 });
+    await expect(page.locator('[data-testid="op-confirm-dialog"]')).toHaveCount(0);
 
     await page.click('[data-testid="operator-leave"]');
     await expect(page.locator('[data-testid="operator-signin"]')).toBeVisible();
@@ -68,9 +65,10 @@ test.describe('Platform support panel', { tag: ['@area:operator'] }, () => {
     await operatorSignIn(page);
     await noSidewaysScroll(page);
     await page.locator('[data-testid="operator-open-company"]').first().click();
-    await page.fill('[data-testid="operator-open-reason"]', 'E2E phone check');
-    await page.click('[data-testid="operator-open-confirm"]');
     await expect(page.locator('[data-testid="op-organisation"]')).toBeVisible({ timeout: 30000 });
+    await noSidewaysScroll(page);
+    await page.getByRole('button', { name: 'Users', exact: true }).click();
+    await expect(page.locator('[data-testid="op-users"]')).toBeVisible({ timeout: 30000 });
     await noSidewaysScroll(page);
   });
 

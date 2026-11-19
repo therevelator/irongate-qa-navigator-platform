@@ -7,8 +7,9 @@ import { operatorSignIn } from '../support/operator';
 /**
  * Platform support panel (src/components/operator/*), the parts tests/e2e/platform-operator.spec.ts
  * does not cover: company users never get in, the session survives a reload until Sign out, the
- * tabs, the request id search, a reason that is too short, a failed repair action showing its
- * request id, full data views, and the transparency entry in the company's own Activity log.
+ * tabs, the request id search, the in-page confirmation of a destructive action, a failed repair
+ * action showing its request id, full data views, and that nothing of the visit reaches the
+ * company's own Activity log (operator activity is not logged).
  * The operator is a platform_operators account (tests/e2e/support/operator.ts), not a company user.
  */
 
@@ -36,32 +37,33 @@ test.describe('Platform support panel', { tag: [TAG.area('operator')] }, () => {
     await expect(page.getByTestId('operator-signin')).toBeVisible();
   });
 
-  test('OPS-03 tabs: error search by request id (none found) and the access log', async ({ page }) => {
+  test('OPS-03 tabs: error search by request id (none found) and platform sign-ins; no access log tab', async ({ page }) => {
     await operatorSignIn(page);
     await page.getByRole('button', { name: 'Error search', exact: true }).click();
     await page.getByTestId('operator-rid').fill(`no-such-request-${uid()}`);
     await page.getByTestId('operator-rid-search').click();
     await expect(page.locator('#main-scroll')).toContainText(/No (server )?errors|Nothing|No matching/i);
-    await page.getByRole('button', { name: 'Access log', exact: true }).click();
-    await expect(page.locator('#main-scroll')).toContainText('sign_in.ok');
+    await page.getByRole('button', { name: 'Sign-ins', exact: true }).click();
+    await expect(page.getByTestId('op-auth-events')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Access log', exact: true })).toHaveCount(0);
   });
 
-  test('OPS-04 a reason shorter than 3 characters cannot open a company; Cancel closes', { tag: [TAG.negative] }, async ({ page }) => {
+  test('OPS-04 a destructive action waits for the confirmation tick; Cancel changes nothing', { tag: [TAG.negative] }, async ({ freshCompany, page }) => {
     await operatorSignIn(page);
-    await page.getByTestId('operator-open-company').first().click();
-    await page.getByTestId('operator-open-reason').fill('  x ');
-    await expect(page.getByTestId('operator-open-confirm')).toBeDisabled();
+    await page.getByRole('row', { name: new RegExp(freshCompany.name) }).getByTestId('operator-open-company').click();
+    await page.getByRole('button', { name: 'Users', exact: true }).click();
+    await page.getByTestId(`op-user-row-${freshCompany.email}`).getByTestId('op-user-deactivate').click();
+    await expect(page.getByTestId('op-confirm-dialog')).toBeVisible();
+    await expect(page.getByTestId('op-confirm-run')).toBeDisabled();
     await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByTestId('operator-overview')).toBeVisible();
+    await expect(page.getByTestId('op-confirm-dialog')).toHaveCount(0);
+    await expect(page.getByTestId(`op-user-row-${freshCompany.email}`)).toContainText('Active');
   });
 
   test('OPS-05 a failed repair action shows the error with its request id', { tag: [TAG.negative] }, async ({ page }) => {
     await operatorSignIn(page);
     await page.route(`${API_URL}/operator/actions/**`, (r) => r.fulfill({ status: 500, json: { error: 'Internal server error', requestId: 'rid-op-500' } }));
     await page.getByTestId('op-demo-refresh').click();
-    await page.getByTestId('op-action-reason').fill('UI test of a failing action');
-    await page.getByTestId('op-action-confirm-check').check();
-    await page.getByTestId('op-action-run').click();
     await expect(page.getByText('Internal server error (request id rid-op-500)')).toBeVisible();
   });
 
@@ -76,28 +78,19 @@ test.describe('Platform support panel', { tag: [TAG.area('operator')] }, () => {
         ? { status: 202, json: { started: true, mode: 'background' } }
         : { status: 200, json: { started: true, mode: 'direct', result: { insertedTotal: 5, companies: [] } } });
     });
+    // Not destructive: it runs at once, with no reason and no dialog.
     await page.getByRole('button', { name: 'Refresh sample data now' }).click();
-    await expect(page.getByRole('dialog')).toContainText('runs in the background for a few minutes');
-    await expect(page.getByTestId('op-action-run')).toBeDisabled();
-    await page.getByTestId('op-action-reason').fill('Sample data is a day behind');
-    await page.getByTestId('op-action-confirm-check').check();
-    await page.getByRole('button', { name: 'Refresh now' }).click();
     await expect(page.getByText('Sample data refresh started. It runs in the background for a few minutes.')).toBeVisible();
-    expect(bodies[0]).toEqual({ reason: 'Sample data is a day behind', confirm: true });
+    expect(bodies[0]).toEqual({});
 
     mode = 'direct';
     await page.getByRole('button', { name: 'Refresh sample data now' }).click();
-    await page.getByTestId('op-action-reason').fill('Sample data is a day behind');
-    await page.getByTestId('op-action-confirm-check').check();
-    await page.getByRole('button', { name: 'Refresh now' }).click();
     await expect(page.getByText('Sample data refreshed: 5 new rows.')).toBeVisible();
   });
 
   test('OPS-08 every module of a company in detail: all developer rows, single pulse answers, module data', async ({ page }) => {
     await operatorSignIn(page);
     await page.getByRole('row', { name: /Northwind/ }).getByTestId('operator-open-company').click();
-    await page.getByTestId('operator-open-reason').fill('UI test: full data views');
-    await page.getByTestId('operator-open-confirm').click();
     await expect(page.getByTestId('op-organisation')).toBeVisible({ timeout: 30000 });
     await page.getByRole('button', { name: 'Data', exact: true }).click();
     await expect(page.getByTestId('op-developers')).toContainText('Opted in', { timeout: 30000 });
@@ -109,19 +102,20 @@ test.describe('Platform support panel', { tag: [TAG.area('operator')] }, () => {
     await expect(page.getByTestId('op-module-pipeline_runs')).toBeVisible();
   });
 
-  test('OPS-06 opening a company is written to that company\'s Activity log with the reason', async ({ freshCompany, signInAs, page }) => {
-    const reason = `UI test reason ${uid()}`;
+  test('OPS-06 nothing of the operator\'s visit or changes reaches the company\'s Activity log', async ({ freshCompany, signInAs, page }) => {
+    const dept = `Ops dept ${uid()}`;
     await operatorSignIn(page);
     await page.getByRole('row', { name: new RegExp(freshCompany.name) }).getByTestId('operator-open-company').click();
-    await page.getByTestId('operator-open-reason').fill(reason);
-    await page.getByTestId('operator-open-confirm').click();
     await expect(page.getByTestId('op-organisation')).toBeVisible({ timeout: 30000 });
+    await page.getByTestId('op-add-department').click();
+    await page.getByTestId('op-f-name').fill(dept);
+    await page.getByTestId('op-form-submit').click();
+    await expect(page.getByTestId('op-organisation')).toContainText(dept, { timeout: 30000 });
     await page.getByTestId('operator-leave').click();
 
     await signInAs(freshCompany, '/activity');
-    // One entry per section opened (organisation, ...), each with the reason, by platform support.
-    const rows = page.getByTestId('activity-row').filter({ hasText: reason });
-    await expect(rows.first()).toBeVisible();
-    for (const row of await rows.all()) await expect(row).toContainText('IronGate platform support');
+    await expect(page.getByTestId('activity-row').first()).toBeVisible({ timeout: 30000 }); // the registration's own entry
+    await expect(page.locator('#main-scroll')).not.toContainText('platform support', { ignoreCase: true });
+    await expect(page.locator('#main-scroll')).not.toContainText(dept);
   });
 });

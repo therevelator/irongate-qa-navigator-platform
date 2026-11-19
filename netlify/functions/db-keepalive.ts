@@ -14,7 +14,7 @@ export default async () => {
   try {
     await pool.query('SELECT 1');
     const removed = await cleanupOperationalLogs();
-    const summary = `ok in ${Date.now() - started} ms; removed ${removed.serverErrors} errors, ${removed.userActivity} activity rows, ${removed.jobRuns} job runs`;
+    const summary = `ok in ${Date.now() - started} ms; removed ${removed.serverErrors} errors, ${removed.userActivity} activity rows, ${removed.jobRuns} job runs, ${removed.authEvents} sign-in events, ${removed.sessions} sessions`;
     console.log(`[db-keepalive] ${summary}`);
     await recordJobOutcome('db-keepalive', true, summary, new Date(started));
     return new Response('ok');

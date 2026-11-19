@@ -105,11 +105,13 @@ const SAMPLE_MARKER_TABLES = [
 ] as const;
 
 /** Active non-demo teams that already hold demo (sample) rows, per company. */
-export async function teamsWithSampleData(db: pg.Pool | pg.PoolClient): Promise<Map<string, string[]>> {
+export async function teamsWithSampleData(db: pg.Pool | pg.PoolClient, opts: { skipSuspended?: boolean } = {}): Promise<Map<string, string[]>> {
   const union = SAMPLE_MARKER_TABLES.map((t) => `SELECT team_id FROM ${t} WHERE id LIKE 'demo-%'`).join(' UNION ');
+  // skipSuspended: the scheduled refresh leaves suspended organisations (companies.status) alone.
+  const suspended = opts.skipSuspended ? `AND NOT EXISTS (SELECT 1 FROM companies c WHERE c.id = t.company_id AND c.status = 'suspended')` : '';
   const rows = (await db.query(
     `SELECT t.company_id, t.id FROM teams t
-      WHERE t.is_active = TRUE AND t.id NOT LIKE 'demo-%' AND t.id IN (${union})
+      WHERE t.is_active = TRUE AND t.id NOT LIKE 'demo-%' AND t.id IN (${union}) ${suspended}
       ORDER BY t.company_id, t.id`
   )).rows as Array<{ company_id: string; id: string }>;
   const out = new Map<string, string[]>();
@@ -303,8 +305,10 @@ export interface RefreshResult {
  */
 export async function runRefreshDates(opts: { today?: string } = {}): Promise<RefreshResult> {
   const today = opts.today ?? todayUtc();
-  const demo = (await isDemoSeeded()) ? await runDemoSeed({ today }) : null;
-  const sample = await teamsWithSampleData(pool);
+  // A suspended organisation (companies.status) is skipped, the demo company included.
+  const demoSuspended = (await pool.query(`SELECT 1 FROM companies WHERE id = $1 AND status = 'suspended'`, [DEMO_COMPANY_ID])).rowCount;
+  const demo = !demoSuspended && (await isDemoSeeded()) ? await runDemoSeed({ today }) : null;
+  const sample = await teamsWithSampleData(pool, { skipSuspended: true });
   const companyIds = [...sample.keys()];
   const fill = companyIds.length
     ? await runFillExisting({ today, companyIds, onlyTeamIds: [...sample.values()].flat() })

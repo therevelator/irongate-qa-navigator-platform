@@ -4,7 +4,6 @@ import jwt from 'jsonwebtoken';
 import type express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
-import { recordAudit } from './audit';
 import { clientIp, ctxOf } from './requestContext';
 
 /**
@@ -23,21 +22,19 @@ import { clientIp, ctxOf } from './requestContext';
  *             platform_operator_sessions; "Sign out" ends the row (revocation on every instance).
  *   Network:  PLATFORM_OPERATOR_ALLOWED_IPS (comma-separated, optional): other client IPs are
  *             refused (clientIp: Netlify's x-nf-client-connection-ip, else req.ip).
- *   Logging:  platform_access_log (every access, platform-wide) and, per company, a readable
- *             entry in that company's audit_log by "IronGate platform support" (platform_support.view,
- *             throttled to one per company and section per 30 minutes; platform_support.action for
- *             every repair).
+ *   Logging:  none. Nothing an operator does is logged: no company audit_log entry (recordAudit is a
+ *             no-op inside an operator request, server/lib/platformContext.ts), no user_activity row,
+ *             and the former platform_access_log is no longer written (the table is left in place,
+ *             unused). Operators give no reason (support tickets live in a separate system).
  */
 
 export const OPERATOR_TOKEN_HEADER = 'x-operator-token';
-export const OPERATOR_REASON_HEADER = 'x-operator-reason';
 export const OPERATOR_COOKIE = 'irongate_operator';
 export const OPERATOR_AUDIENCE = 'irongate-platform-operator';
 export const OPERATOR_TOKEN_TYPE = 'platform_operator';
 export const OPERATOR_SESSION_MINUTES = 8 * 60;
 export const OPERATOR_MAX_FAILURES = 5;
 export const OPERATOR_LOCK_MINUTES = 15;
-export const VIEW_THROTTLE_MINUTES = 30;
 /** bcrypt cost of operator passwords (the hash is $2b$12$…; $2a$ hashes verify too). */
 export const OPERATOR_BCRYPT_COST = 12;
 
@@ -159,66 +156,6 @@ export async function isOperatorEmail(email: unknown): Promise<boolean> {
   return !!r;
 }
 
-/* ------------------------------------------------------------------------------------------
- * Logging
- * ---------------------------------------------------------------------------------------- */
-
 export interface OperatorRequest extends express.Request {
   operator?: { operatorId: string; email: string; name: string; sessionId: string; expiresAt: string };
-}
-
-export async function logPlatformAccess(req: OperatorRequest, entry: { action: string; companyId?: string | null; section?: string | null; reason?: string | null; detail?: unknown; email?: string | null; userId?: string | null }): Promise<void> {
-  await query(
-    `INSERT INTO platform_access_log (operator_user_id, operator_email, action, company_id, section, reason, detail, ip, request_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)`,
-    [
-      entry.userId ?? req.operator?.operatorId ?? null, (entry.email ?? req.operator?.email ?? null)?.slice(0, 255) ?? null,
-      entry.action, entry.companyId ?? null, entry.section ?? null, entry.reason?.slice(0, 500) ?? null,
-      entry.detail === undefined ? null : JSON.stringify(entry.detail), clientIp(req), ctxOf(req).requestId,
-    ],
-  ).catch((e) => console.error(`[operator] access log write failed (${(e as any)?.code ?? 'error'})`));
-}
-
-export const SECTION_LABELS: Record<string, string> = {
-  overview: 'the company overview', organisation: 'the organisation', users: 'users and invitations', settings: 'settings and targets',
-  data: 'metric data', modules: 'the analytics module data', alerts: 'alerts and actions', pulse: 'the wellbeing pulse', activity: 'the activity log',
-  user_activity: 'the user activity log', errors: 'server errors',
-};
-
-/** A view of a company section: platform log always, the company's audit_log at most once per 30 minutes. */
-export async function recordCompanyView(req: OperatorRequest, companyId: string, section: string, reason: string): Promise<void> {
-  await logPlatformAccess(req, { action: 'view', companyId, section, reason });
-  try {
-    const recent = await queryOne<any>(
-      `SELECT 1 FROM audit_log WHERE company_id = ? AND action = 'platform_support.view' AND after->>'section' = ?
-          AND created_at > now() - make_interval(mins => ?)`,
-      [companyId, section, VIEW_THROTTLE_MINUTES],
-    );
-    if (recent) return;
-    await recordAudit({
-      companyId, actorId: null, action: 'platform_support.view', entityType: 'company', entityId: companyId,
-      summary: `Platform support viewed ${SECTION_LABELS[section] ?? section}. Reason: ${reason}`,
-      after: { section, reason, by: 'IronGate platform support' }, subjectIds: [companyId],
-    });
-  } catch (e) {
-    console.error(`[operator] company audit write failed (${(e as any)?.code ?? 'error'})`);
-  }
-}
-
-/** A repair action: platform log and the company's audit_log, always. */
-export async function recordCompanyAction(req: OperatorRequest, companyId: string | null, action: string, summary: string, reason: string, detail?: unknown): Promise<void> {
-  await logPlatformAccess(req, { action: 'action', companyId, section: action, reason, detail });
-  if (!companyId) return;
-  await recordAudit({
-    companyId, actorId: null, action: 'platform_support.action', entityType: 'company', entityId: companyId,
-    summary: `Platform support: ${summary}. Reason: ${reason}`.slice(0, 500),
-    after: { action, reason, by: 'IronGate platform support', ...(detail && typeof detail === 'object' ? { detail } : {}) }, subjectIds: [companyId],
-  });
-}
-
-/** Reason text: required, 3 to 300 characters, one line. */
-export function cleanReason(v: unknown): string | null {
-  if (typeof v !== 'string') return null;
-  const s = v.replace(/[\r\n\t]+/g, ' ').trim();
-  return s.length >= 3 && s.length <= 300 ? s : null;
 }

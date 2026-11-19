@@ -468,7 +468,7 @@ export async function afterIngestionRejected(companyId: string, teamIds: string[
 
 /** Scheduled run: every active company — evaluate, refresh action outcomes, send pending notifications. */
 export async function runScheduledEvaluation(): Promise<Array<{ companyId: string; opened: number; resolved: number }>> {
-  const companies = await query<any[]>('SELECT id FROM companies WHERE is_active IS NOT FALSE ORDER BY id');
+  const companies = await query<any[]>("SELECT id FROM companies WHERE is_active IS NOT FALSE AND status <> 'suspended' ORDER BY id");
   const out: Array<{ companyId: string; opened: number; resolved: number }> = [];
   const { refreshActionOutcomes } = await import('./actions');
   for (const c of companies) {

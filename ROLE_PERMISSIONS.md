@@ -92,24 +92,19 @@ The last active super admin of a company cannot lose that role or be deactivated
 The platform operator is the product owner's support access across **all** companies. It is not a
 role assignment and no company role grants it.
 
-- **Who**: a signed-in user whose e-mail is listed in `PLATFORM_OPERATOR_EMAILS` (comma-separated,
-  case-insensitive). The list is checked again on every request. Unset or empty: the feature is off
-  and every `/api/operator` route answers 404.
-- **Step-up**: entering the panel asks for the password again (5 failed attempts per 15 minutes,
-  every failure logged). An account without a usable password (single sign-on only) must set one
-  first. Success gives a 30-minute operator token, signed with a key derived from `JWT_SECRET`
-  with its own audience, so a session token can never act as it and it is never a session. The web
-  app keeps it in memory only; **Leave** ends it on the server.
+- **Who**: IronGate's own platform operators (table `platform_operators`), never users of a company;
+  own sign-in at `/operator` (8-hour session, lockout after 5 failures, rate limited per IP).
+  No active operator: the feature is off and every `/api/operator` route answers 404.
 - **Network**: `PLATFORM_OPERATOR_ALLOWED_IPS` (optional) refuses other client addresses.
-- **May**: read every company's data except protected data, and run a few logged repair actions
-  (demo refresh, recompute KPI snapshots, re-run alert evaluation, resend an invitation,
-  deactivate / reactivate a user, clear a sign-in lockout). Each needs a reason and a confirmation.
-- **May not**: act as a user (no impersonation), run SQL, delete customer data, or see password
-  hashes, API key hashes, the Slack webhook and secret settings, invitation and survey link tokens,
-  single survey answers or comments, or developer metrics of people who have not opted in.
-- **Transparency**: opening a company section writes "Platform support viewed …" with the reason to
-  that company's Activity log (at most once per section per 30 minutes); every action writes
-  "Platform support: …". All operator access is also kept in `platform_access_log`.
+- **May**: read every company's data except secrets, and change everything in any company: companies
+  (create, edit, sign-in lifetime, suspend / reactivate, delete), departments, teams, people, role
+  assignments, invitations, targets, configuration, update intervals, alert rules, API keys, saved
+  views and single sessions. Changes the company app offers run through the company app's own rules
+  (as a super admin of that company). Destructive actions are confirmed in the page. No reason is asked.
+- **May not**: act as a user (no impersonation), run SQL, or see password hashes, API key hashes (a new
+  key once, at creation), the Slack webhook and secret settings, invitation, reset and survey link tokens.
+- **Logging**: none. Operator views and changes are not written to the company's Activity log, its
+  user activity log, or any platform log.
 
 ## Sign-in
 

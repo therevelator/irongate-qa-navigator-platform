@@ -19,8 +19,8 @@ import { inBackground, onFlush } from './opsLog';
  * Not recorded: /health, static files, OPTIONS, the session check (GET /api/auth/me), the
  * wellbeing pulse answers (their time could be matched to an anonymous answer), the
  * user activity screen's own list requests (opening it is recorded as a screen view and its CSV
- * export as an export), and platform operator requests (/api/operator: recorded in
- * platform_access_log and the company's audit_log instead).
+ * export as an export), and platform operator requests (/api/operator: operator activity is not
+ * logged anywhere).
  *
  * Writes are buffered and inserted in batches in the background (never blocking or failing a
  * request); the Netlify function drains the buffer before it returns (flushBackgroundWrites).

@@ -143,6 +143,11 @@ export async function acceptInvitation(args: {
       const found = byId ? null : await findByToken(args.token);
       throw new InvitationError(found ? 410 : 404, found ? statusMessage(found.status) : 'This invitation link is not valid.', found?.status ?? 'invalid');
     }
+    // A suspended organisation (companies.status) admits nobody new (the transaction rolls back).
+    const [co] = await exec<any>('SELECT status FROM companies WHERE id = ?', [inv.company_id]);
+    if (co?.status === 'suspended') {
+      throw new InvitationError(403, "Your organisation's access is suspended. Contact your administrator.", 'company_suspended');
+    }
     if (args.verifiedEmail && args.verifiedEmail.toLowerCase() !== String(inv.email).toLowerCase()) {
       throw new InvitationError(403, 'This invitation is for a different email address than the account you signed in with.');
     }

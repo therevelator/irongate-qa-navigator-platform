@@ -13,7 +13,7 @@ if (process.env.LOG_CLEANUP_CRON !== 'off' && !process.env.NETLIFY && !process.e
     const started = new Date();
     try {
       const r = await cleanupOperationalLogs();
-      await recordJobOutcome('db-keepalive', true, `cleanup: removed ${r.serverErrors} errors, ${r.userActivity} activity rows, ${r.jobRuns} job runs`, started);
+      await recordJobOutcome('db-keepalive', true, `cleanup: removed ${r.serverErrors} errors, ${r.userActivity} activity rows, ${r.jobRuns} job runs, ${r.authEvents} sign-in events, ${r.sessions} sessions`, started);
     } catch (e) {
       console.error('[cleanup] failed:', (e as Error)?.message ?? e);
       await recordJobOutcome('db-keepalive', false, 'cleanup failed', started);

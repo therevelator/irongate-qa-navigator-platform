@@ -1,18 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { KeyRound, LogOut, ShieldAlert } from 'lucide-react';
-import Modal from '../Modal';
+import { KeyRound, LogOut, Plus, ShieldAlert } from 'lucide-react';
 import { Toaster } from 'react-hot-toast';
 import { Badge, Page, PageIntro, SegmentedControl, StatTile, buttonClass, cx, inputClass } from '../ui';
 import { fetchOperatorStatus, onOperatorSessionChange, opFetch, operatorSession, operatorSignIn, operatorSignOut, type OperatorStatus } from '../../lib/operatorClient';
-import { DataTable, ErrorText, OkBadge, Section, ActionDialog, type RepairAction } from './OperatorBits';
+import { CompanyStatusBadge, DataTable, ErrorText, FormDialog, OkBadge, Section, useOpActions, type FormSpec } from './OperatorBits';
 import { fmtBytes, fmtDate } from './format';
 import OperatorCompany, { ErrorRows } from './OperatorCompany';
+import AuthEventsList from './OperatorAuthEvents';
 
 /**
  * Platform support (/operator): IronGate's own operators (platform_operators), not users of any
  * company. Own sign-in (e-mail + password, 8-hour session in an httpOnly cookie), outside the
- * company app. Every company opened and every repair action is recorded in that company's
- * Activity log as "IronGate platform support".
+ * company app. Full access to every company; nothing an operator does is logged and no reason is
+ * asked for. Destructive actions are confirmed in the page.
  */
 
 const useSession = () => {
@@ -42,9 +42,7 @@ const SignIn: React.FC = () => {
   return (
     <div className="mx-auto mt-10 max-w-md rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900" data-testid="operator-signin">
       <div className="mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><KeyRound size={18} /><h1 className="text-base font-semibold">Platform support sign-in</h1></div>
-      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
-        For IronGate platform operators only. Company accounts cannot sign in here. Every company you open is recorded in that company's Activity log.
-      </p>
+      <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">For IronGate platform operators only. Company accounts cannot sign in here.</p>
       <form onSubmit={submit} className="space-y-3">
         <div>
           <label htmlFor="op-email" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">E-mail address</label>
@@ -61,15 +59,13 @@ const SignIn: React.FC = () => {
   );
 };
 
-type Screen = 'overview' | 'errors' | 'access';
+type Screen = 'overview' | 'sign-ins' | 'errors';
 
 const OperatorPanel: React.FC = () => {
   const [status, setStatus] = useState<OperatorStatus | null>(null);
   const session = useSession();
   const [screen, setScreen] = useState<Screen>('overview');
-  const [company, setCompany] = useState<{ id: string; name: string; reason: string } | null>(null);
-  const [pending, setPending] = useState<{ id: string; name: string } | null>(null);
-  const [reason, setReason] = useState('');
+  const [company, setCompany] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => { document.title = 'IronGate platform support'; fetchOperatorStatus().then(setStatus); }, []);
   const signOut = useCallback(async () => { await operatorSignOut(); setCompany(null); }, []);
@@ -77,9 +73,7 @@ const OperatorPanel: React.FC = () => {
   const shell = (children: React.ReactNode) => (
     <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 sm:px-8 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100" data-testid="operator-banner">
-        <p className="flex items-start gap-2"><ShieldAlert size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
-          <span><strong>IronGate platform support</strong> — every company you open is recorded in its Activity log.</span>
-        </p>
+        <p className="flex items-center gap-2"><ShieldAlert size={16} className="flex-shrink-0" aria-hidden="true" /><strong>IronGate platform support</strong></p>
         {session && (
           <div className="flex items-center gap-3">
             <span data-testid="operator-who">{session.name}</span>
@@ -100,56 +94,89 @@ const OperatorPanel: React.FC = () => {
   return shell(
     <Page>
       {company ? (
-        <OperatorCompany company={company} reason={company.reason} onBack={() => setCompany(null)} />
+        <OperatorCompany company={company} onBack={() => setCompany(null)} />
       ) : (
         <>
-          <PageIntro title="Platform" description="All companies, scheduled jobs and server errors." actions={
-            <SegmentedControl value={screen} onChange={setScreen} options={[{ value: 'overview', label: 'Overview' }, { value: 'errors', label: 'Error search' }, { value: 'access', label: 'Access log' }]} />
+          <PageIntro title="Platform" description="All companies, sign-ins, scheduled jobs and server errors." actions={
+            <SegmentedControl value={screen} onChange={setScreen} options={[{ value: 'overview', label: 'Overview' }, { value: 'sign-ins', label: 'Sign-ins' }, { value: 'errors', label: 'Error search' }]} />
           } />
-          {screen === 'overview' && <Overview onOpen={(c) => { setReason(''); setPending(c); }} />}
+          {screen === 'overview' && <Overview onOpen={(c) => setCompany(c)} />}
+          {screen === 'sign-ins' && <Section title="Sign-in events" subtitle="Every company, including failed sign-ins with an e-mail that belongs to nobody. Kept 180 days."><AuthEventsList base="" /></Section>}
           {screen === 'errors' && <ErrorSearch />}
-          {screen === 'access' && <AccessLog />}
         </>
       )}
-
-      <Modal isOpen={!!pending} onClose={() => setPending(null)} title={`Open ${pending?.name ?? ''}`} size="sm">
-        <form onSubmit={(e) => { e.preventDefault(); if (pending && reason.trim().length >= 3) { setCompany({ ...pending, reason: reason.trim() }); setPending(null); } }} className="space-y-3">
-          <p className="text-sm text-slate-700 dark:text-slate-200">Why are you opening this company? The reason is shown to its super admins in their Activity log.</p>
-          <textarea value={reason} onChange={(e) => setReason(e.target.value)} maxLength={300} rows={3} aria-label="Reason" className={cx(inputClass, 'h-auto w-full py-2')} data-testid="operator-open-reason" />
-          <div className="flex justify-end gap-2">
-            <button type="button" className={buttonClass.secondary} onClick={() => setPending(null)}>Cancel</button>
-            <button type="submit" className={buttonClass.primary} disabled={reason.trim().length < 3} data-testid="operator-open-confirm">Open company</button>
-          </div>
-        </form>
-      </Modal>
     </Page>
   );
 };
 
+const createCompanySpec = (onCreated: (c: { id: string; name: string }) => void): FormSpec => ({
+  title: 'Create company',
+  description: 'Creates the organisation with a first department and team. The first super admin is created with a password or invited by e-mail.',
+  submitLabel: 'Create company',
+  initial: { departmentName: 'General', teamName: 'Team 1', adminMode: 'invite' },
+  fields: [
+    { name: 'name', label: 'Company name', required: true },
+    { name: 'domain', label: 'E-mail domain', help: 'Defaults to the domain of the first super admin.' },
+    { name: 'departmentName', label: 'First department', required: true },
+    { name: 'teamName', label: 'First team', required: true },
+    { name: 'adminEmail', label: 'First super admin: e-mail', type: 'email' },
+    { name: 'adminMode', label: 'How they get access', type: 'select', options: [{ value: 'invite', label: 'Invitation e-mail' }, { value: 'password', label: 'Password set now' }], when: (v) => !!v.adminEmail },
+    { name: 'adminFirstName', label: 'First name', when: (v) => !!v.adminEmail && v.adminMode === 'password' },
+    { name: 'adminLastName', label: 'Last name', when: (v) => !!v.adminEmail && v.adminMode === 'password' },
+    { name: 'adminPassword', label: 'Password', type: 'password', when: (v) => !!v.adminEmail && v.adminMode === 'password', help: 'At least 8 characters.' },
+  ],
+  submit: async (v) => {
+    const out = await opFetch<any>('/companies', {
+      method: 'POST',
+      body: {
+        name: v.name, domain: v.domain, departmentName: v.departmentName, teamName: v.teamName,
+        admin: v.adminEmail ? { email: v.adminEmail, mode: v.adminMode, firstName: v.adminFirstName, lastName: v.adminLastName, password: v.adminPassword } : undefined,
+      },
+    });
+    if (out.admin?.error) throw new Error(`The company was created, but the first super admin was not: ${out.admin.error}`);
+    onCreated({ id: out.company.id, name: out.company.name });
+    return out;
+  },
+  doneMessage: (out) => `${out.company.name} created`,
+});
+
 const Overview: React.FC<{ onOpen: (c: { id: string; name: string }) => void }> = ({ onOpen }) => {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
-  const [action, setAction] = useState<RepairAction | null>(null);
+  const [form, setForm] = useState<FormSpec | null>(null);
   const load = useCallback(() => { opFetch('/overview').then(setData).catch((e) => setError(e.message)); }, []);
   useEffect(() => { load(); }, [load]);
+  const { run, dialog } = useOpActions(load);
   if (!data) return error ? <ErrorText error={error} /> : <p className="text-sm text-slate-500" role="status">Loading…</p>;
   const p = data.platform;
+  const noRuns = !p.jobRunsTotal;
   return (
     <div className="space-y-4" data-testid="operator-overview">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatTile label="Companies" value={data.total} />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatTile label="Companies" value={data.total} caption={p.suspended ? `${p.suspended} suspended` : undefined} />
+        <StatTile label="Active sessions" value={p.activeSessions} />
+        <StatTile label="Sign-ins (7 days)" value={p.signIns7d} />
+        <StatTile label="Failed sign-ins (7 days)" value={p.failedSignIns7d} tone={p.failedSignIns7d ? 'warn' : 'neutral'} />
         <StatTile label="Errors (24 h)" value={p.errors24h} tone={p.errors24h ? 'bad' : 'neutral'} />
         <StatTile label="Database size" value={fmtBytes(p.dbSizeBytes)} />
-        <StatTile label="Jobs failing" value={p.jobs.filter((j: any) => j.last && j.last.ok === false).length} tone={p.jobs.some((j: any) => j.last?.ok === false) ? 'bad' : 'good'} />
       </div>
-      <Section title="Companies" subtitle="Open one to see its data in detail.">
-        <DataTable testId="operator-companies" rows={data.companies} columns={[
+      <Section title="Companies" subtitle="Open one to see and change everything in it." action={
+        <button type="button" className={cx(buttonClass.primary, 'h-8 px-2.5 text-xs')} data-testid="op-create-company" onClick={() => setForm(createCompanySpec(onOpen))}><Plus size={14} /> Create company</button>
+      }>
+        <DataTable testId="operator-companies" rows={data.companies} rowTestId={(c: any) => `op-company-row-${c.id}`} columns={[
           { key: 'name', label: 'Company', render: (c: any) => (
             <button type="button" onClick={() => onOpen({ id: c.id, name: c.name })} className="text-left font-medium text-brand-700 hover:underline dark:text-brand-300" data-testid="operator-open-company">
               {c.name}{c.demo && <Badge tone="warn" className="ml-1">Demo</Badge>}{c.sample_teams > 0 && <Badge className="ml-1">Sample data</Badge>}
             </button>
           ) },
+          { key: 'status', label: 'Status', render: (c: any) => (
+            <span title={c.status === 'suspended' ? `${c.suspended_reason ?? ''}${c.suspended_until ? ` · until ${fmtDate(c.suspended_until)}` : ''}` : undefined} data-testid="op-company-status"><CompanyStatusBadge status={c.status} /></span>
+          ) },
           { key: 'users', label: 'Users' }, { key: 'teams', label: 'Teams' },
+          { key: 'active_sessions', label: 'Sessions now' },
+          { key: 'sign_ins_7d', label: 'Sign-ins 7 d' },
+          { key: 'failed_7d', label: 'Failed 7 d', render: (c: any) => (c.failed_7d ? <Badge tone="warn">{c.failed_7d}</Badge> : '0') },
+          { key: 'countries', label: 'Countries (30 d)', className: 'max-w-[12rem]', render: (c: any) => (c.countries?.length ? c.countries.join(', ') : '—') },
           { key: 'last_data_at', label: 'Last data', render: (c: any) => fmtDate(c.last_data_at) },
           { key: 'stale_pct', label: 'Stale', render: (c: any) => (c.stale_pct == null ? '—' : <Badge tone={c.stale_pct > 30 ? 'bad' : c.stale_pct > 10 ? 'warn' : 'good'}>{c.stale_pct}%</Badge>) },
           { key: 'open_alerts', label: 'Open alerts' },
@@ -157,29 +184,35 @@ const Overview: React.FC<{ onOpen: (c: { id: string; name: string }) => void }> 
           { key: 'last_activity_at', label: 'Last activity', render: (c: any) => fmtDate(c.last_activity_at) },
         ]} />
       </Section>
-      <Section title="Scheduled jobs" subtitle="Last run of each job." action={
-        <button type="button" className={cx(buttonClass.secondary, 'h-8 px-2.5 text-xs')} data-testid="op-demo-refresh" onClick={() => setAction({
+      <Section title="Scheduled jobs" subtitle={noRuns ? 'No runs recorded yet: the jobs record a row each time they run (on Netlify, scheduled functions; locally, the server\'s schedules).' : 'Last run of each job.'} action={
+        <button type="button" className={cx(buttonClass.secondary, 'h-8 px-2.5 text-xs')} data-testid="op-demo-refresh" onClick={() => run({
           title: 'Refresh sample data now',
-          description: 'Adds the missing recent days of sample data up to today (never changes or deletes a row, never touches real data). On the hosted site it runs in the background for a few minutes; its result appears under demo-refresh-background.',
+          description: 'Adds the missing recent days of sample data up to today (never changes or deletes a row, never touches real data).',
           path: '/actions/demo-refresh',
-          confirmLabel: 'Refresh now',
           doneMessage: (out) => (out?.mode === 'background'
             ? 'Sample data refresh started. It runs in the background for a few minutes.'
             : `Sample data refreshed: ${out?.result?.insertedTotal ?? 0} new rows.`),
         })}>Refresh sample data now</button>
       }>
-        <DataTable testId="operator-jobs" rows={p.jobs} rowKey={(j: any) => j.job} columns={[
-          { key: 'job', label: 'Job' },
-          { key: 'last', label: 'Last run', render: (j: any) => (j.last ? fmtDate(j.last.started_at) : 'Never') },
-          { key: 'ok', label: 'Result', render: (j: any) => (j.last ? <OkBadge ok={j.last.ok} /> : '—') },
-          { key: 'summary', label: 'Summary', className: 'max-w-md', render: (j: any) => j.last?.summary ?? '—' },
-          { key: 'lastOkAt', label: 'Last success', render: (j: any) => fmtDate(j.lastOkAt) },
+        {noRuns ? <p className="px-4 py-6 text-sm text-slate-500 dark:text-slate-400" data-testid="operator-jobs-empty">No runs recorded yet.</p> : (
+          <DataTable testId="operator-jobs" rows={p.jobs} rowKey={(j: any) => j.job} columns={[
+            { key: 'job', label: 'Job' },
+            { key: 'last', label: 'Last run', render: (j: any) => (j.last ? fmtDate(j.last.started_at) : 'No runs recorded yet') },
+            { key: 'ok', label: 'Result', render: (j: any) => (j.last ? <OkBadge ok={j.last.ok} /> : '—') },
+            { key: 'summary', label: 'Summary', className: 'max-w-md', render: (j: any) => j.last?.summary ?? '—' },
+            { key: 'lastOkAt', label: 'Last success', render: (j: any) => fmtDate(j.lastOkAt) },
+          ]} />
+        )}
+      </Section>
+      <Section title="Main tables" subtitle="Row counts (exact below 200 000 rows, else the live-row statistic) and size on disk.">
+        <DataTable testId="operator-tables" rows={p.tables} rowKey={(t: any) => t.table} columns={[
+          { key: 'table', label: 'Table' },
+          { key: 'rows', label: 'Rows', render: (t: any) => `${Number(t.rows).toLocaleString()}${t.exact ? '' : ' (approx.)'}` },
+          { key: 'bytes', label: 'Size', render: (t: any) => fmtBytes(t.bytes) },
         ]} />
       </Section>
-      <Section title="Main tables" subtitle="Approximate row counts (planner statistics) and size on disk.">
-        <DataTable rows={p.tables} rowKey={(t: any) => t.table} columns={[{ key: 'table', label: 'Table' }, { key: 'approx_rows', label: 'Rows (approx.)' }, { key: 'bytes', label: 'Size', render: (t: any) => fmtBytes(t.bytes) }]} />
-      </Section>
-      <ActionDialog action={action} onClose={() => setAction(null)} onDone={load} />
+      {dialog}
+      <FormDialog spec={form} onClose={() => setForm(null)} onDone={load} />
     </div>
   );
 };
@@ -206,21 +239,6 @@ const ErrorSearch: React.FC = () => {
         </div>
       )}
       {data && <ErrorRows rows={data.errors} />}
-    </Section>
-  );
-};
-
-const AccessLog: React.FC = () => {
-  const [data, setData] = useState<any>(null);
-  const [error, setError] = useState<string | null>(null);
-  useEffect(() => { opFetch('/access-log').then(setData).catch((e) => setError(e.message)); }, []);
-  return (
-    <Section title="Operator access log" subtitle="Every platform support access, across companies.">
-      <ErrorText error={error} />
-      {data && <DataTable rows={data.entries} columns={[
-        { key: 'created_at', label: 'When', render: (r: any) => fmtDate(r.created_at) }, { key: 'operator_email', label: 'Operator', className: 'break-all' },
-        { key: 'action', label: 'Action' }, { key: 'company_name', label: 'Company' }, { key: 'section', label: 'Section' }, { key: 'reason', label: 'Reason', className: 'max-w-xs' }, { key: 'ip', label: 'IP' },
-      ]} />}
     </Section>
   );
 };

@@ -90,7 +90,7 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Operator-Token, X-Operator-Reason');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Operator-Token');
     res.header('Access-Control-Expose-Headers', 'X-Request-Id');
     res.header('Vary', 'Origin');
   }

@@ -40,11 +40,12 @@ async function authRequest(url: string, body: unknown, fallback: string): Promis
   return data;
 }
 
-/** Header of a 401 for a session that ended (server/lib/sessions.ts). */
+/** Header of a 401 for a session that ended, or a 403 of a suspended organisation (server/lib/sessions.ts). */
 const SESSION_ENDED_HEADER = 'X-Session-Ended';
 const NOTICE: Record<string, string> = {
   session_ended: 'Your session has ended. Please sign in again.',
   session_expired: 'Your sign-in has expired. Please sign in again.',
+  company_suspended: "Your organisation's access is suspended. Contact your administrator.",
 };
 
 /**
@@ -116,7 +117,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const original = window.fetch;
     const wrapped: typeof fetch = async (...args) => {
       const res = await original(...args);
-      const ended = res.status === 401 ? res.headers.get(SESSION_ENDED_HEADER) : null;
+      const ended = res.status === 401 || res.status === 403 ? res.headers.get(SESSION_ENDED_HEADER) : null;
       if (ended) {
         localStorage.removeItem('irongate_user');
         keepNotice(ended);

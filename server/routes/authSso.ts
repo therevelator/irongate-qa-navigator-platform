@@ -5,7 +5,8 @@ import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
 import { inviteLimiter } from '../middleware/rateLimit';
-import { issueSessionCookie, type SessionCookieOptions } from '../lib/sessions';
+import { issueSessionCookie, COMPANY_SUSPENDED_MESSAGE, type SessionCookieOptions } from '../lib/sessions';
+import { recordAuthEvent } from '../lib/authEvents';
 import { recordAudit } from '../lib/audit';
 import {
   providerConfig, enabledProviders, beginSignIn, checkState, completeSignIn, appBaseUrl, SsoError, PROVIDER_LABEL, type ProviderId,
@@ -37,7 +38,9 @@ const isProduction = () => process.env.NODE_ENV === 'production';
  *  "Keep me signed in" (server/lib/sessions.ts). */
 export async function setSessionCookie(res: express.Response, userId: string, opts: SessionCookieOptions = {}): Promise<void> {
   noteSignIn(res, userId); // user activity log: a sign-in (password, invitation, SSO)
-  await issueSessionCookie(res, userId, JWT_SECRET, opts);
+  const { sessionId } = await issueSessionCookie(res, userId, JWT_SECRET, opts);
+  // Sign-in events (server/lib/authEvents.ts): every successful sign-in with its session.
+  await recordAuthEvent(res.req, { outcome: 'success', method: opts.method ?? 'password', userId, sessionId });
 }
 
 /**
@@ -139,6 +142,11 @@ router.get('/sso/:provider/callback', inviteLimiter, async (req: any, res) => {
     if (!user) user = await queryOne<any>('SELECT id, company_id, is_active, email FROM users WHERE LOWER(email) = LOWER(?)', [identity.email]);
     if (user) {
       if (!user.is_active) throw new SsoError('account_inactive', 'Your account has been deactivated. Please contact your administrator.');
+      const co = await queryOne<any>('SELECT status FROM companies WHERE id = ?', [user.company_id]);
+      if (co?.status === 'suspended') {
+        await recordAuthEvent(req, { outcome: 'failure', method: `sso_${provider}`, userId: user.id, failureReason: 'company_suspended' });
+        throw new SsoError('company_suspended', COMPANY_SUSPENDED_MESSAGE);
+      }
       const linked = await queryOne<any>('SELECT id FROM user_identities WHERE provider = ? AND subject = ?', [provider, identity.subject]);
       if (!linked) {
         await query(
@@ -168,9 +176,12 @@ router.get('/sso/:provider/callback', inviteLimiter, async (req: any, res) => {
       user = { id: created.userId };
     }
     await query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
-    await setSessionCookie(res, user.id, { persistent: st.r === true });
+    await setSessionCookie(res, user.id, { persistent: st.r === true, method: `sso_${provider}` });
     res.redirect(302, `${appBaseUrl()}/`);
   } catch (e: any) {
+    if ((e instanceof SsoError && e.code !== 'company_suspended') || e instanceof InvitationError) {
+      await recordAuthEvent(req, { outcome: 'failure', method: `sso_${provider}`, failureReason: String(e.code ?? 'sso_failed') });
+    }
     if (e instanceof SsoError || e instanceof InvitationError) {
       return backWithError(res, e instanceof SsoError ? e.code : (e.code ?? 'invitation'), e.message, invite);
     }
@@ -214,7 +225,7 @@ router.post('/invitations/accept', inviteLimiter, async (req, res) => {
       return res.status(400).json({ error: 'token, firstName, lastName and password are required' });
     }
     const { userId } = await acceptInvitation({ token, firstName, lastName, password });
-    await setSessionCookie(res, userId);
+    await setSessionCookie(res, userId, { method: 'invitation' });
     const user = await queryOne<any>(
       `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id, is_active, email_verified, created_at
          FROM users WHERE id = ?`,

@@ -44,7 +44,9 @@ const UserActivityList: React.FC<{
   facets: ActivityFacets | null;
   filters: ActivityFilterState;
   onFiltersChange: (f: ActivityFilterState) => void;
-}> = ({ load, facets, filters, onFiltersChange }) => {
+  /** Also filter by client IP (the platform operator panel). */
+  ipFilter?: boolean;
+}> = ({ load, facets, filters, onFiltersChange, ipFilter }) => {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,9 +73,9 @@ const UserActivityList: React.FC<{
   }, [query, load]);
 
   useEffect(() => {
-    const t = setTimeout(() => { fetchPage(false, null); }, filters.requestId ? 300 : 0);
+    const t = setTimeout(() => { fetchPage(false, null); }, filters.requestId || filters.ip ? 300 : 0);
     return () => clearTimeout(t);
-  }, [fetchPage, filters.requestId]);
+  }, [fetchPage, filters.requestId, filters.ip]);
 
   const set = (k: keyof ActivityFilterState, v: string | boolean) => onFiltersChange({ ...filters, [k]: v });
   const toggle = (id: string) => setOpen((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
@@ -124,6 +126,12 @@ const UserActivityList: React.FC<{
               <label htmlFor="ua-to" className={labelCls}>To</label>
               <input id="ua-to" type="date" value={filters.to} onChange={(e) => set('to', e.target.value)} className={cx(inputClass, 'w-full')} />
             </div>
+            {ipFilter && (
+              <div>
+                <label htmlFor="ua-ip" className={labelCls}>IP address</label>
+                <input id="ua-ip" value={filters.ip} onChange={(e) => set('ip', e.target.value)} className={cx(inputClass, 'w-full')} data-testid="ua-ip" />
+              </div>
+            )}
             <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700 dark:text-slate-300">
               <input type="checkbox" checked={filters.errors} onChange={(e) => set('errors', e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500 dark:border-slate-600" />
               Errors only

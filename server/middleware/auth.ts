@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { loadAccessContext } from '../lib/assignments';
-import { refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE } from '../lib/sessions';
+import { companyProblem, refuseSession, sessionIdOf, sessionProblem, touchSession, SESSION_EXPIRED_MESSAGE } from '../lib/sessions';
 import type { Grant } from '../lib/userPolicy';
+import { PLATFORM_SUPPORT_REQUEST, platformSupportContext, type PlatformSupportRequest } from '../lib/platformContext';
 
 // Resolve the signing secret once. In production a secret MUST be provided;
 // we fail closed (throw on startup) rather than fall back to a public default,
@@ -36,6 +37,16 @@ export interface AuthRequest extends Request {
  * request — the same state /auth/me shows the UI.
  */
 export async function authenticateToken(req: AuthRequest, res: Response, next: NextFunction) {
+  // IronGate platform support running a company handler (server/routes/operator.ts forward()):
+  // a super admin of that one company, with no user id. Never reachable from a client request.
+  const ps = (req as any)[PLATFORM_SUPPORT_REQUEST] as PlatformSupportRequest | undefined;
+  if (ps && platformSupportContext()) {
+    req.user = { id: null as unknown as string, role: 'super_admin', companyId: ps.companyId, grants: [{ role: 'super_admin', scopeType: 'company', scopeId: ps.companyId } as Grant] };
+    req.userId = undefined;
+    req.userRole = 'super_admin';
+    req.companyId = ps.companyId;
+    return next();
+  }
   let token = req.cookies?.irongate_token;
   if (!token) {
     const authHeader = req.headers['authorization'];
@@ -56,7 +67,7 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
 
   let row: Awaited<ReturnType<typeof loadAccessContext>>;
   try {
-    row = typeof decoded?.userId === 'string' ? await loadAccessContext(decoded.userId) : null;
+    row = typeof decoded?.userId === 'string' ? await loadAccessContext(decoded.userId, sessionIdOf(decoded)) : null;
   } catch (error) {
     console.error('[Auth] Failed to load user:', error);
     return res.status(500).json({ error: 'Authentication failed' });
@@ -68,8 +79,15 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
     return res.status(401).json({ error: 'Your account has been deactivated. Please contact your administrator.' });
   }
   // Signed out everywhere, or older than the company's sign-in lifetime (server/lib/sessions.ts).
+  // Suspended organisation (companies.status): 403 company_suspended (said first: the suspension
+  // also revokes the session rows, and the person should see why).
+  const suspended = companyProblem(row);
+  if (suspended) return refuseSession(res, suspended);
+  // Revoked session row (server/lib/sessions.ts user_sessions), from the same query.
   const problem = sessionProblem(decoded, row);
   if (problem) return refuseSession(res, problem);
+  const sid = sessionIdOf(decoded);
+  if (sid && row.session_last_seen_at) touchSession(req, sid, row.session_last_seen_at);
 
   req.user = {
     id: row.id,

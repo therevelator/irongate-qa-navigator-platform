@@ -1,6 +1,6 @@
 /** Filters of the user activity list (src/components/UserActivityList.tsx) as query parameters. */
 
-export const emptyActivityFilters = { userId: '', from: '', to: '', type: '', teamId: '', errors: false, requestId: '' };
+export const emptyActivityFilters = { userId: '', from: '', to: '', type: '', teamId: '', errors: false, requestId: '', ip: '' };
 export type ActivityFilterState = typeof emptyActivityFilters;
 
 export function activityParams(f: ActivityFilterState): URLSearchParams {

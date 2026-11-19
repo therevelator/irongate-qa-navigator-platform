@@ -8,7 +8,7 @@
  *   OP-002  company accounts are never operators: a company session or a company user's password
  *           gets nothing; an operator's e-mail cannot register, be added or invited as a company
  *           user, and a company user's e-mail cannot become an operator
- *   OP-003  sign-in: wrong password refused and logged (no password stored); success: an 8-hour
+ *   OP-003  sign-in: wrong password refused (nothing logged, no password stored); success: an 8-hour
  *           session in the httpOnly cookie irongate_operator (and the token in the answer)
  *   OP-003b lockout after 5 failed sign-ins in a row (15 minutes, even with the right password)
  *   OP-004  a company session JWT cannot act as the operator token, and the operator token is
@@ -18,9 +18,9 @@
  *   OP-007  full visibility of customer data (every developer row, single pulse answers and
  *           comments, who answered, user details) but never a secret: password / API key / token
  *           hashes, link tokens, the Slack webhook, integration credentials ("set" / "not set")
- *   OP-008  company views write a customer audit entry, throttled per section (30 minutes),
- *           and the platform access log
- *   OP-009  repair actions: reason + confirm required, each works and is audited
+ *   OP-008  nothing an operator does is logged: no customer audit entry, no user activity row,
+ *           no platform access log row; no reason is asked for
+ *   OP-009  repair actions: no reason; destructive ones need confirm; each works
  *   OP-010  overview, error search and pagination limits; invalid company ids
  *   OP-011  "Refresh sample data now" on Netlify: starts the background function with the signed
  *           token, answers 202 "started" at once, records job_runs and the platform access log;
@@ -72,10 +72,9 @@ const markers: Record<string, string> = {};
 /** Kept for the calls below: company cookies are ignored by /api/operator (operators are not company users). */
 let opCookie = '';
 
-const call = (method: 'get' | 'post', path: string, cookie = '', token = '', reason = '') => {
+const call = (method: 'get' | 'post', path: string, cookie = '', token = '') => {
   let r = request(app)[method](path).set('Cookie', cookie);
   if (token) r = r.set('X-Operator-Token', token);
-  if (reason) r = r.set('X-Operator-Reason', reason);
   return r;
 };
 async function register(email: string, company: string) {
@@ -188,14 +187,13 @@ describe('Platform operator', () => {
     await expect(db.query(`UPDATE users SET email = $1 WHERE LOWER(email) = LOWER($2)`, [opEmail, custEmail])).rejects.toThrow(/cannot be used/);
   });
 
-  test('OP-003 sign-in: wrong password refused and logged without the password; then an 8-hour session', async () => {
+  test('OP-003 sign-in: wrong password refused, nothing logged; then an 8-hour session', async () => {
     if (skip()) return;
+    const logBefore = Number((await db.query('SELECT COUNT(*) FROM platform_access_log')).rows[0].count);
     const bad = await signIn(opEmail, 'Wrong-password-MARK');
     expect(bad.status).toBe(401);
     expect(bad.body.token).toBeUndefined();
-    const log = await db.query(`SELECT * FROM platform_access_log WHERE operator_user_id = $1 AND action = 'sign_in.failed'`, [opId]);
-    expect(log.rows.length).toBeGreaterThanOrEqual(1);
-    expect(JSON.stringify(log.rows)).not.toContain('Wrong-password-MARK');
+    expect(Number((await db.query('SELECT COUNT(*) FROM platform_access_log')).rows[0].count)).toBe(logBefore);
     const ok = await signIn(opEmail.toUpperCase());
     expect(ok.status).toBe(200);
     expect(typeof ok.body.token).toBe('string');
@@ -287,7 +285,7 @@ describe('Platform operator', () => {
     const sections = ['summary', 'organisation', 'users', 'settings', `data?teamId=${teamId}`, 'alerts', 'pulse', 'activity', 'user-activity?facets=true', 'errors', `modules?teamId=${teamId}`];
     const bodies: string[] = [];
     for (const s of sections) {
-      const res = await call('get', `/api/operator/companies/${companyId}/${s}`, '', token, 'visibility check');
+      const res = await call('get', `/api/operator/companies/${companyId}/${s}`, '', token);
       expect({ s, status: res.status }).toEqual({ s, status: 200 });
       bodies.push(JSON.stringify(res.body));
     }
@@ -315,104 +313,92 @@ describe('Platform operator', () => {
     expect(Object.keys(users.apiKeys[0]).sort()).toEqual(['created_at', 'id', 'key_prefix', 'last_used_at', 'name', 'revoked_at']);
   });
 
-  test('OP-008 company views are recorded for the customer (throttled) and platform-wide', async () => {
+  test('OP-008 operator views and changes are not logged anywhere, and need no reason', async () => {
     if (skip()) return;
-    await db.query(`DELETE FROM audit_log WHERE company_id = $1 AND action = 'platform_support.view' AND after->>'section' = 'alerts'`, [companyId]);
-    expect((await call('get', `/api/operator/companies/${companyId}/alerts`, '', token)).status).toBe(400); // reason required
-    for (let i = 0; i < 3; i++) {
-      expect((await call('get', `/api/operator/companies/${companyId}/alerts`, '', token, 'Ticket 42: alerts missing')).status).toBe(200);
+    const count = async (sql: string, params: unknown[] = []) => Number((await db.query(sql, params)).rows[0].count);
+    const auditBefore = await count('SELECT COUNT(*) FROM audit_log WHERE company_id = $1', [companyId]);
+    const platBefore = await count('SELECT COUNT(*) FROM platform_access_log');
+    for (const s of ['summary', 'users', 'alerts', 'settings', 'sessions', 'auth-events', 'views']) {
+      expect({ s, status: (await call('get', `/api/operator/companies/${companyId}/${s}`, '', token)).status }).toEqual({ s, status: 200 });
     }
-    const audit = await db.query(`SELECT * FROM audit_log WHERE company_id = $1 AND action = 'platform_support.view' AND after->>'section' = 'alerts'`, [companyId]);
-    expect(audit.rows).toHaveLength(1);
-    expect(audit.rows[0].entity_type).toBe('company');
-    expect(audit.rows[0].actor_id).toBeNull();
-    expect(audit.rows[0].summary).toBe('Platform support viewed alerts and actions. Reason: Ticket 42: alerts missing');
-    // The customer's super admin sees it in the Activity log.
-    const seen = await liveGet('/api/admin/audit?action=platform_support.view', custCookie);
+    // A change made by platform support: in the company's data, not in its history.
+    const dep = await call('post', `/api/operator/companies/${companyId}/departments`, '', token).send({ name: `Op dept ${stamp}` });
+    expect(dep.status).toBe(201);
+    expect(await count('SELECT COUNT(*) FROM audit_log WHERE company_id = $1', [companyId])).toBe(auditBefore);
+    expect(await count(`SELECT COUNT(*) FROM audit_log WHERE action LIKE 'platform_support.%'`)).toBe(0);
+    expect(await count('SELECT COUNT(*) FROM platform_access_log')).toBe(platBefore);
+    // The customer's Activity log shows nothing of it.
+    const seen = await liveGet('/api/admin/audit', custCookie);
     expect(seen.status).toBe(200);
-    expect(seen.body.entries.some((e: any) => e.summary.includes('Ticket 42'))).toBe(true);
-    // Older than 30 minutes: a new entry.
-    await db.query(`UPDATE audit_log SET created_at = now() - interval '31 minutes' WHERE id = $1`, [audit.rows[0].id]);
-    await call('get', `/api/operator/companies/${companyId}/alerts`, '', token, 'Ticket 42: alerts missing');
-    expect((await db.query(`SELECT 1 FROM audit_log WHERE company_id = $1 AND action = 'platform_support.view' AND after->>'section' = 'alerts'`, [companyId])).rows).toHaveLength(2);
-    // Platform log: every view.
-    const plat = await db.query(`SELECT * FROM platform_access_log WHERE company_id = $1 AND action = 'view' AND section = 'alerts'`, [companyId]);
-    expect(plat.rows.length).toBeGreaterThanOrEqual(4);
-    expect(plat.rows[0].operator_email.toLowerCase()).toBe(opEmail);
-    expect(plat.rows[0].operator_user_id).toBe(opId);
+    expect(JSON.stringify(seen.body)).not.toMatch(/Platform support|Op dept/);
     // Operator requests are not in the customer's user activity log.
     await flushActivity();
     const ua = await db.query(`SELECT 1 FROM user_activity WHERE route LIKE '/api/operator%'`);
     expect(ua.rows).toHaveLength(0);
+    // The former access log route is gone.
+    expect((await call('get', '/api/operator/access-log', '', token)).status).toBe(404);
   });
 
-  test('OP-009 repair actions need a reason and a confirm, work, and are audited', async () => {
+  test('OP-009 repair actions need no reason, destructive ones a confirm, and each works', async () => {
     if (skip()) return;
     const post = (p: string, body: object) => call('post', `/api/operator${p}`, opCookie, token).send(body);
     const base = `/companies/${companyId}`;
-    expect((await post(`${base}/actions/evaluate-alerts`, { confirm: true })).status).toBe(400);
-    expect((await post(`${base}/actions/evaluate-alerts`, { reason: 'Check alerts' })).status).toBe(400);
-    const actionsBefore = Number((await db.query(`SELECT COUNT(*) FROM audit_log WHERE company_id = $1 AND action = 'platform_support.action'`, [companyId])).rows[0].count);
+    const auditBefore = Number((await db.query('SELECT COUNT(*) FROM audit_log WHERE company_id = $1', [companyId])).rows[0].count);
 
-    const ev = await post(`${base}/actions/evaluate-alerts`, { reason: 'Check alerts', confirm: true });
+    const ev = await post(`${base}/actions/evaluate-alerts`, {});
     expect(ev.status).toBe(200);
     expect(typeof ev.body.opened).toBe('number');
 
-    const rc = await post(`${base}/actions/recompute-snapshots`, { reason: 'Snapshots looked wrong', confirm: true, teamId });
+    const rc = await post(`${base}/actions/recompute-snapshots`, { teamId });
     expect(rc.status).toBe(200);
     expect(rc.body.teams[0].teamId).toBe(teamId);
-    expect((await post(`${base}/actions/recompute-snapshots`, { reason: 'x team', confirm: true, teamId: 'not-a-team' })).status).toBe(404);
+    expect((await post(`${base}/actions/recompute-snapshots`, { teamId: 'not-a-team' })).status).toBe(404);
 
     const inv = await livePost('/api/admin/invitations', custCookie, { email: `op-invitee-${stamp}@cust${stamp}.test`, role: 'qa_engineer', scopeId: teamId });
     expect(inv.status).toBe(201);
     const hashBefore = (await db.query('SELECT token_hash FROM invitations WHERE id = $1', [inv.body.invitation.id])).rows[0].token_hash;
-    const rs = await post(`${base}/invitations/${inv.body.invitation.id}/resend`, { reason: 'Invitee lost the e-mail', confirm: true });
+    const rs = await post(`${base}/invitations/${inv.body.invitation.id}/resend`, {});
     expect(rs.status).toBe(200);
     expect(JSON.stringify(rs.body)).not.toMatch(/igi_|token|accept-invite/);
     expect((await db.query('SELECT token_hash FROM invitations WHERE id = $1', [inv.body.invitation.id])).rows[0].token_hash).not.toBe(hashBefore);
 
     const u = await livePost('/api/admin/users', custCookie, { email: `op-target-${stamp}@cust${stamp}.test`, password: NEW_PW, firstName: 'Tar', lastName: 'Get', role: 'viewer', teamId });
     expect(u.status).toBe(201);
-    expect((await post(`${base}/users/${u.body.id}/deactivate`, { reason: 'Customer asked', confirm: true })).status).toBe(200);
+    expect((await post(`${base}/users/${u.body.id}/deactivate`, {})).status).toBe(400); // destructive: confirm needed
+    expect((await post(`${base}/users/${u.body.id}/deactivate`, { confirm: true })).status).toBe(200);
     expect((await db.query('SELECT is_active FROM users WHERE id = $1', [u.body.id])).rows[0].is_active).toBe(false);
-    expect((await post(`${base}/users/${u.body.id}/deactivate`, { reason: 'Customer asked', confirm: true })).status).toBe(409);
-    expect((await post(`${base}/users/${u.body.id}/reactivate`, { reason: 'Customer asked again', confirm: true })).status).toBe(200);
+    expect((await post(`${base}/users/${u.body.id}/deactivate`, { confirm: true })).status).toBe(409);
+    expect((await post(`${base}/users/${u.body.id}/reactivate`, {})).status).toBe(200);
     expect((await db.query('SELECT is_active FROM users WHERE id = $1', [u.body.id])).rows[0].is_active).toBe(true);
-    const deact = await db.query(`SELECT * FROM audit_log WHERE company_id = $1 AND action = 'user.deactivate' AND entity_id = $2`, [companyId, u.body.id]);
-    expect(deact.rows[0].summary).toMatch(/^Platform support deactivated/);
 
-    expect((await post(`${base}/users/${u.body.id}/clear-lockout`, { reason: 'Locked out', confirm: true })).status).toBe(409);
+    expect((await post(`${base}/users/${u.body.id}/clear-lockout`, {})).status).toBe(409);
     await db.query(`UPDATE users SET failed_login_attempts = 4, locked_until = now() + interval '1 hour' WHERE id = $1`, [u.body.id]);
-    expect((await post(`${base}/users/${u.body.id}/clear-lockout`, { reason: 'Locked out', confirm: true })).status).toBe(200);
+    expect((await post(`${base}/users/${u.body.id}/clear-lockout`, {})).status).toBe(200);
     expect((await db.query('SELECT failed_login_attempts, locked_until FROM users WHERE id = $1', [u.body.id])).rows[0]).toEqual({ failed_login_attempts: 0, locked_until: null });
     // Sign out everywhere: the user's sessions (issued before now) and platform support sessions end.
     const oldSession = jwt.sign({ userId: u.body.id, iat: Math.floor(Date.now() / 1000) - 5 }, JWT_SECRET, { expiresIn: 3600 });
     expect((await request(app).get('/api/auth/me').set('Cookie', `irongate_token=${oldSession}`)).status).toBe(200);
     const opSid = `op-sid-${stamp}`;
     await db.query(`INSERT INTO platform_operator_sessions (id, user_id, expires_at, ip) VALUES ($1, $2, now() + interval '30 minutes', '127.0.0.1')`, [opSid, u.body.id]);
-    expect((await post(`${base}/users/${u.body.id}/sign-out-everywhere`, { reason: 'Lost laptop', confirm: true })).status).toBe(200);
+    expect((await post(`${base}/users/${u.body.id}/sign-out-everywhere`, {})).status).toBe(400);
+    expect((await post(`${base}/users/${u.body.id}/sign-out-everywhere`, { confirm: true })).status).toBe(200);
     const ended = await request(app).get('/api/auth/me').set('Cookie', `irongate_token=${oldSession}`);
     expect(ended.status).toBe(401);
     expect(ended.body.code).toBe('session_ended');
     expect((await db.query('SELECT ended_at FROM platform_operator_sessions WHERE id = $1', [opSid])).rows[0].ended_at).not.toBeNull();
-    const signOutAudit = await db.query(`SELECT summary FROM audit_log WHERE company_id = $1 AND action = 'platform_support.action' AND summary LIKE '%out everywhere%'`, [companyId]);
-    expect(signOutAudit.rows[0].summary).toMatch(/^Platform support: Signed Tar Get out everywhere\. Reason: Lost laptop/);
     // Another company's user through this company: 404.
-    expect((await post(`${base}/users/${otherUserId}/deactivate`, { reason: 'wrong company', confirm: true })).status).toBe(404);
-    expect((await post(`${base}/users/${otherUserId}/sign-out-everywhere`, { reason: 'wrong company', confirm: true })).status).toBe(404);
+    expect((await post(`${base}/users/${otherUserId}/deactivate`, { confirm: true })).status).toBe(404);
+    expect((await post(`${base}/users/${otherUserId}/sign-out-everywhere`, { confirm: true })).status).toBe(404);
 
     runRefreshDates.mockResolvedValueOnce({ today: '2026-11-19', demoCompany: { refreshed: true, insertedTotal: 3 }, companies: [{ id: companyId, teams: 1, teamsFilled: 1 }], insertedTotal: 3 });
-    const dr = await post('/actions/demo-refresh', { reason: 'Demo data is a day behind', confirm: true });
+    const dr = await post('/actions/demo-refresh', {});
     expect(dr.status).toBe(200);
     expect(runRefreshDates).toHaveBeenCalledTimes(1);
     const job = await db.query(`SELECT * FROM job_runs WHERE job = 'demo-refresh' ORDER BY started_at DESC LIMIT 1`);
     expect(job.rows[0].ok).toBe(true);
 
-    const actions = await db.query(`SELECT summary FROM audit_log WHERE company_id = $1 AND action = 'platform_support.action' ORDER BY created_at`, [companyId]);
-    expect(actions.rows.length - actionsBefore).toBe(8); // evaluate, recompute, resend, deactivate, reactivate, clear lockout, sign out everywhere, demo refresh
-    expect(actions.rows.map((r: any) => r.summary).join('\n')).toMatch(/Reason: Customer asked again/);
-    const plat = await db.query(`SELECT 1 FROM platform_access_log WHERE action = 'action' AND company_id IS NULL AND section = 'demo_refresh'`);
-    expect(plat.rows.length).toBeGreaterThanOrEqual(1);
+    // None of it is in the customer's history (the invitation and the user above were made by its admin).
+    expect(Number((await db.query('SELECT COUNT(*) FROM audit_log WHERE company_id = $1', [companyId])).rows[0].count)).toBe(auditBefore + 2); // invitation.create, user.create by the customer
   });
 
   test('OP-010 overview, errors, limits and invalid ids', async () => {
@@ -424,11 +410,10 @@ describe('Platform operator', () => {
     expect(typeof ov.body.platform.dbSizeBytes).toBe('number');
     const big = await call('get', '/api/operator/overview?limit=100000', opCookie, token);
     expect(big.body.limit).toBe(500);
-    expect((await call('get', "/api/operator/companies/x'%20OR%201=1/users", opCookie, token, 'probe')).status).toBe(400);
-    expect((await call('get', '/api/operator/companies/no-such-company/users', opCookie, token, 'probe')).status).toBe(404);
+    expect((await call('get', "/api/operator/companies/x'%20OR%201=1/users", opCookie, token)).status).toBe(400);
+    expect((await call('get', '/api/operator/companies/no-such-company/users', opCookie, token)).status).toBe(404);
     expect((await call('get', '/api/operator/errors?requestId=%3Cscript%3E', opCookie, token)).status).toBe(400);
     expect((await call('get', '/api/operator/errors?limit=9999', opCookie, token)).status).toBe(200);
-    expect((await call('get', '/api/operator/access-log', opCookie, token)).body.entries.length).toBeLessThanOrEqual(50);
   });
 
   test('OP-011 Refresh sample data now on Netlify starts the background function and reports started', async () => {
@@ -450,14 +435,12 @@ describe('Platform operator', () => {
       global.fetch = fetchMock as any;
       runRefreshDates.mockClear();
 
-      // Step-up, reason and confirmation rules as for every repair action.
-      expect((await request(netlifyApp).post('/api/operator/actions/demo-refresh').set('Cookie', opCookie).send({ reason: 'Sample data is behind', confirm: true })).status).toBe(401); // no operator token
-      expect((await run({ reason: 'x', confirm: true })).status).toBe(400);
-      expect((await run({ reason: 'Sample data is behind' })).status).toBe(400);
+      // The operator session is required.
+      expect((await request(netlifyApp).post('/api/operator/actions/demo-refresh').set('Cookie', opCookie).send({})).status).toBe(401); // no operator token
       expect(fetchMock).not.toHaveBeenCalled();
 
       const t0 = Date.now();
-      const res = await run({ reason: `Sample data is behind ${stamp}`, confirm: true });
+      const res = await run({});
       expect(res.status).toBe(202);
       expect(res.body).toEqual({ started: true, mode: 'background' });
       expect(runRefreshDates).not.toHaveBeenCalled(); // not run inside the API function
@@ -469,12 +452,10 @@ describe('Platform operator', () => {
       const job = await db.query(`SELECT ok, summary, started_at FROM job_runs WHERE job = 'demo-refresh' ORDER BY started_at DESC LIMIT 1`);
       expect(job.rows[0]).toEqual(expect.objectContaining({ ok: true, summary: 'background job requested (202) (manual, platform support)' }));
       expect(new Date(job.rows[0].started_at).getTime()).toBeGreaterThanOrEqual(t0 - 1000);
-      const plat = await db.query(`SELECT reason FROM platform_access_log WHERE action = 'action' AND section = 'demo_refresh' AND operator_user_id = $1 ORDER BY created_at DESC LIMIT 1`, [opId]);
-      expect(plat.rows[0].reason).toBe(`Sample data is behind ${stamp}`);
 
       // The background function cannot be reached: 502, recorded as a failed run.
       fetchMock.mockRejectedValueOnce(Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }));
-      const failed = await run({ reason: 'Sample data is behind again', confirm: true });
+      const failed = await run({});
       expect(failed.status).toBe(502);
       expect(failed.body.error).toMatch(/could not be started/);
       const failedJob = await db.query(`SELECT ok, summary FROM job_runs WHERE job = 'demo-refresh' ORDER BY started_at DESC LIMIT 1`);
@@ -483,7 +464,7 @@ describe('Platform operator', () => {
       // Turned off: nothing starts.
       process.env.DEMO_REFRESH_ENABLED = 'false';
       fetchMock.mockClear();
-      expect((await run({ reason: 'Sample data is behind', confirm: true })).status).toBe(409);
+      expect((await run({})).status).toBe(409);
       expect(fetchMock).not.toHaveBeenCalled();
     } finally {
       global.fetch = realFetch;
@@ -497,7 +478,7 @@ describe('Platform operator', () => {
       `INSERT INTO technical_debt (id, team_id, title, description, category, severity, status) VALUES ($1, $2, 'Op debt item', 'd', 'code_quality', 'high', 'open')`,
       [`op-debt-${stamp}`, teamId],
     ).catch(() => undefined);
-    const res = await call('get', `/api/operator/companies/${companyId}/modules?teamId=${teamId}`, '', token, 'module check');
+    const res = await call('get', `/api/operator/companies/${companyId}/modules?teamId=${teamId}`, '', token);
     expect(res.status).toBe(200);
     expect(res.body.teamId).toBe(teamId);
     const keys = res.body.modules.map((m: any) => m.key);
@@ -505,7 +486,7 @@ describe('Platform operator', () => {
     for (const m of res.body.modules) expect(m.rows.length).toBeLessThanOrEqual(50);
     // A team of another company is not accepted: the company's first team is used instead.
     const foreign = (await db.query('SELECT id FROM teams WHERE company_id <> $1 LIMIT 1', [companyId])).rows[0]?.id;
-    if (foreign) expect((await call('get', `/api/operator/companies/${companyId}/modules?teamId=${foreign}`, '', token, 'module check')).body.teamId).not.toBe(foreign);
+    if (foreign) expect((await call('get', `/api/operator/companies/${companyId}/modules?teamId=${foreign}`, '', token)).body.teamId).not.toBe(foreign);
   });
 
   // Last: it uses up this instance's sign-in allowance for the test client's IP.

@@ -75,7 +75,9 @@ export async function assertTeamWrite(req: AuthRequest, res: Response, teamId?: 
 /** The caller as a PolicyActor (live assignments and display columns from authenticateToken). */
 export function policyActor(req: AuthRequest): PolicyActor {
   return {
-    id: req.user?.id ?? '',
+    // IronGate platform support acting in a company (server/lib/platformContext.ts) has no user
+    // id: null, so actor ids written to the database (created_by, ...) stay empty, not ''.
+    id: req.user ? (req.user.id as string) : '',
     role: req.user?.role ?? '',
     departmentId: req.user?.departmentId ?? null,
     primaryTeamId: req.user?.primaryTeamId ?? null,
