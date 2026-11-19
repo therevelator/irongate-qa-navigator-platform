@@ -1023,6 +1023,9 @@ async function checkDomain(domain: string, exceptId: string | null): Promise<{ d
  * admin, with a password or by invitation. The user and the invitation go through the company app's
  * own handlers (POST /api/admin/users, /invitations, /users/:id/assignments).
  */
+/** Roles the first person of a new company may get (Create company). */
+const FIRST_PERSON_ROLES = ['super_admin', 'qa_manager', 'team_lead', 'qa_engineer', 'viewer'];
+
 router.post('/companies', ...op, async (req: OperatorRequest, res) => {
   try {
     const b = req.body ?? {};
@@ -1031,7 +1034,11 @@ router.post('/companies', ...op, async (req: OperatorRequest, res) => {
     if (await queryOne<any>('SELECT 1 FROM companies WHERE LOWER(name) = LOWER(?)', [name])) return void res.status(409).json({ error: 'An organisation with this name already exists.' });
     const admin = b.admin && typeof b.admin === 'object' ? b.admin : null;
     const adminEmail = admin ? text(admin.email, 255)?.toLowerCase() ?? '' : '';
-    if (admin && !EMAIL_RE.test(adminEmail)) return void res.status(400).json({ error: 'Enter a valid e-mail address for the first super admin.' });
+    if (admin && !EMAIL_RE.test(adminEmail)) return void res.status(400).json({ error: 'Enter a valid e-mail address for the first person.' });
+    // The first person's role (default super admin): manager of the first department, or team lead /
+    // software engineer / viewer of the first team.
+    const firstRole: string = admin?.role ?? 'super_admin';
+    if (admin && !FIRST_PERSON_ROLES.includes(firstRole)) return void res.status(400).json({ error: `Role: one of ${FIRST_PERSON_ROLES.join(', ')}.` });
     const { domain, isPublic } = await checkDomain(text(b.domain, 255) ?? (adminEmail ? emailDomainOf(adminEmail) : ''), null);
     const departmentName = text(b.departmentName, 255) ?? 'General';
     const teamName = text(b.teamName, 255) ?? 'Team 1';
@@ -1046,16 +1053,23 @@ router.post('/companies', ...op, async (req: OperatorRequest, res) => {
     });
     let adminResult: any = null;
     if (admin) {
+      const scopeId = firstRole === 'super_admin' ? companyId : firstRole === 'qa_manager' ? departmentId : teamId;
       if (admin.mode === 'invite') {
-        const r = await forward(req, adminRoutes, 'POST', '/invitations', { email: adminEmail, role: 'super_admin', scopeId: companyId }, companyId);
-        adminResult = { mode: 'invite', status: r.status, ...scrub(r.body) };
+        const r = await forward(req, adminRoutes, 'POST', '/invitations', { email: adminEmail, role: firstRole, scopeId }, companyId);
+        adminResult = { mode: 'invite', role: firstRole, status: r.status, ...scrub(r.body) };
+      } else if (firstRole !== 'super_admin') {
+        const r = await forward(req, adminRoutes, 'POST', '/users', {
+          email: adminEmail, password: admin.password, firstName: admin.firstName, lastName: admin.lastName, role: firstRole,
+          ...(firstRole === 'qa_manager' ? { departmentId } : { teamId, departmentId }),
+        }, companyId);
+        adminResult = { mode: 'password', role: firstRole, status: r.status, userId: r.body?.id, error: r.status < 300 ? undefined : r.body?.error };
       } else {
         const r = await forward(req, adminRoutes, 'POST', '/users', {
           email: adminEmail, password: admin.password, firstName: admin.firstName, lastName: admin.lastName, role: 'qa_engineer', teamId, departmentId,
         }, companyId);
         if (r.status < 300 && r.body?.id) {
           const g = await forward(req, adminRoutes, 'POST', `/users/${enc(r.body.id)}/assignments`, { role: 'super_admin', scopeType: 'company' }, companyId);
-          adminResult = { mode: 'password', status: g.status < 300 ? 201 : g.status, userId: r.body.id, error: g.status < 300 ? undefined : g.body?.error };
+          adminResult = { mode: 'password', role: firstRole, status: g.status < 300 ? 201 : g.status, userId: r.body.id, error: g.status < 300 ? undefined : g.body?.error };
         } else adminResult = { mode: 'password', status: r.status, error: r.body?.error };
       }
     }
