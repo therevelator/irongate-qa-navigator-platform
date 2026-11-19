@@ -394,6 +394,14 @@ export function canViewActivity(actor: PolicyActor): boolean {
   return hasCompany(actor) || managedDepartmentIds(actor).length > 0;
 }
 
+/**
+ * User activity log (every request, sign-in and screen view of the company's users): super admins
+ * of the company only (QA managers do not see it, not even for their departments).
+ */
+export function canViewUserActivity(actor: PolicyActor): boolean {
+  return isCompanyAdmin(actor);
+}
+
 /** May the actor see this audit entry? super_admin: all; QA manager: entries of a department they manage. */
 export function canViewAuditEntry(actor: PolicyActor, entry: { department_ids?: string[] | null }): boolean {
   if (hasCompany(actor)) return true;

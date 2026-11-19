@@ -8,6 +8,7 @@ import { execOn, grantAssignment, listAssignments } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
 import { transaction } from '../../src/lib/db';
 import ssoRoutes, { setSessionCookie } from './authSso';
+import { noteFailedSignIn } from '../lib/userActivity';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -183,6 +184,8 @@ router.post('/login', authLimiter, async (req, res) => {
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+    // From here the email belongs to a user: a failure is recorded in their company's user activity.
+    noteFailedSignIn(res, user.email);
 
     // Check if user is inactive - return same error as invalid credentials for security
     if (!user.is_active) {

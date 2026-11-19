@@ -1,4 +1,5 @@
 import express from 'express';
+import { noteSignIn } from '../lib/userActivity';
 import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
@@ -29,6 +30,7 @@ const isProduction = () => process.env.NODE_ENV === 'production';
 
 /** The session cookie (same for password, invitation and SSO sign-in). */
 export function setSessionCookie(res: express.Response, userId: string): void {
+  noteSignIn(res, userId); // user activity log: a sign-in (password, invitation, SSO)
   const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
   res.cookie('irongate_token', token, {
     httpOnly: true,
