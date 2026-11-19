@@ -86,6 +86,16 @@ brackets are what the database and the API use; they did not change.
 
 - **Company** (organisation, tenant). Registering creates a new company and makes the registrant its
   super admin. Data never crosses companies: every endpoint is scoped to the caller's company.
+  The company keeps the e-mail domain of its registrant. A company domain (acme.com) belongs to one
+  company only: a second registration with it is refused with "An organisation already uses the e-mail
+  domain acme.com. Ask its administrator to invite you." A public e-mail domain (gmail.com, outlook.com,
+  hotmail.com, yahoo.com, icloud.com, proton.me and the others in `src/lib/emailDomains.ts`) never blocks
+  a registration: many companies may share it. People with such addresses can create a company and can be
+  invited into other companies in any role (member, team lead, manager). Nobody is ever added to a
+  company, or matched to one, because of their e-mail domain: people join by invitation (or an account an
+  administrator creates), and single sign-on matches only the exact verified address or an open
+  invitation for it. The registration password follows the same rules as invitations and resets (10+
+  characters, three of lower case / upper case / number / symbol, not containing the e-mail name).
 - **Department**: a group of teams (for example "Payments", "Platform"). Managed by one or more managers.
 - **Team**: the unit metrics are recorded for. Has one team lead and any number of members. A team can be
   moved to another department.
@@ -145,6 +155,13 @@ What each role may do (from `userPolicy.ts`; the navigation in [`src/components/
 Nobody can change their own role, department or team, grant themselves an assignment or manage someone
 of their own rank or above. Editing yourself is limited to name and e-mail.
 
+A page a role may not open (an address typed in, an old link, or rights that changed while the page was
+open) opens the overview with the message "You don't have access to <page>." (it can be dismissed and goes
+with the next page change). The API answers such calls with `403` before it looks at the request body, so
+a refusal never depends on, or describes, what a valid request would contain.
+
+Removing a role assignment (the × on a chip in **Users**) asks for confirmation in the page first.
+
 ### Invitations
 
 Users page → **Invite**: e-mail, role and team or department (within the same rules as granting an
@@ -190,6 +207,12 @@ signs the person out on every device (see **Sessions** below). Code: [`server/li
 
 A sign-in is a signed cookie. The server checks two limits on every request.
 
+**Keep me signed in.** On the sign-in screen (it also applies to the Google / Microsoft buttons). Unticked,
+the cookie lasts until the browser is closed. Ticked, it stays for the company's sign-in lifetime (below).
+Either way a sign-in never lasts longer than that lifetime. Creating an organisation and accepting an
+invitation sign you in until the browser is closed. "Sign out my other devices" and changing your own
+password keep your choice.
+
 **Sign out everywhere.** These end every existing session of a person:
 
 - a reset with the e-mail link, an administrator's direct password reset, changing your own password;
@@ -211,7 +234,8 @@ issued for the value at sign-in). Every change is in the Activity log ("Sign-in 
 idle timeout.
 
 When a session ends this way the app shows the sign-in screen with "Your session has ended. Please sign in
-again." or "Your sign-in has expired. Please sign in again." After signing in, the same page opens.
+again." or "Your sign-in has expired. Please sign in again." The message stays after a reload of that tab
+and goes with the next successful sign-in. After signing in, the same page opens.
 Code: [`server/lib/sessions.ts`](../server/lib/sessions.ts).
 
 ### E-mail
@@ -883,6 +907,10 @@ per-source "last received" overview. This is where you check whether CI integrat
 
 Settings in the `configs` table (Performance SLA, financial settings and others) resolve team, then department, then company
 ([`server/lib/configResolver.ts`](../server/lib/configResolver.ts)). Keys that look like credentials are never returned to the browser.
+The Parameters page and the API (`POST /api/admin/configs`) apply the same rules
+([`src/lib/configRules.ts`](../src/lib/configRules.ts)): the SLA and financial values are numbers of 0 or more within a range
+(P95 response time up to 600,000 ms, error rate up to 100 %, money values up to a sensible maximum), or empty to inherit; a refused
+value stores nothing of that save. Expected update frequency takes a whole number from 1 to 100 with a unit.
 
 ### 4.7 Sample (synthetic) data and the banner
 

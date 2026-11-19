@@ -43,6 +43,19 @@ Registering creates a **new** organisation and makes you its super admin. People
 existing organisation only by invitation (Users page → **Invite**), see
 [Organisation, roles and access](#organisation-roles-and-access).
 
+- **E-mail domain.** A company address (`you@acme.com`) ties the organisation to that domain: a second
+  organisation with `acme.com` is refused ("An organisation already uses the e-mail domain acme.com. Ask
+  its administrator to invite you."). A public address (gmail.com, outlook.com, hotmail.com, yahoo.com,
+  icloud.com, proton.me, …: the list is `src/lib/emailDomains.ts`) never blocks a registration: any
+  number of organisations may be registered with it, and such people can also be invited into other
+  organisations in any role. Nothing ever adds a person to an organisation, or matches one, because of
+  a shared e-mail domain (single sign-on matches the exact verified address or an open invitation).
+  Column `companies.email_domain_public`, partial unique index `companies_domain_company_unique`
+  (migration `supabase/migrations/20261124000000_public_email_domains.sql`).
+- **Password.** The same rules as accepting an invitation and resetting a password, in the form and in
+  the API: 10 to 128 characters, three of lower case / upper case / number / symbol, and not containing
+  the part of the e-mail address before the @ (`src/lib/passwordPolicy.ts`).
+
 ## Sample (demo) data
 
 One command fills every table with a fictional, internally consistent company for demos:
@@ -273,6 +286,13 @@ Migration: `supabase/migrations/20261123400000_password_resets.sql`. Endpoints:
 **Sessions (sign out everywhere, how long a sign-in lasts).** A sign-in is a signed cookie. The
 server checks two limits on every request, from the user row it loads anyway:
 
+- **Keep me signed in** (sign-in form; it also applies to the Google / Microsoft buttons under it):
+  unticked, the cookie is a browser-session cookie (no `Max-Age` / `Expires`), dropped when the browser
+  closes; ticked, it is persistent with a max age of the company's sign-in lifetime. Either way the
+  token expires after that lifetime and the check below refuses an older session. Registration and
+  accepting an invitation give a browser-session cookie. "Sign out my other devices" and changing your
+  own password re-issue the cookie with the same choice.
+
 - **Sign out everywhere.** `users.sessions_valid_after`: a session issued before it is refused. It is
   set by a reset with the e-mail link, an administrator's direct reset, changing your own password,
   **Sign out my other devices** (the screen icon next to Sign out, in the navigation: this browser gets a
@@ -282,14 +302,16 @@ server checks two limits on every request, from the user row it loads anyway:
   The value is truncated to the second, so a session started in that same second stays valid.
 - **Sign-in lasts** (Parameters → Sign-in, super admins only): 1 hour, 8 hours, 1 day, 7 days
   (default), 14 days or 30 days. A session older than the current value is refused, so shortening it
-  signs out anyone signed in for longer at once. At sign-in the cookie's max age and the token's
-  expiry are set from it, so a longer value applies from the next sign-in. Stored as the company
+  signs out anyone signed in for longer at once. At sign-in the token's expiry (and, with "Keep me
+  signed in", the cookie's max age) are set from it, so a longer value applies from the next sign-in. Stored as the company
   config `session_lifetime_hours`; the generic settings endpoint refuses that key. Changes are in
   the Activity log.
 
 A refused session answers `401` with `code` `session_ended` or `session_expired` and the header
 `X-Session-Ended`; the app then shows the sign-in screen with "Your session has ended. Please sign
-in again." (or "Your sign-in has expired…") and opens the same address after sign-in.
+in again." (or "Your sign-in has expired…") and opens the same address after sign-in. The reason is
+kept for the browser tab (sessionStorage), so it is still shown after a reload; the next successful
+sign-in removes it.
 Migration: `supabase/migrations/20261123500000_sessions_valid_after.sql`. Endpoints:
 `POST /api/auth/sessions/sign-out-others`, `POST /api/admin/users/:id/sign-out-everywhere`,
 `GET|PUT /api/admin/session-settings { lifetimeHours }`,
