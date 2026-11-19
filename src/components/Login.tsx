@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import API_URL from '../config/api';
+import { goTo, FORGOT_PATH } from '../lib/passwordResetPaths';
 
 interface LoginProps {
   onSwitchToRegister: () => void;
@@ -184,7 +185,15 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">Password</label>
+              <div className="flex items-baseline justify-between mb-1.5">
+                <label htmlFor="password" className="block text-sm font-medium text-slate-700 dark:text-slate-300">Password</label>
+                <a
+                  href={FORGOT_PATH} onClick={(e) => { e.preventDefault(); goTo(FORGOT_PATH); }} data-testid="forgot-password-link"
+                  className="text-sm font-medium text-brand-700 hover:text-brand-800 dark:text-brand-300 dark:hover:text-brand-200"
+                >
+                  Forgot password?
+                </a>
+              </div>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input

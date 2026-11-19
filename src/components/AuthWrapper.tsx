@@ -4,10 +4,15 @@ import Login from './Login';
 import Register from './Register';
 import AcceptInvite from './AcceptInvite';
 import PulseAnswerLink from './PulseAnswerLink';
+import { ForgotPassword, ResetPassword } from './PasswordReset';
+import { FORGOT_PATH, RESET_PATH } from '../lib/passwordResetPaths';
 
 const isAcceptInvitePath = () => window.location.pathname === '/accept-invite';
 /** Personal survey link from the pulse e-mail: works signed in or not (the token covers one answer only). */
 const isPulseLinkPath = () => window.location.pathname === '/pulse/answer';
+/** Forgot / reset password (public): shown whether or not someone is signed in. */
+const passwordPage = (): 'forgot' | 'reset' | null =>
+  window.location.pathname === FORGOT_PATH ? 'forgot' : window.location.pathname === RESET_PATH ? 'reset' : null;
 
 interface AuthWrapperProps {
   children: React.ReactNode;
@@ -19,13 +24,16 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   // /accept-invite is public (the invited person has no account yet).
   const [acceptInvite, setAcceptInvite] = useState(isAcceptInvitePath);
   const [pulseLink, setPulseLink] = useState(isPulseLinkPath);
+  const [password, setPassword] = useState(passwordPage);
   useEffect(() => {
-    const onPop = () => { setAcceptInvite(isAcceptInvitePath()); setPulseLink(isPulseLinkPath()); };
+    const onPop = () => { setAcceptInvite(isAcceptInvitePath()); setPulseLink(isPulseLinkPath()); setPassword(passwordPage()); };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
 
   if (pulseLink) return <PulseAnswerLink />;
+  if (password === 'reset') return <ResetPassword />;
+  if (password === 'forgot') return <ForgotPassword />;
   if (acceptInvite && !isLoading) return <AcceptInvite />;
 
   // Show loading state

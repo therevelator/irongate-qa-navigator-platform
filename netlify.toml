@@ -53,6 +53,14 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
 
+# Password reset page: its address carried a one-time token, so no Referer at all (the page also
+# removes the token from the address bar and adds <meta name="referrer" content="no-referrer">).
+[[headers]]
+  for = "/reset-password"
+  [headers.values]
+    Referrer-Policy = "no-referrer"
+    Cache-Control = "no-store"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]

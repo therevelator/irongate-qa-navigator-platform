@@ -98,6 +98,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [sendingResetLink, setSendingResetLink] = useState(false);
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [expandedUserIds, setExpandedUserIds] = useState<Set<string>>(new Set());
   const [userMetrics, setUserMetrics] = useState<Record<string, DeveloperMetrics>>({});
@@ -1100,6 +1101,38 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
           }
         }}>
           <div className="space-y-4">
+            <div className="rounded-md border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/60 p-3" data-testid="send-reset-link-box">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                Recommended: e-mail {selectedUser?.id === user?.id ? 'yourself' : 'them'} a link to choose a new password. It works once and expires in 60 minutes.
+              </p>
+              <button
+                type="button" disabled={sendingResetLink} data-testid="send-reset-link-btn"
+                onClick={async () => {
+                  if (!selectedUser) return;
+                  setSendingResetLink(true);
+                  try {
+                    const response = await fetch(`${API_URL}/admin/users/${selectedUser.id}/send-reset-link`, { method: 'POST', credentials: 'include' });
+                    const body = await response.json().catch(() => ({}));
+                    if (response.ok && body.delivered) {
+                      toast.success(body.message || 'Reset link sent');
+                      setShowPasswordModal(false);
+                    } else if (response.ok) {
+                      toast.error(body.message || 'The e-mail could not be sent.');
+                    } else {
+                      toast.error(`Failed: ${body.error || 'Unknown error'}`);
+                    }
+                  } catch {
+                    toast.error('Error sending the reset link');
+                  } finally {
+                    setSendingResetLink(false);
+                  }
+                }}
+                className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 border border-cyan-600 text-cyan-700 dark:text-cyan-300 dark:border-cyan-500 rounded-md text-sm hover:bg-cyan-50 dark:hover:bg-slate-700 disabled:opacity-60 transition-colors"
+              >
+                <Send size={14} />{sendingResetLink ? 'Sending…' : 'Send reset link'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-slate-400">Or set a new password yourself and tell them:</p>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
               <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required minLength={6} placeholder="Enter new password" />

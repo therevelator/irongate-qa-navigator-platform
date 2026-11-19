@@ -164,6 +164,8 @@ if (process.env.NODE_ENV === 'production') {
 
   // SPA fallback for client-side routes (everything except /api and /health)
   app.get(/^\/(?!api\/|health$).*/, (req, res) => {
+    // The reset page's address carries a one-time token: never send it on as a Referer.
+    if (req.path === '/reset-password') res.setHeader('Referrer-Policy', 'no-referrer');
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }

@@ -97,6 +97,10 @@ jobs:
     name: End-to-end tests (Playwright)
     runs-on: ubuntu-24.04  # Playwright 1.57 has no browser builds for ubuntu-latest (26.04) yet
     timeout-minutes: 40
+    env:
+      # The log mailer also writes each e-mail here (development aid), so the tests can follow
+      # the links in invitation, pulse and password reset e-mails.
+      MAIL_CAPTURE_FILE: /tmp/irongate-ci-logs/mail.jsonl
     services:
       postgres:
         image: postgres:16
