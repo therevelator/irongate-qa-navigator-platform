@@ -314,7 +314,7 @@ const TrendLine: React.FC<{ change: ReturnType<typeof describeChange>; unit?: st
 
 const InfoTip: React.FC<{ text: string }> = ({ text }) => (
   <span className="relative group inline-flex">
-    <Info size={13} className="text-slate-400 dark:text-slate-500 cursor-help" aria-label={text} />
+    <Info size={13} className="text-slate-500 dark:text-slate-400 cursor-help" aria-label={text} />
     <span className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-56 -translate-x-1/2 rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-normal text-slate-700 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
       {text}
     </span>
@@ -684,7 +684,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
             return info(k.historyKey as MetricCatalogKey, (
               <StatTile
                 label={h.label}
-                value={k.value == null ? '—' : <span className={stale ? 'text-slate-400 dark:text-slate-500' : undefined}>{fmt(k.value, k.key === 'defectDensity' ? 2 : 1)}</span>}
+                value={k.value == null ? '—' : <span className={stale ? 'text-slate-500 dark:text-slate-400' : undefined}>{fmt(k.value, k.key === 'defectDensity' ? 2 : 1)}</span>}
                 unit={k.value == null ? undefined : k.unit}
                 tone={stale ? 'neutral' : statusTone(k.status)}
                 caption={k.value == null ? 'No data recorded' : stale
@@ -794,7 +794,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
                       : <Badge tone={statusTone(k.status)} className="shrink-0">{STATUS_BADGE[k.status].label}</Badge>}
                   </div>
                   <p className="mt-3 flex items-baseline gap-1">
-                    <span className={cx('text-2xl font-semibold tabular-nums', stale ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')} data-stale={stale ? 'true' : undefined}>
+                    <span className={cx('text-2xl font-semibold tabular-nums', stale ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white')} data-stale={stale ? 'true' : undefined}>
                       {k.value == null ? '—' : fmt(k.value, DIGITS[k.key] ?? 1)}
                     </span>
                     {k.value != null && k.unit && <span className="text-sm text-slate-500 dark:text-slate-400">{k.unit}</span>}

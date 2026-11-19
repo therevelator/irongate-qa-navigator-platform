@@ -42,7 +42,7 @@ const ReadOnlyField: React.FC<{ label: string; value: string; testId: string }> 
     data-testid={testId}
     title={`${label} is fixed for your role`}
   >
-    <Lock size={13} className="flex-shrink-0 text-slate-400 dark:text-slate-500" aria-hidden />
+    <Lock size={13} className="flex-shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />
     <span className="truncate">{value}</span>
   </div>
 );

@@ -531,7 +531,7 @@ const VALUE_TEXT: Record<Status, string> = {
   good: 'text-green-700 dark:text-green-400',
   warning: 'text-amber-700 dark:text-amber-400',
   critical: 'text-red-700 dark:text-red-400',
-  none: 'text-slate-400 dark:text-slate-500',
+  none: 'text-slate-500 dark:text-slate-400',
 };
 
 const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' | 'ready' | 'error'; onOpenKpiStatus: (tab: KpiTab) => void }> = ({ summary, state, onOpenKpiStatus }) => {
@@ -759,7 +759,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
               ))}
             </p>
           ) : (
-            <p className="mt-1 text-sm text-slate-400 dark:text-slate-500">{state === 'loading' ? '—' : 'No KPI data yet'}</p>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{state === 'loading' ? '—' : 'No KPI data yet'}</p>
           )}
         </div>
       </div>
@@ -811,7 +811,7 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
             <dt className="truncate text-xs text-slate-500 dark:text-slate-400">{f.label}</dt>
             <dd className="mt-0.5 flex items-center gap-1.5">
               <span
-                className={cx('text-sm font-semibold tabular-nums', v == null || stale ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')}
+                className={cx('text-sm font-semibold tabular-nums', v == null || stale ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white')}
                 title={stale ? `Stale since ${stale.staleSince ? fmtDate(stale.staleSince) : '—'}: not judged` : undefined}
                 data-stale={stale ? 'true' : undefined}
               >

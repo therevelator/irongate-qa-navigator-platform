@@ -226,11 +226,11 @@ export const SavedViewsMenu: React.FC<{
             <p className="flex items-center gap-2 px-2 py-3 text-sm text-slate-500 dark:text-slate-400"><Loader2 size={14} className="animate-spin" /> Loading views…</p>
           ) : (
             <>
-              <p className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">Your views</p>
+              <p className="px-2 pb-1 pt-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Your views</p>
               {mine.length ? <ul className="space-y-0.5">{mine.map(row)}</ul> : <p className="px-2 pb-2 text-sm text-slate-500 dark:text-slate-400">No saved views yet.</p>}
               {shared.length > 0 && (
                 <>
-                  <p className="mt-2 border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:text-slate-500">Shared with the company</p>
+                  <p className="mt-2 border-t border-slate-100 px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-800 dark:text-slate-400">Shared with the company</p>
                   <ul className="space-y-0.5">{shared.map(row)}</ul>
                 </>
               )}

@@ -119,11 +119,24 @@ test.describe('Analytics', { tag: [TAG.area('analytics')] }, () => {
     });
   }
 
-  test('AN-08 developer productivity: a server error is not shown as "no data"', { tag: [TAG.negative] }, async ({ signInAs, page }) => {
-    test.fail(true, 'Found issue FI-06 (docs/testing/E2E_FLOWS.md): failed requests show "No data recorded".');
+  test('AN-08 developer productivity: a server error is shown with its reference, not as "no data"', { tag: [TAG.negative] }, async ({ signInAs, page }) => {
     await page.route(`${API_URL}/analytics/developer-metrics*`, (r) => r.fulfill({ status: 500, json: { error: 'Internal server error', requestId: 'rid-dev' } }));
     await signInAs('admin', `/analytics/productivity?team=${DEMO.leadTeam.id}`);
-    await expect(page.getByText(/Could not load/)).toBeVisible({ timeout: 5000 });
+    await expect(page.getByTestId('load-error')).toHaveText('Could not load the developer metrics: the server had a problem. Try again in a moment. Reference: rid-dev.');
+    await expect(page.getByText('No data recorded')).toHaveCount(0);
+    await expect(page.getByText('No developer metrics recorded')).toHaveCount(0);
+  });
+
+  test('AN-09 developer productivity: an unreachable server and a failed snapshot history are errors too', { tag: [TAG.negative] }, async ({ signInAs, page }) => {
+    await page.route(`${API_URL}/analytics/developer-metrics*`, (r) => r.abort('internetdisconnected'));
+    await signInAs('admin', `/analytics/productivity?team=${DEMO.leadTeam.id}`);
+    await expect(page.getByTestId('load-error')).toHaveText('Could not load the developer metrics: the server could not be reached. Check your connection and try again.');
+    await page.unroute(`${API_URL}/analytics/developer-metrics*`);
+    await page.route(`${API_URL}/analytics/ddps-history*`, (r) => r.fulfill({ status: 500, json: { error: 'Internal server error', requestId: 'rid-hist' } }));
+    await page.reload();
+    await expect(page.getByTestId('load-error')).toHaveCount(0);
+    await expect(page.getByTestId('history-load-error')).toHaveText('Could not load the DDPS snapshots: the server had a problem. Try again in a moment. Reference: rid-hist.');
+    await expect(page.getByText('No snapshots recorded')).toHaveCount(0);
   });
 });
 
@@ -141,10 +154,14 @@ test.describe('Developer insights opt-in', { tag: [TAG.area('analytics'), TAG.ar
       await page.getByPlaceholder('Search users by name, email, team...').fill(user.email);
       const card = page.getByTestId('user-card').filter({ hasText: user.email });
       await expect(card.getByTestId('user-ai-status')).toHaveText('Developer insights off');
+      await expect(card.getByRole('button', { name: 'Enable developer insights' })).toHaveAttribute('aria-pressed', 'false');
       await card.getByTestId('user-ai-toggle').click();
+      await expect(page.getByText('Developer insights enabled')).toBeVisible();
       await expect(card.getByTestId('user-ai-status')).toHaveText('Developer insights on');
+      await expect(card.getByRole('button', { name: 'Disable developer insights' })).toHaveAttribute('aria-pressed', 'true');
       expect((await sql('SELECT developer_insights_enabled FROM users WHERE id = $1', [user.id]))[0].developer_insights_enabled).toBe(true);
       await card.getByTestId('user-ai-toggle').click();
+      await expect(page.getByText('Developer insights disabled')).toBeVisible();
       await expect(card.getByTestId('user-ai-status')).toHaveText('Developer insights off');
     } finally {
       await deleteFixtureUser(user.id);

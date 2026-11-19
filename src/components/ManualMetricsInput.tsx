@@ -1501,7 +1501,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     const key = storedKeyFor(metricId);
     return key && existingMetrics ? toNum(existingMetrics[key] as number | null | undefined) : null;
   };
-  const muted = 'text-slate-400 dark:text-slate-500';
+  const muted = 'text-slate-500 dark:text-slate-400';
   const targetNode = (metric: MetricDefinition): React.ReactNode => {
     const key = METRIC_DB_MAPPING[metric.id];
     return key && key in METRICS_CONFIG

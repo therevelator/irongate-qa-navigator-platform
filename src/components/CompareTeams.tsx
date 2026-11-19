@@ -77,7 +77,7 @@ function writeUrl(teamIds: string[], days: number, onlyDifferences: boolean) {
 
 /** Small trend line of the window; the dot is the latest value. */
 const Sparkline: React.FC<{ points: Array<{ value: number }>; status: Status | null; label: string }> = ({ points, status, label }) => {
-  if (points.length < 2) return <span className="text-xs text-slate-400 dark:text-slate-500">No trend</span>;
+  if (points.length < 2) return <span className="text-xs text-slate-500 dark:text-slate-400">No trend</span>;
   const w = 88, h = 24, pad = 2;
   const vals = points.map((p) => p.value);
   const min = Math.min(...vals), max = Math.max(...vals);
@@ -111,9 +111,9 @@ const Change: React.FC<{ cell: Cell; metric: Metric; days: number }> = ({ cell, 
 };
 
 const CellView: React.FC<{ cell: Cell; metric: Metric; isBest: boolean; isWorst: boolean; days: number; teamName: string }> = ({ cell, metric, isBest, isWorst, days, teamName }) => {
-  const valueCls = cell.value === null ? 'text-slate-400 dark:text-slate-500' : cell.stale ? 'text-slate-400 dark:text-slate-500' : cell.status ? STATUS_TEXT[cell.status] : 'text-slate-900 dark:text-white';
+  const valueCls = cell.value === null ? 'text-slate-500 dark:text-slate-400' : cell.stale ? 'text-slate-500 dark:text-slate-400' : cell.status ? STATUS_TEXT[cell.status] : 'text-slate-900 dark:text-white';
   return (
-    <div className={cx('flex min-w-0 flex-col gap-1', cell.stale && 'opacity-80')}>
+    <div className={'flex min-w-0 flex-col gap-1'}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className={cx('text-base font-semibold tabular-nums', valueCls)} data-testid="compare-value">{cell.display}</span>
         {cell.status && !cell.stale && <span className="sr-only">{STATUS_LABEL[cell.status]}</span>}
@@ -327,7 +327,7 @@ const CompareTeams: React.FC = () => {
                       </p>
                     </div>
                     <div className="flex items-baseline gap-2">
-                      <span className={cx('text-3xl font-semibold tabular-nums', qa.status ? STATUS_TEXT[qa.status] : 'text-slate-400 dark:text-slate-500')}>{qa.display}</span>
+                      <span className={cx('text-3xl font-semibold tabular-nums', qa.status ? STATUS_TEXT[qa.status] : 'text-slate-500 dark:text-slate-400')}>{qa.display}</span>
                       {qa.value !== null && <span className="text-sm text-slate-500 dark:text-slate-400">QA score</span>}
                       {qa.status && <Badge tone={STATUS_TONE[qa.status]}>{STATUS_LABEL[qa.status]}</Badge>}
                     </div>

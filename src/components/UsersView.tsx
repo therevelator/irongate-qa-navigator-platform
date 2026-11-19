@@ -308,12 +308,13 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   const canChangePassword = (targetUser: User) => !!user && canResetPassword(actor, asTarget(targetUser));
 
   const getRoleColors = (role: string) => {
-    const colors: Record<string, { bg: string; text: string; gradient: string }> = {
-      super_admin: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300', gradient: 'from-purple-500 to-pink-500' },
-      qa_manager: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', gradient: 'from-blue-500 to-cyan-500' },
-      team_lead: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-300', gradient: 'from-amber-500 to-orange-500' },
-      qa_engineer: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-300', gradient: 'from-green-500 to-emerald-500' },
-      viewer: { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-700 dark:text-gray-300', gradient: 'from-gray-500 to-slate-500' }
+    // avatar: solid colours with white initials at 4.5:1 or more (WCAG AA) in both themes.
+    const colors: Record<string, { bg: string; text: string; gradient: string; avatar: string }> = {
+      super_admin: { bg: 'bg-purple-100 dark:bg-purple-900/30', text: 'text-purple-700 dark:text-purple-300', gradient: 'from-purple-700 to-pink-700', avatar: 'bg-purple-700' },
+      qa_manager: { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-700 dark:text-blue-300', gradient: 'from-blue-700 to-cyan-700', avatar: 'bg-blue-700' },
+      team_lead: { bg: 'bg-amber-100 dark:bg-amber-900/30', text: 'text-amber-700 dark:text-amber-300', gradient: 'from-amber-700 to-orange-700', avatar: 'bg-amber-700' },
+      qa_engineer: { bg: 'bg-green-100 dark:bg-green-900/30', text: 'text-green-700 dark:text-green-300', gradient: 'from-green-700 to-emerald-700', avatar: 'bg-green-700' },
+      viewer: { bg: 'bg-gray-100 dark:bg-gray-800', text: 'text-gray-700 dark:text-gray-300', gradient: 'from-gray-600 to-slate-700', avatar: 'bg-gray-600' }
     };
     return colors[role] || colors.viewer;
   };
@@ -372,7 +373,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             {/* Grid Column Selector - only show in grid view */}
             {viewMode === 'grid' && (
               <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
-                <span className="text-[10px] font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wide px-1.5">Grid</span>
+                <span className="text-[10px] font-semibold text-gray-600 dark:text-slate-300 uppercase tracking-wide px-1.5">Grid</span>
                 {([2, 3, 4] as const).map((cols) => (
                   <button
                     key={cols}
@@ -431,7 +432,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
               >
                 <UserPlus size={16} aria-hidden="true" />
                 <span className="hidden sm:inline">Add with password</span>
-                <span className="rounded bg-slate-100 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-400">Demo</span>
+                <span className="rounded bg-slate-100 px-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-800 dark:text-slate-300">Demo</span>
               </button>
             )}
           </div>
@@ -442,7 +443,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
         {/* Search */}
         <div className="mb-6 flex items-center gap-4 flex-wrap">
           <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 dark:text-slate-500" size={20} />
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500 dark:text-slate-400" size={20} />
             <input
               type="text"
               placeholder="Search users by name, email, team..."
@@ -500,7 +501,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-3 min-w-0 flex-1">
                           {/* Avatar */}
-                          <div className={`w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-lg ${is3DMode ? `bg-gradient-to-br ${roleColors.gradient} shadow-lg` : roleColors.bg.replace('100', '500').replace('900/30', '500')
+                          <div className={`w-12 h-12 rounded-full flex-shrink-0 flex items-center justify-center text-white font-bold text-lg ${is3DMode ? `bg-gradient-to-br ${roleColors.gradient} shadow-lg` : roleColors.avatar
                             }`}>
                             {u.first_name[0]}{u.last_name[0]}
                           </div>
@@ -537,7 +538,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
 
                       {/* Department */}
                       {u.department_name && (
-                        <p className="mt-2 text-xs text-gray-400 dark:text-slate-500 truncate">
+                        <p className="mt-2 text-xs text-gray-500 dark:text-slate-400 truncate">
                           {u.department_name}
                         </p>
                       )}
@@ -561,7 +562,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                   });
                                   setShowEditModal(true);
                                 }}
-                                className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
+                                className="p-1.5 text-gray-500 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
                                 data-testid="edit-btn"
                                 title="Edit"
                               >
@@ -577,7 +578,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                 setUserForm({ ...userForm, password: '' });
                                 setShowPasswordModal(true);
                               }}
-                              className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-amber-600 dark:hover:text-amber-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
+                              className="p-1.5 text-gray-500 dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
                               title={u.id === user?.id ? 'Change My Password' : 'Reset Password'}
                             >
                               <Key size={16} />
@@ -595,20 +596,22 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                       body: JSON.stringify({ enabled: !u.developer_insights_enabled })
                                     });
                                     if (response.ok) {
-                                      toast.success(`AI insights ${u.developer_insights_enabled ? 'disabled' : 'enabled'}`);
+                                      toast.success(`Developer insights ${u.developer_insights_enabled ? 'disabled' : 'enabled'}`);
                                       fetchUsers();
                                     } else {
-                                      toast.error('Failed to toggle insights');
+                                      toast.error('Could not change developer insights');
                                     }
                                   } catch (error) {
-                                    toast.error('Error toggling insights');
+                                    toast.error('Could not change developer insights: the server could not be reached.');
                                   }
                                 }}
                                 className={`p-1.5 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 ${u.developer_insights_enabled
                                   ? 'text-purple-500 dark:text-purple-400'
-                                  : 'text-gray-400 dark:text-slate-500 hover:text-purple-500'
+                                  : 'text-gray-500 dark:text-slate-400 hover:text-purple-500'
                                   }`}
-                                title={u.developer_insights_enabled ? 'Disable AI Insights' : 'Enable AI Insights'}
+                                title={u.developer_insights_enabled ? 'Disable developer insights' : 'Enable developer insights'}
+                                aria-label={u.developer_insights_enabled ? 'Disable developer insights' : 'Enable developer insights'}
+                                aria-pressed={!!u.developer_insights_enabled}
                                 data-testid="user-ai-toggle"
                               >
                                 <Bot size={16} />
@@ -631,8 +634,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                   }
                                 }}
                                 className={`p-1.5 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 ${u.is_active
-                                  ? 'text-gray-400 dark:text-slate-500 hover:text-orange-500'
-                                  : 'text-gray-400 dark:text-slate-500 hover:text-green-500'
+                                  ? 'text-gray-500 dark:text-slate-400 hover:text-orange-500'
+                                  : 'text-gray-500 dark:text-slate-400 hover:text-green-500'
                                   }`}
                                 title={u.is_active ? 'Deactivate' : 'Activate'}
                                 data-testid="user-status-toggle"
@@ -660,7 +663,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                       }
                                     }
                                   }}
-                                  className="p-1.5 text-gray-400 dark:text-slate-500 hover:text-red-500 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
+                                  className="p-1.5 text-gray-500 dark:text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700"
                                   data-testid="delete-btn"
                                   title="Delete"
                                 >
@@ -748,7 +751,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                         ) : userMetrics[u.id] === null ? (
                           <div className="flex flex-col items-center justify-center py-6 text-center">
                             <p className="text-slate-500 dark:text-slate-400 text-sm">No metrics recorded</p>
-                            <p className="text-gray-400 dark:text-slate-500 text-xs mt-1">This engineer has no recorded metrics in the database</p>
+                            <p className="text-gray-500 dark:text-slate-400 text-xs mt-1">This engineer has no recorded metrics in the database</p>
                           </div>
                         ) : (
                           <div className="flex items-center justify-center py-4">

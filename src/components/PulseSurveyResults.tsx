@@ -242,7 +242,7 @@ export const PulseTeamSummary: React.FC<{ teamId: string; onOpen?: () => void }>
             {latest.suppressed ? (
               <div className="mt-2"><SuppressedNote testId="team-wellbeing-suppressed" /></div>
             ) : latest.score == null ? (
-              <p className="mt-2 text-2xl font-semibold text-slate-400 dark:text-slate-500">—<span className="ml-2 text-xs font-normal">No answers for this period</span></p>
+              <p className="mt-2 text-2xl font-semibold text-slate-500 dark:text-slate-400">—<span className="ml-2 text-xs font-normal">No answers for this period</span></p>
             ) : (
               <p className="mt-2 flex items-baseline gap-1.5">
                 <span className={cx('text-3xl font-semibold tabular-nums text-slate-900 dark:text-white')}>{Math.round(latest.score)}</span>

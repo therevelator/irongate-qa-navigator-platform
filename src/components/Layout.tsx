@@ -108,7 +108,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
 ];
 
 // Page title + breadcrumb parent for the top bar
-const PAGE_META: Record<string, { title: string; parent?: string }> = {
+export const PAGE_META: Record<string, { title: string; parent?: string }> = {
   dashboard: { title: 'Overview' },
   features: { title: 'Analytics' },
   compare: { title: 'Compare teams' },
@@ -301,7 +301,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
           {/* Brand */}
           <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
             <button onClick={() => go('dashboard')} className="flex items-center gap-3 text-left rounded-md">
-              <div className="h-8 w-8 rounded-md bg-brand-700 dark:bg-brand-500 flex items-center justify-center">
+              <div className="h-8 w-8 rounded-md bg-brand-700 dark:bg-brand-600 flex items-center justify-center">
                 <span className="text-[13px] font-semibold tracking-tight text-white">IG</span>
               </div>
               <div className="leading-tight">
@@ -340,7 +340,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
               return (
                 <div key={gi} className={gi > 0 ? 'mt-5' : ''}>
                   {group.title && (
-                    <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                       {group.title}
                     </p>
                   )}
@@ -360,7 +360,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
                                 : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800/60 dark:hover:text-white'
                             }`}
                           >
-                            <Icon size={17} className={active ? 'text-brand-700 dark:text-brand-300' : 'text-slate-400 dark:text-slate-500'} />
+                            <Icon size={17} className={active ? 'text-brand-700 dark:text-brand-300' : 'text-slate-500 dark:text-slate-400'} />
                             <span className="truncate">{item.label}</span>
                           </button>
                         </li>
@@ -424,7 +424,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
             </button>
             {!docked && (
               <button onClick={() => go('dashboard')} className="hidden sm:flex flex-shrink-0 items-center gap-2.5 rounded-md pr-1" aria-label="IronGate QE Navigator, go to overview">
-                <span className="h-7 w-7 rounded-md bg-brand-700 dark:bg-brand-500 flex items-center justify-center text-[12px] font-semibold tracking-tight text-white">IG</span>
+                <span className="h-7 w-7 rounded-md bg-brand-700 dark:bg-brand-600 flex items-center justify-center text-[12px] font-semibold tracking-tight text-white">IG</span>
                 <span className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</span>
               </button>
             )}

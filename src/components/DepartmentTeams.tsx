@@ -71,7 +71,7 @@ export const QaScoreBadge: React.FC<{ score: number | null; date?: string | null
         {Math.round(score)}
         <span className="sr-only"> ({label})</span>
       </Badge>
-      {date && <span className="hidden text-xs text-slate-400 dark:text-slate-500 xl:inline">{new Date(date).toLocaleDateString()}</span>}
+      {date && <span className="hidden text-xs text-slate-500 dark:text-slate-400 xl:inline">{new Date(date).toLocaleDateString()}</span>}
     </span>
   );
 };
@@ -454,7 +454,7 @@ export const DepartmentTeamsPanel: React.FC<{
                   <td className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-white">{t.member_count}</td>
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-2">
-                      <span className={cx('min-w-0 truncate', t.team_lead_name ? 'text-slate-700 dark:text-slate-300' : 'text-slate-400 dark:text-slate-500')}>
+                      <span className={cx('min-w-0 truncate', t.team_lead_name ? 'text-slate-700 dark:text-slate-300' : 'text-slate-500 dark:text-slate-400')}>
                         {t.team_lead_name || 'No lead'}
                       </span>
                       {t.is_active && (

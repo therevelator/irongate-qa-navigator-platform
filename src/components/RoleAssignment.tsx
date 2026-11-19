@@ -106,10 +106,10 @@ export const UserPicker: React.FC<{
             return (
               <React.Fragment key={u.id}>
                 {preferredLabel && i === 0 && preferredIds?.has(u.id) && (
-                  <li role="presentation" className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">{preferredLabel}</li>
+                  <li role="presentation" className="px-3 pb-1 pt-1.5 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">{preferredLabel}</li>
                 )}
                 {firstOther && (
-                  <li role="presentation" className="mt-1 border-t border-slate-100 px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">Everyone else</li>
+                  <li role="presentation" className="mt-1 border-t border-slate-100 px-3 pb-1 pt-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:text-slate-400">Everyone else</li>
                 )}
                 <li
                   id={optionId(i)}

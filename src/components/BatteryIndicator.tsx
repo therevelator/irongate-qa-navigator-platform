@@ -103,7 +103,7 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
         />
       </div>
       {showValue && (
-        <span className={`${s.text} font-semibold tabular-nums ${value == null ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white'}`}>
+        <span className={`${s.text} font-semibold tabular-nums ${value == null ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white'}`}>
           {value == null ? '—' : Math.round(value)}
         </span>
       )}

@@ -163,7 +163,7 @@ export const KpiTile: React.FC<{ item: TvKpi; isDark: boolean }> = ({ item, isDa
       <span aria-hidden className={cx('absolute inset-y-0 left-0 w-[0.6rem]', meta.bar)} />
       <h3 className="truncate pb-[0.1em] text-[1.6rem] font-medium leading-snug text-slate-700 dark:text-slate-200" title={label}>{label}</h3>
       <p className="mt-1 flex items-baseline gap-2">
-        <span className={cx('text-[4.25rem] font-semibold leading-none tracking-tight tabular-nums', kpi.value == null || stale ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')}>
+        <span className={cx('text-[4.25rem] font-semibold leading-none tracking-tight tabular-nums', kpi.value == null || stale ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white')}>
           {fmtValue(kpi.value, digits)}
         </span>
         {kpi.value != null && kpi.unit && <span className="whitespace-nowrap text-[1.9rem] font-medium text-slate-500 dark:text-slate-400">{unitSuffix(kpi.unit).trim()}</span>}

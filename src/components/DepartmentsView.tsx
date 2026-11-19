@@ -192,7 +192,7 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
       />
 
       <div className="relative mb-4 max-w-md">
-        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" size={16} aria-hidden="true" />
+        <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 dark:text-slate-400" size={16} aria-hidden="true" />
         <input
           type="search"
           aria-label="Search departments"
@@ -251,11 +251,11 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
                         </button>
                       </td>
                       <td className="px-6 py-3">
-                        <div className={cx('text-sm', dept.description ? 'text-slate-600 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500')}>{dept.description || 'No description'}</div>
+                        <div className={cx('text-sm', dept.description ? 'text-slate-600 dark:text-slate-400' : 'text-slate-500 dark:text-slate-400')}>{dept.description || 'No description'}</div>
                       </td>
                       <td className="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums text-slate-900 dark:text-white">
                         {dept.team_count}
-                        {dept.inactive_team_count > 0 && <span className="ml-1 text-xs text-slate-400 dark:text-slate-500" title={`${dept.inactive_team_count} inactive`}>+{dept.inactive_team_count} inactive</span>}
+                        {dept.inactive_team_count > 0 && <span className="ml-1 text-xs text-slate-500 dark:text-slate-400" title={`${dept.inactive_team_count} inactive`}>+{dept.inactive_team_count} inactive</span>}
                       </td>
                       <td className="px-6 py-3 whitespace-nowrap text-right text-sm tabular-nums text-slate-900 dark:text-white">{dept.user_count}</td>
                       <td className="px-6 py-3 whitespace-nowrap">

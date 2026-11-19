@@ -431,7 +431,7 @@ const TeamTvView: React.FC = () => {
             <div className="min-w-0">
               <h2 id="tv-qa-title" className="text-[1.9rem] font-medium text-slate-600 dark:text-slate-300">QA score</h2>
               <p className="flex items-baseline gap-3 whitespace-nowrap">
-                <span className={cx('text-[9.5rem] font-semibold leading-[0.95] tracking-tighter tabular-nums', latest?.qaScore == null ? 'text-slate-400 dark:text-slate-500' : 'text-slate-900 dark:text-white')} data-testid="tv-qa-score">
+                <span className={cx('text-[9.5rem] font-semibold leading-[0.95] tracking-tighter tabular-nums', latest?.qaScore == null ? 'text-slate-500 dark:text-slate-400' : 'text-slate-900 dark:text-white')} data-testid="tv-qa-score">
                   {latest?.qaScore == null ? '—' : Math.round(latest.qaScore)}
                 </span>
                 {latest?.qaScore != null && <span className="text-[2.5rem] font-medium text-slate-500 dark:text-slate-400">/ 100</span>}

@@ -239,9 +239,9 @@ const TeamGamification: React.FC<TeamRankingsProps> = ({ teamId }) => {
                       return (
                         <td key={c.key} className="px-3 py-3 text-right tabular-nums">
                           {v == null ? (
-                            <span className="text-slate-400 dark:text-slate-500">—</span>
+                            <span className="text-slate-500 dark:text-slate-400">—</span>
                           ) : isStale ? (
-                            <span className="text-slate-400 dark:text-slate-500" title={`Stale${staleSince ? ` since ${formatAsOf(staleSince)}` : ''}: shown, not ranked or judged`} data-stale="true">
+                            <span className="text-slate-500 dark:text-slate-400" title={`Stale${staleSince ? ` since ${formatAsOf(staleSince)}` : ''}: shown, not ranked or judged`} data-stale="true">
                               {v.toFixed(c.digits)}{c.unit}<span className="ml-1 text-[10px] uppercase">stale</span>
                             </span>
                           ) : c.key === 'qaScore' ? (

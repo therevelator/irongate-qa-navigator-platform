@@ -598,7 +598,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                             {hasQ && <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{fmtP(qOf(cr))}</td>}
                             <td className="px-3 py-2 text-slate-500 dark:text-slate-400">{cr.correlation_strength}</td>
                             <td className="px-3 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{cr.sample_size}</td>
-                            <td className="px-5 py-2">{cr.is_significant ? <Badge tone="brand">Yes</Badge> : <span className="text-xs text-slate-400 dark:text-slate-500">No</span>}</td>
+                            <td className="px-5 py-2">{cr.is_significant ? <Badge tone="brand">Yes</Badge> : <span className="text-xs text-slate-500 dark:text-slate-400">No</span>}</td>
                           </tr>
                         ))}
                       </tbody>
