@@ -58,6 +58,8 @@ export interface RepairAction {
   path: string;
   body?: Record<string, unknown>;
   confirmLabel?: string;
+  /** Toast after success (default "<title>: done"). */
+  doneMessage?: (result: any) => string;
 }
 
 /** Confirm + reason dialog for a repair action (POST with { reason, confirm: true }). */
@@ -73,7 +75,7 @@ export const ActionDialog: React.FC<{ action: RepairAction | null; onClose: () =
     setError(null);
     try {
       const out = await opFetch(action.path, { method: 'POST', body: { ...(action.body ?? {}), reason: reason.trim(), confirm: true } });
-      toast.success(`${action.title}: done`);
+      toast.success(action.doneMessage?.(out) ?? `${action.title}: done`);
       onDone?.(out);
       close();
     } catch (e: any) {

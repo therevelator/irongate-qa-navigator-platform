@@ -47,6 +47,32 @@ export function siteBaseUrl(env: NodeJS.ProcessEnv = process.env): string | null
   return u ? u.replace(/\/+$/, '') : null;
 }
 
+/** Running inside a Netlify function (the API function marks its app; Lambda sets its name). */
+export function runningOnNetlify(env: NodeJS.ProcessEnv = process.env): boolean {
+  return !!(env.NETLIFY || env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
+export interface BackgroundStart { ok: boolean; status: number | null; summary: string }
+
+/**
+ * Start demo-refresh-background with the signed token (the nightly scheduler and the operator
+ * panel's "Refresh sample data now" on Netlify). Never throws; logs and returns no secret.
+ */
+export async function startBackgroundDemoRefresh(env: NodeJS.ProcessEnv = process.env): Promise<BackgroundStart> {
+  const token = demoRefreshToken(env);
+  const base = siteBaseUrl(env);
+  if (!token || !base) {
+    return { ok: false, status: null, summary: `not started: ${!token ? 'no DEMO_REFRESH_SECRET or JWT_SECRET' : 'site URL unknown'}` };
+  }
+  try {
+    const res = await fetch(`${base}${DEMO_REFRESH_PATH}`, { method: 'POST', headers: { [DEMO_REFRESH_HEADER]: token } });
+    return { ok: res.ok, status: res.status, summary: `background job requested (${res.status})` };
+  } catch (e) {
+    const err = e as { code?: string; name?: string };
+    return { ok: false, status: null, summary: `could not start the background job (${err?.code ?? err?.name ?? 'error'})` };
+  }
+}
+
 /** Run the refresh and return a one-line summary (counts and dates only). */
 export async function runNightlyDemoRefresh(): Promise<string> {
   const { runRefreshDates } = await import('../seeds/demoSeed');

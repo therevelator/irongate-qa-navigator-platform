@@ -22,7 +22,8 @@ import { sendStatus, sentCounts, responseRate } from '../lib/pulseSend';
 import { evaluateCompany } from '../lib/alerts';
 import { onboardingStatus } from '../lib/onboarding';
 import { reissueInvitation, sendInvitationEmail, statusSql } from '../lib/invitations';
-import { JOB_NAMES, withJobRun } from '../lib/opsLog';
+import { JOB_NAMES, recordJobOutcome, withJobRun } from '../lib/opsLog';
+import { demoRefreshEnabled, runningOnNetlify, startBackgroundDemoRefresh } from '../lib/demoRefreshJob';
 import { mailChannel } from '../lib/mailer';
 import { endUserSessions, sessionProblem, sessionRowOf } from '../lib/sessions';
 import { filtersFromQuery, listUserActivity, userActivityFacets } from '../lib/userActivityQuery';
@@ -570,7 +571,19 @@ function action(handler: (req: OperatorRequest, res: express.Response, company: 
   };
 }
 
+// "Refresh sample data now". On Netlify the refresh takes longer than the API function may run,
+// so it starts the background function (as the nightly scheduler does) and answers "started"; the
+// result is in Scheduled jobs (demo-refresh-background). Elsewhere it runs here and now.
 router.post('/actions/demo-refresh', ...op, action(async (req, res, _c, reason) => {
+  if (!demoRefreshEnabled()) return void res.status(409).json({ error: 'The sample data refresh is off (DEMO_REFRESH_ENABLED=false).' });
+  if (req.app?.locals?.behindNetlify || runningOnNetlify()) {
+    const started = new Date();
+    const r = await startBackgroundDemoRefresh();
+    await recordJobOutcome('demo-refresh', r.ok, `${r.summary} (manual, platform support)`, started);
+    if (!r.ok) return void res.status(502).json({ error: `The sample data refresh could not be started: ${r.summary}.` });
+    await recordCompanyAction(req, null, 'demo_refresh', 'Started the sample data refresh', reason);
+    return void res.status(202).json({ started: true, mode: 'background' });
+  }
   const { runRefreshDates } = await import('../seeds/demoSeed');
   const r = await withJobRun('demo-refresh', () => runRefreshDates(), (x) => `${x.insertedTotal} new rows (manual, platform support)`);
   await recordCompanyAction(req, null, 'demo_refresh', 'Re-ran the demo data refresh', reason, { insertedTotal: r.insertedTotal });
@@ -578,7 +591,7 @@ router.post('/actions/demo-refresh', ...op, action(async (req, res, _c, reason) 
   for (const c of r.companies.filter((x) => x.teamsFilled > 0)) {
     await recordCompanyAction(req, c.id, 'demo_refresh', `Refreshed the sample data of ${c.teamsFilled} team(s)`, reason);
   }
-  res.json({ result: r });
+  res.json({ started: true, mode: 'direct', result: r });
 }, false));
 
 router.post('/companies/:companyId/actions/recompute-snapshots', ...op, action(async (req, res, company, reason) => {

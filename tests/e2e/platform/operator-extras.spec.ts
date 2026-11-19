@@ -68,6 +68,35 @@ test.describe('Platform support panel', { tag: [TAG.area('operator')] }, () => {
     await expect(page.getByText('Internal server error (request id rid-op-500)')).toBeVisible();
   });
 
+  test('OPS-07 "Refresh sample data now": started in the background on the hosted site, run directly elsewhere', { tag: [TAG.role('admin')] }, async ({ signInAs, page }) => {
+    await signInAs('admin', '/operator');
+    await stepUp(page);
+    const bodies: any[] = [];
+    let mode: 'background' | 'direct' = 'background';
+    // The answer of the API function on Netlify (202 started) and of a long-running server (the result).
+    await page.route(`${API_URL}/operator/actions/demo-refresh`, async (r) => {
+      bodies.push(r.request().postDataJSON());
+      await r.fulfill(mode === 'background'
+        ? { status: 202, json: { started: true, mode: 'background' } }
+        : { status: 200, json: { started: true, mode: 'direct', result: { insertedTotal: 5, companies: [] } } });
+    });
+    await page.getByRole('button', { name: 'Refresh sample data now' }).click();
+    await expect(page.getByRole('dialog')).toContainText('runs in the background for a few minutes');
+    await expect(page.getByTestId('op-action-run')).toBeDisabled();
+    await page.getByTestId('op-action-reason').fill('Sample data is a day behind');
+    await page.getByTestId('op-action-confirm-check').check();
+    await page.getByRole('button', { name: 'Refresh now' }).click();
+    await expect(page.getByText('Sample data refresh started. It runs in the background for a few minutes.')).toBeVisible();
+    expect(bodies[0]).toEqual({ reason: 'Sample data is a day behind', confirm: true });
+
+    mode = 'direct';
+    await page.getByRole('button', { name: 'Refresh sample data now' }).click();
+    await page.getByTestId('op-action-reason').fill('Sample data is a day behind');
+    await page.getByTestId('op-action-confirm-check').check();
+    await page.getByRole('button', { name: 'Refresh now' }).click();
+    await expect(page.getByText('Sample data refreshed: 5 new rows.')).toBeVisible();
+  });
+
   test('OPS-06 opening a company is written to that company\'s Activity log with the reason', { tag: [TAG.role('admin')] }, async ({ freshCompany, signInAs, page, app }) => {
     const reason = `UI test reason ${uid()}`;
     await signInAs('admin', '/operator');

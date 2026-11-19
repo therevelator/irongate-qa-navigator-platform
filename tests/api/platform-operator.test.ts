@@ -15,6 +15,9 @@
  *           and the platform access log
  *   OP-009  repair actions: reason + confirm required, each works and is audited
  *   OP-010  overview, error search and pagination limits; invalid company ids
+ *   OP-011  "Refresh sample data now" on Netlify: starts the background function with the signed
+ *           token, answers 202 "started" at once, records job_runs and the platform access log;
+ *           a failed start is 502 and recorded as failed; off (DEMO_REFRESH_ENABLED=false) is 409
  */
 const runRefreshDates = jest.fn();
 jest.mock('../../server/seeds/demoSeed', () => ({
@@ -379,5 +382,65 @@ describe('Platform operator', () => {
     expect((await call('get', '/api/operator/errors?requestId=%3Cscript%3E', opCookie, token)).status).toBe(400);
     expect((await call('get', '/api/operator/errors?limit=9999', opCookie, token)).status).toBe(200);
     expect((await call('get', '/api/operator/access-log', opCookie, token)).body.entries.length).toBeLessThanOrEqual(50);
+  });
+
+  test('OP-011 Refresh sample data now on Netlify starts the background function and reports started', async () => {
+    if (skip()) return;
+    const keys = ['URL', 'DEMO_REFRESH_SECRET', 'DEMO_REFRESH_ENABLED'];
+    const env: Record<string, string | undefined> = {};
+    for (const k of keys) env[k] = process.env[k];
+    const realFetch = global.fetch;
+    const netlifyApp = buildApp();
+    netlifyApp.locals.behindNetlify = true; // as netlify/functions/api.ts
+    const fresh = (await stepUp(opCookie)).body.token as string;
+    const run = (body: object) => request(netlifyApp).post('/api/operator/actions/demo-refresh').set('Cookie', opCookie).set('X-Operator-Token', fresh).send(body);
+    try {
+      process.env.URL = 'https://demo.example.test/';
+      process.env.DEMO_REFRESH_SECRET = 'op-refresh-test-secret';
+      delete process.env.DEMO_REFRESH_ENABLED;
+      const { demoRefreshToken, DEMO_REFRESH_HEADER, DEMO_REFRESH_PATH } = await import('../../server/lib/demoRefreshJob');
+      const fetchMock = jest.fn(async (_url: unknown, _init?: any) => new Response(null, { status: 202 }));
+      global.fetch = fetchMock as any;
+      runRefreshDates.mockClear();
+
+      // Step-up, reason and confirmation rules as for every repair action.
+      expect((await request(netlifyApp).post('/api/operator/actions/demo-refresh').set('Cookie', opCookie).send({ reason: 'Sample data is behind', confirm: true })).status).toBe(401); // no operator token
+      expect((await run({ reason: 'x', confirm: true })).status).toBe(400);
+      expect((await run({ reason: 'Sample data is behind' })).status).toBe(400);
+      expect(fetchMock).not.toHaveBeenCalled();
+
+      const t0 = Date.now();
+      const res = await run({ reason: `Sample data is behind ${stamp}`, confirm: true });
+      expect(res.status).toBe(202);
+      expect(res.body).toEqual({ started: true, mode: 'background' });
+      expect(runRefreshDates).not.toHaveBeenCalled(); // not run inside the API function
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      const [url, init] = fetchMock.mock.calls[0];
+      expect(url).toBe(`https://demo.example.test${DEMO_REFRESH_PATH}`);
+      expect(init.method).toBe('POST');
+      expect(init.headers[DEMO_REFRESH_HEADER]).toBe(demoRefreshToken());
+      const job = await db.query(`SELECT ok, summary, started_at FROM job_runs WHERE job = 'demo-refresh' ORDER BY started_at DESC LIMIT 1`);
+      expect(job.rows[0]).toEqual(expect.objectContaining({ ok: true, summary: 'background job requested (202) (manual, platform support)' }));
+      expect(new Date(job.rows[0].started_at).getTime()).toBeGreaterThanOrEqual(t0 - 1000);
+      const plat = await db.query(`SELECT reason FROM platform_access_log WHERE action = 'action' AND section = 'demo_refresh' AND operator_user_id = $1 ORDER BY created_at DESC LIMIT 1`, [opUserId]);
+      expect(plat.rows[0].reason).toBe(`Sample data is behind ${stamp}`);
+
+      // The background function cannot be reached: 502, recorded as a failed run.
+      fetchMock.mockRejectedValueOnce(Object.assign(new Error('getaddrinfo ENOTFOUND'), { code: 'ENOTFOUND' }));
+      const failed = await run({ reason: 'Sample data is behind again', confirm: true });
+      expect(failed.status).toBe(502);
+      expect(failed.body.error).toMatch(/could not be started/);
+      const failedJob = await db.query(`SELECT ok, summary FROM job_runs WHERE job = 'demo-refresh' ORDER BY started_at DESC LIMIT 1`);
+      expect(failedJob.rows[0]).toEqual({ ok: false, summary: 'could not start the background job (ENOTFOUND) (manual, platform support)' });
+
+      // Turned off: nothing starts.
+      process.env.DEMO_REFRESH_ENABLED = 'false';
+      fetchMock.mockClear();
+      expect((await run({ reason: 'Sample data is behind', confirm: true })).status).toBe(409);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      global.fetch = realFetch;
+      for (const k of keys) { if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; }
+    }
   });
 });

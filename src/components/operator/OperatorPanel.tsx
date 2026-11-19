@@ -162,7 +162,15 @@ const Overview: React.FC<{ onOpen: (c: { id: string; name: string }) => void }> 
         ]} />
       </Section>
       <Section title="Scheduled jobs" subtitle="Last run of each job." action={
-        <button type="button" className={cx(buttonClass.secondary, 'h-8 px-2.5 text-xs')} data-testid="op-demo-refresh" onClick={() => setAction({ title: 'Re-run the demo refresh', description: 'Adds the missing recent days of sample data (never changes or deletes a row, never touches real data).', path: '/actions/demo-refresh' })}>Re-run demo refresh</button>
+        <button type="button" className={cx(buttonClass.secondary, 'h-8 px-2.5 text-xs')} data-testid="op-demo-refresh" onClick={() => setAction({
+          title: 'Refresh sample data now',
+          description: 'Adds the missing recent days of sample data up to today (never changes or deletes a row, never touches real data). On the hosted site it runs in the background for a few minutes; its result appears under demo-refresh-background.',
+          path: '/actions/demo-refresh',
+          confirmLabel: 'Refresh now',
+          doneMessage: (out) => (out?.mode === 'background'
+            ? 'Sample data refresh started. It runs in the background for a few minutes.'
+            : `Sample data refreshed: ${out?.result?.insertedTotal ?? 0} new rows.`),
+        })}>Refresh sample data now</button>
       }>
         <DataTable testId="operator-jobs" rows={p.jobs} rowKey={(j: any) => j.job} columns={[
           { key: 'job', label: 'Job' },
