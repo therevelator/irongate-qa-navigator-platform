@@ -1,5 +1,6 @@
 import type { Config } from '@netlify/functions';
 import { runPulseAutoSend } from '../../server/lib/pulseSend';
+import { withJobRun } from '../../server/lib/opsLog';
 
 /**
  * Automatic wellbeing pulse e-mail (Netlify Scheduled Function, hourly; locally
@@ -9,7 +10,7 @@ import { runPulseAutoSend } from '../../server/lib/pulseSend';
  */
 export default async () => {
   try {
-    const r = await runPulseAutoSend();
+    const r = await withJobRun('pulse-auto-send', () => runPulseAutoSend(), (x) => `${x.sent} of ${x.teams} teams sent, ${x.skipped} skipped`);
     console.log(`[pulse-auto-send] ${r.sent} of ${r.teams} teams sent, ${r.skipped} skipped`);
     return new Response('ok');
   } catch (e: any) {

@@ -1,4 +1,5 @@
 import { DEMO_REFRESH_HEADER, demoRefreshEnabled, isValidDemoRefreshToken, runNightlyDemoRefresh } from '../../server/lib/demoRefreshJob';
+import { withJobRun } from '../../server/lib/opsLog';
 
 /**
  * Nightly demo refresh, worker (Netlify Background Function: the "-background" name gives it up to
@@ -16,7 +17,7 @@ export default async (req: Request) => {
     return;
   }
   try {
-    console.log(`[demo-refresh-background] done ${await runNightlyDemoRefresh()}`);
+    console.log(`[demo-refresh-background] done ${await withJobRun('demo-refresh-background', runNightlyDemoRefresh, (s) => s)}`);
   } catch (e) {
     const err = e as { code?: string; message?: string };
     console.error(`[demo-refresh-background] failed (${err?.code ?? 'error'}): ${err?.message ?? String(e)}`);

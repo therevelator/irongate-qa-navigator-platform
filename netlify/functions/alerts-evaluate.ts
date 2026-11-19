@@ -1,5 +1,6 @@
 import type { Config } from '@netlify/functions';
 import { runScheduledEvaluation } from '../../server/lib/alerts';
+import { withJobRun } from '../../server/lib/opsLog';
 
 /**
  * Hourly alert evaluation (Netlify Scheduled Function; the long-running server does the same in
@@ -8,7 +9,8 @@ import { runScheduledEvaluation } from '../../server/lib/alerts';
  */
 export default async () => {
   try {
-    const r = await runScheduledEvaluation();
+    const r = await withJobRun('alerts-evaluate', runScheduledEvaluation,
+      (x) => `${x.length} companies, ${x.reduce((n, c) => n + c.opened, 0)} alerts opened`);
     const opened = r.reduce((n, c) => n + c.opened, 0);
     console.log(`[alerts-evaluate] ${r.length} companies, ${opened} alerts opened`);
     return new Response('ok');

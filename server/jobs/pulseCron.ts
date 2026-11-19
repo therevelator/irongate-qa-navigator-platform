@@ -1,5 +1,6 @@
 import cron from 'node-cron';
 import { runPulseAutoSend } from '../lib/pulseSend';
+import { withJobRun } from '../lib/opsLog';
 
 /**
  * Local schedule of the automatic pulse-survey e-mail (on Netlify the Scheduled Function
@@ -17,7 +18,7 @@ if (process.env.PULSE_CRON !== 'false' && !process.env.NETLIFY && !process.env.A
     if (running) return;
     running = true;
     try {
-      const r = await runPulseAutoSend();
+      const r = await withJobRun('pulse-auto-send', () => runPulseAutoSend(), (x) => `${x.sent} of ${x.teams} teams sent, ${x.skipped} skipped`);
       if (r.sent) console.log(`[pulse] automatic send: ${r.sent} of ${r.teams} teams sent`);
     } catch (e) {
       console.error('[pulse] automatic send failed:', (e as Error)?.message ?? e);

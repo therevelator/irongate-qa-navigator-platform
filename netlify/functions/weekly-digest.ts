@@ -1,5 +1,6 @@
 import type { Config } from '@netlify/functions';
 import { runWeeklyDigest } from '../../server/lib/digest';
+import { withJobRun } from '../../server/lib/opsLog';
 
 /**
  * Weekly digest (Netlify Scheduled Function, Mondays 07:00 UTC; locally server/jobs/alertsCron.ts):
@@ -9,7 +10,7 @@ import { runWeeklyDigest } from '../../server/lib/digest';
  */
 export default async () => {
   try {
-    const r = await runWeeklyDigest();
+    const r = await withJobRun('weekly-digest', () => runWeeklyDigest(), (x) => `${x.queued} messages queued for ${x.companies} companies`);
     console.log(`[weekly-digest] ${r.queued} messages queued for ${r.companies} companies`);
     return new Response('ok');
   } catch (e: any) {

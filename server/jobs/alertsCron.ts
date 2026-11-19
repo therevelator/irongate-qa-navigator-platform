@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { runScheduledEvaluation } from '../lib/alerts';
 import { runWeeklyDigest } from '../lib/digest';
+import { withJobRun } from '../lib/opsLog';
 
 /**
  * Local schedule of the long-running server (on Netlify the Scheduled Functions in
@@ -19,7 +20,7 @@ if (process.env.ALERTS_CRON !== 'false' && !process.env.NETLIFY && !process.env.
     if (running) return;
     running = true;
     try {
-      const r = await runScheduledEvaluation();
+      const r = await withJobRun('alerts-evaluate', runScheduledEvaluation, (x) => `${x.length} companies, ${x.reduce((n, c) => n + c.opened, 0)} alerts opened`);
       const opened = r.reduce((n, c) => n + c.opened, 0);
       const resolved = r.reduce((n, c) => n + c.resolved, 0);
       console.log(`[alerts] scheduled evaluation: ${r.length} companies, ${opened} opened, ${resolved} resolved`);
@@ -32,7 +33,7 @@ if (process.env.ALERTS_CRON !== 'false' && !process.env.NETLIFY && !process.env.
   cron.schedule(evaluateAt, evaluate, { timezone: 'UTC' });
   cron.schedule(digestAt, async () => {
     try {
-      const r = await runWeeklyDigest();
+      const r = await withJobRun('weekly-digest', () => runWeeklyDigest(), (x) => `${x.queued} messages queued for ${x.companies} companies`);
       console.log(`[digest] weekly digest: ${r.queued} messages queued for ${r.companies} companies`);
     } catch (e) {
       console.error('[digest] weekly digest failed:', (e as Error)?.message ?? e);
