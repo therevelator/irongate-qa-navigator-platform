@@ -1,13 +1,13 @@
 # Manual test cases
 
-367 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+368 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
 ## Contents
 
 - [Sign-in and sessions](#sign-in-and-sessions) (29)
-- [Registration and invitations](#registration-and-invitations) (18)
+- [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
 - [Accessibility](#accessibility) (13)
@@ -1257,6 +1257,29 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** Access control check; nothing is sent.
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-09 a manager may invite team leads, software engineers and viewers only; a team lead engineers and viewers`
+
+### TC-AUTH-121: Right after signing in with the form, a company that hides sample-data notices shows no 'Includes sample data' banner
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin
+
+**Preconditions**
+
+- App running at the test URL
+- A company whose data includes generated sample values (e.g. the Meridian showcase), with 'Hide the sample-data notices' on (platform support → Edit company)
+
+**Test data**
+
+- A super admin of that company
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open the sign-in page and sign in with the form (do not reload afterwards). | The overview opens with the team cards and WITHOUT the 'Includes sample data.' banner. |
+| 2 | Sign out. In platform support untick 'Hide the sample-data notices' for the company, then sign in again with the form. | The 'Includes sample data.' banner is shown on the overview. |
+| 3 | Set the option back on. | — |
+
+**After the test:** Leave 'Hide the sample-data notices' as it was.
+
+*Automated:* `tests/e2e/auth/sample-notice-sign-in.spec.ts › Sign-in and the sample-data notice › SIGN-SN-01 the banner follows the company setting straight after the sign-in form`
 
 ## Forgot / reset password
 
@@ -6239,8 +6262,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Manager and open Parameters (/parameters-config). | The page 'System configuration' opens with 'Currently editing: Company-wide'. |
 | 2 | Look at the Scope card. | There is no 'Apply to every department and team' checkbox. |
-| 3 | Without changing any value, click 'Save configuration'. | A toast 'Configuration saved (Company-wide)' appears. |
-| 4 | In DevTools > Network open the POST request to /api/admin/configs and view its payload. | The payload has no 'applyToAll' field. |
+| 3 | Look at the Scope card and the 'Save configuration' button. | The note 'Company-wide values are set by super admins. Choose one of your departments or teams to change its values.' is shown and 'Save configuration' is disabled. |
+| 4 | Choose one of your departments in the Scope card. | The note disappears and 'Save configuration' is enabled (managers change their departments' and teams' values). |
 | 5 | Look at the 'KPI targets' card. | It says 'Company-wide targets are set by super admins. You can view them here.'; the Test coverage Target field is disabled; there is no save button on the card. |
 | 6 | Scroll through the rest of the page. | There is no 'Sign-in' card ('Sign-in lasts') and no Slack settings ('Notification channels' / 'Incoming webhook URL'). |
 
