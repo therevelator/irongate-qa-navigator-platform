@@ -468,10 +468,28 @@ security on, no policies.
     or a second scheduler send nothing. Expired links are deleted after 30 days.
   - **Response rate** per closed period = responses ÷ members the survey was e-mailed to (at most 100 %),
     shown with the period's results (only when the results are shown, i.e. ≥ 3 responses).
-  - Answers are stored **without user id or time** (only team and period). Who answered which period is
-    stored separately (`pulse_participation`) only to refuse a second answer (409). Each answer rewrites
-    the period's answer set in random order with fresh ids in one transaction, so ids, row order and
-    transaction ids do not tell whose answer is whose. No audit entry is written for an answer.
+  - Answers are stored **without user id or time** (only team and period). **Your answers are
+    anonymous. Your manager can see whether you have responded, not what you answered.** Who answered
+    which period is stored separately (`pulse_participation`, no time): to refuse a second answer
+    (409), to send reminders, and for the escalation below. Each answer rewrites the period's answer
+    set in random order with fresh ids in one transaction, so ids, row order and transaction ids do not
+    tell whose answer is whose. No audit entry and no user activity row is written for an answer.
+  - **Non-response warning, reminders and escalation** (migration
+    `20261123200000_pulse_reminders_escalation.sql`; set per team by the team lead, the department's QA
+    managers and super admins, `canSetPulseReminders`, on the Wellbeing pulse page; every change in
+    Activity). Counted from the day the period's survey went out: after `warning_after_days` (default 2)
+    a member who has not answered sees a banner across the app ("Your team's wellbeing pulse is waiting
+    — it takes 1 minute. Your answers are anonymous.", only about themselves, hidden for the day with
+    "Not today"); automatic reminder e-mails every `reminder_every_days` (default 3; on by default) to
+    members who have not answered, at most one a day per person and never after the period ends; after
+    `escalate_after_days` (default 5) **once per team and period** the team lead and / or the
+    department's managers (`escalate_to`, default both; nobody in that role: the company's super admins,
+    and the page says so) get a notification (in-app, and e-mail when their immediate e-mails are on)
+    with the **names of members who have not answered** and the response rate, never anything about
+    answers. They can also see the current list on the team's pulse page. Short periods shorten the
+    delays so the escalation always lands before the period ends (shown as the values for this period).
+    Reminders and escalations run in the hourly pulse job; `GET /api/pulse/pending` feeds the banner and
+    `PUT /api/pulse/teams/:teamId/settings` saves the settings.
   - Results: only **closed** periods (never the running one, so results never move after one person
     answers), only aggregates, only with **≥ 3 responses**; comments with the same rule, sorted
     alphabetically, for leads, managers and admins only. Members see their team's averages.
@@ -486,7 +504,9 @@ security on, no policies.
   `POST /api/pulse/teams/:teamId/responses` (`canTakePulseSurvey`: assigned to the team),
   `PUT /api/pulse/teams/:teamId/cadence` and `PUT /api/pulse/teams/:teamId/auto-send` (`canSetPulseCadence`:
   QA manager of the department, super admin), `POST /api/pulse/teams/:teamId/send` and `…/remind`
-  (`canSendPulseSurvey`: the team lead, QA manager of the department, super admin). Without a session, the
+  (`canSendPulseSurvey`: the team lead, QA manager of the department, super admin),
+  `PUT /api/pulse/teams/:teamId/settings` (`canSetPulseReminders`: the team lead, QA manager of the
+  department, super admin) and `GET /api/pulse/pending` (the caller's own pending surveys). Without a session, the
   token being the credential: `POST /api/pulse/link` `{ token }` (what the answer page shows; no personal
   data) and `POST /api/pulse/link/respond` `{ token, answers, comment }`. Cadence changes, sends, reminders
   and automatic-sending changes are in the Activity log; answers never are.

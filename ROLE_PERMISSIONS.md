@@ -36,6 +36,7 @@ the server; access never depends on them alone.
 | Executive briefing (`canRequestExecutiveBriefing`) | yes | yes | yes | no | no |
 | Wellbeing pulse results (aggregates only, `canViewPulseResults`) | all teams | their departments' teams | their teams | their teams | their teams |
 | Pulse comments (`canViewPulseComments`) | yes | their departments | their teams | no | no |
+| Names of members who have not answered the pulse (after the period's escalation) | when they were told (fallback recipients) | when they were told | when they were told | no | no |
 | Alerts and tracked actions of a team (`canSeeTeamAlerts`, `canSeeActions`) | all teams (plus company-level alerts) | their departments' teams | their teams | their teams | their teams |
 | Revenue impact of a team / roll-up (`canViewRevenueRollup`) | all / company and departments | their departments' teams / their departments | their teams / no | their teams / no | their teams / no |
 | Activity (`canViewActivity`), Ingestion log (`canViewIngestionLog`) | whole company | entries of their departments | no | no | no |
@@ -61,6 +62,7 @@ individual developer data needs at least 3 such contributors (k-anonymity, `serv
 | Acknowledge alerts; create / edit / delete tracked actions (`canManageActions`) | any team | their departments | teams they lead | own actions' status only | own actions' status only |
 | Pulse cadence and automatic sending (`canSetPulseCadence`) | any team | their departments | no | no | no |
 | Send the pulse survey and reminders (`canSendPulseSurvey`) | any team | their departments | teams they lead | no | no |
+| Pulse warning, reminder e-mails and escalation settings (`canSetPulseReminders`) | any team | their departments | teams they lead | no | no |
 | Answer the pulse survey (`canTakePulseSurvey`) | teams they are assigned to | teams they are assigned to | yes | yes | yes |
 | Share saved views with the company; onboarding checklist; sample data (`canShareSavedView`, `canViewOnboarding`, `canManageSampleData`) | yes | no | no | no | no |
 

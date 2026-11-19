@@ -989,9 +989,13 @@ Individual rows follow the role rules of section 2 (own row for QA engineers and
 ### Survey anonymity design
 
 - Answers are stored in `pulse_responses` **without user id or time**, only team and period.
-- Who answered which period is stored separately in `pulse_participation`, only to refuse a second answer (409). It cannot be matched to an
-  answer: each new answer rewrites the period's whole answer set in random order with fresh ids in one transaction, so ids, row order and
-  transaction ids reveal nothing. No audit entry is written for an answer.
+- **Your answers are anonymous. Your manager can see whether you have responded, not what you answered.** The survey screen and the
+  survey e-mail say this.
+- Who answered which period is stored separately in `pulse_participation` (team, person, period; no time). It is used to refuse a second
+  answer (409), to remind members who have not answered, and, after the escalation delay, to tell the team lead or managers who has not
+  answered yet. It cannot be matched to an answer: each new answer rewrites the period's whole answer set in random order with fresh ids
+  in one transaction, so ids, row order and transaction ids reveal nothing; `pulse_responses` has no user id and no time. No audit entry
+  and no user activity row is written for an answer.
 - Results: only **closed** periods (never the running one, so results never move after one person answers), only aggregates, only with at
   least 3 responses. Comments follow the same rule, are sorted alphabetically, and are shown to leads, managers and admins only. Members see
   their team's averages.
@@ -1035,14 +1039,36 @@ fewer than 7 days, to the end of the following one. Every change is in Activity.
   the database makes a second run send nothing.
 - The answer page (`/pulse/answer?token=…`) works signed in or not, shows the team, company, period and questions (no personal data),
   and ends with a thank-you. A used, expired or wrong link says so.
-- Activity records cadence changes, sends (manual and automatic), reminders and automatic-sending changes, never answers.
+- Activity records cadence changes, sends (manual and automatic), reminders, reminder settings, escalations and automatic-sending
+  changes, never answers.
+
+### Members who have not answered: warning, reminders, escalation
+
+Set per team on the Wellbeing pulse page by the **team lead, the department's QA managers and super admins** (`canSetPulseReminders`),
+recorded in Activity. Days count from the day the period's survey went out (no survey sent: nothing happens).
+
+| Setting | Default | What happens |
+|---|---|---|
+| Warn after | 2 days | A member who has not answered sees a banner across the app: "Your team's wellbeing pulse is waiting — it takes 1 minute. Your answers are anonymous." Only they see it; "Answer now" opens the survey, "Not today" hides it until tomorrow. One line per team |
+| E-mail reminders | on, every 3 days | A new personal link to members who have not answered. At most one a day per person, never after the period ends. Logged as an automatic reminder (counts only) |
+| Escalate after | 5 days | Once per team and period: the chosen people get a notification (in-app; e-mail when their immediate e-mails are on) with the **names of members who have not answered** and the response rate. Never anything about answers |
+| Tell | team lead and department managers | Or only one of them. When nobody holds the chosen role, the company's super admins are told instead, and the page says so |
+
+The escalation must land before the period ends and the warning before the escalation, so short periods shorten the delays (a weekly
+period keeps the defaults; an escalation of 10 days becomes 6). The page shows the values for this period. After the escalation the
+people it went to see the current list on the team's pulse page; a member who answers drops off it.
+
+This changes the earlier rule that nobody sees **who** answered: managers now see who has **not** responded. What anyone answered stays
+anonymous, and the result threshold (at least 3 responses) is unchanged. Code: [`server/lib/pulseSend.ts`](../server/lib/pulseSend.ts)
+(`runPulseReminders`, hourly with the automatic send), [`server/lib/pulseRules.ts`](../server/lib/pulseRules.ts) (`effectiveReminderSettings`).
 
 ### Residual risks (by design, documented)
 
 - With k = 3, a person who answered a 3-response period knows their own answers and therefore the sum of the other two.
 - Database superusers could read dead row versions before vacuum; the API never exposes rows.
-- The send tables know who was e-mailed and reminded (a reminder goes to people who had not answered yet); like the participation list they
-  never leave the server, and the API returns only counts under the same threshold.
+- The send tables know who was e-mailed and reminded (a reminder goes to people who had not answered yet). After the escalation, the
+  people told see who has not answered yet; someone watching that list closely can tell roughly when a person answered (never what).
+  Before the escalation the API returns only counts under the same threshold.
 - A personal link works for whoever holds it (as with any e-mailed link): it is single-use, period-bound and says not to forward it.
 - Developer metrics individual rows are visible to leads, managers and admins only for people who opted in; the choice is per person
   (users page toggle, off by default).
