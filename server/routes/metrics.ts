@@ -25,7 +25,7 @@ import {
   COMPANY_AGGREGATE_TEXT,
   distributionOf,
 } from '../lib/metricFormulas';
-import { evaluateSnapshot, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { evaluateLatestSnapshot, evaluateSnapshot, type EvalContext, type LatestEvaluation, type SnapshotEvaluation } from '../lib/kpiEvaluation';
 import { loadIntervals, referenceFor, STALENESS_RULE_TEXT } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 
@@ -57,7 +57,7 @@ async function evalContext(companyId: string): Promise<EvalContext> {
 }
 
 /** Latest snapshot of every active team of the company, evaluated now (stale values flagged). */
-async function latestEvaluated(companyId: string): Promise<Array<{ row: any; ev: SnapshotEvaluation | null }>> {
+async function latestEvaluated(companyId: string): Promise<Array<{ row: any; ev: LatestEvaluation | null }>> {
   const rows: any[] = await query<any>(
     `SELECT t.id, t.name, t.department_id, d.name AS department_name, ${teamMemberCountSql('t')} AS member_count, k.*,
             t.id AS id, t.name AS name
@@ -71,7 +71,7 @@ async function latestEvaluated(companyId: string): Promise<Array<{ row: any; ev:
   const now = Date.now();
   return rows.map((r: any) => ({
     row: r,
-    ev: r.snapshot_date ? evaluateSnapshot(r, { id: String(r.id), department_id: r.department_id }, ctx, now) : null,
+    ev: r.snapshot_date ? evaluateLatestSnapshot(r, { id: String(r.id), department_id: r.department_id }, ctx, now) : null,
   }));
 }
 
@@ -130,6 +130,8 @@ router.get('/analytics/teams', authenticateToken, async (req: any, res) => {
         qa_score: ev ? ev.qa.value : null,
         qa_score_recorded: toNum(row.qa_score),
         snapshot_date: row.snapshot_date ?? null,
+        last_updated: ev?.lastUpdated ?? null,
+        data_outdated: ev?.outdated ?? false,
         stale_metrics: stale,
       };
       for (const c of cols) t[c] = stale.includes(c) ? null : toNum(row[c]);

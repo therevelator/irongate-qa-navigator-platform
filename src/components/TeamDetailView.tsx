@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { LastUpdatedNote } from './LastUpdatedNote';
 import type { Team } from '../data/mockData';
 import { generateDetailedKPIs, getThreshold, statusFor, toNum } from '../data/detailedKPIs';
 import type { KPIData, KPIStatus, Threshold } from '../data/detailedKPIs';
@@ -353,6 +354,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
 
   const kpi: KPIData = team.kpiData || {};
   const [snapshotDate, setSnapshotDate] = useState<string | null>(team.snapshotDate ?? kpi.snapshotDate ?? null);
+  // Newest value time, and whether it is over a day old ("Last updated", FI-22).
+  const [freshness, setFreshness] = useState<{ at: string | null; outdated: boolean }>({ at: team.lastUpdated ?? null, outdated: !!team.dataOutdated });
+  useEffect(() => { setFreshness({ at: team.lastUpdated ?? null, outdated: !!team.dataOutdated }); }, [team.lastUpdated, team.dataOutdated]);
   const [members, setMembers] = useState<MemberRow[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [aiSuggestions, setAISuggestions] = useState<TeamAISuggestions | null>(null);
@@ -438,6 +442,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
         const list: TeamMember[] = data.team?.members || [];
         const snap = data.team?.kpiData?.snapshotDate ?? data.team?.snapshotDate ?? null;
         if (!cancelled && snap) setSnapshotDate(snap);
+        if (!cancelled && data.team) setFreshness({ at: data.team.lastUpdated ?? null, outdated: !!data.team.dataOutdated });
 
         let byId: Record<string, DevMetricRow> = {};
         let byName: Record<string, DevMetricRow> = {};
@@ -599,6 +604,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
               {team.teamLead ? <>Lead: {team.teamLead}</> : 'No team lead'}
               {' · '}
               {asOf ? <>KPI snapshot as of {asOf}</> : 'No KPI snapshot recorded'}
+              {freshness.outdated && <>{' · '}<LastUpdatedNote at={freshness.at} outdated /></>}
             </>
           }
           actions={(canShowFormulas || (onOpenTv && canOpenTv)) ? (

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { LastUpdatedNote } from './LastUpdatedNote';
 import { GitCompareArrows, Loader2, Plus, X, ArrowUpRight, ArrowDownRight, Minus } from 'lucide-react';
 import toast from 'react-hot-toast';
 import API_URL from '../config/api';
@@ -32,7 +33,7 @@ interface Cell {
 }
 interface CompareTeam {
   id: string; name: string; departmentName: string | null; leadName: string | null; memberCount: number;
-  snapshotDate: string | null; qaScoreConfidence: ConfidenceInfo | null; sampleData: boolean; cells: Record<string, Cell>;
+  snapshotDate: string | null; lastUpdated?: string | null; dataOutdated?: boolean; qaScoreConfidence: ConfidenceInfo | null; sampleData: boolean; cells: Record<string, Cell>;
 }
 interface Diff { best: string[]; worst: string[]; spread: number | null; spreadDisplay: string; differs: boolean }
 interface Comparison { days: number; metrics: Metric[]; teams: CompareTeam[]; differences: Record<string, Diff>; differenceRule: string }
@@ -332,7 +333,10 @@ const CompareTeams: React.FC = () => {
                       {qa.status && <Badge tone={STATUS_TONE[qa.status]}>{STATUS_LABEL[qa.status]}</Badge>}
                     </div>
                     <ConfidenceNote c={t.qaScoreConfidence} compact />
-                    <p className="text-xs text-slate-500 dark:text-slate-400">{t.snapshotDate ? `Latest snapshot ${t.snapshotDate}` : 'No KPI snapshot recorded'}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {t.snapshotDate ? `Latest snapshot ${t.snapshotDate}` : 'No KPI snapshot recorded'}
+                      {t.dataOutdated && <>{' · '}<LastUpdatedNote at={t.lastUpdated} outdated={t.dataOutdated} /></>}
+                    </p>
                   </Card>
                 );
               })}

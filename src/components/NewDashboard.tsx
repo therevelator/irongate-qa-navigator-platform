@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { LastUpdatedNote } from './LastUpdatedNote';
 import {
   Search, ArrowUp, ArrowDown, Sparkles, X, Loader2, TrendingUp, TrendingDown, Minus,
   LayoutGrid, Rows3, ChevronRight, CalendarDays, Users,
@@ -56,6 +57,9 @@ interface CompanySummary {
   teamsWithKpiData: number;
   asOf?: string | null;
   oldestSnapshotDate?: string | null;
+  /** Newest value of any active team; dataOutdated when over a day old (latest data shown as of then). */
+  lastUpdated?: string | null;
+  dataOutdated?: boolean;
   engineeringHealthBasis?: { weights: Record<string, number>; included: string[]; missing: string[] };
   deliveryPerformanceBasis?: { method: string; teamsClassified: number };
   /** Wellbeing (survey): teams with a shown latest-period result (k-anonymous, server/lib/pulse.ts). */
@@ -623,6 +627,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
             {state === 'loading' ? 'Loading…' : asOf ? <>Data as of <span className="font-medium text-slate-700 dark:text-slate-200">{asOf}</span></> : 'No KPI snapshots recorded'}
           </span>
           {oldest && asOf && oldest !== asOf && <span>Oldest team snapshot {oldest}</span>}
+          {state !== 'loading' && <LastUpdatedNote at={s?.lastUpdated} outdated={s?.dataOutdated} className="font-medium text-amber-700 dark:text-amber-400" />}
         </p>
       </div>
 

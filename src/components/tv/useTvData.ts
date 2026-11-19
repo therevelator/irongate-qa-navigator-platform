@@ -13,6 +13,9 @@ export interface TvSummary {
     status: 'good' | 'warning' | 'critical' | 'no-data';
     kpiData: Record<string, number | null>;
     lastRecordedAt: string | null;
+    /** Newest value time; dataOutdated when over a day old (latest values shown as of then). */
+    lastUpdated?: string | null;
+    dataOutdated?: boolean;
     sampleData: boolean;
     /** What the QA score is based on (stale and missing inputs left out). */
     qaScoreConfidence?: { value: number | null; inputsUsed: number; inputsTotal: number; confidence: 'high' | 'medium' | 'low'; staleInputs: string[]; missingInputs: string[] };

@@ -4,7 +4,7 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamAnalytics } from '../middleware/access';
 import { TECH_DEBT_OPEN_WEIGHT_SQL, techDebtScoreFromWeight, toNum, qaStatusFromScore } from '../lib/metricFormulas';
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
-import { evaluateSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext } from '../lib/kpiEvaluation';
+import { evaluateLatestSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext } from '../lib/kpiEvaluation';
 import { loadIntervals } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 
@@ -80,7 +80,7 @@ router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
     let latest: any = null;
     if (snapshot) {
       const ctx: EvalContext = { companyId: req.companyId as string, intervals: await loadIntervals(req.companyId as string), book: await loadTargetBook(req.companyId as string) };
-      const ev = evaluateSnapshot(snapshot, owned, ctx, Date.now());
+      const ev = evaluateLatestSnapshot(snapshot, owned, ctx);
       const kpiData: Record<string, number | null> = {};
       for (const [col, key] of Object.entries(KPI_COLUMNS)) kpiData[key] = toNum(snapshot[col]);
       const sources: Record<string, any> = snapshot.field_sources && typeof snapshot.field_sources === 'object' ? snapshot.field_sources : {};
@@ -101,6 +101,9 @@ router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
         kpiThresholds: ev.thresholds,
         // Newest per-field recorded_at of the snapshot (ingestion provenance), when known.
         lastRecordedAt: recorded.length ? new Date(Math.max(...recorded)).toISOString() : null,
+        // The newest value is over a day old: read as of its day ("Last updated").
+        lastUpdated: ev.lastUpdated,
+        dataOutdated: ev.outdated,
         // Any value of the snapshot from generated demo data (field_sources source 'synthetic').
         sampleData: ev.sampleData,
       };

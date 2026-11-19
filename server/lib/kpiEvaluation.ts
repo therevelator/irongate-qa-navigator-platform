@@ -89,6 +89,51 @@ export function evaluateSnapshot(row: Record<string, any>, team: TeamRef, ctx: E
   return { qa, values, staleness, thresholds, judge: { targets, stale: staleKeys }, sampleData: hasSampleData(row.field_sources) };
 }
 
+/** A team's data counts as outdated once its newest value is older than this (a day). */
+export const OUTDATED_AFTER_MS = 86_400_000;
+
+/** The newest recorded_at of a snapshot's values (provenance, else the snapshot day). */
+export function latestRecordedAt(row: Record<string, any>, intervals: IntervalMap): string | null {
+  let best = NaN;
+  for (const v of Object.values(valueInfo(row, KPI_COLUMN_NAMES, intervals, Date.now()))) {
+    const t = v.recordedAt ? Date.parse(v.recordedAt) : NaN;
+    if (Number.isFinite(t) && !(t <= best)) best = t;
+  }
+  if (Number.isFinite(best)) return new Date(best).toISOString();
+  return row.snapshot_date ? `${String(row.snapshot_date).slice(0, 10)}T00:00:00.000Z` : null;
+}
+
+/**
+ * Reference time for a team's LATEST snapshot (FI-22).
+ *
+ * While the team's newest value is at most a day old the reference is now (unchanged: values
+ * older than their interval are stale and left out of the QA score). Once the team has sent
+ * nothing for over a day (no data import, the sample data not refreshed overnight), measuring
+ * at now would make every daily input stale and the latest data would disappear ("No data"):
+ * the snapshot is then read as of the end of the day of its newest value (what was current at
+ * the last update, the same rule as the KPI history), and flagged `outdated` with `lastUpdated`
+ * so the screens say "Last updated <date>". Nothing is invented: the values are the stored ones.
+ */
+export function latestReference(row: Record<string, any>, intervals: IntervalMap, now = Date.now()): { reference: number; lastUpdated: string | null; outdated: boolean } {
+  const lastUpdated = latestRecordedAt(row, intervals);
+  const t = lastUpdated ? Date.parse(lastUpdated) : NaN;
+  if (!Number.isFinite(t) || now - t <= OUTDATED_AFTER_MS) return { reference: now, lastUpdated, outdated: false };
+  return { reference: referenceFor(new Date(t).toISOString().slice(0, 10), now), lastUpdated, outdated: true };
+}
+
+export interface LatestEvaluation extends SnapshotEvaluation {
+  /** Newest recorded_at of the snapshot's values (ISO). */
+  lastUpdated: string | null;
+  /** The newest value is over a day old: read as of its day (latestReference). */
+  outdated: boolean;
+}
+
+/** Evaluate a team's latest snapshot for the current screens (latestReference). */
+export function evaluateLatestSnapshot(row: Record<string, any>, team: TeamRef, ctx: EvalContext, now = ctx.now ?? Date.now()): LatestEvaluation {
+  const { reference, lastUpdated, outdated } = latestReference(row, ctx.intervals, now);
+  return { ...evaluateSnapshot(row, team, ctx, reference), lastUpdated, outdated };
+}
+
 /** JSON-friendly QA confidence block (the API's qaScoreConfidence). */
 export function qaConfidenceJson(qa: QaScoreComposite) {
   return {

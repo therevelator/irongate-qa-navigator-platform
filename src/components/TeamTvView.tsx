@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { LastUpdatedNote } from './LastUpdatedNote';
 import { Toaster, toast } from 'react-hot-toast';
 import { Maximize, Minimize, Moon, Sun, LogOut, Repeat, Loader2, MonitorX } from 'lucide-react';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
@@ -473,6 +474,7 @@ const TeamTvView: React.FC = () => {
             <div>
               <p className="text-slate-500 dark:text-slate-400">Data as of</p>
               <p className="mt-1 text-[2.4rem] font-semibold leading-tight" data-testid="tv-as-of">{formatAsOf(latest?.snapshotDate) ?? '—'}</p>
+              <LastUpdatedNote at={latest?.lastUpdated} outdated={latest?.dataOutdated} className="mt-1 block font-medium text-amber-700 dark:text-amber-400" />
               {age != null && age > 7 && (
                 <p className="mt-1 font-medium text-amber-700 dark:text-amber-400">No new snapshot for {age} days</p>
               )}

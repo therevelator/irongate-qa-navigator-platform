@@ -15,7 +15,7 @@ import { isSyntheticDataEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
-import { evaluateSnapshot, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { evaluateLatestSnapshot, evaluateSnapshot, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
 import { loadIntervals, referenceFor } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 import { teamMemberCountSql } from '../lib/teamMembership';
@@ -2116,7 +2116,7 @@ async function computeCompanyMetrics(companyId: string) {
   // each value's date (server/lib/targets.ts). A team's QA score leaves its stale inputs out.
   const evalCtx: EvalContext = { companyId, intervals: await loadIntervals(companyId), book: await loadTargetBook(companyId) };
   const now = Date.now();
-  const evaluated = latestSnapshots.map((t: any) => ({ t, ev: evaluateSnapshot(t, { id: t.team_id, department_id: t.department_id }, evalCtx, now) }));
+  const evaluated = latestSnapshots.map((t: any) => ({ t, ev: evaluateLatestSnapshot(t, { id: t.team_id, department_id: t.department_id }, evalCtx, now) }));
   const evalOf = new Map<string, SnapshotEvaluation>(evaluated.map((x: any) => [x.t.team_id as string, x.ev]));
   const teamsWithData = evaluated.filter((x: any) => x.ev.qa.value !== null).map((x: any) => x.t);
   const qaOf = (t: any) => evalOf.get(t.team_id)!.qa.value as number;
@@ -2127,6 +2127,11 @@ async function computeCompanyMetrics(companyId: string) {
   const snapshotDays = teamsWithData.map((t: any) => t.snapshot_day as string).sort();
   const asOf: string | null = snapshotDays.length ? snapshotDays[snapshotDays.length - 1] : null;
   const oldestSnapshotDate: string | null = snapshotDays.length ? snapshotDays[0] : null;
+  // Newest value of any active team; dataOutdated when even that is over a day old (FI-22: the
+  // latest snapshots are then read as of their day and the overview says "Last updated <date>").
+  const lastUpdatedTimes = evaluated.map((x: any) => x.ev.lastUpdated).filter((v: any): v is string => !!v).sort();
+  const lastUpdated: string | null = lastUpdatedTimes.length ? lastUpdatedTimes[lastUpdatedTimes.length - 1] : null;
+  const dataOutdated = evaluated.length > 0 && evaluated.every((x: any) => x.ev.outdated);
 
   // Global QA score: mean of each active team's current QA score weighted by team size
   // (COMPANY_AGGREGATE_TEXT), with the unweighted mean and the distribution alongside.
@@ -2386,6 +2391,8 @@ async function computeCompanyMetrics(companyId: string) {
     // Staleness / provenance
     asOf,
     oldestSnapshotDate,
+    lastUpdated,
+    dataOutdated,
     engineeringHealthBasis: {
       weights: ENGINEERING_HEALTH_WEIGHTS,
       included: healthIncluded,

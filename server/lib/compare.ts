@@ -14,7 +14,7 @@
  */
 import { queryOne } from '../../src/lib/db';
 import { KPI_COLUMNS, type KpiColumn } from './kpiIngest';
-import { evaluateSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext } from './kpiEvaluation';
+import { evaluateLatestSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext } from './kpiEvaluation';
 import { loadIntervals } from './staleness';
 import { loadTargetBook, TARGET_METRICS, type TargetMetric } from './targets';
 import { teamLeadNameSql, teamMemberCountSql } from './teamMembership';
@@ -124,6 +124,9 @@ export interface CompareTeam {
   leadName: string | null;
   memberCount: number;
   snapshotDate: string | null;
+  /** Newest value time of the latest snapshot; dataOutdated when over a day old (FI-22). */
+  lastUpdated: string | null;
+  dataOutdated: boolean;
   qaScoreConfidence: ReturnType<typeof qaConfidenceJson> | null;
   sampleData: boolean;
   cells: Record<string, CompareCell>;
@@ -174,7 +177,7 @@ export async function buildComparison(companyId: string, teamIds: string[], days
     const hist = await kpiHistoryFor(companyId, ref, days);
 
     const cells: Record<string, CompareCell> = {};
-    const ev = snapshot ? evaluateSnapshot(snapshot, ref, ctx, now) : null;
+    const ev = snapshot ? evaluateLatestSnapshot(snapshot, ref, ctx, now) : null;
     for (const m of COMPARE_METRICS) {
       const cell = emptyCell();
       if (m.key === 'qa_score') {
@@ -213,6 +216,8 @@ export async function buildComparison(companyId: string, teamIds: string[], days
       leadName: t.lead_name ?? null,
       memberCount: Number(t.member_count) || 0,
       snapshotDate: snapshot ? String(snapshot.snapshot_date).slice(0, 10) : null,
+      lastUpdated: ev?.lastUpdated ?? null,
+      dataOutdated: ev?.outdated ?? false,
       qaScoreConfidence: ev ? qaConfidenceJson(ev.qa) : null,
       sampleData: !!ev?.sampleData,
       cells,

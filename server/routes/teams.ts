@@ -24,7 +24,7 @@ import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 import { teamMembers } from '../lib/assignments';
 import { SUPPRESSED_TEXT, privacyInfo } from '../lib/privacy';
 import { recordAudit } from '../lib/audit';
-import { evaluateSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { evaluateLatestSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
 import { loadIntervals } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 
@@ -229,7 +229,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
       const technicalDebtScore = await getTechnicalDebtScore(team.id);
       // QA score with stale inputs left out, and what it is based on. A team with no snapshot
       // (or not enough current inputs) has no score — never 0/critical.
-      const ev = team.snapshot_date ? evaluateSnapshot(team, { id: team.id, department_id: team.department_id }, evalCtx, now) : null;
+      const ev = team.snapshot_date ? evaluateLatestSnapshot(team, { id: team.id, department_id: team.department_id }, evalCtx, now) : null;
       const qaScore = ev ? ev.qa.value : null;
       const status = qaScore === null ? 'no-data' : (ev?.qa.status ?? qaStatusFromScore(qaScore));
 
@@ -252,6 +252,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
         qaScoreRecorded: toNum(team.qaScore),
         qaScoreConfidence: ev ? qaConfidenceJson(ev.qa) : null,
         snapshotDate: team.snapshot_date ?? null,
+        // Newest value time, and whether it is over a day old (read as of then: "Last updated").
+        lastUpdated: ev?.lastUpdated ?? null,
+        dataOutdated: ev?.outdated ?? false,
         memberCount: team.member_count || 0,
         teamLead: team.team_lead_name,
         // No sprint history is computed here; the previous random values were removed.
@@ -389,12 +392,14 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       intervals: await loadIntervals(req.companyId as string),
       book: await loadTargetBook(req.companyId as string),
     };
-    const ev = kpiSnapshot ? evaluateSnapshot(kpiSnapshot, { id: team.id, department_id: team.department_id }, evalCtx, Date.now()) : null;
+    const ev = kpiSnapshot ? evaluateLatestSnapshot(kpiSnapshot, { id: team.id, department_id: team.department_id }, evalCtx) : null;
     team.qaScore = ev ? ev.qa.value : null;
     team.status = team.qaScore === null ? 'no-data' : (ev?.qa.status ?? qaStatusFromScore(team.qaScore));
     team.qaScoreRecorded = toNum(kpiSnapshot?.qa_score);
     team.qaScoreConfidence = ev ? qaConfidenceJson(ev.qa) : null;
     team.snapshotDate = kpiSnapshot?.snapshot_date ?? null;
+    team.lastUpdated = ev?.lastUpdated ?? null;
+    team.dataOutdated = ev?.outdated ?? false;
     team.taskSizingAccuracy = toNum(kpiSnapshot?.sizing_accuracy);
     if (kpiSnapshot) {
       team.kpiData = {
