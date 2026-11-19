@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import BrandMark from './BrandMark';
 import { Eye, EyeOff, AlertCircle, ArrowRight, Check, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { UserRole } from '../types/auth';
@@ -65,13 +66,11 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 sm:p-8">
       <div className="w-full max-w-xl">
         <div className="mb-8 flex items-center gap-3">
-          <div className="h-9 w-9 rounded-md bg-brand-800 flex items-center justify-center">
-            <span className="text-sm font-semibold text-white">IG</span>
-          </div>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</p>
-            <p className="text-xs text-slate-500 dark:text-slate-400">QE Navigator</p>
-          </div>
+          <BrandMark height={36} />
+              <div className="leading-tight">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">QE Navigator</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">by IronGate Software</p>
+              </div>
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-6 sm:p-8 dark:border-slate-800 dark:bg-slate-900">

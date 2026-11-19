@@ -176,7 +176,7 @@ const TeamTvView: React.FC = () => {
   const trackedActions = useTvActions(state === 'ready' ? teamId : null, true);
 
   useEffect(() => {
-    if (data?.team.name) document.title = `${data.team.name} · TV mode · IronGate`;
+    if (data?.team.name) document.title = `${data.team.name} · TV mode · QE Navigator`;
   }, [data?.team.name]);
 
   /* ---------------- panels, rotation ---------------- */
@@ -405,7 +405,7 @@ const TeamTvView: React.FC = () => {
       {/* Header: team identity + clock */}
       <header className={cx('flex justify-between gap-8', wide ? 'items-start' : 'flex-col')}>
         <div className="min-w-0">
-          <p className="text-[1.35rem] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">IronGate QE Navigator · Team view</p>
+          <p className="text-[1.35rem] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">QE Navigator · Team view</p>
           <h1 className="mt-2 truncate text-[4.5rem] font-semibold leading-[1.05] tracking-tight" data-testid="tv-team-name" title={team.name}>{team.name}</h1>
           <p className="mt-3 flex flex-wrap items-center gap-x-[1.25em] gap-y-1 text-[1.75rem] text-slate-600 dark:text-slate-300">
             <span>{team.departmentName ?? 'No department'}</span>

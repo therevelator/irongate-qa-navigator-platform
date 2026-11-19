@@ -125,7 +125,7 @@ const completionText = (a: ActionJson) => {
 /** Subject, text and HTML of a digest email. */
 export function renderDigest(d: Digest): { subject: string; text: string; html: string } {
   const period = `${day(d.periodStart)} – ${day(d.periodEnd)}`;
-  const subject = `IronGate weekly digest · ${period}`;
+  const subject = `QE Navigator weekly digest · ${period}`;
   const link = appUrl();
   const lines: string[] = [`Weekly digest for ${d.recipient.name} (${period})`, ''];
   lines.push('QA score (stale inputs left out), now vs 7 days earlier:');
@@ -139,7 +139,7 @@ export function renderDigest(d: Digest): { subject: string; text: string; html: 
   for (const a of d.actions.overdue.slice(0, 10)) lines.push(`  Overdue (due ${a.dueDate}): ${a.title} · ${a.teamName}${a.owner ? ` · ${a.owner.name}` : ''}`);
   for (const a of d.actions.dueSoon.slice(0, 10)) lines.push(`  Due ${a.dueDate}: ${a.title} · ${a.teamName}${a.owner ? ` · ${a.owner.name}` : ''}`);
   for (const a of d.actions.completed.slice(0, 10)) lines.push(`  Done: ${a.title} · ${a.teamName} · ${completionText(a)}`);
-  if (link) lines.push('', `Open IronGate: ${link}`);
+  if (link) lines.push('', `Open QE Navigator: ${link}`);
   lines.push('', 'You receive this weekly digest because it is on in your notification preferences.');
 
   const td = 'padding:4px 8px;border-bottom:1px solid #e2e8f0;font-size:13px;';
@@ -162,7 +162,7 @@ ${d.actions.dueSoon.slice(0, 10).map((a) => `<li>Due ${escapeHtml(a.dueDate ?? '
 ${d.actions.completed.slice(0, 10).map((a) => `<li>Done: ${escapeHtml(a.title)} · ${escapeHtml(a.teamName)} · ${escapeHtml(completionText(a))}</li>`).join('')}
 ${d.actions.overdue.length + d.actions.dueSoon.length + d.actions.completed.length === 0 ? '<li>Nothing due and nothing completed this week.</li>' : ''}
 </ul>
-${link ? `<p><a href="${escapeHtml(link)}" style="color:#1d4ed8">Open IronGate</a></p>` : ''}
+${link ? `<p><a href="${escapeHtml(link)}" style="color:#1d4ed8">Open QE Navigator</a></p>` : ''}
 <p style="color:#64748b;font-size:12px">You receive this weekly digest because it is on in your notification preferences.</p></div>`;
   return { subject, text: lines.join('\n'), html };
 }
@@ -183,7 +183,7 @@ async function slackSummary(companyId: string, now: number): Promise<string> {
     [companyId]
   );
   const link = appUrl();
-  return `*IronGate weekly summary*\nAlerts: ${counts.critical} critical and ${counts.warning} warning open, ${counts.opened} opened this week.\nActions: ${acts.overdue} overdue, ${acts.done} completed this week.${link ? `\n<${link}|Open IronGate>` : ''}`;
+  return `*QE Navigator weekly summary*\nAlerts: ${counts.critical} critical and ${counts.warning} warning open, ${counts.opened} opened this week.\nActions: ${acts.overdue} overdue, ${acts.done} completed this week.${link ? `\n<${link}|Open QE Navigator>` : ''}`;
 }
 
 /** Weekly run for every company: evaluate, then queue and send the digests. */

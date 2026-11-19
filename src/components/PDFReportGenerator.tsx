@@ -173,7 +173,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
-      doc.text(`IronGate QA Navigator${team.department_name ? `  |  ${team.department_name}` : ''}`, logoDataUrl ? 30 : 14, 24);
+      doc.text(`QE Navigator${team.department_name ? `  |  ${team.department_name}` : ''}`, logoDataUrl ? 30 : 14, 24);
       doc.text(`Data as of ${fmtDate(asOf)}  |  Generated ${generatedAt.toLocaleString()}`, pageWidth - 14, 24, { align: 'right' });
       doc.setDrawColor(226, 232, 240);
       doc.line(14, 28, pageWidth - 14, 28);

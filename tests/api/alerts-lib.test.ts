@@ -94,7 +94,7 @@ describe('Digest', () => {
       alerts: { opened: [], openCount: { info: 1, warning: 2, critical: 0 } }, stale: [], actions: { overdue: [], dueSoon: [], completed: [] }, empty: false,
     };
     const r = renderDigest(d);
-    expect(r.subject).toMatch(/^IronGate weekly digest · /);
+    expect(r.subject).toMatch(/^QE Navigator weekly digest · /);
     expect(r.text).toContain('Team & Co: 72.3 (-7.7; based on 3 of 4 inputs)');
     expect(r.html).toContain('Team &amp; Co');
     expect(r.html).toContain('Pat &lt;Lead&gt;');

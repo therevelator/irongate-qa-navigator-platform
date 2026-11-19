@@ -265,7 +265,7 @@ router.post('/settings/slack-test', authenticateToken, async (req: AuthRequest, 
     if (s.slackUnreadable) return res.status(409).json({ error: 'The stored webhook cannot be read (the server’s encryption key changed). Enter it again.' });
     const r = await sendNow({
       companyId: req.companyId as string, channel: 'slack', kind: 'test', userId: actor.id, recipient: 'slack', subject: 'Test message',
-      payload: { text: 'IronGate QE Navigator: test message. Alerts will be posted to this channel.' }, dedupeKey: null,
+      payload: { text: 'QE Navigator: test message. Alerts will be posted to this channel.' }, dedupeKey: null,
     });
     res.json({ status: r.status, delivered: r.status === 'sent', message: r.status === 'sent' ? 'Test message posted to Slack' : `Slack test failed: ${r.error ?? 'unknown error'}` });
   } catch (error) {

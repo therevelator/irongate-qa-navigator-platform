@@ -21,9 +21,9 @@ export function tvShareUrl(teamId: string): string {
 
 /** mailto: link with the TV mode link of a team. */
 export function tvMailto(teamId: string, teamName: string): string {
-  const subject = `${teamName}: IronGate TV mode`;
+  const subject = `${teamName}: QE Navigator TV mode`;
   const body = `Open ${teamName} in TV mode on the meeting-room screen:\n\n${tvShareUrl(teamId)}\n\n`
-    + 'Sign in with your IronGate account; the screen shows the team if it is in your scope and refreshes on its own.';
+    + 'Sign in with your QE Navigator account; the screen shows the team if it is in your scope and refreshes on its own.';
   return `mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
 

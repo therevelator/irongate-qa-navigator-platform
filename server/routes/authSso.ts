@@ -157,7 +157,7 @@ router.get('/sso/:provider/callback', inviteLimiter, async (req: any, res) => {
       const inv = invite ? await findByToken(invite) : null;
       const target = inv && inv.status === 'open' && String(inv.email).toLowerCase() === identity.email ? inv : await openInvitationForEmail(identity.email);
       if (!target) {
-        throw new SsoError('no_account', `There is no IronGate account for ${identity.email}. Ask your administrator for an invitation.`);
+        throw new SsoError('no_account', `There is no QE Navigator account for ${identity.email}. Ask your administrator for an invitation.`);
       }
       const first = identity.givenName || identity.name?.split(' ')[0] || identity.email.split('@')[0];
       const last = identity.familyName || identity.name?.split(' ').slice(1).join(' ') || '-';

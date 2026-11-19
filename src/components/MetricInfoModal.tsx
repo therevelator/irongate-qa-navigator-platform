@@ -181,7 +181,7 @@ const MetricInfoModal: React.FC<MetricInfoModalProps> = ({ open, onClose, metric
               </li>
             ))}
           </ul>
-          <p className={cx('mt-2 text-xs', muted)}>IronGate has no built-in connectors: these systems, or a small job reading them, push values through the ingestion API.</p>
+          <p className={cx('mt-2 text-xs', muted)}>QE Navigator has no built-in connectors: these systems, or a small job reading them, push values through the ingestion API.</p>
         </Section>
 
         <Section title="How to send it">

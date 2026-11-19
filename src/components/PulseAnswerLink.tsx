@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import BrandMark from './BrandMark';
 import { AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
 import API_URL from '../config/api';
 import { PulseAnswerForm, type PulseQuestionSet } from './PulseSurveyForm';
@@ -24,13 +25,11 @@ const Shell: React.FC<{ children: React.ReactNode; wide?: boolean }> = ({ childr
   <div className="min-h-screen bg-slate-50 px-4 py-10 dark:bg-slate-950">
     <main className={wide ? 'mx-auto w-full max-w-2xl' : 'mx-auto w-full max-w-md'}>
       <div className="mb-8 flex items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-md bg-brand-800">
-          <span className="text-sm font-semibold text-white">IG</span>
-        </div>
-        <div className="leading-tight">
-          <p className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</p>
-          <p className="text-xs text-slate-500 dark:text-slate-400">QE Navigator</p>
-        </div>
+        <BrandMark height={36} />
+              <div className="leading-tight">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">QE Navigator</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">by IronGate Software</p>
+              </div>
       </div>
       <div className="rounded-lg border border-slate-200 bg-white p-5 sm:p-8 dark:border-slate-800 dark:bg-slate-900">{children}</div>
     </main>
@@ -107,7 +106,7 @@ const PulseAnswerLink: React.FC = () => {
             </h1>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">{error ?? info?.message}</p>
             <button type="button" onClick={goHome} className="mt-5 h-10 rounded-md border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800">
-              Open IronGate
+              Open QE Navigator
             </button>
           </div>
         </div>

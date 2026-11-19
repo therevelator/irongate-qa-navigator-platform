@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import BrandMark from './BrandMark';
 import {
   LayoutDashboard, BarChart3, LogOut, MonitorSmartphone, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
@@ -15,6 +16,9 @@ import {
 import { policyActorOf, ROLE_LABELS } from '../lib/policyActor';
 import PulsePendingBanner from './PulsePendingBanner';
 import NotificationsBell from './NotificationsBell';
+import { AccessHelp, AccountMenu, CompanyBadge } from './HeaderParts';
+import { accessSummary } from '../lib/accessSummary';
+import { canOpenView } from '../lib/viewAccess';
 import { NOTIFICATIONS_TAB_EVENT, NOTIFICATIONS_TAB_KEY } from './NotificationsCenter';
 
 interface LayoutProps {
@@ -245,7 +249,27 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
 
   const role = (user?.role || 'viewer') as Role;
   const actor = policyActorOf(user);
-  const canSee = (item: NavItem) => (item.can ? !!user && item.can(actor) : !item.roles || item.roles.includes(role));
+  // Only the pages this person may open at all (the same rule as the router: src/lib/viewAccess.ts).
+  const canSee = (item: NavItem) => !!user && canOpenView(actor, item.view) && (item.can ? item.can(actor) : !item.roles || item.roles.includes(role));
+  // Job title and company name for the top bar (GET /api/users/:id, the person's own profile).
+  const [profile, setProfile] = useState<{ jobTitle: string | null; companyName: string | null } | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    fetch(`${API_URL}/users/${encodeURIComponent(String(user.id))}`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!cancelled && d?.user) setProfile({ jobTitle: d.user.job_title ?? null, companyName: d.user.company_name ?? null }); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [user?.id]);
+  const fullName = `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || user?.email || '';
+  // Job title when recorded, else the role label (server/lib/roleLabels.ts).
+  const personTitle = profile?.jobTitle || (ROLE_LABEL[role] ?? role);
+  const help = React.useMemo(
+    () => accessSummary(actor, (user?.assignments ?? []).map((a: any) => ({ role: a.role, scopeType: a.scopeType, scopeId: a.scopeId, scopeName: a.scopeName })), profile?.companyName),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputed when the assignments or the company name change
+    [user?.assignments, profile?.companyName],
+  );
 
   const go = (view: string) => {
     if (view === 'dashboard') onTabChange?.('all');
@@ -287,12 +311,10 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
           {/* Brand */}
           <div className="h-16 px-5 flex items-center justify-between border-b border-slate-200 dark:border-slate-800">
             <button onClick={() => go('dashboard')} className="flex items-center gap-3 text-left rounded-md">
-              <div className="h-8 w-8 rounded-md bg-brand-700 dark:bg-brand-600 flex items-center justify-center">
-                <span className="text-[13px] font-semibold tracking-tight text-white">IG</span>
-              </div>
+              <BrandMark height={36} />
               <div className="leading-tight">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400">QE Navigator</p>
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">QE Navigator</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">by IronGate Software</p>
               </div>
             </button>
             <div className="flex items-center gap-1">
@@ -395,8 +417,8 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
 
       {/* Main column */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 flex-shrink-0 px-4 sm:px-6 flex items-center justify-between gap-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
-          <div className="flex items-center gap-3 min-w-0">
+        <header className="h-16 flex-shrink-0 px-3 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <button
               ref={burgerRef}
               onClick={toggleNav}
@@ -409,9 +431,9 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
               {docked ? <PanelLeftClose size={19} /> : <Menu size={20} />}
             </button>
             {!docked && (
-              <button onClick={() => go('dashboard')} className="hidden sm:flex flex-shrink-0 items-center gap-2.5 rounded-md pr-1" aria-label="IronGate QE Navigator, go to overview">
-                <span className="h-7 w-7 rounded-md bg-brand-700 dark:bg-brand-600 flex items-center justify-center text-[12px] font-semibold tracking-tight text-white">IG</span>
-                <span className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</span>
+              <button onClick={() => go('dashboard')} className="flex flex-shrink-0 items-center gap-2 rounded-md pr-1" aria-label="QE Navigator, go to overview" data-testid="brand-home">
+                <BrandMark height={32} />
+                <span className="hidden whitespace-nowrap text-sm font-semibold text-slate-900 dark:text-white sm:inline">QE Navigator</span>
               </button>
             )}
             {!docked && <span className="hidden sm:block h-6 w-px bg-slate-200 dark:bg-slate-700" aria-hidden="true" />}
@@ -425,7 +447,14 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
               <h1 className="text-base font-semibold text-slate-900 dark:text-white truncate">{meta.title}</h1>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-1.5 sm:gap-2">
+            {profile?.companyName && <CompanyBadge name={profile.companyName} />}
+            <div className="hidden min-w-0 max-w-[15rem] leading-tight lg:block" data-testid="header-person">
+              <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{fullName}</p>
+              <p className="truncate text-xs text-slate-500 dark:text-slate-400" data-testid="header-person-title">{personTitle}</p>
+            </div>
+            <span className="hidden h-6 w-px bg-slate-200 dark:bg-slate-700 lg:block" aria-hidden="true" />
+            <AccessHelp summary={help} />
             <NotificationsBell
               onOpenAll={(tab = 'alerts') => {
                 try { sessionStorage.setItem(NOTIFICATIONS_TAB_KEY, tab); } catch { /* storage unavailable */ }
@@ -441,13 +470,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
             >
               {isDark ? <Sun size={16} /> : <Moon size={16} />}
             </button>
-            <span
-              className="hidden sm:flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-200"
-              title={`${user?.firstName ?? ''} ${user?.lastName ?? ''} · ${ROLE_LABEL[role] ?? role}`.trim()}
-              aria-hidden="true"
-            >
-              {initials}
-            </span>
+            <AccountMenu name={fullName} title={personTitle} companyName={profile?.companyName} onSignOutOthers={signOutOthers} onSignOut={logout} />
           </div>
         </header>
 

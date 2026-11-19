@@ -34,7 +34,7 @@ import CompareTeams from './components/CompareTeams';
 import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
-import { ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin } from '../server/lib/userPolicy';
+import { canOpenView } from './lib/viewAccess';
 import { policyActorOf } from './lib/policyActor';
 import { loadErrorMessage, NETWORK_ERROR } from './lib/loadError';
 
@@ -136,57 +136,9 @@ function App() {
     setCurrentView(view);
   };
 
-  // Permission check function
-  const hasPermission = (view: string): boolean => {
-    if (!user) return view === 'dashboard'; // Guest only sees dashboard (or login)
-
-    const role = user.role;
-
-    switch (view) {
-      case 'dashboard':
-        return true;
-      case 'users':
-      case 'teams':
-        return canOpenUserAdmin(policyActorOf(user));
-      case 'departments':
-        return isCompanyAdmin(policyActorOf(user));
-      case 'activity':
-        // Change history: super_admin (company) and QA managers (their departments), as GET /api/admin/audit.
-        return canViewActivity(policyActorOf(user));
-      case 'user-activity':
-        // User activity log: super admins of the company only (GET /api/activity/log).
-        return canViewUserActivity(policyActorOf(user));
-      case 'ingestion-log':
-        // Ingestion log: super_admin (company) and QA managers (their departments), as GET /api/ingestion-log.
-        return canViewIngestionLog(policyActorOf(user));
-      case 'features':
-      case 'flaky-test-intelligence':
-      case 'technical-debt':
-      case 'pipeline-visualization':
-      case 'business-impact':
-      case 'performance-metrics':
-      case 'developer-productivity':
-      case 'team-pulse':
-      case 'test-execution-timeline':
-      case 'team-gamification':
-      case 'pdf-report-generator':
-      case 'compare': // Team comparison: only teams of the analytics scope (GET /api/compare/teams)
-      case 'tv': // Team TV mode: the team must be in the analytics scope (GET /api/tv/teams/:id)
-        // Every role (server/lib/userPolicy.ts ANALYTICS_ROLES); each sees only the teams
-        // in its analytics scope, enforced by the API.
-        return ANALYTICS_ROLES.includes(role);
-      case 'admin-panel':
-      case 'metric-intervals':
-      case 'parameters-config':
-        // Company configuration (server: canManageCompanyData → canManageCompanyConfig).
-        return canManageCompanyConfig(policyActorOf(user));
-      case 'manual-metrics':
-        // Anyone who may write some team's data (server: assertTeamWrite → canWriteTeamData per team).
-        return canWriteSomeTeamData(policyActorOf(user));
-      default:
-        return true;
-    }
-  };
+  // Permission check: the one rule shared with the navigation and the Analytics hub
+  // (src/lib/viewAccess.ts, built on server/lib/userPolicy.ts, which the API enforces too).
+  const hasPermission = (view: string): boolean => (user ? canOpenView(policyActorOf(user), view) : view === 'dashboard');
 
 
   // not recorded there (its access goes to the platform log and the company's Activity log).

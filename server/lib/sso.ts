@@ -211,7 +211,7 @@ function identityFrom(cfg: ProviderConfig, claims: any): VerifiedIdentity {
     if (claims.email && (claims.email_verified === true || claims.xms_edov === true || claims.xms_edov === 'true' || singleTenant)) email = String(claims.email);
     else if (singleTenant && typeof claims.preferred_username === 'string' && claims.preferred_username.includes('@')) email = claims.preferred_username;
   }
-  if (!email) throw new SsoError('email_unverified', `Your ${PROVIDER_LABEL[cfg.id]} account has no verified email address, so it cannot be matched to an IronGate account.`);
+  if (!email) throw new SsoError('email_unverified', `Your ${PROVIDER_LABEL[cfg.id]} account has no verified email address, so it cannot be matched to a QE Navigator account.`);
   return {
     provider: cfg.id, subject: claims.sub, email: email.trim().toLowerCase(),
     name: claims.name ?? null, givenName: claims.given_name ?? null, familyName: claims.family_name ?? null,
