@@ -343,7 +343,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Wraps on phones (the buttons are wider than a 390 px screen together). */}
+          <div className="flex max-w-full flex-wrap items-center gap-3">
             {/* View Mode Toggle */}
             <div className="flex items-center gap-1 bg-gray-100 dark:bg-slate-800 rounded-lg p-1">
               <button
