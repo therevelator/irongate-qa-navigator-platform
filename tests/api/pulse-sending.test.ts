@@ -429,7 +429,8 @@ describe('Reminders and anonymity', () => {
       `SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 ORDER BY ordinal_position`, [t]
     )).rows.map((r: any) => r.column_name);
     expect(await cols('pulse_links')).toEqual(['token_hash', 'company_id', 'team_id', 'user_id', 'period_start', 'period_end', 'expires_at', 'used']);
-    expect(await cols('pulse_recipients')).toEqual(['company_id', 'team_id', 'user_id', 'period_start', 'period_end', 'first_sent_at', 'delivered']);
+    // last_reminder_on (reminders of members who have not answered) is a day per recipient, never linked to an answer.
+    expect(await cols('pulse_recipients')).toEqual(['company_id', 'team_id', 'user_id', 'period_start', 'period_end', 'first_sent_at', 'delivered', 'last_reminder_on']);
     expect(await cols('pulse_sends')).not.toContain('user_id');
     const fks = (await db.query(
       `SELECT confrelid::regclass::text AS ref FROM pg_constraint WHERE contype = 'f'
