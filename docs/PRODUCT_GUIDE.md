@@ -373,13 +373,13 @@ independent of sample data (section 4.7).
 - **Stale.** A value older than its expected update interval is greyed, labelled "Stale since …", not
   judged against its target and left out of composites ([`server/lib/staleness.ts`](../server/lib/staleness.ts)).
   For a past day, staleness is measured at the end of that UTC day.
-- **Last updated.** When a team's newest value is over a day old (no data import, or the sample data
-  not refreshed overnight), its latest snapshot is read as it stood at the end of the day of that value
-  (what was current at the last update) instead of at now, so the overview, team detail, TV mode,
-  compare and team rankings still show its latest values and QA score, with "Last updated <date>"
-  (`latestReference` in [`server/lib/kpiEvaluation.ts`](../server/lib/kpiEvaluation.ts); the API adds
-  `lastUpdated` and `dataOutdated`). Nothing is invented. While the data is current nothing changes: a value
-  older than its interval is still stale.
+- **Last updated.** When the company's newest value (over all its active teams) is over a day old (no
+  data import, or the sample data not refreshed overnight), the latest snapshots are read as they stood
+  at the end of that value's day (what was current at the last update) instead of at now, so the overview,
+  team detail, TV mode, compare and team rankings still show the latest values and QA scores, with
+  "Last updated <date>" (`latestReference` in [`server/lib/kpiEvaluation.ts`](../server/lib/kpiEvaluation.ts);
+  the API adds `lastUpdated` and `dataOutdated`). Nothing is invented. While the company's data is current
+  nothing changes: a value older than its interval is still stale, also for a team that stopped sending.
 - **Confidence.** Every composite returns `{ value, inputsUsed, inputsTotal, confidence }` and the UI shows
   "based on n of m inputs" (or teams, or components). Confidence = inputs used ÷ inputs expected:
   **high** at 90 % or more, **medium** at 50 % or more, otherwise **low** (also low when there is no
@@ -484,7 +484,7 @@ QA Score = [ Test Coverage × 0.30
 - **Status:** ≥ 85 good, ≥ 70 warning, otherwise critical (`QA_SCORE_THRESHOLDS = { good: 85, warning: 70 }`).
 - **Confidence:** "based on n of 4 inputs". On screens that show current values, stale inputs are treated
   as not recorded (`qaScoreComposite`), so a team whose coverage is stale has no current QA score
-  (unless the team's newest value is over a day old: then "Last updated", section 3.1).
+  (unless the company's newest value is over a day old: then "Last updated", section 3.1).
 - **Stored** in `kpi_snapshots.qa_score` and `status` by the database trigger `kpi_snapshots_qa_score`
   (function `compute_qa_score`, migration
   [`20261117000000_kpi_integrity_and_ingestion.sql`](../supabase/migrations/20261117000000_kpi_integrity_and_ingestion.sql)),

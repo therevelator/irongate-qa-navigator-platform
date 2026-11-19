@@ -679,9 +679,10 @@ Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (table
   off with `DEMO_REFRESH_ENABLED=false`, for a deployment with no demo data. The platform support
   panel's **Refresh sample data now** starts the same background function on demand (on a
   long-running server it runs directly).
-- **Data older than a day**: when a team's newest value is over a day old, its latest snapshot is
-  shown as it stood then, with "Last updated <date>", instead of every daily input turning stale and
-  the dashboards showing "No data" (`latestReference`, `server/lib/kpiEvaluation.ts`).
+- **Data older than a day**: when the company's newest value is over a day old, the latest snapshots
+  are shown as they stood then, with "Last updated <date>", instead of every daily input turning stale
+  and the dashboards showing "No data" (`latestReference`, `server/lib/kpiEvaluation.ts`). A single
+  team that stopped sending while the others are current stays stale, as before.
 
 Environment (all optional; the Slack webhook is entered in the app, not in the environment):
 `SETTINGS_ENCRYPTION_KEY` (recommended in production, a long random string; otherwise `JWT_SECRET` is
