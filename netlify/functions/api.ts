@@ -37,6 +37,8 @@ const app = express();
 // Netlify runs functions behind its edge proxy; trust it so the rate limiter
 // keys on the real client IP (from x-forwarded-for) rather than the proxy.
 app.set('trust proxy', true);
+// Netlify's edge sets x-nf-client-connection-ip (the real client); server/lib/requestContext.ts clientIp.
+app.locals.behindNetlify = true;
 
 // Request id, client IP and route pattern for the logs (server/lib/requestContext.ts): first.
 app.use(requestContext);

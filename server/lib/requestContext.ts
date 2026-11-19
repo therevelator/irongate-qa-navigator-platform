@@ -65,10 +65,14 @@ export function ctxOf(req: express.Request): RequestContext {
   return r._igCtx as RequestContext;
 }
 
-/** Netlify's client address header, else Express's req.ip ('trust proxy' set by each server). */
+/**
+ * Netlify's client address header, else Express's req.ip ('trust proxy' set by each server). The
+ * Netlify header is trusted only inside the Netlify function (app.locals.behindNetlify, set in
+ * netlify/functions/api.ts): there Netlify's edge sets it; anywhere else a client could send it.
+ */
 export function clientIp(req: express.Request): string {
   const nf = req.headers['x-nf-client-connection-ip'];
-  if (process.env.NETLIFY && typeof nf === 'string' && nf.trim()) return nf.trim().slice(0, 64);
+  if (req.app?.locals?.behindNetlify && typeof nf === 'string' && nf.trim()) return nf.trim().slice(0, 64);
   return String(req.ip ?? req.socket?.remoteAddress ?? '').slice(0, 64);
 }
 

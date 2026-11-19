@@ -192,7 +192,7 @@ export function baseRow(req: express.Request, ctx: RequestContext, status: numbe
 export function activityRowFor(req: express.Request, res: express.Response, ctx: RequestContext): ActivityRow | null {
   if (req.method === 'OPTIONS' || res.locals.activitySkip) return null;
   const path = (req.originalUrl || req.url || '').split('?')[0];
-  if (!path.startsWith('/api') && !(process.env.NETLIFY && ctx.route)) return null;
+  if (!path.startsWith('/api') && !(req.app?.locals?.behindNetlify && ctx.route)) return null;
   if (isSkipped(ctx.route, path)) return null;
   const base = baseRow(req, ctx, res.statusCode);
   const ent = entityOf(ctx.route, ctx.params);

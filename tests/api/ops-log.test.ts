@@ -138,3 +138,12 @@ describe('Request ids and the server error log', () => {
     expect(res.headers['x-request-id']).toBe('live-check-123456');
   });
 });
+
+describe('Client IP', () => {
+  test('OPS-008 the Netlify client header counts only inside the Netlify function', async () => {
+    const { clientIp } = await import('../../server/lib/requestContext');
+    const req = (behindNetlify: boolean) => ({ headers: { 'x-nf-client-connection-ip': '203.0.113.9' }, ip: '10.0.0.1', app: { locals: { behindNetlify } }, socket: {} }) as any;
+    expect(clientIp(req(true))).toBe('203.0.113.9');
+    expect(clientIp(req(false))).toBe('10.0.0.1');
+  });
+});

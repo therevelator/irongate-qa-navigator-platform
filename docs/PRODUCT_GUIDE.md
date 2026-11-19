@@ -209,7 +209,8 @@ debug problems in production. It is off unless `PLATFORM_OPERATOR_EMAILS` lists 
 **Entering.** The owner is signed in normally, then enters the password again. This starts a
 30-minute support session (a separate token kept only in the browser's memory; a reload asks again).
 Five wrong passwords lock the step for 15 minutes. Accounts that only use single sign-on must set a
-password first. `PLATFORM_OPERATOR_ALLOWED_IPS` can limit it to known addresses. **Leave** ends the
+password first. `PLATFORM_OPERATOR_ALLOWED_IPS` can limit it to known addresses (on Netlify the client
+address comes from Netlify's own `x-nf-client-connection-ip` header, elsewhere from the trusted proxy). **Leave** ends the
 session at once.
 
 **What it shows.** Overview: every company with users, teams, last data received, share of stale
