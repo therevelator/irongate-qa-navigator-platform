@@ -93,9 +93,9 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
       {/* Brand panel */}
       <aside className="ig-brand-panel hidden lg:flex flex-col justify-between bg-brand-900 text-white p-12">
         <div className="flex items-center gap-3">
-          <BrandMark height={36} />
+          <BrandMark height={64} className="drop-shadow-[0_6px_14px_rgba(0,0,0,0.45)]" />
               <div className="leading-tight">
-                <p className="text-sm font-semibold">QE Navigator</p>
+                <p className="text-base font-semibold">QE Navigator</p>
                 <p className="text-xs text-brand-200">by IronGate Software</p>
               </div>
         </div>
@@ -131,7 +131,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
       <main className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm">
           <div className="lg:hidden mb-10 flex items-center gap-3">
-            <BrandMark height={36} />
+            <BrandMark height={48} />
               <div className="leading-tight">
                 <p className="text-sm font-semibold text-slate-900 dark:text-white">QE Navigator</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">by IronGate Software</p>
