@@ -605,6 +605,46 @@ Demo data: 12 months of business-impact data per team (`data_source = 'synthetic
 sample revenue follows team health with modest growth so the associations are plausible. `seed:demo:check`
 requires 12 months with monthly revenue per team.
 
+## User activity log and platform support
+
+**User activity** (Organisation → User activity, super admins only). Every sign-in, failed sign-in
+(when the e-mail belongs to a user), API request (reads included), screen opened, CSV export and
+API-key ingestion request of the company's users, for 90 days. Each row: who (name and e-mail at the
+time, or the API key name and prefix), the route pattern (`/api/teams/:id`, never the raw address or
+query string), the team or other entity from the path, status, duration, client IP, browser and the
+request id. Request and response bodies, query strings, headers, cookies, tokens and passwords are
+never stored. Answering the wellbeing pulse is not recorded at all (its time could be matched to an
+anonymous answer). Filters: user, dates, action type, team, errors only, request id; CSV export
+(itself recorded). Tell your staff about it (for example in your privacy notice for employees).
+Code: `server/lib/userActivity.ts`, `server/routes/activity.ts`; migration
+`supabase/migrations/20261123100000_user_activity.sql`.
+
+**Request ids and the server error log.** Every API response has an `X-Request-Id` header; 5xx JSON
+bodies are `{ "error": "…", "requestId": "…" }`. Each 5xx and each failed scheduled job is stored in
+`server_errors` (route pattern, error name, message, stack up to 4 KB, company, user; never bodies,
+headers, cookies or query strings) for 30 days. Scheduled job runs are stored in `job_runs`.
+Retention runs in `db-keepalive` (Netlify) or `server/jobs/cleanupCron.ts` (long-running server).
+
+**Platform support panel** (`/operator`, product owner only). Off unless `PLATFORM_OPERATOR_EMAILS`
+is set. The owner re-enters the password and gets a 30-minute operator session (kept in memory only)
+to see every company: overview with health per company, scheduled jobs, errors and database size;
+per company the organisation, users and invitations, settings and targets, metric data with staleness,
+alerts and actions, wellbeing pulse aggregates, the Activity log, the user activity log and server
+errors; and search by request id. A few repair actions (demo refresh, recompute KPI snapshots, re-run
+alerts, resend an invitation, deactivate / reactivate a user, clear a lockout) need a reason and a
+confirmation. Every company opened and every action is written to that company's own Activity log
+("Platform support viewed …"). Protected data stays hidden: password and API key hashes, the Slack
+webhook and secret settings, invitation and survey link tokens, single survey answers and comments,
+developer metrics of people who have not opted in. No impersonation, no SQL, no deletes. Code:
+`server/routes/operator.ts`, `server/lib/operator.ts`, `src/components/operator/`; migration
+`supabase/migrations/20261123000000_platform_operator_errors_jobs.sql`.
+
+| Variable | Purpose |
+|---|---|
+| `PLATFORM_OPERATOR_EMAILS` | Comma-separated e-mails that may open the platform support panel. Unset or empty: off |
+| `PLATFORM_OPERATOR_ALLOWED_IPS` | Optional comma-separated client IPs; other addresses are refused |
+| `LOG_CLEANUP_CRON` | Long-running server only: retention schedule (default `7 3 * * *`; `off` turns it off) |
+
 ## Tests
 
 ```bash

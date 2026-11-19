@@ -39,6 +39,7 @@ the server; access never depends on them alone.
 | Alerts and tracked actions of a team (`canSeeTeamAlerts`, `canSeeActions`) | all teams (plus company-level alerts) | their departments' teams | their teams | their teams | their teams |
 | Revenue impact of a team / roll-up (`canViewRevenueRollup`) | all / company and departments | their departments' teams / their departments | their teams / no | their teams / no | their teams / no |
 | Activity (`canViewActivity`), Ingestion log (`canViewIngestionLog`) | whole company | entries of their departments | no | no | no |
+| User activity: every request, sign-in and screen view of the company's users (`canViewUserActivity`) | whole company | no | no | no | no |
 | Weekly digest (`canReceiveDigest`) | yes | yes | yes | no | no |
 | Formula mode, "Show formulas & data sources" (`canUseFormulaMode`) | yes | no | no | no | no |
 
@@ -80,6 +81,30 @@ whose highest role is below team lead. Nobody manages themselves.
 
 The last active super admin of a company cannot lose that role or be deactivated.
 
+## Platform operator (outside the company roles)
+
+The platform operator is the product owner's support access across **all** companies. It is not a
+role assignment and no company role grants it.
+
+- **Who**: a signed-in user whose e-mail is listed in `PLATFORM_OPERATOR_EMAILS` (comma-separated,
+  case-insensitive). The list is checked again on every request. Unset or empty: the feature is off
+  and every `/api/operator` route answers 404.
+- **Step-up**: entering the panel asks for the password again (5 failed attempts per 15 minutes,
+  every failure logged). An account without a usable password (single sign-on only) must set one
+  first. Success gives a 30-minute operator token, signed with a key derived from `JWT_SECRET`
+  with its own audience, so a session token can never act as it and it is never a session. The web
+  app keeps it in memory only; **Leave** ends it on the server.
+- **Network**: `PLATFORM_OPERATOR_ALLOWED_IPS` (optional) refuses other client addresses.
+- **May**: read every company's data except protected data, and run a few logged repair actions
+  (demo refresh, recompute KPI snapshots, re-run alert evaluation, resend an invitation,
+  deactivate / reactivate a user, clear a sign-in lockout). Each needs a reason and a confirmation.
+- **May not**: act as a user (no impersonation), run SQL, delete customer data, or see password
+  hashes, API key hashes, the Slack webhook and secret settings, invitation and survey link tokens,
+  single survey answers or comments, or developer metrics of people who have not opted in.
+- **Transparency**: opening a company section writes "Platform support viewed …" with the reason to
+  that company's Activity log (at most once per section per 30 minutes); every action writes
+  "Platform support: …". All operator access is also kept in `platform_access_log`.
+
 ## Sign-in
 
 - **Invitations**: single-use 256-bit tokens stored only as SHA-256 hashes, revocable, expiring after
@@ -95,3 +120,5 @@ webhook URL are never returned by the API.
 
 The automated check of this table is `tests/api/r2-security-matrix.test.ts` (one request per role for
 every endpoint added in R2) with `tests/api/role-matrix.test.ts` and `tests/api/analytics-scope.test.ts`.
+The platform operator and the user activity log are covered by `tests/api/platform-operator.test.ts`,
+`tests/api/user-activity.test.ts` and `tests/api/ops-log.test.ts`.

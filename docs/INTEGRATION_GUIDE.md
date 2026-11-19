@@ -406,8 +406,14 @@ All errors are JSON `{ "error": "…", … }`. Validation errors list **every** 
 | 413 | Body over 100 kB | `{"error":"Payload too large"}` | No: send smaller batches |
 | 422 | `Idempotency-Key` reused with a different body | `{"error":"This Idempotency-Key was already used with a different request"}` | No: new key for a new request |
 | 429 | Rate limit | `{"error":"Ingestion rate limit reached (60 requests per minute per key). …"}` + `Retry-After` | Yes, after `Retry-After` seconds |
-| 500 | Server error; nothing was written (logged as rejected) | `{"error":"Failed to ingest metrics"}` or `{"error":"Authentication failed"}` | Yes, with backoff and the same `Idempotency-Key` |
+| 500 | Server error; nothing was written (logged as rejected) | `{"error":"Failed to ingest metrics","requestId":"…"}` or `{"error":"Authentication failed","requestId":"…"}` | Yes, with backoff and the same `Idempotency-Key` |
 | 502 / 503 / 504 | Hosting platform / network | (not JSON) | Yes, with backoff and the same key |
+
+**Request ids.** Every API response carries an `X-Request-Id` header. Send your own (8 to 64
+characters: letters, digits, `.`, `_`, `:`, `-`) to match our logs to yours; otherwise the server
+makes one. Every 5xx JSON body also contains it: `{"error":"…","requestId":"…"}`. Quote the request
+id when you report a problem: support can find the error by it. Request bodies, query strings and
+headers are never stored with it.
 
 ### 4.10 The ingestion log
 

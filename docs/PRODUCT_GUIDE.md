@@ -173,6 +173,75 @@ refused, with the reason, when a newer change touches the same people / team / d
 state was changed outside the history. QA managers may undo only user and assignment changes inside their
 departments (not their own access, not manager or lead changes). Code: [`server/lib/audit.ts`](../server/lib/audit.ts).
 
+### User activity log (super admins)
+
+Organisation → **User activity** lists everything the company's users do, for 90 days: sign-ins,
+failed sign-ins (when the e-mail belongs to one of your users), every API request (reads too), every
+screen opened in the app (with its team), CSV exports and API-key ingestion requests. Each row shows
+who (name and e-mail at the time, or the API key's name and prefix), what in plain words ("Viewed
+team Payments – KPIs", "Changed targets"), status, duration, IP address, browser and the request id.
+
+What it never stores: request or response bodies, query strings, headers, cookies, tokens or
+passwords. Answering the wellbeing pulse is never recorded, because the time of an answer could be
+matched to the anonymous answer. Not recorded either: the session check, this screen's own list
+requests (opening it and exporting it are recorded) and platform support requests (they go to the
+Activity log, below).
+
+Only super admins of the company see it (`canViewUserActivity`); QA managers do not. Filters: user,
+dates, action type (sign-in, view, change, export, API ingestion, failed), team, errors only, request
+id. CSV export of the filtered list (at most 10 000 rows), itself recorded.
+
+**Tell your staff.** This is monitoring of employees. Customers should say so in their privacy notice
+for employees (GDPR transparency), including the 90-day retention and who can see it.
+
+Code: [`server/lib/userActivity.ts`](../server/lib/userActivity.ts),
+[`server/routes/activity.ts`](../server/routes/activity.ts),
+[`src/components/UserActivity.tsx`](../src/components/UserActivity.tsx).
+
+### Platform support (product owner only)
+
+The product owner can open a support panel at `/operator` that sees **every** company. It exists to
+debug problems in production. It is off unless `PLATFORM_OPERATOR_EMAILS` lists the owner's e-mail.
+
+**Entering.** The owner is signed in normally, then enters the password again. This starts a
+30-minute support session (a separate token kept only in the browser's memory; a reload asks again).
+Five wrong passwords lock the step for 15 minutes. Accounts that only use single sign-on must set a
+password first. `PLATFORM_OPERATOR_ALLOWED_IPS` can limit it to known addresses. **Leave** ends the
+session at once.
+
+**What it shows.** Overview: every company with users, teams, last data received, share of stale
+metric values, open alerts, errors in the last 24 hours, last activity and a demo / sample flag;
+the last run of each scheduled job; database size and the main tables. Per company: organisation
+(departments, teams, members and their roles), users (last sign-in, status, lockouts, invitations
+with status, API keys by name and prefix), settings and targets (with history), data per team
+(metric values, KPI snapshots with staleness and sample / real source, ingestion log), alerts and
+actions, wellbeing pulse (cadence, send log, response rates and the same aggregates the team sees),
+the Activity log, the user activity log and server errors. Errors can be searched by request id
+across all companies.
+
+**What stays protected.** Password hashes, API key hashes, the Slack webhook and secret settings
+(shown masked), invitation and survey link tokens, single survey answers and comments (only the
+aggregates with at least 3 responses), and developer metrics of people who have not opted in (the
+same opt-in rule as everywhere else).
+
+**Repair actions.** Re-run the demo refresh, recompute KPI snapshots of a company or team, re-run
+the alert evaluation, resend a pending invitation, deactivate or reactivate a user, clear a sign-in
+lockout. Each asks for a confirmation and a reason. There is no impersonation, no SQL and no delete.
+
+**Transparency.** Opening a company section writes an entry to that company's own Activity log:
+"Platform support viewed users and invitations. Reason: …" (at most once per section per 30
+minutes). Every repair action writes "Platform support: … Reason: …". A deactivation is also the usual
+reversible user change, so the company's super admin can undo it. All operator access, including
+failed password attempts, is also kept in a platform-level log (`platform_access_log`).
+
+**Request ids.** Every API response has an `X-Request-Id` header and every server error message
+(5xx) includes `requestId`. A customer can quote it; support finds the error in `server_errors` (kept
+30 days; never request bodies, headers, cookies or query strings).
+
+Code: [`server/routes/operator.ts`](../server/routes/operator.ts),
+[`server/lib/operator.ts`](../server/lib/operator.ts), [`server/lib/opsLog.ts`](../server/lib/opsLog.ts),
+[`src/components/operator/`](../src/components/operator/).
+
 ### Demo mode
 
 `DEMO_MODE=true` shows demo-account chips on the login page (admin, QA manager, lead, engineer, viewer of
@@ -1051,7 +1120,9 @@ admins) sends yours immediately.
 ### Database keep-alive
 
 `netlify/functions/db-keepalive.ts` runs `SELECT 1` at 06:00 and 18:00 UTC (`0 6,18 * * *`), logging only ok / failed, so a hosted database on a
-plan that pauses idle projects stays available.
+plan that pauses idle projects stays available. It also deletes `server_errors` older than 30 days and
+`user_activity` and `job_runs` older than 90 days. Every scheduled job records its runs in `job_runs`
+(shown in the platform support panel).
 
 ### Nightly demo refresh
 
@@ -1103,6 +1174,9 @@ Only names and purposes are listed here. Never commit real values; `.env` is git
 | `ALERTS_CRON` | no | `false` turns the local alert / digest schedule off (for example on a second instance) |
 | `ALERTS_EVALUATE_CRON`, `DIGEST_CRON` | no | Local schedules in UTC (defaults `15 * * * *` hourly and `0 7 * * 1` Monday 07:00) |
 | `NOTIFY_SLACK_ALLOW_LOCAL` | tests only | Accepts a local `http://127.0.0.1:<port>/` webhook; ignored in production |
+| `PLATFORM_OPERATOR_EMAILS` | no | Comma-separated e-mails that may open the platform support panel (`/operator`). Unset or empty: off (all `/api/operator` routes answer 404) |
+| `PLATFORM_OPERATOR_ALLOWED_IPS` | no | Optional comma-separated client IPs allowed to use the platform support panel |
+| `LOG_CLEANUP_CRON` | no | Long-running server: retention of `server_errors` (30 days), `user_activity` and `job_runs` (90 days); default `7 3 * * *`, `off` turns it off. On Netlify `db-keepalive` does it |
 
 The Slack webhook is entered in **Parameters → Notification channels**, not in the environment.
 
