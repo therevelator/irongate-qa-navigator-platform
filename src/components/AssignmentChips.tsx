@@ -159,7 +159,7 @@ const AddAssignmentDialog: React.FC<{
         {leadTaken && (
           <label className="flex items-start gap-2 text-xs text-amber-800 dark:text-amber-300">
             <input type="checkbox" checked={replaceLead} onChange={(e) => setReplaceLead(e.target.checked)} className="mt-0.5 h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500" />
-            <span>{scope?.name} is led by {scope?.leadName}. Replace them (they stay on the team as a QA engineer).</span>
+            <span>{scope?.name} is led by {scope?.leadName}. Replace them (they stay on the team as a software engineer).</span>
           </label>
         )}
         <div className="flex justify-end gap-2 pt-1">

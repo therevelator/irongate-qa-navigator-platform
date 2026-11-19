@@ -143,7 +143,7 @@ router.put('/teams/:teamId/cadence', authenticateToken, async (req: AuthRequest,
     const team = await getOwnedTeam(req, req.params.teamId as string);
     const actor = policyActor(req);
     if (!team || !canViewPulseResults(actor, team)) return denied(res);
-    if (!canSetPulseCadence(actor, team)) return denied(res, 'Managers decide how often the team is asked: a QA manager of its department or an administrator.');
+    if (!canSetPulseCadence(actor, team)) return denied(res, 'Managers decide how often the team is asked: a manager of its department or an administrator.');
     const cadence = req.body?.cadence as PulseCadence;
     if (!PULSE_CADENCES.includes(cadence)) return res.status(400).json({ error: `cadence must be one of: ${PULSE_CADENCES.join(', ')}` });
     const r = await setPulseCadence({ companyId: req.companyId!, teamId: team.id, cadence, actorId: req.user!.id });
@@ -173,7 +173,7 @@ router.put('/teams/:teamId/auto-send', authenticateToken, async (req: AuthReques
     const team = await getOwnedTeam(req, req.params.teamId as string);
     const actor = policyActor(req);
     if (!team || !canViewPulseResults(actor, team)) return denied(res);
-    if (!canSetPulseCadence(actor, team)) return denied(res, 'Managers decide whether the survey goes out automatically: a QA manager of its department or an administrator.');
+    if (!canSetPulseCadence(actor, team)) return denied(res, 'Managers decide whether the survey goes out automatically: a manager of its department or an administrator.');
     if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be true or false' });
     const r = await setAutoSend({ companyId: req.companyId!, teamId: team.id, enabled: req.body.enabled, actorId: req.user!.id });
     await recordAudit({
@@ -197,7 +197,7 @@ router.put('/teams/:teamId/settings', authenticateToken, async (req: AuthRequest
     const team = await getOwnedTeam(req, req.params.teamId as string);
     const actor = policyActor(req);
     if (!team || !canViewPulseResults(actor, team)) return denied(res);
-    if (!canSetPulseReminders(actor, team)) return denied(res, 'The team lead, a QA manager of its department or an administrator sets the reminders.');
+    if (!canSetPulseReminders(actor, team)) return denied(res, 'The team lead, a manager of its department or an administrator sets the reminders.');
     const before = (await reminderState(team.id)).settings;
     const v = validateReminderSettings(req.body ?? {}, before);
     if ('error' in v) return res.status(400).json({ error: v.error });
@@ -221,7 +221,7 @@ const sendRoute = (kind: 'send' | 'remind') => async (req: AuthRequest, res: exp
     const team = await getOwnedTeam(req, req.params.teamId as string);
     const actor = policyActor(req);
     if (!team || !canViewPulseResults(actor, team)) return denied(res);
-    if (!canSendPulseSurvey(actor, team)) return denied(res, 'Only the team lead, a QA manager of its department or an administrator can send the survey.');
+    if (!canSendPulseSurvey(actor, team)) return denied(res, 'Only the team lead, a manager of its department or an administrator can send the survey.');
     if (!team.is_active) return res.status(409).json({ error: 'This team is inactive.' });
     const r = kind === 'send'
       ? await sendPulseSurvey({ companyId: req.companyId!, team, actorId: req.user!.id, trigger: 'manual' })

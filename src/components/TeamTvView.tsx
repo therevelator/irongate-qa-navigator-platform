@@ -359,7 +359,7 @@ const TeamTvView: React.FC = () => {
       icon = <MonitorX className="h-16 w-16 text-slate-400" aria-hidden />;
     } else if (state === 'forbidden') {
       title = 'This team is not available to you';
-      body = 'TV mode can show the teams in your scope only: your own team for team leads, engineers and viewers; the teams of your department for QA managers.';
+      body = 'TV mode can show the teams in your scope only: your own team for team leads, engineers and viewers; the teams of your department for managers.';
       icon = <MonitorX className="h-16 w-16 text-slate-400" aria-hidden />;
     } else if (state === 'signed-out') {
       title = 'Your session has ended';

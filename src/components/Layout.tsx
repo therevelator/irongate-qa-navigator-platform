@@ -11,7 +11,7 @@ import {
   ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin,
   type PolicyActor,
 } from '../../server/lib/userPolicy';
-import { policyActorOf } from '../lib/policyActor';
+import { policyActorOf, ROLE_LABELS } from '../lib/policyActor';
 import { fetchOperatorStatus } from '../lib/operatorClient';
 import PulsePendingBanner from './PulsePendingBanner';
 import NotificationsBell from './NotificationsBell';
@@ -135,13 +135,7 @@ const PAGE_META: Record<string, { title: string; parent?: string }> = {
   notifications: { title: 'Notifications' },
 };
 
-const ROLE_LABEL: Record<string, string> = {
-  super_admin: 'Administrator',
-  qa_manager: 'QA manager',
-  team_lead: 'Team lead',
-  qa_engineer: 'QA engineer',
-  viewer: 'Viewer',
-};
+const ROLE_LABEL = ROLE_LABELS;
 
 const PIN_KEY = 'irongate_nav_pinned';
 const WIDE_QUERY = '(min-width: 1280px)';

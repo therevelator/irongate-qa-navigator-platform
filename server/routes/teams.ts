@@ -60,19 +60,19 @@ interface TeamBenchmark {
 
 const TEAM_BENCHMARKS: TeamBenchmark[] = [
   { key: 'defectEscapeRate', label: 'Defect escape rate', unit: '%', digits: 1, lowerIsBetter: true,
-    action: { initiative: 'Run a post-mortem on escaped defects and add regression tests for each root cause', owner: 'QA Lead', timebox: '2 weeks', kpi: 'Defect escape rate' } },
+    action: { initiative: 'Run a post-mortem on escaped defects and add regression tests for each root cause', owner: 'Team lead', timebox: '2 weeks', kpi: 'Defect escape rate' } },
   { key: 'changeFailureRate', label: 'Change failure rate', unit: '%', digits: 1, lowerIsBetter: true,
     action: { initiative: 'Review failed changes; add pre-merge checks and staged rollouts for risky changes', owner: 'Release Lead', timebox: '2 weeks', kpi: 'Change failure rate' } },
   { key: 'mttrHours', label: 'Mean time to recovery', unit: ' h', digits: 1, lowerIsBetter: true,
     action: { initiative: 'Write runbooks for the most common incidents and practise one-click rollback', owner: 'DevOps', timebox: '3 weeks', kpi: 'MTTR' } },
   { key: 'testCoverage', label: 'Test coverage', unit: '%', digits: 1, lowerIsBetter: false,
-    action: { initiative: 'Add tests for the least-covered critical modules and enforce coverage on new code', owner: 'QA Lead', timebox: '1 sprint', kpi: 'Test coverage' } },
+    action: { initiative: 'Add tests for the least-covered critical modules and enforce coverage on new code', owner: 'Team lead', timebox: '1 sprint', kpi: 'Test coverage' } },
   { key: 'defectDensity', label: 'Defect density', unit: ' /KLOC', digits: 3, lowerIsBetter: true,
     action: { initiative: 'Identify the modules with the most defects and schedule focused review/refactoring', owner: 'Tech Lead', timebox: '1 sprint', kpi: 'Defect density' } },
   { key: 'testFlakinessRate', label: 'Test flakiness', unit: '%', digits: 1, lowerIsBetter: true,
-    action: { initiative: 'Quarantine flaky tests, fix the top offenders and track flakiness per test', owner: 'QA Lead', timebox: '3 weeks', kpi: 'Test flakiness rate' } },
+    action: { initiative: 'Quarantine flaky tests, fix the top offenders and track flakiness per test', owner: 'Team lead', timebox: '3 weeks', kpi: 'Test flakiness rate' } },
   { key: 'automationCoverage', label: 'Automation coverage', unit: '%', digits: 1, lowerIsBetter: false,
-    action: { initiative: 'Automate the highest-value manual regression cases', owner: 'QA Lead', timebox: '1 sprint', kpi: 'Automation coverage' } },
+    action: { initiative: 'Automate the highest-value manual regression cases', owner: 'Team lead', timebox: '1 sprint', kpi: 'Automation coverage' } },
   { key: 'codeQualityScore', label: 'Code quality score', unit: '/100', digits: 0, lowerIsBetter: false,
     action: { initiative: 'Fix the top static-analysis findings and add a quality gate to CI', owner: 'Tech Lead', timebox: '2 weeks', kpi: 'Code quality score' } },
   { key: 'avgBuildTimeMinutes', label: 'Build time', unit: ' min', digits: 1, lowerIsBetter: true,
@@ -82,7 +82,7 @@ const TEAM_BENCHMARKS: TeamBenchmark[] = [
   { key: 'deploymentFrequencyPerWeek', label: 'Deployment frequency', unit: '/week', digits: 1, lowerIsBetter: false,
     action: { initiative: 'Automate the release pipeline so small changes can ship independently', owner: 'DevOps', timebox: '1 sprint', kpi: 'Deployment frequency' } },
   { key: 'firstTimePassRate', label: 'First-time pass rate', unit: '%', digits: 1, lowerIsBetter: false,
-    action: { initiative: 'Run the fast test suite locally/pre-push and clarify acceptance criteria before development', owner: 'QA Lead', timebox: '2 weeks', kpi: 'First-time pass rate' } },
+    action: { initiative: 'Run the fast test suite locally/pre-push and clarify acceptance criteria before development', owner: 'Team lead', timebox: '2 weeks', kpi: 'First-time pass rate' } },
   { key: 'sprintCommitmentRate', label: 'Sprint commitment rate', unit: '%', digits: 1, lowerIsBetter: false,
     action: { initiative: 'Plan to measured capacity and split stories that do not fit a sprint', owner: 'Scrum Master', timebox: '1 sprint', kpi: 'Sprint commitment rate' } },
   { key: 'sprintCarryover', label: 'Sprint carryover', unit: '%', digits: 1, lowerIsBetter: true,
@@ -503,7 +503,7 @@ router.get('/:id/ai-suggestions', aiLimiter, authenticateToken, async (req: Auth
     const owned = await getOwnedTeam(req, req.params.id as string);
     if (!owned || !canRequestTeamInsights(policyActor(req), owned)) {
       return res.status(403).json({
-        error: 'AI insights are available to the team’s leads, its department’s QA managers and administrators',
+        error: 'AI insights are available to the team’s leads, its department’s managers and administrators',
         restricted: true
       });
     }
@@ -608,7 +608,7 @@ Return ONLY valid JSON (no markdown, no code blocks) with this exact structure:
     {
       "priority": "Urgent" or "Moderate" or "Low",
       "initiative": "specific action to take",
-      "owner": "role responsible (e.g., QA Lead, DevOps, Scrum Master)",
+      "owner": "role responsible (e.g., Team lead, DevOps, Scrum Master)",
       "timebox": "timeframe (e.g., 1 week, 2 weeks, 1 sprint)",
       "kpi": "which metric should improve"
     }
@@ -877,7 +877,7 @@ async function departmentInCompany(req: AuthRequest, departmentId?: string | nul
 router.post('/', authenticateToken, async (req: AuthRequest, res) => {
   try {
     if (!canManageCompanyData(req)) {
-      return res.status(403).json({ error: 'Only QA Managers and Super Admins can create teams' });
+      return res.status(403).json({ error: 'Only managers and super admins can create teams' });
     }
     const { name, description, departmentId, platform, leadId } = req.body;
 

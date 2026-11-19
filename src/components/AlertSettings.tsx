@@ -114,7 +114,7 @@ const AlertSettings: React.FC<{ scopeType: 'company' | 'department' | 'team'; sc
             <>
               {!data.canEdit && (
                 <p className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-                  {scopeType === 'company' ? 'Company alert rules are set by super admins.' : 'Alert rules of this department and its teams are set by super admins and the department’s QA managers.'} You can view them here.
+                  {scopeType === 'company' ? 'Company alert rules are set by super admins.' : 'Alert rules of this department and its teams are set by super admins and the department’s managers.'} You can view them here.
                 </p>
               )}
               <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -259,7 +259,7 @@ const NotificationChannels: React.FC = () => {
           <p className="text-sm font-medium text-slate-900 dark:text-white">Email and the weekly digest</p>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             {smtp ? 'Email is sent through the SMTP server configured on this server.' : 'SMTP is not configured on this server (SMTP_HOST): emails are written to the server log instead of being sent.'}
-            {' '}The weekly digest goes out on Mondays at 07:00 UTC to administrators, QA managers and team leads who have it on.
+            {' '}The weekly digest goes out on Mondays at 07:00 UTC to super admins, managers and team leads who have it on.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => run('digest', '/notifications/digest/test')} disabled={busy !== null} className={buttonClass.secondary} data-testid="admin-send-test-digest"><Send size={14} aria-hidden /> {busy === 'digest' ? 'Sending…' : 'Send test digest to me'}</button>

@@ -285,7 +285,7 @@ const PreferencesTab: React.FC = () => {
           </>
         ) : (
           <p className="flex items-start gap-2 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-            <Mail size={15} className="mt-0.5 shrink-0" aria-hidden /> The weekly digest is sent to administrators, QA managers and team leads.
+            <Mail size={15} className="mt-0.5 shrink-0" aria-hidden /> The weekly digest is sent to super admins, managers and team leads.
           </p>
         )}
         <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">Changes apply from the next alert and the next digest.</p>

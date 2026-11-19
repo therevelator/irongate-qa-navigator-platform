@@ -9,6 +9,7 @@ import { Page, PageIntro, Card, Badge, EmptyState, buttonClass, inputClass, scor
 import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
 import { canManageTeam, canWriteTeamData, canManageCompanyConfig, ledTeamIds, type PolicyActor } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
+import { ROLE_LABELS } from '../lib/policyActor';
 import ExportCsvButton from './ExportCsvButton';
 
 interface TeamMetrics {
@@ -62,9 +63,7 @@ const fmt = (v: unknown, digits = 0, suffix = ''): string => {
   return n === null ? '—' : `${n.toFixed(digits)}${suffix}`;
 };
 
-const ROLE_LABEL: Record<string, string> = {
-  super_admin: 'Super admin', qa_manager: 'Manager', team_lead: 'Team lead', qa_engineer: 'Engineer', viewer: 'Viewer',
-};
+const ROLE_LABEL = ROLE_LABELS;
 
 const TeamsView: React.FC<TeamsViewProps> = () => {
   const { user } = useAuth();

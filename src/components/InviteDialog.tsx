@@ -4,6 +4,7 @@ import { Copy, MailCheck, MailWarning, RefreshCw, Send, XCircle } from 'lucide-r
 import API_URL from '../config/api';
 import Modal from './Modal';
 import { Badge, buttonClass, cx, inputClass, type Tone } from './ui';
+import { ROLE_LABELS } from '../lib/policyActor';
 import type { GrantRoleOption } from '../lib/policyActor';
 
 /**
@@ -32,9 +33,7 @@ export interface Invitation {
 interface Delivery { delivered: boolean; channel: 'smtp' | 'log'; error: string | null }
 interface SendResult { invitation: Invitation; delivery: Delivery; link: string | null }
 
-const ROLE_NAMES: Record<string, string> = {
-  super_admin: 'Super admin', qa_manager: 'QA manager', team_lead: 'Team lead', qa_engineer: 'QA engineer', viewer: 'Viewer',
-};
+const ROLE_NAMES = ROLE_LABELS;
 const STATUS: Record<Invitation['status'], { label: string; tone: Tone }> = {
   open: { label: 'Pending', tone: 'brand' },
   expired: { label: 'Expired', tone: 'warn' },
@@ -171,7 +170,7 @@ export const InviteDialog: React.FC<{
             </div>
           </div>
           {role === 'team_lead' && scopes.find((s) => s.id === scopeId)?.leadName && (
-            <p className="text-xs text-amber-700 dark:text-amber-400">This team already has a lead. Invite the person as a QA engineer, then change the lead on the Departments page.</p>
+            <p className="text-xs text-amber-700 dark:text-amber-400">This team already has a lead. Invite the person as a software engineer, then change the lead on the Departments page.</p>
           )}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className={buttonClass.secondary} onClick={onClose}>Cancel</button>

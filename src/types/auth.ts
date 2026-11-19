@@ -1,3 +1,4 @@
+import { ROLE_LABELS } from '../../server/lib/roleLabels';
 /**
  * Authentication & Authorization Types
  * IronGate QA Navigator - Full RBAC System
@@ -100,7 +101,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
   };
 }> = {
   super_admin: {
-    name: 'Super Admin',
+    name: ROLE_LABELS.super_admin,
     description: 'Full system control',
     level: 5,
     permissions: {
@@ -127,7 +128,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     },
   },
   qa_manager: {
-    name: 'QA Manager',
+    name: ROLE_LABELS.qa_manager,
     description: 'Organization-wide QA oversight',
     level: 4,
     permissions: {
@@ -154,7 +155,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     },
   },
   team_lead: {
-    name: 'Team Lead',
+    name: ROLE_LABELS.team_lead,
     description: 'Own team + limited cross-team visibility',
     level: 3,
     permissions: {
@@ -181,7 +182,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     },
   },
   qa_engineer: {
-    name: 'QA Engineer',
+    name: ROLE_LABELS.qa_engineer,
     description: 'Own team only',
     level: 2,
     permissions: {
@@ -208,7 +209,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, {
     },
   },
   viewer: {
-    name: 'Viewer',
+    name: ROLE_LABELS.viewer,
     description: 'Read-only access',
     level: 1,
     permissions: {

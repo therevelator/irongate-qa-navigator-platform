@@ -16,13 +16,9 @@ export function policyActorOf(user: User | null | undefined): PolicyActor {
   };
 }
 
-export const ROLE_LABELS: Record<string, string> = {
-  super_admin: 'Super admin',
-  qa_manager: 'QA manager',
-  team_lead: 'Team lead',
-  qa_engineer: 'QA engineer',
-  viewer: 'Viewer',
-};
+/** Role display names: the one map in server/lib/roleLabels.ts (keys stay qa_manager / qa_engineer). */
+export { ROLE_LABELS, ROLE_LABELS_PLURAL, roleLabel } from '../../server/lib/roleLabels';
+import { ROLE_LABELS } from '../../server/lib/roleLabels';
 
 export interface GrantScopeOption { scopeType: 'company' | 'department' | 'team'; id: string; name: string; departmentName?: string | null; leadName?: string | null }
 export interface GrantRoleOption { role: string; label: string; scopes: GrantScopeOption[] }

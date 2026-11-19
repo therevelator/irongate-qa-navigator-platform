@@ -141,7 +141,7 @@ const KpiTargetsConfig: React.FC<{
         <>
           {!data.canEdit && (
             <p className="mb-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
-              {scopeType === 'company' ? 'Company-wide targets are set by super admins.' : 'Targets of this department and its teams are set by super admins and the department’s QA managers.'} You can view them here.
+              {scopeType === 'company' ? 'Company-wide targets are set by super admins.' : 'Targets of this department and its teams are set by super admins and the department’s managers.'} You can view them here.
             </p>
           )}
           <div className="-mx-5 overflow-x-auto sm:mx-0">

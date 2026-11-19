@@ -95,7 +95,7 @@ router.post('/:id/acknowledge', authenticateToken, async (req: AuthRequest, res)
     const actor = policyActor(req);
     const a = await queryOne<any>(`${ALERT_SELECT} WHERE a.id = ? AND a.company_id = ?`, [req.params.id, req.companyId]);
     if (!a || !canSeeAlert(actor, a)) return res.status(404).json({ error: 'Alert not found' });
-    if (!canAcknowledgeAlert(actor, a)) return res.status(403).json({ error: 'Only the team’s leads, its department’s QA managers and administrators can acknowledge this alert' });
+    if (!canAcknowledgeAlert(actor, a)) return res.status(403).json({ error: 'Only the team’s leads, its department’s managers and administrators can acknowledge this alert' });
     if (a.resolved_at) return res.status(409).json({ error: 'This alert is already resolved' });
     if (a.acknowledged_at) return res.json({ alert: alertJson(a, actor) });
     await transaction(async (client) => {
@@ -156,7 +156,7 @@ async function rulesAt(companyId: string, scope: ScopeRef) {
 router.get('/rules', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const actor = policyActor(req);
-    if (!canReadAlertRules(actor)) return res.status(403).json({ error: 'Only administrators and QA managers can see the alert rules' });
+    if (!canReadAlertRules(actor)) return res.status(403).json({ error: 'Only super admins and managers can see the alert rules' });
     const scope = await resolveScope(req.companyId as string, req.query.scopeType, req.query.scopeId);
     if (!scope) return res.status(404).json({ error: 'Scope not found' });
     res.json({
@@ -178,7 +178,7 @@ router.put('/rules', authenticateToken, async (req: AuthRequest, res) => {
     const scope = await resolveScope(companyId, scopeType, scopeId);
     if (!scope) return res.status(404).json({ error: 'Scope not found' });
     if (!canEditAlertRules(actor, { type: scope.type, departmentId: scope.departmentId })) {
-      return res.status(403).json({ error: scope.type === 'company' ? 'Only administrators can change company alert rules' : 'Only administrators and this department’s QA managers can change these alert rules' });
+      return res.status(403).json({ error: scope.type === 'company' ? 'Only administrators can change company alert rules' : 'Only administrators and this department’s managers can change these alert rules' });
     }
     if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return res.status(400).json({ error: 'rules must be an object of { rule: { enabled, params } | null }' });
     const changes: Array<{ rule: AlertRule; value: { enabled: boolean; params: Record<string, number | string> } | null }> = [];

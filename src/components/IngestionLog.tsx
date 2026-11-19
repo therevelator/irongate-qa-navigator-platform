@@ -122,7 +122,7 @@ const IngestionLog: React.FC = () => {
     return (
       <Page>
         <PageIntro title="Ingestion log" />
-        <Card><EmptyState title="Not available for your role" description="The ingestion log is available to super admins and QA managers." icon={<Inbox size={28} />} /></Card>
+        <Card><EmptyState title="Not available for your role" description="The ingestion log is available to super admins and managers." icon={<Inbox size={28} />} /></Card>
       </Page>
     );
   }

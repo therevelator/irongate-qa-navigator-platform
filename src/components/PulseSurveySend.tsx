@@ -179,7 +179,7 @@ export const PulseSendPanel: React.FC<{ data: TeamPulseData; sending: PulseSendS
               <Mail size={14} className="mt-0.5 shrink-0" aria-hidden />
               <span>
                 Asked {data.cadences.find((c) => c.value === data.cadence)?.label.toLowerCase() ?? data.cadence}
-                {sending.autoSend.enabled ? ', e-mailed automatically at the start of each period' : ', sent by hand'}. QA managers decide how often and whether it goes out automatically.
+                {sending.autoSend.enabled ? ', e-mailed automatically at the start of each period' : ', sent by hand'}. Managers decide how often and whether it goes out automatically.
               </span>
             </p>
           )}

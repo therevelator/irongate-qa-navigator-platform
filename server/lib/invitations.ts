@@ -7,6 +7,7 @@ import { sendMail, escapeHtml, type MailResult } from './mailer';
 import { appBaseUrl } from './sso';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
 import type { Grant } from './userPolicy';
+import { ROLE_LABELS } from './roleLabels';
 
 /**
  * Invitations (table invitations): invite a person by email to exactly one role assignment.
@@ -32,9 +33,8 @@ export type InvitationStatus = 'open' | 'expired' | 'accepted' | 'revoked';
 export const statusSql = (a = 'i') =>
   `CASE WHEN ${a}.accepted_at IS NOT NULL THEN 'accepted' WHEN ${a}.revoked_at IS NOT NULL THEN 'revoked' WHEN ${a}.expires_at <= now() THEN 'expired' ELSE 'open' END`;
 
-export const ROLE_NAMES: Record<string, string> = {
-  super_admin: 'Super admin', qa_manager: 'QA manager', team_lead: 'Team lead', qa_engineer: 'QA engineer', viewer: 'Viewer',
-};
+/** Role display names (server/lib/roleLabels.ts). */
+export const ROLE_NAMES = ROLE_LABELS;
 
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 

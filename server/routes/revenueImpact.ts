@@ -97,7 +97,7 @@ router.get('/rollup', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const actor = policyActor(req);
     if (!canViewRevenueRollup(actor)) {
-      return res.status(403).json({ error: 'The revenue roll-up is available to super admins and QA managers.' });
+      return res.status(403).json({ error: 'The revenue roll-up is available to super admins and managers.' });
     }
     const departmentId = typeof req.query.departmentId === 'string' && req.query.departmentId && req.query.departmentId !== 'all' ? req.query.departmentId : null;
     const rows = await query<any>(

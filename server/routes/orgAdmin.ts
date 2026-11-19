@@ -170,7 +170,7 @@ function scopeWhere(actor: PolicyActor, params: any[]): string {
 router.get('/audit', authenticateToken, async (req: any, res) => {
   try {
     const actor = policyActor(req);
-    if (!canViewActivity(actor)) return res.status(403).json({ error: 'The change history is available to super admins and QA managers' });
+    if (!canViewActivity(actor)) return res.status(403).json({ error: 'The change history is available to super admins and managers' });
     const q = req.query ?? {};
     const params: any[] = [req.user.companyId];
     let where = 'a.company_id = ?' + scopeWhere(actor, params);
@@ -209,7 +209,7 @@ router.get('/audit', authenticateToken, async (req: any, res) => {
 router.get('/audit/facets', authenticateToken, async (req: any, res) => {
   try {
     const actor = policyActor(req);
-    if (!canViewActivity(actor)) return res.status(403).json({ error: 'The change history is available to super admins and QA managers' });
+    if (!canViewActivity(actor)) return res.status(403).json({ error: 'The change history is available to super admins and managers' });
     const params: any[] = [req.user.companyId];
     const where = 'a.company_id = ?' + scopeWhere(actor, params);
     const actions = await query<any[]>(`SELECT a.action, COUNT(*)::int AS n FROM audit_log a WHERE ${where} GROUP BY a.action ORDER BY a.action`, params);
@@ -232,7 +232,7 @@ router.get('/audit/facets', authenticateToken, async (req: any, res) => {
 router.post('/audit/:id/undo', authenticateToken, async (req: any, res) => {
   try {
     const actor = policyActor(req);
-    if (!canViewActivity(actor)) return res.status(403).json({ error: 'The change history is available to super admins and QA managers' });
+    if (!canViewActivity(actor)) return res.status(403).json({ error: 'The change history is available to super admins and managers' });
     const out = await undoEntry(actor, req.user.companyId, req.params.id);
     res.json(out);
   } catch (e) {
@@ -318,7 +318,7 @@ router.post('/invitations', authenticateToken, async (req: any, res) => {
     }
     if (grant.role === 'team_lead') {
       const lead = await queryOne<any>(`SELECT 1 FROM role_assignments WHERE scope_type = 'team' AND scope_id = ? AND role = 'team_lead' AND revoked_at IS NULL`, [grant.scopeId]);
-      if (lead) return res.status(409).json({ error: `${scope.name} already has a team lead. Invite them as a QA engineer, then change the lead on the Departments page.` });
+      if (lead) return res.status(409).json({ error: `${scope.name} already has a team lead. Invite them as a software engineer, then change the lead on the Departments page.` });
     }
 
     const { token, hash } = newToken();

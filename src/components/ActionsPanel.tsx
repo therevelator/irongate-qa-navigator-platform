@@ -107,7 +107,7 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
         />
         {error ? <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
           : list.length === 0 ? (
-            <EmptyState title="No actions yet" description={data?.canManage ? 'Create one, or use “Create action” on a recommendation below.' : 'Actions created by the team lead or QA manager appear here.'} />
+            <EmptyState title="No actions yet" description={data?.canManage ? 'Create one, or use “Create action” on a recommendation below.' : 'Actions created by the team lead or a manager appear here.'} />
           ) : (
             <ul className="divide-y divide-slate-100 dark:divide-slate-800" data-testid="action-list">
               {list.map((a) => (

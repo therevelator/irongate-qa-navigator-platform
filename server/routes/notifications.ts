@@ -128,7 +128,7 @@ router.put('/preferences', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: (e as Error).message });
     }
     if (next.weeklyDigest && !canReceiveDigest(actor)) {
-      return res.status(400).json({ error: 'The weekly digest is available to administrators, QA managers and team leads' });
+      return res.status(400).json({ error: 'The weekly digest is available to super admins, managers and team leads' });
     }
     await savePrefs(req.companyId as string, actor.id, next);
     await recordAudit({
@@ -149,7 +149,7 @@ router.put('/preferences', authenticateToken, async (req: AuthRequest, res) => {
 router.get('/digest/preview', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const actor = policyActor(req);
-    if (!canReceiveDigest(actor)) return res.status(403).json({ error: 'The weekly digest is available to administrators, QA managers and team leads' });
+    if (!canReceiveDigest(actor)) return res.status(403).json({ error: 'The weekly digest is available to super admins, managers and team leads' });
     const me = await loadActor(req.companyId as string, actor.id);
     if (!me) return res.status(403).json({ error: 'Access denied' });
     const d = await buildDigest(req.companyId as string, me);
@@ -164,7 +164,7 @@ router.get('/digest/preview', authenticateToken, async (req: AuthRequest, res) =
 router.post('/digest/test', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const actor = policyActor(req);
-    if (!canReceiveDigest(actor)) return res.status(403).json({ error: 'The weekly digest is available to administrators, QA managers and team leads' });
+    if (!canReceiveDigest(actor)) return res.status(403).json({ error: 'The weekly digest is available to super admins, managers and team leads' });
     const me = await loadActor(req.companyId as string, actor.id);
     if (!me) return res.status(403).json({ error: 'Access denied' });
     const r = await sendTestDigest(req.companyId as string, me);

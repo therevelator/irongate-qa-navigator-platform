@@ -4,6 +4,7 @@ import {
   AssignmentError, type Exec,
 } from './assignments';
 import { auditedUserChange } from './audit';
+import { ROLE_LABELS } from './roleLabels';
 import { ROLE_RANK, type Grant } from './userPolicy';
 
 /**
@@ -32,9 +33,7 @@ import { ROLE_RANK, type Grant } from './userPolicy';
  *   lead stays on the team as a qa_engineer (their role stays team_lead if they lead another team).
  */
 
-export const ROLE_LABEL: Record<string, string> = {
-  super_admin: 'Super admin', qa_manager: 'QA manager', team_lead: 'Team lead', qa_engineer: 'QA engineer', viewer: 'Viewer',
-};
+export const ROLE_LABEL = ROLE_LABELS;
 const label = (role: string) => ROLE_LABEL[role] ?? role;
 
 /** Roles a removed manager can be given. */
@@ -138,7 +137,7 @@ export async function planAssignManager(companyId: string, actorId: string, depa
   if ('ok' in u) return u;
   const grants = await loadGrants(companyId, u.id);
   const add: Grant = { role: 'qa_manager', scopeType: 'department', scopeId: dept.id };
-  if (grants.some((g) => same(g, add))) return fail(400, `${nameOf(u)} is already a QA manager of ${dept.name}`);
+  if (grants.some((g) => same(g, add))) return fail(400, `${nameOf(u)} is already a manager of ${dept.name}`);
 
   const teams = await teamInfo(grants.filter((g) => g.scopeType === 'team').map((g) => g.scopeId));
   const revokes = grants.filter((g) => g.role === 'super_admin'
@@ -176,7 +175,7 @@ export async function planAssignManager(companyId: string, actorId: string, depa
     c.push(`${who} will manage ${dept.name}: they will see ${scope}.`);
   }
   const leftTeams = revokes.filter((g) => g.scopeType === 'team' && g.role !== 'team_lead').map((g) => teams.get(g.scopeId)?.name ?? g.scopeId);
-  if (leftTeams.length) c.push(`${who} leaves ${list(leftTeams)} (QA managers do not need a team; their scope is the department).`);
+  if (leftTeams.length) c.push(`${who} leaves ${list(leftTeams)} (managers do not need a team; their scope is the department).`);
   if (keepTeam) c.push(`${who} stays a member of ${u.team_name}.`);
   if (led.length) c.push(`${list(led.map((t) => t.name))} will no longer have ${who} as team lead.`);
   plan.consequences = c;
@@ -195,7 +194,7 @@ export async function applyAssignManager(companyId: string, actorId: string, pla
     { companyId, actorId, action: 'department.manager_assign', userIds: [plan.user.id], extraSubjects: [plan.department.to as string] },
     async (exec) => {
       await applyUserGrants(exec, companyId, actorId, plan.user.id, plan, { departmentId: plan.department.to, primaryTeamId: plan.primaryTeam.to });
-      return { summary: `${plan.user.name} made QA manager of ${plan.department.toName}`, result: null };
+      return { summary: `${plan.user.name} made manager of ${plan.department.toName}`, result: null };
     },
   );
 }
@@ -213,7 +212,7 @@ export async function planRemoveManager(
   if (!u) return fail(400, 'User not found in your company');
   const grants = await loadGrants(companyId, u.id);
   const mgr: Grant = { role: 'qa_manager', scopeType: 'department', scopeId: dept.id };
-  if (!grants.some((g) => same(g, mgr))) return fail(400, `${nameOf(u)} is not a QA manager of ${dept.name}`);
+  if (!grants.some((g) => same(g, mgr))) return fail(400, `${nameOf(u)} is not a manager of ${dept.name}`);
   const roleErr = await roleChangeError(companyId, actorId, u, false);
   if (roleErr) return fail(400, roleErr);
 
@@ -227,7 +226,7 @@ export async function planRemoveManager(
     const pick = inDept.find((g) => g.scopeId === u.primary_team_id) ?? inDept[0];
     if (pick) team = { id: pick.scopeId, name: teams.get(pick.scopeId)?.name ?? '' };
   }
-  if (!team && role === 'qa_engineer') return fail(400, `A QA engineer needs a team: choose a team in ${dept.name}, or make ${nameOf(u)} a viewer`);
+  if (!team && role === 'qa_engineer') return fail(400, `A software engineer needs a team: choose a team in ${dept.name}, or make ${nameOf(u)} a viewer`);
 
   const existingOnTeam = team ? grants.find((g) => g.scopeType === 'team' && g.scopeId === team!.id) : undefined;
   const add: Grant[] = team && existingOnTeam?.role !== 'team_lead' && existingOnTeam?.role !== role
@@ -253,7 +252,7 @@ export async function planRemoveManager(
   c.push(team
     ? `${who} will see ${team.name}${role === 'viewer' ? ', read-only' : ''}${team.id !== u.primary_team_id ? ` (their new primary team)` : ''}.`
     : `${who} will have no team, so no team analytics, until a team is assigned on the Users page.`);
-  if (!others.some((m) => m.id !== u.id)) c.push(`${dept.name} will have no QA manager; only super admins will manage it.`);
+  if (!others.some((m) => m.id !== u.id)) c.push(`${dept.name} will have no manager; only super admins will manage it.`);
   plan.consequences = c;
   return { ok: true, plan, target: { id: u.id, departmentId: dept.id } };
 }
@@ -265,7 +264,7 @@ export async function applyRemoveManager(companyId: string, actorId: string, pla
       await applyUserGrants(exec, companyId, actorId, plan.user.id, plan, {
         primaryTeamId: plan.primaryTeam.to, departmentId: plan.department.to, fallbackRole: plan.role.to,
       });
-      return { summary: `${plan.user.name} is no longer QA manager of ${plan.department.toName}`, result: null };
+      return { summary: `${plan.user.name} is no longer manager of ${plan.department.toName}`, result: null };
     },
   );
 }

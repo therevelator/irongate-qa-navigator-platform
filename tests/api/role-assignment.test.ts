@@ -132,7 +132,7 @@ describe('Assign department managers and team leads', () => {
     expect(await flaky('src', team)).toBe(403);
     const dry = await post(`/api/admin/departments/${dept}/managers`, c.admin, { userId: ids.src, dryRun: true });
     expect(dry.status).toBe(200);
-    expect(dry.body.consequences.join(' ')).toMatch(/QA engineer to QA manager/);
+    expect(dry.body.consequences.join(' ')).toMatch(/Software engineer to Manager/);
     expect((await userRow(ids.src)).role).toBe('qa_engineer');
 
     const res = await post(`/api/admin/departments/${dept}/managers`, c.admin, { userId: ids.src });
@@ -160,7 +160,7 @@ describe('Assign department managers and team leads', () => {
     expect((await post(path, c.admin, { role: 'super_admin', teamId: team })).status).toBe(400);
     const res = await post(path, c.admin, { teamId: team });
     expect(res.status).toBe(200);
-    expect(res.body.consequences.join(' ')).toMatch(/no QA manager/);
+    expect(res.body.consequences.join(' ')).toMatch(/no manager/);
     expect(await userRow(ids.src)).toMatchObject({ role: 'qa_engineer', department_id: dept, primary_team_id: team });
     expect((await detail()).managers).toEqual([]);
     const s = await scope('src');

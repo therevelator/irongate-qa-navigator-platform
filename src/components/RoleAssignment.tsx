@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import { Check, Search, UserCog } from 'lucide-react';
 import Modal from './Modal';
 import API_URL from '../config/api';
+import { ROLE_LABELS } from '../lib/policyActor';
 import { buttonClass, cx, inputClass } from './ui';
 
 /**
@@ -26,9 +27,7 @@ export interface CompanyUser {
   team_ids?: string[];
 }
 
-const ROLE_LABEL: Record<string, string> = {
-  super_admin: 'Super admin', qa_manager: 'QA manager', team_lead: 'Team lead', qa_engineer: 'QA engineer', viewer: 'Viewer',
-};
+const ROLE_LABEL = ROLE_LABELS;
 
 const fullName = (u: CompanyUser) => `${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email;
 
@@ -247,7 +246,7 @@ export const AssignmentDialog: React.FC<{
       if (!res.ok) { toast.error(data.error || 'Could not save the change'); return; }
       const who = plan.user.name;
       toast.success(
-        request.kind === 'assign_manager' ? `${who} is now a QA manager of ${request.departmentName}`
+        request.kind === 'assign_manager' ? `${who} is now a manager of ${request.departmentName}`
           : request.kind === 'remove_manager' ? `${who} is no longer a manager of ${request.departmentName}`
           : `${who} is now team lead of ${request.teamName}`,
       );
@@ -259,13 +258,13 @@ export const AssignmentDialog: React.FC<{
     }
   };
 
-  const title = request.kind === 'assign_manager' ? `Assign a QA manager to ${request.departmentName}`
+  const title = request.kind === 'assign_manager' ? `Assign a department manager to ${request.departmentName}`
     : request.kind === 'remove_manager' ? `Remove ${request.user.name} as manager`
     : `Assign team lead for ${request.teamName}`;
-  const subtitle = request.kind === 'assign_manager' ? 'QA managers see every team of their department and manage its teams and users. A department can have several.'
+  const subtitle = request.kind === 'assign_manager' ? 'Managers see every team of their department and manage its teams and users. A department can have several.'
     : request.kind === 'remove_manager' ? `They stay in ${request.departmentName} with the role you choose.`
     : request.currentLeadName ? `Current lead: ${request.currentLeadName}.` : 'This team has no lead yet.';
-  const action = request.kind === 'assign_manager' ? 'Make QA manager' : request.kind === 'remove_manager' ? 'Remove as manager' : 'Make team lead';
+  const action = request.kind === 'assign_manager' ? 'Make department manager' : request.kind === 'remove_manager' ? 'Remove as manager' : 'Make team lead';
 
   return (
     <Modal isOpen onClose={onClose} title={title} subtitle={subtitle} size="prose">

@@ -150,25 +150,25 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
         const rolesList = data.availableRoles || [];
         setRoles(rolesList.map((r: string) => ({
           id: r,
-          name: r.split('_').map((w: string) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+          name: ROLE_LABELS[r] ?? r
         })));
       } else {
         setRoles([
-          { id: 'super_admin', name: 'Super Admin' },
-          { id: 'qa_manager', name: 'QA Manager' },
-          { id: 'team_lead', name: 'Team Lead' },
-          { id: 'qa_engineer', name: 'QA Engineer' },
-          { id: 'viewer', name: 'Viewer' }
+          { id: 'super_admin', name: ROLE_LABELS.super_admin },
+          { id: 'qa_manager', name: ROLE_LABELS.qa_manager },
+          { id: 'team_lead', name: ROLE_LABELS.team_lead },
+          { id: 'qa_engineer', name: ROLE_LABELS.qa_engineer },
+          { id: 'viewer', name: ROLE_LABELS.viewer }
         ]);
       }
     } catch (error) {
       console.error('Error fetching users:', error);
       setRoles([
-        { id: 'super_admin', name: 'Super Admin' },
-        { id: 'qa_manager', name: 'QA Manager' },
-        { id: 'team_lead', name: 'Team Lead' },
-        { id: 'qa_engineer', name: 'QA Engineer' },
-        { id: 'viewer', name: 'Viewer' }
+        { id: 'super_admin', name: ROLE_LABELS.super_admin },
+        { id: 'qa_manager', name: ROLE_LABELS.qa_manager },
+        { id: 'team_lead', name: ROLE_LABELS.team_lead },
+        { id: 'qa_engineer', name: ROLE_LABELS.qa_engineer },
+        { id: 'viewer', name: ROLE_LABELS.viewer }
       ]);
     } finally {
       setLoading(false);

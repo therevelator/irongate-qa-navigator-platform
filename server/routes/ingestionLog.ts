@@ -18,7 +18,7 @@ import { canViewIngestionLog, canViewIngestionEntry, isCompanyAdmin, managedDepa
  */
 const router = express.Router();
 
-const DENIED = 'The ingestion log is available to super admins and QA managers';
+const DENIED = 'The ingestion log is available to super admins and managers';
 
 /** WHERE clause limiting entries to what the actor may see (canViewIngestionEntry, in SQL). */
 function scopeWhere(actor: PolicyActor, params: any[]): string {

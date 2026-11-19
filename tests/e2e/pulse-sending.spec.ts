@@ -193,6 +193,6 @@ test.describe('Wellbeing pulse: sending and answering through the link', () => {
     await page.goto('http://localhost:5173/analytics/pulse');
     await expect(page.locator('[data-testid="pulse-send"]').first()).toBeVisible({ timeout: 15000 });
     await expect(page.locator('[data-testid="pulse-cadence"]')).toHaveCount(0);
-    await expect(page.locator('[data-testid="pulse-auto-readonly"]')).toContainText('QA managers decide');
+    await expect(page.locator('[data-testid="pulse-auto-readonly"]')).toContainText('Managers decide');
   });
 });

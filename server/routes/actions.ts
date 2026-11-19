@@ -62,7 +62,7 @@ router.get('/owners', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const team = await getOwnedTeam(req, typeof req.query.teamId === 'string' ? req.query.teamId : null);
     if (!team || !canSeeActions(policyActor(req), team)) return res.status(403).json({ error: 'Access denied. This team is outside your analytics scope.' });
-    if (!canManageActions(policyActor(req), team)) return res.status(403).json({ error: 'Only the team’s leads, its department’s QA managers and administrators can assign actions' });
+    if (!canManageActions(policyActor(req), team)) return res.status(403).json({ error: 'Only the team’s leads, its department’s managers and administrators can assign actions' });
     const owners = (await loadCompanyActors(req.companyId as string)).filter((a) => canOwnAction(a, team))
       .map((a) => ({ id: a.id, name: a.name, email: a.email }))
       .sort((a, b) => a.name.localeCompare(b.name));
@@ -78,7 +78,7 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     const team = await getOwnedTeam(req, typeof body.teamId === 'string' ? body.teamId : null);
     const actor = policyActor(req);
     if (!team || !canSeeActions(actor, team)) return res.status(403).json({ error: 'Access denied. This team is outside your analytics scope.' });
-    if (!canManageActions(actor, team)) return res.status(403).json({ error: 'Only the team’s leads, its department’s QA managers and administrators can create actions' });
+    if (!canManageActions(actor, team)) return res.status(403).json({ error: 'Only the team’s leads, its department’s managers and administrators can create actions' });
     const companyId = req.companyId as string;
     const origin = body.origin === undefined || body.origin === null || body.origin === '' ? 'manual' : body.origin;
     if (!(ACTION_ORIGINS as string[]).includes(origin)) return res.status(400).json({ error: `origin must be one of ${ACTION_ORIGINS.join(', ')}` });
@@ -118,7 +118,7 @@ router.patch('/:id', authenticateToken, async (req: AuthRequest, res) => {
     const fields = Object.keys(body).filter((k) => ['title', 'description', 'ownerId', 'dueDate', 'status', 'metricKey'].includes(k));
     if (!fields.length) return res.status(400).json({ error: 'Nothing to change' });
     if (!writer) {
-      if (!canUpdateActionStatus(actor, team, row)) return res.status(403).json({ error: 'Only the team’s leads, its department’s QA managers, administrators and the action’s owner can change it' });
+      if (!canUpdateActionStatus(actor, team, row)) return res.status(403).json({ error: 'Only the team’s leads, its department’s managers, administrators and the action’s owner can change it' });
       if (fields.some((f) => f !== 'status')) return res.status(403).json({ error: 'As the owner you can change the status of this action' });
     }
     const patch: ActionPatch = {};
@@ -144,7 +144,7 @@ router.delete('/:id', authenticateToken, async (req: AuthRequest, res) => {
     const row = await getActionRow(companyId, req.params.id as string);
     const team = row ? await getOwnedTeam(req, row.team_id) : null;
     if (!row || !team || !canSeeActions(actor, team)) return res.status(404).json({ error: 'Action not found' });
-    if (!canManageActions(actor, team)) return res.status(403).json({ error: 'Only the team’s leads, its department’s QA managers and administrators can delete actions' });
+    if (!canManageActions(actor, team)) return res.status(403).json({ error: 'Only the team’s leads, its department’s managers and administrators can delete actions' });
     await deleteAction({ companyId, actorId: actor.id, team }, row.id);
     res.json({ ok: true });
   } catch (e) {

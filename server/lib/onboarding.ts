@@ -83,7 +83,7 @@ export async function onboardingStatus(companyId: string): Promise<OnboardingSta
   const steps: OnboardingStep[] = [
     {
       key: 'departments', label: 'Create departments', done: departments > 0, count: departments, view: 'departments', actionLabel: 'Open Departments',
-      description: 'Group your teams into departments so QA managers can look after theirs.',
+      description: 'Group your teams into departments so managers can look after theirs.',
     },
     {
       key: 'teams', label: 'Add teams', done: teams > 0, count: teams, view: 'teams', actionLabel: 'Open Teams',
@@ -91,7 +91,7 @@ export async function onboardingStatus(companyId: string): Promise<OnboardingSta
     },
     {
       key: 'people', label: 'Invite people', done: otherUsers + invitations > 0, count: otherUsers + invitations, view: 'users', actionLabel: 'Invite people',
-      description: 'Invite QA managers, team leads and engineers; they get the access of their role.',
+      description: 'Invite managers, team leads and software engineers; they get the access of their role.',
     },
     {
       key: 'targets', label: 'Set KPI targets', done: targets > 0, count: targets, view: 'parameters-config', actionLabel: 'Open Parameters',

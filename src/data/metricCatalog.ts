@@ -166,7 +166,7 @@ const OVERVIEW = 'Overview → team cards and the "needs attention" filter';
 const OVERVIEW_CARDS = 'Overview → team cards';
 const RANKINGS = 'Analytics → Team rankings';
 const REPORTS = 'Analytics → Reports (PDF)';
-const MANUAL_CURRENT = 'Manual metrics → Current metrics (super admin, team lead, QA manager)';
+const MANUAL_CURRENT = 'Manual metrics → Current metrics (super admin, team lead, manager)';
 const UPDATE_FREQUENCY = 'Administration → Update frequency (expected interval; marks the value stale)';
 const DEV_PRODUCTIVITY = 'Analytics → Developer productivity';
 const PULSE_PAGE = 'Analytics → Wellbeing pulse';
@@ -782,7 +782,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     ],
     howToSendIt: {
       kind: 'computed',
-      manual: `${PULSE_PAGE}: members answer once per period; the lead, a QA manager or an admin sets weekly or every two weeks.`,
+      manual: `${PULSE_PAGE}: members answer once per period; the lead, a manager or an admin sets weekly or every two weeks.`,
       note: 'There is no import: answers can only be given by the people themselves, so they stay anonymous.',
     },
     related: ['workload_balance', 'team_members'],
@@ -867,7 +867,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
       'One row per member of the team (primary team or team_members). PR merge, review, focus, meetings and context switches are the latest recorded values. ' +
       `Workload balance (derived) = ${WORKLOAD_BALANCE_FORMULA}. Burnout risk: ${BURNOUT_DEFINITION}`,
     calculationNotes: [
-      'Visibility (server/lib/userPolicy.ts): super admin any team, QA manager their department, team lead their team; other roles see only their own row.',
+      'Visibility (server/lib/userPolicy.ts): super admin any team, manager their department, team lead their team; other roles see only their own row.',
       'Members who turned developer insights off are listed without metrics.',
       `Team averages built from these rows: ${K_ANONYMITY_RULE}`,
     ],
@@ -918,7 +918,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     direction: 'none',
     thresholds: { text: 'The per-metric thresholds of each KPI on this page', source: 'METRICS_CONFIG (src/config/metricsConfig.ts)' },
     storedIn: ['kpi_snapshots (latest row, read only)', 'technical_debt (debt score)', 'teams.ai_enabled'],
-    whereToFindIt: [`${TD} → Team recommendations (super admin, QA manager, team lead)`, 'Administration → Admin console (AI toggle per team)'],
+    whereToFindIt: [`${TD} → Team recommendations (super admin, manager, team lead)`, 'Administration → Admin console (AI toggle per team)'],
     productionSources: [
       { system: 'Not sourced directly', detail: 'Built from the stored KPIs above; their production sources apply' },
       { system: 'LLM provider (optional)', detail: 'Groq chat completions API, only when GROQ_API_KEY is set' },
@@ -954,7 +954,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
       'developer_metrics.context_switches_per_day',
       'users.developer_insights_enabled',
     ],
-    whereToFindIt: [`${TD} → Developer recommendations (super admin, QA manager, team lead)`, DEV_PRODUCTIVITY],
+    whereToFindIt: [`${TD} → Developer recommendations (super admin, manager, team lead)`, DEV_PRODUCTIVITY],
     productionSources: [
       { system: 'GitHub / GitLab', detail: 'PR merge and review times per developer (pulls and reviews APIs)' },
       { system: 'Google Calendar / Microsoft 365', detail: 'Meetings and focus time per day' },
@@ -1049,12 +1049,12 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     title: 'Revenue impact: all teams',
     whyItMatters: 'Adds the team figures up for a department or the company, and says which teams had no figure and why.',
     howCalculated: REVENUE_ROLLUP_FORMULA,
-    calculationNotes: ['Super admins see the company, QA managers the teams of their departments (the analytics scope). API: GET /api/revenue-impact/rollup.'],
+    calculationNotes: ['Super admins see the company, managers the teams of their departments (the analytics scope). API: GET /api/revenue-impact/rollup.'],
     unit: '$/month',
     direction: 'none',
     thresholds: null,
     storedIn: ['(computed per team, see Revenue associated with quality gaps)'],
-    whereToFindIt: ['Delivery → Business impact → All teams (super admin, QA manager)'],
+    whereToFindIt: ['Delivery → Business impact → All teams (super admin, manager)'],
     productionSources: [{ system: 'Not sourced directly', detail: 'Sum of the team figures' }],
     howToSendIt: { kind: 'computed', note: 'Computed from the team figures.' },
     related: ['revenue_at_stake', 'revenue_at_risk'],

@@ -1,5 +1,6 @@
 import express from 'express';
 import { noteSignIn } from '../lib/userActivity';
+import { ROLE_LABELS } from '../lib/roleLabels';
 import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
@@ -47,11 +48,11 @@ export function demoModeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
 }
 
 const DEMO_ACCOUNTS = [
-  { role: 'Administrator', email: 'admin@irongate.com' },
-  { role: 'QA manager', email: 'manager@irongate.com' },
-  { role: 'Team lead', email: 'lead@irongate.com' },
-  { role: 'QA engineer', email: 'engineer@irongate.com' },
-  { role: 'Viewer', email: 'viewer@irongate.com' },
+  { role: ROLE_LABELS.super_admin, email: 'admin@irongate.com' },
+  { role: ROLE_LABELS.qa_manager, email: 'manager@irongate.com' },
+  { role: ROLE_LABELS.team_lead, email: 'lead@irongate.com' },
+  { role: ROLE_LABELS.qa_engineer, email: 'engineer@irongate.com' },
+  { role: ROLE_LABELS.viewer, email: 'viewer@irongate.com' },
 ];
 
 router.get('/providers', (_req, res) => {

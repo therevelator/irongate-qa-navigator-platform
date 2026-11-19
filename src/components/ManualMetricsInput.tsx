@@ -1558,7 +1558,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-8 text-center dark:border-slate-800 dark:bg-slate-900">
           <AlertCircle className="w-10 h-10 text-red-600 dark:text-red-400 mx-auto mb-4" />
           <h2 className="text-base font-semibold text-slate-900 dark:text-white mb-2">Access denied</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400">This page is only accessible to Super Admins, QA Managers and Team Leads.</p>
+          <p className="text-sm text-slate-500 dark:text-slate-400">This page is only accessible to super admins, managers and team leads.</p>
           <button
             onClick={onBack}
             className={cx(buttonClass.secondary, 'mt-6')}

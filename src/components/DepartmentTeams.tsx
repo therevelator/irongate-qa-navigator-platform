@@ -271,24 +271,24 @@ export const MoveTeamDialog: React.FC<{
                 <div className="flex gap-3 px-4 py-3">
                   <ShieldCheck size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-slate-400" />
                   <div className="min-w-0">
-                    <dt className="font-medium text-slate-900 dark:text-white">Which QA manager sees it</dt>
+                    <dt className="font-medium text-slate-900 dark:text-white">Which manager sees it</dt>
                     <dd className="mt-0.5 space-y-1 text-slate-600 dark:text-slate-300">
                       <p>
                         {plan.managersLosing.length > 0
                           ? <>{names(plan.managersLosing)} ({plan.from?.name}) will no longer see or manage this team.</>
-                          : <>{plan.from?.name ?? 'The old department'} has no QA manager, so no manager loses access.</>}
+                          : <>{plan.from?.name ?? 'The old department'} has no manager, so no manager loses access.</>}
                       </p>
                       <p>
                         {plan.managersGaining.length > 0
                           ? <>{names(plan.managersGaining)} ({plan.to.name}) will see its analytics and manage it.</>
-                          : <>{plan.to.name} has no QA manager yet; only super admins and the team itself will see it.</>}
+                          : <>{plan.to.name} has no manager yet; only super admins and the team itself will see it.</>}
                       </p>
                     </dd>
                   </div>
                 </div>
               </dl>
               <p className="border-t border-slate-200 px-4 py-2.5 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
-                QA managers and super admins never move with a team: they stay in their department, so a manager keeps managing it and loses this team (a membership of it ends; Undo on the Activity page restores it). To give the team a manager in {plan.to.name}, assign one there. KPI history, metrics and team settings stay with the team; people for whom it is a secondary team keep their department.
+                Managers and super admins never move with a team: they stay in their department, so a manager keeps managing it and loses this team (a membership of it ends; Undo on the Activity page restores it). To give the team a manager in {plan.to.name}, assign one there. KPI history, metrics and team settings stay with the team; people for whom it is a secondary team keep their department.
                 {!plan.team.is_active && ' This team is inactive; it stays inactive.'}
               </p>
             </div>
@@ -333,7 +333,7 @@ export const DepartmentTeamsPanel: React.FC<{
       <section aria-labelledby={`mgr-${departmentId}`}>
         <div className="mb-2 flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <h3 id={`mgr-${departmentId}`} className="text-sm font-semibold text-slate-900 dark:text-white">QA managers</h3>
+            <h3 id={`mgr-${departmentId}`} className="text-sm font-semibold text-slate-900 dark:text-white">Department managers</h3>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">See every team of {departmentName} and manage its teams and users. They stay here when teams move.</p>
           </div>
           <button
@@ -348,7 +348,7 @@ export const DepartmentTeamsPanel: React.FC<{
         </div>
         {detail && (managers.length === 0 ? (
           <p className="rounded-md border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
-            No QA manager yet. Only super admins manage {departmentName} until one is assigned.
+            No manager yet. Only super admins manage {departmentName} until one is assigned.
           </p>
         ) : (
           <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">

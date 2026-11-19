@@ -432,7 +432,7 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
 
     // Only QA Managers and Super Admins can create teams (canManageDepartment for the department).
     if (!canManageCompanyConfig(actor)) {
-      return res.status(403).json({ error: 'Only QA Managers and Super Admins can create teams' });
+      return res.status(403).json({ error: 'Only managers and super admins can create teams' });
     }
 
     if (!name) {

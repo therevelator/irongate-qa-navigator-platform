@@ -43,7 +43,7 @@ const PulseSurvey: React.FC<{ teamId: string }> = ({ teamId }) => {
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />A separate list records whether you answered this period: so you cannot answer twice, for reminders, and so your team lead or managers can see who has not answered yet. It holds no time and cannot be matched to an answer.</li>
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Results are averages, shown only after a period ends and only when at least {data.threshold} people answered.</li>
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />E-mailed survey links are personal, work once and expire when the period ends. Answering through a link is stored the same way: without your name.</li>
-                <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Comments are shown to the team lead, QA managers and admins with the period’s results, in alphabetical order.</li>
+                <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Comments are shown to the team lead, managers and admins with the period’s results, in alphabetical order.</li>
               </ul>
               <p className="mt-3 text-xs text-slate-500 dark:text-slate-400">{data.formula}</p>
             </Card>
