@@ -18,7 +18,7 @@ import { pool } from '../../src/lib/db';
 import {
   buildDemoDataset, buildFillDataset, renderScript, CLEAR_STATEMENTS, ALL_TABLES, demoRowCondition, demoSummary, todayUtc,
   teamDefFor, demoDevelopersFor, TEAM_GROUPS, realDataExists, recentSnapshotSql, KPI_COLUMNS,
-  DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, TeamGroup, Member, DEMO_LOGIN_EMAILS,
+  DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, TeamGroup, Member, DEMO_LOGIN_EMAILS, type SampleShape,
 } from './demoData';
 
 export interface SeedRunResult {
@@ -52,22 +52,45 @@ async function demoCounts(client: pg.PoolClient): Promise<Record<string, number>
   return out;
 }
 
+export interface ApplyOptions {
+  /**
+   * false: skip the before/after count of demo rows in every table (two queries per table, slow on a
+   * large or remote database); `inserted` then holds the rows this transaction inserted per table
+   * (pg_stat_xact_user_tables, one query).
+   */
+  counts?: boolean;
+  /** Called after each statement (statements done, total): progress of a long run. */
+  onProgress?: (done: number, total: number) => void | Promise<void>;
+  /** SQL run in the same transaction after the dataset (e.g. the showcase content layer). */
+  after?: string[];
+}
+
 /** Run a dataset in one transaction (advisory-locked) and report the demo rows it added. */
-async function apply(ds: Dataset): Promise<SeedRunResult> {
+async function apply(ds: Dataset, opts: ApplyOptions = {}): Promise<SeedRunResult & { statements: number }> {
   const started = Date.now();
-  const statements = renderScript(ds);
+  const statements = [...renderScript(ds).map(r => r.sql), ...(opts.after ?? [])];
+  const counts = opts.counts !== false;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     // Two seeds against the same database (CLI + app) wait for each other.
     await client.query("SELECT pg_advisory_xact_lock(hashtext('irongate-demo-seed'))");
-    const before = await demoCounts(client);
-    for (const s of statements) await client.query(s.sql);
-    const after = await demoCounts(client);
-    await client.query('COMMIT');
+    const before = counts ? await demoCounts(client) : null;
+    for (const [i, sql] of statements.entries()) {
+      await client.query(sql);
+      await opts.onProgress?.(i + 1, statements.length);
+    }
     const inserted: Record<string, number> = {};
-    for (const t of ALL_TABLES) if (after[t] - before[t]) inserted[t] = after[t] - before[t];
-    return { inserted, insertedTotal: Object.values(inserted).reduce((a, b) => a + b, 0), durationMs: Date.now() - started };
+    if (!counts) {
+      // The rows this transaction really inserted (guards and ON CONFLICT DO NOTHING skip some).
+      for (const r of (await client.query(`SELECT relname, n_tup_ins::bigint AS n FROM pg_stat_xact_user_tables WHERE n_tup_ins > 0`)).rows) {
+        inserted[r.relname] = Number(r.n);
+      }
+    }
+    const after = counts ? await demoCounts(client) : null;
+    await client.query('COMMIT');
+    if (before && after) for (const t of ALL_TABLES) { if (after[t] - before[t]) inserted[t] = after[t] - before[t]; }
+    return { inserted, insertedTotal: Object.values(inserted).reduce((a, b) => a + b, 0), durationMs: Date.now() - started, statements: statements.length };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => undefined);
     throw e;
@@ -133,7 +156,7 @@ export function sampleEmailDomain(c: { id: string; domain: string | null }): str
 
 export async function planFillExisting(
   db: pg.Pool | pg.PoolClient,
-  opts: { today: string; companyIds?: string[]; onlyTeamIds?: string[] },
+  opts: { today: string; companyIds?: string[]; onlyTeamIds?: string[]; noNewPeople?: boolean },
 ): Promise<CompanyInput[]> {
   const q = async <T = Record<string, unknown>>(sql: string, params: unknown[] = []) => (await db.query(sql, params)).rows as T[];
   const companies = await q<{ id: string; domain: string }>(
@@ -149,8 +172,9 @@ export async function planFillExisting(
     [companyIds]
   );
   const teamIds = teams.map(t => t.id);
-  const members = await q<{ team_id: string; id: string; first_name: string; last_name: string; role: Member['role']; developer_insights_enabled: boolean }>(
-    `SELECT DISTINCT t.id AS team_id, u.id, u.first_name, u.last_name, u.role, u.developer_insights_enabled
+  const members = await q<{ team_id: string; id: string; first_name: string; last_name: string; role: Member['role']; developer_insights_enabled: boolean; since: string; pulse: boolean }>(
+    `SELECT DISTINCT t.id AS team_id, u.id, u.first_name, u.last_name, u.role, u.developer_insights_enabled, to_char(u.created_at, 'YYYY-MM-DD') AS since,
+            (u.role <> 'viewer' OR EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = u.id AND tm.team_id = t.id)) AS pulse
        FROM teams t JOIN users u ON u.primary_team_id = t.id
          OR EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = u.id AND tm.team_id = t.id)
       WHERE t.id = ANY($1::text[]) AND u.is_active = TRUE AND u.id NOT LIKE 'demo-%'
@@ -241,15 +265,19 @@ export async function planFillExisting(
     const ctxs: TeamCtx[] = teams.filter(t => t.company_id === c.id).map(t => {
       const groups = new Set<Group>(TEAM_GROUPS.filter(g => !has[g]!.has(t.id)));
       const existing: Member[] = members.filter(m => m.team_id === t.id).map(m => ({
-        id: m.id, first: m.first_name, last: m.last_name, role: m.role, insights: !!m.developer_insights_enabled,
+        id: m.id, first: m.first_name, last: m.last_name, role: m.role, insights: !!m.developer_insights_enabled, since: m.since ?? undefined, pulse: m.pulse,
       }));
       const isDev = (m: Member) => m.role === 'qa_engineer' || m.role === 'team_lead';
       const engineers = existing.filter(m => m.role === 'qa_engineer').length;
       const sharing = existing.filter(m => isDev(m) && m.insights).length;
-      const extra = demoDevelopersFor({ id: t.id, departmentId: t.department_id }, sampleEmailDomain(c), engineers, taken, sharing);
+      // noNewPeople ("Populate metrics", "Demo Data"): only the team's own people.
+      const extra = opts.noNewPeople ? [] : demoDevelopersFor({ id: t.id, departmentId: t.department_id }, sampleEmailDomain(c), engineers, taken, sharing);
       const all = [...existing, ...extra];
       const devsWithMetrics = new Set(metricPairs.filter(p => p.team_id === t.id).map(p => p.developer_id));
       if (all.some(m => isDev(m) && (!devsWithSnapshots.has(m.id) || !devsWithMetrics.has(m.id)))) groups.add('dev');
+      // A team without a team lead or software engineer has nobody to attribute runs, tests and
+      // sprints to: with noNewPeople it gets no sample data.
+      if (opts.noNewPeople && !all.some(isDev)) groups.clear();
       return {
         ...teamDefFor(t), companyId: c.id, deptId: t.department_id, members: all, guarded: true,
         groups, realKpi: realKpi.get(t.id), devsWithSnapshots, devsWithMetrics,
@@ -269,21 +297,29 @@ export async function planFillExisting(
   });
 }
 
+export interface FillOptions {
+  today?: string; companyIds?: string[]; onlyTeamIds?: string[];
+  /** Never add sample developers to a team (only its own people). */
+  noNewPeople?: boolean;
+  /** History lengths, stories, releases, pulse (demoData.ts SampleShape). */
+  shape?: SampleShape;
+}
+
 /** Build the fill dataset for existing companies (reads the current state from `db`). */
-export async function buildFill(db: pg.Pool | pg.PoolClient, opts: { today?: string; companyIds?: string[]; onlyTeamIds?: string[] } = {}) {
+export async function buildFill(db: pg.Pool | pg.PoolClient, opts: FillOptions = {}) {
   const today = opts.today ?? todayUtc();
-  const plan = await planFillExisting(db, { today, companyIds: opts.companyIds, onlyTeamIds: opts.onlyTeamIds });
-  return { today, plan, ds: buildFillDataset(plan, { today }) };
+  const plan = await planFillExisting(db, { today, companyIds: opts.companyIds, onlyTeamIds: opts.onlyTeamIds, noNewPeople: opts.noNewPeople });
+  return { today, plan, ds: buildFillDataset(plan, { today, shape: opts.shape }) };
 }
 
 const planSummary = (plan: CompanyInput[]) =>
   plan.map(c => ({ id: c.id, teams: c.teams.length, teamsFilled: c.teams.filter(t => (t.groups?.size ?? 0) > 0).length }));
 
-export function runFillExisting(opts: { today?: string; companyIds?: string[]; onlyTeamIds?: string[] } = {}): Promise<FillResult> {
+export function runFillExisting(opts: FillOptions & ApplyOptions & { afterPlan?: (plan: CompanyInput[]) => string[] } = {}): Promise<FillResult & { plan: CompanyInput[]; statements: number }> {
   return exclusive(async () => {
     const { today, plan, ds } = await buildFill(pool, opts);
-    const r = await apply(ds);
-    return { today, companies: planSummary(plan), ...r };
+    const r = await apply(ds, { counts: opts.counts, onProgress: opts.onProgress, after: opts.afterPlan?.(plan) ?? opts.after });
+    return { today, companies: planSummary(plan), plan, ...r };
   });
 }
 

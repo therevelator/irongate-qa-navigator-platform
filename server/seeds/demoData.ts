@@ -47,11 +47,50 @@ export const DEMO_PASSWORD_HASH = '$2b$10$puGdBtySdfzNUo5zCLPRg.fAMlRhZwSpwPCYe9
  */
 const envDays = (key: string, def: number) => { const v = Number(process.env[key]); return Number.isInteger(v) && v > 0 && v <= 1500 ? v : def; };
 /** Number of days of KPI history (today and the previous HISTORY_DAYS days). */
-const HISTORY_DAYS = envDays('SAMPLE_HISTORY_DAYS', 120);
+let HISTORY_DAYS = envDays('SAMPLE_HISTORY_DAYS', 120);
 /** Days of event-level history (pipeline runs, test executions, suite runs). */
-const EVENT_DAYS = envDays('SAMPLE_EVENT_DAYS', 30);
-const PERF_DAYS = envDays('SAMPLE_PERF_DAYS', 90);
+let EVENT_DAYS = envDays('SAMPLE_EVENT_DAYS', 30);
+let PERF_DAYS = envDays('SAMPLE_PERF_DAYS', 90);
 const PIPELINE_COST_PER_MINUTE = 0.12;
+/** Sprints end on Fridays every two weeks from this date (plus the team's offset of 0 or 7 days). */
+const SPRINT_EPOCH = '2024-01-05';
+
+/**
+ * The shape of one build, given in code instead of the SAMPLE_* environment variables (the operator
+ * panel's "Demo Data" and "Populate metrics": a year of history for some teams of one company).
+ * Applied while the dataset is built (synchronously) and restored afterwards; the nightly refresh and
+ * every other build keep the defaults.
+ */
+export interface SampleShape {
+  historyDays?: number; eventDays?: number; perfDays?: number; devDays?: number; pulseWeeks?: number;
+  /** Health stories per team id ([daysAgo, health 0..1]); see SAMPLE_TEAM_STORIES. */
+  stories?: Record<string, Array<[number, number]>>;
+  /** Releases at each team's sprint end (its last Thursday and Friday); hotfixes on other days. */
+  sprintReleases?: boolean;
+  /** Pulse cadence of every team (default: spread over the four cadences). */
+  pulseCadence?: PulseCadence;
+  /** The pulse send log lists every team member (default: only demo users are "e-mailed"). */
+  pulseMailMembers?: boolean;
+  /** A developer's productivity history starts when they joined (Member.since). */
+  respectJoinDates?: boolean;
+}
+let SHAPE: SampleShape = {};
+
+function withShape<T>(shape: SampleShape | undefined, fn: () => T): T {
+  if (!shape) return fn();
+  const saved = { SHAPE, HISTORY_DAYS, EVENT_DAYS, PERF_DAYS, DEV_DAYS, PULSE_WEEKS };
+  SHAPE = shape;
+  HISTORY_DAYS = shape.historyDays ?? HISTORY_DAYS;
+  EVENT_DAYS = shape.eventDays ?? EVENT_DAYS;
+  PERF_DAYS = shape.perfDays ?? PERF_DAYS;
+  DEV_DAYS = shape.devDays ?? DEV_DAYS;
+  PULSE_WEEKS = shape.pulseWeeks ?? PULSE_WEEKS;
+  try {
+    return fn();
+  } finally {
+    ({ SHAPE, HISTORY_DAYS, EVENT_DAYS, PERF_DAYS, DEV_DAYS, PULSE_WEEKS } = saved);
+  }
+}
 
 // ============================================================================
 // Deterministic randomness
@@ -385,7 +424,7 @@ export type TeamGroup = Exclude<Group, 'base' | 'dev'>;
 /** A team with real rows at most this many days old keeps that data (e.g. its KPI history). */
 export const RECENT_DAYS = 30;
 /** Days of developer productivity snapshots (covers the 6-month DDPS range). */
-export const DEV_DAYS = envDays('SAMPLE_DEV_DAYS', 180);
+export let DEV_DAYS = envDays('SAMPLE_DEV_DAYS', 180);
 
 /**
  * SQL condition: the team already has real (non-demo) data for a group *in the window the
@@ -420,6 +459,13 @@ export interface Member {
   id: string; first: string; last: string; role: UserDef['role']; insights: boolean;
   /** Set for demo developers created on an existing team (inserted as users). */
   newUser?: { email: string; departmentId: string };
+  /** Day the person joined (YYYY-MM-DD); see SampleShape.respectJoinDates. */
+  since?: string;
+  /**
+   * false: a stakeholder with read access only (a viewer not listed in team_members): never a pulse
+   * recipient or respondent (server/lib/assignments.ts PULSE_MEMBER_SQL).
+   */
+  pulse?: boolean;
 }
 
 export interface TeamCtx extends TeamDef {
@@ -506,7 +552,7 @@ export function teamDefFor(t: { id: string; name: string; platform: string | nul
   const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'team';
   return {
     key: t.id, id: t.id, code, name: t.name, dept: '', platform: t.platform || PLATFORMS[Math.floor(rnd('plat', t.id) * PLATFORMS.length)],
-    description: t.description ?? '', h: teamStories()[t.id] ? storyAt(teamStories()[t.id], 0) : round(0.32 + 0.62 * rnd('h', t.id), 3), change: round((rnd('chg', t.id) - 0.45) * 0.2, 3),
+    description: t.description ?? '', h: teamStories()[t.id] ? storyAt(teamStories()[t.id], 0) : defaultTeamHealth(t.id), change: round((rnd('chg', t.id) - 0.45) * 0.2, 3),
     story: teamStories()[t.id],
     phase: rnd('phase', t.id) * 6, sprintOffset: rnd('spo', t.id) < 0.5 ? 0 : 7,
     revenue: Math.round(300_000 + 1_900_000 * rnd('rev', t.id)),
@@ -615,8 +661,9 @@ function teamStories(): Record<string, Array<[number, number]>> {
 }
 
 /** SAMPLE_SPRINT_RELEASES=<YYYY-MM-DD, a sprint's first Monday>: deployments cluster at sprint ends. */
-function sprintDay(date: string): number | null {
-  const anchor = process.env.SAMPLE_SPRINT_RELEASES;
+function sprintDay(date: string, team?: TeamDef): number | null {
+  // Each team's own sprints: the Monday 11 days before a sprint's last Friday.
+  const anchor = SHAPE.sprintReleases && team ? addDays(SPRINT_EPOCH, team.sprintOffset - 11) : process.env.SAMPLE_SPRINT_RELEASES;
   if (!anchor || !/^\d{4}-\d{2}-\d{2}$/.test(anchor)) return null;
   const d = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${anchor}T00:00:00Z`)) / DAY_MS);
   return ((d % 14) + 14) % 14;
@@ -634,7 +681,7 @@ function metricValue(team: TeamDef, m: MetricDef, t: number, date: string): numb
 // Build
 // ============================================================================
 
-export interface BuildOptions { today?: string }
+export interface BuildOptions { today?: string; shape?: SampleShape }
 
 export interface DemoSummary {
   companyId: string;
@@ -675,13 +722,23 @@ export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
 /** Sample data for existing companies' teams that lack it (see planFillExisting in demoSeed.ts). */
 export function buildFillDataset(companies: CompanyInput[], opts: BuildOptions = {}): Dataset {
   const today = checkDate(opts.today ?? todayUtc());
-  const ds = new Dataset(today);
-  for (const c of companies) {
-    emitCompany(ds, c);
-    ds.sql('saved_views', savedViewsSql(c.id));
-  }
-  return ds;
+  return withShape(opts.shape, () => {
+    const ds = new Dataset(today);
+    for (const c of companies) {
+      // Stories given in code (SampleShape.stories) end at the team's health today.
+      for (const t of c.teams) {
+        const story = SHAPE.stories?.[t.id];
+        if (story) { t.story = story; t.h = round(storyAt(story, 0), 3); }
+      }
+      emitCompany(ds, c);
+      ds.sql('saved_views', savedViewsSql(c.id));
+    }
+    return ds;
+  });
 }
+
+/** A team's default health today (as the nightly refresh derives it from the team id, 0..1). */
+export const defaultTeamHealth = (teamId: string) => round(0.32 + 0.62 * rnd('h', teamId), 3);
 
 function emitCompany(ds: Dataset, company: CompanyInput): void {
   const today = ds.today;
@@ -912,7 +969,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
   // --------------------------------------------------------------------------
   interface Sprint { name: string; start: string; end: string; committed: number; delivered: number; carryover: number }
   const sprintsByTeam = new Map<string, Sprint[]>();
-  const EPOCH = '2024-01-05'; // a Friday
+  const EPOCH = SPRINT_EPOCH;
   for (const team of teams) {
     const sprints: Sprint[] = [];
     const daysSinceEpoch = (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${EPOCH}T00:00:00Z`)) / DAY_MS - team.sprintOffset;
@@ -1014,9 +1071,11 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       const jitter = (rnd('devjit', u.id) - 0.5) * 0.3;
       const isLead = u.role === 'team_lead';
       const byDate = new Map<string, DevDay>();
+      // With respectJoinDates: from the day they joined (at least the last two weeks).
+      const from = SHAPE.respectJoinDates && u.since ? (u.since < D(14) ? u.since : D(14)) : null;
       for (let t = DEV_DAYS; t >= 0; t--) {
         const date = D(t);
-        if (!isWeekday(date)) continue;
+        if (!isWeekday(date) || (from && date < from)) continue;
         const n = (k: string) => (rnd('dev', u.id, k, date) - 0.5) * 2;
         const hp = clamp(0.15 + 0.85 * teamHealth(team, t) + jitter + n('h') * 0.06, 0.05, 0.98);
         byDate.set(date, {
@@ -1309,7 +1368,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       const rng = new Rng('pipe', team.key, date);
       // Release cadence: by default about the KPI's deployments per working day; with sprint releases
       // most deployments of a sprint go out on its last Thursday and Friday, the rest are hotfixes.
-      const sd = sprintDay(date);
+      const sd = sprintDay(date, team);
       const perSprint = (k.deployment_frequency_per_week * 2) * 1.15;
       const mainRuns = sd === null
         ? (wk ? Math.max(1, Math.round((k.deployment_frequency_per_week / 5) * 1.15 + rng.float() - 0.5)) : rng.chance(0.15) ? 1 : 0)
@@ -1823,7 +1882,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
 // Wellbeing pulse survey (anonymous answers; server/lib/pulse.ts)
 // ============================================================================
 
-const PULSE_WEEKS = envDays('SAMPLE_PULSE_WEEKS', 16);
+let PULSE_WEEKS = envDays('SAMPLE_PULSE_WEEKS', 16);
 const PULSE_COMMENTS = [
   'Too many context switches this sprint.',
   'Pairing sessions helped a lot.',
@@ -1856,7 +1915,9 @@ const PULSE_CALENDAR_FROM = '2026-01-01';
 function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: string) => number | null } {
   const today = ds.today;
   const teams = company.teams;
-  const respondents = (team: TeamCtx) => team.members.length;
+  // Only the people who work in the team take its survey (never stakeholders with read access only).
+  const takers = (team: TeamCtx) => team.members.filter(u => u.pulse !== false);
+  const respondents = (team: TeamCtx) => takers(team).length;
   // One team (the smallest) answers too rarely to be shown (k-anonymity in action), in companies with
   // more than three teams; a small company keeps every team's results visible.
   const low = teams.length > 3 ? [...teams].sort((a, b) => respondents(a) - respondents(b) || a.id.localeCompare(b.id))[0]?.id : undefined;
@@ -1869,7 +1930,7 @@ function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: stri
     if (base === SKIP) { cadences.set(team.id, []); continue; }
     // Weekly stays on the teams that had it before; the others spread over the remaining cadences.
     const r = rnd('pulse-cadence', team.id);
-    const cadence: PulseCadence = r < 0.35 ? 'weekly' : r < 0.55 ? 'monthly' : r < 0.7 ? 'quarterly' : 'biweekly';
+    const cadence: PulseCadence = SHAPE.pulseCadence ?? (r < 0.35 ? 'weekly' : r < 0.55 ? 'monthly' : r < 0.7 ? 'quarterly' : 'biweekly');
     const rows: CadenceRow[] = cadence === 'biweekly' ? [] : [{ cadence, effective_from: cadence === 'weekly' ? DEFAULT_ANCHOR : PULSE_CALENDAR_FROM }];
     const T = literal(team.id);
     // Re-seeding never mixes cadences: nothing is added for a team whose answers or cadence row are of another shape.
@@ -1886,7 +1947,7 @@ function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: stri
     }
     const lead = leadOf(team);
     const leadId = lead && lead.id.startsWith(DEMO_PREFIX) ? lead.id : null;
-    const mailed = team.members.filter(u => u.id.startsWith(DEMO_PREFIX));
+    const mailed = SHAPE.pulseMailMembers ? takers(team) : takers(team).filter(u => u.id.startsWith(DEMO_PREFIX));
     const logSend = (p: { start: string; end: string }, trigger: 'auto' | 'manual') => {
       ds.add('pulse_sends', {
         id: did('psend', sha1(`${team.id}|${p.start}|survey`).slice(0, 24)), company_id: company.id, team_id: team.id,
@@ -1905,7 +1966,7 @@ function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: stri
     let p = current;
     const since = addDays(today, cadence === 'quarterly' ? -400 : -7 * PULSE_WEEKS);
     // A longer showcase history also runs before the default anchor (periods continue backwards).
-    const first = rows[0]?.effective_from ?? (process.env.SAMPLE_PULSE_WEEKS ? since : DEFAULT_ANCHOR);
+    const first = rows[0]?.effective_from ?? (process.env.SAMPLE_PULSE_WEEKS || SHAPE.pulseWeeks ? since : DEFAULT_ANCHOR);
     for (;;) {
       p = periodFor(rows, addDays(p.start, -1));
       if (p.start < since || p.start < first) break;
@@ -1913,7 +1974,9 @@ function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: stri
       const share = 0.6 + 0.35 * rnd('pulse-share', team.id, p.start);
       const n = team.id === low ? Math.min(2, m) : Math.min(m, Math.max(K_ANONYMITY_MIN, Math.round(m * share)));
       // Mood follows the team's health, with a slow drift and per-period noise.
-      const base = 2.4 + 2.0 * clamp(team.h + 0.15 * Math.sin(team.phase + Date.parse(p.start) / (DAY_MS * 20)), 0, 1);
+      // A team with a story: mood follows its health at the time.
+      const hAt = team.story ? storyAt(team.story, Math.max(0, (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${p.start}T00:00:00Z`)) / DAY_MS)) : team.h;
+      const base = 2.4 + 2.0 * clamp(hAt + 0.15 * Math.sin(team.phase + Date.parse(p.start) / (DAY_MS * 20)), 0, 1);
       let total = 0;
       for (let i = 0; i < n; i++) {
         const answers: Record<string, number> = {};
@@ -2242,7 +2305,9 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
     WHERE ra.id LIKE '${DEMO_PREFIX}ral-%' AND ra.user_id = u.id AND u.primary_team_id = ra.scope_id AND u.id NOT LIKE ${D_}` },
   { table: 'saved_views', sql: `DELETE FROM saved_views WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'pulse_links', sql: `DELETE FROM pulse_links WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_}` },
-  { table: 'pulse_recipients', sql: `DELETE FROM pulse_recipients WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_}` },
+  // Also the recipients of sample send logs of real teams (SampleShape.pulseMailMembers lists real people).
+  { table: 'pulse_recipients', sql: `DELETE FROM pulse_recipients WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_}
+      OR (team_id, period_start) IN (SELECT team_id, period_start FROM pulse_sends WHERE id LIKE ${D_} AND kind = 'survey')` },
   { table: 'pulse_sends', sql: `DELETE FROM pulse_sends WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'pulse_settings', sql: `DELETE FROM pulse_settings WHERE company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'pulse_participation', sql: `DELETE FROM pulse_participation WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_}` },

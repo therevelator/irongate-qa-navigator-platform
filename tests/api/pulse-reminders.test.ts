@@ -94,6 +94,8 @@ beforeAll(async () => {
   await addUser('prem-lead', 'team_lead', 'team', T);
   for (const id of ['prem-e1', 'prem-e2', 'prem-e3', 'prem-e4']) await addUser(id, 'qa_engineer', 'team', T);
   await addUser('prem-viewer', 'viewer', 'team', T);
+  // The viewer works in the team (a Product Owner): a pulse member, not only a stakeholder with read access.
+  await db.query(`INSERT INTO team_members (user_id, team_id, role) VALUES ('prem-viewer', $1, 'member') ON CONFLICT DO NOTHING`, [T]);
   await addUser('prem-blead', 'team_lead', 'team', B);
   for (const id of ['prem-b1', 'prem-b2', 'prem-b3']) await addUser(id, 'qa_engineer', 'team', B);
   for (const id of ['prem-n1', 'prem-n2']) await addUser(id, 'qa_engineer', 'team', N, D3);

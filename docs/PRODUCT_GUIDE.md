@@ -141,6 +141,12 @@ What each role may do (from `userPolicy.ts`; the navigation in [`src/components/
 | Admin console, Update frequency, Parameters | yes | yes | no | no | no |
 | Activity (change history), Ingestion log | whole company | entries of their departments | no | no | no |
 | Answer the wellbeing pulse | teams they are assigned to | teams they are assigned to | yes | yes | yes |
+
+**Who takes the pulse survey.** The people who work in the team: its team lead, its software engineers and a viewer
+listed as a member of the team (e.g. the Product Owner). A stakeholder with read access only (a viewer assignment
+without team membership: a Head of Product, a Finance Controller, an external auditor) is never sent the survey,
+cannot answer it, gets no reminder and no pending-survey banner, is never named as not having answered and is not
+counted in the response rate (`PULSE_MEMBER_SQL` in [`server/lib/assignments.ts`](../server/lib/assignments.ts)).
 | Read pulse comments | yes | yes | yes | no | no |
 | Share saved views with the company; onboarding checklist | yes | no | no | no | no |
 | Executive briefing (AI) | yes | yes | yes | no | no |
