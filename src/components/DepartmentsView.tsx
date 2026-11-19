@@ -378,12 +378,12 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
         }}>
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Department Name</label>
-              <input type="text" value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} className={cx(inputClass, 'w-full')} required placeholder="Enter department name" />
+              <label htmlFor="dept-create-department-name" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Department Name</label>
+              <input id="dept-create-department-name" type="text" value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} className={cx(inputClass, 'w-full')} required placeholder="Enter department name" />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
-              <textarea value={deptForm.description} onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })} rows={3} className={cx(inputClass.replace('h-9', 'h-auto'), 'w-full py-2')} placeholder="Brief description of the department" />
+              <label htmlFor="dept-create-description" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
+              <textarea id="dept-create-description" value={deptForm.description} onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })} rows={3} className={cx(inputClass.replace('h-9', 'h-auto'), 'w-full py-2')} placeholder="Brief description of the department" />
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-6">
@@ -423,12 +423,12 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
         }}>
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Department Name</label>
-              <input type="text" value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} className={cx(inputClass, 'w-full')} required />
+              <label htmlFor="dept-edit-department-name" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Department Name</label>
+              <input id="dept-edit-department-name" type="text" value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} className={cx(inputClass, 'w-full')} required />
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
-              <textarea value={deptForm.description} onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })} rows={3} className={cx(inputClass.replace('h-9', 'h-auto'), 'w-full py-2')} />
+              <label htmlFor="dept-edit-description" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Description</label>
+              <textarea id="dept-edit-description" value={deptForm.description} onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })} rows={3} className={cx(inputClass.replace('h-9', 'h-auto'), 'w-full py-2')} />
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-6">
