@@ -148,7 +148,7 @@ router.put('/teams/:teamId/cadence', authenticateToken, async (req: AuthRequest,
     if (!team || !canViewPulseResults(actor, team)) return denied(res);
     if (!canSetPulseCadence(actor, team)) return denied(res, 'Managers decide how often the team is asked: a manager of its department or an administrator.');
     const cadence = req.body?.cadence as PulseCadence;
-    if (!PULSE_CADENCES.includes(cadence)) return res.status(400).json({ error: `cadence must be one of: ${PULSE_CADENCES.join(', ')}` });
+    if (!PULSE_CADENCES.includes(cadence)) return res.status(400).json({ error: `Choose how often the team is asked: ${PULSE_CADENCES.map((c) => CADENCE_LABELS[c].toLowerCase()).join(', ')}.` });
     const r = await setPulseCadence({ companyId: req.companyId!, teamId: team.id, cadence, actorId: req.user!.id });
     // The first time a manager sets the cadence, automatic sending is switched on from the next period.
     const cads = (await loadCadences([team.id])).get(team.id) ?? [];
@@ -177,7 +177,7 @@ router.put('/teams/:teamId/auto-send', authenticateToken, async (req: AuthReques
     const actor = policyActor(req);
     if (!team || !canViewPulseResults(actor, team)) return denied(res);
     if (!canSetPulseCadence(actor, team)) return denied(res, 'Managers decide whether the survey goes out automatically: a manager of its department or an administrator.');
-    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be true or false' });
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'Choose whether the survey is e-mailed automatically (on or off).' });
     const r = await setAutoSend({ companyId: req.companyId!, teamId: team.id, enabled: req.body.enabled, actorId: req.user!.id });
     await recordAudit({
       companyId: req.companyId!, actorId: req.user!.id, action: 'team.pulse_auto_send', entityType: 'team', entityId: team.id,

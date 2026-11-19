@@ -155,7 +155,7 @@ export function parseAnswers(body: any): { answers: Record<PulseQuestionKey, num
   for (const q of PULSE_QUESTIONS) {
     const v = Number(src[q.key]);
     if (!Number.isInteger(v) || v < PULSE_SCALE.min || v > PULSE_SCALE.max) {
-      return { error: `Answer every question with a whole number from ${PULSE_SCALE.min} to ${PULSE_SCALE.max} (missing or invalid: ${q.key}).` };
+      return { error: `Answer every question with a whole number from ${PULSE_SCALE.min} to ${PULSE_SCALE.max} (missing or invalid: "${q.text}").` };
     }
     answers[q.key] = v;
   }
@@ -201,6 +201,13 @@ export const REMINDER_LIMITS = {
   escalateAfterDays: { min: 1, max: 60 },
 } as const;
 
+/** What each setting is called on the page (Reminders and escalation card), for the messages. */
+export const REMINDER_SETTING_NAMES: Record<keyof typeof REMINDER_LIMITS, string> = {
+  warningAfterDays: 'The in-app warning to members who have not answered',
+  reminderEveryDays: 'The time between e-mail reminders',
+  escalateAfterDays: 'The escalation',
+};
+
 /** Validate a settings change (missing fields keep the current value). */
 export function validateReminderSettings(input: any, current: ReminderSettings): { settings: ReminderSettings } | { error: string } {
   const out: ReminderSettings = { ...current };
@@ -208,15 +215,19 @@ export function validateReminderSettings(input: any, current: ReminderSettings):
     if (input?.[k] === undefined) continue;
     const v = input[k];
     const { min, max } = REMINDER_LIMITS[k];
-    if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) return { error: `${k} must be a whole number from ${min} to ${max}` };
+    if (typeof v !== 'number' || !Number.isInteger(v) || v < min || v > max) {
+      return { error: `${REMINDER_SETTING_NAMES[k]} must be a whole number of days from ${min} to ${max}.` };
+    }
     out[k] = v;
   }
   if (input?.reminderEmails !== undefined) {
-    if (typeof input.reminderEmails !== 'boolean') return { error: 'reminderEmails must be true or false' };
+    if (typeof input.reminderEmails !== 'boolean') return { error: 'Choose whether e-mail reminders are sent (on or off).' };
     out.reminderEmails = input.reminderEmails;
   }
   if (input?.escalateTo !== undefined) {
-    if (!ESCALATE_TO.includes(input.escalateTo)) return { error: `escalateTo must be one of: ${ESCALATE_TO.join(', ')}` };
+    if (!ESCALATE_TO.includes(input.escalateTo)) {
+      return { error: 'Choose who is told about the escalation: the team lead, the department managers, or both.' };
+    }
     out.escalateTo = input.escalateTo;
   }
   if (out.warningAfterDays >= out.escalateAfterDays) return { error: 'The warning must come before the escalation (fewer days).' };

@@ -9,6 +9,7 @@ import SessionSettings from './SessionSettings';
 import { useAuth } from '../contexts/AuthContext';
 import { isCompanyAdmin } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
+import { configValueProblem } from '../lib/configRules';
 
 interface ParametersConfigurationProps {
   onBack?: () => void;
@@ -113,13 +114,11 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
   })();
 
   const handleSave = async () => {
-    // Every value on this page is a number of 0 or more (the API stores what it is given).
-    const bad = CONFIG_SECTIONS.flatMap((sec) => sec.fields).find((f) => {
-      const v = (configs[f.key] ?? '').trim();
-      return v !== '' && !(Number.isFinite(Number(v)) && Number(v) >= 0);
-    });
-    if (bad) {
-      toast.error(`${bad.label}: enter a number of 0 or more, or leave it empty to inherit.`);
+    // Every value on this page is a number of 0 or more within its range (src/lib/configRules.ts,
+    // the same rules the API applies).
+    const problem = FIELD_KEYS.map((k) => configValueProblem(k, (configs[k] ?? '').trim())).find(Boolean);
+    if (problem) {
+      toast.error(problem);
       return;
     }
     setSaving(true);
@@ -132,14 +131,17 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
         credentials: 'include',
         body: JSON.stringify({ departmentId: selectedDepartment, teamId: selectedTeam, configs: payload, ...(companyScope && applyToAll ? { applyToAll: true } : {}) }),
       });
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(response.status === 400 && err?.error ? err.error : undefined);
+      }
       window.dispatchEvent(new CustomEvent('slaConfigUpdated'));
       const body = await response.json().catch(() => ({}));
       toast.success(companyScope && applyToAll
         ? `Configuration saved and applied to every department and team${body?.replaced ? ` (${body.replaced} department/team value${body.replaced === 1 ? '' : 's'} replaced)` : ''}`
         : `Configuration saved (${scopeLabel})`);
-    } catch {
-      toast.error('Failed to save configuration');
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : 'Failed to save configuration');
     } finally {
       setSaving(false);
     }

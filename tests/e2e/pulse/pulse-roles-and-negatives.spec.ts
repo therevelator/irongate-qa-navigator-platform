@@ -63,13 +63,19 @@ test.describe('Wellbeing pulse: changes on a fixture team', { tag: [TAG.area('pu
     await expect(page.getByText(/^Stays every two weeks\./)).toBeVisible();
   });
 
-  test('PUL-11 reminder settings outside the allowed range are refused with the reason', { tag: [TAG.negative, TAG.role('lead')] }, async ({ signInAs, page }) => {
+  test('PUL-11 reminder settings outside the allowed range are refused with the reason, in the page\'s words', { tag: [TAG.negative, TAG.role('lead')] }, async ({ signInAs, page }) => {
     await signInAs({ email: team.leadEmail!, password: 'demo123' }, `/analytics/pulse?team=${team.id}`);
     const card = page.getByTestId('pulse-reminders');
     await expect(card).toBeVisible();
     await page.getByTestId('pulse-warningAfterDays').fill('99');
     await page.getByTestId('pulse-reminders-save').click();
-    await expect(card.getByRole('alert')).toContainText('from 0 to 30');
+    await expect(card.getByRole('alert')).toHaveText('The in-app warning to members who have not answered must be a whole number of days from 0 to 30.');
+    await expect(card.getByRole('alert')).not.toContainText('warningAfterDays');
+    await page.getByTestId('pulse-warningAfterDays').fill('3');
+    await page.getByTestId('pulse-escalateAfterDays').fill('61');
+    await page.getByTestId('pulse-reminders-save').click();
+    await expect(card.getByRole('alert')).toHaveText('The escalation must be a whole number of days from 1 to 60.');
+    await page.getByTestId('pulse-escalateAfterDays').fill('5');
     await page.getByTestId('pulse-warningAfterDays').fill('3');
     await page.getByTestId('pulse-reminders-save').click();
     await expect(page.getByText('Reminder settings saved.')).toBeVisible();

@@ -53,6 +53,17 @@ router.get('/metric-intervals', authenticateToken, async (req: any, res) => {
   }
 });
 
+const VALID_UNITS = ['minutes', 'hours', 'days', 'weeks', 'months'];
+/** The rules of the Expected update frequency page: a whole number from 1 to 100 and a known unit. */
+function intervalProblem(i: { metric_key?: unknown; interval_value?: unknown; interval_unit?: unknown; custom_label?: unknown }): string | null {
+  if (typeof i.metric_key !== 'string' || !/^[a-z][a-z0-9_]{0,99}$/.test(i.metric_key)) return 'Invalid metric';
+  if (typeof i.interval_unit !== 'string' || !VALID_UNITS.includes(i.interval_unit)) return 'Invalid interval unit';
+  const v = i.interval_value;
+  if (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 100) return 'The update interval must be a whole number from 1 to 100';
+  if (i.custom_label != null && (typeof i.custom_label !== 'string' || i.custom_label.length > 100)) return 'The label must be text of at most 100 characters';
+  return null;
+}
+
 // Update a single metric interval
 router.put('/metric-intervals/:metricKey', authenticateToken, async (req: any, res) => {
   try {
@@ -65,16 +76,8 @@ router.put('/metric-intervals/:metricKey', authenticateToken, async (req: any, r
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    // Validate interval_unit
-    const validUnits = ['minutes', 'hours', 'days', 'weeks', 'months'];
-    if (!validUnits.includes(interval_unit)) {
-      return res.status(400).json({ error: 'Invalid interval unit' });
-    }
-
-    // Validate interval_value
-    if (!interval_value || interval_value < 1) {
-      return res.status(400).json({ error: 'Interval value must be at least 1' });
-    }
+    const problem = intervalProblem({ metric_key: metricKey, interval_value, interval_unit, custom_label });
+    if (problem) return res.status(400).json({ error: problem });
 
     // Check if exists
     const existing = await queryOne<any>(
@@ -128,17 +131,17 @@ router.put('/metric-intervals', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
 
-    if (!Array.isArray(intervals)) {
+    if (!Array.isArray(intervals) || intervals.length > 200) {
       return res.status(400).json({ error: 'Invalid intervals format' });
     }
-
-    const validUnits = ['minutes', 'hours', 'days', 'weeks', 'months'];
+    // Every row is checked first: nothing is stored when one is refused.
+    for (const interval of intervals) {
+      const problem = intervalProblem(interval ?? {});
+      if (problem) return res.status(400).json({ error: problem });
+    }
 
     for (const interval of intervals) {
       const { metric_key, interval_value, interval_unit, custom_label } = interval;
-
-      if (!validUnits.includes(interval_unit)) continue;
-      if (!interval_value || interval_value < 1) continue;
 
       const existing = await queryOne<any>(
         'SELECT id FROM metric_update_intervals WHERE company_id = ? AND metric_key = ?',

@@ -157,6 +157,26 @@ test.describe('Configuration values and sign-in lifetime', { tag: [TAG.area('par
     await expect(page.locator('label', { hasText: 'P95 response time (ms)' }).locator('input')).not.toHaveValue('-5');
   });
 
+  test('PAR-14 a configuration value above its range is refused by the page and by the API', { tag: [TAG.negative] }, async ({ freshCompany, signInAs, page }) => {
+    await signInAs(freshCompany, '/parameters-config');
+    await ready(page);
+    await page.getByTestId('apply-to-all').uncheck();
+    const rate = page.locator('label', { hasText: 'Error rate threshold (%)' }).locator('input');
+    await rate.fill('150');
+    await page.getByRole('button', { name: 'Save configuration' }).click();
+    await expect(page.getByText('Error rate threshold (%): enter a number from 0 to 100, or leave it empty to inherit.')).toBeVisible();
+    // Sent directly, the API refuses it with the same words and stores nothing (FI-10b).
+    const res = await page.request.post(`${API_URL}/admin/configs`, { data: { departmentId: 'all', teamId: 'all', configs: { sla_error_rate_percent: '150', sla_response_time_ms: '-5' } } });
+    expect(res.status()).toBe(400);
+    expect((await res.json()).errors).toEqual([
+      'Error rate threshold (%): enter a number from 0 to 100, or leave it empty to inherit.',
+      'P95 response time (ms): enter a number of 0 or more, or leave it empty to inherit.',
+    ]);
+    await page.reload();
+    await ready(page);
+    await expect(page.locator('label', { hasText: 'Error rate threshold (%)' }).locator('input')).not.toHaveValue('150');
+  });
+
   test('PAR-12 "Sign-in lasts" can be changed by a super admin; the label follows', { tag: [TAG.role('admin')] }, async ({ freshCompany, signInAs, page }) => {
     await signInAs(freshCompany, '/parameters-config');
     await ready(page);

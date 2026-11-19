@@ -87,11 +87,14 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = () => {
         credentials: 'include',
         body: JSON.stringify({ intervals }),
       });
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(response.status === 400 && err?.error ? `Could not save the update frequencies: ${err.error}.` : undefined);
+      }
       toast.success('Expected update frequencies saved');
       await fetchIntervals();
-    } catch {
-      toast.error('Could not save the update frequencies');
+    } catch (e) {
+      toast.error(e instanceof Error && e.message ? e.message : 'Could not save the update frequencies');
     } finally {
       setSaving(false);
     }
@@ -144,7 +147,7 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = () => {
                           max={100}
                           aria-label={`${interval.custom_label} interval`}
                           value={interval.interval_value}
-                          onChange={(e) => change(metricKey, 'interval_value', Math.max(1, parseInt(e.target.value, 10) || 1))}
+                          onChange={(e) => change(metricKey, 'interval_value', Math.min(100, Math.max(1, parseInt(e.target.value, 10) || 1)))}
                           className={cx(inputClass, 'w-20')}
                         />
                         <select
