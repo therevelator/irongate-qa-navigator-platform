@@ -9,7 +9,9 @@ import { setupAuth } from './fixtures/auth';
 const APP = 'http://localhost:5173';
 const API = 'http://localhost:3000';
 
-test.describe('Compare teams, saved views, CSV export, onboarding', () => {
+test.describe('Compare teams, saved views, CSV export, onboarding', { tag: ['@area:compare', '@area:saved-views', '@area:onboarding'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(90000);
 
   test('Compare teams: open from the navigation, add a team, differences are highlighted', async ({ page }) => {

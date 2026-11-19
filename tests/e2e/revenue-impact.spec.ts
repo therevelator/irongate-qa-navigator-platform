@@ -9,7 +9,9 @@ const APP = 'http://localhost:5173';
 const API = 'http://localhost:3000';
 const MONEY = /^(—|−?\$\d+(\.\d)?k?|−?\$\d+(\.\d{1,2})?M)$/;
 
-test.describe('Business impact: revenue impact', () => {
+test.describe('Business impact: revenue impact', { tag: ['@area:business-impact'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(90000);
 
   test('super admin: money summary first, explanations behind "How is this calculated?", what-if and all teams', async ({ page }) => {

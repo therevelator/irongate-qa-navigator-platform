@@ -19,7 +19,9 @@ const noSidewaysScroll = async (page: Page) => {
   expect(overflow.main).toBeLessThanOrEqual(1);
 };
 
-test.describe('Platform support panel', () => {
+test.describe('Platform support panel', { tag: ['@area:operator'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
   test('the operator steps up, opens a company with a reason, sees the banner and leaves', async ({ page }) => {
@@ -86,7 +88,9 @@ test.describe('Platform support panel', () => {
   });
 });
 
-test.describe('User activity', () => {
+test.describe('User activity', { tag: ['@area:operator'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(90000);
 
   test('super admins see the user activity with the privacy notice', async ({ page }) => {
@@ -104,6 +108,6 @@ test.describe('User activity', () => {
     await setupAuth(page, 'qa_manager');
     await page.goto('http://localhost:5173/user-activity');
     await expect(page.locator('[data-testid="dashboard"]')).toBeVisible({ timeout: 30000 });
-    expect(new URL(page.url()).pathname).toBe('/');
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/');
   });
 });

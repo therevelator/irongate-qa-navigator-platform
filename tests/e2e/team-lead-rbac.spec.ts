@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { setupAuth } from './fixtures/auth';
 
-test.describe('Team Lead Role-Based Access Control', () => {
+test.describe('Team Lead Role-Based Access Control', { tag: ['@area:navigation', '@role:lead'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
   test('Main Dashboard - Team Lead sees ALL teams', async ({ page }) => {

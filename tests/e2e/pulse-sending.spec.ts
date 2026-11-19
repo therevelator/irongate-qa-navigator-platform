@@ -53,7 +53,9 @@ function periods(today: string) {
 let company = '';
 let today = '';
 
-test.describe('Wellbeing pulse: sending and answering through the link', () => {
+test.describe('Wellbeing pulse: sending and answering through the link', { tag: ['@area:pulse'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
   test.beforeAll(async () => {

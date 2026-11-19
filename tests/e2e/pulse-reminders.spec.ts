@@ -46,7 +46,9 @@ async function signIn(page: Page, email: string) {
   await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 }
 
-test.describe('Wellbeing pulse reminders', () => {
+test.describe('Wellbeing pulse reminders', { tag: ['@area:pulse'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(90000);
 
   test.beforeAll(async () => {

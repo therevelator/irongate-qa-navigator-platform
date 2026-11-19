@@ -24,7 +24,9 @@ async function ownTeam(page: Page): Promise<{ id: string; name: string }> {
   return { id: team.id, name: team.name };
 }
 
-test.describe('Alerts, notifications and tracked actions', () => {
+test.describe('Alerts, notifications and tracked actions', { tag: ['@area:alerts', '@area:actions'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
   test('A team lead sees a new alert in the bell, can open the panel and mark everything read', async ({ page }) => {

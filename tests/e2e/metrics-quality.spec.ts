@@ -5,7 +5,9 @@ import { setupAuth } from './fixtures/auth';
  * Metric storage and ingestion quality in the UI: confidence next to every score, KPI targets with
  * history on the Parameters page, and the Ingestion log (super admins and QA managers only).
  */
-test.describe('Confidence, KPI targets and the ingestion log', () => {
+test.describe('Confidence, KPI targets and the ingestion log', { tag: ['@area:targets', '@area:dashboard'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(90000);
 
   test('The dashboard and team detail say what the QA score is based on', async ({ page }) => {
@@ -40,6 +42,6 @@ test.describe('Confidence, KPI targets and the ingestion log', () => {
     await expect(page.locator('[data-testid="nav-ingestion-log"]')).toHaveCount(0);
     await page.goto('http://localhost:5173/ingestion-log');
     await expect(page.locator('[data-testid="dashboard"]')).toBeVisible({ timeout: 30000 });
-    expect(new URL(page.url()).pathname).toBe('/');
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/');
   });
 });

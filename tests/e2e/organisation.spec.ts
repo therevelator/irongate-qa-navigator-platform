@@ -6,7 +6,9 @@ import { setupAuth } from './fixtures/auth';
  * the Users page invites by email (link shown when no email is sent), and the invited person
  * accepts on /accept-invite and lands in the app with exactly the invited access.
  */
-test.describe('Organisation, invitations and activity', () => {
+test.describe('Organisation, invitations and activity', { tag: ['@area:org', '@area:activity'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(90000);
 
   test('Activity is in the navigation for super admins and QA managers only', async ({ page }) => {
@@ -24,7 +26,7 @@ test.describe('Organisation, invitations and activity', () => {
     await expect(page.locator('[data-testid="nav-activity"]')).toHaveCount(0);
     await page.goto('http://localhost:5173/activity');
     await expect(page.locator('[data-testid="dashboard"]')).toBeVisible({ timeout: 30000 });
-    expect(new URL(page.url()).pathname).toBe('/');
+    await expect.poll(() => new URL(page.url()).pathname).toBe('/');
   });
 
   test('Invite by email, then accept the invitation and sign in', async ({ page, browser }) => {

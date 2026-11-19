@@ -32,7 +32,9 @@ async function db(): Promise<Client> {
   return client;
 }
 
-test.describe('Forgot password and reset by e-mail', () => {
+test.describe('Forgot password and reset by e-mail', { tag: ['@area:auth'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
   test.beforeAll(async () => {

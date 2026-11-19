@@ -48,7 +48,9 @@ function previousDefaultPeriod(today: string): { start: string; end: string } {
   return { start: str(start - 14), end: str(start) };
 }
 
-test.describe('Wellbeing pulse survey', () => {
+test.describe('Wellbeing pulse survey', { tag: ['@area:pulse', '@area:privacy'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(90000);
 
   test.beforeAll(async () => {

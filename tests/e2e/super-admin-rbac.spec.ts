@@ -1,7 +1,9 @@
 import { test, expect } from '@playwright/test';
 import { setupAuth } from './fixtures/auth';
 
-test.describe('Super Admin Role-Based Access Control', () => {
+test.describe('Super Admin Role-Based Access Control', { tag: ['@area:navigation', '@role:admin'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(60000);
 
   test('Super Admin has full access to all features', async ({ page }) => {

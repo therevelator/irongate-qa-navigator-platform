@@ -37,7 +37,9 @@ async function signIn(browser: Browser, email: string) {
   return { ctx, page };
 }
 
-test.describe('Sign-in lifetime and signing out other devices', () => {
+test.describe('Sign-in lifetime and signing out other devices', { tag: ['@area:auth'] }, () => {
+  // Written for one worker: these tests run in order, in one worker (a failure does not skip the rest).
+  test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
   test.beforeAll(async () => {
@@ -99,7 +101,9 @@ test.describe('Sign-in lifetime and signing out other devices', () => {
     await mine.page.click('[data-testid="sign-out-others"]');
     await expect(mine.page.getByText('You were signed out on all other devices')).toBeVisible();
 
-    await other.page.reload();
+    // The other browser's next request is refused (the cookie is cleared with it), so trigger one
+    // instead of reloading: a background poll may already have used up the refusal.
+    await other.page.evaluate(() => fetch('http://localhost:3000/api/teams', { credentials: 'include' }).catch(() => undefined));
     await expect(other.page.locator('[data-testid="session-notice"]')).toHaveText('Your session has ended. Please sign in again.');
     await mine.page.reload();
     await expect(mine.page.locator('[data-testid="dashboard"]')).toBeVisible({ timeout: 30000 });
