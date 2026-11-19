@@ -29,20 +29,22 @@ test.describe('Viewer Role-Based Access Control', { tag: ['@area:navigation', '@
     await expect(page.locator('[data-testid="nav-parameters-config"]')).toHaveCount(0);
   });
 
-  test('Viewer can view dashboard with all teams and departments', async ({ page }) => {
+  test('Viewer sees only the teams she is assigned to on the dashboard', async ({ page }) => {
     await setupAuth(page, 'viewer');
 
-    // Wait for dashboard to load
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
-    // Should see all teams and departments on dashboard
+    // One scope for every page (docs/ROLE_ACCESS.md): the cards are the teams of her assignments.
     const teamCards = page.locator('[data-testid="team-card"]');
     await expect(teamCards.first()).toBeVisible();
-
-
-    // Count teams to verify viewer can see all teams
-    const teamCount = await teamCards.count();
-    expect(teamCount).toBeGreaterThan(0);
+    const scope = await (await page.request.get('http://localhost:3000/api/analytics/scope')).json();
+    const names = ((scope.teams ?? []) as Array<{ name: string }>).map((t) => t.name).sort();
+    expect((await teamCards.locator('[data-testid="team-name"]').allTextContents()).sort()).toEqual(names);
+    // The summary is about her team(s), not the company.
+    await expect(page.getByTestId('hero-title')).toHaveText(names.length === 1 ? 'Your team' : 'Your teams');
+    // Another team of the company: refused by the API (team detail), allowed in TV mode (the wall screen).
+    expect((await page.request.get('http://localhost:3000/api/teams/team-1764026236967-uphpblii4')).status()).toBe(403);
+    expect((await page.request.get('http://localhost:3000/api/tv/teams/team-1764026236967-uphpblii4')).status()).toBe(200);
   });
 
   test('Viewer can click into team detail views', async ({ page }) => {
@@ -71,16 +73,16 @@ test.describe('Viewer Role-Based Access Control', { tag: ['@area:navigation', '@
 
     await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
 
-    // Viewer should NOT see recommendations or the team members table
+    // Viewer should NOT see recommendations; the members table holds at most her own row
     await expect(page.locator('[data-testid="ai-insights-header"]')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Developer recommendations', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('heading', { name: 'Team members', exact: true })).toHaveCount(0);
+    expect(await page.locator('[data-testid="team-member-card"]').count()).toBeLessThanOrEqual(1);
 
     // Should still see basic team information
     await expect(page.locator('[data-testid="team-kpis"]')).toBeVisible();
   });
 
-  test('Viewer can navigate between multiple teams', async ({ page }) => {
+  test('Viewer can go back and forth between the overview and the teams of her scope', async ({ page }) => {
     await setupAuth(page, 'viewer');
 
     // Go to dashboard
@@ -98,12 +100,14 @@ test.describe('Viewer Role-Based Access Control', { tag: ['@area:navigation', '@
     await page.click('[data-testid="back-to-dashboard"]');
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 10000 });
 
-    // Click on another team
-    await teamCards.nth(1).click();
-    await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
-
-    // Should be able to view this team too
-    await expect(page.locator('[data-testid="team-detail"]')).toBeVisible();
+    // Every other card (a viewer of several teams) opens too; the demo viewer has one team.
+    const count = await teamCards.count();
+    for (let i = 1; i < count; i++) {
+      await teamCards.nth(i).click();
+      await expect(page.locator('[data-testid="team-detail"]')).toBeVisible();
+      await page.click('[data-testid="back-to-dashboard"]');
+    }
+    expect(count).toBeGreaterThanOrEqual(1);
   });
 
   test('Viewer cannot access any admin or management pages', async ({ page }) => {

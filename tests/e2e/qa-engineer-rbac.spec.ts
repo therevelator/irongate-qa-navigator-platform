@@ -6,19 +6,19 @@ test.describe('QA Engineer Role-Based Access Control', { tag: ['@area:navigation
   test.describe.configure({ mode: 'default' });
   test.setTimeout(60000);
 
-  test('QA Engineer sees ALL teams on dashboard', async ({ page }) => {
+  test('QA Engineer sees only the teams of their analytics scope on the dashboard', async ({ page }) => {
     await setupAuth(page, 'qa_engineer');
 
     // Wait for dashboard to load
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
 
-    // Should see all teams (more than 1)
+    // One scope for every page (docs/ROLE_ACCESS.md): the cards are exactly the teams of the scope.
     const teamCards = page.locator('[data-testid="team-card"]');
     await expect(teamCards.first()).toBeVisible();
-
-    // Check count - should be > 1 (assuming seed data has multiple teams)
-    const count = await teamCards.count();
-    expect(count).toBeGreaterThan(1);
+    const scope = await (await page.request.get('http://localhost:3000/api/analytics/scope')).json();
+    const names = ((scope.teams ?? []) as Array<{ name: string }>).map((t) => t.name).sort();
+    expect((await teamCards.locator('[data-testid="team-name"]').allTextContents()).sort()).toEqual(names);
+    await expect(page.getByTestId('hero-title')).toHaveText(names.length === 1 ? 'Your team' : 'Your teams');
   });
 
   test('QA Engineer sees themselves in Team Members for their own team', async ({ page }) => {
@@ -43,22 +43,13 @@ test.describe('QA Engineer Role-Based Access Control', { tag: ['@area:navigation
     await expect(memberCards).toHaveCount(1);
   });
 
-  test('QA Engineer does NOT see Team Members for other teams', async ({ page }) => {
+  test('QA Engineer cannot open another team: no card for it, and its team detail API answers 403', async ({ page }) => {
     await setupAuth(page, 'qa_engineer');
-
-    // Go to dashboard
     await page.waitForSelector('[data-testid="dashboard"]', { timeout: 30000 });
-
-    // Click a team that is not the engineer's own team
-    const otherTeamCard = page.locator('[data-testid="team-card"]:not([data-primary-team="true"])').first();
-
-    if (await otherTeamCard.count() > 0) {
-      await otherTeamCard.click();
-      await page.waitForSelector('[data-testid="team-detail"]', { timeout: 10000 });
-
-      // Should NOT see the Team members section
-      await expect(page.getByRole('heading', { name: 'Team members', exact: true })).toHaveCount(0);
-    }
+    // QualityCowboys (Payments Processing) is outside the engineer's scope (tests/e2e/support/roles.ts DEMO.otherTeam).
+    await expect(page.locator('[data-testid="team-card"]', { hasText: 'QualityCowboys' })).toHaveCount(0);
+    const res = await page.request.get('http://localhost:3000/api/teams/team-1764026236967-uphpblii4');
+    expect(res.status()).toBe(403);
   });
 
   test('QA Engineer does NOT see AI Insights or Developer Insights', async ({ page }) => {

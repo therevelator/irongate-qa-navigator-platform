@@ -3,9 +3,15 @@ import { HelpCircle, LogOut, MonitorSmartphone, X, Check, Minus } from 'lucide-r
 
 import type { AccessSummary } from '../lib/accessSummary';
 
-/** Initials of a name ("Meridian Financial Technologies" -> "MF"). */
-export const initialsOf = (name: string | null | undefined, max = 2) =>
-  (name ?? '').split(/\s+/).filter((w) => /^[A-Za-z0-9]/.test(w)).slice(0, max).map((w) => w[0]!.toUpperCase()).join('') || '?';
+/** Initials of a name ("Meridian Financial Technologies" -> "MF", "NovaTech" -> "NT", "Acme" -> "A"). */
+export const initialsOf = (name: string | null | undefined, max = 2): string => {
+  const words = (name ?? '').split(/\s+/).filter((w) => /^[A-Za-z0-9]/.test(w));
+  if (words.length === 1) {
+    const caps = words[0].match(/[A-Z0-9]/g) ?? [];
+    return (caps.length >= 2 ? caps.slice(0, max).join('') : words[0][0].toUpperCase());
+  }
+  return words.slice(0, max).map((w) => w[0]!.toUpperCase()).join('') || '?';
+};
 
 /** Closes a popover on Escape (focus back to its button) and on a click outside it. */
 function useDismiss(open: boolean, close: () => void, refs: Array<React.RefObject<HTMLElement | null>>, buttonRef: React.RefObject<HTMLElement | null>) {

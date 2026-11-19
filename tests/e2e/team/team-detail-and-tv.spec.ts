@@ -25,16 +25,22 @@ async function openTeam(page: Page, name: string) {
 
 test.describe('Team detail', { tag: [TAG.area('team')] }, () => {
   for (const role of ALL_ROLES) {
-    test(`TEAM-01 ${role}: own team shows KPIs and members; another team shows KPIs only (unless super admin)`, { tag: [TAG.role(role)] }, async ({ signInAs, page }) => {
+    test(`TEAM-01 ${role}: own team shows KPIs and members; another team only for roles that have it in scope`, { tag: [TAG.role(role)] }, async ({ signInAs, page }) => {
       await signInAs(role);
       await openTeam(page, OWN[role].name);
       await expect(page.getByTestId('team-kpis')).toBeVisible();
       await expect(page.getByTestId('team-members-section')).toBeVisible();
       await page.getByTestId('back-to-dashboard').click();
-      await openTeam(page, DEMO.otherTeam.name);
-      await expect(page.getByTestId('team-kpis')).toBeVisible();
-      if (role === 'admin') await expect(page.getByTestId('team-members-section')).toBeVisible();
-      else await expect(page.getByTestId('team-members-section')).toHaveCount(0);
+      if (role === 'admin') {
+        await openTeam(page, DEMO.otherTeam.name);
+        await expect(page.getByTestId('team-kpis')).toBeVisible();
+        await expect(page.getByTestId('team-members-section')).toBeVisible();
+      } else {
+        // One scope for every page (docs/ROLE_ACCESS.md): no card, and the API refuses the team.
+        await page.getByLabel('Search teams').fill(DEMO.otherTeam.name);
+        await expect(page.getByTestId('team-card')).toHaveCount(0);
+        expect((await page.request.get(`${API_URL}/teams/${DEMO.otherTeam.id}`)).status()).toBe(403);
+      }
     });
   }
 
@@ -120,11 +126,17 @@ test.describe('Team TV mode', { tag: [TAG.area('tv')] }, () => {
     await page.keyboard.press('r');
   });
 
-  test('TV-04 a team outside the scope is refused, with a way to show the own team', { tag: [TAG.negative, TAG.role('engineer')] }, async ({ signInAs, page }) => {
+  test('TV-04 TV mode shows any team of the company, for every role; an unknown team is refused', { tag: [TAG.role('engineer')] }, async ({ signInAs, page }) => {
     await signInAs('engineer', `/tv?team=${DEMO.otherTeam.id}`);
-    await expect(page.getByTestId('tv-state-forbidden')).toContainText('This team is not available to you');
-    await page.getByRole('button', { name: `Show ${DEMO.engineerTeam.name}` }).click();
+    await expect(page.getByTestId('tv-team-name')).toHaveText(DEMO.otherTeam.name);
+    // The picker lists the company's teams, not only the engineer's.
+    await page.mouse.move(400, 400);
+    const picker = page.getByTestId('tv-team-select');
+    await expect(picker.locator('option', { hasText: DEMO.leadTeam.name })).toHaveCount(1);
+    await picker.selectOption(DEMO.engineerTeam.id);
     await expect(page.getByTestId('tv-team-name')).toHaveText(DEMO.engineerTeam.name);
+    await page.goto('/tv?team=no-such-team');
+    await expect(page.getByTestId('tv-state-forbidden')).toContainText('This team is not available to you');
   });
 
   test('TV-05 an e-mailed TV link opened while signed out shows the team after signing in', { tag: [TAG.role('viewer')] }, async ({ page }) => {
