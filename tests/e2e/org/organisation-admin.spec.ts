@@ -179,7 +179,7 @@ test.describe('Users and assignments', { tag: [TAG.area('org')] }, () => {
     await expect(page.locator('b', { hasText: 'Bold' })).toHaveCount(0);
   });
 
-  test('ORG-23 an assignment is added as a chip and removed again', { tag: [TAG.role('admin')] }, async ({ freshCompany, signInAs, page }) => {
+  test('ORG-23 an assignment is added as a chip and removed again after a confirmation in the page', { tag: [TAG.role('admin')] }, async ({ freshCompany, signInAs, page }) => {
     await signInAs(freshCompany, '/users');
     const email = `${uid('chip')}@${freshCompany.email.split('@')[1]}`;
     await addUser(page, { first: 'Chip', last: 'Holder', email, password: STRONG_PASSWORD, team: freshCompany.teamName });
@@ -190,9 +190,27 @@ test.describe('Users and assignments', { tag: [TAG.area('org')] }, () => {
     await page.getByTestId('assign-scope').selectOption({ index: 1 }).catch(() => undefined);
     await page.getByTestId('assign-submit').click();
     await expect(card.getByTestId('assignment-chip')).toHaveCount(before + 1);
+    let browserDialog = false;
+    page.on('dialog', (d) => { browserDialog = true; void d.dismiss(); });
+    // Cancel keeps the assignment.
     await card.getByRole('button', { name: /^Remove Viewer of / }).click();
+    const confirm = page.getByRole('dialog', { name: 'Remove this assignment?' });
+    await expect(confirm).toContainText(/Remove Viewer of .+ from Chip Holder\?/);
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(card.getByTestId('assignment-chip')).toHaveCount(before + 1);
+    // Escape closes it too.
+    await card.getByRole('button', { name: /^Remove Viewer of / }).click();
+    await expect(confirm).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(confirm).toHaveCount(0);
+    await expect(card.getByTestId('assignment-chip')).toHaveCount(before + 1);
+    // Confirmed, it is removed.
+    await card.getByRole('button', { name: /^Remove Viewer of / }).click();
+    await confirm.getByRole('button', { name: 'Remove assignment' }).click();
     await expect(page.getByText(/Chip Holder: removed Viewer of/)).toBeVisible();
     await expect(card.getByTestId('assignment-chip')).toHaveCount(before);
+    expect(browserDialog, 'no window.confirm').toBe(false);
   });
 
   test('ORG-24 nobody can deactivate or delete themselves', { tag: [TAG.negative] }, async ({ freshCompany, signInAs, page }) => {

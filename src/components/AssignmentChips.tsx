@@ -48,6 +48,8 @@ export const AssignmentChips: React.FC<{
 }> = ({ actor, user, teams, options, onChanged }) => {
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
+  // Removing asks first, in the page (the chip's button opens this confirmation).
+  const [confirming, setConfirming] = useState<AssignmentRow | null>(null);
   const list = user.assignments ?? [];
   const isSelf = actor.id === user.id;
   // Same guard as the server: never your own, never someone of your rank or above (unless super admin).
@@ -61,6 +63,7 @@ export const AssignmentChips: React.FC<{
     try {
       await call('DELETE', `${API_URL}/admin/users/${user.id}/assignments/${a.id}`);
       toast.success(`${name}: removed ${ROLE_LABELS[a.role] ?? a.role} of ${a.scope_name ?? ''}`);
+      setConfirming(null);
       onChanged();
     } catch (e: any) {
       toast.error(e.message);
@@ -68,6 +71,7 @@ export const AssignmentChips: React.FC<{
       setBusy(null);
     }
   };
+  const scopeText = (a: AssignmentRow) => (a.scope_type === 'company' ? 'the organisation' : a.scope_name ?? 'this scope');
 
   return (
     <div className="flex flex-wrap items-center gap-1.5" data-testid="assignment-chips">
@@ -78,7 +82,7 @@ export const AssignmentChips: React.FC<{
             {ROLE_LABELS[a.role] ?? a.role} · {a.scope_type === 'company' ? 'Organisation' : a.scope_name ?? '—'}
           </span>
           {canRemove(a) && (
-            <button type="button" onClick={() => remove(a)} disabled={busy === a.id}
+            <button type="button" onClick={() => setConfirming(a)} disabled={busy === a.id}
               className="rounded-full p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:hover:bg-slate-700 dark:hover:text-white"
               aria-label={`Remove ${ROLE_LABELS[a.role] ?? a.role} of ${a.scope_name ?? 'the organisation'} from ${name}`}>
               <X size={12} aria-hidden="true" />
@@ -93,6 +97,22 @@ export const AssignmentChips: React.FC<{
           <Plus size={12} aria-hidden="true" /> Add
         </button>
       )}
+      <Modal isOpen={!!confirming} onClose={() => { if (!busy) setConfirming(null); }} title="Remove this assignment?" size="sm">
+        {confirming && (
+          <div className="space-y-4" data-testid="confirm-remove-assignment">
+            <p className="text-sm text-slate-700 dark:text-slate-300">
+              Remove <strong>{ROLE_LABELS[confirming.role] ?? confirming.role}</strong> of <strong>{scopeText(confirming)}</strong> from {name}?
+              They lose the access it gives on their next request. The change is recorded in the change history.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button type="button" data-autofocus className={buttonClass.secondary} onClick={() => setConfirming(null)} disabled={!!busy}>Cancel</button>
+              <button type="button" className="inline-flex items-center justify-center gap-2 h-9 px-3.5 rounded-md bg-red-700 text-sm font-medium text-white hover:bg-red-800 disabled:opacity-60 transition-colors" onClick={() => remove(confirming)} disabled={!!busy} data-testid="confirm-remove-assignment-yes">
+                {busy ? 'Removing…' : 'Remove assignment'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
       <AddAssignmentDialog isOpen={adding} onClose={() => setAdding(false)} userId={user.id} userName={name} options={options} existing={list}
         onAdded={() => { setAdding(false); onChanged(); }} />
     </div>
