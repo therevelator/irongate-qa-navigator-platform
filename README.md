@@ -759,23 +759,26 @@ bodies are `{ "error": "…", "requestId": "…" }`. Each 5xx and each failed sc
 headers, cookies or query strings) for 30 days. Scheduled job runs are stored in `job_runs`.
 Retention runs in `db-keepalive` (Netlify) or `server/jobs/cleanupCron.ts` (long-running server).
 
-**Platform support panel** (`/operator`, product owner only). Off unless `PLATFORM_OPERATOR_EMAILS`
-is set. The owner re-enters the password and gets a 30-minute operator session (kept in memory only)
-to see every company: overview with health per company, scheduled jobs, errors and database size;
-per company the organisation, users and invitations, settings and targets, metric data with staleness,
-alerts and actions, wellbeing pulse aggregates, the Activity log, the user activity log and server
-errors; and search by request id. A few repair actions (refresh sample data now, recompute KPI snapshots, re-run
+**Platform support panel** (`/operator`, IronGate platform support). Operators are their own
+accounts (`platform_operators`, migration `20261125000000_platform_operators.sql`), never users of a
+company; create one with `npm run operator:create -- --email … --name "…"` (bcrypt cost 12). Off while
+no operator exists. Own sign-in at `/operator` (8-hour session in the httpOnly cookie
+`irongate_operator`, its own token audience, lockout after 5 failures, rate limited per IP) to see
+every company: overview with health per company, scheduled jobs, errors and database size; per
+company the organisation, users and invitations, settings and targets, metric data with staleness and
+every developer's metrics, every analytics module's rows, alerts and actions, the wellbeing pulse
+(aggregates, single answers with comments, who answered), the Activity log, the user activity log
+and server errors; and search by request id. A few repair actions (refresh sample data now, recompute KPI snapshots, re-run
 alerts, resend an invitation, deactivate / reactivate a user, clear a lockout) need a reason and a
 confirmation. Every company opened and every action is written to that company's own Activity log
-("Platform support viewed …"). Protected data stays hidden: password and API key hashes, the Slack
-webhook and secret settings, invitation and survey link tokens, single survey answers and comments,
-developer metrics of people who have not opted in. No impersonation, no SQL, no deletes. Code:
+("Platform support viewed …"). Secrets are never shown: password, API key and token hashes, link
+tokens, the Slack webhook and integration credentials ("set" / "not set"). No impersonation, no SQL,
+no deletes. Code:
 `server/routes/operator.ts`, `server/lib/operator.ts`, `src/components/operator/`; migration
 `supabase/migrations/20261123000000_platform_operator_errors_jobs.sql`.
 
 | Variable | Purpose |
 |---|---|
-| `PLATFORM_OPERATOR_EMAILS` | Comma-separated e-mails that may open the platform support panel. Unset or empty: off |
 | `PLATFORM_OPERATOR_ALLOWED_IPS` | Optional comma-separated client IPs; other addresses are refused |
 | `LOG_CLEANUP_CRON` | Long-running server only: retention schedule (default `7 3 * * *`; `off` turns it off) |
 

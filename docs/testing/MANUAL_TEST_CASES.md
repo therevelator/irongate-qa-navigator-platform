@@ -1,6 +1,6 @@
 # Manual test cases
 
-347 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+349 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -41,7 +41,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Activity](#activity) (4)
 - [User activity](#user-activity) (4)
 - [Invitations](#invitations) (1)
-- [Platform support](#platform-support) (13)
+- [Platform support](#platform-support) (15)
 - [Navigation and access control](#navigation-and-access-control) (12)
 - [Users and teams](#users-and-teams) (6)
 - [Analytics](#analytics) (4)
@@ -1524,7 +1524,6 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 - App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
 - Browser signed out (no IronGate session: use a fresh private window or sign out first)
-- For the Super admin: admin@irongate.com is listed as a platform operator on this server (PLATFORM_OPERATOR_EMAILS), as in the test setup; otherwise the Platform entry is not expected
 
 **Test data**
 
@@ -1535,7 +1534,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
 | 2 | Click the menu button (Open navigation) at the left of the top bar and wait a moment for the drawer to settle. | The navigation drawer opens. |
-| 3 | Read every entry of the drawer from top to bottom (group headings Quality, Delivery, Organisation, Administration, Platform are not entries). | The entries are exactly, in this order: Overview, Analytics, Compare teams, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports, Users, Teams, Departments, Activity, User activity, Admin console, Manual metrics, Update frequency, Parameters, Ingestion log, Platform. |
+| 3 | Read every entry of the drawer from top to bottom (group headings Quality, Delivery, Organisation, Administration, Platform are not entries). | The entries are exactly, in this order: Overview, Analytics, Compare teams, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports, Users, Teams, Departments, Activity, User activity, Admin console, Manual metrics, Update frequency, Parameters, Ingestion log. |
 | 4 | Check that no other entry is present. | No further entries are shown. |
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 admin sees exactly the navigation entries of the role`
@@ -7896,14 +7895,14 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Platform support
 
-### TC-ORG-045: Manager: no Platform entry and /operator is not available
+### TC-ORG-045: Manager: no Platform entry; /operator asks for a platform support account
 
 **Type:** Negative · **Priority:** High · **Role:** Manager · **Flow:** F14.1, F4.1
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
@@ -7912,20 +7911,21 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in page and sign in as Manager (manager@irongate.com / demo123). | The Overview opens; the top bar shows the menu (burger) button. |
-| 2 | Click the menu (burger) button. | The navigation opens; there is no "Platform" entry. |
-| 3 | Enter /operator in the address bar and press Enter. | The page "Platform" says "This area is not available for your account." No step-up form is shown. |
+| 1 | Sign in as Manager (manager@irongate.com / demo123) and open the navigation (menu button at the left of the top bar). | There is no "Platform" entry in the navigation. |
+| 2 | Open /operator in the address bar. | The "Platform support sign-in" form (E-mail address, Password, Sign in) is shown, not the platform overview: the company session does not count here. |
 
-*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 manager: no Platform entry and /operator is not available`
+**Notes:** Platform operators are separate accounts (platform_operators), never company users.
 
-### TC-ORG-046: Team lead: no Platform entry and /operator is not available
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 manager: no Platform entry; /operator asks for a platform support account`
+
+### TC-ORG-046: Team lead: no Platform entry; /operator asks for a platform support account
 
 **Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F14.1, F4.1
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
@@ -7934,20 +7934,21 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in page and sign in as Team lead (lead@irongate.com / demo123). | The Overview opens; the top bar shows the menu (burger) button. |
-| 2 | Click the menu (burger) button. | The navigation opens; there is no "Platform" entry. |
-| 3 | Enter /operator in the address bar and press Enter. | The page "Platform" says "This area is not available for your account." No step-up form is shown. |
+| 1 | Sign in as Team lead (lead@irongate.com / demo123) and open the navigation (menu button at the left of the top bar). | There is no "Platform" entry in the navigation. |
+| 2 | Open /operator in the address bar. | The "Platform support sign-in" form (E-mail address, Password, Sign in) is shown, not the platform overview: the company session does not count here. |
 
-*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 lead: no Platform entry and /operator is not available`
+**Notes:** Platform operators are separate accounts (platform_operators), never company users.
 
-### TC-ORG-047: Software engineer: no Platform entry and /operator is not available
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 lead: no Platform entry; /operator asks for a platform support account`
+
+### TC-ORG-047: Software engineer: no Platform entry; /operator asks for a platform support account
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F14.1, F4.1
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
@@ -7956,20 +7957,21 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in page and sign in as Software engineer (engineer@irongate.com / demo123). | The Overview opens; the top bar shows the menu (burger) button. |
-| 2 | Click the menu (burger) button. | The navigation opens; there is no "Platform" entry. |
-| 3 | Enter /operator in the address bar and press Enter. | The page "Platform" says "This area is not available for your account." No step-up form is shown. |
+| 1 | Sign in as Software engineer (engineer@irongate.com / demo123) and open the navigation (menu button at the left of the top bar). | There is no "Platform" entry in the navigation. |
+| 2 | Open /operator in the address bar. | The "Platform support sign-in" form (E-mail address, Password, Sign in) is shown, not the platform overview: the company session does not count here. |
 
-*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 engineer: no Platform entry and /operator is not available`
+**Notes:** Platform operators are separate accounts (platform_operators), never company users.
 
-### TC-ORG-048: Viewer: no Platform entry and /operator is not available
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 engineer: no Platform entry; /operator asks for a platform support account`
+
+### TC-ORG-048: Viewer: no Platform entry; /operator asks for a platform support account
 
 **Type:** Negative · **Priority:** High · **Role:** Viewer · **Flow:** F14.1, F4.1
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
@@ -7978,34 +7980,36 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in page and sign in as Viewer (viewer@irongate.com / demo123). | The Overview opens; the top bar shows the menu (burger) button. |
-| 2 | Click the menu (burger) button. | The navigation opens; there is no "Platform" entry. |
-| 3 | Enter /operator in the address bar and press Enter. | The page "Platform" says "This area is not available for your account." No step-up form is shown. |
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123) and open the navigation (menu button at the left of the top bar). | There is no "Platform" entry in the navigation. |
+| 2 | Open /operator in the address bar. | The "Platform support sign-in" form (E-mail address, Password, Sign in) is shown, not the platform overview: the company session does not count here. |
 
-*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 viewer: no Platform entry and /operator is not available`
+**Notes:** Platform operators are separate accounts (platform_operators), never company users.
 
-### TC-ORG-049: The support session lives in memory only: a reload asks for the password again
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 viewer: no Platform entry; /operator asks for a platform support account`
+
+### TC-ORG-049: The support session survives a reload; Sign out ends it
 
 **Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.1
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Operator: admin@irongate.com / demo123
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Super admin (admin@irongate.com / demo123) and open /operator. | The "Platform support" page shows the amber banner "Platform support mode — your access is recorded in this company's Activity log." and the card "Confirm it is you". |
-| 2 | Enter password demo123 in "Password" of "Confirm it is you" and click "Enter platform support". | The platform overview opens: tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 3 | Reload the page (F5). | The "Confirm it is you" step-up card is shown again; the overview is not shown until the password is entered again. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 2 | Reload the page (F5). | The platform overview is shown again without signing in (8-hour session). |
+| 3 | Click "Sign out" in the amber bar. | The "Platform support sign-in" form is shown. |
+| 4 | Reload the page. | The sign-in form is still shown. |
 
-**Notes:** Do not enter wrong passwords in the step-up: 5 wrong attempts lock it for 15 minutes.
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
-*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-02 the support session lives in memory only: a reload asks for the password again`
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-02 the support session survives a reload; Sign out ends it`
 
 ### TC-ORG-050: Tabs: error search by request id (none found) and the access log
 
@@ -8014,22 +8018,20 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Operator: admin@irongate.com / demo123
-- Request id: no-such-request-<random>
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Super admin (admin@irongate.com / demo123) and open /operator. | The "Platform support" page shows the amber banner "Platform support mode — your access is recorded in this company's Activity log." and the card "Confirm it is you". |
-| 2 | Enter password demo123 in "Password" of "Confirm it is you" and click "Enter platform support". | The platform overview opens: tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 3 | Click "Error search". | The "Server errors" section opens with a "Request id" field and a "Search" button. |
-| 4 | Enter "no-such-request-<random>" and click "Search". | The result says "No errors." (no matching errors). |
-| 5 | Click "Access log". | The "Operator access log" table lists accesses, including an entry with action "step_up" from your step-up. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 2 | Click "Error search". | The "Server errors" section opens with a "Request id" field and a "Search" button. |
+| 3 | Enter "no-such-request-<random>" and click "Search". | The result says "No errors." (no matching errors). |
+| 4 | Click "Access log". | The "Operator access log" table lists accesses, including an entry with action "sign_in.ok" from your sign-in. |
 
-**Notes:** Do not enter wrong passwords in the step-up: 5 wrong attempts lock it for 15 minutes.
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
 *Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-03 tabs: error search by request id (none found) and the access log`
 
@@ -8040,22 +8042,20 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Operator: admin@irongate.com / demo123
-- Reason: "  x " (spaces around one letter)
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Super admin (admin@irongate.com / demo123) and open /operator. | The "Platform support" page shows the amber banner "Platform support mode — your access is recorded in this company's Activity log." and the card "Confirm it is you". |
-| 2 | Enter password demo123 in "Password" of "Confirm it is you" and click "Enter platform support". | The platform overview opens: tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 3 | Click the name of the first company in the "Companies" table. | A dialog "Open <company>" asks "Why are you opening this company?..." with a Reason box and the buttons "Cancel" and "Open company". |
-| 4 | Type "  x " into the reason box. | "Open company" stays disabled. |
-| 5 | Click "Cancel". | The dialog closes and the platform overview is shown again. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 2 | Click the name of the first company in the "Companies" table. | A dialog "Open <company>" asks "Why are you opening this company?..." with a Reason box and the buttons "Cancel" and "Open company". |
+| 3 | Type "  x " into the reason box. | "Open company" stays disabled. |
+| 4 | Click "Cancel". | The dialog closes and the platform overview is shown again. |
 
-**Notes:** Do not enter wrong passwords in the step-up: 5 wrong attempts lock it for 15 minutes.
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
 *Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-04 a reason shorter than 3 characters cannot open a company; Cancel closes`
 
@@ -8066,25 +8066,22 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
-- DevTools available to make the action request fail: use Local Overrides (or a proxy) so that POST /api/operator/actions/... answers HTTP 500 with body {"error": "Internal server error", "requestId": "rid-op-500"}.
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Operator: admin@irongate.com / demo123
-- Reason: UI test of a failing action
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Super admin (admin@irongate.com / demo123) and open /operator. | The "Platform support" page shows the amber banner "Platform support mode — your access is recorded in this company's Activity log." and the card "Confirm it is you". |
-| 2 | Enter password demo123 in "Password" of "Confirm it is you" and click "Enter platform support". | The platform overview opens: tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 3 | Set up the DevTools override for */api/operator/actions/* as described in the preconditions. | The override is active. |
-| 4 | In "Scheduled jobs" click "Refresh sample data now". | A dialog "Refresh sample data now" opens with "Reason (shown in the company's Activity log)", the checkbox "I want to do this now" and the "Refresh now" button. |
-| 5 | Enter the reason "UI test of a failing action", tick "I want to do this now" and click "Refresh now". | The dialog shows the error "Internal server error (request id rid-op-500)". |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 2 | Set up the DevTools override for */api/operator/actions/* as described in the preconditions. | The override is active. |
+| 3 | In "Scheduled jobs" click "Refresh sample data now". | A dialog "Refresh sample data now" opens with "Reason (shown in the company's Activity log)", the checkbox "I want to do this now" and the "Refresh now" button. |
+| 4 | Enter the reason "UI test of a failing action", tick "I want to do this now" and click "Refresh now". | The dialog shows the error "Internal server error (request id rid-op-500)". |
 
 **After the test:** Remove the DevTools override.
 
-**Notes:** Requires DevTools Local Overrides or a proxy (the automated test mocks the response). Plain request blocking shows a network error instead of the request id. Do not enter wrong passwords in the step-up: 5 wrong attempts lock it for 15 minutes.
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
 *Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-05 a failed repair action shows the error with its request id`
 
@@ -8095,66 +8092,55 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
-- A new, empty organisation registered through "Create an account" on the sign-in page: first name Uitest, last name Owner, e-mail owner@<unique>.uitest.example, password Ui-Tests-Passw0rd!, organisation name "UI Test <unique>", department "Engineering", team "Core Team". Its registrant is its super admin (referred to below as "the owner").
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Operator: admin@irongate.com / demo123
-- Reason: UI test reason <random>
-- Owner e-mail: owner@<unique>.uitest.example
-- Owner password: Ui-Tests-Passw0rd!
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
+- A super admin of the company that was opened (to read its Activity log)
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Super admin (admin@irongate.com / demo123) and open /operator. | The "Platform support" page shows the amber banner "Platform support mode — your access is recorded in this company's Activity log." and the card "Confirm it is you". |
-| 2 | Enter password demo123 in "Password" of "Confirm it is you" and click "Enter platform support". | The platform overview opens: tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 3 | In the "Companies" table click the name of the test organisation "UI Test <unique>". | The dialog "Open UI Test <unique>" opens. |
-| 4 | Enter the reason "UI test reason <random>" and click "Open company". | The company view opens with the "Organisation" section (departments, teams and members). |
-| 5 | Click "Leave" in the amber banner. | The support session ends and the step-up card "Confirm it is you" is shown. |
-| 6 | Open the navigation and click "Sign out". | The sign-in screen is shown. |
-| 7 | Sign in as the owner of the test organisation and open /activity. | The Activity log contains one or more entries (one per section opened) with the reason "UI test reason <random>". |
-| 8 | Read each of those entries. | Each one names "IronGate platform support" as the actor. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 2 | In the "Companies" table click the name of the test organisation "UI Test <unique>". | The dialog "Open UI Test <unique>" opens. |
+| 3 | Enter the reason "UI test reason <random>" and click "Open company". | The company view opens with the "Organisation" section (departments, teams and members). |
+| 4 | Click "Sign out" in the amber bar. | The platform support sign-in form is shown. |
+| 5 | Sign in as the owner of the test organisation and open /activity. | The Activity log contains one or more entries (one per section opened) with the reason "UI test reason <random>". |
+| 6 | Read each of those entries. | Each one names "IronGate platform support" as the actor. |
 
 **After the test:** The test organisation cannot be removed in the app: ask a developer to delete it from the test database, or leave it (it is isolated from the demo data).
 
-**Notes:** Do not enter wrong passwords in the step-up: 5 wrong attempts lock it for 15 minutes.
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
 *Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-06 opening a company is written to that company's Activity log with the reason`
 
-### TC-ORG-054: The operator steps up (wrong password refused), opens a company with a reason, runs a repair action and leaves
+### TC-ORG-054: The operator signs in at /operator (wrong password refused), opens a company with a reason, runs an action and signs out
 
 **Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.1, F14.3, F14.4, F14.5
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Operator: admin@irongate.com / demo123
-- Wrong password: not-the-password
-- Reason: E2E smoke test
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in page and sign in as Super admin (admin@irongate.com / demo123). | The Overview opens; the top bar shows the menu (burger) button. |
-| 2 | Click the menu (burger) button. | The navigation contains "Platform". |
-| 3 | Click "Platform". | The address is /operator; the amber banner reads "Platform support mode — ..." and "Confirm it is you" is shown. |
-| 4 | Enter the wrong password "not-the-password" and click "Enter platform support". | An error "Wrong password." is shown. |
-| 5 | Enter password demo123 in "Password" of "Confirm it is you" and click "Enter platform support". | The platform overview opens: tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 6 | Read the "Session ends in" countdown in the banner and the "Scheduled jobs" table. | The countdown shows 30:00 or 29:xx; the jobs table includes "db-keepalive". |
-| 7 | Click the first company name in the "Companies" table. | The dialog "Open <company>" opens; "Open company" is disabled while the reason is empty. |
-| 8 | Enter the reason "E2E smoke test" and click "Open company". | The company view opens with the "Organisation" section. |
-| 9 | Click the "Users" tab of the company view. | The company's users table (status, assignments, last sign-in) is shown. |
-| 10 | Click "Re-run alerts". | The dialog "Re-run alert evaluation" opens; the "Run" button is disabled. |
-| 11 | Enter the reason "E2E smoke test", tick "I want to do this now" and click "Run". | The action runs and the dialog closes. |
-| 12 | Click "Leave" in the banner. | The step-up card "Confirm it is you" is shown again. |
+| 1 | Open /operator. | The amber bar reads "IronGate platform support …" and the "Platform support sign-in" form is shown. |
+| 2 | Enter the operator's e-mail and the password not-the-password, click "Sign in". | An error reads "Wrong e-mail address or password." |
+| 3 | Enter the right password and click "Sign in". | The platform overview opens; the amber bar shows the operator's name; "Scheduled jobs" lists db-keepalive. |
+| 4 | Click a company name in "Companies". | A dialog asks why; "Open company" is disabled until 3 characters are typed. |
+| 5 | Type the reason "E2E smoke test" and click "Open company". | The company opens on the Organisation tab. |
+| 6 | Click the "Users" tab. | The users table is shown (name and e-mail, status, assignments, department / team, contact, insights opt-in, last sign-in). |
+| 7 | Click "Re-run alerts"; type the reason "E2E smoke test", tick "I want to do this now" and click "Run". | "Run" is disabled until both are given; then the dialog closes and a message says it is done. |
+| 8 | Click "Sign out". | The sign-in form is shown. |
 
-**Notes:** One wrong password is entered on purpose; Do not enter wrong passwords in the step-up: 5 wrong attempts lock it for 15 minutes.
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
-*Automated:* `tests/e2e/platform-operator.spec.ts › Platform support panel › the operator steps up, opens a company with a reason, sees the banner and leaves`
+*Automated:* `tests/e2e/platform-operator.spec.ts › Platform support panel › the operator signs in at /operator, opens a company with a reason, runs an action and signs out`
 
 ### TC-ORG-055: The platform support panel works at 390 px phone width without sideways scrolling
 
@@ -8163,47 +8149,46 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
-- Browser window set to 390 x 844 pixels (DevTools device toolbar, e.g. a 390 px wide phone).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Operator: admin@irongate.com / demo123
-- Reason: E2E phone check
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Set the viewport to 390 x 844 in DevTools device mode. | The app is shown in phone layout. |
-| 2 | Sign in as Super admin (admin@irongate.com / demo123) and open /operator. | The "Platform support" page shows the amber banner "Platform support mode — your access is recorded in this company's Activity log." and the card "Confirm it is you". |
-| 3 | Enter password demo123 in "Password" of "Confirm it is you" and click "Enter platform support". | The platform overview opens: tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 4 | Try to scroll the page sideways. | The page does not scroll sideways; wide tables scroll inside their own box only. |
-| 5 | Click the first company name, enter the reason "E2E phone check" and click "Open company". | The company view with the "Organisation" section opens. |
-| 6 | Try to scroll the page sideways again. | The page does not scroll sideways. |
+| 1 | Set the browser window (or DevTools device toolbar) to 390 × 844. | The page is narrow. |
+| 2 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 3 | Scroll the overview sideways. | The page does not scroll sideways (wide tables scroll inside their cards). |
+| 4 | Open a company with a reason. | The Organisation tab shows without sideways scrolling of the page. |
 
-**Notes:** Do not enter wrong passwords in the step-up: 5 wrong attempts lock it for 15 minutes.
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
 *Automated:* `tests/e2e/platform-operator.spec.ts › Platform support panel › works at 390 px without sideways scrolling`
 
-### TC-ORG-056: A software engineer has no Platform or User activity entry and /operator says it is not available
+### TC-ORG-056: Company users have no Platform entry and cannot sign in at /operator
 
-**Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F14.1, F4.1, F13.4
+**Type:** Negative · **Priority:** High · **Role:** Super admin · **Flow:** F14.1, F4.1, F13.4
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Software engineer: engineer@irongate.com / demo123
+- E-mail: admin@irongate.com
+- Password: demo123
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in page and sign in as Software engineer (engineer@irongate.com / demo123). | The Overview opens; the top bar shows the menu (burger) button. |
-| 2 | Click the menu (burger) button. | The navigation has neither "User activity" nor "Platform". |
-| 3 | Enter /operator in the address bar and press Enter. | The page says "This area is not available for your account." |
+| 1 | Sign in as Super admin (admin@irongate.com / demo123) and open the navigation. | "User activity" is listed; there is no "Platform" entry. |
+| 2 | Open /operator. | The "Platform support sign-in" form is shown (the company session does not count). |
+| 3 | Enter admin@irongate.com and demo123 and click "Sign in". | An error reads "Wrong e-mail address or password.": a company account cannot sign in to platform support. |
 
-*Automated:* `tests/e2e/platform-operator.spec.ts › Platform support panel › other roles have no Platform entry and /operator says it is not available`
+**Notes:** Platform operators and company users are kept apart: the same e-mail address cannot be both.
+
+*Automated:* `tests/e2e/platform-operator.spec.ts › Platform support panel › company users have no Platform entry and cannot sign in at /operator`
 
 ### TC-ORG-059: Refresh sample data now: started in the background on the hosted site, run directly on a local server
 
@@ -8212,25 +8197,72 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
-- admin@irongate.com is a platform operator (its e-mail is in the server setting PLATFORM_OPERATOR_EMAILS).
-- DEMO_REFRESH_ENABLED is not set to false.
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
 
 **Test data**
 
-- Operator: admin@irongate.com / demo123
-- Reason: Sample data is a day behind
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Super admin (admin@irongate.com / demo123), open /operator, enter password demo123 in "Confirm it is you" and click "Enter platform support". | The platform overview opens with the "Scheduled jobs" table and the button "Refresh sample data now" above it. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
 | 2 | Click "Refresh sample data now". | A dialog "Refresh sample data now" explains that it adds the missing recent days of sample data, never changes or deletes a row, never touches real data, and on the hosted site runs in the background for a few minutes. "Refresh now" is disabled. |
 | 3 | Enter the reason "Sample data is a day behind", tick "I want to do this now" and click "Refresh now". | Local server: the message "Sample data refreshed: <n> new rows." appears (n is 0 when the data is already current). Hosted (Netlify) site: within a second the message "Sample data refresh started. It runs in the background for a few minutes." appears. |
-| 4 | Look at the row "demo-refresh" in "Scheduled jobs" (reload the panel and step up again if needed). | Last run is now; Result OK; Summary ends with "(manual, platform support)" (hosted: "background job requested (202) (manual, platform support)"). |
-| 5 | Hosted site only: after a few minutes, reload the panel, step up and look at the row "demo-refresh-background". | A new run with Result OK and a summary "up to <today>: <n> new rows …". The overview of NovaTech then shows data as of today without "Last updated". |
 
-**Notes:** On Netlify the API function may not run as long as the refresh takes, so it only starts the background function (signed call, as the nightly 02:17 UTC run). The automated test mocks both answers; the API test platform-operator.test.ts OP-011 covers the signed call, a failed start (502, recorded as failed) and DEMO_REFRESH_ENABLED=false (409).
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
 *Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-07 "Refresh sample data now": started in the background on the hosted site, run directly elsewhere`
+
+### TC-ORG-060: Super admin: no Platform entry; /operator asks for a platform support account
+
+**Type:** Negative · **Priority:** High · **Role:** Super admin · **Flow:** F14.1
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123) and open the navigation. | There is no "Platform" entry. |
+| 2 | Open /operator. | The "Platform support sign-in" form is shown, not the platform overview. |
+
+**Notes:** Platform operators are separate accounts (platform_operators), never company users.
+
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-01 admin: no Platform entry; /operator asks for a platform support account`
+
+### TC-ORG-061: Every module of a company in detail: all developer rows, single pulse answers, module data
+
+**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.8
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
+- The sample company Northwind Payments (Sample data) is loaded (npm run seed:demo).
+
+**Test data**
+
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
+- Reason: UI test: full data views
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 2 | In "Companies", click Northwind Payments (Sample data), type the reason "UI test: full data views" and click "Open company". | The company opens on the Organisation tab. |
+| 3 | Click the "Data" tab. | "Developer metrics" lists every developer of the first team with the columns Developer, E-mail, Opted in (yes / no), PR merge, Review, Focus, Meetings, Switches, Happiness, Updated. |
+| 4 | Click the "Wellbeing pulse" tab. | The note reads "… every single answer with its comment, and who answered in each period. The app never stores which person gave which answer."; each team shows its answers (Workload, Focus, Support, Energy, Outlook, Comment) and who answered. |
+| 5 | Click the "Modules" tab. | One table per module (Test execution runs, Flaky tests, Technical debt, Pipeline runs, Performance metrics, …) with its row count and newest rows for the chosen team. |
+| 6 | Click the "Settings & targets" tab and look at a credential setting such as jira_api_token, if one is set. | Its value reads "set" (never the token itself). |
+
+**Notes:** Secrets are never shown: password, API key and token hashes, link tokens, the Slack webhook, integration credentials.
+
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-08 every module of a company in detail: all developer rows, single pulse answers, module data`
 
 ## Navigation and access control
 
@@ -8809,7 +8841,6 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 - App running at http://localhost:5173 with the API at http://localhost:3000 and the NovaTech demo data loaded
 - You are signed out (use a fresh private browser window)
-- admin@irongate.com is configured as platform operator (PLATFORM_OPERATOR_EMAILS), so the "Platform" entry is shown
 - Browser DevTools available
 
 **Test data**
@@ -8822,7 +8853,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Open DevTools (F12) on the Console tab and clear it before starting. | The Console is empty. |
 | 2 | Open http://localhost:5173, enter E-mail address admin@irongate.com and Password demo123, then click Sign in. | The Overview page opens: the top bar title reads "Overview" and the "Team performance" section lists team cards. |
 | 3 | Open the navigation and click, one after the other: Overview, Analytics, Compare teams, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports. | Each page opens and shows its content area (the top bar title changes to the page name). |
-| 4 | Continue with Users, Teams, Departments, Activity, User activity, Admin console, Manual metrics, Update frequency, Parameters, Ingestion log and Platform. | Each page opens and shows its content. |
+| 4 | Continue with Users, Teams, Departments, Activity, User activity, Admin console, Manual metrics, Update frequency, Parameters and Ingestion log. | Each page opens and shows its content. |
 | 5 | Check the DevTools Console. | The DevTools Console shows no red "Uncaught" error entries. |
 
 **Notes:** Tagged @smoke.

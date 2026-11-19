@@ -303,30 +303,41 @@ Code: [`server/lib/userActivity.ts`](../server/lib/userActivity.ts),
 
 ### Platform support (product owner only)
 
-The product owner can open a support panel at `/operator` that sees **every** company. It exists to
-debug problems in production. It is off unless `PLATFORM_OPERATOR_EMAILS` lists the owner's e-mail.
+IronGate platform support opens a panel at `/operator` that sees **every** company. It exists to
+debug problems in production. Platform operators are their own accounts (table `platform_operators`,
+migration `20261125000000_platform_operators.sql`), **never users of a company**: the same e-mail
+address cannot be both (database triggers; registering, adding or inviting an operator's address is
+refused). No active operator: the panel is off and every `/api/operator` route answers 404. Create or
+update one with `npm run operator:create -- --email you@example.com --name "Your Name"` (asks for the
+password; bcrypt cost 12, `$2b$12$…`) or an INSERT with a bcrypt hash.
 
-**Entering.** The owner is signed in normally, then enters the password again. This starts a
-30-minute support session (a separate token kept only in the browser's memory; a reload asks again).
-Five wrong passwords lock the step for 15 minutes. Accounts that only use single sign-on must set a
-password first. `PLATFORM_OPERATOR_ALLOWED_IPS` can limit it to known addresses (on Netlify the client
-address comes from Netlify's own `x-nf-client-connection-ip` header, elsewhere from the trusted proxy). **Leave** ends the
-session at once.
+**Signing in.** `/operator` is outside the company app, with its own sign-in (e-mail and password;
+company accounts cannot sign in there and the company sign-in page does not mention it). A session
+lasts 8 hours (httpOnly cookie `irongate_operator`, its own token audience: it is never accepted as a
+company session and a company session is never accepted here). Five wrong passwords in a row lock
+the account for 15 minutes; sign-ins are also rate limited per IP. `PLATFORM_OPERATOR_ALLOWED_IPS`
+can limit it to known addresses (on Netlify the client address comes from Netlify's own
+`x-nf-client-connection-ip` header, elsewhere from the trusted proxy). **Sign out** ends the session
+at once.
 
 **What it shows.** Overview: every company with users, teams, last data received, share of stale
 metric values, open alerts, errors in the last 24 hours, last activity and a demo / sample flag;
 the last run of each scheduled job; database size and the main tables. Per company: organisation
 (departments, teams, members and their roles), users (last sign-in, status, lockouts, invitations
 with status, API keys by name and prefix), settings and targets (with history), data per team
-(metric values, KPI snapshots with staleness and sample / real source, ingestion log), alerts and
-actions, wellbeing pulse (cadence, send log, response rates and the same aggregates the team sees),
-the Activity log, the user activity log and server errors. Errors can be searched by request id
-across all companies.
+(metric values, KPI snapshots with staleness and sample / real source, ingestion log, every person's
+developer metrics with whether they opted in), every analytics module's stored rows per team
+(Modules: test runs, flaky tests, technical debt, pipelines, performance, sprints, developer
+productivity, business metrics, company snapshots), alerts and actions, wellbeing pulse (cadence,
+send log, response rates, the aggregates the team sees, every single answer with its comment, and who
+answered in each period; the app never stores which person gave which answer), user details
+(department, team, phone, time zone, opt-ins), invitations with who invited, the Activity log, the
+user activity log and server errors. Errors can be searched by request id across all companies.
+Customer access by IronGate support is covered by the customer's written contract.
 
-**What stays protected.** Password hashes, API key hashes, the Slack webhook and secret settings
-(shown masked), invitation and survey link tokens, single survey answers and comments (only the
-aggregates with at least 3 responses), and developer metrics of people who have not opted in (the
-same opt-in rule as everywhere else).
+**Never shown (secrets, not customer data).** Password hashes, API key hashes, invitation, survey
+link and password reset tokens, session tokens, the Slack webhook (only whether one is set) and
+integration credentials such as API tokens (shown as "set" / "not set").
 
 **Repair actions.** Refresh sample data now (on Netlify it starts the background refresh function and
 reports "started", the result appears under `demo-refresh-background` in Scheduled jobs; elsewhere it runs
@@ -352,8 +363,18 @@ Code: [`server/routes/operator.ts`](../server/routes/operator.ts),
 
 `DEMO_MODE=true` shows demo-account chips on the login page (admin, manager, lead, engineer, viewer of
 the IronGate demo company). Default: on for local development, off when `NODE_ENV=production` or on
-Netlify ([`server/routes/authSso.ts`](../server/routes/authSso.ts), `demoModeEnabled`). Demo mode is
-independent of sample data (section 4.7).
+Netlify ([`server/routes/authSso.ts`](../server/routes/authSso.ts), `demoModeEnabled`). Only demo
+accounts that exist and are active are offered (none on a database without the demo data). The same
+setting decides whether **Load sample data** also creates the separate fictional sample company with
+its shared accounts: in production / on Netlify it only fills the signed-in company's own teams.
+Demo mode is independent of sample data (section 4.7).
+
+### Production reseed
+
+`scripts/reseed/build.sh <out> [day]` builds `000_wipe.sql` (empties every public table except
+`platform_operators`), `001.sql` … (one showcase company, Meridian Financial Technologies, INSERTs
+only, each file standalone, password hashes as per-role placeholders) and `operator.sql` (the
+platform support account, hash placeholder). See [`scripts/reseed/README.md`](../scripts/reseed/README.md).
 
 ---
 
@@ -1323,7 +1344,6 @@ Only names and purposes are listed here. Never commit real values; `.env` is git
 | `ALERTS_CRON` | no | `false` turns the local alert / digest schedule off (for example on a second instance) |
 | `ALERTS_EVALUATE_CRON`, `DIGEST_CRON` | no | Local schedules in UTC (defaults `15 * * * *` hourly and `0 7 * * 1` Monday 07:00) |
 | `NOTIFY_SLACK_ALLOW_LOCAL` | tests only | Accepts a local `http://127.0.0.1:<port>/` webhook; ignored in production |
-| `PLATFORM_OPERATOR_EMAILS` | no | Comma-separated e-mails that may open the platform support panel (`/operator`). Unset or empty: off (all `/api/operator` routes answer 404) |
 | `PLATFORM_OPERATOR_ALLOWED_IPS` | no | Optional comma-separated client IPs allowed to use the platform support panel |
 | `LOG_CLEANUP_CRON` | no | Long-running server: retention of `server_errors` (30 days), `user_activity` and `job_runs` (90 days); default `7 3 * * *`, `off` turns it off. On Netlify `db-keepalive` does it |
 

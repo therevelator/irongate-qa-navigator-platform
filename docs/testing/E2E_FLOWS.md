@@ -5,8 +5,8 @@ cover the happy path and the negative cases. How to run them: [README.md](README
 
 Roles: **A** super admin (`admin@irongate.com`), **M** manager (`manager@`, department DevOps),
 **L** team lead (`lead@`, The Away Team), **E** software engineer (`engineer@`, Mavericks),
-**V** viewer (`viewer@`, The Away Team), **P** platform operator (an e-mail in
-`PLATFORM_OPERATOR_EMAILS`; `admin@` in tests), **–** signed out. "All" = A M L E V.
+**V** viewer (`viewer@`, The Away Team), **P** platform operator (a `platform_operators`
+account, never a company user; `tests/e2e/support/operator.ts` in tests), **–** signed out. "All" = A M L E V.
 
 Test references: `ID` is the id at the start of a test title in `tests/e2e/<area>/*.spec.ts` (search for
 it, or run `--grep "ID "`); `legacy:<file> "<title>"` is one of the specs that existed before this
@@ -36,10 +36,10 @@ Derived from the code, then checked against the documentation:
 
 | | Count |
 |---|---|
-| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **148** |
-| Flows with a happy-path UI test | **130** of the 133 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
-| Flows with at least one negative UI test | **106** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
-| UI tests (Playwright, `chromium` project) | **347** in 39 files: 73 existing (kept, tagged) + 274 new; no `test.fail` left |
+| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **149** |
+| Flows with a happy-path UI test | **131** of the 134 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
+| Flows with at least one negative UI test | **107** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
+| UI tests (Playwright, `chromium` project) | **349** in 39 files: 73 existing (kept, tagged) + 276 new; no `test.fail` left |
 | …tagged `@smoke` / `@negative` / `@a11y` / `@readonly` | 40 / 121 / 13 / 4 |
 | Other tests (passing) | API 393 and database 29 (Jest); the golden baseline is untouched |
 
@@ -238,13 +238,14 @@ Derived from the code, then checked against the documentation:
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
-| F14.1 | Step up with the password (30-minute session in memory) | P | All other users | legacy:platform-operator | legacy:platform-operator (wrong password), OPS-01 (M L E V: not available), OPS-02 reload asks again |
+| F14.1 | Own sign-in at /operator (8-hour session, survives a reload) | P | Every company user | legacy:platform-operator, OPS-02 | legacy:platform-operator (wrong password; a company admin's credentials refused), OPS-01 (A M L E V: no entry, sign-in asked) |
 | F14.2 | Overview tabs: overview, error search by request id, access log | P | — | OPS-03 | OPS-03 unknown request id |
 | F14.3 | Open a company with a reason (≥ 3 characters), sections | P | — | legacy:platform-operator, OPS-06 | OPS-04 short reason, Cancel |
 | F14.4 | Repair actions (reason + confirmation), errors with request id | P | — | legacy:platform-operator | OPS-05 failed action shows the request id |
-| F14.5 | Leave | P | — | legacy:platform-operator | — |
+| F14.5 | Sign out | P | — | legacy:platform-operator, OPS-02 | — |
 | F14.6 | Phone layout | P | — | legacy:platform-operator "works at 390 px…" | — |
 | F14.7 | Refresh sample data now (started in the background on Netlify, run directly elsewhere) | P | — | OPS-07 | OPS-05 failed action; API `platform-operator.test.ts` OP-011 (failed start, off) |
+| F14.8 | Every module of a company in detail (all developer rows, single pulse answers and who answered, module rows); secrets never shown | P | — | OPS-08 | API `platform-operator.test.ts` OP-007 (no hash, token, webhook or credential) |
 
 ## 15. Accessibility
 
@@ -289,7 +290,7 @@ Derived from the code, then checked against the documentation:
 | Pulse reminders with delivered e-mails | Reminders count delivered e-mails; the log mailer delivers none | PUL-17 checks the button is off without delivery; PUL-18 stubs the delivered state and the reminder answer |
 | Sample data seeding (`ENABLE_SYNTHETIC_DATA=true`) | Off on test servers by design | DEMO-02 / DEMO-03 stub the status and the seed call |
 | Netlify functions (production API) | CI runs the Express server | Both mount the same `server/routes/*`; API tests run against Express |
-| `PLATFORM_OPERATOR_ALLOWED_IPS` and the 5-attempt step-up lock | Would lock the operator for 15 minutes for every later test | `tests/api/platform-operator.test.ts` |
+| `PLATFORM_OPERATOR_ALLOWED_IPS`, the 5-attempt operator lockout and the sign-in rate limit | Would lock the operator for 15 minutes for every later test | `tests/api/platform-operator.test.ts` OP-003b, OP-006, OP-013 |
 | Full screen (F key in TV mode), clipboard of other browsers | Headless Chromium has no real full screen | TV-02 covers the other keys; TEAM-03 grants clipboard permission |
 | PDF content | Binary output | AN-05 checks the download |
 | Docker path of `npm run test:ui:local` | Not available in the container this suite was built in | The `TEST_DATABASE_URL` path is the same code after the database is up; `docker-compose.test.yml` is a plain `postgres:16` |
@@ -327,6 +328,9 @@ Fixed (each with a test):
 | FI-22 | The live site showed "No data" everywhere once the newest data was over a day old (the nightly sample-data refresh had not run yet): every daily input (test coverage, code quality) was then older than its update interval, so the QA score left it out and the overview ("No KPI snapshots recorded", "Insufficient data"), every team card, team detail, TV mode, compare and team rankings showed no score although the snapshots were there | Once the company's newest value (its data clock) is over a day old, the latest snapshots are read as of the end of that value's day (`latestReference` in `server/lib/kpiEvaluation.ts`), flagged `dataOutdated` with each team's `lastUpdated`; the screens say "Last updated <date>" (`LastUpdatedNote`). Nothing is invented; unchanged while the company's data is current (values older than their interval are still stale, also for a single team that stopped sending) | LATEST-01; API `latest-data.test.ts` LD-001 … 003 |
 | FI-23 | On Netlify almost no user activity was recorded (sign-ins, page views and data requests missing; only some polled unread-count requests): the function waited at most 300 ms for the background writes, less than a round trip to the database in another region, and the instance is frozen as soon as the handler resolves; batches were also chained, so a write hanging on a connection dropped while frozen blocked every later batch | The handler awaits this invocation's writes (user activity and server errors) before it returns (cap 2.5 s), each batch is written on its own, writes left over from earlier invocations are not awaited | API `netlify-background-writes.test.ts` NBW-001 … 003 (runs the Netlify handler) |
 | FI-24 | The operator's "Re-run demo refresh" ran the whole refresh inside the API function, longer than a Netlify function may run | "Refresh sample data now": on Netlify it starts the background function (signed token, as the nightly scheduler) and reports "started"; elsewhere it runs directly; recorded in `job_runs` | OPS-07; API `platform-operator.test.ts` OP-011 |
+| FI-25 | The platform operator was a company user (an e-mail in `PLATFORM_OPERATOR_EMAILS` who re-entered the password): a company account held access to every company | Independent operator accounts (`platform_operators`, migration `20261125000000_platform_operators.sql`), never company users (triggers; register / add / invite refuse their addresses), own sign-in at /operator (8-hour httpOnly cookie, own token audience, lockout, rate limit), `npm run operator:create` | legacy:platform-operator, OPS-01, OPS-02; API `platform-operator.test.ts` OP-001 … 006, OP-013 |
+| FI-26 | Support could not see the data a customer reported a problem with (single pulse answers, developer metrics of people who had not opted in, module data) | Full view of customer data; secrets (hashes, tokens, webhook, credentials) still never returned | OPS-08; API OP-007, OP-012 |
+| FI-27 | On a database without the demo company the sign-in page still offered demo-account chips, and Load sample data on the hosted site created a separate company with shared, publicly known accounts | Chips only for demo accounts that exist and are active (and never on Netlify unless `DEMO_MODE=true`); on the hosted site Load sample data fills the own company only | AUTH (demo chips) unchanged locally; checked against the wiped database (scripts/reseed) |
 | KA11Y-01 … 04 | Colour contrast below WCAG AA: greyed values on Compare (`text-slate-400`, and `opacity-80` on stale cells), role avatars, department line and small labels on Users, stale KPI values on Team detail, navigation group headings and the brand mark in dark mode | Greyed text `text-slate-500` / `dark:text-slate-400` everywhere it was `text-slate-400 dark:text-slate-500`, no opacity on stale cells, avatars on 700 shades, brand mark `dark:bg-brand-600` | A11Y-04, A11Y-08, A11Y-11, A11Y-12 (no known violations left), A11Y-13 (the same pages in dark mode) |
 
 Recorded (larger, or a product decision; tests marked `test.fail` where a behaviour is asserted):
