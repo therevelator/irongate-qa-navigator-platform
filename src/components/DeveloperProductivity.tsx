@@ -21,6 +21,7 @@ import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { useAuth } from '../contexts/AuthContext';
 import ExportCsvButton from './ExportCsvButton';
 import { SuppressedNote, type PrivacyInfo } from './PrivacyNote';
+import { loadErrorMessage, NETWORK_ERROR } from '../lib/loadError';
 
 interface DeveloperProductivityProps {
   onBack?: () => void;
@@ -90,19 +91,24 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
   const [aiLoading, setAiLoading] = useState(false);
   const [history, setHistory] = useState<DdpsHistory | null>(null);
   const [historyLoading, setHistoryLoading] = useState(true);
+  // A failed request is an error with the request id, never "No data recorded" (FI-06).
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
 
   // Members + recorded metrics per team. Members without a metrics row are excluded (never zero-filled).
   useEffect(() => {
-    const fetchTeamDevelopers = async (team: TeamRef): Promise<{ rows: DevRow[]; summary: TeamSummary | null }> => {
+    const fetchTeamDevelopers = async (team: TeamRef): Promise<{ rows: DevRow[]; summary: TeamSummary | null; error: string | null }> => {
       try {
         const [teamRes, metricsRes] = await Promise.all([
           fetch(`${API_URL}/teams/${team.id}`, { credentials: 'include' }),
           fetch(`${API_URL}/analytics/developer-metrics?teamId=${team.id}`, { credentials: 'include' }),
         ]);
-        const members: any[] = teamRes.ok ? (await teamRes.json()).team?.members || [] : [];
+        const failed = !metricsRes.ok ? metricsRes : !teamRes.ok ? teamRes : null;
+        if (failed) return { rows: [], summary: null, error: await loadErrorMessage(failed, 'the developer metrics') };
+        const members: any[] = (await teamRes.json()).team?.members || [];
         const lookup: Record<string, any> = {};
         let summary: TeamSummary | null = null;
-        if (metricsRes.ok) {
+        {
           const body = await metricsRes.json();
           (body.developers || []).forEach((m: any) => { if (m.developer_id) lookup[String(m.developer_id)] = m; });
           summary = body.summary ?? null;
@@ -136,10 +142,10 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
             burnout: calculateBurnoutRisk(d),
           }];
         });
-        return { rows, summary };
+        return { rows, summary, error: null };
       } catch (error) {
         console.error(`Error fetching developers for team ${team.name}`, error);
-        return { rows: [], summary: null };
+        return { rows: [], summary: null, error: NETWORK_ERROR('the developer metrics') };
       }
     };
 
@@ -147,10 +153,11 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
     (async () => {
       setLoading(true);
       const team: TeamRef = { id: teamId, name: scope.team?.id === teamId ? scope.team.name : 'Selected team' };
-      const { rows, summary } = await fetchTeamDevelopers(team);
+      const { rows, summary, error } = await fetchTeamDevelopers(team);
       if (!cancelled) {
         setDevelopers(rows);
         setTeamSummary(summary);
+        setLoadError(error);
         setLoading(false);
       }
     })();
@@ -204,10 +211,16 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
     setHistoryLoading(true);
     const params = new URLSearchParams({ range: '6m', teamId: selectedTeam });
     if (selectedDeveloperId !== 'all') params.set('developerId', selectedDeveloperId);
+    setHistoryError(null);
     fetch(`${API_URL}/analytics/ddps-history?${params}`, { credentials: 'include' })
-      .then(r => (r.ok ? r.json() : null))
+      .then(async r => {
+        if (r.ok) return r.json();
+        const msg = await loadErrorMessage(r, 'the DDPS snapshots');
+        if (!cancelled) setHistoryError(msg);
+        return null;
+      })
       .then(d => { if (!cancelled) setHistory(d); })
-      .catch(() => { if (!cancelled) setHistory(null); })
+      .catch(() => { if (!cancelled) { setHistory(null); setHistoryError(NETWORK_ERROR('the DDPS snapshots')); } })
       .finally(() => { if (!cancelled) setHistoryLoading(false); });
     return () => { cancelled = true; };
   }, [selectedTeam, selectedDeveloperId]);
@@ -251,6 +264,12 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
         }
       />
 
+      {loadError ? (
+        <div role="alert" data-testid="load-error" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          {loadError}
+        </div>
+      ) : (
+      <>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <StatTile label={single ? 'DDPS' : 'Team avg DDPS'} value={avgDDPS == null ? '—' : Math.round(avgDDPS)} unit={avgDDPS == null ? undefined : '/100'} tone={suppressed ? 'neutral' : band.tone}
           caption={loading ? 'Loading…' : suppressed ? privacyCaption : avgDDPS == null ? 'No data recorded' : `${band.label} · ${single ? scopeLabel : `${contributors} developers`}`} />
@@ -297,6 +316,8 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
           />
           {historyLoading ? (
             <p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p>
+          ) : historyError ? (
+            <p role="alert" data-testid="history-load-error" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{historyError}</p>
           ) : history?.aggregatePrivacy?.suppressed ? (
             <div className="flex h-72 items-center justify-center"><SuppressedNote className="text-sm" testId="ddps-history-suppressed" /></div>
           ) : historyData.length === 0 ? (
@@ -398,6 +419,8 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
           </div>
         )}
       </Card>
+      </>
+      )}
 
       {(
         <Card>
