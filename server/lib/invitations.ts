@@ -42,6 +42,29 @@ export class InvitationError extends Error {
   constructor(public status: number, message: string, public code?: string) { super(message); }
 }
 
+/**
+ * Re-send: a new token replaces the old one (the previous link stops working), the expiry starts
+ * again, and the change is recorded in the change history. Shared by the Users page
+ * (POST /api/admin/invitations/:id/resend) and the platform operator panel. Returns the new token
+ * for the e-mail; null when the invitation was accepted or revoked meanwhile.
+ */
+export async function reissueInvitation(args: { companyId: string; invitation: { id: string; email: string; department_id: string | null }; actorId: string | null; summary?: string }): Promise<{ token: string; expiresAt: Date } | null> {
+  const { token, hash } = newToken();
+  const expiresAt = new Date(Date.now() + INVITE_TTL_HOURS() * 3600 * 1000);
+  const updated = await queryOne<any>(
+    `UPDATE invitations SET token_hash = ?, expires_at = ?, last_sent_at = now(), send_count = send_count + 1
+      WHERE id = ? AND company_id = ? AND accepted_at IS NULL AND revoked_at IS NULL RETURNING id`,
+    [hash, expiresAt.toISOString(), args.invitation.id, args.companyId]
+  );
+  if (!updated) return null;
+  await recordAudit({
+    companyId: args.companyId, actorId: args.actorId, action: 'invitation.resend', entityType: 'invitation', entityId: args.invitation.id,
+    summary: args.summary ?? `Re-sent the invitation to ${args.invitation.email} (new link; the previous one no longer works)`, after: { expiresAt },
+    departmentIds: [args.invitation.department_id], subjectIds: [args.invitation.id],
+  });
+  return { token, expiresAt };
+}
+
 /** The invitation behind a token (any status), with names for the accept page. */
 export async function findByToken(token: unknown) {
   if (typeof token !== 'string' || !token.startsWith('igi_') || token.length > 200) return null;

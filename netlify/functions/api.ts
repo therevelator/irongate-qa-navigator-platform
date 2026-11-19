@@ -25,13 +25,21 @@ import pulseRoutes from '../../server/routes/pulse';
 import alertsRoutes from '../../server/routes/alerts';
 import notificationsRoutes from '../../server/routes/notifications';
 import actionsRoutes from '../../server/routes/actions';
+import activityRoutes from '../../server/routes/activity';
+import operatorRoutes from '../../server/routes/operator';
+import { requestContext } from '../../server/lib/requestContext';
+import '../../server/lib/userActivity'; // user activity log (request hook)
 import { apiErrorHandler } from '../../server/middleware/errorHandler';
+import { flushBackgroundWrites } from '../../server/lib/opsLog';
 
 const app = express();
 
 // Netlify runs functions behind its edge proxy; trust it so the rate limiter
 // keys on the real client IP (from x-forwarded-for) rather than the proxy.
 app.set('trust proxy', true);
+
+// Request id, client IP and route pattern for the logs (server/lib/requestContext.ts): first.
+app.use(requestContext);
 
 // Allowed origins for CORS (production + local dev)
 const allowedOrigins = [
@@ -55,7 +63,8 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Operator-Token, X-Operator-Reason');
+    res.header('Access-Control-Expose-Headers', 'X-Request-Id');
     res.header('Vary', 'Origin');
   }
   
@@ -102,6 +111,8 @@ router.use('/pulse', pulseRoutes);
 router.use('/alerts', alertsRoutes);
 router.use('/notifications', notificationsRoutes);
 router.use('/actions', actionsRoutes);
+router.use('/activity', activityRoutes);
+router.use('/operator', operatorRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix
@@ -124,4 +135,8 @@ testConnection().catch(err => {
 });
 
 // Export as serverless function
-export const handler = serverless(app);
+// Before the instance may be frozen, wait briefly (at most 300 ms) for the background log writes
+// of this request (user activity, server errors): server/lib/opsLog.ts.
+export const handler = serverless(app, {
+  response: async () => { await flushBackgroundWrites(300); },
+});

@@ -11,7 +11,7 @@ import {
   AssignmentError, type ScopeInfo,
 } from '../lib/assignments';
 import { auditedUserChange, recordAudit, undoEntry, canUndoEntry, isReversible, REVERSIBLE_ACTIONS, UndoError, type AuditEntry } from '../lib/audit';
-import { newToken, sendInvitationEmail, statusSql, INVITE_TTL_HOURS, EMAIL_RE, ROLE_NAMES } from '../lib/invitations';
+import { newToken, sendInvitationEmail, statusSql, INVITE_TTL_HOURS, EMAIL_RE, ROLE_NAMES, reissueInvitation } from '../lib/invitations';
 
 /**
  * Organisation administration (mounted inside /api/admin):
@@ -362,20 +362,10 @@ router.post('/invitations/:id/resend', authenticateToken, async (req: any, res) 
     const inv = await loadInvitation(req, res);
     if (!inv) return;
     if (inv.status === 'accepted' || inv.status === 'revoked') return res.status(409).json({ error: `This invitation was ${inv.status}; create a new one instead.` });
-    const { token, hash } = newToken();
-    const expiresAt = new Date(Date.now() + INVITE_TTL_HOURS() * 3600 * 1000);
-    // The old link stops working: its token hash is replaced.
-    const updated = await queryOne<any>(
-      `UPDATE invitations SET token_hash = ?, expires_at = ?, last_sent_at = now(), send_count = send_count + 1
-        WHERE id = ? AND accepted_at IS NULL AND revoked_at IS NULL RETURNING id`,
-      [hash, expiresAt.toISOString(), inv.id]
-    );
-    if (!updated) return res.status(409).json({ error: 'This invitation was used or revoked meanwhile.' });
-    await recordAudit({
-      companyId: req.user.companyId, actorId: req.user.id, action: 'invitation.resend', entityType: 'invitation', entityId: inv.id,
-      summary: `Re-sent the invitation to ${inv.email} (new link; the previous one no longer works)`, after: { expiresAt },
-      departmentIds: [inv.department_id], subjectIds: [inv.id],
-    });
+    // The old link stops working: its token hash is replaced (server/lib/invitations.ts).
+    const issued = await reissueInvitation({ companyId: req.user.companyId, invitation: inv, actorId: req.user.id });
+    if (!issued) return res.status(409).json({ error: 'This invitation was used or revoked meanwhile.' });
+    const { token, expiresAt } = issued;
     const out = await deliver(req, inv, token, expiresAt);
     const invitation = await queryOne<any>(`SELECT ${INVITATION_COLUMNS} ${INVITATION_FROM} WHERE i.id = ?`, [inv.id]);
     res.json({ invitation, ...out });

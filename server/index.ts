@@ -33,6 +33,11 @@ import './jobs/intervalSync'; // Interval-based metric sync
 import './jobs/analyticsSync'; // Analytics data sync
 import './jobs/alertsCron'; // Alert evaluation, notification outbox, weekly digest
 import './jobs/pulseCron'; // Automatic wellbeing pulse e-mail per team cadence
+import './jobs/cleanupCron'; // Retention of server_errors / user_activity / job_runs
+import activityRoutes from './routes/activity';
+import operatorRoutes from './routes/operator';
+import { requestContext } from './lib/requestContext';
+import './lib/userActivity'; // user activity log (request hook)
 import { apiErrorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -54,6 +59,9 @@ jobEvents.on('job-notification', (payload) => {
     ...payload,
   });
 });
+
+// Request id, client IP and route pattern for the logs (server/lib/requestContext.ts): first.
+app.use(requestContext);
 
 // Middleware
 const allowedOrigins = [
@@ -82,7 +90,8 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', origin);
     res.header('Access-Control-Allow-Credentials', 'true');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Request-Id, X-Operator-Token, X-Operator-Reason');
+    res.header('Access-Control-Expose-Headers', 'X-Request-Id');
     res.header('Vary', 'Origin');
   }
   
@@ -126,6 +135,8 @@ app.use('/api/pulse', pulseRoutes);
 app.use('/api/alerts', alertsRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/actions', actionsRoutes);
+app.use('/api/activity', activityRoutes);
+app.use('/api/operator', operatorRoutes);
 
 // Health check
 app.get('/health', (req, res) => {
