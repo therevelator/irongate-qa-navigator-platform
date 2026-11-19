@@ -756,8 +756,16 @@ developer metrics of people who have not opted in. No impersonation, no SQL, no 
 npx tsc --noEmit -p tsconfig.app.json      # frontend types
 npx tsc --noEmit -p tsconfig.server.json   # API types
 npm run test:api                           # API tests (need the API running on :3000)
-npm run test:e2e                           # Playwright role tests (need API + app running)
+npm run test:ui:local                      # the whole UI suite on your computer, one command (below)
+npm run test:ui:local:smoke                # its @smoke subset (about a minute)
 ```
+
+**UI tests (Playwright)**: every user flow per role with its negative cases, accessibility checks
+and phone layouts. `npm run test:ui:local` prepares its own local test database (Docker, or a local
+Postgres via `TEST_DATABASE_URL` in `.env.test`; never your `.env`, never a hosted database), starts the
+API and the app, runs the suite and stops everything again. First time: `npx playwright install --with-deps chromium`.
+How to run subsets, read the report and add tests: [docs/testing/README.md](docs/testing/README.md);
+every flow and the tests that cover it: [docs/testing/E2E_FLOWS.md](docs/testing/E2E_FLOWS.md).
 
 **CI** (`.github/workflows/ci.yml`, GitHub Actions tab) runs on every push to any branch, on
 every pull request and on demand, in three jobs:
@@ -767,8 +775,12 @@ every pull request and on demand, in three jobs:
   (initial schema, snapshot, later migrations in timestamp order, `seed:demo`,
   `seed:demo -- --fill-existing`), the API started by `scripts/ci/start-services.sh`, then the
   jest API and database suites;
-- `e2e`: the same database and API plus the Vite app, then all Playwright specs (HTML report
-  uploaded as an artifact).
+- `e2e`: the same database and API plus the Vite app, then the `@smoke` Playwright subset as a fast
+  gate (HTML report uploaded as an artifact).
+
+**UI tests** (`.github/workflows/ui-tests.yml`) runs the full Playwright suite on pushes to `main`,
+pull requests, nightly and on demand (subset: all, smoke, negative, a11y or a grep string), in four
+shards merged into one HTML report artifact (`ui-tests-report`).
 
 The same scripts work locally against an empty local database:
 `DATABASE_URL=postgres://…@127.0.0.1:5432/irongate_ci scripts/ci/prepare-db.sh`.

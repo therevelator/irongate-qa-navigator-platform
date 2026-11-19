@@ -1322,7 +1322,7 @@ npx tsc --noEmit -p tsconfig.app.json      # frontend types
 npx tsc --noEmit -p tsconfig.server.json   # API types
 npm run test:api                           # API tests (API running on :3000)
 npm run test:db                            # database tests
-npm run test:e2e                           # Playwright role tests (API and app running)
+npm run test:ui:local                      # Playwright UI suite with its own local test database and servers
 ```
 
 API suites cover the role matrix, analytics scope, ingestion, targets, audit, invitations, SSO, mailer, privacy and pulse, TV mode, compare /
@@ -1330,8 +1330,10 @@ views / onboarding, security and "golden" outputs (`tests/api/golden.test.ts` fa
 the schema, the QA score trigger against `computeQaScore` for every stale combination, `metric_values` derivation and the pulse schema.
 
 **CI** (`.github/workflows/ci.yml`, GitHub Actions) runs on every push, pull request and on demand: `quality` (typechecks, ESLint report,
-build), `api-and-db` (Postgres 16 prepared like production by `scripts/ci/prepare-db.sh`, demo seed, API and database suites) and `e2e` (all
-Playwright specs, HTML report as an artifact).
+build), `api-and-db` (Postgres 16 prepared like production by `scripts/ci/prepare-db.sh`, demo seed, API and database suites) and `e2e` (the
+`@smoke` Playwright subset, HTML report as an artifact). The **UI tests** workflow runs the whole Playwright suite (every user flow per role,
+negative cases, accessibility, phone layouts) in four shards on pull requests, `main`, nightly and on demand. Details:
+[docs/testing/README.md](testing/README.md); flows and their tests: [docs/testing/E2E_FLOWS.md](testing/E2E_FLOWS.md).
 
 ---
 
