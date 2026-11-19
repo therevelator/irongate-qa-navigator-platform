@@ -26,12 +26,13 @@ async function db(): Promise<Client> {
   return client;
 }
 
-async function signIn(browser: Browser, email: string) {
+async function signIn(browser: Browser, email: string, keepSignedIn = false) {
   const ctx = await browser.newContext();
   const page = await ctx.newPage();
   await page.goto('http://localhost:5173/');
   await page.fill('input[type="email"]', email);
   await page.fill('input[type="password"]', 'demo123');
+  if (keepSignedIn) await page.getByLabel('Keep me signed in').check();
   await page.click('button[type="submit"]');
   await expect(page.locator('[data-testid="dashboard"]')).toBeVisible({ timeout: 30000 });
   return { ctx, page };
@@ -80,7 +81,8 @@ test.describe('Sign-in lifetime and signing out other devices', { tag: ['@area:a
     await expect(page.locator('[data-testid="session-lifetime-current"]')).toContainText('Current: 1 hour.');
     await expect(page.locator('[data-testid="session-lifetime-current"]')).toContainText('Shortening it signs out anyone signed in for longer than the new limit.');
 
-    const { ctx, page: again } = await signIn(browser, 'admin@irongate.com');
+    // "Keep me signed in": the cookie lasts the company lifetime (unticked it is a browser-session cookie).
+    const { ctx, page: again } = await signIn(browser, 'admin@irongate.com', true);
     const cookie = (await ctx.cookies()).find((k) => k.name === 'irongate_token')!;
     const hoursLeft = (cookie.expires * 1000 - Date.now()) / 3600_000;
     expect(hoursLeft).toBeGreaterThan(0.9);

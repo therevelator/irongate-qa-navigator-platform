@@ -144,7 +144,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         setAuthState({ user: mappedUser, isAuthenticated: true, isLoading: false, error: null });
       } else {
         const ended = response.headers.get(SESSION_ENDED_HEADER);
-        if (ended) { keepNotice(ended); setSessionNotice(NOTICE[ended] ?? NOTICE.session_ended); }
+        // This browser was signed in (the cached user is removed only by signing out) but the
+        // cookie is gone: the server ended the session on a request whose answer the page never
+        // read (for example one cut off by a reload), or the browser dropped the cookie. Say so
+        // instead of showing the plain sign-in screen.
+        const hadSession = localStorage.getItem('irongate_user') !== null;
+        const code = ended ?? (hadSession ? 'session_ended' : null);
+        if (code) { keepNotice(code); setSessionNotice(NOTICE[code] ?? NOTICE.session_ended); }
         // Session invalid or expired
         localStorage.removeItem('irongate_user');
         setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
