@@ -103,6 +103,15 @@ router.post('/register', authLimiter, async (req, res) => {
       });
     }
 
+    // One organisation per e-mail domain (companies_domain is unique): say so instead of failing
+    // with a 500 on the insert.
+    const domainTaken = await queryOne<any>('SELECT id FROM companies WHERE LOWER(domain) = LOWER(?)', [emailDomain]);
+    if (domainTaken) {
+      return res.status(409).json({
+        error: `An organisation already uses the e-mail domain ${emailDomain}. Ask its administrator to invite you.`
+      });
+    }
+
     const companyId = generateCompanyId();
     await query(
       `INSERT INTO companies (id, name, domain, is_active) VALUES (?, ?, ?, true)`,
