@@ -35,6 +35,7 @@ runs:
         JWT_SECRET=${JWT_SECRET}
         PORT=3000
         NOTIFY_SLACK_ALLOW_LOCAL=true
+        PLATFORM_OPERATOR_EMAILS=admin@irongate.com
         ENV
 
     - name: Prepare database
