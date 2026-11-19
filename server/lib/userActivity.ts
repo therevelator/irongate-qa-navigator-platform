@@ -154,7 +154,10 @@ async function insertRows(rows: ActivityRow[]): Promise<void> {
           LIMIT 1
        ) u ON TRUE
       WHERE COALESCE(v.company_id, k.company_id, u.company_id) IS NOT NULL
-        AND (v.company_id IS NULL OR u.company_id IS NULL OR v.company_id = u.company_id)`,
+        AND (v.company_id IS NULL OR u.company_id IS NULL OR v.company_id = u.company_id)
+        -- A row for an organisation deleted while it waited in the buffer would break the foreign
+        -- key and lose every other row of the batch with it: drop just that row.
+        AND EXISTS (SELECT 1 FROM companies c WHERE c.id = COALESCE(v.company_id, k.company_id, u.company_id))`,
     [
       col('at'), col('companyId'), col('userId'), col('apiKeyId'), rows.map((r) => cut(r.email, 255)), col('category'), col('method'),
       rows.map((r) => cut(r.route, 200)), rows.map((r) => cut(r.screen, 60)), col('teamId'), col('entityType'), col('entityId'),

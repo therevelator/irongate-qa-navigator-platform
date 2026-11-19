@@ -308,6 +308,8 @@ Fixed (each with a test):
 | FI-10 | Configuration values such as a P95 response time of −5 were stored as typed | The page refuses negative and non-numeric values (the API still accepts any value: see FI-10b) | PAR-11 |
 | FI-19 | On a phone the Users toolbar (grid size, Export CSV, Invite, Add with password) was wider than the screen: the page scrolled sideways | The toolbar wraps | UX-11 (Users) |
 | FI-11 | The create / edit user and department forms had labels not linked to their fields (unnamed fields for screen readers) | `htmlFor` / `id` | ORG-01, ORG-20 … ORG-23 |
+| FI-20 | User activity rows are written in batches; a buffered row for an organisation deleted in the meantime broke the foreign key and lost every other row of the batch (a super admin then saw an empty User activity page) | That row alone is dropped | UAB-001 (database), ORG-32 |
+| FI-21 | The local runner kept the server logs and the captured e-mails under `test-results/`, which Playwright empties when a run starts: e-mailed links were lost and PWR-08 failed on a full local run | Logs and e-mails go to `logs/ui-tests/` | PWR-08 |
 
 Recorded (larger, or a product decision; tests marked `test.fail` where a behaviour is asserted):
 

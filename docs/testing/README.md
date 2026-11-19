@@ -6,6 +6,10 @@ migrations, demo seed). It covers every user flow, for every role that can do it
 cases around them. The list of flows and which test covers each one is
 [E2E_FLOWS.md](E2E_FLOWS.md).
 
+Every automated test also exists as a manual test case with step-by-step directions:
+[MANUAL_TEST_CASES.xlsx](MANUAL_TEST_CASES.xlsx) (columns for the actual result, status, tester and date,
+and a summary sheet) and the same cases as [MANUAL_TEST_CASES.md](MANUAL_TEST_CASES.md).
+
 - [Run it on your computer](#run-it-on-your-computer)
 - [Run a subset](#run-a-subset)
 - [Run the read-only checks against a deployed site](#run-the-read-only-checks-against-a-deployed-site)
@@ -53,13 +57,13 @@ What `npm run test:ui:local` does (`scripts/ui-tests/run-local.mjs`):
 4. starts the API and the web app with an explicit test environment. **Your `.env` is never read**
    (the servers get `DOTENV_CONFIG_PATH=.env.test` or an empty file), and `RESEND_API_KEY`,
    `SMTP_HOST` and `GROQ_API_KEY` are blanked, so no real e-mail, AI or Slack call leaves the machine.
-   E-mails are written to `test-results/ui-local-logs/mail.jsonl` so tests can follow their links;
+   E-mails are written to `logs/ui-tests/mail.jsonl` so tests can follow their links;
 5. runs Playwright and then stops the servers (and the Docker database).
 
 Options, after `--`: `--grep <text>`, `--workers <n>`, `--reuse-db` (skip preparing an already prepared
 database: faster re-runs), `--keep-db` (leave the Docker database running), `--trace` (record traces),
 and any Playwright argument such as a folder: `npm run test:ui:local -- tests/e2e/pulse`.
-Server logs: `test-results/ui-local-logs/`.
+Server logs: `logs/ui-tests/`.
 
 If something goes wrong: the message says what to do (Node version, Chromium missing, port busy, no
 database, non-local host). A test that failed keeps a screenshot (and with `--trace` a trace) in the

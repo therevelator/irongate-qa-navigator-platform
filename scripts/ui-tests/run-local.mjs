@@ -84,7 +84,9 @@ async function main() {
 
   await checkChromium();
   const testEnv = readEnvFile(path.join(ROOT, '.env.test'));
-  const logDir = path.join(ROOT, 'test-results', 'ui-local-logs');
+  // Not under test-results/: Playwright empties that folder when a run starts, which would delete
+  // the server logs and the captured e-mails the tests read.
+  const logDir = path.join(ROOT, 'logs', 'ui-tests');
   fs.mkdirSync(logDir, { recursive: true });
 
   step('Checking ports 3000 (API) and 5173 (web app)');
