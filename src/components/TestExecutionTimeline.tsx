@@ -7,6 +7,7 @@ import type { TestExecution } from '../data/advancedFeatures';
 import { API_URL } from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
 import ExportCsvButton from './ExportCsvButton';
+import { loadErrorMessage, NETWORK_ERROR } from '../lib/loadError';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, buttonClass, inputClass, cx } from './ui';
 import type { Tone } from './ui';
 
@@ -53,6 +54,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
   const [viewMode, setViewMode] = useState<'timeline' | 'list'>('timeline');
   const [executions, setExecutions] = useState<TestExecution[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [statusSort, setStatusSort] = useState<StatusFilter>('all');
   const [pageSize, setPageSize] = useState<10 | 20 | 50>(10);
   const [currentPage, setCurrentPage] = useState(1);
@@ -66,9 +68,13 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
         if (response.ok) {
           const data = await response.json();
           setExecutions(data.executions || []);
+          setLoadError(null);
+        } else {
+          setLoadError(await loadErrorMessage(response, 'the test runs'));
         }
       } catch (error) {
         console.error('Error fetching test executions:', error);
+        setLoadError(NETWORK_ERROR('the test runs'));
       } finally {
         setLoading(false);
       }
@@ -274,7 +280,11 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
         }
       />
 
-      {executions.length === 0 ? (
+      {loadError ? (
+        <div role="alert" data-testid="load-error" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+          {loadError}
+        </div>
+      ) : executions.length === 0 ? (
         <Card>
           <EmptyState
             title="No test runs in this period"
