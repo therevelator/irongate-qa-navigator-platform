@@ -114,7 +114,7 @@ decision on the server and in the UI goes through the same rules in
 request without signing in again. `users.role` (the highest role) and the primary department / team are
 kept in step for display only.
 
-| Role | Assigned on | Analytics scope (which teams' overview, team detail, analytics, members, compare; TV mode: any team of the company) | Individual developer rows |
+| Role | Assigned on | Analytics scope (which teams' overview, team detail, analytics, members, TV, compare) | Individual developer rows |
 |---|---|---|---|
 | `super_admin` | the company | every team of the company | everyone who opted in to developer insights |
 | `qa_manager` | a department (one or more) | the teams of those departments | everyone who opted in, on those teams |
@@ -127,8 +127,7 @@ What each role may do (from `userPolicy.ts`; the navigation in [`src/components/
 | Capability | super_admin | qa_manager | team_lead | qa_engineer | viewer |
 |---|---|---|---|---|---|
 | Overview (the teams of the analytics scope: company for super admins) | yes | yes | yes | yes | yes |
-| Overview team list, team detail, Analytics modules, Compare teams, per-team metric detail (history, velocity) | all teams | their departments' teams | their teams | their teams | their teams |
-| TV mode (wall screen; team figures only) | any team of the company | any team of the company | any team of the company | any team of the company | any team of the company |
+| Overview team list, team detail, Analytics modules, Compare teams, TV mode, per-team metric detail (history, velocity) | all teams | their departments' teams | their teams | their teams | their teams |
 | Team member names and e-mails (`canViewTeamMembers`) | any team | their departments | assigned teams | assigned teams | assigned teams |
 | Manage users (activate / deactivate, reset password, developer-insights toggle) | anyone in the company except themselves | users of their departments ranked below manager | users of teams they lead ranked below team lead | no | no |
 | Edit another user's profile and assignments; delete (= deactivate) | yes | users they manage | no | no | no |
@@ -1014,7 +1013,7 @@ Why: everything about one team in one place, with each number explained
   from a recommendation (section 7).
 - **Open TV mode** and, for super admins, the **Show formulas & data sources** switch (formula mode) that opens the metric explanation
   for any value.
-- Team detail opens for the teams of the analytics scope only (as the overview list and Compare); another team answers 403.
+- Team detail opens for the teams of the analytics scope only (as the overview list, TV mode and Compare); another team answers 403.
 - QA score card: the 3D battery (horizontal, gently moving liquid, still with reduced motion), the score with its status and
   target, the change against 30 days earlier, a 30 / 90 day trend with the target line, the rank among the teams the viewer
   may see (two or more), the input that costs the score most, the people per role, the Scrum Master (team lead) and
@@ -1452,7 +1451,7 @@ Still open:
 
 | Term | Meaning |
 |---|---|
-| Analytics scope | The teams a person may open on the overview, team detail, analytics, compare and member lists (TV mode: any team of the company): all (super admin), their departments' teams (manager), their assigned teams (others) |
+| Analytics scope | The teams a person may open on the overview, team detail, analytics, compare, TV and member lists: all (super admin), their departments' teams (manager), their assigned teams (others) |
 | Assignment | A role on a scope (company, department or team) in `role_assignments`; a person can hold several |
 | Automation coverage | Share of test cases that run automatically |
 | Carried forward | A snapshot value that was recorded on an earlier day and is still the latest value |

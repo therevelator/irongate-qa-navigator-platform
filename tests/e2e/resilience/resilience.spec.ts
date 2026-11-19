@@ -18,6 +18,12 @@ test.describe('Resilience', { tag: [TAG.area('resilience'), TAG.negative] }, () 
     for (const id of NAV_BY_ROLE.admin) {
       await app.go(id);
       await expect(page.locator('#main-scroll').or(page.getByTestId('tv-mode')).first()).toBeVisible();
+      if (id === 'nav-tv') {
+        // TV mode is full screen (no app chrome): leave it before the next entry.
+        await expect(page.getByTestId('tv-mode')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.getByTestId('nav-toggle')).toBeVisible();
+      }
     }
     noErrors();
   });

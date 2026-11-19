@@ -34,7 +34,7 @@ describe('canOpenView', () => {
     for (const v of ANALYTICS_VIEWS) expect(canOpenView(noTeam, v)).toBe(false);
   });
 
-  it('VIEW-004: TV mode for every role, even without a team in scope (any team of the company)', () => {
+  it('VIEW-004: TV mode entry for every role (the API limits it to the teams in scope)', () => {
     for (const a of [admin, manager, lead, engineer, viewer, noTeam]) expect(canOpenView(a, 'tv')).toBe(true);
     expect(canOpenView(null, 'tv')).toBe(false);
   });
@@ -58,7 +58,7 @@ describe('accessSummary', () => {
     expect(s.cannot.join(' ')).toMatch(/read-only/);
     expect(s.cannot.join(' ')).toMatch(/Change settings/);
     expect(s.can.join(' ')).not.toMatch(/Invite people/);
-    expect(s.can.join(' ')).toMatch(/any team of Meridian in TV mode/);
+    expect(s.can.join(' ')).toMatch(/TV mode, Compare teams and the Analytics modules for the teams in your scope/);
   });
 
   it('ACC-002: a super admin sees every team and may change settings and job titles', () => {

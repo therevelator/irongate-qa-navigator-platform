@@ -445,16 +445,6 @@ export function canSetTargets(actor: PolicyActor, scope: { type: 'company' | 'de
  * Team comparison, saved views, onboarding (Phase 3B)
  * ---------------------------------------------------------------------------------------- */
 
-/**
- * TV mode (the wall / meeting-room screen, /tv and /api/tv/*): every role may show ANY team of their
- * own company (owner decision: the screen is meant to be seen by everyone). The one exception to the
- * analytics scope; another company's team is never shown (the server checks the company). Team
- * aggregates only: no member list and no individual developer data.
- */
-export function canViewTeamTv(actor: PolicyActor, _team: ScopeTeam): boolean {
-  return !!actor.id;
-}
-
 /** May the actor compare these teams side by side? Every team must be in their analytics scope. */
 export function canCompareTeams(actor: PolicyActor, teams: ScopeTeam[]): boolean {
   return teams.length > 0 && teams.every((t) => canViewTeamAnalytics(actor, t));

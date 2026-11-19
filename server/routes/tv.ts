@@ -1,8 +1,8 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { getOwnedTeam, policyActor } from '../middleware/access';
-import { canViewTeamTv } from '../lib/userPolicy';
+import { assertTeamAnalytics, policyActor } from '../middleware/access';
+import { analyticsTeamsInScope } from '../lib/userPolicy';
 import { TECH_DEBT_OPEN_WEIGHT_SQL, techDebtScoreFromWeight, toNum, qaStatusFromScore } from '../lib/metricFormulas';
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 import { evaluateLatestSnapshot, kpiHistoryFor, loadDataClock, qaConfidenceJson, type EvalContext } from '../lib/kpiEvaluation';
@@ -16,23 +16,15 @@ import { loadTargetBook } from '../lib/targets';
  * name, department, lead, member count, the latest KPI snapshot, 90 days of KPI history and
  * the technical debt score. No member list and no individual developer data.
  *
- * GET /api/tv/teams — the teams TV mode may show (the team picker): every active team of the
- * caller's company, with its department.
+ * GET /api/tv/teams — the teams TV mode may show (the team picker): the active teams of the
+ * caller's analytics scope, with their department.
  *
- * Scope: canViewTeamTv (server/lib/userPolicy.ts): every role may show ANY team of their own
- * company (the wall screen is for everyone; the one exception to the analytics scope). Another
- * company's team and an unknown id get the same 403.
+ * Scope: the shared analytics rule (assertTeamAnalytics → canViewTeamAnalytics in
+ * server/lib/userPolicy.ts), as every other page: super_admin any team of their company, a QA
+ * manager the teams of the departments they manage, team_lead / qa_engineer / viewer the teams
+ * they are assigned to. Every role may use TV mode, for those teams only. Another company's team,
+ * an unknown id and an out-of-scope team all get the same 403.
  */
-
-/** The team of the caller's company TV mode may show, or null (403 written). */
-async function tvTeam(req: AuthRequest, res: express.Response, id: string) {
-  const team = await getOwnedTeam(req, id);
-  if (!team || !canViewTeamTv(policyActor(req), team)) {
-    res.status(403).json({ error: 'Access denied. TV mode shows the teams of your company.' });
-    return null;
-  }
-  return team;
-}
 
 const router = express.Router();
 
@@ -72,7 +64,7 @@ router.get('/teams', authenticateToken, async (req: AuthRequest, res) => {
         ORDER BY d.name NULLS LAST, t.name`,
       [req.companyId]
     );
-    res.json({ teams: teams.filter((t: any) => canViewTeamTv(policyActor(req), t)) });
+    res.json({ teams: analyticsTeamsInScope(policyActor(req), teams.map((t: any) => ({ ...t, id: String(t.id) }))) });
   } catch (error) {
     console.error('TV teams error:', error);
     res.status(500).json({ error: 'Failed to load the teams' });
@@ -81,7 +73,7 @@ router.get('/teams', authenticateToken, async (req: AuthRequest, res) => {
 
 router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const owned = await tvTeam(req, res, String(req.params.id));
+    const owned = await assertTeamAnalytics(req, res, String(req.params.id));
     if (!owned) return;
 
     const team = await queryOne<any>(
@@ -93,7 +85,7 @@ router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
         WHERE t.id = ? AND t.company_id = ?`,
       [owned.id, req.companyId]
     );
-    if (!team) return res.status(403).json({ error: 'Access denied. TV mode shows the teams of your company.' });
+    if (!team) return res.status(403).json({ error: 'Access denied. This team is outside your analytics scope.' });
 
     const snapshot = await queryOne<any>(
       `SELECT * FROM kpi_snapshots WHERE team_id = ? ORDER BY snapshot_date DESC LIMIT 1`,

@@ -35,9 +35,8 @@ import {
  * - Full screen, no app chrome. The root font size follows the screen (1rem = 1/120 of a
  *   16:9 width), so the layout is identical at 1366×768, 1920×1080 and 3840×2160.
  * - Team aggregates only (GET /api/tv/teams/:id): never individual developer data.
- * - Scope: every role may show ANY team of their own company (canViewTeamTv: the wall screen is for
- *   everyone; the team picker lists the company's teams, GET /api/tv/teams). Recommendations and
- *   tracked actions stay with the analytics scope and are left out for other teams.
+ * - Scope: the shared analytics rule, for every role; the team picker lists the teams of the
+ *   caller's scope (GET /api/tv/teams) and the server answers 403 for any other team.
  * - Refreshes every 60 s and on the live "metrics updated" event; keeps the last data on
  *   screen when a refresh fails.
  * - Keys: F full screen, T theme, R auto-rotate, ← → or 1–3 panels, Esc exit.
@@ -158,7 +157,7 @@ const TeamTvView: React.FC = () => {
 
   /* ---------------- team ---------------- */
 
-  // The teams TV mode may show: every active team of the company (GET /api/tv/teams).
+  // The teams TV mode may show: the teams of the caller's analytics scope (GET /api/tv/teams).
   const [tvTeams, setTvTeams] = useState<{ id: string; name: string; department_id: string | null; department_name: string | null }[] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -172,14 +171,13 @@ const TeamTvView: React.FC = () => {
   const fallbackTeamId = scope.teamId ?? (tvTeams && tvTeams.length ? tvTeams[0].id : null);
   const teamId = urlTeamId ?? fallbackTeamId;
   useEffect(() => {
-    // Without ?team=, show the scope's team (else the company's first) and put it in the URL so the link can be shared.
+    // Without ?team=, show the scope's team (else the first team in scope) and put it in the URL so the link can be shared.
     if (!urlTeamId && fallbackTeamId) { replaceTvTeam(fallbackTeamId); setUrlTeamId(fallbackTeamId); }
   }, [urlTeamId, fallbackTeamId]);
 
   const chooseTeam = (id: string) => {
     replaceTvTeam(id);
     setUrlTeamId(id);
-    // The analytics scope follows only when the team is in it (TV mode can show any team of the company).
     if (scope.teams.some((t) => t.id === id)) scope.setTeamId(id);
   };
 
@@ -188,7 +186,7 @@ const TeamTvView: React.FC = () => {
   const tvTeam = scope.teams.find((t) => t.id === teamId);
   const canSeeRecommendations = !!user && !!tvTeam && canRequestTeamInsights(policyActorOf(user), { id: tvTeam.id, department_id: tvTeam.department_id ?? null }) && state === 'ready';
   const recommendations = useTvRecommendations(state === 'ready' ? teamId : null, canSeeRecommendations);
-  // Tracked actions follow the analytics scope (GET /api/actions): left out for other teams.
+  // Tracked actions (GET /api/actions, the same scope).
   const trackedActions = useTvActions(state === 'ready' && tvTeam ? teamId : null, true);
 
   useEffect(() => {
@@ -373,11 +371,11 @@ const TeamTvView: React.FC = () => {
     let icon: React.ReactNode = <Loader2 className="h-16 w-16 animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden />;
     if (none) {
       title = 'No team to show';
-      body = 'TV mode shows one team at a time, and your company has no active team yet.';
+      body = 'TV mode shows one team at a time. You are not assigned to a team you can view. Ask an administrator to add you to a team.';
       icon = <MonitorX className="h-16 w-16 text-slate-400" aria-hidden />;
     } else if (state === 'forbidden') {
       title = 'This team is not available to you';
-      body = 'TV mode shows the teams of your own company. This team does not exist or belongs to another company.';
+      body = 'TV mode can show the teams in your scope only: your own team for team leads, engineers and viewers; the teams of your department for managers.';
       icon = <MonitorX className="h-16 w-16 text-slate-400" aria-hidden />;
     } else if (state === 'signed-out') {
       title = 'Your session has ended';

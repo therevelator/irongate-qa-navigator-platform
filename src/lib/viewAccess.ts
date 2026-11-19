@@ -30,7 +30,8 @@ export function canOpenView(actor: PolicyActor | null | undefined, view: string)
     case 'notifications':
       return true;
     case 'tv':
-      // TV mode: any team of the person's company, for every role (canViewTeamTv).
+      // TV mode: every role may open it, for the teams of their analytics scope (the API refuses
+      // others); without a team in scope it says so.
       return true;
     case 'users':
     case 'teams':

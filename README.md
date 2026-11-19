@@ -380,19 +380,18 @@ Endpoints: `GET|POST /api/admin/users/:id/assignments`, `DELETE /api/admin/users
 A full-screen view of ONE team for a meeting-room screen or a team wall: `/tv?team=<id>`.
 Open it from the team's page (Team detail): **Open TV mode**, **E-mail TV link** (opens your mail
 app with the team's TV link filled in) or **Copy link**. Whoever opens the link signs in and lands on
-that team's TV screen, if the team belongs to their company (a signed-out visit keeps the address through
-sign-in). **TV mode** is also in the navigation for every role, with a team picker listing every team of
-the company (`GET /api/tv/teams`).
+that team's TV screen, if the team is in their scope (a signed-out visit keeps the address through
+sign-in). **TV mode** is also in the navigation for every role, with a team picker listing the teams of
+their scope (`GET /api/tv/teams`).
 
 - Shows the team name, department, lead and member count, the QA score battery with its
   status and change since the previous snapshot, six key KPIs (value, target, status, change,
   90-day sparkline), "data as of", a clock, and two more panels: 90-day trends with target
   lines, and focus areas (KPIs off target, plus recommended actions for team leads and up).
   Team aggregates only: no member list and no individual developer data.
-- Scope: every role may show **any team of their own company** (`canViewTeamTv`: the wall screen is
-  for everyone; the one exception to the analytics scope). `GET /api/tv/teams/:id` answers 403 for
-  another company's team or an unknown id. Recommendations and tracked actions on the screen still
-  follow the analytics scope and are left out for other teams.
+- Scope: the analytics rule. Admins any team, managers the teams of their department,
+  team leads / engineers / viewers their own team. `GET /api/tv/teams/:id` answers 403 for
+  any other team (also another company's team or an unknown id).
 - Refreshes every 60 s, on the live "metrics updated" event and when the tab becomes
   visible; a failed refresh keeps the last data on screen and says so.
 - Keys: **F** full screen (if the browser refuses, a message suggests F11), **T** light/dark
@@ -478,14 +477,13 @@ current targets; existing snapshot rows are not rewritten).
   company can hide the banner, the markers, the TV label and the PDF / CSV notes with
   `companies.settings.hideSampleDataNotice = true` (set for the Meridian showcase by `scripts/reseed`).
 - **One scope for every page** (see [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md)): the overview list and
-  summary, team detail (KPIs, members, history), Compare and the Analytics modules show the teams
-  of the caller's analytics scope only (`canViewTeamAnalytics`: super admin every team, a manager the
+  summary, team detail (KPIs, members, history), TV mode, Compare and the Analytics modules show the
+  teams of the caller's analytics scope only (`canViewTeamAnalytics`: super admin every team, a manager the
   teams of their departments, everyone else the teams they are assigned to); another team answers 403.
   Until this change the overview listed every team and team detail showed any team's KPIs, while
   Compare, TV mode and Analytics were scoped. Super admins see "Company status"; everyone else "Your
-  team(s)" (`GET /api/analytics/company-summary` returns `scope`). Exception: **TV mode** shows any team
-  of the caller's company, for every role (`canViewTeamTv`; team picker `GET /api/tv/teams`), never another
-  company's; the navigation has a TV mode entry for everyone.
+  team(s)" (`GET /api/analytics/company-summary` returns `scope`). TV mode is in everyone's navigation; its
+  team picker (`GET /api/tv/teams`) lists the teams in scope.
 
 ## Top bar, targets everywhere, battery colours
 

@@ -102,7 +102,7 @@ Derived from the code, then checked against the documentation:
 | F4.14 | Top bar: QE Navigator shield and name, company badge, name with job title (role label when empty) | All | — | HDR-01 (each role), HDR-04 (job title) | HDR-04 (only super admins set job titles) |
 | F4.15 | "What you can do here": roles, scope and limits from the access policy; Escape / outside click close it | All | — | HDR-02 (viewer), HDR-03 (super admin) | HDR-02 ("You cannot …" list) |
 | F4.16 | Phone top bar: company initials, account menu (name, title, sign out) | All | — | HDR-05 | — |
-| F4.17 | TV mode entry in the navigation for every role | All | — | HDR-06, NAV-01 | — |
+| F4.17 | TV mode entry in the navigation for every role (for the teams in scope) | All | — | HDR-06, NAV-01 | TV-04 |
 
 ## 5. Overview (dashboard)
 
@@ -132,10 +132,10 @@ Derived from the code, then checked against the documentation:
 | F6.2 | Team members (names, e-mails) | Teams in scope | Others | TEAM-01, legacy:qa-engineer-rbac | TEAM-01 (other team: no members), legacy:qa-engineer-rbac "does NOT see Team Members…" |
 | F6.3 | Team AI recommendations / developer recommendations | A, M (dept), L (own) | E V | legacy:team-lead-rbac "Team Detail (own team)" | legacy:qa-engineer-rbac, legacy:viewer-rbac "cannot see AI insights" |
 | F6.4 | Formula mode ("Show formulas & data sources") and metric explanation | A | M L E V | TEAM-02 | TEAM-02 (manager has no switch) |
-| F6.5 | Open TV mode from the team, Exit back | All teams of the company | — | TV-01 | — |
+| F6.5 | Open TV mode from the team, Exit back | Teams in scope | — | TV-01 | — |
 | F6.6 | E-mail TV link (mailto) and Copy link | Teams in scope | — | TEAM-03 | — |
 | F6.7 | TV keys (1–3, arrows, T, R, Esc) and kiosk options (`theme`, `rotate`) | Teams in scope | — | TV-02, TV-03 | — |
-| F6.8 | TV mode for any team of the company (team picker lists all teams); unknown or other company's team refused | All | Another company | TV-04 | TV-04 (unknown team) |
+| F6.8 | TV for a team outside the scope ("Show my team"); the team picker lists the teams in scope only | — | Out of scope | — | TV-04 |
 | F6.9 | TV link opened signed out → sign in → TV | Teams in scope | — | TV-05 | — |
 | F6.10 | TV errors and lost connection (keeps last data) | — | — | — | TV-06 server error, TV-07 refresh fails |
 | F6.11 | TV without a team (own team or "no team") | All | — | TV-08 | TV-08 |

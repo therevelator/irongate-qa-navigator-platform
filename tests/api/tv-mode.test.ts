@@ -4,10 +4,10 @@ import request, { Response } from 'supertest';
  * Team TV mode (GET /api/tv/teams/:id) and the dashboard "Teams vs KPI targets" breakdown
  * (company-summary kpiStatusTeams).
  *
- * TV scope (canViewTeamTv): every role may show ANY team of their own company (the wall screen
- * is for everyone; the one exception to the analytics scope). Another company's team or an
- * unknown id: 403. The payload is team aggregates only. GET /api/tv/teams lists the company's
- * teams for the picker.
+ * TV scope = the shared analytics rule (canViewTeamAnalytics): super_admin any team of the
+ * company, qa_manager the teams of their department, team_lead / qa_engineer / viewer their
+ * own team. Another company's team or an unknown id: 403. The payload is team aggregates only.
+ * Every role may use TV mode (the picker GET /api/tv/teams lists the teams of the caller's scope).
  *
  * Runs against a live backend at API_URL; skips cleanly when none is running.
  */
@@ -77,24 +77,39 @@ describe('Team TV mode API', () => {
     expect(JSON.stringify(res.body)).not.toMatch(/@[a-z0-9.-]+\.[a-z]{2,}/i);
   });
 
-  it.each(['lead', 'engineer', 'viewer', 'manager'])('%s can open any team of the company, still without individual data', async (k) => {
-    if (!backendAvailable) return;
-    for (const t of adminTeams.slice(0, 6)) {
-      const res = await tv(t.id, c[k]);
-      expect([t.id, res.status]).toEqual([t.id, 200]);
-      expect(res.body.team.members).toBeUndefined();
-      expect(JSON.stringify(res.body)).not.toMatch(/@[a-z0-9.-]+\.[a-z]{2,}/i);
-    }
+  it.each(['lead', 'engineer'])('%s can open their own team only', async (k) => {
+    if (!backendAvailable || !ownTeam(k)) return;
+    expect((await tv(ownTeam(k), c[k])).status).toBe(200);
+    const other = otherTeam(k);
+    const res = await tv(other, c[k]);
+    expect(res.status).toBe(403);
+    expect(res.body.team).toBeUndefined();
   });
 
-  it('the team picker lists every active team of the caller\'s company, for every role', async () => {
+  it('viewer cannot open a team outside their scope', async () => {
     if (!backendAvailable) return;
-    const all = ((await get('/api/tv/teams', c.admin)).body.teams || []).map((t: any) => t.id).sort();
-    expect(all.length).toBeGreaterThan(0);
-    for (const k of ['viewer', 'engineer']) {
-      expect(((await get('/api/tv/teams', c[k])).body.teams || []).map((t: any) => t.id).sort()).toEqual(all);
+    const scope = (await get('/api/analytics/scope', c.viewer)).body.teams || [];
+    const outside = adminTeams.find((t) => !scope.some((s: any) => s.id === t.id));
+    expect((await tv(outside.id, c.viewer)).status).toBe(403);
+    for (const t of scope) expect((await tv(t.id, c.viewer)).status).toBe(200);
+  });
+
+  it('qa_manager can open the teams of their department, not others', async () => {
+    if (!backendAvailable) return;
+    const scope = (await get('/api/analytics/scope', c.manager)).body.teams || [];
+    if (scope[0]) expect((await tv(scope[0].id, c.manager)).status).toBe(200);
+    const outside = adminTeams.find((t) => !scope.some((s: any) => s.id === t.id));
+    if (outside) expect((await tv(outside.id, c.manager)).status).toBe(403);
+  });
+
+  it('the team picker (GET /api/tv/teams) lists exactly the teams of the caller\'s analytics scope', async () => {
+    if (!backendAvailable) return;
+    for (const k of ['admin', 'manager', 'lead', 'engineer', 'viewer']) {
+      const scope = ((await get('/api/analytics/scope', c[k])).body.teams || []).map((t: any) => t.id).sort();
+      const picker = ((await get('/api/tv/teams', c[k])).body.teams || []).map((t: any) => t.id).sort();
+      expect([k, picker]).toEqual([k, scope]);
     }
-    if (foreignTeamId) expect(all).not.toContain(foreignTeamId);
+    if (foreignTeamId) expect(((await get('/api/tv/teams', c.admin)).body.teams || []).map((t: any) => t.id)).not.toContain(foreignTeamId);
     expect((await get('/api/tv/teams', '')).status).toBe(401);
   });
 

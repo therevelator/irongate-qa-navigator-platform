@@ -2150,7 +2150,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open http://localhost:5173/ and sign in as Viewer: E-mail address viewer@irongate.com, Password demo123, click Sign in. | The Overview page opens (top bar title "Overview"). |
 | 2 | Click the question-mark button "What you can do here" in the top bar. | A panel "What you can do here" opens below the button; keyboard focus moves into it. |
-| 3 | Read the panel. | A chip "Viewer · The Away Team"; the sentence "You see The Away Team. Other teams are not shown to you."; under "You can" the overview, team dashboards, Compare and Analytics for the teams in scope, pulse results, answering the pulse and "Show any team of NovaTech in TV mode …"; under "You cannot" among others "Change settings, KPI targets or alert rules." and "Invite people or change anyone's access." |
+| 3 | Read the panel. | A chip "Viewer · The Away Team"; the sentence "You see The Away Team. Other teams are not shown to you."; under "You can" the overview, team dashboards, TV mode, Compare and Analytics for the teams in scope, pulse results and answering the pulse; under "You cannot" among others "Change settings, KPI targets or alert rules." and "Invite people or change anyone's access." |
 | 4 | Press Escape. | The panel closes and the focus is back on the question-mark button. |
 | 5 | Open the panel again and click somewhere on the overview outside it. | The panel closes. |
 
@@ -2227,7 +2227,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-05 phone: company initials only; name, title and sign out in the account menu`
 
-### TC-AUTH-120: TV mode is in every role's navigation and opens with a team
+### TC-AUTH-120: TV mode is in every role's navigation and opens with a team of the role's scope
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.17
 
@@ -2243,7 +2243,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Open http://localhost:5173/ and sign in as Viewer: E-mail address viewer@irongate.com, Password demo123, click Sign in. | The Overview page opens (top bar title "Overview"). |
-| 2 | Open the navigation and click "TV mode". | TV mode opens full screen with The Away Team (the viewer's team) and a Team picker in the controls listing every team of NovaTech. |
+| 2 | Open the navigation and click "TV mode". | TV mode opens full screen with The Away Team (the viewer's only team); the controls offer no other team (the picker lists the teams in scope only). |
 | 3 | Press Escape. | The overview is shown again. |
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Navigation entries follow the access policy › HDR-06 TV mode is in everyone's navigation and opens with a team`
@@ -4235,7 +4235,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-03 kiosk options in the address (?theme=light&rotate=1)`
 
-### TC-DASH-030: TV mode shows any team of the company for every role; an unknown team is refused
+### TC-DASH-030: TV mode for a team outside the scope is refused, with a button to show the own team; the picker lists the scope only
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F6.8
 
@@ -4251,14 +4251,14 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Software engineer (engineer@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764026236967-uphpblii4. | TV mode opens full screen and shows the team name "QualityCowboys" (a team outside the engineer's analytics scope: TV mode shows any team of the own company). |
-| 2 | Move the mouse to show the controls and open the Team picker. | It lists every team of NovaTech grouped by department, among them The Away Team and Mavericks. |
-| 3 | Choose Mavericks. | The TV view shows "Mavericks". |
-| 4 | Open http://localhost:5173/tv?team=no-such-team. | The message "This team is not available to you" with "TV mode shows the teams of your own company. This team does not exist or belongs to another company." |
+| 1 | Sign in as Software engineer (engineer@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764026236967-uphpblii4. | Sign-in succeeds and the page at /tv?team=team-1764026236967-uphpblii4 opens inside the app frame. |
+| 2 | Look at the TV view. | The message "This team is not available to you" is shown with the explanation "TV mode can show the teams in your scope only: ..."; no data of QualityCowboys is shown. |
+| 3 | Click the button "Show Mavericks". | The TV view now shows the team name "Mavericks". |
+| 4 | Move the mouse to show the controls. | There is no Team picker with other teams: the engineer's scope holds one team (Mavericks), and GET /api/tv/teams lists only Mavericks. |
 
 **Notes:** Access control check.
 
-*Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-04 TV mode shows any team of the company, for every role; an unknown team is refused`
+*Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-04 a team outside the scope is refused, with a way to show the own team; the picker lists the scope only`
 
 ### TC-DASH-031: An e-mailed TV link opened while signed out shows the team right after signing in
 
@@ -7558,7 +7558,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team-lead-rbac.spec.ts › Team Lead Role-Based Access Control › Main Dashboard - Team Lead sees the teams of their scope only`
 
-### TC-ROLE-028: Viewer sees only her team on the overview; another team is refused, TV mode shows it
+### TC-ROLE-028: Viewer sees only her team on the overview; another team is refused (team detail and TV mode)
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F5.1
 
@@ -7576,7 +7576,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open http://localhost:5173, enter E-mail address viewer@irongate.com and Password demo123, then click Sign in. | The Overview page opens: the top bar title reads "Overview" and the "Team performance" section lists team cards. |
 | 2 | Look at the "Team performance" section and the summary card. | Only The Away Team is listed and the summary card is titled "Your team". |
-| 3 | Open http://localhost:3000/api/teams/team-1764026236967-uphpblii4 and then http://localhost:3000/api/tv/teams/team-1764026236967-uphpblii4 in the same browser. | The first answers 403 (team detail follows the scope); the second answers 200 (TV mode shows any team of the company). |
+| 3 | Open http://localhost:3000/api/teams/team-1764026236967-uphpblii4 and then http://localhost:3000/api/tv/teams/team-1764026236967-uphpblii4 in the same browser. | Both answer 403: team detail and TV mode follow the analytics scope. |
 
 *Automated:* `tests/e2e/viewer-rbac.spec.ts › Viewer Role-Based Access Control › Viewer sees only the teams she is assigned to on the dashboard`
 
@@ -8273,7 +8273,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
 | 2 | Reload the page (F5). | The platform overview is shown again without signing in (8-hour session). |
 | 3 | Click "Sign out" in the amber bar. | The "Platform support sign-in" form is shown. |
 | 4 | Reload the page. | The sign-in form is still shown. |
@@ -8282,7 +8282,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-02 the support session survives a reload; Sign out ends it`
 
-### TC-ORG-050: Tabs: error search by request id (none found) and the access log
+### TC-ORG-050: Tabs: error search by request id (none found) and platform sign-ins; there is no access log tab
 
 **Type:** Positive · **Priority:** Medium · **Role:** Platform operator · **Flow:** F14.2
 
@@ -8297,23 +8297,24 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 2 | Click "Error search". | The "Server errors" section opens with a "Request id" field and a "Search" button. |
-| 3 | Enter "no-such-request-<random>" and click "Search". | The result says "No errors." (no matching errors). |
-| 4 | Click "Access log". | The "Operator access log" table lists accesses, including an entry with action "sign_in.ok" from your sign-in. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Active sessions, Sign-ins (7 days), Failed sign-ins (7 days), Errors (24 h), Database size, and the "Companies", "Scheduled jobs" and "Main tables" sections. |
+| 2 | Click "Error search", type a made-up request id (e.g. no-such-request-123) and click "Search". | The "Server errors" list says "No errors." |
+| 3 | Click "Sign-ins". | "Sign-in events" lists sign-ins of every company with When, Company, User (or "Unknown e-mail"), Outcome, Type, IP, Location, Device and Request id, with filters and a CSV button. |
+| 4 | Look at the tabs at the top right. | Only Overview, Sign-ins and Error search are offered; there is no "Access log" tab (operator activity is not logged). |
 
 **Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
-*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-03 tabs: error search by request id (none found) and the access log`
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-03 tabs: error search by request id (none found) and platform sign-ins; no access log tab`
 
-### TC-ORG-051: A reason shorter than 3 characters cannot open a company; Cancel closes the dialog
+### TC-ORG-051: A destructive action waits for the "I want to do this now" tick; Cancel changes nothing
 
-**Type:** Negative · **Priority:** Medium · **Role:** Platform operator · **Flow:** F14.3
+**Type:** Negative · **Priority:** High · **Role:** Platform operator · **Flow:** F14.4
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
 - A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
+- A fresh organisation registered for this test (Create an account: any company name, its owner's e-mail and password); delete it afterwards in platform support (Delete, type its name).
 
 **Test data**
 
@@ -8321,14 +8322,14 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 2 | Click the name of the first company in the "Companies" table. | A dialog "Open <company>" asks "Why are you opening this company?..." with a Reason box and the buttons "Cancel" and "Open company". |
-| 3 | Type "  x " into the reason box. | "Open company" stays disabled. |
-| 4 | Click "Cancel". | The dialog closes and the platform overview is shown again. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Active sessions, Sign-ins (7 days), Failed sign-ins (7 days), Errors (24 h), Database size, and the "Companies", "Scheduled jobs" and "Main tables" sections. |
+| 2 | Click the fresh organisation's name in "Companies". | The company opens at once on the Organisation tab (no reason is asked for). |
+| 3 | Click the "Users" tab, then "Deactivate" in the owner's row. | A dialog "Deactivate account" explains the effect; "Deactivate" is disabled until "I want to do this now" is ticked. |
+| 4 | Click "Cancel". | The dialog closes; the owner is still "Active". |
 
 **Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
-*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-04 a reason shorter than 3 characters cannot open a company; Cancel closes`
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-04 a destructive action waits for the confirmation tick; Cancel changes nothing`
 
 ### TC-ORG-052: A failed repair action shows the error with its request id
 
@@ -8345,49 +8346,41 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 2 | Set up the DevTools override for */api/operator/actions/* as described in the preconditions. | The override is active. |
-| 3 | In "Scheduled jobs" click "Refresh sample data now". | A dialog "Refresh sample data now" opens with "Reason (shown in the company's Activity log)", the checkbox "I want to do this now" and the "Refresh now" button. |
-| 4 | Enter the reason "UI test of a failing action", tick "I want to do this now" and click "Refresh now". | The dialog shows the error "Internal server error (request id rid-op-500)". |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Active sessions, Sign-ins (7 days), Failed sign-ins (7 days), Errors (24 h), Database size, and the "Companies", "Scheduled jobs" and "Main tables" sections. |
+| 2 | In DevTools → Network, block (or override with a 500 answer) the URL pattern */api/operator/actions/*. | — |
+| 3 | Click "Refresh sample data now" under "Scheduled jobs". | It runs at once (no dialog) and an error message shows the server's error with "(request id …)" when the server sent one. |
 
-**After the test:** Remove the DevTools override.
-
-**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
+**Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes. Requires DevTools request blocking or an override.
 
 *Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-05 a failed repair action shows the error with its request id`
 
-### TC-ORG-053: Opening a company is written to that company's Activity log with the reason
+### TC-ORG-053: Nothing of the operator's visit or changes appears in the company's Activity log
 
-**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F13.5, F14.3
+**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F13.5
 
 **Preconditions**
 
 - App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
 - A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
+- A fresh organisation registered for this test (Create an account: any company name, its owner's e-mail and password); delete it afterwards in platform support (Delete, type its name).
 
 **Test data**
 
 - Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
-- A super admin of the company that was opened (to read its Activity log)
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 2 | In the "Companies" table click the name of the test organisation "UI Test <unique>". | The dialog "Open UI Test <unique>" opens. |
-| 3 | Enter the reason "UI test reason <random>" and click "Open company". | The company view opens with the "Organisation" section (departments, teams and members). |
-| 4 | Click "Sign out" in the amber bar. | The platform support sign-in form is shown. |
-| 5 | Sign in as the owner of the test organisation and open /activity. | The Activity log contains one or more entries (one per section opened) with the reason "UI test reason <random>". |
-| 6 | Read each of those entries. | Each one names "IronGate platform support" as the actor. |
-
-**After the test:** The test organisation cannot be removed in the app: ask a developer to delete it from the test database, or leave it (it is isolated from the demo data).
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Active sessions, Sign-ins (7 days), Failed sign-ins (7 days), Errors (24 h), Database size, and the "Companies", "Scheduled jobs" and "Main tables" sections. |
+| 2 | Open the fresh organisation; on Organisation click "Add department", type a unique name (e.g. Ops dept 123) and click "Save". | The new department appears on the Organisation tab. |
+| 3 | Click "Sign out". Sign in to the app as the organisation's owner and open Organisation → Activity. | The Activity log shows the organisation's own entries (e.g. its creation) but nothing by "platform support" and no entry for the new department. |
 
 **Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
-*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-06 opening a company is written to that company's Activity log with the reason`
+*Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-06 nothing of the operator's visit or changes reaches the company's Activity log`
 
-### TC-ORG-054: The operator signs in at /operator (wrong password refused), opens a company with a reason, runs an action and signs out
+### TC-ORG-054: The operator signs in at /operator (wrong password refused), opens a company, runs an action and signs out
 
-**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.1, F14.3, F14.4, F14.5
+**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.1, F14.2, F14.3, F14.4, F14.5
 
 **Preconditions**
 
@@ -8400,18 +8393,17 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open /operator. | The amber bar reads "IronGate platform support …" and the "Platform support sign-in" form is shown. |
+| 1 | Open /operator. | The amber bar reads "IronGate platform support" and the "Platform support sign-in" form is shown. |
 | 2 | Enter the operator's e-mail and the password not-the-password, click "Sign in". | An error reads "Wrong e-mail address or password." |
-| 3 | Enter the right password and click "Sign in". | The platform overview opens; the amber bar shows the operator's name; "Scheduled jobs" lists db-keepalive. |
-| 4 | Click a company name in "Companies". | A dialog asks why; "Open company" is disabled until 3 characters are typed. |
-| 5 | Type the reason "E2E smoke test" and click "Open company". | The company opens on the Organisation tab. |
-| 6 | Click the "Users" tab. | The users table is shown (name and e-mail, status, assignments, department / team, contact, insights opt-in, last sign-in). |
-| 7 | Click "Re-run alerts"; type the reason "E2E smoke test", tick "I want to do this now" and click "Run". | "Run" is disabled until both are given; then the dialog closes and a message says it is done. |
-| 8 | Click "Sign out". | The sign-in form is shown. |
+| 3 | Enter the right password and click "Sign in". | The platform overview opens; "Scheduled jobs" lists the jobs with their last run, or says "No runs recorded yet."; "Main tables" lists companies, users, … with row counts. |
+| 4 | Click a company name in "Companies". | The company opens at once on the Organisation tab (no reason is asked for). |
+| 5 | Click the "Users" tab. | The users table shows Name, Status, Assignments, Last sign-in (time, IP and location, device), Sessions now, Last seen, Failed 7 d. |
+| 6 | Click "Re-run alerts". | It runs at once (no dialog) and a message "Alerts evaluated: … opened, … resolved" appears. |
+| 7 | Click "Sign out". | The sign-in form is shown. |
 
 **Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
-*Automated:* `tests/e2e/platform-operator.spec.ts › Platform support panel › the operator signs in at /operator, opens a company with a reason, runs an action and signs out`
+*Automated:* `tests/e2e/platform-operator.spec.ts › Platform support panel › the operator signs in at /operator, opens a company, runs an action and signs out`
 
 ### TC-ORG-055: The platform support panel works at 390 px phone width without sideways scrolling
 
@@ -8429,9 +8421,10 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Set the browser window (or DevTools device toolbar) to 390 × 844. | The page is narrow. |
-| 2 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 2 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
 | 3 | Scroll the overview sideways. | The page does not scroll sideways (wide tables scroll inside their cards). |
-| 4 | Open a company with a reason. | The Organisation tab shows without sideways scrolling of the page. |
+| 4 | Open a company. | The Organisation tab shows without sideways scrolling of the page. |
+| 5 | Click the "Users" tab. | The users table scrolls inside its card; the page does not scroll sideways. |
 
 **Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
@@ -8476,9 +8469,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 2 | Click "Refresh sample data now". | A dialog "Refresh sample data now" explains that it adds the missing recent days of sample data, never changes or deletes a row, never touches real data, and on the hosted site runs in the background for a few minutes. "Refresh now" is disabled. |
-| 3 | Enter the reason "Sample data is a day behind", tick "I want to do this now" and click "Refresh now". | Local server: the message "Sample data refreshed: <n> new rows." appears (n is 0 when the data is already current). Hosted (Netlify) site: within a second the message "Sample data refresh started. It runs in the background for a few minutes." appears. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Active sessions, Sign-ins (7 days), Failed sign-ins (7 days), Errors (24 h), Database size, and the "Companies", "Scheduled jobs" and "Main tables" sections. |
+| 2 | Click "Refresh sample data now" under "Scheduled jobs" on the hosted site (Netlify). | It runs at once (no reason, no dialog); a message says "Sample data refresh started. It runs in the background for a few minutes." |
+| 3 | On a local server, click "Refresh sample data now" again. | A message says "Sample data refreshed: N new rows." |
 
 **Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
@@ -8524,8 +8517,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support — every company you open is recorded in its Activity log." with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
-| 2 | In "Companies", click Northwind Payments (Sample data), type the reason "UI test: full data views" and click "Open company". | The company opens on the Organisation tab. |
+| 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Errors (24 h), Database size, Jobs failing, the "Companies" table and the "Scheduled jobs" table. |
+| 2 | In "Companies", click Northwind Payments (Sample data). | The company opens at once on the Organisation tab (no reason is asked for). |
 | 3 | Click the "Data" tab. | "Developer metrics" lists every developer of the first team with the columns Developer, E-mail, Opted in (yes / no), PR merge, Review, Focus, Meetings, Switches, Happiness, Updated. |
 | 4 | Click the "Wellbeing pulse" tab. | The note reads "… every single answer with its comment, and who answered in each period. The app never stores which person gave which answer."; each team shows its answers (Workload, Focus, Support, Energy, Outlook, Comment) and who answered. |
 | 5 | Click the "Modules" tab. | One table per module (Test execution runs, Flaky tests, Technical debt, Pipeline runs, Performance metrics, …) with its row count and newest rows for the chosen team. |

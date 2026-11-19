@@ -126,17 +126,13 @@ test.describe('Team TV mode', { tag: [TAG.area('tv')] }, () => {
     await page.keyboard.press('r');
   });
 
-  test('TV-04 TV mode shows any team of the company, for every role; an unknown team is refused', { tag: [TAG.role('engineer')] }, async ({ signInAs, page }) => {
+  test('TV-04 a team outside the scope is refused, with a way to show the own team; the picker lists the scope only', { tag: [TAG.negative, TAG.role('engineer')] }, async ({ signInAs, page }) => {
     await signInAs('engineer', `/tv?team=${DEMO.otherTeam.id}`);
-    await expect(page.getByTestId('tv-team-name')).toHaveText(DEMO.otherTeam.name);
-    // The picker lists the company's teams, not only the engineer's.
-    await page.mouse.move(400, 400);
-    const picker = page.getByTestId('tv-team-select');
-    await expect(picker.locator('option', { hasText: DEMO.leadTeam.name })).toHaveCount(1);
-    await picker.selectOption(DEMO.engineerTeam.id);
-    await expect(page.getByTestId('tv-team-name')).toHaveText(DEMO.engineerTeam.name);
-    await page.goto('/tv?team=no-such-team');
     await expect(page.getByTestId('tv-state-forbidden')).toContainText('This team is not available to you');
+    await page.getByRole('button', { name: `Show ${DEMO.engineerTeam.name}` }).click();
+    await expect(page.getByTestId('tv-team-name')).toHaveText(DEMO.engineerTeam.name);
+    const picker = (await (await page.request.get(`${API_URL}/tv/teams`)).json()).teams.map((t: { id: string }) => t.id);
+    expect(picker).toEqual([DEMO.engineerTeam.id]);
   });
 
   test('TV-05 an e-mailed TV link opened while signed out shows the team after signing in', { tag: [TAG.role('viewer')] }, async ({ page }) => {

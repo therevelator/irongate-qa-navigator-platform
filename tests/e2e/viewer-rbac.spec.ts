@@ -42,9 +42,9 @@ test.describe('Viewer Role-Based Access Control', { tag: ['@area:navigation', '@
     expect((await teamCards.locator('[data-testid="team-name"]').allTextContents()).sort()).toEqual(names);
     // The summary is about her team(s), not the company.
     await expect(page.getByTestId('hero-title')).toHaveText(names.length === 1 ? 'Your team' : 'Your teams');
-    // Another team of the company: refused by the API (team detail), allowed in TV mode (the wall screen).
+    // Another team of the company: refused by the API (team detail and TV mode).
     expect((await page.request.get('http://localhost:3000/api/teams/team-1764026236967-uphpblii4')).status()).toBe(403);
-    expect((await page.request.get('http://localhost:3000/api/tv/teams/team-1764026236967-uphpblii4')).status()).toBe(200);
+    expect((await page.request.get('http://localhost:3000/api/tv/teams/team-1764026236967-uphpblii4')).status()).toBe(403);
   });
 
   test('Viewer can click into team detail views', async ({ page }) => {

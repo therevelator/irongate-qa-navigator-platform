@@ -15,7 +15,7 @@ import {
 import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
-import { canViewIndividualDevelopers, canViewTeamAnalytics, canViewTeamTv, canUseFormulaMode } from '../../server/lib/userPolicy';
+import { canViewIndividualDevelopers, canViewTeamAnalytics, canUseFormulaMode } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
 import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay, Mail, Link2, ArrowUpRight, ArrowDownRight, Trophy, Target, UserRound } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -364,8 +364,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
   const policyTeam = { id: String(team.id), department_id: (team as any).department_id != null ? String((team as any).department_id) : null };
   const canViewDeveloperInsights = !!policyActor && canViewIndividualDevelopers(policyActor, policyTeam);
   const canViewOwnRow = !canViewDeveloperInsights && !!policyActor && canViewTeamAnalytics(policyActor, policyTeam);
-  // TV mode: any team of the company, for every role (canViewTeamTv; GET /api/tv/teams/:id).
-  const canOpenTv = !!policyActor && canViewTeamTv(policyActor, policyTeam);
+  // TV mode uses the analytics scope (GET /api/tv/teams/:id enforces the same rule).
+  const canOpenTv = !!policyActor && canViewTeamAnalytics(policyActor, policyTeam);
 
   const kpi: KPIData = team.kpiData || {};
   const [snapshotDate, setSnapshotDate] = useState<string | null>(team.snapshotDate ?? kpi.snapshotDate ?? null);

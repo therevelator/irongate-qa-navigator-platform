@@ -30,7 +30,7 @@ test.describe('Top bar', { tag: [TAG.area('navigation')] }, () => {
     await expect(button).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByTestId('access-help-roles')).toContainText(`Viewer · ${DEMO.leadTeam.name}`);
     await expect(page.getByTestId('access-help-scope')).toHaveText(`You see ${DEMO.leadTeam.name}. Other teams are not shown to you.`);
-    await expect(page.getByTestId('access-help-can')).toContainText('in TV mode');
+    await expect(page.getByTestId('access-help-can')).toContainText('TV mode, Compare teams and the Analytics modules for the teams in your scope');
     await expect(page.getByTestId('access-help-cannot')).toContainText('Change settings, KPI targets or alert rules.');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);

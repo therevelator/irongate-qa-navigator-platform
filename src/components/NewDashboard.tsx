@@ -521,7 +521,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, teamsError, onTeamCl
           if (t) onTeamClick?.(t);
         }}
         onOpenTv={(id) => { setKpiModal(null); openTvMode(id); }}
-        canOpenTv={() => true /* TV mode: any team of the company (canViewTeamTv) */}
+        canOpenTv={() => true /* every listed team is in the caller's analytics scope (TV mode's rule) */}
       />
     </Page>
   );
