@@ -132,7 +132,6 @@ async function main() {
     PORT: '3000',
     API_RATE_LIMIT_MAX: '10000',
     NOTIFY_SLACK_ALLOW_LOCAL: 'true',
-    PLATFORM_OPERATOR_EMAILS: 'admin@irongate.com',
     MAIL_CAPTURE_FILE: mailFile,
     DEMO_MODE: 'true',
     // Nothing leaves the machine: no real e-mail, AI or Slack.

@@ -32,7 +32,7 @@ const ANALYTICS = ['nav-dashboard', 'nav-analytics', 'nav-compare', 'nav-flaky-t
   'nav-business-impact', 'nav-team-gamification', 'nav-pdf-report-generator'];
 export const NAV_BY_ROLE: Record<Role, string[]> = {
   admin: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-departments', 'nav-activity', 'nav-user-activity', 'nav-admin',
-    'nav-manual-metrics', 'nav-metric-intervals', 'nav-parameters-config', 'nav-ingestion-log', 'nav-operator'],
+    'nav-manual-metrics', 'nav-metric-intervals', 'nav-parameters-config', 'nav-ingestion-log'],
   manager: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-activity', 'nav-admin', 'nav-manual-metrics', 'nav-metric-intervals',
     'nav-parameters-config', 'nav-ingestion-log'],
   lead: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-manual-metrics'],

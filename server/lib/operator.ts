@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from 'crypto';
+import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import type express from 'express';
 import { query, queryOne } from '../../src/lib/db';
@@ -7,37 +8,46 @@ import { recordAudit } from './audit';
 import { clientIp, ctxOf } from './requestContext';
 
 /**
- * Platform operator (the product owner's support access across companies).
+ * Platform operator (IronGate platform support: the product owner's access across companies).
  *
- *   Who:      a signed-in user whose email is in PLATFORM_OPERATOR_EMAILS (comma-separated,
- *             case-insensitive). Unset or empty: the feature is off and every /api/operator
- *             route answers 404. Re-checked on every request against the user's current email.
+ *   Who:      a row of platform_operators (migration 20261125000000). Operators are NOT users of
+ *             any company and a company user can never be one (the same e-mail cannot be in both
+ *             tables: database triggers). No active operator: the feature is off and every
+ *             /api/operator route answers 404. Create one with `npm run operator:create`.
+ *   Sign-in:  /operator has its own sign-in (e-mail + password, bcrypt). 5 failed attempts lock the
+ *             account for 15 minutes; the route is also rate limited per IP. A session lasts 8 hours.
+ *   Token:    signed with a key DERIVED from JWT_SECRET (HMAC with a fixed label), with its own
+ *             audience and type claim, so a company session JWT can never be used as an operator
+ *             token and an operator token never verifies as a company session. It is sent as the
+ *             httpOnly cookie irongate_operator (or the X-Operator-Token header). Its id is a row of
+ *             platform_operator_sessions; "Sign out" ends the row (revocation on every instance).
  *   Network:  PLATFORM_OPERATOR_ALLOWED_IPS (comma-separated, optional): other client IPs are
  *             refused (clientIp: Netlify's x-nf-client-connection-ip, else req.ip).
- *   Step-up:  the password is entered again; then a separate operator token (30 minutes) is
- *             issued. It is signed with a key DERIVED from JWT_SECRET (HMAC with a fixed label)
- *             and carries its own audience and type claim, so a session JWT can never be used as
- *             an operator token and an operator token never verifies as a session JWT. Its id is a
- *             row of platform_operator_sessions; "Leave" ends the row (revocation on every
- *             instance). The web app keeps the token in memory only.
  *   Logging:  platform_access_log (every access, platform-wide) and, per company, a readable
- *             entry in that company's audit_log (platform_support.view, throttled to one per
- *             company and section per 30 minutes; platform_support.action for every repair).
+ *             entry in that company's audit_log by "IronGate platform support" (platform_support.view,
+ *             throttled to one per company and section per 30 minutes; platform_support.action for
+ *             every repair).
  */
 
 export const OPERATOR_TOKEN_HEADER = 'x-operator-token';
 export const OPERATOR_REASON_HEADER = 'x-operator-reason';
+export const OPERATOR_COOKIE = 'irongate_operator';
 export const OPERATOR_AUDIENCE = 'irongate-platform-operator';
 export const OPERATOR_TOKEN_TYPE = 'platform_operator';
-export const OPERATOR_SESSION_MINUTES = 30;
+export const OPERATOR_SESSION_MINUTES = 8 * 60;
+export const OPERATOR_MAX_FAILURES = 5;
+export const OPERATOR_LOCK_MINUTES = 15;
 export const VIEW_THROTTLE_MINUTES = 30;
+/** bcrypt cost of operator passwords (the hash is $2b$12$…; $2a$ hashes verify too). */
+export const OPERATOR_BCRYPT_COST = 12;
 
 const list = (v: string | undefined) => (v ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
 
-export const operatorEmails = (env: NodeJS.ProcessEnv = process.env) => new Set(list(env.PLATFORM_OPERATOR_EMAILS));
-export const operatorEnabled = (env: NodeJS.ProcessEnv = process.env) => operatorEmails(env).size > 0;
-export const isOperatorEmail = (email: unknown, env: NodeJS.ProcessEnv = process.env) =>
-  typeof email === 'string' && operatorEmails(env).has(email.trim().toLowerCase());
+/** At least one active operator exists. */
+export async function operatorEnabled(): Promise<boolean> {
+  const r = await queryOne<any>('SELECT EXISTS (SELECT 1 FROM platform_operators WHERE is_active) AS on').catch(() => null);
+  return !!r?.on;
+}
 
 /** IPv4-mapped IPv6 (::ffff:1.2.3.4) compares as the IPv4 address. */
 const normIp = (ip: string) => ip.trim().toLowerCase().replace(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/, '$1');
@@ -51,9 +61,9 @@ const operatorKey = () => createHmac('sha256', JWT_SECRET).update('irongate-plat
 
 export interface OperatorClaims { sub: string; sid: string; typ: string }
 
-export function signOperatorToken(userId: string, sessionId: string, minutes = OPERATOR_SESSION_MINUTES): string {
+export function signOperatorToken(operatorId: string, sessionId: string, minutes = OPERATOR_SESSION_MINUTES): string {
   return jwt.sign({ typ: OPERATOR_TOKEN_TYPE, sid: sessionId }, operatorKey(), {
-    subject: userId, audience: OPERATOR_AUDIENCE, issuer: 'irongate', expiresIn: minutes * 60, algorithm: 'HS256',
+    subject: operatorId, audience: OPERATOR_AUDIENCE, issuer: 'irongate', expiresIn: minutes * 60, algorithm: 'HS256',
   });
 }
 
@@ -67,17 +77,56 @@ export function verifyOperatorToken(token: string): OperatorClaims | null {
   }
 }
 
-export async function startOperatorSession(userId: string, ip: string): Promise<{ token: string; expiresAt: string; sessionId: string }> {
-  const sessionId = randomUUID();
-  const expires = new Date(Date.now() + OPERATOR_SESSION_MINUTES * 60_000);
-  await query('INSERT INTO platform_operator_sessions (id, user_id, expires_at, ip) VALUES (?, ?, ?, ?)', [sessionId, userId, expires.toISOString(), ip.slice(0, 64)]);
-  return { token: signOperatorToken(userId, sessionId), expiresAt: expires.toISOString(), sessionId };
+export interface OperatorRow { id: string; email: string; name: string; is_active: boolean }
+
+export type SignInResult =
+  | { ok: true; operator: OperatorRow }
+  | { ok: false; why: 'unknown' | 'inactive' | 'locked' | 'wrong_password'; operator?: OperatorRow; lockedUntil?: string };
+
+/**
+ * Check an operator's e-mail and password. A wrong password counts a failure; the fifth in a row
+ * locks the account for 15 minutes. A success clears the counter and records last_login.
+ * An unknown e-mail still runs a bcrypt comparison (same timing).
+ */
+export async function checkOperatorPassword(email: string, password: string): Promise<SignInResult> {
+  const row = await queryOne<any>(
+    'SELECT id, email, name, password_hash, is_active, failed_login_attempts, locked_until FROM platform_operators WHERE LOWER(email) = LOWER(?)',
+    [email.trim()],
+  );
+  if (!row) {
+    await bcrypt.compare(password, '$2b$12$C6UzMDM.H6dfI/f/IKcEeO5dOsZb3n2BSb7tzNWbbUk8C5XbNq3uS').catch(() => false);
+    return { ok: false, why: 'unknown' };
+  }
+  const op: OperatorRow = { id: row.id, email: row.email, name: row.name, is_active: row.is_active };
+  if (row.locked_until && Date.parse(row.locked_until) > Date.now()) return { ok: false, why: 'locked', operator: op, lockedUntil: new Date(row.locked_until).toISOString() };
+  const good = await bcrypt.compare(password, row.password_hash).catch(() => false);
+  if (!good) {
+    const failures = (Number(row.failed_login_attempts) || 0) + 1;
+    const lock = failures >= OPERATOR_MAX_FAILURES;
+    await query(
+      `UPDATE platform_operators SET failed_login_attempts = ?, locked_until = CASE WHEN ? THEN now() + make_interval(mins => ?) ELSE locked_until END WHERE id = ?`,
+      [lock ? 0 : failures, lock, OPERATOR_LOCK_MINUTES, row.id],
+    );
+    return { ok: false, why: 'wrong_password', operator: op };
+  }
+  if (!row.is_active) return { ok: false, why: 'inactive', operator: op };
+  await query('UPDATE platform_operators SET failed_login_attempts = 0, locked_until = NULL, last_login = now() WHERE id = ?', [row.id]);
+  return { ok: true, operator: op };
 }
 
-export async function openOperatorSession(sessionId: string, userId: string): Promise<{ expires_at: string } | null> {
+export async function startOperatorSession(operatorId: string, ip: string): Promise<{ token: string; expiresAt: string; sessionId: string }> {
+  const sessionId = randomUUID();
+  const expires = new Date(Date.now() + OPERATOR_SESSION_MINUTES * 60_000);
+  await query('INSERT INTO platform_operator_sessions (id, operator_id, expires_at, ip) VALUES (?, ?, ?, ?)', [sessionId, operatorId, expires.toISOString(), ip.slice(0, 64)]);
+  return { token: signOperatorToken(operatorId, sessionId), expiresAt: expires.toISOString(), sessionId };
+}
+
+/** The open session of an active operator, with the operator. */
+export async function openOperatorSession(sessionId: string, operatorId: string): Promise<{ expires_at: string; email: string; name: string } | null> {
   return queryOne<any>(
-    'SELECT expires_at FROM platform_operator_sessions WHERE id = ? AND user_id = ? AND ended_at IS NULL AND expires_at > now()',
-    [sessionId, userId],
+    `SELECT s.expires_at, o.email, o.name FROM platform_operator_sessions s JOIN platform_operators o ON o.id = s.operator_id
+      WHERE s.id = ? AND s.operator_id = ? AND s.ended_at IS NULL AND s.expires_at > now() AND o.is_active`,
+    [sessionId, operatorId],
   );
 }
 
@@ -85,13 +134,37 @@ export async function endOperatorSession(sessionId: string): Promise<void> {
   await query('UPDATE platform_operator_sessions SET ended_at = COALESCE(ended_at, now()) WHERE id = ?', [sessionId]);
 }
 
+/** Create or update an operator (npm run operator:create). Refuses an e-mail of a company user. */
+export async function upsertOperator(email: string, name: string, password: string): Promise<{ id: string; created: boolean }> {
+  const e = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) throw new Error('Give a valid e-mail address.');
+  if (!name.trim()) throw new Error('Give a name.');
+  if (password.length < 12) throw new Error('The password needs at least 12 characters.');
+  const user = await queryOne<any>('SELECT 1 FROM users WHERE LOWER(email) = ?', [e]);
+  if (user) throw new Error('This e-mail address belongs to a company user. A platform operator must use another address.');
+  const hash = await bcrypt.hash(password, OPERATOR_BCRYPT_COST);
+  const existing = await queryOne<any>('SELECT id FROM platform_operators WHERE LOWER(email) = ?', [e]);
+  if (existing) {
+    await query('UPDATE platform_operators SET name = ?, password_hash = ?, is_active = TRUE, failed_login_attempts = 0, locked_until = NULL WHERE id = ?', [name.trim(), hash, existing.id]);
+    return { id: existing.id, created: false };
+  }
+  const rows = await query<any[]>('INSERT INTO platform_operators (email, name, password_hash) VALUES (?, ?, ?) RETURNING id', [e, name.trim(), hash]);
+  return { id: rows[0].id, created: true };
+}
+
+/** Is this e-mail a platform operator's? (company sign-up and user creation refuse it) */
+export async function isOperatorEmail(email: unknown): Promise<boolean> {
+  if (typeof email !== 'string' || !email.trim()) return false;
+  const r = await queryOne<any>('SELECT 1 FROM platform_operators WHERE LOWER(email) = LOWER(?)', [email.trim()]).catch(() => null);
+  return !!r;
+}
+
 /* ------------------------------------------------------------------------------------------
  * Logging
  * ---------------------------------------------------------------------------------------- */
 
 export interface OperatorRequest extends express.Request {
-  user?: any;
-  operator?: { userId: string; email: string; sessionId: string; expiresAt: string };
+  operator?: { operatorId: string; email: string; name: string; sessionId: string; expiresAt: string };
 }
 
 export async function logPlatformAccess(req: OperatorRequest, entry: { action: string; companyId?: string | null; section?: string | null; reason?: string | null; detail?: unknown; email?: string | null; userId?: string | null }): Promise<void> {
@@ -99,7 +172,7 @@ export async function logPlatformAccess(req: OperatorRequest, entry: { action: s
     `INSERT INTO platform_access_log (operator_user_id, operator_email, action, company_id, section, reason, detail, ip, request_id)
      VALUES (?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)`,
     [
-      entry.userId ?? req.operator?.userId ?? req.user?.id ?? null, (entry.email ?? req.operator?.email ?? null)?.slice(0, 255) ?? null,
+      entry.userId ?? req.operator?.operatorId ?? null, (entry.email ?? req.operator?.email ?? null)?.slice(0, 255) ?? null,
       entry.action, entry.companyId ?? null, entry.section ?? null, entry.reason?.slice(0, 500) ?? null,
       entry.detail === undefined ? null : JSON.stringify(entry.detail), clientIp(req), ctxOf(req).requestId,
     ],
@@ -108,7 +181,7 @@ export async function logPlatformAccess(req: OperatorRequest, entry: { action: s
 
 export const SECTION_LABELS: Record<string, string> = {
   overview: 'the company overview', organisation: 'the organisation', users: 'users and invitations', settings: 'settings and targets',
-  data: 'metric data', alerts: 'alerts and actions', pulse: 'the wellbeing pulse', activity: 'the activity log',
+  data: 'metric data', modules: 'the analytics module data', alerts: 'alerts and actions', pulse: 'the wellbeing pulse', activity: 'the activity log',
   user_activity: 'the user activity log', errors: 'server errors',
 };
 

@@ -1,10 +1,11 @@
 import { test, expect, type Page } from '@playwright/test';
 import { setupAuth } from './fixtures/auth';
+import { OPERATOR, ensureOperator, operatorSignIn } from './support/operator';
 
 /**
- * Smoke test of the platform support panel (/operator) and the User activity page.
- * The test API runs with PLATFORM_OPERATOR_EMAILS=admin@irongate.com (CI .env), so the demo
- * super admin is the operator; other roles never see the panel.
+ * Smoke test of the platform support panel (/operator) and the User activity page. Platform
+ * support has its own accounts (platform_operators, tests/e2e/support/operator.ts), never a
+ * company user: company users have no Platform entry and cannot sign in at /operator.
  */
 
 const noSidewaysScroll = async (page: Page) => {
@@ -24,22 +25,21 @@ test.describe('Platform support panel', { tag: ['@area:operator'] }, () => {
   test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
-  test('the operator steps up, opens a company with a reason, sees the banner and leaves', async ({ page }) => {
-    await setupAuth(page, 'super_admin');
-    await page.click('[data-testid="nav-toggle"]');
-    await expect(page.locator('[data-testid="nav-operator"]')).toBeVisible();
-    await page.click('[data-testid="nav-operator"]');
-    await expect(page).toHaveURL(/\/operator$/);
-    await expect(page.locator('[data-testid="operator-banner"]')).toContainText('Platform support mode');
+  test('the operator signs in at /operator, opens a company with a reason, runs an action and signs out', async ({ page }) => {
+    await ensureOperator();
+    await page.goto('http://localhost:5173/operator');
+    await expect(page.locator('[data-testid="operator-banner"]')).toContainText('IronGate platform support');
+    await expect(page.locator('[data-testid="operator-signin"]')).toBeVisible();
 
     // Wrong password first.
+    await page.fill('[data-testid="operator-email"]', OPERATOR.email);
     await page.fill('[data-testid="operator-password"]', 'not-the-password');
     await page.click('[data-testid="operator-enter"]');
-    await expect(page.getByRole('alert')).toContainText('Wrong password');
-    await page.fill('[data-testid="operator-password"]', 'demo123');
+    await expect(page.getByRole('alert')).toContainText('Wrong e-mail address or password');
+    await page.fill('[data-testid="operator-password"]', OPERATOR.password);
     await page.click('[data-testid="operator-enter"]');
     await expect(page.locator('[data-testid="operator-overview"]')).toBeVisible({ timeout: 30000 });
-    await expect(page.locator('[data-testid="operator-countdown"]')).toHaveText(/^(29|30):\d\d$/);
+    await expect(page.locator('[data-testid="operator-who"]')).toHaveText(OPERATOR.name);
     await expect(page.locator('[data-testid="operator-jobs"]')).toContainText('db-keepalive');
 
     await page.locator('[data-testid="operator-open-company"]').first().click();
@@ -60,16 +60,12 @@ test.describe('Platform support panel', { tag: ['@area:operator'] }, () => {
     await expect(page.locator('[data-testid="op-action-run"]')).toHaveCount(0, { timeout: 30000 });
 
     await page.click('[data-testid="operator-leave"]');
-    await expect(page.locator('[data-testid="operator-stepup"]')).toBeVisible();
+    await expect(page.locator('[data-testid="operator-signin"]')).toBeVisible();
   });
 
   test('works at 390 px without sideways scrolling', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await setupAuth(page, 'super_admin');
-    await page.goto('http://localhost:5173/operator');
-    await page.fill('[data-testid="operator-password"]', 'demo123');
-    await page.click('[data-testid="operator-enter"]');
-    await expect(page.locator('[data-testid="operator-overview"]')).toBeVisible({ timeout: 30000 });
+    await operatorSignIn(page);
     await noSidewaysScroll(page);
     await page.locator('[data-testid="operator-open-company"]').first().click();
     await page.fill('[data-testid="operator-open-reason"]', 'E2E phone check');
@@ -78,13 +74,19 @@ test.describe('Platform support panel', { tag: ['@area:operator'] }, () => {
     await noSidewaysScroll(page);
   });
 
-  test('other roles have no Platform entry and /operator says it is not available', async ({ page }) => {
-    await setupAuth(page, 'qa_engineer');
+  test('company users have no Platform entry and cannot sign in at /operator', async ({ page }) => {
+    await setupAuth(page, 'super_admin');
     await page.click('[data-testid="nav-toggle"]');
-    await expect(page.locator('[data-testid="nav-user-activity"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid="nav-user-activity"]')).toBeVisible();
     await expect(page.locator('[data-testid="nav-operator"]')).toHaveCount(0);
+    await ensureOperator();
     await page.goto('http://localhost:5173/operator');
-    await expect(page.getByText('This area is not available for your account.')).toBeVisible({ timeout: 30000 });
+    // The company session does not count here: the platform support sign-in is shown.
+    await expect(page.locator('[data-testid="operator-signin"]')).toBeVisible({ timeout: 30000 });
+    await page.fill('[data-testid="operator-email"]', 'admin@irongate.com');
+    await page.fill('[data-testid="operator-password"]', 'demo123');
+    await page.click('[data-testid="operator-enter"]');
+    await expect(page.getByRole('alert')).toContainText('Wrong e-mail address or password');
   });
 });
 

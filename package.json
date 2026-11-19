@@ -21,6 +21,7 @@
     "seed:demo": "tsx server/seeds/demoSeedCli.ts",
     "seed:demo:clear": "tsx server/seeds/demoSeedCli.ts --clear",
     "seed:demo:check": "tsx server/seeds/demoCheck.ts",
+    "operator:create": "tsx server/scripts/operatorCreate.ts",
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "jest --config jest.config.cjs",
     "test:api": "jest --config jest.config.cjs tests/api",

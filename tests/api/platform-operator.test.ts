@@ -1,16 +1,23 @@
 /**
  * Platform operator panel (server/routes/operator.ts, server/lib/operator.ts), against an
- * in-process copy of the API (tests/api/helpers/inProcessApp.ts) so PLATFORM_OPERATOR_EMAILS can
- * change per test. Same local database as the live API.
+ * in-process copy of the API (tests/api/helpers/inProcessApp.ts) so PLATFORM_OPERATOR_ALLOWED_IPS
+ * can change per test. Same local database as the live API. Operators are rows of
+ * platform_operators (never company users), created here with upsertOperator.
  *
- *   OP-001  feature off (env unset or empty): every /api/operator route is 404
- *   OP-002  a super admin whose email is not allowlisted: 404 (status says operator: false)
- *   OP-003  step-up: wrong password refused and logged (no password stored); rate limited
- *   OP-004  a session JWT cannot act as the operator token, the operator token alone (no session)
- *           cannot either, and it is never accepted as a session
- *   OP-005  operator token expiry, Leave (revocation) and the session row expiry
+ *   OP-001  feature off (no active operator): every /api/operator route is 404
+ *   OP-002  company accounts are never operators: a company session or a company user's password
+ *           gets nothing; an operator's e-mail cannot register, be added or invited as a company
+ *           user, and a company user's e-mail cannot become an operator
+ *   OP-003  sign-in: wrong password refused and logged (no password stored); success: an 8-hour
+ *           session in the httpOnly cookie irongate_operator (and the token in the answer)
+ *   OP-003b lockout after 5 failed sign-ins in a row (15 minutes, even with the right password)
+ *   OP-004  a company session JWT cannot act as the operator token, and the operator token is
+ *           never accepted as a company session
+ *   OP-005  operator token expiry, Sign out (revocation), the session row expiry, a deactivated operator
  *   OP-006  allowed IPs (PLATFORM_OPERATOR_ALLOWED_IPS)
- *   OP-007  protected fields never appear in any operator response
+ *   OP-007  full visibility of customer data (every developer row, single pulse answers and
+ *           comments, who answered, user details) but never a secret: password / API key / token
+ *           hashes, link tokens, the Slack webhook, integration credentials ("set" / "not set")
  *   OP-008  company views write a customer audit entry, throttled per section (30 minutes),
  *           and the platform access log
  *   OP-009  repair actions: reason + confirm required, each works and is audited
@@ -18,7 +25,11 @@
  *   OP-011  "Refresh sample data now" on Netlify: starts the background function with the signed
  *           token, answers 202 "started" at once, records job_runs and the platform access log;
  *           a failed start is 502 and recorded as failed; off (DEMO_REFRESH_ENABLED=false) is 409
+ *   OP-012  the modules section returns every analytics module's stored rows for a team
+ *   OP-013  sign-ins are rate limited per IP
  */
+// Room for the sign-in failures the tests make on purpose before OP-013 checks the limit.
+process.env.OPERATOR_SIGN_IN_MAX = '14';
 const runRefreshDates = jest.fn();
 jest.mock('../../server/seeds/demoSeed', () => ({
   runRefreshDates: (...a: unknown[]) => runRefreshDates(...a),
@@ -32,28 +43,34 @@ import jwt from 'jsonwebtoken';
 import type { Client } from 'pg';
 import { buildApp } from './helpers/inProcessApp';
 import { NEW_PW, backendUp, cookieFrom, localDb, get as liveGet, post as livePost, put as livePut, API_URL } from './helpers/http';
-import { signOperatorToken } from '../../server/lib/operator';
+import { signOperatorToken, upsertOperator } from '../../server/lib/operator';
 import { JWT_SECRET } from '../../server/middleware/auth';
 import { flushActivity } from '../../server/lib/userActivity';
 import { flushBackgroundWrites } from '../../server/lib/opsLog';
 import { pool } from '../../src/lib/db';
 
 const app = buildApp();
-const ENV = ['PLATFORM_OPERATOR_EMAILS', 'PLATFORM_OPERATOR_ALLOWED_IPS'];
+const ENV = ['PLATFORM_OPERATOR_ALLOWED_IPS'];
 const saved: Record<string, string | undefined> = {};
 let up = true;
 let db: Client;
 const stamp = Date.now();
-const opEmail = `op-owner-${stamp}@owner${stamp}.test`;
-const op2Email = `op-second-${stamp}@second${stamp}.test`;
+const OP_PW = 'Operator-Test-Passw0rd!';
+const opEmail = `op-owner-${stamp}@platform${stamp}.test`;
+const op2Email = `op-second-${stamp}@platform${stamp}.test`;
+const op3Email = `op-third-${stamp}@platform${stamp}.test`;
+const otherEmail = `op-other-${stamp}@other${stamp}.test`;
 const custEmail = `op-customer-${stamp}@cust${stamp}.test`;
-let opCookie = '';
-let op2Cookie = '';
+let opId = '';
+let op2Id = '';
+let otherCookie = '';
+let otherUserId = '';
 let custCookie = '';
-let opUserId = '';
 let companyId = '';
 let teamId = '';
 const markers: Record<string, string> = {};
+/** Kept for the calls below: company cookies are ignored by /api/operator (operators are not company users). */
+let opCookie = '';
 
 const call = (method: 'get' | 'post', path: string, cookie = '', token = '', reason = '') => {
   let r = request(app)[method](path).set('Cookie', cookie);
@@ -68,9 +85,7 @@ async function register(email: string, company: string) {
   if (res.status >= 300) throw new Error(`register ${email}: ${res.status} ${JSON.stringify(res.body)}`);
   return { cookie: cookieFrom(res), user: res.body.user };
 }
-async function stepUp(cookie: string, password = NEW_PW) {
-  return call('post', '/api/operator/session', cookie).send({ password });
-}
+const signIn = (email: string, password = OP_PW) => request(app).post('/api/operator/login').send({ email, password });
 let token = '';
 
 beforeAll(async () => {
@@ -78,16 +93,18 @@ beforeAll(async () => {
   up = await backendUp();
   if (!up) return;
   db = await localDb();
-  const op = await register(opEmail, `OpHome ${stamp}`);
-  opCookie = op.cookie; opUserId = op.user.id;
-  op2Cookie = (await register(op2Email, `OpHome2 ${stamp}`)).cookie;
+  opId = (await upsertOperator(opEmail, 'Owner Operator', OP_PW)).id;
+  op2Id = (await upsertOperator(op2Email, 'Second Operator', OP_PW)).id;
+  await upsertOperator(op3Email, 'Third Operator', OP_PW);
+  const other = await register(otherEmail, `OpOther ${stamp}`);
+  otherCookie = other.cookie; otherUserId = other.user.id;
+  opCookie = otherCookie;
   const cust = await register(custEmail, `OpCustomer ${stamp}`);
   custCookie = cust.cookie;
   companyId = cust.user.company_id ?? cust.user.companyId;
   teamId = (await db.query('SELECT id FROM teams WHERE company_id = $1 LIMIT 1', [companyId])).rows[0].id;
-  process.env.PLATFORM_OPERATOR_EMAILS = `${opEmail.toUpperCase()}, ${op2Email}`;
 
-  // ---- protected data of the customer company, each with a marker value
+  // ---- data of the customer company, each with a marker value
   markers.apiKey = (await livePost('/api/admin/api-keys', custCookie, { name: 'Op test key' })).body.plaintextKey;
   markers.apiKeyHash = createHash('sha256').update(markers.apiKey).digest('hex');
   markers.passwordHash = (await db.query('SELECT password_hash FROM users WHERE LOWER(email) = LOWER($1)', [custEmail])).rows[0].password_hash;
@@ -103,13 +120,17 @@ beforeAll(async () => {
      VALUES ($1, $2, $3, $4, CURRENT_DATE, CURRENT_DATE + 7, now() + interval '7 days')`,
     [markers.pulseHash, companyId, teamId, cust.user.id],
   );
+  // Customer data that support now sees in full.
   markers.pulseComment = `PULSECOMMENT${stamp}`;
   await db.query(
     `INSERT INTO pulse_responses (company_id, team_id, period_start, period_end, q_workload, q_focus, q_support, q_energy, q_outlook, comment)
      VALUES ($1, $2, CURRENT_DATE - 14, CURRENT_DATE - 7, 1, 2, 3, 4, 5, $3)`,
     [companyId, teamId, markers.pulseComment],
   );
-  // Developers: one opted in (row shown), one not (row never shown).
+  await db.query(
+    `INSERT INTO pulse_participation (company_id, team_id, user_id, period_start) VALUES ($1, $2, $3, CURRENT_DATE - 14) ON CONFLICT DO NOTHING`,
+    [companyId, teamId, cust.user.id],
+  );
   const mkDev = async (key: string, optIn: boolean, value: number) => {
     const res = await livePost('/api/admin/users', custCookie, { email: `op-dev-${key}-${stamp}@cust${stamp}.test`, password: NEW_PW, firstName: 'Dev', lastName: key, role: 'qa_engineer', teamId });
     if (res.status !== 201) throw new Error(`dev ${key}: ${res.status} ${JSON.stringify(res.body)}`);
@@ -121,13 +142,13 @@ beforeAll(async () => {
     );
     return res.body.id;
   };
-  markers.devOptOutValue = '987.65';
   await mkDev('out', false, 987.65);
   await mkDev('in', true, 123.45);
 }, 60_000);
 
 afterAll(async () => {
   for (const k of ENV) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+  if (db) await db.query('DELETE FROM platform_operators WHERE email = ANY($1::text[])', [[opEmail, op2Email, op3Email]]);
   await db?.end();
   await flushBackgroundWrites(2000);
   await pool.end();
@@ -136,145 +157,170 @@ afterAll(async () => {
 const skip = () => !up;
 
 describe('Platform operator', () => {
-  test('OP-001 off when PLATFORM_OPERATOR_EMAILS is unset or empty', async () => {
+  test('OP-001 off when no active operator exists', async () => {
     if (skip()) return;
-    const was = process.env.PLATFORM_OPERATOR_EMAILS;
-    for (const v of [undefined, '', ' , ']) {
-      if (v === undefined) delete process.env.PLATFORM_OPERATOR_EMAILS; else process.env.PLATFORM_OPERATOR_EMAILS = v;
-      for (const [m, p] of [['get', '/api/operator/status'], ['post', '/api/operator/session'], ['get', '/api/operator/overview'], ['get', `/api/operator/companies/${companyId}/users`]] as const) {
-        const res = await call(m, p, opCookie);
-        expect(res.status).toBe(404);
+    const active = (await db.query('UPDATE platform_operators SET is_active = FALSE WHERE is_active RETURNING id')).rows.map((r: any) => r.id);
+    try {
+      for (const [m, p] of [['get', '/api/operator/status'], ['post', '/api/operator/login'], ['get', '/api/operator/overview'], ['get', `/api/operator/companies/${companyId}/users`]] as const) {
+        expect({ p, status: (await call(m, p)).status }).toEqual({ p, status: 404 });
       }
+    } finally {
+      await db.query('UPDATE platform_operators SET is_active = TRUE WHERE id = ANY($1::text[])', [active]);
     }
-    process.env.PLATFORM_OPERATOR_EMAILS = was;
   });
 
-  test('OP-002 a super admin who is not allowlisted is refused (404); status says false', async () => {
+  test('OP-002 company accounts are never operators, and the other way round', async () => {
     if (skip()) return;
-    expect((await call('get', '/api/operator/status', custCookie)).body).toEqual({ operator: false });
-    expect((await call('get', '/api/operator/status', '')).body).toEqual({ operator: false });
-    expect((await call('get', '/api/operator/status', opCookie)).body).toEqual({ operator: true });
-    expect((await stepUp(custCookie)).status).toBe(404);
-    expect((await call('get', '/api/operator/overview', custCookie)).status).toBe(404);
-    expect((await call('get', '/api/operator/overview', '')).status).toBe(401);
+    expect((await call('get', '/api/operator/status', custCookie)).body).toEqual({ signedIn: false, allowed: true });
+    expect((await call('get', '/api/operator/overview', custCookie)).status).toBe(401);
+    // A company user's own password does not open platform support.
+    expect((await signIn(custEmail, NEW_PW)).status).toBe(401);
+    // An operator's e-mail cannot become a company account.
+    const reg = await request(API_URL).post('/api/auth/register').send({
+      email: opEmail, password: NEW_PW, firstName: 'X', lastName: 'Y', companyName: `OpClash ${stamp}`, departmentName: 'D', teamName: 'T',
+    });
+    expect(reg.status).toBe(409);
+    expect((await livePost('/api/admin/users', custCookie, { email: opEmail.toUpperCase(), password: NEW_PW, firstName: 'X', lastName: 'Y', role: 'viewer', teamId })).status).toBe(409);
+    expect((await livePost('/api/admin/invitations', custCookie, { email: opEmail, role: 'qa_engineer', scopeId: teamId })).status).toBe(409);
+    // A company user's e-mail cannot become an operator (the script and the database refuse it).
+    await expect(upsertOperator(custEmail, 'Clash', OP_PW)).rejects.toThrow(/company user/);
+    await expect(db.query(`INSERT INTO platform_operators (email, name, password_hash) VALUES ($1, 'Clash', 'x')`, [custEmail.toUpperCase()])).rejects.toThrow(/company user/);
+    await expect(db.query(`UPDATE users SET email = $1 WHERE LOWER(email) = LOWER($2)`, [opEmail, custEmail])).rejects.toThrow(/cannot be used/);
   });
 
-  test('OP-003 step-up: wrong password refused and logged without the password; then success', async () => {
+  test('OP-003 sign-in: wrong password refused and logged without the password; then an 8-hour session', async () => {
     if (skip()) return;
-    const bad = await stepUp(opCookie, 'Wrong-password-MARK');
+    const bad = await signIn(opEmail, 'Wrong-password-MARK');
     expect(bad.status).toBe(401);
     expect(bad.body.token).toBeUndefined();
-    const log = await db.query(`SELECT * FROM platform_access_log WHERE operator_user_id = $1 AND action = 'step_up.failed'`, [opUserId]);
+    const log = await db.query(`SELECT * FROM platform_access_log WHERE operator_user_id = $1 AND action = 'sign_in.failed'`, [opId]);
     expect(log.rows.length).toBeGreaterThanOrEqual(1);
     expect(JSON.stringify(log.rows)).not.toContain('Wrong-password-MARK');
-    const ok = await stepUp(opCookie);
+    const ok = await signIn(opEmail.toUpperCase());
     expect(ok.status).toBe(200);
     expect(typeof ok.body.token).toBe('string');
-    expect(Date.parse(ok.body.expiresAt) - Date.now()).toBeGreaterThan(29 * 60_000);
-    expect(Date.parse(ok.body.expiresAt) - Date.now()).toBeLessThanOrEqual(30 * 60_000 + 5000);
+    expect(ok.body).toEqual(expect.objectContaining({ email: opEmail, name: 'Owner Operator' }));
+    expect(Date.parse(ok.body.expiresAt) - Date.now()).toBeGreaterThan(8 * 3600_000 - 60_000);
+    expect(Date.parse(ok.body.expiresAt) - Date.now()).toBeLessThanOrEqual(8 * 3600_000 + 5000);
+    const cookie = ([] as string[]).concat(ok.headers['set-cookie'] ?? []).find((c) => c.startsWith('irongate_operator='))!;
+    expect(cookie).toMatch(/HttpOnly/i);
+    expect(cookie).toMatch(/SameSite=Lax/i);
     token = ok.body.token;
-    expect((await call('get', '/api/operator/session', opCookie, token)).status).toBe(200);
+    // The cookie alone is the session (the web page uses it).
+    const viaCookie = await request(app).get('/api/operator/session').set('Cookie', cookie.split(';')[0]);
+    expect(viaCookie.status).toBe(200);
+    expect(viaCookie.body.email).toBe(opEmail);
+    expect((await request(app).get('/api/operator/status').set('Cookie', cookie.split(';')[0])).body).toEqual(expect.objectContaining({ signedIn: true, email: opEmail }));
+    expect((await db.query('SELECT last_login, failed_login_attempts FROM platform_operators WHERE id = $1', [opId])).rows[0]).toEqual(expect.objectContaining({ failed_login_attempts: 0, last_login: expect.any(Date) }));
   });
 
-  test('OP-003b step-up is rate limited (5 failures per 15 minutes per user)', async () => {
+  test('OP-003b five failed sign-ins in a row lock the account for 15 minutes', async () => {
     if (skip()) return;
     const statuses: number[] = [];
-    for (let i = 0; i < 6; i++) statuses.push((await stepUp(op2Cookie, `nope-${i}`)).status);
-    expect(statuses.slice(0, 5)).toEqual([401, 401, 401, 401, 401]);
-    expect(statuses[5]).toBe(429);
-    // Even the right password is refused while limited.
-    expect((await stepUp(op2Cookie)).status).toBe(429);
+    for (let i = 0; i < 5; i++) statuses.push((await signIn(op2Email, `nope-${i}`)).status);
+    expect(statuses).toEqual([401, 401, 401, 401, 401]);
+    const locked = await signIn(op2Email);
+    expect(locked.status).toBe(423);
+    const row = (await db.query('SELECT locked_until FROM platform_operators WHERE id = $1', [op2Id])).rows[0];
+    expect(Date.parse(row.locked_until) - Date.now()).toBeGreaterThan(14 * 60_000);
+    await db.query('UPDATE platform_operators SET locked_until = NULL WHERE id = $1', [op2Id]);
+    expect((await signIn(op2Email)).status).toBe(200);
   });
 
-  test('OP-004 session JWT and operator token are not interchangeable; both are needed', async () => {
+  test('OP-004 company session JWT and operator token are not interchangeable', async () => {
     if (skip()) return;
-    const sessionJwt = opCookie.replace('irongate_token=', '');
-    // Session only, or the session JWT in place of the operator token.
-    expect((await call('get', '/api/operator/overview', opCookie)).status).toBe(401);
-    expect((await call('get', '/api/operator/overview', opCookie, sessionJwt)).status).toBe(401);
+    const sessionJwt = custCookie.replace('irongate_token=', '');
+    expect((await call('get', '/api/operator/overview', custCookie, sessionJwt)).status).toBe(401);
+    expect((await request(app).get('/api/operator/overview').set('Cookie', `irongate_operator=${sessionJwt}`)).status).toBe(401);
     // A token signed with JWT_SECRET carrying the operator claims is still refused (different key).
-    const forged = jwt.sign({ typ: 'platform_operator', sid: 'x' }, JWT_SECRET, { subject: opUserId, audience: 'irongate-platform-operator', issuer: 'irongate', expiresIn: 600 });
-    expect((await call('get', '/api/operator/overview', opCookie, forged)).status).toBe(401);
-    // Operator token alone, without the session.
-    expect((await call('get', '/api/operator/overview', '', token)).status).toBe(401);
-    // Operator token as a session (cookie or bearer) never works on normal routes.
-    expect((await request(API_URL).get('/api/teams').set('Cookie', `irongate_token=${token}`)).status).toBe(403);
-    expect((await request(API_URL).get('/api/teams').set('Authorization', `Bearer ${token}`)).status).toBe(403);
-    // Another operator's session cannot use my token.
-    expect((await call('get', '/api/operator/overview', op2Cookie, token)).status).toBe(401);
-    expect((await call('get', '/api/operator/overview', opCookie, token)).status).toBe(200);
+    const forged = jwt.sign({ typ: 'platform_operator', sid: 'x' }, JWT_SECRET, { subject: opId, audience: 'irongate-platform-operator', issuer: 'irongate', expiresIn: 600 });
+    expect((await call('get', '/api/operator/overview', '', forged)).status).toBe(401);
+    // The operator token as a company session never works on normal routes.
+    expect([401, 403]).toContain((await request(API_URL).get('/api/teams').set('Cookie', `irongate_token=${token}`)).status);
+    expect([401, 403]).toContain((await request(API_URL).get('/api/teams').set('Authorization', `Bearer ${token}`)).status);
+    // Another operator's id with my session: refused.
+    const sid = (jwt.decode(token) as any).sid;
+    expect((await call('get', '/api/operator/overview', '', signOperatorToken(op2Id, sid))).status).toBe(401);
+    expect((await call('get', '/api/operator/overview', '', token)).status).toBe(200);
   });
 
-  test('OP-005 expiry and Leave end the operator token', async () => {
+  test('OP-005 expiry, Sign out and deactivation end the operator session', async () => {
     if (skip()) return;
-    const s = await stepUp(opCookie);
+    const s = await signIn(opEmail);
     const sid = (jwt.decode(s.body.token) as any).sid;
-    const expired = signOperatorToken(opUserId, sid, -1);
-    expect((await call('get', '/api/operator/overview', opCookie, expired)).status).toBe(401);
-    // The session row expired (e.g. after 30 minutes): refused although the JWT is still valid.
+    expect((await call('get', '/api/operator/overview', '', signOperatorToken(opId, sid, -1))).status).toBe(401);
+    // The session row expired: refused although the JWT is still valid.
     await db.query(`UPDATE platform_operator_sessions SET expires_at = now() - interval '1 second' WHERE id = $1`, [sid]);
-    expect((await call('get', '/api/operator/overview', opCookie, s.body.token)).status).toBe(401);
-    // Leave.
-    const s2 = await stepUp(opCookie);
-    expect((await call('post', '/api/operator/session/end', opCookie, s2.body.token)).status).toBe(200);
-    const after = await call('get', '/api/operator/overview', opCookie, s2.body.token);
+    expect((await call('get', '/api/operator/overview', '', s.body.token)).status).toBe(401);
+    // Sign out.
+    const s2 = await signIn(opEmail);
+    const out = await call('post', '/api/operator/logout', '', s2.body.token);
+    expect(out.status).toBe(200);
+    expect(([] as string[]).concat(out.headers['set-cookie'] ?? []).some((c) => /^irongate_operator=;/.test(c))).toBe(true);
+    const after = await call('get', '/api/operator/overview', '', s2.body.token);
     expect(after.status).toBe(401);
     expect(after.body.code).toBe('operator_session_required');
-    // Removed from the allowlist: refused at once, even with a live token.
-    const was = process.env.PLATFORM_OPERATOR_EMAILS;
-    process.env.PLATFORM_OPERATOR_EMAILS = op2Email;
-    expect((await call('get', '/api/operator/overview', opCookie, token)).status).toBe(404);
-    process.env.PLATFORM_OPERATOR_EMAILS = was;
+    // A deactivated operator: refused at once, even with a live token, and cannot sign in.
+    const s3 = await signIn(op3Email);
+    await db.query('UPDATE platform_operators SET is_active = FALSE WHERE email = $1', [op3Email]);
+    expect((await call('get', '/api/operator/overview', '', s3.body.token)).status).toBe(401);
+    expect((await signIn(op3Email)).status).toBe(401);
+    await db.query('UPDATE platform_operators SET is_active = TRUE WHERE email = $1', [op3Email]);
   });
 
   test('OP-006 PLATFORM_OPERATOR_ALLOWED_IPS refuses other client addresses', async () => {
     if (skip()) return;
-    process.env.PLATFORM_OPERATOR_ALLOWED_IPS = '203.0.113.7';
-    expect((await call('get', '/api/operator/overview', opCookie, token)).status).toBe(403);
-    expect((await call('get', '/api/operator/status', opCookie)).body.operator).toBe(false);
-    process.env.PLATFORM_OPERATOR_ALLOWED_IPS = '127.0.0.1, ::1';
-    expect((await call('get', '/api/operator/overview', opCookie, token)).status).toBe(200);
-    delete process.env.PLATFORM_OPERATOR_ALLOWED_IPS;
+    try {
+      process.env.PLATFORM_OPERATOR_ALLOWED_IPS = '203.0.113.7';
+      expect((await call('get', '/api/operator/overview', '', token)).status).toBe(403);
+      expect((await call('get', '/api/operator/status', '', token)).body).toEqual({ signedIn: false, allowed: false });
+      expect((await signIn(opEmail)).status).toBe(403);
+      process.env.PLATFORM_OPERATOR_ALLOWED_IPS = '127.0.0.1, ::1';
+      expect((await call('get', '/api/operator/overview', '', token)).status).toBe(200);
+    } finally {
+      delete process.env.PLATFORM_OPERATOR_ALLOWED_IPS;
+    }
   });
 
-  test('OP-007 protected fields never appear in operator responses', async () => {
+  test('OP-007 every customer value is visible; secrets never are', async () => {
     if (skip()) return;
-    const sections = ['summary', 'organisation', 'users', 'settings', `data?teamId=${teamId}`, 'alerts', 'pulse', 'activity', 'user-activity?facets=true', 'errors'];
+    const sections = ['summary', 'organisation', 'users', 'settings', `data?teamId=${teamId}`, 'alerts', 'pulse', 'activity', 'user-activity?facets=true', 'errors', `modules?teamId=${teamId}`];
     const bodies: string[] = [];
     for (const s of sections) {
-      const res = await call('get', `/api/operator/companies/${companyId}/${s}`, opCookie, token, 'protected field check');
-      expect(res.status).toBe(200);
+      const res = await call('get', `/api/operator/companies/${companyId}/${s}`, '', token, 'visibility check');
+      expect({ s, status: res.status }).toEqual({ s, status: 200 });
       bodies.push(JSON.stringify(res.body));
     }
-    bodies.push(JSON.stringify((await call('get', '/api/operator/overview', opCookie, token)).body));
+    bodies.push(JSON.stringify((await call('get', '/api/operator/overview', '', token)).body));
     const all = bodies.join('\n');
-    for (const [k, v] of Object.entries(markers)) {
-      if (k === 'devOptOutValue') continue;
-      expect({ k, found: all.includes(v) }).toEqual({ k, found: false });
+    for (const k of ['apiKey', 'apiKeyHash', 'passwordHash', 'slack', 'configSecret', 'pulseToken', 'pulseHash']) {
+      expect({ k, found: all.includes(markers[k]) }).toEqual({ k, found: false });
     }
-    expect(all).not.toMatch(/password_hash|key_hash|token_hash|slack_webhook_enc/);
-    expect(all).not.toContain('q_workload');
-    // Developer metrics: the opted-in row is shown, the other one never.
+    expect(all).not.toMatch(/password_hash|key_hash|token_hash|slack_webhook_enc|password_reset_token/);
+    // Developer metrics: every person's row, with whether they opted in.
     const data = JSON.parse(bodies[4]);
-    const values = data.developers.optedInRows.map((r: any) => Number(r.pr_merge_time_avg));
-    expect(values).toContain(123.45);
-    expect(values).not.toContain(987.65);
-    expect(bodies[4]).not.toContain(markers.devOptOutValue);
-    // Secret config values are masked, the key is listed.
+    const rows = data.developers.rows.map((r: any) => ({ v: Number(r.pr_merge_time_avg), optedIn: r.opted_in }));
+    expect(rows).toEqual(expect.arrayContaining([{ v: 123.45, optedIn: true }, { v: 987.65, optedIn: false }]));
+    // Pulse: single answers with comments, and who answered.
+    const pulse = JSON.parse(bodies[6]).teams.find((t: any) => t.team.id === teamId);
+    expect(pulse.answers).toEqual(expect.arrayContaining([expect.objectContaining({ q_workload: 1, q_outlook: 5, comment: markers.pulseComment })]));
+    expect(pulse.participants.map((p: any) => p.email.toLowerCase())).toContain(custEmail);
+    // Integration credentials: only whether one is set.
     const settings = JSON.parse(bodies[3]);
-    const secret = settings.configs.find((c: any) => c.config_key === 'jira_api_token');
-    expect(secret?.config_value).toBe('********');
-    // Invitations / API keys: no token or hash fields at all.
+    expect(settings.configs.find((c: any) => c.config_key === 'jira_api_token')?.config_value).toBe('set');
+    expect(settings.notificationSettings.slack_configured).toBe(true);
+    // Users: details, but no hash or token field.
     const users = JSON.parse(bodies[2]);
+    expect(users.users.find((u: any) => u.email.toLowerCase() === custEmail)).toEqual(expect.objectContaining({ password_set: true, department_name: expect.any(String) }));
     expect(Object.keys(users.apiKeys[0]).sort()).toEqual(['created_at', 'id', 'key_prefix', 'last_used_at', 'name', 'revoked_at']);
   });
 
   test('OP-008 company views are recorded for the customer (throttled) and platform-wide', async () => {
     if (skip()) return;
     await db.query(`DELETE FROM audit_log WHERE company_id = $1 AND action = 'platform_support.view' AND after->>'section' = 'alerts'`, [companyId]);
-    expect((await call('get', `/api/operator/companies/${companyId}/alerts`, opCookie, token)).status).toBe(400); // reason required
+    expect((await call('get', `/api/operator/companies/${companyId}/alerts`, '', token)).status).toBe(400); // reason required
     for (let i = 0; i < 3; i++) {
-      expect((await call('get', `/api/operator/companies/${companyId}/alerts`, opCookie, token, 'Ticket 42: alerts missing')).status).toBe(200);
+      expect((await call('get', `/api/operator/companies/${companyId}/alerts`, '', token, 'Ticket 42: alerts missing')).status).toBe(200);
     }
     const audit = await db.query(`SELECT * FROM audit_log WHERE company_id = $1 AND action = 'platform_support.view' AND after->>'section' = 'alerts'`, [companyId]);
     expect(audit.rows).toHaveLength(1);
@@ -287,12 +333,13 @@ describe('Platform operator', () => {
     expect(seen.body.entries.some((e: any) => e.summary.includes('Ticket 42'))).toBe(true);
     // Older than 30 minutes: a new entry.
     await db.query(`UPDATE audit_log SET created_at = now() - interval '31 minutes' WHERE id = $1`, [audit.rows[0].id]);
-    await call('get', `/api/operator/companies/${companyId}/alerts`, opCookie, token, 'Ticket 42: alerts missing');
+    await call('get', `/api/operator/companies/${companyId}/alerts`, '', token, 'Ticket 42: alerts missing');
     expect((await db.query(`SELECT 1 FROM audit_log WHERE company_id = $1 AND action = 'platform_support.view' AND after->>'section' = 'alerts'`, [companyId])).rows).toHaveLength(2);
     // Platform log: every view.
     const plat = await db.query(`SELECT * FROM platform_access_log WHERE company_id = $1 AND action = 'view' AND section = 'alerts'`, [companyId]);
     expect(plat.rows.length).toBeGreaterThanOrEqual(4);
     expect(plat.rows[0].operator_email.toLowerCase()).toBe(opEmail);
+    expect(plat.rows[0].operator_user_id).toBe(opId);
     // Operator requests are not in the customer's user activity log.
     await flushActivity();
     const ua = await db.query(`SELECT 1 FROM user_activity WHERE route LIKE '/api/operator%'`);
@@ -351,8 +398,8 @@ describe('Platform operator', () => {
     const signOutAudit = await db.query(`SELECT summary FROM audit_log WHERE company_id = $1 AND action = 'platform_support.action' AND summary LIKE '%out everywhere%'`, [companyId]);
     expect(signOutAudit.rows[0].summary).toMatch(/^Platform support: Signed Tar Get out everywhere\. Reason: Lost laptop/);
     // Another company's user through this company: 404.
-    expect((await post(`${base}/users/${opUserId}/deactivate`, { reason: 'wrong company', confirm: true })).status).toBe(404);
-    expect((await post(`${base}/users/${opUserId}/sign-out-everywhere`, { reason: 'wrong company', confirm: true })).status).toBe(404);
+    expect((await post(`${base}/users/${otherUserId}/deactivate`, { reason: 'wrong company', confirm: true })).status).toBe(404);
+    expect((await post(`${base}/users/${otherUserId}/sign-out-everywhere`, { reason: 'wrong company', confirm: true })).status).toBe(404);
 
     runRefreshDates.mockResolvedValueOnce({ today: '2026-11-19', demoCompany: { refreshed: true, insertedTotal: 3 }, companies: [{ id: companyId, teams: 1, teamsFilled: 1 }], insertedTotal: 3 });
     const dr = await post('/actions/demo-refresh', { reason: 'Demo data is a day behind', confirm: true });
@@ -392,7 +439,7 @@ describe('Platform operator', () => {
     const realFetch = global.fetch;
     const netlifyApp = buildApp();
     netlifyApp.locals.behindNetlify = true; // as netlify/functions/api.ts
-    const fresh = (await stepUp(opCookie)).body.token as string;
+    const fresh = (await signIn(opEmail)).body.token as string;
     const run = (body: object) => request(netlifyApp).post('/api/operator/actions/demo-refresh').set('Cookie', opCookie).set('X-Operator-Token', fresh).send(body);
     try {
       process.env.URL = 'https://demo.example.test/';
@@ -422,7 +469,7 @@ describe('Platform operator', () => {
       const job = await db.query(`SELECT ok, summary, started_at FROM job_runs WHERE job = 'demo-refresh' ORDER BY started_at DESC LIMIT 1`);
       expect(job.rows[0]).toEqual(expect.objectContaining({ ok: true, summary: 'background job requested (202) (manual, platform support)' }));
       expect(new Date(job.rows[0].started_at).getTime()).toBeGreaterThanOrEqual(t0 - 1000);
-      const plat = await db.query(`SELECT reason FROM platform_access_log WHERE action = 'action' AND section = 'demo_refresh' AND operator_user_id = $1 ORDER BY created_at DESC LIMIT 1`, [opUserId]);
+      const plat = await db.query(`SELECT reason FROM platform_access_log WHERE action = 'action' AND section = 'demo_refresh' AND operator_user_id = $1 ORDER BY created_at DESC LIMIT 1`, [opId]);
       expect(plat.rows[0].reason).toBe(`Sample data is behind ${stamp}`);
 
       // The background function cannot be reached: 502, recorded as a failed run.
@@ -442,5 +489,30 @@ describe('Platform operator', () => {
       global.fetch = realFetch;
       for (const k of keys) { if (env[k] === undefined) delete process.env[k]; else process.env[k] = env[k]; }
     }
+  });
+
+  test('OP-012 the modules section returns the stored rows of every analytics module for a team', async () => {
+    if (skip()) return;
+    await db.query(
+      `INSERT INTO technical_debt (id, team_id, title, description, category, severity, status) VALUES ($1, $2, 'Op debt item', 'd', 'code_quality', 'high', 'open')`,
+      [`op-debt-${stamp}`, teamId],
+    ).catch(() => undefined);
+    const res = await call('get', `/api/operator/companies/${companyId}/modules?teamId=${teamId}`, '', token, 'module check');
+    expect(res.status).toBe(200);
+    expect(res.body.teamId).toBe(teamId);
+    const keys = res.body.modules.map((m: any) => m.key);
+    expect(keys).toEqual(expect.arrayContaining(['test_runs', 'flaky_tests', 'technical_debt', 'pipeline_runs', 'performance', 'ddps', 'company_snapshots']));
+    for (const m of res.body.modules) expect(m.rows.length).toBeLessThanOrEqual(50);
+    // A team of another company is not accepted: the company's first team is used instead.
+    const foreign = (await db.query('SELECT id FROM teams WHERE company_id <> $1 LIMIT 1', [companyId])).rows[0]?.id;
+    if (foreign) expect((await call('get', `/api/operator/companies/${companyId}/modules?teamId=${foreign}`, '', token, 'module check')).body.teamId).not.toBe(foreign);
+  });
+
+  // Last: it uses up this instance's sign-in allowance for the test client's IP.
+  test('OP-013 sign-ins are rate limited per IP', async () => {
+    if (skip()) return;
+    let limited = false;
+    for (let i = 0; i < 16 && !limited; i++) limited = (await signIn(`nobody-${i}-${stamp}@nowhere.test`, 'x')).status === 429;
+    expect(limited).toBe(true);
   });
 });

@@ -1,16 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { KeyRound, LogOut, ShieldAlert } from 'lucide-react';
 import Modal from '../Modal';
+import { Toaster } from 'react-hot-toast';
 import { Badge, Page, PageIntro, SegmentedControl, StatTile, buttonClass, cx, inputClass } from '../ui';
-import { fetchOperatorStatus, onOperatorSessionChange, opFetch, operatorSession, setOperatorSession } from '../../lib/operatorClient';
+import { fetchOperatorStatus, onOperatorSessionChange, opFetch, operatorSession, operatorSignIn, operatorSignOut, type OperatorStatus } from '../../lib/operatorClient';
 import { DataTable, ErrorText, OkBadge, Section, ActionDialog, type RepairAction } from './OperatorBits';
 import { fmtBytes, fmtDate } from './format';
 import OperatorCompany, { ErrorRows } from './OperatorCompany';
 
 /**
- * Platform operator panel (/operator): for the product owner only (PLATFORM_OPERATOR_EMAILS).
- * Entering asks for the password again; the operator token is kept in memory for 30 minutes.
- * Every company opened and every repair action is recorded in that company's Activity log.
+ * Platform support (/operator): IronGate's own operators (platform_operators), not users of any
+ * company. Own sign-in (e-mail + password, 8-hour session in an httpOnly cookie), outside the
+ * company app. Every company opened and every repair action is recorded in that company's
+ * Activity log as "IronGate platform support".
  */
 
 const useSession = () => {
@@ -19,16 +21,8 @@ const useSession = () => {
   return s;
 };
 
-const Countdown: React.FC<{ until: string; onExpired: () => void }> = ({ until, onExpired }) => {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
-  const left = Math.max(0, Date.parse(until) - now);
-  useEffect(() => { if (left === 0) onExpired(); }, [left, onExpired]);
-  const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
-  return <span className="tabular-nums" data-testid="operator-countdown">{m}:{String(s).padStart(2, '0')}</span>;
-};
-
-const StepUp: React.FC = () => {
+const SignIn: React.FC = () => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,9 +31,8 @@ const StepUp: React.FC = () => {
     setBusy(true);
     setError(null);
     try {
-      const out = await opFetch<{ token: string; expiresAt: string }>('/session', { method: 'POST', body: { password } });
+      await operatorSignIn(email.trim(), password);
       setPassword('');
-      setOperatorSession(out.token, out.expiresAt);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -47,16 +40,22 @@ const StepUp: React.FC = () => {
     }
   };
   return (
-    <div className="mx-auto max-w-md rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900" data-testid="operator-stepup">
-      <div className="mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><KeyRound size={18} /><h2 className="text-base font-semibold">Confirm it is you</h2></div>
+    <div className="mx-auto mt-10 max-w-md rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900" data-testid="operator-signin">
+      <div className="mb-4 flex items-center gap-2 text-slate-900 dark:text-white"><KeyRound size={18} /><h1 className="text-base font-semibold">Platform support sign-in</h1></div>
       <p className="mb-4 text-sm text-slate-600 dark:text-slate-300">
-        Enter your password again to open platform support for 30 minutes. Every company you open is recorded in that company's Activity log.
+        For IronGate platform operators only. Company accounts cannot sign in here. Every company you open is recorded in that company's Activity log.
       </p>
       <form onSubmit={submit} className="space-y-3">
-        <label htmlFor="op-password" className="block text-xs font-medium text-slate-500 dark:text-slate-400">Password</label>
-        <input id="op-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={cx(inputClass, 'w-full')} data-testid="operator-password" />
+        <div>
+          <label htmlFor="op-email" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">E-mail address</label>
+          <input id="op-email" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} className={cx(inputClass, 'w-full')} data-testid="operator-email" />
+        </div>
+        <div>
+          <label htmlFor="op-password" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Password</label>
+          <input id="op-password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={cx(inputClass, 'w-full')} data-testid="operator-password" />
+        </div>
         <ErrorText error={error} />
-        <button type="submit" disabled={!password || busy} className={cx(buttonClass.primary, 'w-full')} data-testid="operator-enter">{busy ? 'Checking…' : 'Enter platform support'}</button>
+        <button type="submit" disabled={!email.trim() || !password || busy} className={cx(buttonClass.primary, 'w-full')} data-testid="operator-enter">{busy ? 'Checking…' : 'Sign in'}</button>
       </form>
     </div>
   );
@@ -65,45 +64,42 @@ const StepUp: React.FC = () => {
 type Screen = 'overview' | 'errors' | 'access';
 
 const OperatorPanel: React.FC = () => {
-  const [allowed, setAllowed] = useState<boolean | null>(null);
+  const [status, setStatus] = useState<OperatorStatus | null>(null);
   const session = useSession();
   const [screen, setScreen] = useState<Screen>('overview');
   const [company, setCompany] = useState<{ id: string; name: string; reason: string } | null>(null);
   const [pending, setPending] = useState<{ id: string; name: string } | null>(null);
   const [reason, setReason] = useState('');
 
-  useEffect(() => { fetchOperatorStatus().then(setAllowed); }, []);
-  const leave = useCallback(async () => {
-    try { await opFetch('/session/end', { method: 'POST' }); } catch { /* the token is dropped anyway */ }
-    setOperatorSession(null, null);
-    setCompany(null);
-  }, []);
-  const expired = useCallback(() => { setOperatorSession(null, null); setCompany(null); }, []);
+  useEffect(() => { document.title = 'IronGate platform support'; fetchOperatorStatus().then(setStatus); }, []);
+  const signOut = useCallback(async () => { await operatorSignOut(); setCompany(null); }, []);
 
-  if (allowed === null) return <Page><p className="text-sm text-slate-500" role="status">Loading…</p></Page>;
-  if (!allowed) {
-    return (
-      <Page>
-        <PageIntro title="Platform" description="This area is not available for your account." />
-      </Page>
-    );
-  }
-
-  return (
-    <Page>
-      <div className="sticky top-0 z-10 -mx-4 mb-4 flex flex-col gap-2 border-y border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 sm:-mx-8 sm:flex-row sm:items-center sm:justify-between sm:px-8 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100" role="status" data-testid="operator-banner">
+  const shell = (children: React.ReactNode) => (
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 sm:px-8 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100" data-testid="operator-banner">
         <p className="flex items-start gap-2"><ShieldAlert size={16} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
-          <span><strong>Platform support mode</strong> — your access is recorded in this company's Activity log.</span>
+          <span><strong>IronGate platform support</strong> — every company you open is recorded in its Activity log.</span>
         </p>
         {session && (
           <div className="flex items-center gap-3">
-            <span>Session ends in <Countdown until={session.expiresAt} onExpired={expired} /></span>
-            <button type="button" onClick={leave} className={cx(buttonClass.secondary, 'h-8 px-2.5 text-xs')} data-testid="operator-leave"><LogOut size={14} /> Leave</button>
+            <span data-testid="operator-who">{session.name}</span>
+            <button type="button" onClick={signOut} className={cx(buttonClass.secondary, 'h-8 px-2.5 text-xs')} data-testid="operator-leave"><LogOut size={14} /> Sign out</button>
           </div>
         )}
-      </div>
+      </header>
+      <main id="main-scroll">{children}</main>
+      <Toaster position="top-right" toastOptions={{ duration: 3000, style: { fontSize: '14px' } }} />
+    </div>
+  );
 
-      {!session ? <StepUp /> : company ? (
+  if (status === null) return shell(<Page><p className="text-sm text-slate-500" role="status">Loading…</p></Page>);
+  if (!status.available) return shell(<Page><PageIntro title="Platform support" description="Platform support is not available." /></Page>);
+  if (!status.allowed) return shell(<Page><PageIntro title="Platform support" description="Platform support is not available from this network." /></Page>);
+  if (!session) return shell(<Page><SignIn /></Page>);
+
+  return shell(
+    <Page>
+      {company ? (
         <OperatorCompany company={company} reason={company.reason} onBack={() => setCompany(null)} />
       ) : (
         <>

@@ -6,9 +6,9 @@ import { query, queryOne, pool } from '../../src/lib/db';
 import { authenticateToken, JWT_SECRET } from '../middleware/auth';
 import { clientIp } from '../lib/requestContext';
 import {
-  OPERATOR_REASON_HEADER, OPERATOR_TOKEN_HEADER, cleanReason, endOperatorSession, ipAllowed, isOperatorEmail, logPlatformAccess,
-  openOperatorSession, operatorEnabled, recordCompanyAction, recordCompanyView, startOperatorSession, verifyOperatorToken,
-  type OperatorRequest,
+  OPERATOR_COOKIE, OPERATOR_REASON_HEADER, OPERATOR_SESSION_MINUTES, OPERATOR_TOKEN_HEADER, checkOperatorPassword, cleanReason,
+  endOperatorSession, ipAllowed, logPlatformAccess, openOperatorSession, operatorEnabled, recordCompanyAction, recordCompanyView,
+  startOperatorSession, verifyOperatorToken, type OperatorRequest, type SignInResult,
 } from '../lib/operator';
 import { listAssignments, teamLeadNameSql, teamMemberCountSql, lastSuperAdminGuard, AssignmentError } from '../lib/assignments';
 import { auditedUserChange } from '../lib/audit';
@@ -57,111 +57,124 @@ const router = express.Router();
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const NOT_FOUND = { error: 'Not found' };
-const SECRET_MASK = '********';
 const intParam = (v: unknown, def: number, min: number, max: number) => Math.min(Math.max(parseInt(String(v ?? def), 10) || def, min), max);
 
-/** Feature off (no PLATFORM_OPERATOR_EMAILS): every route is 404. */
-router.use((_req, res, next) => (operatorEnabled() ? next() : res.status(404).json(NOT_FOUND)));
+/** Feature off (no active platform operator): every route is 404. */
+router.use(async (_req, res, next) => ((await operatorEnabled()) ? next() : res.status(404).json(NOT_FOUND)));
+
+const tokenOf = (req: express.Request): string | null => {
+  const h = req.headers[OPERATOR_TOKEN_HEADER];
+  if (typeof h === 'string' && h) return h;
+  const c = (req as any).cookies?.[OPERATOR_COOKIE];
+  return typeof c === 'string' && c ? c : null;
+};
+
+const cookieOptions = (req: express.Request) => ({
+  httpOnly: true,
+  secure: req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production',
+  sameSite: 'lax' as const,
+  path: '/',
+});
+
+/** The operator session (cookie irongate_operator or X-Operator-Token) of an active operator, from an allowed network. */
+async function sessionOf(req: OperatorRequest): Promise<OperatorRequest['operator'] | null> {
+  const raw = tokenOf(req);
+  const claims = raw ? verifyOperatorToken(raw) : null;
+  if (!claims) return null;
+  const open = await openOperatorSession(claims.sid, claims.sub);
+  if (!open) return null;
+  return { operatorId: claims.sub, email: open.email, name: open.name, sessionId: claims.sid, expiresAt: new Date(open.expires_at).toISOString() };
+}
+
+async function requireOperator(req: OperatorRequest, res: express.Response, next: express.NextFunction) {
+  try {
+    if (!ipAllowed(clientIp(req))) {
+      await logPlatformAccess(req, { action: 'access.refused', detail: { why: 'ip_not_allowed' } });
+      return res.status(403).json({ error: 'Platform support is not available from this network.' });
+    }
+    const s = await sessionOf(req);
+    if (!s) return res.status(401).json({ error: 'Sign in to platform support.', code: 'operator_session_required' });
+    req.operator = s;
+    next();
+  } catch (e) {
+    console.error('Operator session check error:', e);
+    res.status(500).json({ error: 'Failed to check the platform support session' });
+  }
+}
+
+const op = [requireOperator] as const;
+
+/* ------------------------------------------------------------------------------------------
+ * Sign-in
+ * ---------------------------------------------------------------------------------------- */
 
 router.get('/status', async (req: OperatorRequest, res) => {
   try {
-    let token = req.cookies?.irongate_token;
-    if (!token) { const h = req.headers.authorization; token = h && h.split(' ')[1]; }
-    if (!token) return res.json({ operator: false });
-    let decoded: any;
-    try { decoded = jwt.verify(token, JWT_SECRET); } catch { return res.json({ operator: false }); }
-    const u = typeof decoded?.userId === 'string' ? await sessionRowOf(decoded.userId) : null;
-    // An ended or expired session is not an operator either (the same check as every other route).
-    res.json({ operator: !!u?.is_active && !sessionProblem(decoded, u) && isOperatorEmail(u.email) && ipAllowed(clientIp(req)) });
+    if (!ipAllowed(clientIp(req))) return res.json({ signedIn: false, allowed: false });
+    const s = await sessionOf(req);
+    res.json(s ? { signedIn: true, allowed: true, email: s.email, name: s.name, expiresAt: s.expiresAt } : { signedIn: false, allowed: true });
   } catch {
-    res.json({ operator: false });
+    res.json({ signedIn: false, allowed: true });
   }
 });
 
-/** Session + allowlisted email (current) + allowed network. Non-operators get 404. */
-async function requireOperatorUser(req: OperatorRequest, res: express.Response, next: express.NextFunction) {
-  const u = await queryOne<any>('SELECT email FROM users WHERE id = ?', [req.user.id]).catch(() => null);
-  if (!u || !isOperatorEmail(u.email)) return res.status(404).json(NOT_FOUND);
-  if (!ipAllowed(clientIp(req))) {
-    await logPlatformAccess(req, { action: 'step_up.refused', email: u.email, detail: { why: 'ip_not_allowed' } });
-    return res.status(403).json({ error: 'Platform support is not available from this network.' });
-  }
-  (req as any).operatorEmail = u.email;
-  next();
-}
-
-/** The operator token (X-Operator-Token): valid signature and claims, same user, session still open. */
-async function requireOperatorToken(req: OperatorRequest, res: express.Response, next: express.NextFunction) {
-  const raw = req.headers[OPERATOR_TOKEN_HEADER];
-  const claims = typeof raw === 'string' ? verifyOperatorToken(raw) : null;
-  if (!claims || claims.sub !== req.user.id) return res.status(401).json({ error: 'Platform support session required. Enter your password again.', code: 'operator_session_required' });
-  const open = await openOperatorSession(claims.sid, req.user.id);
-  if (!open) return res.status(401).json({ error: 'Your platform support session has ended. Enter your password again.', code: 'operator_session_required' });
-  req.operator = { userId: req.user.id, email: (req as any).operatorEmail, sessionId: claims.sid, expiresAt: new Date(open.expires_at).toISOString() };
-  next();
-}
-
-const base = [authenticateToken, requireOperatorUser] as const;
-const op = [authenticateToken, requireOperatorUser, requireOperatorToken] as const;
-
-/* ------------------------------------------------------------------------------------------
- * Step-up
- * ---------------------------------------------------------------------------------------- */
-
-// Five failed attempts per user per 15 minutes (per instance; the failures are logged too).
-const stepUpLimiter = rateLimit({
+// 10 failed sign-ins per IP per 15 minutes (per instance); the account itself locks after 5 in a row.
+const signInLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: Number(process.env.OPERATOR_STEP_UP_MAX) || 5,
+  max: Number(process.env.OPERATOR_SIGN_IN_MAX) || 10,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  keyGenerator: (req: any) => `op:${req.user?.id ?? clientIp(req)}`,
+  keyGenerator: (req: any) => `opsign:${clientIp(req)}`,
   message: { error: 'Too many attempts. Try again in 15 minutes.' },
 });
 
-router.post('/session', ...base, stepUpLimiter, async (req: OperatorRequest, res) => {
+router.post('/login', signInLimiter, async (req: OperatorRequest, res) => {
   try {
-    const password = req.body?.password;
-    if (typeof password !== 'string' || !password) return res.status(400).json({ error: 'Enter your password' });
-    const u = await queryOne<any>('SELECT id, email, password_hash FROM users WHERE id = ?', [req.user.id]);
-    if (!u?.password_hash) {
-      await logPlatformAccess(req, { action: 'step_up.refused', email: u?.email, detail: { why: 'no_password' } });
-      return res.status(400).json({ error: 'This account has no password. Platform support needs a password: set one first (password reset), then try again.' });
+    const { email, password } = req.body ?? {};
+    if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || !password) {
+      return res.status(400).json({ error: 'Enter your e-mail address and password.' });
     }
-    const ok = await bcrypt.compare(password, u.password_hash).catch(() => false);
-    if (!ok) {
-      const sso = await queryOne<any>('SELECT 1 FROM user_identities WHERE user_id = ? LIMIT 1', [u.id]).catch(() => null);
-      await logPlatformAccess(req, { action: 'step_up.failed', email: u.email });
-      console.warn('[operator] failed step-up');
-      return res.status(401).json({
-        error: sso
-          ? 'Wrong password. If you only sign in with single sign-on, this account has no usable password: set one first (password reset).'
-          : 'Wrong password.',
-      });
+    if (!ipAllowed(clientIp(req))) {
+      await logPlatformAccess(req, { action: 'sign_in.refused', email: email.slice(0, 255), detail: { why: 'ip_not_allowed' } });
+      return res.status(403).json({ error: 'Platform support is not available from this network.' });
     }
-    const s = await startOperatorSession(u.id, clientIp(req));
-    await logPlatformAccess(req, { action: 'step_up.ok', email: u.email, detail: { sessionId: s.sessionId } });
-    res.json({ token: s.token, expiresAt: s.expiresAt });
+    const r = await checkOperatorPassword(email, password);
+    if (r.ok === false) {
+      const f = r as Extract<SignInResult, { ok: false }>;
+      await logPlatformAccess(req, { action: 'sign_in.failed', email: f.operator?.email ?? null, userId: f.operator?.id ?? null, detail: { why: f.why } });
+      console.warn('[operator] failed sign-in');
+      if (f.why === 'locked') return res.status(423).json({ error: 'Too many failed attempts. This account is locked for 15 minutes.' });
+      return res.status(401).json({ error: 'Wrong e-mail address or password.' });
+    }
+    const okr = r as Extract<SignInResult, { ok: true }>;
+    const s = await startOperatorSession(okr.operator.id, clientIp(req));
+    await logPlatformAccess(req, { action: 'sign_in.ok', email: okr.operator.email, userId: okr.operator.id, detail: { sessionId: s.sessionId } });
+    res.cookie(OPERATOR_COOKIE, s.token, { ...cookieOptions(req), maxAge: OPERATOR_SESSION_MINUTES * 60_000 });
+    res.json({ token: s.token, expiresAt: s.expiresAt, email: okr.operator.email, name: okr.operator.name });
   } catch (e) {
-    console.error('Operator step-up error:', e);
-    res.status(500).json({ error: 'Failed to start the platform support session' });
+    console.error('Operator sign-in error:', e);
+    res.status(500).json({ error: 'Failed to sign in to platform support' });
   }
 });
 
 router.get('/session', ...op, (req: OperatorRequest, res) => {
-  res.json({ email: req.operator!.email, expiresAt: req.operator!.expiresAt });
+  res.json({ email: req.operator!.email, name: req.operator!.name, expiresAt: req.operator!.expiresAt });
 });
 
-router.post('/session/end', ...op, async (req: OperatorRequest, res) => {
+const signOut = async (req: OperatorRequest, res: express.Response) => {
   try {
     await endOperatorSession(req.operator!.sessionId);
     await logPlatformAccess(req, { action: 'session.end' });
+    res.clearCookie(OPERATOR_COOKIE, cookieOptions(req));
     res.json({ ended: true });
   } catch (e) {
-    console.error('Operator leave error:', e);
+    console.error('Operator sign-out error:', e);
     res.status(500).json({ error: 'Failed to end the session' });
   }
-});
+};
+router.post('/session/end', ...op, signOut);
+router.post('/logout', ...op, signOut);
 
 /* ------------------------------------------------------------------------------------------
  * Platform-wide
@@ -369,16 +382,19 @@ router.get('/companies/:companyId/users', ...op, view('users', async (_req, res,
   const users = await query<any[]>(
     `SELECT u.id, ${fullNameSql('u')} AS name, u.email, u.role, u.is_active, u.last_login, u.created_at,
             u.failed_login_attempts, u.locked_until, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked,
-            u.developer_insights_enabled, u.email_verified,
+            u.developer_insights_enabled, u.email_verified, u.email_verified_at, u.first_name, u.last_name, u.phone, u.timezone,
+            u.department_id, d.name AS department_name, u.primary_team_id, t.name AS primary_team_name, u.updated_at, u.sessions_valid_after,
+            (u.password_hash IS NOT NULL) AS password_set,
             EXISTS (SELECT 1 FROM user_identities ui WHERE ui.user_id = u.id) AS sso_linked
-       FROM users u WHERE u.company_id = ? ORDER BY 2 NULLS LAST, u.email LIMIT 5000`,
+       FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN teams t ON t.id = u.primary_team_id
+      WHERE u.company_id = ? ORDER BY 2 NULLS LAST, u.email LIMIT 5000`,
     [company.id],
   );
   const assignments = await listAssignments(company.id, null);
   const invitations = await query<any[]>(
     `SELECT i.id, i.email, i.role, i.scope_type, i.scope_id, i.created_at, i.expires_at, i.last_sent_at, i.send_count,
-            i.accepted_at, i.revoked_at, ${statusSql('i')} AS status
-       FROM invitations i WHERE i.company_id = ? ORDER BY i.created_at DESC LIMIT 500`,
+            i.accepted_at, i.revoked_at, ${statusSql('i')} AS status, ${fullNameSql('ib')} AS invited_by_name, ib.email AS invited_by_email
+       FROM invitations i LEFT JOIN users ib ON ib.id = i.invited_by WHERE i.company_id = ? ORDER BY i.created_at DESC LIMIT 500`,
     [company.id],
   );
   const apiKeys = await query<any[]>(
@@ -396,7 +412,8 @@ router.get('/companies/:companyId/settings', ...op, view('settings', async (_req
   );
   const masked = configs.map((c: any) => ({
     ...c, scope: c.team_id ? 'team' : c.department_id ? 'department' : 'company',
-    config_value: isSecretConfigKey(c.config_key) ? SECRET_MASK : c.config_value, secret: isSecretConfigKey(c.config_key),
+    // Credentials (API tokens, passwords of integrations) are never returned: only whether one is set.
+    config_value: isSecretConfigKey(c.config_key) ? (c.config_value ? 'set' : 'not set') : c.config_value, secret: isSecretConfigKey(c.config_key),
   }));
   const targets = await query<any[]>(
     `SELECT id, scope_type, scope_id, metric_key, good, warning, valid_from, valid_to, changed_by, created_at
@@ -450,14 +467,15 @@ router.get('/companies/:companyId/data', ...op, view('data', async (req, res, co
       ORDER BY recorded_at DESC, metric_key LIMIT ${limit}`,
     [teamId, company.id, from, to],
   );
-  // Developer metrics: the k-anonymous team figures, and individual rows ONLY of people who opted in.
+  // Developer metrics: the team figures and every person's row (support access the company agreed
+  // to; opted_in says whether the person shares them inside the company).
   const developers = {
     summary: await teamDeveloperSummary(company.id, teamId),
-    optedInRows: await query<any[]>(
-      `SELECT dm.developer_id, ${fullNameSql('u')} AS name, dm.pr_merge_time_avg, dm.code_review_time_avg, dm.focus_time_hours,
-              dm.meeting_time_hours, dm.context_switches_per_day, dm.updated_at
+    rows: await query<any[]>(
+      `SELECT dm.developer_id, ${fullNameSql('u')} AS name, u.email, (${optedInDeveloperSql('u')}) AS opted_in, dm.pr_merge_time_avg, dm.code_review_time_avg,
+              dm.focus_time_hours, dm.meeting_time_hours, dm.context_switches_per_day, dm.happiness_score, dm.updated_at
          FROM developer_metrics dm JOIN users u ON u.id = dm.developer_id AND u.company_id = ?
-        WHERE dm.team_id = ? AND ${optedInDeveloperSql('u')} ORDER BY 2 LIMIT 500`,
+        WHERE dm.team_id = ? ORDER BY 2 LIMIT 500`,
       [company.id, teamId],
     ),
   };
@@ -505,16 +523,76 @@ router.get('/companies/:companyId/pulse', ...op, view('pulse', async (_req, res,
     const sent = await sentCounts(t.id, mine.map((a) => a.start));
     const periods = mine.map((a) => {
       const r = periodResult(a);
-      // Same k-anonymised figures as the team's pulse screen; no single answer, no comment.
       return { start: r.start, end: r.end, suppressed: r.suppressed, responses: r.responses, score: r.score, responseRate: responseRate(r.responses, sent.get(a.start)) };
     });
+    // Support access: every single answer with its comment, and who answered in each period. The
+    // database never links an answer to the person (anonymous by design), so that link cannot be shown.
+    const answers = await query<any[]>(
+      `SELECT period_start, period_end, q_workload, q_focus, q_support, q_energy, q_outlook, comment
+         FROM pulse_responses WHERE team_id = ? AND period_start >= ?::date ORDER BY period_start DESC LIMIT 1000`,
+      [t.id, since],
+    );
+    const participants = await query<any[]>(
+      `SELECT p.period_start, ${fullNameSql('u')} AS name, u.email FROM pulse_participation p JOIN users u ON u.id = p.user_id
+        WHERE p.team_id = ? AND p.period_start >= ?::date ORDER BY p.period_start DESC, 2 LIMIT 2000`,
+      [t.id, since],
+    );
     out.push({
       team: t, cadence: periodFor(cadences.get(t.id) ?? [], today), cadences: cadences.get(t.id) ?? [],
       autoSend: status.autoSend, members: status.members, sentThisPeriod: status.sent, lastSentAt: status.lastSentAt,
-      emailConfigured: status.emailConfigured, sendLog: status.log, periods,
+      emailConfigured: status.emailConfigured, sendLog: status.log, periods, answers, participants,
     });
   }
   res.json({ teams: out });
+}));
+
+// Every analytics module's stored data for one team (or the company), newest first, so support sees
+// what the company's screens are computed from.
+const MODULE_TABLES: Array<{ key: string; label: string; table: string; order: string; scope: 'team' | 'company' }> = [
+  { key: 'test_runs', label: 'Test execution runs', table: 'test_execution_runs', order: 'start_time', scope: 'team' },
+  { key: 'test_executions', label: 'Team test executions (daily)', table: 'team_test_executions', order: 'execution_date', scope: 'team' },
+  { key: 'flaky_tests', label: 'Flaky tests', table: 'flaky_tests', order: 'last_flaky_at', scope: 'team' },
+  { key: 'technical_debt', label: 'Technical debt', table: 'technical_debt', order: 'created_at', scope: 'team' },
+  { key: 'pipeline_runs', label: 'Pipeline runs', table: 'pipeline_runs', order: 'started_at', scope: 'team' },
+  { key: 'pipeline_metrics', label: 'Pipeline metrics (daily)', table: 'team_pipeline_metrics', order: 'recorded_date', scope: 'team' },
+  { key: 'performance', label: 'Performance metrics', table: 'performance_metrics', order: 'recorded_date', scope: 'team' },
+  { key: 'sprints', label: 'Sprint velocity', table: 'sprint_velocity', order: 'end_date', scope: 'team' },
+  { key: 'team_analytics', label: 'Team analytics periods', table: 'team_analytics', order: 'period_end', scope: 'team' },
+  { key: 'ddps', label: 'Developer productivity snapshots', table: 'developer_productivity_snapshots', order: 'snapshot_date', scope: 'team' },
+  { key: 'business_metrics', label: 'Business metrics', table: 'business_metrics', order: 'metric_date', scope: 'team' },
+  { key: 'business_impact', label: 'Business impact metrics', table: 'business_impact_metrics', order: 'recorded_date', scope: 'team' },
+  { key: 'company_snapshots', label: 'Company KPI snapshots', table: 'company_kpi_snapshots', order: 'snapshot_date', scope: 'company' },
+];
+
+router.get('/companies/:companyId/modules', ...op, view('modules', async (req, res, company) => {
+  const teams = await query<any[]>('SELECT id, name FROM teams WHERE company_id = ? ORDER BY name LIMIT 2000', [company.id]);
+  const teamId = typeof req.query.teamId === 'string' && teams.some((t: any) => t.id === req.query.teamId) ? req.query.teamId : teams[0]?.id ?? null;
+  const limit = intParam(req.query.limit, 50, 1, 500);
+  const modules: Array<{ key: string; label: string; total: number; rows: any[] }> = [];
+  for (const m of MODULE_TABLES) {
+    const exists = await queryOne<any>(
+      `SELECT array_agg(column_name::text) AS cols FROM information_schema.columns WHERE table_schema = 'public' AND table_name = ?`, [m.table],
+    );
+    const cols: string[] = exists?.cols ?? [];
+    if (!cols.length) continue;
+    let where: string; let params: any[];
+    if (m.scope === 'team' && !cols.includes('team_id') && cols.includes('developer_id')) {
+      // Per-developer rows: the team's members.
+      if (!teamId) { modules.push({ key: m.key, label: m.label, total: 0, rows: [] }); continue; }
+      where = `developer_id IN (SELECT user_id FROM role_assignments WHERE scope_type = 'team' AND scope_id = ? AND revoked_at IS NULL)`; params = [teamId];
+    } else if (m.scope === 'company' || !cols.includes('team_id')) {
+      if (!cols.includes('company_id')) continue;
+      where = 'company_id = ?'; params = [company.id];
+    } else {
+      if (!teamId) { modules.push({ key: m.key, label: m.label, total: 0, rows: [] }); continue; }
+      where = 'team_id = ?'; params = [teamId];
+    }
+    const order = cols.includes(m.order) ? `${m.order} DESC NULLS LAST` : '1';
+    const total = (await queryOne<any>(`SELECT COUNT(*)::int AS n FROM ${m.table} WHERE ${where}`, params))?.n ?? 0;
+    const rows = await query<any[]>(`SELECT * FROM ${m.table} WHERE ${where} ORDER BY ${order} LIMIT ${limit}`, params);
+    modules.push({ key: m.key, label: m.label, total, rows });
+  }
+  res.json({ teams, teamId, modules });
 }));
 
 router.get('/companies/:companyId/activity', ...op, view('activity', async (req, res, company) => {
@@ -677,7 +755,6 @@ for (const kind of ['deactivate', 'reactivate'] as const) {
     if (!u) return;
     const active = kind === 'reactivate';
     if (u.is_active === active) return void res.status(409).json({ error: `This user is already ${active ? 'active' : 'inactive'}.` });
-    if (!active && u.id === req.user.id) return void res.status(403).json({ error: 'You cannot deactivate your own account here.' });
     if (!active && u.role === 'super_admin') await lastSuperAdminGuard(company.id, u.id);
     const who = u.name ?? u.email;
     // The usual reversible user change (a super admin of the company can undo it in the Activity log).
@@ -708,7 +785,6 @@ router.post('/companies/:companyId/users/:userId/clear-lockout', ...op, action(a
 router.post('/companies/:companyId/users/:userId/sign-out-everywhere', ...op, action(async (req, res, company, reason) => {
   const u = await loadCompanyUser(req, res, company.id);
   if (!u) return;
-  if (u.id === req.user.id) return void res.status(403).json({ error: 'Use "Sign out my other devices" for your own account.' });
   await endUserSessions(u.id);
   await recordCompanyAction(req, company.id, 'sign_out_everywhere', `Signed ${u.name ?? u.email} out everywhere`, reason, { userId: u.id });
   res.json({ userId: u.id, signedOut: true });

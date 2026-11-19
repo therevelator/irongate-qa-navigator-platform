@@ -1,4 +1,5 @@
 import express from 'express';
+import { isOperatorEmail } from '../lib/operator';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
@@ -96,6 +97,8 @@ router.post('/register', authLimiter, async (req, res) => {
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
+    // A platform operator is never a company user (server/lib/operator.ts).
+    if (await isOperatorEmail(email)) return res.status(409).json({ error: 'This e-mail address cannot be used for a company account.' });
 
     // The organisation's e-mail domain (src/lib/emailDomains.ts): a company domain belongs to one
     // organisation only; a public one (gmail.com, outlook.com, …) never blocks a registration.

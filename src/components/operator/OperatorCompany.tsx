@@ -10,10 +10,10 @@ import { fmtDate, fmtDay } from './format';
 
 /** One company in the platform operator panel: tabs, each loaded (and recorded) on its own. */
 
-type Tab = 'organisation' | 'users' | 'settings' | 'data' | 'alerts' | 'pulse' | 'activity' | 'user-activity' | 'errors';
+type Tab = 'organisation' | 'users' | 'settings' | 'data' | 'modules' | 'alerts' | 'pulse' | 'activity' | 'user-activity' | 'errors';
 const TABS: Array<{ value: Tab; label: string }> = [
   { value: 'organisation', label: 'Organisation' }, { value: 'users', label: 'Users' }, { value: 'settings', label: 'Settings & targets' },
-  { value: 'data', label: 'Data' }, { value: 'alerts', label: 'Alerts & actions' }, { value: 'pulse', label: 'Wellbeing pulse' },
+  { value: 'data', label: 'Data' }, { value: 'modules', label: 'Modules' }, { value: 'alerts', label: 'Alerts & actions' }, { value: 'pulse', label: 'Wellbeing pulse' },
   { value: 'activity', label: 'Activity' }, { value: 'user-activity', label: 'User activity' }, { value: 'errors', label: 'Errors' },
 ];
 
@@ -89,6 +89,7 @@ const OperatorCompany: React.FC<{ company: { id: string; name: string }; reason:
         {tab === 'users' && <UsersTab companyId={company.id} reason={reason} onAction={setAction} />}
         {tab === 'settings' && <SettingsTab companyId={company.id} reason={reason} />}
         {tab === 'data' && <DataTab companyId={company.id} reason={reason} onAction={setAction} />}
+        {tab === 'modules' && <ModulesTab companyId={company.id} reason={reason} />}
         {tab === 'alerts' && <AlertsTab companyId={company.id} reason={reason} />}
         {tab === 'pulse' && <PulseTab companyId={company.id} reason={reason} />}
         {tab === 'activity' && <ActivityTab companyId={company.id} reason={reason} />}
@@ -149,6 +150,9 @@ const UsersTab: React.FC<{ companyId: string; reason: string; onAction: (a: Repa
           { key: 'name', label: 'Name', render: (u: any) => <><p className="font-medium">{u.name ?? '—'}</p><p className="break-all text-xs text-slate-500 dark:text-slate-400">{u.email}</p></> },
           { key: 'is_active', label: 'Status', render: (u: any) => <>{u.is_active ? <Badge tone="good">Active</Badge> : <Badge tone="bad">Inactive</Badge>} {u.locked && <Badge tone="warn">Locked</Badge>} {u.sso_linked && <Badge>SSO</Badge>}</> },
           { key: 'roles', label: 'Assignments', render: (u: any) => <span className="text-xs">{grants(u.id) || '—'}</span> },
+          { key: 'where', label: 'Department / team', render: (u: any) => <span className="text-xs">{[u.department_name, u.primary_team_name].filter(Boolean).join(' / ') || '—'}</span> },
+          { key: 'contact', label: 'Contact', render: (u: any) => <span className="text-xs">{[u.phone, u.timezone].filter(Boolean).join(' · ') || '—'}</span> },
+          { key: 'insights', label: 'Insights opt-in', render: (u: any) => (u.developer_insights_enabled ? 'yes' : 'no') },
           { key: 'last_login', label: 'Last sign-in', render: (u: any) => fmtDate(u.last_login) },
           { key: 'created_at', label: 'Created', render: (u: any) => fmtDay(u.created_at) },
           { key: 'actions', label: '', render: (u: any) => (
@@ -173,6 +177,7 @@ const UsersTab: React.FC<{ companyId: string; reason: string; onAction: (a: Repa
           { key: 'email', label: 'Email', className: 'break-all' },
           { key: 'role', label: 'Role', render: (i: any) => roleLabel(i.role) },
           { key: 'status', label: 'Status', render: (i: any) => <Badge tone={i.status === 'open' ? 'brand' : i.status === 'accepted' ? 'good' : 'neutral'}>{i.status}</Badge> },
+          { key: 'invited_by_name', label: 'Invited by', render: (i: any) => i.invited_by_name ?? i.invited_by_email ?? '—' },
           { key: 'last_sent_at', label: 'Last sent', render: (i: any) => `${fmtDate(i.last_sent_at)} (${i.send_count}×)` },
           { key: 'expires_at', label: 'Expires', render: (i: any) => fmtDate(i.expires_at) },
           { key: 'actions', label: '', render: (i: any) => (i.status === 'open' || i.status === 'expired') ? (
@@ -277,10 +282,14 @@ const DataTab: React.FC<{ companyId: string; reason: string; onAction: (a: Repai
             ]} />
           </Section>
           {data.developers && (
-            <Section title="Developer metrics" subtitle={`Team figures need at least 3 developers who opted in. Individual rows: only people who opted in. ${data.developers.summary?.privacy?.suppressed ? 'Team figures: not shown (fewer than 3).' : ''}`}>
-              <DataTable rows={data.developers.optedInRows} rowKey={(r: any) => r.developer_id} empty="Nobody on this team has opted in." columns={[
-                { key: 'name', label: 'Developer' }, { key: 'pr_merge_time_avg', label: 'PR merge (h)' }, { key: 'code_review_time_avg', label: 'Review (h)' },
+            <Section title="Developer metrics" subtitle="Every person's recorded metrics. Opted in: whether the person shares them inside the company.">
+              <DataTable testId="op-developers" rows={data.developers.rows} rowKey={(r: any) => r.developer_id} empty="No developer metrics recorded for this team." columns={[
+                { key: 'name', label: 'Developer' }, { key: 'email', label: 'E-mail', className: 'break-all' },
+                { key: 'opted_in', label: 'Opted in', render: (r: any) => (r.opted_in ? 'yes' : 'no') },
+                { key: 'pr_merge_time_avg', label: 'PR merge (h)' }, { key: 'code_review_time_avg', label: 'Review (h)' },
                 { key: 'focus_time_hours', label: 'Focus (h)' }, { key: 'meeting_time_hours', label: 'Meetings (h)' },
+                { key: 'context_switches_per_day', label: 'Switches' }, { key: 'happiness_score', label: 'Happiness' },
+                { key: 'updated_at', label: 'Updated', render: (r: any) => fmtDate(r.updated_at) },
               ]} />
             </Section>
           )}
@@ -321,7 +330,7 @@ const PulseTab: React.FC<{ companyId: string; reason: string }> = ({ companyId, 
   if (!data) return <Loading loading={loading} error={error} />;
   return (
     <div className="space-y-3">
-      <p className="text-xs text-slate-500 dark:text-slate-400">Only the aggregates the team sees (at least 3 responses). Single answers and comments are never shown here.</p>
+      <p className="text-xs text-slate-500 dark:text-slate-400">Aggregates as the team sees them, every single answer with its comment, and who answered in each period. The app never stores which person gave which answer.</p>
       {data.teams.map((t: any) => (
         <Section key={t.team.id} title={t.team.name} subtitle={`${t.cadence.cadence} · automatic sending ${t.autoSend.enabled ? 'on' : 'off'} · sent to ${t.sentThisPeriod} of ${t.members} this period`}>
           <DataTable rows={t.periods} rowKey={(p: any) => p.start} empty="No closed periods with responses." columns={[
@@ -334,8 +343,43 @@ const PulseTab: React.FC<{ companyId: string; reason: string }> = ({ companyId, 
             { key: 'at', label: 'Sent', render: (s: any) => fmtDate(s.at) }, { key: 'kind', label: 'Kind' }, { key: 'trigger', label: 'How' },
             { key: 'delivered', label: 'Delivered', render: (s: any) => (s.recipients == null ? 'Not shown' : `${s.delivered} of ${s.recipients}`) },
           ]} />
+          <DataTable testId="op-pulse-answers" rows={t.answers ?? []} rowKey={(a: any, i?: number) => `${a.period_start}-${i}`} empty="No answers in the last 180 days." columns={[
+            { key: 'period_start', label: 'Period' }, { key: 'q_workload', label: 'Workload' }, { key: 'q_focus', label: 'Focus' },
+            { key: 'q_support', label: 'Support' }, { key: 'q_energy', label: 'Energy' }, { key: 'q_outlook', label: 'Outlook' },
+            { key: 'comment', label: 'Comment', className: 'max-w-md' },
+          ]} />
+          <DataTable testId="op-pulse-participants" rows={t.participants ?? []} rowKey={(p: any, i?: number) => `${p.period_start}-${p.email}-${i}`} empty="Nobody answered in the last 180 days." columns={[
+            { key: 'period_start', label: 'Period' }, { key: 'name', label: 'Answered' }, { key: 'email', label: 'E-mail', className: 'break-all' },
+          ]} />
         </Section>
       ))}
+    </div>
+  );
+};
+
+const ModulesTab: React.FC<{ companyId: string; reason: string }> = ({ companyId, reason }) => {
+  const [teamId, setTeamId] = useState('');
+  const { data, error, loading } = useSection<any>(companyId, 'modules', reason, teamId ? `teamId=${encodeURIComponent(teamId)}` : '');
+  if (!data) return <Loading loading={loading} error={error} />;
+  return (
+    <div className="space-y-3">
+      <div className="max-w-md">
+        <label htmlFor="op-modules-team" className="mb-1 block text-xs font-medium text-slate-500 dark:text-slate-400">Team</label>
+        <select id="op-modules-team" value={teamId || data.teamId || ''} onChange={(e) => setTeamId(e.target.value)} className={cx(inputClass, 'w-full')}>
+          {(data.teams ?? []).map((t: any) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </div>
+      {data.modules.map((m: any) => {
+        const cols = m.rows.length ? Object.keys(m.rows[0]).slice(0, 12) : [];
+        return (
+          <Section key={m.key} title={m.label} subtitle={`${m.total} row${m.total === 1 ? '' : 's'}; newest ${m.rows.length} shown`}>
+            <DataTable testId={`op-module-${m.key}`} rows={m.rows} rowKey={(r: any, i?: number) => String(r.id ?? i)} empty="No rows." columns={cols.map((k) => ({
+              key: k, label: k, className: 'max-w-xs break-all',
+              render: (r: any) => (r[k] === null || r[k] === undefined ? '' : typeof r[k] === 'object' ? JSON.stringify(r[k]).slice(0, 120) : String(r[k]).slice(0, 120)),
+            }))} />
+          </Section>
+        );
+      })}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import express from 'express';
+import { isOperatorEmail } from '../lib/operator';
 import bcrypt from 'bcrypt';
 import { query, queryOne, transaction } from '../../src/lib/db';
 import { authenticateToken, JWT_SECRET } from '../middleware/auth';
@@ -164,6 +165,7 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     if (existingUser) {
       return res.status(400).json({ error: 'Email already registered' });
     }
+    if (await isOperatorEmail(email)) return res.status(409).json({ error: 'This e-mail address cannot be used for a company account.' });
 
     const passwordHash = await bcrypt.hash(password, 10);
     const userId = randomUUID();

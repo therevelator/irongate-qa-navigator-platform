@@ -1,4 +1,5 @@
 import express from 'express';
+import { isOperatorEmail } from '../lib/operator';
 import { query, queryOne, transaction } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
 import { policyActor } from '../middleware/access';
@@ -310,6 +311,7 @@ router.post('/invitations', authenticateToken, async (req: any, res) => {
     const { grant, scope } = await resolveGrant(companyId, req.body ?? {});
     if (!canGrant(actor, grant, scope.team)) return res.status(403).json({ error: 'You cannot invite someone to this role and scope' });
 
+    if (await isOperatorEmail(email)) return res.status(409).json({ error: 'This e-mail address cannot be used for a company account.' });
     const existing = await queryOne<any>('SELECT id, company_id FROM users WHERE LOWER(email) = LOWER(?)', [email]);
     if (existing) {
       return res.status(409).json({

@@ -20,7 +20,6 @@ import TeamsView from './components/TeamsView';
 import DepartmentsView from './components/DepartmentsView';
 import ActivityLog from './components/ActivityLog';
 import UserActivity from './components/UserActivity';
-import OperatorPanel from './components/operator/OperatorPanel';
 import { trackScreen } from './lib/activityTracker';
 import IngestionLog from './components/IngestionLog';
 import NotificationsCenter from './components/NotificationsCenter';
@@ -47,7 +46,6 @@ const VIEW_TO_PATH: Record<string, string> = {
   'departments': '/departments',
   'activity': '/activity',
   'user-activity': '/user-activity',
-  'operator': '/operator',
   'ingestion-log': '/ingestion-log',
   'features': '/analytics',
   'admin-panel': '/admin-panel',
@@ -158,9 +156,6 @@ function App() {
       case 'user-activity':
         // User activity log: super admins of the company only (GET /api/activity/log).
         return canViewUserActivity(policyActorOf(user));
-      case 'operator':
-        // Platform operator panel: the server decides (PLATFORM_OPERATOR_EMAILS); the page says so otherwise.
-        return true;
       case 'ingestion-log':
         // Ingestion log: super_admin (company) and QA managers (their departments), as GET /api/ingestion-log.
         return canViewIngestionLog(policyActorOf(user));
@@ -193,10 +188,10 @@ function App() {
     }
   };
 
-  // User activity log: one screen-view event per screen (and team) opened. The operator panel is
+
   // not recorded there (its access goes to the platform log and the company's Activity log).
   useEffect(() => {
-    if (!user?.id || isLoading || currentView === 'operator') return;
+    if (!user?.id || isLoading) return;
     if (selectedTeam) trackScreen('team-detail', selectedTeam.id);
     else trackScreen(currentView, VIEW_TO_PATH[currentView]?.startsWith('/analytics') ? analyticsScope.teamId : null);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one event per screen / team change (the team object itself refreshes)
@@ -409,7 +404,6 @@ function App() {
   if (currentView === 'compare') return renderLayout(<CompareTeams />);
   if (currentView === 'activity') return renderLayout(<ActivityLog />);
   if (currentView === 'user-activity') return renderLayout(<UserActivity />);
-  if (currentView === 'operator') return renderLayout(<OperatorPanel />);
   if (currentView === 'ingestion-log') return renderLayout(<IngestionLog />);
   if (currentView === 'notifications') return renderLayout(<NotificationsCenter />);
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
