@@ -122,12 +122,12 @@ kept in step for display only.
 | `qa_engineer` | a team (one or more) | those teams | own row only |
 | `viewer` | a team (one or more) | those teams | own row only |
 
-What each role may do (from `userPolicy.ts`; the navigation in [`src/components/Layout.tsx`](../src/components/Layout.tsx) follows it):
+What each role may do (from `userPolicy.ts`; the navigation in [`src/components/Layout.tsx`](../src/components/Layout.tsx) follows it; the full matrix per page and module is [ROLE_ACCESS.md](ROLE_ACCESS.md)):
 
 | Capability | super_admin | qa_manager | team_lead | qa_engineer | viewer |
 |---|---|---|---|---|---|
-| Overview (company dashboard; team KPIs are company-visible) | yes | yes | yes | yes | yes |
-| Analytics modules, Compare teams, TV mode, per-team metric detail (history, velocity) | all teams | their departments' teams | their teams | their teams | their teams |
+| Overview (the teams of the analytics scope: company for super admins) | yes | yes | yes | yes | yes |
+| Overview team list, team detail, Analytics modules, Compare teams, TV mode, per-team metric detail (history, velocity) | all teams | their departments' teams | their teams | their teams | their teams |
 | Team member names and e-mails (`canViewTeamMembers`) | any team | their departments | assigned teams | assigned teams | assigned teams |
 | Manage users (activate / deactivate, reset password, developer-insights toggle) | anyone in the company except themselves | users of their departments ranked below manager | users of teams they lead ranked below team lead | no | no |
 | Edit another user's profile and assignments; delete (= deactivate) | yes | users they manage | no | no | no |
@@ -490,6 +490,12 @@ and can be changed per company in **Administration → Update frequency** (a "mo
 ### 3.3 QA score (team)
 
 The single 0–100 quality number per team, shown as a battery on the dashboard, team cards, Team detail and TV.
+
+**Battery colour** (every battery of the app, one scale in [`src/lib/batteryScale.ts`](../src/lib/batteryScale.ts)): below 30 red, 30–45
+deep amber, 45–60 amber, 60–75 yellow, 75–90 light green, 90–100 solid green. The colour follows the value; the status text
+(On target / Watch / Off target) is judged against the target and is always shown with it, e.g. "Off target · Target ≥ 85" or
+"Watch: 70–85 · Target ≥ 85" ([`src/lib/targetText.ts`](../src/lib/targetText.ts)), on Team detail, the overview cards and gauges,
+Compare, TV mode, Team rankings, pulse results and the PDF report, with the target valid at the value's date.
 
 ```
 QA Score = [ Test Coverage × 0.30
@@ -1007,7 +1013,11 @@ Why: everything about one team in one place, with each number explained
   from a recommendation (section 7).
 - **Open TV mode** and, for super admins, the **Show formulas & data sources** switch (formula mode) that opens the metric explanation
   for any value.
-- Team KPIs are company-visible; member names and e-mails only within the team's analytics scope.
+- Team detail opens for the teams of the analytics scope only (as the overview list, TV mode and Compare); another team answers 403.
+- QA score card: the 3D battery (horizontal, gently moving liquid, still with reduced motion), the score with its status and
+  target, the change against 30 days earlier, a 30 / 90 day trend with the target line, the rank among the teams the viewer
+  may see (two or more), the input that costs the score most, the people per role, the Scrum Master (team lead) and
+  Product Owner (job title).
 
 ### Team TV mode
 

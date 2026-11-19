@@ -8,7 +8,8 @@ cases around them. The list of flows and which test covers each one is
 
 Every automated test also exists as a manual test case with step-by-step directions:
 [MANUAL_TEST_CASES.xlsx](MANUAL_TEST_CASES.xlsx) (columns for the actual result, status, tester and date,
-and a summary sheet) and the same cases as [MANUAL_TEST_CASES.md](MANUAL_TEST_CASES.md).
+and a summary sheet) and the same cases as [MANUAL_TEST_CASES.md](MANUAL_TEST_CASES.md). What each role may see and do (the expected results of the
+role tests) is [docs/ROLE_ACCESS.md](../ROLE_ACCESS.md).
 
 - [Run it on your computer](#run-it-on-your-computer)
 - [Run a subset](#run-a-subset)
