@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { getOwnedTeam, policyActor } from '../middleware/access';
+import { isPulseMember } from '../lib/assignments';
 import { canSendPulseSurvey, canSetPulseCadence, canSetPulseReminders, canTakePulseSurvey, canViewPulseComments, canViewPulseResults } from '../lib/userPolicy';
 import {
   CADENCE_LABELS, PULSE_CADENCES, PULSE_COMMENT_MAX, PULSE_QUESTIONS, PULSE_SCALE, PulseError, WELLBEING_FORMULA,
@@ -93,7 +94,7 @@ router.get('/teams/:teamId', authenticateToken, async (req: AuthRequest, res) =>
       },
       sending: canSend ? await sendStatus(team) : null,
       canSend,
-      canRespond: team.is_active && canTakePulseSurvey(actor, team),
+      canRespond: team.is_active && canTakePulseSurvey(actor, team) && await isPulseMember(team.id, actor.id),
       canSetCadence: canSetPulseCadence(actor, team),
       canSetReminders: canSetPulseReminders(actor, team),
       reminders: canSetPulseReminders(actor, team) ? await reminderInfo(req.companyId!, team) : null,
@@ -125,7 +126,7 @@ router.post('/teams/:teamId/responses', authenticateToken, async (req: AuthReque
   try {
     const team = await getOwnedTeam(req, req.params.teamId as string);
     const actor = policyActor(req);
-    if (!team || !canTakePulseSurvey(actor, team)) return denied(res, 'Only members of this team can answer its pulse survey.');
+    if (!team || !canTakePulseSurvey(actor, team) || !(await isPulseMember(team.id, actor.id))) return denied(res, 'Only members of this team can answer its pulse survey.');
     if (!team.is_active) return res.status(409).json({ error: 'This team is inactive.' });
     const parsed = parseAnswers(req.body);
     if ('error' in parsed) return res.status(400).json({ error: parsed.error });

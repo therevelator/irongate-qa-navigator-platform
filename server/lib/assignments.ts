@@ -540,4 +540,36 @@ export async function teamMembers(teamId: string, exec: Exec = execOn()): Promis
   );
 }
 
+/**
+ * The people who WORK in a team (wellbeing pulse recipients): an active user with an active team
+ * assignment who is a member of the team: a team lead or software engineer of the team, or a viewer
+ * listed in team_members (e.g. the Product Owner). Stakeholders who only have read access to the
+ * team (a viewer assignment without a team_members row: a Head of Product, a Finance Controller, an
+ * external auditor) are not members: they are never sent the survey, cannot answer it, get no
+ * reminder or pending-survey banner and are not counted in its response rate.
+ */
+export const PULSE_MEMBER_SQL = (userSql: string, teamSql: string) =>
+  `EXISTS (SELECT 1 FROM role_assignments pra JOIN users pu ON pu.id = pra.user_id AND pu.is_active = TRUE
+           WHERE pra.user_id = ${userSql} AND pra.scope_type = 'team' AND pra.scope_id = ${teamSql} AND pra.revoked_at IS NULL
+             AND (pra.role <> 'viewer' OR EXISTS (SELECT 1 FROM team_members ptm WHERE ptm.user_id = pra.user_id AND ptm.team_id = pra.scope_id)))`;
+
+/** Active members of a team who take its pulse survey (see PULSE_MEMBER_SQL). */
+export async function pulseMembers(teamId: string, exec: Exec = execOn()): Promise<any[]> {
+  return exec(
+    `SELECT DISTINCT ON (u.first_name, u.last_name, u.id) u.id, u.email, u.first_name, u.last_name
+       FROM role_assignments ra
+       JOIN users u ON u.id = ra.user_id AND u.is_active = TRUE
+      WHERE ra.scope_type = 'team' AND ra.scope_id = ? AND ra.revoked_at IS NULL
+        AND (ra.role <> 'viewer' OR EXISTS (SELECT 1 FROM team_members tm WHERE tm.user_id = u.id AND tm.team_id = ra.scope_id))
+      ORDER BY u.first_name, u.last_name, u.id`,
+    [teamId]
+  );
+}
+
+/** Does this user take the team's pulse survey (a member, not only a stakeholder with read access)? */
+export async function isPulseMember(teamId: string, userId: string): Promise<boolean> {
+  const r = await query<any[]>(`SELECT ${PULSE_MEMBER_SQL('?', '?')} AS ok`, [userId, teamId]);
+  return !!r[0]?.ok;
+}
+
 export { ROLE_SCOPE };

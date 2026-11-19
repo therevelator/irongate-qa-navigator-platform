@@ -28,7 +28,7 @@
  */
 import { createHash, randomBytes } from 'crypto';
 import { query, queryOne } from '../../src/lib/db';
-import { execOn, loadGrants, teamMembers, departmentManagers, teamLeadOf, type Exec } from './assignments';
+import { execOn, loadGrants, pulseMembers, isPulseMember, departmentManagers, teamLeadOf, type Exec } from './assignments';
 import { recordAudit } from './audit';
 import { escapeHtml, getMailer, sendMail, type MailChannel } from './mailer';
 import { appBaseUrl } from './sso';
@@ -186,8 +186,9 @@ export interface SendOutcome {
 
 interface Member { id: string; email: string; first_name: string | null; name: string }
 
+/** The team's survey recipients: its members (team_members), never stakeholders with read access only. */
 async function activeMembers(teamId: string): Promise<Member[]> {
-  const rows = await teamMembers(teamId);
+  const rows = await pulseMembers(teamId);
   const seen = new Set<string>();
   return rows.filter((r: any) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
     .map((r: any) => ({
@@ -437,6 +438,7 @@ async function linkState(link: LinkRow | null, today: string): Promise<LinkStatu
   if (!link.team_active || !link.user_active) return 'invalid';
   const grants = await loadGrants(link.company_id, link.user_id);
   if (!canTakePulseSurvey({ id: link.user_id, role: '', grants }, { id: link.team_id })) return 'invalid';
+  if (!(await isPulseMember(link.team_id, link.user_id))) return 'invalid';
   return 'open';
 }
 
@@ -616,6 +618,7 @@ export async function pendingSurveysFor(actor: PolicyActor, companyId: string, t
   );
   const out = [];
   for (const t of teams) {
+    if (!(await isPulseMember(t.id, actor.id))) continue; // stakeholders with read access are not asked
     const st = await reminderState(t.id, today);
     if (st.sentDay === null || (st.daysSinceSent ?? 0) < st.effective.warningAfterDays) continue;
     const answered = await queryOne<any>(

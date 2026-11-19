@@ -93,6 +93,8 @@ beforeAll(async () => {
   await addUser('priv-mgr', 'qa_manager', { scopeType: 'department', scopeId: DEPT });
   await addUser('priv-mgr2', 'qa_manager', { scopeType: 'department', scopeId: OTHER_DEPT, dept: OTHER_DEPT });
   await addUser('priv-viewer', 'viewer', { scopeType: 'team', scopeId: A, primary: A });
+  // The viewer works in the team (a Product Owner): a pulse member, not only a stakeholder with read access.
+  await db.query(`INSERT INTO team_members (user_id, team_id, role) VALUES ('priv-viewer', $1, 'member') ON CONFLICT DO NOTHING`, [A]);
   for (const d of DEVS) {
     await addUser(d.id, d.role, { insights: d.insights, scopeType: 'team', scopeId: d.team, primary: d.team });
     await db.query(
