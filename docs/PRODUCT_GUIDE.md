@@ -1021,6 +1021,25 @@ value stores nothing of that save. Expected update frequency takes a whole numbe
 
 ## 5. Screens and features
 
+### Appearance (themes and score display)
+
+The **Appearance** button (palette icon) in the top bar opens a small menu, operable with the keyboard (arrows, Home / End, Enter / Space,
+Escape):
+
+- **Theme:** **Light** (default), **Dark**, **Graphite** (deep graphite with translucent dark-glass surfaces and a soft light sheen),
+  **Porcelain** (warm pearl with frosted white glass) and **Match system** (Light or Dark by the device setting). Every page follows it:
+  sign-in, TV mode, dialogs, menus, charts, tables, toasts and the platform support panel. Glass uses backdrop blur on floating layers
+  (menus, dialogs, drawers, toasts) where the browser supports it and solid surfaces otherwise (and with "reduce transparency"). Text
+  meets WCAG AA in every theme; status colours and the battery liquid colours are the same in every theme (only the battery shell turns
+  smoky glass with silver rims and nib).
+- **Score display:** **Battery** (the 3D battery) or **Gauge** (a 240° radial gauge in the same colour scale, number in the centre, a tick
+  at the target, a short sweep on load, none with reduced motion). It applies everywhere a score is drawn: Overview hero, executive
+  metrics, team cards, the Team detail QA card and TV mode. Both read the same to a screen reader ("QA score: 81 of 100").
+- Both choices are kept in the browser (localStorage `irongate_theme_mode`, `irongate_score_display`) and applied before the first
+  paint. TV mode keeps its own light / dark switch; while the app shows Graphite or Porcelain, TV dark is Graphite and TV light Porcelain.
+- Implementation: `src/lib/appearance.ts`, `src/contexts/ThemeContext.tsx`, `src/styles/themes.css` (tokens per `<html data-theme>`),
+  `src/components/ScoreVisual.tsx` / `ScoreGauge.tsx`.
+
 ### Overview (dashboard)
 
 Why: the one-page answer to "how is quality across the company, and which teams need help?"
@@ -1060,7 +1079,9 @@ Why: everything about one team in one place, with each number explained
   survey** panel (send, remind, sent N of M, automatic sending); Team members with their latest workload metrics (only for people who may see
   the team's people, and with metrics only for those who opted in to developer insights); Team recommendations (rule-based or AI); Developer recommendations.
 - **Action plan**: the team's tracked actions with owner, due date, status, linked KPI, baseline and computed outcome; **Create action**
-  from a recommendation (section 7).
+  from a recommendation (section 7). Grouped by status in accordions with counts (Open, In progress, Done, Dropped; Done and Dropped
+  collapsed by default), 5 / 10 / 20 per page in each group; the whole card can be collapsed. What is expanded is remembered per person
+  in the browser.
 - **Open TV mode** and, for super admins, the **Show formulas & data sources** switch (formula mode) that opens the metric explanation
   for any value.
 - Team detail opens for the teams of the analytics scope only (as the overview list, TV mode and Compare); another team answers 403.
@@ -1347,6 +1368,8 @@ admins) sends yours immediately.
   compared with the baseline. **Improved** or **worse** when it moved by more than 2 % of the baseline (at least 0.01) in the KPI's direction,
   otherwise **unchanged**; "no new data" when nothing was recorded in that window.
 - TV mode shows the actions without owner names.
+- On Team detail the list is grouped by status (Open, In progress, Done, Dropped, each with its count) and paged per group; an action
+  whose status changes moves to its new group.
 
 ### Database keep-alive
 

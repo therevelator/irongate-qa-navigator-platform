@@ -1,6 +1,6 @@
 # Manual test cases
 
-368 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+382 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -10,8 +10,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
-- [Accessibility](#accessibility) (13)
-- [Theme and phone layout](#theme-and-phone-layout) (23)
+- [Accessibility](#accessibility) (18)
+- [Theme and phone layout](#theme-and-phone-layout) (28)
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
 - [Team detail](#team-detail) (22)
@@ -31,7 +31,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Administration: parameters](#administration-parameters) (4)
 - [Administration: update frequency](#administration-update-frequency) (1)
 - [Alerts and notifications](#alerts-and-notifications) (11)
-- [Tracked actions](#tracked-actions) (6)
+- [Tracked actions](#tracked-actions) (10)
 - [Wellbeing pulse](#wellbeing-pulse) (23)
 - [Developer productivity](#developer-productivity) (1)
 - [Overview](#overview) (4)
@@ -1258,7 +1258,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-09 a manager may invite team leads, software engineers and viewers only; a team lead engineers and viewers`
 
-### TC-AUTH-121: Right after signing in with the form, a company that hides sample-data notices shows no 'Includes sample data' banner
+### TC-AUTH-131: Right after signing in with the form, a company that hides sample-data notices shows no 'Includes sample data' banner
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F1.14
 
@@ -2132,7 +2132,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-17 the brand button returns to the overview from any page`
 
-### TC-AUTH-115: Top bar shows the QE Navigator brand, company badge and the person with their role label
+### TC-AUTH-125: Top bar shows the QE Navigator brand, company badge and the person with their role label
 
 **Type:** Positive · **Priority:** High · **Role:** Viewer · **Flow:** F4.14
 
@@ -2156,7 +2156,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-01 viewer: brand, company badge, name and role label`
 
-### TC-AUTH-116: "What you can do here" explains the viewer's role, scope and limits; Escape and a click outside close it
+### TC-AUTH-126: "What you can do here" explains the viewer's role, scope and limits; Escape and a click outside close it
 
 **Type:** Positive · **Priority:** High · **Role:** Viewer · **Flow:** F4.15
 
@@ -2181,7 +2181,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-02 viewer: "What you can do here" says her role, scope and limits; Escape and outside click close it`
 
-### TC-AUTH-117: "What you can do here" for a super admin lists company-wide powers and nothing they cannot do
+### TC-AUTH-127: "What you can do here" for a super admin lists company-wide powers and nothing they cannot do
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.15
 
@@ -2201,7 +2201,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-03 super admin: help lists company-wide powers and nothing she cannot do`
 
-### TC-AUTH-118: A job title set by a super admin replaces the role label in the top bar; others cannot set it
+### TC-AUTH-128: A job title set by a super admin replaces the role label in the top bar; others cannot set it
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin, Viewer · **Flow:** F4.14
 
@@ -2227,7 +2227,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-04 a job title set by a super admin replaces the role label; only super admins may set it`
 
-### TC-AUTH-119: Phone: the top bar shows company initials only; name, title and sign out are in the account menu
+### TC-AUTH-129: Phone: the top bar shows company initials only; name, title and sign out are in the account menu
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.16
 
@@ -2250,7 +2250,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-05 phone: company initials only; name, title and sign out in the account menu`
 
-### TC-AUTH-120: TV mode is in every role's navigation and opens with a team of the role's scope
+### TC-AUTH-130: TV mode is in every role's navigation and opens with a team of the role's scope
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.17
 
@@ -2541,10 +2541,10 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | Click the theme switch in the top bar (tooltip 'Switch to dark mode'). | The app turns dark. |
+| 2 | Click the Appearance button (palette icon) in the top bar and choose Theme 'Dark'; press Escape to close the menu. | The app turns dark. |
 | 3 | Open the navigation. | The drawer is shown in dark colours. |
 | 4 | Run the axe-core scan on the whole page (overview with the open drawer) and filter the results to impact Serious and Critical. | No serious or critical violation is reported (colour contrast included). |
-| 5 | Press Escape and click the theme switch again. | The drawer closes and the app is back in light mode. |
+| 5 | Press Escape, then click Appearance and choose Theme 'Light'. | The drawer closes and the app is back in light mode. |
 
 **Notes:** KA11Y-04 (colour contrast) is fixed: no known violation is accepted on this page any more.
 
@@ -2569,17 +2569,141 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) and open /compare. | The title reads Compare teams. |
-| 2 | Click the theme switch in the top bar (tooltip 'Switch to dark mode'). | The app turns dark. |
+| 2 | Click the Appearance button (palette icon) in the top bar and choose Theme 'Dark'; press Escape to close the menu. | The app turns dark. |
 | 3 | Wait until the page has loaded and run the axe-core scan; filter to Serious and Critical. | No serious or critical violation. |
 | 4 | Open /users, wait until it has loaded and run the scan again. | No serious or critical violation. |
 | 5 | Open the overview, click the team card 'The Away Team', wait until it has loaded and run the scan. | No serious or critical violation. |
-| 6 | Click the theme switch again. | The app is back in light mode. |
+| 6 | Click Appearance and choose Theme 'Light'. | The app is back in light mode. |
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-13 compare teams, users and team detail in the dark theme`
 
+### TC-AUTH-120: Overview and Team detail in the Light theme (Gauge) have no serious or critical accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- An accessibility checker browser extension using axe-core (e.g. axe DevTools) configured for WCAG 2.1 A and AA rules
+
+**Test data**
+
+- Super admin: admin@irongate.com / demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123). | The overview opens. |
+| 2 | Click Appearance, choose Theme 'Light' and Score display 'Gauge', press Escape. | The app shows the Light theme with gauges. |
+| 3 | Wait until the page has loaded and run the axe-core scan; filter to Serious and Critical. | No serious or critical violation (colour contrast included). |
+| 4 | Click the team card 'The Away Team', wait until it has loaded and run the scan again. | No serious or critical violation. |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-20 Light theme (Gauge): overview and team detail have no serious violations`
+
+### TC-AUTH-121: Overview and Team detail in the Dark theme (Gauge) have no serious or critical accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- An accessibility checker browser extension using axe-core (e.g. axe DevTools) configured for WCAG 2.1 A and AA rules
+
+**Test data**
+
+- Super admin: admin@irongate.com / demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123). | The overview opens. |
+| 2 | Click Appearance, choose Theme 'Dark' and Score display 'Gauge', press Escape. | The app shows the Dark theme with gauges. |
+| 3 | Wait until the page has loaded and run the axe-core scan; filter to Serious and Critical. | No serious or critical violation (colour contrast included). |
+| 4 | Click the team card 'The Away Team', wait until it has loaded and run the scan again. | No serious or critical violation. |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-21 Dark theme (Gauge): overview and team detail have no serious violations`
+
+### TC-AUTH-122: Overview and Team detail in the Graphite theme (Battery) have no serious or critical accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- An accessibility checker browser extension using axe-core (e.g. axe DevTools) configured for WCAG 2.1 A and AA rules
+
+**Test data**
+
+- Super admin: admin@irongate.com / demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123). | The overview opens. |
+| 2 | Click Appearance, choose Theme 'Graphite' and Score display 'Battery', press Escape. | The app shows the Graphite theme with batterys. |
+| 3 | Wait until the page has loaded and run the axe-core scan; filter to Serious and Critical. | No serious or critical violation (colour contrast included). |
+| 4 | Click the team card 'The Away Team', wait until it has loaded and run the scan again. | No serious or critical violation. |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-22 Graphite theme (Battery): overview and team detail have no serious violations`
+
+### TC-AUTH-123: Overview and Team detail in the Porcelain theme (Gauge) have no serious or critical accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- An accessibility checker browser extension using axe-core (e.g. axe DevTools) configured for WCAG 2.1 A and AA rules
+
+**Test data**
+
+- Super admin: admin@irongate.com / demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123). | The overview opens. |
+| 2 | Click Appearance, choose Theme 'Porcelain' and Score display 'Gauge', press Escape. | The app shows the Porcelain theme with gauges. |
+| 3 | Wait until the page has loaded and run the axe-core scan; filter to Serious and Critical. | No serious or critical violation (colour contrast included). |
+| 4 | Click the team card 'The Away Team', wait until it has loaded and run the scan again. | No serious or critical violation. |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-23 Porcelain theme (Gauge): overview and team detail have no serious violations`
+
+### TC-AUTH-124: Sign-in screen in Graphite and Porcelain has no serious or critical accessibility violations
+
+**Type:** Accessibility · **Priority:** Low · **Role:** Signed out · **Flow:** F15.1
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- An accessibility checker browser extension using axe-core configured for WCAG 2.1 A and AA rules
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | In DevTools > Application > Local storage set irongate_theme_mode to graphite and open the sign-in screen. | The sign-in screen is Graphite. |
+| 2 | Run the axe-core scan; filter to Serious and Critical. | No serious or critical violation. |
+| 3 | Set irongate_theme_mode to porcelain, reload and scan again. | The sign-in screen is Porcelain; no serious or critical violation. |
+
+**After the test:** Remove the irongate_theme_mode entry.
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-24 sign-in screen in Graphite and Porcelain`
+
 ## Theme and phone layout
 
-### TC-AUTH-092: The theme switch toggles dark mode and the choice survives a reload and signing out
+### TC-AUTH-092: Switching between Light and Dark in the Appearance menu survives a reload and signing out
 
 **Type:** Positive · **Priority:** High · **Role:** Viewer · **Flow:** F4.10
 
@@ -2595,7 +2719,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | Note whether the app is light or dark, then click the theme switch in the top bar (button 'Toggle colour theme'). | The app switches to the other theme (light → dark or dark → light). |
+| 2 | Note whether the app is light or dark, then click the Appearance button (palette icon) in the top bar and choose the other of Light / Dark. | The app switches to the other theme (light → dark or dark → light). |
 | 3 | Reload the page. | The overview is shown, still in the new theme. |
 | 4 | Open the navigation and click Sign out. | The sign-in screen is shown, still in the new theme. |
 
@@ -3105,6 +3229,135 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** The automated test rewrites the team name in the API response; manually rename a test team (not a demo team used by other tests) or use a proxy.
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-13 very long names and unicode do not break the phone layout`
+
+### TC-AUTH-115: Appearance menu with the keyboard: choose Graphite and Gauge; the choice survives a reload and signing out
+
+**Type:** Positive · **Priority:** High · **Role:** Viewer · **Flow:** F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+
+**Test data**
+
+- Viewer: viewer@irongate.com / demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens in the Light theme; the QA scores are drawn as 3D batteries. |
+| 2 | Press Tab until the Appearance button (palette icon) in the top bar has the focus ring, then press Enter. | A menu opens with two groups: Theme (Light, Dark, Graphite, Porcelain, Match system) and Score display (Battery, Gauge). The focus is on 'Light', which has a check mark. |
+| 3 | Press the Down arrow twice, then Enter. | 'Graphite' has the focus and is chosen: the app turns deep graphite with translucent dark-glass cards, light hairline borders and a soft diagonal light sheen; text is white / silver. |
+| 4 | Press End, then Space. | The focus moves to 'Gauge' and it is chosen: every QA score (company hero, executive metrics, team cards) is now a radial gauge with the number in the centre, a coloured arc and a small tick at the target. |
+| 5 | Press Escape. | The menu closes and the focus returns to the Appearance button. |
+| 6 | Reload the page. | The overview opens directly in Graphite with gauges, without a flash of the light theme. |
+| 7 | Open the navigation and click Sign out. | The sign-in screen is shown in Graphite (dark glass, graphite brand panel on wide screens). |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+**Notes:** The preference is kept in this browser (localStorage), not on the account.
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance › APR-01 keyboard: open the menu, choose Graphite and Gauge; the choice survives a reload and signing out`
+
+### TC-AUTH-116: Every theme of the Appearance menu: Light, Dark, Graphite, Porcelain
+
+**Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+
+**Test data**
+
+- Viewer: viewer@irongate.com / demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens. |
+| 2 | Click Appearance and choose 'Dark'. | The app turns dark (plain dark slate surfaces). |
+| 3 | Choose 'Porcelain'. | The app turns warm pearl with frosted translucent white cards, soft shadows and hairline borders; text is charcoal. |
+| 4 | Choose 'Graphite'. | The app turns dark graphite glass. |
+| 5 | Choose 'Light'. | The app is back in the original light theme. |
+| 6 | Open the menu again and click somewhere on the page outside it. | The menu closes. |
+| 7 | In each theme look at the status pills (Good / Warning / Critical), the battery liquid and the chart colours on a team page. | Status colours and the battery liquid colours are the same in every theme; only surfaces, text and the battery shell change. |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance › APR-02 every theme from the menu; Porcelain is light, the menu closes on a click outside`
+
+### TC-AUTH-117: "Match system" follows the device's light / dark setting; with no choice the app is Light
+
+**Type:** Positive · **Priority:** Medium · **Role:** Signed out · **Flow:** F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Set the operating system (or DevTools > Rendering > Emulate CSS prefers-color-scheme) to dark. Open the sign-in screen in a fresh private window. | The sign-in screen is Light: the device setting is not followed until 'Match system' is chosen. |
+| 2 | Sign in as any user, click Appearance and choose 'Match system'. | The app turns Dark. |
+| 3 | Switch the device setting to light. | The app turns Light without a reload. |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance › APR-03 "Match system" follows the device setting; with no choice the app stays Light`
+
+### TC-AUTH-118: Score display Gauge on team cards and Team detail, and back to Battery
+
+**Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+
+**Test data**
+
+- Viewer: viewer@irongate.com / demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens with 3D batteries. |
+| 2 | Click Appearance and choose Score display 'Gauge'. | The team cards show a small gauge next to 'QA score'. A screen reader reads it as '<team> QA score: <n> of 100', as for the battery. |
+| 3 | Click the team card 'The Away Team'. | Team detail opens; the QA score card shows a gauge with the target tick at the team's QA target. |
+| 4 | Choose Score display 'Battery'. | The QA score card shows the horizontal 3D battery again. |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+**Notes:** With 'Reduce motion' on in the OS the gauge appears without the sweep animation.
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance › APR-04 the score display applies to team cards and Team detail too (Battery back again)`
+
+### TC-AUTH-119: TV mode in a glass theme: its Light / Dark switch shows Porcelain / Graphite and exit gives the app theme back
+
+**Type:** Positive · **Priority:** Low · **Role:** Viewer · **Flow:** F4.10, F7.1
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+
+**Test data**
+
+- Viewer: viewer@irongate.com / demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens. |
+| 2 | Choose Theme 'Graphite' in the Appearance menu, open the team 'The Away Team' and click 'Open TV mode'. | TV mode opens in Graphite (dark glass). |
+| 3 | Move the mouse to show the controls and click 'Light'. | TV mode turns Porcelain (light frosted glass). |
+| 4 | Click 'Exit'. | TV mode closes and the app is Graphite again. |
+
+**After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).
+
+**Notes:** With the Light or Dark app theme the TV switch keeps showing plain Light / Dark.
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance › APR-05 TV mode keeps its light/dark switch inside the glass family and gives the app theme back on exit`
 
 ## Overview (dashboard)
 
@@ -6568,7 +6821,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ALT-01 alerts cannot be acknowledged by an engineer even through the API`
 
-### TC-ADM-040: A team lead sees a new alert in the bell, marks everything read and acknowledges the alert
+### TC-ADM-044: A team lead sees a new alert in the bell, marks everything read and acknowledges the alert
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F4.13, F10.1, F10.2, F10.3
 
@@ -6602,7 +6855,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts-actions.spec.ts › Alerts, notifications and tracked actions › A team lead sees a new alert in the bell, can open the panel and mark everything read`
 
-### TC-ADM-041: Notification preferences can be changed and saved
+### TC-ADM-045: Notification preferences can be changed and saved
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.4, F10.5
 
@@ -6625,7 +6878,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts-actions.spec.ts › Alerts, notifications and tracked actions › Notification preferences can be changed and saved`
 
-### TC-ADM-042: A software engineer has no digest option and cannot acknowledge alerts
+### TC-ADM-046: A software engineer has no digest option and cannot acknowledge alerts
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F10.2, F10.5
 
@@ -6647,7 +6900,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts-actions.spec.ts › Alerts, notifications and tracked actions › An engineer has no digest option and cannot acknowledge alerts`
 
-### TC-ADM-043: Parameters shows the alert rules and, for super admins, the Slack settings with a masked webhook field
+### TC-ADM-047: Parameters shows the alert rules and, for super admins, the Slack settings with a masked webhook field
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F10.6, F10.8
 
@@ -6696,10 +6949,11 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 2 | Click 'New action'. | The dialog 'New action' opens with Title, Description (optional), Owner, Due date and Linked KPI. |
 | 3 | Enter the title, choose Owner 'Fixture Member1', Linked KPI 'Test coverage', Due date 2030-06-30 and click 'Create action'. | A toast 'Action created' appears; the action is listed with the owner 'Fixture Member1'. |
 | 4 | Click the Edit (pencil) button of the action, change the title to the new title and click 'Save changes'. | A toast 'Action updated' appears; the list shows 'Stabilise the checkout suite (phase 1)'. |
-| 5 | In the action's status dropdown choose 'Done'. | A toast 'Marked done; the outcome is computed from the stored values' appears; the action shows outcome badges (checkpoints with e.g. 'Pending' / 'No new data'). |
-| 6 | Click the Delete (bin) button of the action. | A browser confirmation asks 'Delete the action "Stabilise the checkout suite (phase 1)"? This cannot be undone.' |
-| 7 | Click Cancel. | The action is still listed. |
-| 8 | Click Delete again and confirm with OK. | A toast 'Action deleted' appears and the action is no longer listed. |
+| 5 | In the action's status dropdown choose 'Done'. | A toast 'Marked done; the outcome is computed from the stored values' appears; the action leaves the Open group and the group header 'Done (1)' is shown, collapsed. |
+| 6 | Click the 'Done (1)' group header. | The Done group expands and shows the action with outcome badges (checkpoints with e.g. 'Pending' / 'No new data'). |
+| 7 | Click the Delete (bin) button of the action. | A browser confirmation asks 'Delete the action "Stabilise the checkout suite (phase 1)"? This cannot be undone.' |
+| 8 | Click Cancel. | The action is still listed. |
+| 9 | Click Delete again and confirm with OK. | A toast 'Action deleted' appears and the action is no longer listed. |
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ACT-01 a lead creates an action for a member, edits it, marks it done (outcome shown) and deletes it after a cancel`
 
@@ -6818,7 +7072,121 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ACT-05 a failed save keeps the form open with the reason`
 
-### TC-ADM-044: A team lead creates a tracked action on Team detail, moves it to In progress, and TV mode shows it without owner names
+### TC-ADM-040: Action plan groups the actions by status; Done and Dropped are collapsed by default
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- A test team with a team lead (Overview > search) that has tracked actions: 7 Open, 2 In progress, 12 Done, 3 Dropped (created through the app or the database)
+- Browser signed out (fresh private window)
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team name into 'Search teams' on the Overview and click its team card. | Team detail opens with the 'Action plan' card. |
+| 2 | Read the group headers in the Action plan. | Four accordion headers in this order: 'Open (7)', 'In progress (2)', 'Done (12)', 'Dropped (3)'. |
+| 3 | Look under 'Open' and 'In progress'. | Both are expanded and list their actions. |
+| 4 | Look under 'Done' and 'Dropped'. | Both are collapsed: no actions are shown under them. |
+| 5 | Click the 'Done (12)' header. | The Done group expands and shows its first 5 actions. |
+| 6 | Press Tab until the 'Dropped (3)' header has the focus ring and press Enter. | The Dropped group expands and shows 3 actions without a pager. |
+
+**After the test:** Delete the test actions.
+
+**Notes:** Screen readers announce each header as a button, expanded or collapsed.
+
+*Automated:* `tests/e2e/team/action-plan.spec.ts › Action plan › APL-01 grouped by status with counts; Open and In progress expanded, Done and Dropped collapsed`
+
+### TC-ADM-041: Action plan paging per group: 5 per page by default, previous / next, page numbers, 10 and 20 per page
+
+**Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- A test team with a team lead (Overview > search) that has tracked actions: 7 Open, 2 In progress, 12 Done, 3 Dropped (created through the app or the database)
+- Browser signed out (fresh private window)
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team name into 'Search teams' on the Overview and click its team card. | Team detail opens. |
+| 2 | Look at the bottom of the Open group. | 'Showing 1–5 of 7', 'Per page 5', 'Previous' (disabled), page numbers 1 and 2, 'Next'. |
+| 3 | Click 'Next'. | 'Showing 6–7 of 7'; two actions are listed; page 2 is highlighted and 'Next' is disabled. |
+| 4 | Choose Per page '10'. | 'Showing 1–7 of 7'; all 7 actions are listed and there are no page buttons. |
+| 5 | Expand 'Done (12)' and click page '3'. | 'Showing 11–12 of 12' in the Done group; the Open group still shows 'Showing 1–7 of 7'. |
+| 6 | Choose Per page '20' in the Done group. | All 12 done actions are listed. |
+
+**After the test:** Delete the test actions.
+
+*Automated:* `tests/e2e/team/action-plan.spec.ts › Action plan › APL-02 paging per group: 5 per page by default, previous / next / numbers, page size 10 and 20`
+
+### TC-ADM-042: The expanded groups and the collapsed Action plan section are remembered after a reload
+
+**Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- A test team with a team lead (Overview > search) that has tracked actions: 7 Open, 2 In progress, 12 Done, 3 Dropped (created through the app or the database)
+- Browser signed out (fresh private window)
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team name into 'Search teams' on the Overview and click its team card. | Team detail opens. |
+| 2 | Expand 'Done' and collapse 'Open'. | Done shows its actions; Open shows none. |
+| 3 | Reload the page and open the team again. | Done is still expanded and Open still collapsed. |
+| 4 | Click the 'Action plan' title (chevron) at the top of the card. | The whole list collapses; the 'New action' button stays. |
+| 5 | Reload the page and open the team again. | The Action plan is still collapsed. |
+| 6 | Click 'Action plan' again. | The list is shown again. |
+
+**After the test:** Delete the test actions.
+
+**Notes:** Remembered per person in this browser (localStorage).
+
+*Automated:* `tests/e2e/team/action-plan.spec.ts › Action plan › APL-03 the expanded state of the groups and the section survives a reload`
+
+### TC-ADM-043: Changing an action's status moves it to its group and updates the counts
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- A test team with a team lead (Overview > search) that has tracked actions: 7 Open, 2 In progress, 12 Done, 3 Dropped (created through the app or the database)
+- Browser signed out (fresh private window)
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team name into 'Search teams' on the Overview and click its team card. | Team detail opens. |
+| 2 | In the In progress group change the status dropdown of an action to 'Dropped'. | A toast 'Status: Dropped' appears; the headers read 'In progress (1)' and 'Dropped (4)'. |
+| 3 | Expand 'Dropped'. | The action is listed there. |
+| 4 | Change its status back to 'In progress'. | The headers read 'In progress (2)' and 'Dropped (3)'. |
+
+**After the test:** Delete the test actions.
+
+*Automated:* `tests/e2e/team/action-plan.spec.ts › Action plan › APL-04 a status change moves the action to its group and updates the counts`
+
+### TC-ADM-048: A team lead creates a tracked action on Team detail, moves it to In progress, and TV mode shows it without owner names
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9, F6.12
 
@@ -9549,7 +9917,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/readonly/live-smoke.spec.ts › Live smoke (read-only) › LIVE-03 every page in the navigation opens`
 
-### TC-ROLE-047: Unknown address leads to the overview, theme switch works, phone layout fits
+### TC-ROLE-047: Unknown address leads to the overview, the Appearance menu switches Light / Dark, phone layout fits
 
 **Type:** Read-only (live site) · **Priority:** High · **Role:** Any · **Flow:** F17.4, F4.5, F4.10, F4.11
 
@@ -9568,8 +9936,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open the app's home address, enter the e-mail and password of the account from Test data and click Sign in. | The Overview page opens (the Overview / team grid is shown). |
 | 2 | Go to <app address>/this-page-does-not-exist. | The Overview page is shown. |
-| 3 | Click the "Toggle colour theme" button in the top bar. | The colours switch between light and dark. |
-| 4 | Click "Toggle colour theme" again. | The original theme is restored. |
+| 3 | Click the "Appearance" button in the top bar and choose the other of Light / Dark. | The colours switch between light and dark. |
+| 4 | Click "Appearance" again and choose the original theme. | The original theme is restored. |
 | 5 | In DevTools turn on the device toolbar and set the size to 390 x 844. | The layout adapts to the phone width. |
 | 6 | Try to scroll the page sideways. | The page does not scroll horizontally and no content sticks out to the right (wide tables may scroll inside their own box). |
 
