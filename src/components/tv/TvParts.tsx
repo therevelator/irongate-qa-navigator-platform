@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, ReferenceLine, ResponsiveContainer, CartesianGrid } from 'recharts';
 import HeroBattery from '../HeroBattery';
+import { expectationText } from '../../lib/targetText';
 import { cx, type Tone } from '../ui';
 import type { DetailedKPI, KPIStatus } from '../../data/detailedKPIs';
 import type { HistoryPoint, KpiChange } from '../../data/kpiTrend';
@@ -53,11 +54,9 @@ export const unitSuffix = (unit: string) => (!unit ? '' : unit === '%' ? '%' : u
 export const fmtValue = (v: number | null, digits = 1) =>
   v == null ? '—' : v.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
 
-export const targetText = (k: Pick<DetailedKPI, 'threshold' | 'unit'>) => {
-  if (!k.threshold) return null;
-  const u = k.unit === '%' || k.unit.startsWith('/') ? k.unit : k.unit ? ` ${k.unit}` : '';
-  return `Target ${k.threshold.lowerIsBetter ? '≤' : '≥'} ${k.threshold.good}${u}`;
-};
+/** "Target ≥ 80%", and for Watch the band too ("Watch: 70–80% · Target ≥ 80%"): src/lib/targetText.ts. */
+export const targetText = (k: Pick<DetailedKPI, 'threshold' | 'unit'> & { status?: DetailedKPI['status'] }) =>
+  expectationText(k.threshold, k.unit, k.status);
 
 /** "17 Nov" (no year: TV mode shows the last 90 days). */
 export const shortDate = (d: string) => {

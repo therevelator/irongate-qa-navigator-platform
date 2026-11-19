@@ -453,7 +453,7 @@ const TeamTvView: React.FC = () => {
               </p>
               {model.qaChange && <p className="mt-1 text-[1.35rem] text-slate-500 dark:text-slate-400">vs {shortDate(model.qaChange.prevDate)}</p>}
               <p className="mt-1 text-[1.35rem] text-slate-500 dark:text-slate-400">
-                Target ≥ {model.qaThreshold.good} · watch ≥ {model.qaThreshold.warning}
+                Target ≥ {model.qaThreshold.good} · Watch: {model.qaThreshold.warning}–{model.qaThreshold.good}
               </p>
               {latest?.qaScoreConfidence && (
                 <p className="mt-1 text-[1.35rem] text-slate-600 dark:text-slate-300" data-testid="tv-qa-confidence" title={confidenceExplanation(latest.qaScoreConfidence)}>

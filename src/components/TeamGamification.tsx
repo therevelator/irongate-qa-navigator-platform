@@ -4,6 +4,7 @@ import ExportCsvButton from './ExportCsvButton';
 import { Page, PageIntro, Card, Badge, EmptyState, SegmentedControl, cx } from './ui';
 import type { Tone } from './ui';
 import { getThreshold, statusFor, toNum } from '../data/detailedKPIs';
+import { statusWithTarget } from '../lib/targetText';
 import type { KPIKey, KPIStatus } from '../data/detailedKPIs';
 import { formatAsOf } from '../data/advancedFeatures';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
@@ -244,12 +245,20 @@ const TeamGamification: React.FC<TeamRankingsProps> = ({ teamId }) => {
                             <span className="text-slate-500 dark:text-slate-400" title={`Stale${staleSince ? ` since ${formatAsOf(staleSince)}` : ''}: shown, not ranked or judged`} data-stale="true">
                               {v.toFixed(c.digits)}{c.unit}<span className="ml-1 text-[10px] uppercase">stale</span>
                             </span>
-                          ) : c.key === 'qaScore' ? (
-                            <Badge tone={toneFor(status)}>{v.toFixed(c.digits)}{c.unit}</Badge>
                           ) : (
-                            <span className={cx(status === 'critical' && 'text-red-700 dark:text-red-400', status === 'warning' && 'text-amber-700 dark:text-amber-400')}>
-                              {v.toFixed(c.digits)}{c.unit}
-                            </span>
+                            <>
+                              {c.key === 'qaScore' ? (
+                                <Badge tone={toneFor(status)}>{v.toFixed(c.digits)}{c.unit}</Badge>
+                              ) : (
+                                <span className={cx(status === 'critical' && 'text-red-700 dark:text-red-400', status === 'warning' && 'text-amber-700 dark:text-amber-400')}>
+                                  {v.toFixed(c.digits)}{c.unit}
+                                </span>
+                              )}
+                              {/* Status and the target valid at the value's date (src/lib/targetText.ts). */}
+                              <span className="block whitespace-nowrap text-[11px] text-slate-500 dark:text-slate-400" data-testid="ranking-target">
+                                {statusWithTarget(getThreshold(c.metric, team.thresholds ?? thresholds), c.key === 'qaScore' ? '/100' : c.unit.trim(), status)}
+                              </span>
+                            </>
                           )}
                         </td>
                       );
