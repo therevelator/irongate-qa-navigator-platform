@@ -14,7 +14,7 @@ import {
 /** The Analytics modules and the pages built on the analytics scope (one team at a time). */
 export const ANALYTICS_VIEWS = [
   'features', 'flaky-test-intelligence', 'technical-debt', 'pipeline-visualization', 'business-impact', 'performance-metrics',
-  'developer-productivity', 'team-pulse', 'test-execution-timeline', 'team-gamification', 'pdf-report-generator', 'compare', 'tv',
+  'developer-productivity', 'team-pulse', 'test-execution-timeline', 'team-gamification', 'pdf-report-generator', 'compare',
 ] as const;
 
 /** Every role may use them, provided at least one team is in their analytics scope. */
@@ -28,6 +28,9 @@ export function canOpenView(actor: PolicyActor | null | undefined, view: string)
   switch (view) {
     case 'dashboard':
     case 'notifications':
+      return true;
+    case 'tv':
+      // TV mode: any team of the person's company, for every role (canViewTeamTv).
       return true;
     case 'users':
     case 'teams':

@@ -28,7 +28,7 @@ or a manager of two departments); their access is the union. Data never crosses 
   access, departments, teams, KPI targets, parameters, expected update frequency, alert rules, Slack, API keys, session
   length, sample data and job titles. Reads the change history, the ingestion log and the user activity log.
 - **Manager.** Sees the teams of the departments they manage (and nothing of other departments): dashboards, trends,
-  Compare, TV mode, Analytics, the revenue roll-up of those teams, and individual developer rows of people who opted in.
+  Compare, Analytics, the revenue roll-up of those teams, and individual developer rows of people who opted in.
   Manages those teams and their people (below manager), sets their targets and alert rules, and reads the change history
   and ingestion log of their departments.
 - **Team lead.** Sees the teams they lead or belong to. Writes those teams' data (manual metrics, alerts, tracked actions,
@@ -38,8 +38,8 @@ or a manager of two departments); their access is the union. Data never crosses 
   the wellbeing pulse of their teams. Can update the status of a tracked action they own.
 - **Viewer** (Product Owner, stakeholder, auditor). Sees the teams they are assigned to, read-only, and nothing of other
   teams. A viewer of one team (for example Olivia Grant, Product Owner of Payments Core) sees that team on the overview,
-  its team detail, TV mode, Compare (that team only) and the Analytics modules; any other team's page and API answer
-  403.
+  its team detail, Compare (that team only) and the Analytics modules; any other team's page and API answer 403. The
+  one exception, for every role: **TV mode** (the wall screen) shows any team of the company.
 
 ## Scope rule (one rule for every page)
 
@@ -53,11 +53,16 @@ A team is **in scope** for a person when one of their assignments covers it (`ca
 
 The overview list (`GET /api/teams`), the overview summary (`GET /api/analytics/company-summary`, which says
 `scope.companyWide` false and is computed over the teams in scope for everyone but super admins), team detail
-(`GET /api/teams/:id`), KPI history, TV mode, Compare, the Analytics modules, revenue impact, pulse results, alerts,
+(`GET /api/teams/:id`), KPI history, Compare, the Analytics modules, revenue impact, pulse results, alerts,
 tracked actions, saved views (teams outside scope are left out when applied), `/api/metrics/analytics/*`,
 `/api/metrics/dashboard` and `/api/departments/:id` all use it. Individual developer rows have a second rule: your own
 row always; other people's only for super admins, managers and team leads of the team, and only for people who opted in
 to developer insights. Averages of individuals and pulse results are shown only with at least 3 contributors.
+
+**Exception: TV mode.** The wall / meeting-room screen (`/tv`, `GET /api/tv/teams`, `GET /api/tv/teams/:id`) shows
+**any team of the person's own company**, for every role (`canViewTeamTv`, owner decision): team figures only (KPIs,
+targets, trends, technical debt score), never a member list or individual data. Another company's team answers 403.
+Inside TV mode, recommendations and tracked actions still follow the analytics scope and are left out for other teams.
 
 The **directory** (names of departments and teams, used to assign people and send invitations: `/api/admin/teams`,
 `/api/admin/departments`) is company-visible to people who manage users; it carries no KPIs.
@@ -75,7 +80,7 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Team detail (KPIs, targets, trends, QA score card) | any team | scope | scope | scope | scope |
 | Team detail: members table | all members, metrics of opted-in people | same, in scope | same, in scope | own row | own row |
 | Team detail: team and developer recommendations | scope | scope | scope | — | — |
-| TV mode (`/tv?team=`) | any team | scope | scope | scope | scope |
+| TV mode (`/tv?team=`, team picker) | any team of the company | any team of the company | any team of the company | any team of the company | any team of the company |
 | Compare teams | 2–4 teams of the company | of scope | of scope | of scope | of scope |
 | Analytics: Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline | any team | scope | scope | scope | scope |
 | Analytics: Developer productivity | rows of opted-in people | same, in scope | same, in scope | own row, team averages (≥ 3) | own row, team averages (≥ 3) |
@@ -148,8 +153,8 @@ The navigation drawer and the Analytics hub show only the pages the person may o
 
 | Entry | Shown to |
 |---|---|
-| Overview, Notifications (bell) | everyone |
-| Analytics and its modules, Compare teams, TV mode | everyone with at least one team in scope |
+| Overview, Notifications (bell), TV mode | everyone |
+| Analytics and its modules, Compare teams | everyone with at least one team in scope |
 | Users, Teams | super admins, managers, team leads |
 | Departments, User activity | super admins |
 | Activity, Ingestion log, Admin console, Update frequency, Parameters | super admins, managers |
@@ -160,9 +165,9 @@ roll-up tab) stay in the navigation.
 
 ## Tests
 
-- API: `tests/api/viewer-scope.test.ts` (a viewer of one team: other teams' detail, TV, history, Analytics, revenue,
+- API: `tests/api/viewer-scope.test.ts` (a viewer of one team: other teams' detail, history, Analytics, revenue,
   pulse, alerts, actions and Compare answer 403; allowed for someone with that team in scope; the summary and metrics
-  reads cover the scope only), `tests/api/role-matrix.test.ts`, `tests/api/r2-security-matrix.test.ts`,
+  reads cover the scope only; TV mode shows any team of her company, never another company's), `tests/api/tv-mode.test.ts`, `tests/api/role-matrix.test.ts`, `tests/api/r2-security-matrix.test.ts`,
   `tests/api/team-read-policy.test.ts`, `tests/api/analytics-scope.test.ts`.
 - UI: `tests/e2e/viewer-rbac.spec.ts`, `tests/e2e/navigation/role-navigation.spec.ts` (visible entries per role) and the
   other `*-rbac.spec.ts` suites.

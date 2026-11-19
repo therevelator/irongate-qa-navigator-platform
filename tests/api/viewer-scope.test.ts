@@ -70,20 +70,35 @@ describe('A viewer scoped to one team sees that team only', () => {
     expect((await ids('admin')).length).toBeGreaterThanOrEqual(5);
   });
 
-  it('SCOPE-002: team detail, TV mode, KPI history: another team 403 for her, 200 with that team in scope', async () => {
+  it('SCOPE-002: team detail and KPI history: another team 403 for her, 200 with that team in scope', async () => {
     if (!up) return;
-    for (const path of [`/api/teams/${BIG}`, `/api/tv/teams/${BIG}`, `/api/teams/${BIG}/kpi-history?days=30`, `/api/metrics/teams/${BIG}/history`]) {
+    for (const path of [`/api/teams/${BIG}`, `/api/teams/${BIG}/kpi-history?days=30`, `/api/metrics/teams/${BIG}/history`]) {
       expect([path, await status(path, 'vone')]).toEqual([path, 403]);
       expect([path, await status(path, 'vtwo')]).toEqual([path, 200]);
       expect([path, await status(path, 'mgra')]).toEqual([path, 200]);
     }
-    for (const path of [`/api/teams/${PARTIAL}`, `/api/tv/teams/${PARTIAL}`]) {
-      expect([path, await status(path, 'vone')]).toEqual([path, 200]);
-      expect([path, await status(path, 'mgra')]).toEqual([path, 403]);
-    }
+    expect(await status(`/api/teams/${PARTIAL}`, 'vone')).toBe(200);
+    expect(await status(`/api/teams/${PARTIAL}`, 'mgra')).toBe(403);
     const refused = await get(`/api/teams/${BIG}`, c.vone);
     expect(refused.body.team).toBeUndefined();
     expect(JSON.stringify(refused.body)).not.toMatch(/qaScore|kpiData|@golden/);
+  });
+
+  it('SCOPE-006: TV mode is the exception: any team of her company (200), never another company\'s (403)', async () => {
+    if (!up) return;
+    for (const id of [BIG, SMALL, PARTIAL]) {
+      expect([id, await status(`/api/tv/teams/${id}`, 'vone')]).toEqual([id, 200]);
+      expect([id, await status(`/api/tv/teams/${id}`, 'mgra')]).toEqual([id, 200]);
+    }
+    const tv = (await get(`/api/tv/teams/${BIG}`, c.vone)).body;
+    expect(JSON.stringify(tv)).not.toMatch(/@golden\.example/);
+    const picker = ((await get('/api/tv/teams', c.vone)).body.teams ?? []).map((t: any) => t.id);
+    expect(picker).toEqual(expect.arrayContaining([BIG, SMALL, PARTIAL]));
+    const foreign = (await login('alex.morgan@northwind.example')).cookie;
+    if (foreign) {
+      expect((await get(`/api/tv/teams/${BIG}`, foreign)).status).toBe(403);
+      expect(((await get('/api/tv/teams', foreign)).body.teams ?? []).map((t: any) => t.id)).not.toContain(BIG);
+    }
   });
 
   it('SCOPE-003: Analytics modules, revenue impact, pulse, alerts, actions, compare: another team 403', async () => {

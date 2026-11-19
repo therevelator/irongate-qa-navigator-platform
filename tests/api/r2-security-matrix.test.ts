@@ -94,11 +94,13 @@ const OUT_OF_SCOPE_B1: Record<Who, Expect> = { admin: 'ok', manager: 403, lead: 
 const SIGNED_IN: Record<Who, Expect> = { admin: 'ok', manager: 'ok', lead: 'ok', engineer: 'ok', viewer: 'ok', foreign: 'ok', anon: 401 };
 
 describe('R2 security matrix', () => {
-  it('SEC-R2-001: TV mode, compare, revenue impact follow the analytics scope', async () => {
+  it('SEC-R2-001: TV mode shows any team of the company; compare and revenue impact follow the analytics scope', async () => {
     if (skip()) return;
     const e: string[] = [];
     await matrix('GET /tv/teams/A1', (k) => get(`/api/tv/teams/${T.A1}`, k), ALL_A1, e);
-    await matrix('GET /tv/teams/B1', (k) => get(`/api/tv/teams/${T.B1}`, k), OUT_OF_SCOPE_B1, e);
+    // TV mode (the wall screen): every role, any team of the own company (canViewTeamTv).
+    await matrix('GET /tv/teams/B1', (k) => get(`/api/tv/teams/${T.B1}`, k), ALL_A1, e);
+    await matrix('GET /tv/teams/F', (k) => get(`/api/tv/teams/${T.F}`, k), { admin: 403, manager: 403, lead: 403, engineer: 403, viewer: 403, foreign: 'ok', anon: 401 }, e);
     const cmp = { ...ADMIN_MANAGER };
     await matrix('GET /compare/teams A1,A2', (k) => get(`/api/compare/teams?ids=${T.A1},${T.A2}`, k), cmp, e);
     await matrix('GET /compare/teams.csv A1,A2', (k) => get(`/api/compare/teams.csv?ids=${T.A1},${T.A2}`, k), cmp, e);

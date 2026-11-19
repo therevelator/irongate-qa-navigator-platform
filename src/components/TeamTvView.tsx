@@ -1,3 +1,4 @@
+import API_URL from '../config/api';
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { LastUpdatedNote } from './LastUpdatedNote';
 import { Toaster, toast } from 'react-hot-toast';
@@ -34,7 +35,9 @@ import {
  * - Full screen, no app chrome. The root font size follows the screen (1rem = 1/120 of a
  *   16:9 width), so the layout is identical at 1366×768, 1920×1080 and 3840×2160.
  * - Team aggregates only (GET /api/tv/teams/:id): never individual developer data.
- * - Scope: the shared analytics rule; the server answers 403 for any other team.
+ * - Scope: every role may show ANY team of their own company (canViewTeamTv: the wall screen is for
+ *   everyone; the team picker lists the company's teams, GET /api/tv/teams). Recommendations and
+ *   tracked actions stay with the analytics scope and are left out for other teams.
  * - Refreshes every 60 s and on the live "metrics updated" event; keeps the last data on
  *   screen when a refresh fails.
  * - Keys: F full screen, T theme, R auto-rotate, ← → or 1–3 panels, Esc exit.
@@ -155,17 +158,29 @@ const TeamTvView: React.FC = () => {
 
   /* ---------------- team ---------------- */
 
-  const [urlTeamId, setUrlTeamId] = useState<string | null>(() => readParam('team'));
-  const teamId = urlTeamId ?? scope.teamId;
+  // The teams TV mode may show: every active team of the company (GET /api/tv/teams).
+  const [tvTeams, setTvTeams] = useState<{ id: string; name: string; department_id: string | null; department_name: string | null }[] | null>(null);
   useEffect(() => {
-    // Without ?team=, show the scope's team and put it in the URL so the link can be shared.
-    if (!urlTeamId && scope.teamId) { replaceTvTeam(scope.teamId); setUrlTeamId(scope.teamId); }
-  }, [urlTeamId, scope.teamId]);
+    let cancelled = false;
+    fetch(`${API_URL}/tv/teams`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : { teams: [] }))
+      .then((d) => { if (!cancelled) setTvTeams(d.teams ?? []); })
+      .catch(() => { if (!cancelled) setTvTeams([]); });
+    return () => { cancelled = true; };
+  }, []);
+  const [urlTeamId, setUrlTeamId] = useState<string | null>(() => readParam('team'));
+  const fallbackTeamId = scope.teamId ?? (tvTeams && tvTeams.length ? tvTeams[0].id : null);
+  const teamId = urlTeamId ?? fallbackTeamId;
+  useEffect(() => {
+    // Without ?team=, show the scope's team (else the company's first) and put it in the URL so the link can be shared.
+    if (!urlTeamId && fallbackTeamId) { replaceTvTeam(fallbackTeamId); setUrlTeamId(fallbackTeamId); }
+  }, [urlTeamId, fallbackTeamId]);
 
   const chooseTeam = (id: string) => {
     replaceTvTeam(id);
     setUrlTeamId(id);
-    scope.setTeamId(id);
+    // The analytics scope follows only when the team is in it (TV mode can show any team of the company).
+    if (scope.teams.some((t) => t.id === id)) scope.setTeamId(id);
   };
 
   const { data, state, offline, updatedAt } = useTvSummary(teamId);
@@ -173,7 +188,8 @@ const TeamTvView: React.FC = () => {
   const tvTeam = scope.teams.find((t) => t.id === teamId);
   const canSeeRecommendations = !!user && !!tvTeam && canRequestTeamInsights(policyActorOf(user), { id: tvTeam.id, department_id: tvTeam.department_id ?? null }) && state === 'ready';
   const recommendations = useTvRecommendations(state === 'ready' ? teamId : null, canSeeRecommendations);
-  const trackedActions = useTvActions(state === 'ready' ? teamId : null, true);
+  // Tracked actions follow the analytics scope (GET /api/actions): left out for other teams.
+  const trackedActions = useTvActions(state === 'ready' && tvTeam ? teamId : null, true);
 
   useEffect(() => {
     if (data?.team.name) document.title = `${data.team.name} · TV mode · QE Navigator`;
@@ -318,7 +334,7 @@ const TeamTvView: React.FC = () => {
       refEl={controlsRef}
       visible={controlsVisible}
       onFocusInside={pokeControls}
-      teams={scope.teams}
+      teams={tvTeams ?? scope.teams}
       teamId={teamId}
       onTeam={chooseTeam}
       panel={panel}
@@ -351,17 +367,17 @@ const TeamTvView: React.FC = () => {
 
   // States without a team summary: loading, outside scope, signed out, error.
   if (!teamId || state !== 'ready' || !data || !model) {
-    const none = !scope.loading && !teamId;
+    const none = !scope.loading && tvTeams !== null && !teamId;
     let title = 'Loading team…';
     let body: React.ReactNode = null;
     let icon: React.ReactNode = <Loader2 className="h-16 w-16 animate-spin text-slate-400 motion-reduce:animate-none" aria-hidden />;
     if (none) {
       title = 'No team to show';
-      body = 'TV mode shows one team at a time. You are not assigned to a team you can view. Ask an administrator to add you to a team.';
+      body = 'TV mode shows one team at a time, and your company has no active team yet.';
       icon = <MonitorX className="h-16 w-16 text-slate-400" aria-hidden />;
     } else if (state === 'forbidden') {
       title = 'This team is not available to you';
-      body = 'TV mode can show the teams in your scope only: your own team for team leads, engineers and viewers; the teams of your department for managers.';
+      body = 'TV mode shows the teams of your own company. This team does not exist or belongs to another company.';
       icon = <MonitorX className="h-16 w-16 text-slate-400" aria-hidden />;
     } else if (state === 'signed-out') {
       title = 'Your session has ended';

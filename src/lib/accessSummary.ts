@@ -50,7 +50,8 @@ export function accessSummary(actor: PolicyActor, assignments: AssignmentLike[],
   const cannot: string[] = [];
   const add = (allowed: boolean, yes: string, no?: string) => { if (allowed) can.push(yes); else if (no) cannot.push(no); };
 
-  add(analytics, 'Open the overview, team dashboards, TV mode, Compare teams and the Analytics modules for the teams in your scope, with their targets and trends.');
+  add(analytics, 'Open the overview, team dashboards, Compare teams and the Analytics modules for the teams in your scope, with their targets and trends.');
+  can.push(`Show any team of ${companyName || 'your company'} in TV mode (the wall screen: team figures only, no individual data).`);
   add(analytics, 'See wellbeing pulse results (team averages of at least 3 answers) and alerts and tracked actions of your teams.');
   if (assignments.some((a) => a.scopeType === 'team')) can.push('Answer the wellbeing pulse of the teams you belong to (anonymously).');
   const seesOthers = grantsOf(actor).some((g) => DEVELOPER_INSIGHT_ROLES.includes(g.role));
