@@ -59,8 +59,8 @@ Derived from the code, then checked against the documentation:
 | F1.10 | Expired sign-in message | All | – | AUTH-23 | — |
 | F1.11 | Sign out my other devices (confirm) | All | – | legacy:sessions "Sign out my other devices…" | AUTH-24 cancel changes nothing, AUTH-25 server error shown |
 | F1.12 | Sign-in lifetime (Parameters → Sign-in) | A | M L E V | PAR-12, legacy:sessions "A super admin sets Sign-in lasts…" | PAR-05 not shown to a manager |
-| F1.13 | Right after the sign-in form, a company that hides sample-data notices shows no banner (the sign-in answer carries the setting) | All | — | SIGN-SN-01, API `sample-notice.test.ts` SNH-003 | — |
 | F1.13 | Corrupted / forged session cookie | – | – | — | RES-09 → signed out, no broken page |
+| F1.14 | Right after the sign-in form, a company that hides sample-data notices shows no banner (the sign-in answer carries the setting) | All | — | SIGN-SN-01, API `sample-notice.test.ts` SNH-003 | — |
 
 ## 2. Forgot / reset password
 
@@ -170,8 +170,7 @@ Derived from the code, then checked against the documentation:
 | F8.3 | Manual developer metrics, technical-debt impact, pipeline settings / stages, business-impact config | A M L (per section) | E V | API tests (`ingestion.test.ts`, `consistency.test.ts`); page renders in RES-01 | — |
 | F8.4 | KPI targets at company / department / team level, with history | A (all levels), M (department, team) | L E V | PAR-01, legacy:metrics-quality | PAR-02 one value only / watch on the wrong side, PAR-03 out of range refused by the API, PAR-05 manager read-only at company level, PAR-06 API refuses |
 | F8.5 | Apply to every department and team | A | M (FI-09, fixed) L E V | PAR-04 | PAR-05 (no option for a manager) |
-| F8.6 | Parameters (configuration values): company level by super admins only; managers their departments and teams | A (all levels), M (their departments / teams) | M at company level, L E V | PAR-10, API `config-scope.test.ts` | PAR-05 (company scope read-only for a manager, API 403), API `config-scope.test.ts` CFG-001 / CFG-002 |
-| F8.6 | Configuration values (SLA, financial) | A M | L E V | PAR-10 | PAR-11 negative value refused (FI-10), PAR-14 above the range refused by the page and the API (FI-10b); API tests (`settings-validation.test.ts`) |
+| F8.6 | Configuration values (SLA, financial): company level by super admins only, managers their departments and teams | A (all levels), M (their departments / teams) | M at company level, L E V | PAR-10, API `config-scope.test.ts` | PAR-05 company scope read-only for a manager (API 403, CFG-001), PAR-11 negative value refused (FI-10), PAR-14 above the range refused by the page and the API (FI-10b); API tests (`settings-validation.test.ts`, `config-scope.test.ts`) |
 | F8.7 | Expected update frequency (change, discard, save, reset) | A M | L E V | PAR-13 | NAV-03 |
 | F8.8 | Ingestion log (sources, entries, filters) | A, M (their departments) | L E V | ING-01, ING-03, legacy:metrics-quality | ING-03 API refuses E, legacy:metrics-quality |
 
