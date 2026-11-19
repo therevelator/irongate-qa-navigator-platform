@@ -489,7 +489,8 @@ security on, no policies.
     department's managers (`escalate_to`, default both; nobody in that role: the company's super admins,
     and the page says so) get a notification (in-app, and e-mail when their immediate e-mails are on)
     with the **names of members who have not answered** and the response rate, never anything about
-    answers. They can also see the current list on the team's pulse page. Short periods shorten the
+    answers. They can also see the list on the team's pulse page, updated once a day (a daily snapshot,
+    so it never shows when someone answered; a member who answers drops off the next day). Short periods shorten the
     delays so the escalation always lands before the period ends (shown as the values for this period).
     Reminders and escalations run in the hourly pulse job; `GET /api/pulse/pending` feeds the banner and
     `PUT /api/pulse/teams/:teamId/settings` saves the settings.

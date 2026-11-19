@@ -50,7 +50,7 @@ export interface TeamPulseData {
   canSetReminders: boolean;
   reminders: PulseReminderInfo | null;
   /** After the period's escalation, to the people it went to: who has not answered yet (names only). */
-  nonResponders: { escalatedAt: string; members: Array<{ id: string; name: string }> } | null;
+  nonResponders: { escalatedAt: string; asOf: string; members: Array<{ id: string; name: string }> } | null;
   /** Lead, QA manager or admin of the team: may e-mail the survey and reminders. */
   canSend: boolean;
   /** Send status (only with canSend). */

@@ -9,7 +9,7 @@ import {
 } from '../lib/pulse';
 import {
   ensureAutoSendDefault, inspectLink, remindPulseSurvey, respondWithLink, responseRate, sendPulseSurvey, sendStatus, sentCounts, setAutoSend,
-  reminderState, saveReminderSettings, escalationRecipients, currentEscalation, nonResponders, pendingSurveysFor,
+  reminderState, saveReminderSettings, escalationRecipients, currentEscalation, dailyNonResponders, pendingSurveysFor,
 } from '../lib/pulseSend';
 import { K_ANONYMITY_RULE, SUPPRESSED_TEXT } from '../lib/privacy';
 import { recordAudit } from '../lib/audit';
@@ -97,11 +97,14 @@ router.get('/teams/:teamId', authenticateToken, async (req: AuthRequest, res) =>
       canSetCadence: canSetPulseCadence(actor, team),
       canSetReminders: canSetPulseReminders(actor, team),
       reminders: canSetPulseReminders(actor, team) ? await reminderInfo(req.companyId!, team) : null,
-      // After the escalation of the running period, the people it went to see who has not answered yet.
+      // After the escalation of the running period, the people it went to see who has not answered yet,
+      // as of the day's snapshot (updated once a day, so the list never shows when someone answered).
       nonResponders: await (async () => {
         const esc = await currentEscalation(team.id, pulse.currentPeriod.start);
         if (!esc || !esc.escalatedTo.includes(req.user!.id)) return null;
-        return { escalatedAt: esc.at, members: (await nonResponders(team.id, pulse.currentPeriod.start)).map((m) => ({ id: m.id, name: m.name })) };
+        const daily = await dailyNonResponders(team.id, pulse.currentPeriod.start);
+        if (!daily) return null;
+        return { escalatedAt: esc.at, asOf: daily.asOf, members: daily.members };
       })(),
       cadences: PULSE_CADENCES.map((c) => ({ value: c, label: CADENCE_LABELS[c] })),
       canViewComments: canViewPulseComments(actor, team),

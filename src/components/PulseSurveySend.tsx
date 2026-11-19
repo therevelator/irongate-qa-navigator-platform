@@ -126,8 +126,11 @@ export const PulseSendPanel: React.FC<{ data: TeamPulseData; sending: PulseSendS
               <ul className="mt-1.5 flex flex-wrap gap-1.5">
                 {data.nonResponders.members.map((m) => <li key={m.id}><Badge tone="warn" className="whitespace-nowrap">{m.name}</Badge></li>)}
               </ul>
-            ) : <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Everyone has answered now.</p>}
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Only whether people answered; never what they answered.</p>
+            ) : <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Everyone had answered by {formatAsOf(data.nonResponders.asOf)}.</p>}
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              As of {formatAsOf(data.nonResponders.asOf)}; the list updates once a day, so it never shows when someone answered.
+              Only whether people answered; never what they answered.
+            </p>
           </div>
         )}
 

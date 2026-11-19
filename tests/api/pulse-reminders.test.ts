@@ -3,7 +3,7 @@ import { hash } from 'bcrypt';
 import { backendUp, get, localDb, login, post, put } from './helpers/http';
 import { DEFAULT_REMINDER_SETTINGS, effectiveReminderSettings, validateReminderSettings, addDays } from '../../server/lib/pulseRules';
 import { canSetPulseReminders, type PolicyActor } from '../../server/lib/userPolicy';
-import { pendingSurveysFor, runPulseReminders, reminderState } from '../../server/lib/pulseSend';
+import { pendingSurveysFor, runPulseReminders, reminderState, dailyNonResponders } from '../../server/lib/pulseSend';
 import { submitPulseResponse } from '../../server/lib/pulse';
 import { setMailerForTests, type MailMessage } from '../../server/lib/mailer';
 import { pool } from '../../src/lib/db';
@@ -52,7 +52,7 @@ const outbox: MailMessage[] = [];
 const captureMailer = { channel: 'smtp' as const, async send(m: MailMessage) { outbox.push(m); return { delivered: true, channel: 'smtp' as const }; } };
 
 async function cleanup() {
-  for (const t of ['notifications', 'notification_deliveries', 'pulse_links', 'pulse_recipients', 'pulse_sends', 'pulse_settings', 'pulse_participation', 'pulse_responses', 'pulse_cadences', 'audit_log', 'user_activity']) {
+  for (const t of ['notifications', 'notification_deliveries', 'pulse_links', 'pulse_recipients', 'pulse_sends', 'pulse_settings', 'pulse_participation', 'pulse_responses', 'pulse_cadences', 'pulse_nonresponder_days', 'audit_log', 'user_activity']) {
     await db.query(`DELETE FROM ${t} WHERE company_id = $1`, [CO]).catch(() => undefined);
   }
   await db.query(`DELETE FROM role_assignments WHERE company_id = $1`, [CO]);
@@ -251,7 +251,7 @@ describe('Pulse reminders: live', () => {
     expect((await reminderState(T, '2030-01-13')).settings.escalateTo).toBe('team_lead');
   });
 
-  test('PREM-006 the non-responder list: only for the people told; answering drops you off', async () => {
+  test('PREM-006 the non-responder list: only for the people told; a daily snapshot, answering drops you off the next day', async () => {
     if (!up) return;
     await put(`/api/pulse/teams/${B}/settings`, c['prem-mgr'], { warningAfterDays: 1, escalateAfterDays: 3, escalateTo: 'team_lead' });
     expect((await runPulseReminders(today, { teamIds: [B] })).escalated).toBe(1);
@@ -260,9 +260,20 @@ describe('Pulse reminders: live', () => {
     expect(Object.keys(lead.body.nonResponders.members[0]).sort()).toEqual(['id', 'name']);
     expect((await get(`/api/pulse/teams/${B}`, c['prem-mgr'])).body.nonResponders).toBeNull(); // not told (team_lead only)
     expect((await get(`/api/pulse/teams/${B}`, c['prem-b1'])).body.nonResponders).toBeNull();
+    expect(lead.body.nonResponders.asOf).toBe(today);
     expect((await post(`/api/pulse/teams/${B}/responses`, c['prem-b2'], { answers: ans(2), comment: null })).status).toBe(201);
-    const after = await get(`/api/pulse/teams/${B}`, c['prem-blead']);
-    expect(after.body.nonResponders.members.map((m: any) => m.name)).toEqual(['Pr prem-b3', 'Pr prem-blead']);
+    // Same day: the list does not move, whatever runs or whoever looks.
+    await runPulseReminders(today, { teamIds: [B] });
+    const sameDay = await get(`/api/pulse/teams/${B}`, c['prem-blead']);
+    expect(sameDay.body.nonResponders.members.map((m: any) => m.name)).toEqual(['Pr prem-b2', 'Pr prem-b3', 'Pr prem-blead']);
+    // The next day's snapshot (the hourly job's first run of that day) drops the member who answered.
+    const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+    await runPulseReminders(tomorrow, { teamIds: [B] });
+    const next = await dailyNonResponders(B, lead.body.currentPeriod.start, tomorrow);
+    expect(next).toEqual({ asOf: tomorrow, members: expect.any(Array) });
+    expect(next!.members.map((m) => m.name)).toEqual(['Pr prem-b3', 'Pr prem-blead']);
+    const snap = await db.query(`SELECT * FROM pulse_nonresponder_days WHERE team_id = $1 ORDER BY day`, [B]);
+    expect(Object.keys(snap.rows[0]).sort()).toEqual(['company_id', 'day', 'period_start', 'team_id', 'user_ids']);
   });
 
   test('PREM-007 anonymity: nothing here joins a person to an answer', async () => {

@@ -527,6 +527,38 @@ export async function nonResponders(teamId: string, periodStart: string): Promis
   return members.filter((m) => !answered.has(m.id)).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * The once-a-day snapshot of the non-responder list (pulse_nonresponder_days). Taken at the
+ * escalation and then by the hourly job on its first run of each UTC day; never by a viewer, so
+ * how often someone looks changes nothing. The first snapshot of a day stays (ON CONFLICT DO NOTHING).
+ */
+export async function snapshotNonResponders(team: { id: string; company_id: string }, periodStart: string, day: string): Promise<void> {
+  const ids = (await nonResponders(team.id, periodStart)).map((m) => m.id);
+  await query(
+    `INSERT INTO pulse_nonresponder_days (team_id, company_id, period_start, day, user_ids)
+     VALUES (?, ?, ?::date, ?::date, ?::varchar[]) ON CONFLICT DO NOTHING`,
+    [team.id, team.company_id, periodStart, day, ids]
+  );
+}
+
+/**
+ * The non-responder list as the people told see it: the latest daily snapshot up to today, limited
+ * to members still active in the team. A member who answers drops off with the next day's snapshot.
+ */
+export async function dailyNonResponders(teamId: string, periodStart: string, today = todayUtc()):
+  Promise<{ asOf: string; members: Array<{ id: string; name: string }> } | null> {
+  const snap = await queryOne<any>(
+    `SELECT to_char(day, 'YYYY-MM-DD') AS day, user_ids FROM pulse_nonresponder_days
+      WHERE team_id = ? AND period_start = ?::date AND day <= ?::date ORDER BY day DESC LIMIT 1`,
+    [teamId, periodStart, today]
+  );
+  if (!snap) return null;
+  const listed = new Set<string>(snap.user_ids ?? []);
+  const members = (await activeMembers(teamId)).filter((m) => listed.has(m.id))
+    .sort((a, b) => a.name.localeCompare(b.name)).map((m) => ({ id: m.id, name: m.name }));
+  return { asOf: snap.day, members };
+}
+
 async function markReminded(teamId: string, period: PulsePeriod, userIds: string[], today: string): Promise<void> {
   if (!userIds.length) return;
   await query(
@@ -647,6 +679,7 @@ async function escalateTeam(team: { id: string; name: string; company_id: string
     [team.company_id, team.id, st.period.start, st.period.end, users.length, answered, users.map((u) => u.id)]
   );
   if (!row) return false; // already escalated this period
+  await snapshotNonResponders(team, st.period.start, today);
   const names = pending.map((m) => m.name);
   const rate = `${pct(answered, members)}% (${answered} of ${members} members)`;
   const title = `Wellbeing pulse: ${pending.length} not answered yet · ${team.name}`;
@@ -683,6 +716,8 @@ export async function runPulseReminders(today = todayUtc(), opts: { teamIds?: st
       const st = await reminderState(t.id, today);
       reminded += await autoRemindTeam(t, st, today);
       if (await escalateTeam(t, st, today)) escalated++;
+      // The day's snapshot of the non-responder list (first run of the day; later runs change nothing).
+      else if (today < st.period.end && await currentEscalation(t.id, st.period.start)) await snapshotNonResponders(t, st.period.start, today);
     } catch (e) {
       console.error(`[pulse] reminders for team ${t.id} failed:`, (e as Error)?.message ?? e);
     }

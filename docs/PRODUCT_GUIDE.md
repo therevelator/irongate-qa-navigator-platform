@@ -1060,7 +1060,9 @@ recorded in Activity. Days count from the day the period's survey went out (no s
 
 The escalation must land before the period ends and the warning before the escalation, so short periods shorten the delays (a weekly
 period keeps the defaults; an escalation of 10 days becomes 6). The page shows the values for this period. After the escalation the
-people it went to see the current list on the team's pulse page; a member who answers drops off it.
+people it went to see the list on the team's pulse page. The list is a **once-a-day snapshot** (taken at the escalation, then by the
+hourly pulse job on its first run of each UTC day; looking at it changes nothing), so a member who answers drops off it the next day and
+the list never shows when someone answered.
 
 This changes the earlier rule that nobody sees **who** answered: managers now see who has **not** responded. What anyone answered stays
 anonymous, and the result threshold (at least 3 responses) is unchanged. Code: [`server/lib/pulseSend.ts`](../server/lib/pulseSend.ts)
@@ -1071,7 +1073,8 @@ anonymous, and the result threshold (at least 3 responses) is unchanged. Code: [
 - With k = 3, a person who answered a 3-response period knows their own answers and therefore the sum of the other two.
 - Database superusers could read dead row versions before vacuum; the API never exposes rows.
 - The send tables know who was e-mailed and reminded (a reminder goes to people who had not answered yet). After the escalation, the
-  people told see who has not answered yet; someone watching that list closely can tell roughly when a person answered (never what).
+  people told see who has not answered yet, as a once-a-day snapshot, so they can tell at most on which day someone answered (never what).
+  The live response count (shown only from 3 responses) says that someone answered, not who.
   Before the escalation the API returns only counts under the same threshold.
 - A personal link works for whoever holds it (as with any e-mailed link): it is single-use, period-bound and says not to forward it.
 - Developer metrics individual rows are visible to leads, managers and admins only for people who opted in; the choice is per person
@@ -1198,7 +1201,7 @@ Only names and purposes are listed here. Never commit real values; `.env` is git
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | no | Google sign-in (redirect URI `<APP_URL>/api/auth/sso/google/callback`) |
 | `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_TENANT` | no | Microsoft sign-in (redirect URI `<APP_URL>/api/auth/sso/microsoft/callback`; a single tenant is recommended) |
 | `GOOGLE_OIDC_DISCOVERY_URL`, `MS_OIDC_DISCOVERY_URL` | no | Override the OpenID discovery documents (testing) |
-| `API_RATE_LIMIT_MAX` | no | General API rate limit per minute (default 300); raise it for local end-to-end runs |
+| `API_RATE_LIMIT_MAX` | no | General API rate limit per minute and client address (default 300); raise it for local end-to-end runs. Every per-address limit counts by the real client address (on Netlify its own client address header), so a forged `X-Forwarded-For` does not reset it |
 | `VITE_DISABLE_WEBSOCKET` | no | Front-end switch to turn the live-update socket off |
 | `SETTINGS_ENCRYPTION_KEY` | recommended in production | Key for encrypting the Slack webhook (a long random string); without it a key is derived from `JWT_SECRET` |
 | `ALERTS_CRON` | no | `false` turns the local alert / digest schedule off (for example on a second instance) |
