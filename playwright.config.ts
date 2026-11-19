@@ -31,7 +31,8 @@ const chromiumLaunch = {
 };
 
 export default defineConfig({
-  testDir: './tests/e2e',
+  // Remote mode: only the read-only checks exist for Playwright (a second guard besides the grep below).
+  testDir: REMOTE ? './tests/e2e/readonly' : './tests/e2e',
   tsconfig: './tsconfig.playwright.json',
 
   /* Maximum time one test can run */

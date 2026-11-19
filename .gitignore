@@ -14,12 +14,14 @@ dist-ssr
 
 # Environment variables
 .env
+.env.test
 .env.local
 .env.example
 
 # Test results
 test-results/
 playwright-report/
+blob-report/
 coverage/
 
 # Editor directories and files
