@@ -111,7 +111,7 @@ describe('Forgot password', () => {
     }
     const sent = outbox.slice(before);
     expect(sent.map((m) => m.to)).toEqual([email('self1'), email('self1')]);
-    expect(sent[0].subject).toBe('Reset your IronGate QE Navigator password');
+    expect(sent[0].subject).toBe('Reset your QE Navigator password');
     expect(sent[0].text).toMatch(/\/reset-password\?token=igr_/);
     expect(sent[0].text).toMatch(/expires in 60 minutes/);
     expect(sent[0].text).toMatch(/If you did not ask for this, ignore this e-mail/);
@@ -165,7 +165,7 @@ describe('Reset password', () => {
     expect(u).toMatchObject({ failed_login_attempts: 0, locked_until: null });
     expect(u.password_hash).toMatch(/^\$2[aby]\$10\$/); // bcrypt, same cost as elsewhere
     const notice = last(mailsTo(email('self3')))!;
-    expect(notice.subject).toBe('Your IronGate QE Navigator password was changed');
+    expect(notice.subject).toBe('Your QE Navigator password was changed');
     expect(notice.text).toMatch(/If this was not you, contact your administrator/);
     expect(notice.text).not.toMatch(/token=/);
     const row = (await db.query('SELECT used_at FROM password_resets WHERE token_hash = $1', [sha(token)])).rows[0];

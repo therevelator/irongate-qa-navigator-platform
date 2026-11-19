@@ -527,7 +527,7 @@ export async function teamsLedBy(companyId: string, userId: string, exec: Exec =
 /** Active team members (users with an active assignment on the team). */
 export async function teamMembers(teamId: string, exec: Exec = execOn()): Promise<any[]> {
   return exec(
-    `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.avatar_url, u.developer_insights_enabled,
+    `SELECT u.id, u.email, u.first_name, u.last_name, u.role, u.avatar_url, u.developer_insights_enabled, u.job_title,
             CASE ra.role WHEN 'team_lead' THEN 'lead' ELSE COALESCE(tm.role, 'member') END AS team_role,
             ra.role AS assignment_role,
             COALESCE(tm.joined_at, ra.created_at) AS joined_at

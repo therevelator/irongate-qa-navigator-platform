@@ -1,6 +1,6 @@
 /**
  * Mock Organization Data
- * IronGate QA Navigator - Sample organizational hierarchy
+ * QE Navigator - Sample organizational hierarchy
  */
 
 import type { Company, Department, Team } from '../types/organization';

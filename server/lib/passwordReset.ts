@@ -61,24 +61,24 @@ const USER_COLUMNS = (a = 'u') => `${a}.id, ${a}.email, ${a}.first_name, ${a}.la
 export function renderResetEmail(args: { firstName: string | null; link: string; byAdmin?: string | null }): { subject: string; text: string; html: string } {
   const hello = args.firstName ? `Hello ${args.firstName},` : 'Hello,';
   const lead = args.byAdmin
-    ? `${args.byAdmin} sent you a link to choose a new password for IronGate QE Navigator.`
-    : 'Someone asked to reset the password of your IronGate QE Navigator account.';
+    ? `${args.byAdmin} sent you a link to choose a new password for QE Navigator.`
+    : 'Someone asked to reset the password of your QE Navigator account.';
   const fine = `The link works once and expires in ${RESET_TTL_MINUTES} minutes. If you did not ask for this, ignore this e-mail: your password stays the same.`;
   const text = `${hello}\n\n${lead}\n\nChoose a new password:\n${args.link}\n\n${fine}`;
   const html = `<p>${escapeHtml(hello)}</p><p>${escapeHtml(lead)}</p>
 <p><a href="${escapeHtml(args.link)}">Choose a new password</a></p>
 <p style="color:#475569;font-size:13px">${escapeHtml(fine)}</p>`;
-  return { subject: 'Reset your IronGate QE Navigator password', text, html };
+  return { subject: 'Reset your QE Navigator password', text, html };
 }
 
 export function renderPasswordChangedEmail(args: { firstName: string | null; email: string }): { subject: string; text: string; html: string } {
   const hello = args.firstName ? `Hello ${args.firstName},` : 'Hello,';
-  const lead = `The password of your IronGate QE Navigator account (${args.email}) was just changed with a reset link.`;
+  const lead = `The password of your QE Navigator account (${args.email}) was just changed with a reset link.`;
   const fine = 'If this was you, there is nothing else to do. If this was not you, contact your administrator straight away.';
   const text = `${hello}\n\n${lead}\n\n${fine}\n\nSign in: ${appBaseUrl()}/`;
   const html = `<p>${escapeHtml(hello)}</p><p>${escapeHtml(lead)}</p><p><strong>${escapeHtml(fine)}</strong></p>
 <p><a href="${escapeHtml(`${appBaseUrl()}/`)}">Sign in</a></p>`;
-  return { subject: 'Your IronGate QE Navigator password was changed', text, html };
+  return { subject: 'Your QE Navigator password was changed', text, html };
 }
 
 /* ------------------------------------------------------------------------------------------

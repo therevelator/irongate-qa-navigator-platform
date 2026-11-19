@@ -3,6 +3,9 @@ import { Bug, CalendarClock, Wrench, Gauge, GitBranch, Activity, TrendingUp, Tro
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { AnalyticsScopeBar, AnalyticsNoTeam } from './AnalyticsScopeBar';
 import { Page, PageIntro } from './ui';
+import { useAuth } from '../contexts/AuthContext';
+import { policyActorOf } from '../lib/policyActor';
+import { canOpenView } from '../lib/viewAccess';
 
 interface FeaturesMenuProps {
   onBack: () => void;
@@ -35,6 +38,8 @@ const MODULES: { group: string; items: { id: string; title: string; description:
 
 const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onSelectFeature }) => {
   const scope = useAnalyticsScope();
+  const { user } = useAuth();
+  const actor = policyActorOf(user);
   const teamName = scope.team?.name;
 
   return (
@@ -56,7 +61,7 @@ const FeaturesMenu: React.FC<FeaturesMenuProps> = ({ onSelectFeature }) => {
         <AnalyticsNoTeam error={scope.error} />
       ) : (
       <div className="space-y-8">
-        {MODULES.map((g) => (
+        {MODULES.map((g) => ({ ...g, items: g.items.filter((m) => canOpenView(actor, m.id)) })).filter((g) => g.items.length > 0).map((g) => (
           <section key={g.group}>
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">{g.group}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">

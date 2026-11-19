@@ -10,6 +10,7 @@ import SampleDataBanner from './SampleDataBanner';
 import SavedViewsMenu from './SavedViewsMenu';
 import ExportCsvButton from './ExportCsvButton';
 import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
+import { watchBand } from '../lib/targetText';
 
 /**
  * Team comparison: 2–4 teams of the user's analytics scope side by side
@@ -117,7 +118,6 @@ const CellView: React.FC<{ cell: Cell; metric: Metric; isBest: boolean; isWorst:
     <div className={'flex min-w-0 flex-col gap-1'}>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <span className={cx('text-base font-semibold tabular-nums', valueCls)} data-testid="compare-value">{cell.display}</span>
-        {cell.status && !cell.stale && <span className="sr-only">{STATUS_LABEL[cell.status]}</span>}
         {isBest && <Badge tone="brand" className="!py-0 text-[10px] uppercase tracking-wide">Best</Badge>}
         {isWorst && <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400" title="The weakest value of the compared teams (direction-aware: the highest value for lower-is-better metrics)">Weakest</span>}
         {cell.sample && <SampleMarker />}
@@ -129,7 +129,13 @@ const CellView: React.FC<{ cell: Cell; metric: Metric; isBest: boolean; isWorst:
       {cell.stale ? (
         <StaleNote staleSince={cell.staleSince} recordedAt={cell.recordedAt} />
       ) : (
-        cell.target && <span className="text-xs text-slate-500 dark:text-slate-400">Target {cell.targetDisplay}</span>
+        cell.target && (
+          <span className="text-xs text-slate-500 dark:text-slate-400" data-testid="compare-target">
+            {cell.status && cell.value !== null
+              ? <><span className={STATUS_TEXT[cell.status]}>{cell.status === 'warning' ? watchBand(cell.target, metric.unit, false) : STATUS_LABEL[cell.status]}</span> · Target {cell.targetDisplay}</>
+              : <>Target {cell.targetDisplay}</>}
+          </span>
+        )
       )}
     </div>
   );
@@ -332,6 +338,7 @@ const CompareTeams: React.FC = () => {
                       {qa.value !== null && <span className="text-sm text-slate-500 dark:text-slate-400">QA score</span>}
                       {qa.status && <Badge tone={STATUS_TONE[qa.status]}>{STATUS_LABEL[qa.status]}</Badge>}
                     </div>
+                    {qa.target && <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="compare-qa-target">{qa.status === 'warning' ? `${watchBand(qa.target, '/100')} · ` : ''}Target {qa.targetDisplay}</p>}
                     <ConfidenceNote c={t.qaScoreConfidence} compact />
                     <p className="text-xs text-slate-500 dark:text-slate-400">
                       {t.snapshotDate ? `Latest snapshot ${t.snapshotDate}` : 'No KPI snapshot recorded'}

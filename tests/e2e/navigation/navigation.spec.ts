@@ -152,7 +152,7 @@ test.describe('Routes, history and the navigation drawer', { tag: [TAG.area('nav
 
   test('NAV-17 the brand button returns to the overview from any page', async ({ signInAs, page, app }) => {
     await signInAs('lead', '/compare');
-    await page.getByRole('button', { name: 'IronGate QE Navigator, go to overview' }).click();
+    await page.getByRole('button', { name: 'QE Navigator, go to overview' }).click();
     await expect(app.title).toHaveText('Overview');
   });
 });

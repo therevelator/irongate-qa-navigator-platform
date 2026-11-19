@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import BrandMark from './BrandMark';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import API_URL from '../config/api';
@@ -92,13 +93,11 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
       {/* Brand panel */}
       <aside className="hidden lg:flex flex-col justify-between bg-brand-900 text-white p-12">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-md bg-white/10 border border-white/15 flex items-center justify-center">
-            <span className="text-sm font-semibold tracking-tight">IG</span>
-          </div>
-          <div className="leading-tight">
-            <p className="text-sm font-semibold">IronGate</p>
-            <p className="text-xs text-brand-200">QE Navigator</p>
-          </div>
+          <BrandMark height={36} />
+              <div className="leading-tight">
+                <p className="text-sm font-semibold">QE Navigator</p>
+                <p className="text-xs text-brand-200">by IronGate Software</p>
+              </div>
         </div>
 
         <div className="max-w-md">
@@ -132,13 +131,11 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
       <main className="flex items-center justify-center p-6 sm:p-12">
         <div className="w-full max-w-sm">
           <div className="lg:hidden mb-10 flex items-center gap-3">
-            <div className="h-9 w-9 rounded-md bg-brand-800 flex items-center justify-center">
-              <span className="text-sm font-semibold text-white">IG</span>
-            </div>
-            <div className="leading-tight">
-              <p className="text-sm font-semibold text-slate-900 dark:text-white">IronGate</p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">QE Navigator</p>
-            </div>
+            <BrandMark height={36} />
+              <div className="leading-tight">
+                <p className="text-sm font-semibold text-slate-900 dark:text-white">QE Navigator</p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">by IronGate Software</p>
+              </div>
           </div>
 
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Sign in</h1>

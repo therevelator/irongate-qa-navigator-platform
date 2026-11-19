@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor } from '../middleware/access';
-import { canViewIndividualDevelopers, canManageDepartment, canRequestTeamInsights, canViewTeamMembers } from '../lib/userPolicy';
+import { canViewIndividualDevelopers, canManageDepartment, canRequestTeamInsights, canViewTeamMembers, analyticsTeamsInScope, analyticsScopeLevelOf, canViewTeamAnalytics } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { groqChatCompletion, parseGroqJson, isGroqConfigured } from '../lib/groq';
 import {
@@ -193,9 +193,10 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     sql += ' AND t.company_id = ?';
     params.push(req.companyId);
 
-    // Role-based filtering for main dashboard
-    // Everyone can see all teams on the dashboard - filtering is optional
-    // Only filter by department if a specific departmentId is requested
+    // Only the teams of the caller's analytics scope (canViewTeamAnalytics in
+    // server/lib/userPolicy.ts): super_admin every team of the company, a QA manager the teams of
+    // the departments they manage, team leads / engineers / viewers the teams they are assigned to.
+    // The overview, team detail, TV mode, Compare and the Analytics modules all use this one rule.
 
     if (departmentId) {
       sql += ' AND t.department_id = ?';
@@ -204,7 +205,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
 
     sql += ' ORDER BY t.name';
 
-    const teams = await query<any[]>(sql, params);
+    const teams = analyticsTeamsInScope(policyActor(req), await query<any[]>(sql, params));
 
     // Staleness and targets: one load per request (server/lib/kpiEvaluation.ts).
     const evalCtx: EvalContext = {
@@ -355,6 +356,33 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
   }
 });
 
+/**
+ * Rank of a team's current QA score (stale inputs left out, as everywhere) among the active teams
+ * of the caller's analytics scope that have a score. Null when fewer than two scored teams are in
+ * scope. `scope` is 'company' when the caller's scope covers every active team of the company.
+ * Ties share the better position (competition ranking: 90, 85, 85, 80 -> 1, 2, 2, 4).
+ */
+async function qaRankInScope(req: AuthRequest, ctx: EvalContext, teamId: string, score: number) {
+  const rows = await query<any[]>(
+    `SELECT t.id, t.department_id, k.*, t.id AS id
+       FROM teams t
+       LEFT JOIN LATERAL (SELECT * FROM kpi_snapshots ks WHERE ks.team_id = t.id ORDER BY ks.snapshot_date DESC LIMIT 1) k ON TRUE
+      WHERE t.company_id = ? AND t.is_active = TRUE`,
+    [req.companyId]
+  );
+  const inScope = analyticsTeamsInScope(policyActor(req), rows.map((r: any) => ({ ...r, id: String(r.id) })));
+  const now = Date.now();
+  const scores = inScope
+    .map((r: any) => (r.snapshot_date ? evaluateLatestSnapshot(r, { id: r.id, department_id: r.department_id }, ctx, now).qa.value : null))
+    .filter((v): v is number => v !== null);
+  if (scores.length < 2 || !inScope.some((r: any) => r.id === String(teamId))) return null;
+  return {
+    position: 1 + scores.filter((v) => v > score).length,
+    of: scores.length,
+    scope: inScope.length === rows.length && analyticsScopeLevelOf(policyActor(req)) !== 'none' ? 'company' : 'scope',
+  };
+}
+
 // Get team by ID
 router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -362,7 +390,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT t.*, 
               d.name as department_name,
               c.name as company_name,
-              ${teamLeadNameSql('t')} as team_lead_name
+              ${teamLeadNameSql('t')} as team_lead_name,
+              ${teamMemberCountSql('t')} as member_count
        FROM teams t
        JOIN departments d ON t.department_id = d.id
        JOIN companies c ON t.company_id = c.id
@@ -373,6 +402,12 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
 
     if (!team) {
       return res.status(404).json({ error: 'Team not found' });
+    }
+    // The team and its KPIs follow the analytics scope, as the overview list, TV mode, Compare
+    // and the Analytics modules (canViewTeamAnalytics): another team of the company is refused.
+    const actor = policyActor(req);
+    if (!canViewTeamAnalytics(actor, { id: team.id, department_id: team.department_id })) {
+      return res.status(403).json({ error: 'Access denied. This team is outside your analytics scope.' });
     }
 
     const technicalDebtScore = await getTechnicalDebtScore(team.id);
@@ -442,7 +477,6 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
     // Team members (names, emails, roles): only for callers who may see the people of this team
     // (canViewTeamMembers in server/lib/userPolicy.ts: super_admin, the QA manager of its
     // department, people assigned to the team). Others get the team and its KPIs only.
-    const actor = policyActor(req);
     if (canViewTeamMembers(actor, { id: team.id, department_id: team.department_id })) {
       // Active users with an active role assignment on the team (server/lib/assignments.ts).
       team.members = await teamMembers(req.params.id);
@@ -451,6 +485,22 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       team.members = [];
       team.membersHidden = true;
     }
+    // People of the team per role (from the members' assignments on this team) and its leads.
+    // Same definition as the overview card (teamMemberCountSql).
+    team.memberCount = Number(team.member_count) || 0;
+    team.memberRoles = team.members.reduce((acc: Record<string, number>, m: any) => {
+      const role = String(m.assignment_role ?? m.role ?? 'qa_engineer');
+      acc[role] = (acc[role] ?? 0) + 1;
+      return acc;
+    }, {});
+    const personOf = (m: any) => ({ name: [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || m.email, jobTitle: m.job_title ?? null });
+    team.teamLeads = team.members.filter((m: any) => m.assignment_role === 'team_lead').map(personOf);
+    // Product Owners: members whose job title says so (users.job_title); none when not recorded.
+    team.productOwners = team.members.filter((m: any) => /product owner/i.test(String(m.job_title ?? ''))).map(personOf);
+
+    // Rank of the current QA score among the teams of the caller's analytics scope (only when the
+    // scope holds at least two scored teams); scope 'company' when that is every team of the company.
+    team.qaRank = team.qaScore === null ? null : await qaRankInScope(req, evalCtx, team.id, team.qaScore);
 
     res.json({ team });
   } catch (error) {
@@ -520,7 +570,8 @@ router.get('/:id/ai-suggestions', aiLimiter, authenticateToken, async (req: Auth
               t.ai_enabled,
               d.name as department_name,
               c.name as company_name,
-              ${teamLeadNameSql('t')} as team_lead_name
+              ${teamLeadNameSql('t')} as team_lead_name,
+              ${teamMemberCountSql('t')} as member_count
        FROM teams t
        JOIN departments d ON t.department_id = d.id
        JOIN companies c ON t.company_id = c.id

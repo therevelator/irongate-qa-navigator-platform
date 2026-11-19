@@ -15,6 +15,7 @@ interface User {
   first_name: string;
   last_name: string;
   role: string;
+  job_title?: string | null;
   team_name: string;
   department_name: string;
   department_id: string;
@@ -74,7 +75,7 @@ const STATUS_META: Record<DeveloperStatus, { label: string; tone: 'good' | 'warn
 const fmtH = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}h`);
 
 import API_URL from '../config/api';
-import { canEditUser, canEditAssignment, canManageUser, canDeleteUser, canResetPassword, canAssignRole, canCreateUsers, canInvite, highestRole, TEAM_OPTIONAL_ROLES, type PolicyActor } from '../../server/lib/userPolicy';
+import { canEditUser, canEditAssignment, canManageUser, canDeleteUser, canResetPassword, canAssignRole, canCreateUsers, canInvite, canSetJobTitle, highestRole, TEAM_OPTIONAL_ROLES, type PolicyActor } from '../../server/lib/userPolicy';
 import { policyActorOf, grantableOptions } from '../lib/policyActor';
 import { InviteDialog, InvitationsPanel } from './InviteDialog';
 import { AssignmentChips, type AssignmentRow } from './AssignmentChips';
@@ -119,7 +120,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     role: '',
     departmentId: '',
     primaryTeamId: '',
-    password: ''
+    password: '',
+    jobTitle: ''
   });
 
   useEffect(() => {
@@ -423,7 +425,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                     role: '',
                     departmentId: user?.departmentId || '',
                     primaryTeamId: '',
-                    password: ''
+                    password: '', jobTitle: ''
                   });
                   setShowCreateModal(true);
                 }}
@@ -558,7 +560,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                                     role: u.role,
                                     departmentId: u.department_id || '',
                                     primaryTeamId: u.primary_team_id || '',
-                                    password: ''
+                                    password: '',
+                                    jobTitle: u.job_title || ''
                                   });
                                   setShowEditModal(true);
                                 }}
@@ -883,7 +886,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
 
             if (response.ok) {
               setShowCreateModal(false);
-              setUserForm({ firstName: '', lastName: '', email: '', role: '', departmentId: '', primaryTeamId: '', password: '' });
+              setUserForm({ firstName: '', lastName: '', email: '', role: '', departmentId: '', primaryTeamId: '', password: '', jobTitle: '' });
               toast.success('User created successfully!');
               fetchUsers();
             } else {
@@ -981,7 +984,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
               credentials: 'include',
               // Role / department / team are only sent when the caller may change them (not for
               // self-edits); unchanged values are accepted by the server either way.
-              body: JSON.stringify(canEditTargetAssignment(selectedUser) ? {
+              body: JSON.stringify({ ...(canSetJobTitle(actor) ? { jobTitle: userForm.jobTitle } : {}), ...(canEditTargetAssignment(selectedUser) ? {
                 firstName: userForm.firstName,
                 lastName: userForm.lastName,
                 email: userForm.email,
@@ -992,7 +995,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 firstName: userForm.firstName,
                 lastName: userForm.lastName,
                 email: userForm.email
-              })
+              }) })
             });
 
             if (response.ok) {
@@ -1018,6 +1021,12 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 <input id="edit-user-last-name" type="text" value={userForm.lastName} onChange={(e) => setUserForm({ ...userForm, lastName: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
               </div>
             </div>
+            {canSetJobTitle(actor) && (
+              <div>
+                <label htmlFor="edit-user-job-title" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Job title <span className="font-normal text-gray-500 dark:text-slate-400">(optional, shown in the top bar)</span></label>
+                <input id="edit-user-job-title" type="text" maxLength={120} value={userForm.jobTitle} onChange={(e) => setUserForm({ ...userForm, jobTitle: e.target.value })} placeholder="e.g. Product Owner" className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" data-testid="edit-user-job-title" />
+              </div>
+            )}
             <div>
               <label htmlFor="edit-user-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
               <input id="edit-user-email" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />

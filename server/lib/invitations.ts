@@ -97,11 +97,11 @@ export async function sendInvitationEmail(args: {
   const what = `${ROLE_NAMES[args.role] ?? args.role}${args.scopeName ? ` of ${args.scopeName}` : ''}`;
   const by = args.inviterName ? `${args.inviterName} invited you` : 'You are invited';
   const expires = args.expiresAt.toUTCString();
-  const text = `${by} to join ${args.companyName} on IronGate QE Navigator as ${what}.\n\nAccept the invitation and choose your password:\n${link}\n\nThe link works once and expires on ${expires}. If you did not expect this email, ignore it.`;
-  const html = `<p>${escapeHtml(by)} to join <strong>${escapeHtml(args.companyName)}</strong> on IronGate QE Navigator as ${escapeHtml(what)}.</p>
+  const text = `${by} to join ${args.companyName} on QE Navigator as ${what}.\n\nAccept the invitation and choose your password:\n${link}\n\nThe link works once and expires on ${expires}. If you did not expect this email, ignore it.`;
+  const html = `<p>${escapeHtml(by)} to join <strong>${escapeHtml(args.companyName)}</strong> on QE Navigator as ${escapeHtml(what)}.</p>
 <p><a href="${escapeHtml(link)}">Accept the invitation</a> and choose your password.</p>
 <p style="color:#475569;font-size:13px">The link works once and expires on ${escapeHtml(expires)}. If you did not expect this email, ignore it.</p>`;
-  const result = await sendMail({ to: args.to, subject: `Invitation to ${args.companyName} on IronGate QE Navigator`, text, html });
+  const result = await sendMail({ to: args.to, subject: `Invitation to ${args.companyName} on QE Navigator`, text, html });
   return { ...result, link };
 }
 

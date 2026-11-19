@@ -16,6 +16,8 @@ const PROFILE_COLUMNS = `u.id, u.email, u.first_name, u.last_name, u.role,
   u.company_id, u.department_id, u.primary_team_id,
   u.avatar_url, u.phone, u.timezone,
   u.created_at, u.last_login, u.is_active, u.email_verified,
+  u.job_title,
+  (SELECT c.name FROM companies c WHERE c.id = u.company_id) AS company_name,
   d.name as department_name,
   t.name as primary_team_name`;
 

@@ -4,6 +4,7 @@ import { HeartPulse } from 'lucide-react';
 import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
 import { chartTheme, formatAsOf } from '../data/advancedFeatures';
+import { statusWithTarget } from '../lib/targetText';
 import { Badge, Card, CardHeader, EmptyState, ProgressBar, StatTile, buttonClass, cx, scoreTone } from './ui';
 import { SuppressedNote } from './PrivacyNote';
 import { CADENCE_LABELS, WELLBEING_BANDS, type PulseCadence } from '../../server/lib/pulseRules';
@@ -112,6 +113,8 @@ export function useTeamPulse(teamId: string | null | undefined) {
 
 /** 0–100 wellbeing score tone (WELLBEING_BANDS: 70 on target, 50 watch). */
 export const wellbeingTone = (score: number | null | undefined) => scoreTone(score, WELLBEING_BANDS.good, WELLBEING_BANDS.warning);
+const WELLBEING_TARGET = { good: WELLBEING_BANDS.good, warning: WELLBEING_BANDS.warning, lowerIsBetter: false };
+const wellbeingStatus = (score: number) => (score >= WELLBEING_BANDS.good ? 'good' : score >= WELLBEING_BANDS.warning ? 'warning' : 'critical');
 
 /** Trend of the closed periods (suppressed periods are gaps). */
 export const PulseTrendChart: React.FC<{ periods: PulsePeriodResult[]; height?: number }> = ({ periods, height = 220 }) => {
@@ -159,7 +162,7 @@ export const PulseResults: React.FC<{ data: TeamPulseData }> = ({ data }) => {
           <div className="grid grid-cols-1 gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]" data-testid="pulse-latest">
             <div className="space-y-3">
               <StatTile label="Wellbeing (survey)" value={Math.round(latest.score)} unit="/100" tone={wellbeingTone(latest.score)} progress={latest.score}
-                caption={`Mean answer ${((latest.score / 100) * 4 + 1).toFixed(1)} of 5`} />
+                caption={<>Mean answer {((latest.score / 100) * 4 + 1).toFixed(1)} of 5<span className="block text-slate-500 dark:text-slate-400" data-testid="pulse-results-target">{statusWithTarget(WELLBEING_TARGET, '/100', wellbeingStatus(latest.score))}</span></>} />
               <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="pulse-response-rate">
                 Response rate: {responseRateText(latest) ?? (latest.sent ? '—' : 'not e-mailed this period (answered in the app)')}
               </p>
@@ -250,6 +253,7 @@ export const PulseTeamSummary: React.FC<{ teamId: string; onOpen?: () => void }>
                 <Badge tone={wellbeingTone(latest.score)} className="ml-2 whitespace-nowrap">{latest.responses} responses</Badge>
               </p>
             )}
+            {latest.score != null && !latest.suppressed && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400" data-testid="pulse-target">{statusWithTarget(WELLBEING_TARGET, '/100', wellbeingStatus(latest.score))}</p>}
             {latest.responseRate != null && (
               <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">Response rate {latest.responseRate}% ({latest.responses} of {latest.sent} e-mailed)</p>
             )}

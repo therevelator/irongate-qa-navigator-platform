@@ -1,6 +1,6 @@
 /**
  * Organizational Hierarchy Types
- * IronGate QA Navigator - Multi-tenant Organization Management
+ * QE Navigator - Multi-tenant Organization Management
  */
 
 export interface Company {

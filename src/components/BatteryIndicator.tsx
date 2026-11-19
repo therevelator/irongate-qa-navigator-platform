@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
+import { batteryBand, BATTERY_SHELL } from '../lib/batteryScale';
 
 /**
  * Battery gauges for 0–100 scores.
  *
- * The fill colour is the score's status against the caller's thresholds (defaults: the QA score
- * thresholds shared with the server, ≥85 good, ≥70 warning, otherwise critical). A missing value
- * renders an empty grey battery labelled "—", never 0. The only motion is a short fill transition
+ * The fill colour is the value's band of the one battery scale (src/lib/batteryScale.ts), on the
+ * same dark shell as the 3D battery in both themes. A missing value renders an empty grey battery
+ * labelled "—", never 0. The only motion is a short fill transition
  * on first render, which is switched off for prefers-reduced-motion.
  */
 
@@ -75,7 +76,8 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
   showValue = true,
 }) => {
   const value = clampScore(percentage);
-  const status = gaugeStatus(value, good, warn);
+  const band = batteryBand(value);
+  void good; void warn; // accepted for compatibility: the colour follows the value's band
   const s = SIZES[size];
   const fill = useMountedFill(value ?? 0);
 
@@ -90,10 +92,11 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
           className={`relative rounded-[5px] border-2 p-[2px] ${value == null ? 'border-slate-300 border-dashed dark:border-slate-600' : 'border-slate-400 dark:border-slate-500'}`}
           style={{ width: s.w, height: s.h }}
         >
-          <div className="relative h-full w-full overflow-hidden rounded-[2px] bg-slate-100 dark:bg-slate-800">
+          <div className="relative h-full w-full overflow-hidden rounded-[2px]" style={{ background: BATTERY_SHELL }}>
             <div
-              className={`absolute inset-y-0 left-0 rounded-[2px] ${GAUGE_FILL[status]} transition-[width] duration-700 ease-out motion-reduce:transition-none`}
-              style={{ width: `${fill}%` }}
+              className="absolute inset-y-0 left-0 rounded-[2px] transition-[width] duration-700 ease-out motion-reduce:transition-none"
+              style={{ width: `${fill}%`, background: band?.flat ?? 'transparent' }}
+              data-battery-band={band?.key ?? 'none'}
             />
           </div>
         </div>

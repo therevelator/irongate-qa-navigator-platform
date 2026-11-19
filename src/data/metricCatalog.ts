@@ -12,7 +12,7 @@
  * column without a catalog entry is a type error.
  *
  * "productionSources" describe where each value would realistically come from in a
- * production setup. IronGate has no built-in connectors: those systems (or a small job
+ * production setup. QE Navigator has no built-in connectors: those systems (or a small job
  * that reads them) push values through POST /api/ingest/kpis.
  */
 import type { KpiColumn } from '../../server/lib/kpiIngest';
@@ -44,7 +44,7 @@ import type { MetricsConfig } from '../config/metricsConfig';
 export type MetricKind =
   /** A value measured by an external system and stored as sent. */
   | 'measured'
-  /** Calculated by IronGate from other stored values. */
+  /** Calculated by QE Navigator from other stored values. */
   | 'computed'
   /** A model built from other inputs, not a measurement of the thing its name suggests. */
   | 'derived'
@@ -191,7 +191,7 @@ const KPI_ENTRIES: { [K in KpiColumn]: Omit<MetricCatalogEntry, 'key' | 'storedI
       'Coverage does not prove tests are good, but a low or falling number is a reliable early warning that changes are shipping unchecked.',
     howCalculated: 'Test coverage % = lines executed by automated tests ÷ total executable lines × 100',
     calculationNotes: [
-      'Stored as sent (0–100). IronGate does not recompute it.',
+      'Stored as sent (0–100). QE Navigator does not recompute it.',
       QA_WEIGHT_NOTE('test_coverage') + ' The QA score is not calculated when coverage is missing.',
       `Overview "needs attention" when below ${KPI_TARGETS.coverage}% (KPI_TARGETS.coverage).`,
     ],
@@ -760,7 +760,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     title: 'Wellbeing (survey)',
     whyItMatters:
       'How the team says it is doing, in its own words: workload, focus time, support, energy and outlook, answered anonymously every week or two. ' +
-      'It is the wellbeing signal of IronGate and part of engineering health; workload balance (derived) is a separate workload signal.',
+      'It is the wellbeing signal of QE Navigator and part of engineering health; workload balance (derived) is a separate workload signal.',
     howCalculated: WELLBEING_FORMULA,
     calculationNotes: [
       `Questions (1 = strongly disagree … 5 = strongly agree): ${PULSE_QUESTIONS.map((q, i) => `${i + 1}. ${q.text}`).join(' ')}`,
@@ -778,7 +778,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     storedIn: ['pulse_responses (anonymous answers)', 'pulse_participation (who answered which period, duplicates only)', 'pulse_cadences (weekly / biweekly per team)'],
     whereToFindIt: [PULSE_PAGE, `${TD} → Wellbeing (survey)`, 'Overview → Company status (wellbeing and engineering health)'],
     productionSources: [
-      { system: 'IronGate pulse survey', detail: 'Answered in the app by the team\'s members (POST /api/pulse/teams/:teamId/responses)' },
+      { system: 'QE Navigator pulse survey', detail: 'Answered in the app by the team\'s members (POST /api/pulse/teams/:teamId/responses)' },
     ],
     howToSendIt: {
       kind: 'computed',
@@ -988,7 +988,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     whereToFindIt: ['Delivery → Business impact → Money (How is this calculated?), What-if and Details'],
     productionSources: [
       { system: 'Finance / BI (ERP, billing, Snowflake, Looker)', detail: 'Monthly recognised revenue attributable to the team\'s product area' },
-      { system: 'IronGate KPI history', detail: 'Monthly averages of the quality KPIs (coverage, escape rate, MTTR, …)' },
+      { system: 'QE Navigator KPI history', detail: 'Monthly averages of the quality KPIs (coverage, escape rate, MTTR, …)' },
     ],
     howToSendIt: { kind: 'no-api', manual: 'Delivery → Business impact → Data entry (monthly quality metrics and business KPIs).', note: 'There is no ingestion endpoint for the monthly business-impact series yet.' },
     related: ['revenue_at_stake', 'revenue_rollup'],
@@ -1011,7 +1011,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     whereToFindIt: ['Delivery → Business impact → Money'],
     productionSources: [
       { system: 'Finance / BI', detail: 'Monthly revenue per product area' },
-      { system: 'IronGate targets', detail: 'KPI targets with history (target_history)' },
+      { system: 'QE Navigator targets', detail: 'KPI targets with history (target_history)' },
     ],
     howToSendIt: { kind: 'computed', note: 'Computed from the monthly business-impact data and the targets; nothing to send directly.' },
     related: ['revenue_sensitivity', 'revenue_at_risk'],
@@ -1082,7 +1082,7 @@ export const getMetricCatalogEntry = (key: string): MetricCatalogEntry | null =>
 
 export const KIND_LABEL: Record<MetricKind, string> = {
   measured: 'Measured',
-  computed: 'Computed by IronGate',
+  computed: 'Computed by QE Navigator',
   derived: 'Derived, not measured',
   container: 'Page section',
 };

@@ -231,7 +231,7 @@ const TechnicalDebtTracker: React.FC<TechnicalDebtTrackerProps> = ({ teamId }) =
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12);
         doc.setTextColor(0, 0, 0);
-        doc.text('IronGate QA Navigator', 26, 12);
+        doc.text('QE Navigator', 26, 12);
         doc.setFontSize(14);
         doc.text('Technical Debt ROI Report', pageWidth / 2, 10, { align: 'center' });
         doc.setFont('helvetica', 'normal');

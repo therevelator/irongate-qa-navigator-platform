@@ -23,6 +23,7 @@ import OnboardingChecklist from './OnboardingChecklist';
 import SavedViewsMenu from './SavedViewsMenu';
 import ExportCsvButton from './ExportCsvButton';
 import type { CsvColumn } from '../lib/csv';
+import { statusWithTarget, targetLabel } from '../lib/targetText';
 
 interface NewDashboardProps {
   teams: Team[];
@@ -74,6 +75,8 @@ interface CompanySummary {
   deliveryPerformanceConfidence?: ConfidenceInfo;
   companyKpiTargets?: { coverage: number; automation: number; flakiness: number; escapeRate: number };
   sampleData?: boolean;
+  /** Which teams the summary covers: the whole company (super admins) or the caller's analytics scope. */
+  scope?: { level: string; teamCount: number; companyTeamCount: number; companyWide: boolean };
 }
 
 type Filter = 'all' | 'high' | 'attention';
@@ -352,7 +355,9 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, teamsError, onTeamCl
       <div data-testid="dashboard">
         <PageIntro
           title={greeting}
-          description="Company quality status and the latest KPI snapshot of every team."
+          description={summary?.scope && !summary.scope.companyWide
+            ? `Quality status and the latest KPI snapshot of ${summary.scope.teamCount === 1 ? 'your team' : `the ${summary.scope.teamCount} teams you can see`}.`
+            : 'Company quality status and the latest KPI snapshot of every team.'}
           actions={canBrief && (
             <button className={buttonClass.secondary} onClick={() => setBriefingOpen(true)}>
               <Sparkles size={15} /> Executive briefing
@@ -616,11 +621,14 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
 
   const qaStatus = toneFor(qa, QA_GOOD, QA_WARN);
   const kpi = s?.kpiStatus;
+  // Scoped callers (everyone but super admins) see the teams of their analytics scope only.
+  const scoped = !!s?.scope && !s.scope.companyWide;
+  const qaTitle = !scoped ? 'Global QA score' : s?.scope?.teamCount === 1 ? 'QA score' : 'QA score of your teams';
 
   return (
     <Card padded={false} className="overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-3.5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Company status</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-white" data-testid="hero-title">{scoped ? (s?.scope?.teamCount === 1 ? 'Your team' : 'Your teams') : 'Company status'}</h2>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
           <span className="inline-flex items-center gap-1.5">
             <CalendarDays size={13} className="text-slate-400" />
@@ -635,9 +643,9 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
         {/* Global QA score */}
         <div className="flex flex-col gap-5 p-5 sm:p-6 lg:border-r lg:border-slate-200 lg:dark:border-slate-800">
           <div className="flex items-center gap-6">
-            <HeroBattery value={qa} good={QA_GOOD} warn={QA_WARN} label="Global QA score" />
+            <HeroBattery value={qa} good={QA_GOOD} warn={QA_WARN} label={qaTitle} />
             <div className="min-w-0">
-              <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Global QA score</p>
+              <p className="text-sm font-medium text-slate-500 dark:text-slate-400" data-testid="hero-qa-title">{qaTitle}</p>
               <p className="mt-1 flex items-baseline gap-1.5">
                 <span className={cx('text-5xl font-semibold tracking-tight tabular-nums', qa == null ? VALUE_TEXT.none : 'text-slate-900 dark:text-white')}>
                   {qa == null ? '—' : Math.round(qa)}
@@ -646,6 +654,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
               </p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 {risk && <Badge tone={risk.tone}>{risk.label}</Badge>}
+                {qa != null && <span className="text-xs text-slate-600 dark:text-slate-300" data-testid="global-qa-target">{statusWithTarget({ good: QA_GOOD, warning: QA_WARN, lowerIsBetter: false }, '/100', qaStatus === 'none' ? null : qaStatus)?.replace(/^On target · |^Off target · /, '')}</span>}
                 {s && (
                   trend == null ? (
                     <span className="text-xs text-slate-500 dark:text-slate-400">No trend data</span>
@@ -701,6 +710,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
                       {g.value != null && <span className={cx('ml-1 h-1.5 w-1.5 self-center rounded-full', STATUS_META[st].dot)} aria-hidden="true" />}
                     </p>
                     {g.caption && <p className="mt-1 text-xs leading-snug text-slate-500 dark:text-slate-400">{g.caption}</p>}
+                    {g.value != null && <p className="mt-0.5 text-[11px] leading-snug text-slate-500 dark:text-slate-400" data-testid="gauge-target">{st === 'warning' ? `Watch: ${g.warn}–${g.good} · ` : ''}Target ≥ {g.good}</p>}
                     {g.confidence && g.value != null && <ConfidenceNote c={g.confidence} noun={g.noun} compact className="mt-1" testId={`confidence-${g.label}`} />}
                   </div>
                 </div>
@@ -811,6 +821,10 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
         // Judged with the target valid at the value's date; a stale value is shown, not judged.
         const judged = v == null || stale ? null : statusAgainst(v, r.thresholds?.[f.metric]) ?? getMetricStatus(v, f.metric);
         const st = judged === 'none' ? null : judged;
+        // The target valid at the value's date (else the default), shown under the value.
+        const t = r.thresholds?.[f.metric] ?? (METRICS_CONFIG[f.metric] as { good: number; warning: number; lowerIsBetter: boolean } | undefined) ?? null;
+        const unit = f.suffix === '%' ? '%' : '';
+        const short = t ? `${t.lowerIsBetter ? '≤' : '≥'} ${t.good}${unit}` : null;
         return (
           <div key={f.key} className="min-w-0">
             <dt className="truncate text-xs text-slate-500 dark:text-slate-400">{f.label}</dt>
@@ -822,9 +836,15 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
               >
                 {fmt(v, f.digits, f.suffix)}
               </span>
-              {st && <span className={cx('h-1.5 w-1.5 flex-shrink-0 rounded-full', METRIC_DOT[st])} title={`${st === 'good' ? 'On target' : st === 'warning' ? 'Below target' : 'Critical'}`} aria-hidden="true" />}
+              {st && <span className={cx('h-1.5 w-1.5 flex-shrink-0 rounded-full', METRIC_DOT[st])} title={statusWithTarget(t, unit, st) ?? undefined} aria-hidden="true" />}
               {stale && <span className="sr-only">(stale)</span>}
+              {st && <span className="sr-only">{statusWithTarget(t, unit, st)}</span>}
             </dd>
+            {short && (
+              <dd className={cx('truncate text-[11px] leading-tight', st === 'critical' ? 'text-red-700 dark:text-red-400' : st === 'warning' ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')} title={targetLabel(t, unit) ?? undefined} data-testid="team-card-target" aria-hidden="true">
+                Target {short}
+              </dd>
+            )}
           </div>
         );
       })}
@@ -874,6 +894,7 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
                   {r.qa == null ? '—' : Math.round(r.qa)}
                   {r.qa != null && <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-400">/ 100</span>}
                 </p>
+                {r.qa != null && <p className="text-[11px] leading-tight text-slate-500 dark:text-slate-400" data-testid="team-card-qa-target">{targetLabel(r.thresholds?.qaScore ?? { good: QA_GOOD, warning: QA_WARN, lowerIsBetter: false }, '/100')}</p>}
                 <ConfidenceNote c={r.confidence} compact testId="team-card-confidence" />
               </div>
             </div>

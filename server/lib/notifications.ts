@@ -224,14 +224,14 @@ export async function notifyAlerts(companyId: string, items: Array<{ alert: Aler
         inApp++;
       }
       if (p.emailImmediate && a.email) {
-        const subject = `[IronGate] ${SEVERITY_LABEL[alert.severity]}: ${title}`;
+        const subject = `[QE Navigator] ${SEVERITY_LABEL[alert.severity]}: ${title}`;
         const text = `${title}\n\n${alert.message}\n\n${link ? `Open the alerts: ${link}\n\n` : ''}You receive this because immediate alert emails are on in your notification preferences.`;
         const html = `<p><strong>${escapeHtml(title)}</strong></p><p>${escapeHtml(alert.message)}</p>${link ? `<p><a href="${escapeHtml(link)}">Open the alerts</a></p>` : ''}<p style="color:#64748b;font-size:12px">You receive this because immediate alert emails are on in your notification preferences.</p>`;
         if (await enqueue({ companyId, channel: 'email', kind: 'alert', userId: a.id, recipient: a.email, alertId: alert.id, subject, payload: { text, html }, dedupeKey: `alert:${alert.id}:${a.id}:${alert.severity}` })) queued++;
       }
     }
     if (settings.slackEnabled && settings.webhook && atLeast(alert.severity, settings.slackMinSeverity)) {
-      const text = `*${SEVERITY_LABEL[alert.severity]}* · ${title}\n${alert.message}${link ? `\n<${link}|Open in IronGate>` : ''}`;
+      const text = `*${SEVERITY_LABEL[alert.severity]}* · ${title}\n${alert.message}${link ? `\n<${link}|Open in QE Navigator>` : ''}`;
       if (await enqueue({ companyId, channel: 'slack', kind: 'alert', recipient: 'slack', alertId: alert.id, subject: title, payload: { text }, dedupeKey: `alert:${alert.id}:slack:${alert.severity}` })) queued++;
     }
   }
@@ -275,7 +275,7 @@ export async function notifyPulseEscalation(args: {
     if (p.emailImmediate && a.email) {
       const text = `${args.title}\n\n${args.body}\n\n${link ? `Open the team's pulse: ${link}\n\n` : ''}You receive this because immediate e-mails are on in your notification preferences.`;
       const html = `<p><strong>${escapeHtml(args.title)}</strong></p><p>${escapeHtml(args.body)}</p>${link ? `<p><a href="${escapeHtml(link)}">Open the team's pulse</a></p>` : ''}<p style="color:#64748b;font-size:12px">You receive this because immediate e-mails are on in your notification preferences.</p>`;
-      if (await enqueue({ companyId: args.companyId, channel: 'email', kind: 'pulse', userId: a.id, recipient: a.email, subject: `[IronGate] ${args.title}`, payload: { text, html }, dedupeKey: `${args.dedupe}:${a.id}` })) { queued++; reached = true; }
+      if (await enqueue({ companyId: args.companyId, channel: 'email', kind: 'pulse', userId: a.id, recipient: a.email, subject: `[QE Navigator] ${args.title}`, payload: { text, html }, dedupeKey: `${args.dedupe}:${a.id}` })) { queued++; reached = true; }
     }
     if (reached) told++;
   }
@@ -304,7 +304,7 @@ export async function postToSlack(webhook: string, text: string): Promise<{ ok: 
 
 async function sendOne(d: any, webhooks: Map<string, string | null>): Promise<{ status: 'sent' | 'logged' | 'failed' | 'skipped'; error?: string }> {
   if (d.channel === 'email') {
-    const r = await sendMail({ to: d.recipient, subject: d.subject ?? 'IronGate notification', text: d.payload?.text ?? '', html: d.payload?.html });
+    const r = await sendMail({ to: d.recipient, subject: d.subject ?? 'QE Navigator notification', text: d.payload?.text ?? '', html: d.payload?.html });
     if (r.delivered) return { status: 'sent' };
     return r.channel === 'log' ? { status: 'logged', error: 'E-mail is not configured (RESEND_API_KEY / SMTP_HOST): the email was logged, not sent' } : { status: 'failed', error: r.error };
   }

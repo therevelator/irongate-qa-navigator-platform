@@ -380,7 +380,7 @@ describe('Weekly digest', () => {
     expect(sent.body.to).toBe('partial-1@golden.example');
     expect(['logged', 'sent']).toContain(sent.body.status);
     const d = await db.query(`SELECT kind, subject FROM notification_deliveries WHERE company_id = $1 AND kind = 'test' AND channel = 'email' ORDER BY created_at DESC LIMIT 1`, [GOLDEN_COMPANY]);
-    expect(d.rows[0].subject).toContain('[Test] IronGate weekly digest');
+    expect(d.rows[0].subject).toContain('[Test] QE Navigator weekly digest');
   });
 });
 

@@ -8,7 +8,7 @@
  *          verified in Resend. The API key is never logged or returned.
  *   SMTP   when SMTP_HOST is set: SMTP_HOST, SMTP_PORT (default 587), SMTP_USER, SMTP_PASS,
  *          SMTP_SECURE ('true' = implicit TLS, default true only for port 465), SMTP_FROM
- *          (default MAIL_FROM, else "IronGate QE Navigator <no-reply@SMTP_HOST>").
+ *          (default MAIL_FROM, else "QE Navigator <no-reply@SMTP_HOST>").
  *   log    otherwise: nothing is sent; the message is logged (without links outside development)
  *          and the caller gets delivered: false, so the UI shows the link to copy instead.
  *          A message is never dropped silently.
@@ -57,14 +57,14 @@ export function smtpConfigFromEnv(env: NodeJS.ProcessEnv = process.env): SmtpCon
     secure,
     user: env.SMTP_USER || undefined,
     pass: env.SMTP_PASS || undefined,
-    from: env.SMTP_FROM || env.MAIL_FROM || `IronGate QE Navigator <no-reply@${host}>`,
+    from: env.SMTP_FROM || env.MAIL_FROM || `QE Navigator <no-reply@${host}>`,
   };
 }
 
 export interface ResendConfig { apiKey: string; from: string }
 
 export const RESEND_ENDPOINT = 'https://api.resend.com/emails';
-export const RESEND_TEST_SENDER = 'IronGate QE Navigator <onboarding@resend.dev>';
+export const RESEND_TEST_SENDER = 'QE Navigator <onboarding@resend.dev>';
 
 /** Resend settings from the environment, or null when RESEND_API_KEY is not set. */
 export function resendConfigFromEnv(env: NodeJS.ProcessEnv = process.env): ResendConfig | null {

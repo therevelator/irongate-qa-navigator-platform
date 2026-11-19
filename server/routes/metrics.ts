@@ -6,7 +6,7 @@ import { findReplay, logRejected, requestHash, runLogged, sendReplay, type Inges
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertSomeTeamWrite, assertTeamRead, assertTeamWrite, canManageCompanyData, getOwnedTeam, policyActor } from '../middleware/access';
-import { canViewDeveloperRow } from '../lib/userPolicy';
+import { analyticsTeamsInScope, canViewDeveloperRow } from '../lib/userPolicy';
 import { BI_CONFIG_FIELDS, DEVELOPER_METRIC_FIELDS, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 import { isTeamMemberSql, teamMemberCountSql } from '../lib/teamMembership';
 import { teamDeveloperSummary } from '../lib/developerAggregates';
@@ -56,6 +56,12 @@ async function evalContext(companyId: string): Promise<EvalContext> {
   return { companyId, intervals: await loadIntervals(companyId), book: await loadTargetBook(companyId) };
 }
 
+/** Ids of the company's active teams in the caller's analytics scope (canViewTeamAnalytics). */
+async function scopedTeamIds(req: AuthRequest): Promise<Set<string>> {
+  const rows = await query<any>('SELECT id, department_id FROM teams WHERE company_id = ? AND is_active = TRUE', [req.companyId]);
+  return new Set(analyticsTeamsInScope(policyActor(req), rows.map((r: any) => ({ id: String(r.id), department_id: r.department_id }))).map((t) => t.id));
+}
+
 /** Latest snapshot of every active team of the company, evaluated now (stale values flagged). */
 async function latestEvaluated(companyId: string): Promise<Array<{ row: any; ev: LatestEvaluation | null }>> {
   const rows: any[] = await query<any>(
@@ -94,8 +100,10 @@ router.get('/analytics/history', authenticateToken, async (req: any, res) => {
       [companyId, numDays]
     );
     const ctx = await evalContext(companyId);
+    // The teams of the caller's analytics scope only (the overview's teams).
+    const inScope = await scopedTeamIds(req);
     const byDay = new Map<string, any[]>();
-    for (const r of rows) {
+    for (const r of rows.filter((x: any) => inScope.has(String(x.team_id)))) {
       const day = String(r.snapshot_date);
       if (!byDay.has(day)) byDay.set(day, []);
       byDay.get(day)!.push(r);
@@ -124,7 +132,8 @@ router.get('/analytics/history', authenticateToken, async (req: any, res) => {
 router.get('/analytics/teams', authenticateToken, async (req: any, res) => {
   try {
     const cols = ['test_coverage', 'defect_density', 'automation_coverage', 'deployment_frequency_per_week', 'mttr_hours', 'change_failure_rate', 'sprint_velocity'];
-    const teams = (await latestEvaluated(req.user.companyId)).map(({ row, ev }): Record<string, any> => {
+    const inScope = await scopedTeamIds(req);
+    const teams = (await latestEvaluated(req.user.companyId)).filter(({ row }) => inScope.has(String(row.id))).map(({ row, ev }): Record<string, any> => {
       const stale = cols.filter((c) => ev?.values[c]?.stale);
       const t: Record<string, any> = {
         id: row.id, name: row.name,
@@ -214,16 +223,14 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const companyId = req.companyId;
 
-    // Total active teams in this company.
-    const totalTeamsResult = await queryOne<any>(
-      `SELECT COUNT(*) as count FROM teams WHERE company_id = ? AND is_active = true`,
-      [companyId]
-    );
-    const totalTeams = Number(totalTeamsResult?.count) || 0;
+    // The teams of the caller's analytics scope (super admin: every active team of the company).
+    const inScope = await scopedTeamIds(req);
+    const scopeIds = [...inScope];
+    const totalTeams = inScope.size;
 
-    // Company QA score: team-size weighted mean of the teams' current QA scores (stale inputs
-    // left out), the same definition as the dashboard hero (distributionOf, COMPANY_AGGREGATE_TEXT).
-    const evaluated = await latestEvaluated(companyId as string);
+    // QA score: team-size weighted mean of the teams' current QA scores (stale inputs left out),
+    // the same definition as the dashboard hero (distributionOf, COMPANY_AGGREGATE_TEXT).
+    const evaluated = (await latestEvaluated(companyId as string)).filter(({ row }) => inScope.has(String(row.id)));
     const scored = evaluated.filter((e) => e.ev && e.ev.qa.value !== null);
     const overallPassRate = distributionOf(scored.map((e) => ({ value: e.ev!.qa.value, weight: e.row.member_count }))).weightedMean;
 
@@ -232,8 +239,8 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT COUNT(*) as count
        FROM technical_debt td
        JOIN teams t ON td.team_id = t.id
-       WHERE t.company_id = ? AND t.is_active = true AND td.status IN ('open', 'in_progress')`,
-      [companyId]
+       WHERE t.company_id = ? AND t.is_active = true AND t.id = ANY(?::text[]) AND td.status IN ('open', 'in_progress')`,
+      [companyId, scopeIds]
     );
     const openDefects = Number(openDefectsResult?.count) || 0;
 
@@ -241,8 +248,8 @@ router.get('/dashboard', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT COUNT(*) as count
        FROM technical_debt td
        JOIN teams t ON td.team_id = t.id
-       WHERE t.company_id = ? AND t.is_active = true AND td.severity = 'critical' AND td.status IN ('open', 'in_progress')`,
-      [companyId]
+       WHERE t.company_id = ? AND t.is_active = true AND t.id = ANY(?::text[]) AND td.severity = 'critical' AND td.status IN ('open', 'in_progress')`,
+      [companyId, scopeIds]
     );
     const criticalDefects = Number(criticalDefectsResult?.count) || 0;
 

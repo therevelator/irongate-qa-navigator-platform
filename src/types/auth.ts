@@ -1,7 +1,7 @@
 import { ROLE_LABELS } from '../../server/lib/roleLabels';
 /**
  * Authentication & Authorization Types
- * IronGate QA Navigator - Full RBAC System
+ * QE Navigator - Full RBAC System
  */
 
 export type UserRole = 'super_admin' | 'qa_manager' | 'team_lead' | 'qa_engineer' | 'viewer';

@@ -4,6 +4,8 @@ import { useHideSampleNotice } from '../contexts/AuthContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { basedOnText } from '../../server/lib/metricFormulas';
+import { getThreshold, statusFor, type KPIKey } from '../data/detailedKPIs';
+import { statusWithTarget } from '../lib/targetText';
 import { showError } from '../utils/alerts';
 import { API_URL } from '../config/api';
 import { Page, PageIntro, Card, CardHeader, StatTile, EmptyState, buttonClass, cx } from './ui';
@@ -30,6 +32,8 @@ interface TeamDetail {
   /** camelCase KPI key -> staleness of its latest value. */
   kpiStaleness?: Record<string, { stale: boolean; staleSince: string | null } | undefined>;
   sampleData?: boolean;
+  /** camelCase KPI key -> target valid at the value's date (GET /api/teams/:id). */
+  kpiThresholds?: Record<string, { good: number; warning: number; lowerIsBetter: boolean }> | null;
 }
 
 const num = (v: unknown): number | null => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -73,6 +77,16 @@ const kpiNote = (t: TeamDetail, key: string): string => {
   if (kpiValue(t, key) == null || !st?.stale) return '';
   return `Stale since ${fmtDate(dayKey(st.staleSince))}`;
 };
+
+/** "Off target · Target ≥ 80%" for a KPI row (the target valid at the value's date); '' without a value or target, or when stale. */
+const kpiStatus = (t: TeamDetail, key: string, unit: string): string => {
+  const v = num(kpiValue(t, key));
+  if (v == null || t.kpiStaleness?.[key]?.stale) return '';
+  const threshold = getThreshold(key as KPIKey, t.kpiThresholds ?? undefined);
+  return statusWithTarget(threshold, unit.trim(), statusFor(v, threshold)) ?? '';
+};
+/** The PDF's standard font has no ≥ / ≤ glyphs. */
+const pdfText = (s: string) => s.replace(/≥/g, '>=').replace(/≤/g, '<=').replace(/−/g, '-');
 
 const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
   const hideSampleNotice = useHideSampleNotice();
@@ -159,7 +173,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(100, 116, 139);
-      doc.text(`IronGate QA Navigator${team.department_name ? `  |  ${team.department_name}` : ''}`, logoDataUrl ? 30 : 14, 24);
+      doc.text(`QE Navigator${team.department_name ? `  |  ${team.department_name}` : ''}`, logoDataUrl ? 30 : 14, 24);
       doc.text(`Data as of ${fmtDate(asOf)}  |  Generated ${generatedAt.toLocaleString()}`, pageWidth - 14, 24, { align: 'right' });
       doc.setDrawColor(226, 232, 240);
       doc.line(14, 28, pageWidth - 14, 28);
@@ -185,8 +199,8 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
       autoTable(doc, {
         startY: afterSummary + 13,
         margin: { left: 14, right: 14 },
-        head: [['Metric', 'Value', 'Note']],
-        body: KPI_ROWS.map(r => [r.label, fmt(kpiValue(team, r.key), r.digits, r.suffix), kpiNote(team, r.key)]),
+        head: [['Metric', 'Value', 'Status and target', 'Note']],
+        body: KPI_ROWS.map(r => [r.label, fmt(kpiValue(team, r.key), r.digits, r.suffix), pdfText(kpiStatus(team, r.key, r.suffix)), kpiNote(team, r.key)]),
         styles: { fontSize: 9, cellPadding: 2 },
         columnStyles: { 1: { halign: 'right' } },
         headStyles: { fillColor: [38, 83, 138], textColor: 255 },
@@ -262,6 +276,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
                   <tr className="border-y border-slate-200 bg-slate-50 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-800/50 dark:text-slate-400">
                     <th className="px-5 py-2 text-left font-medium">Metric</th>
                     <th className="px-5 py-2 text-right font-medium">Value</th>
+                    <th className="px-5 py-2 text-left font-medium">Status and target</th>
                     <th className="px-5 py-2 text-left font-medium">Note</th>
                   </tr>
                 </thead>
@@ -270,6 +285,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
                     <tr key={r.key}>
                       <td className="px-5 py-2 text-slate-900 dark:text-white">{r.label}</td>
                       <td className="px-5 py-2 text-right tabular-nums text-slate-700 dark:text-slate-300">{fmt(kpiValue(team, r.key), r.digits, r.suffix)}</td>
+                      <td className="px-5 py-2 text-xs text-slate-600 dark:text-slate-300" data-testid="report-target">{kpiStatus(team, r.key, r.suffix) || '—'}</td>
                       <td className={cx('px-5 py-2 text-xs', kpiNote(team, r.key).startsWith('Stale') ? 'text-amber-700 dark:text-amber-400' : 'text-slate-500 dark:text-slate-400')}>{kpiNote(team, r.key) || '—'}</td>
                     </tr>
                   ))}
