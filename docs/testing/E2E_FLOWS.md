@@ -306,6 +306,7 @@ Fixed (each with a test):
 | FI-08 | Test execution showed "No test runs in this period" when its request failed | Load error | AN-07 (timeline) |
 | FI-09 | Parameters offered "Apply to every department and team" (ticked by default) to managers; the API refuses it, so a manager's company-level save failed | Option shown and sent for super admins only | PAR-05 |
 | FI-10 | Configuration values such as a P95 response time of −5 were stored as typed | The page refuses negative and non-numeric values (the API still accepts any value: see FI-10b) | PAR-11 |
+| FI-19 | On a phone the Users toolbar (grid size, Export CSV, Invite, Add with password) was wider than the screen: the page scrolled sideways | The toolbar wraps | UX-11 (Users) |
 | FI-11 | The create / edit user and department forms had labels not linked to their fields (unnamed fields for screen readers) | `htmlFor` / `id` | ORG-01, ORG-20 … ORG-23 |
 
 Recorded (larger, or a product decision; tests marked `test.fail` where a behaviour is asserted):
