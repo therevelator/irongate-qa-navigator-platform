@@ -10,7 +10,16 @@ interface AuthContextType extends AuthState {
   updateUser: (user: Partial<User>) => void;
   /** Reload the signed-in user from the server (after accepting an invitation, or a role change). */
   reloadUser: () => Promise<void>;
+  /** Why the session ended (expired, or signed out everywhere): shown on the sign-in screen. */
+  sessionNotice: string | null;
 }
+
+/** Header of a 401 for a session that ended (server/lib/sessions.ts). */
+const SESSION_ENDED_HEADER = 'X-Session-Ended';
+const NOTICE: Record<string, string> = {
+  session_ended: 'Your session has ended. Please sign in again.',
+  session_expired: 'Your sign-in has expired. Please sign in again.',
+};
 
 /** Map the API user (snake_case) to the app's User, including the role assignments. */
 export function mapApiUser(u: any): User {
@@ -53,6 +62,25 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading: true,
     error: null,
   });
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+
+  // A session ended by the server (expired, or signed out everywhere) on ANY API call: back to the
+  // sign-in screen with a clear message. The address is kept, so a deep link opens after sign-in.
+  useEffect(() => {
+    const original = window.fetch;
+    const wrapped: typeof fetch = async (...args) => {
+      const res = await original(...args);
+      const ended = res.status === 401 ? res.headers.get(SESSION_ENDED_HEADER) : null;
+      if (ended) {
+        localStorage.removeItem('irongate_user');
+        setSessionNotice(NOTICE[ended] ?? NOTICE.session_ended);
+        setAuthState({ user: null, isAuthenticated: false, isLoading: false, error: null });
+      }
+      return res;
+    };
+    window.fetch = wrapped;
+    return () => { if (window.fetch === wrapped) window.fetch = original; };
+  }, []);
 
   // Check for existing session on mount (and on reloadUser).
   const checkAuth = async () => {
@@ -70,6 +98,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         localStorage.setItem('irongate_user', JSON.stringify(mappedUser));
         setAuthState({ user: mappedUser, isAuthenticated: true, isLoading: false, error: null });
       } else {
+        const ended = response.headers.get(SESSION_ENDED_HEADER);
+        if (ended) setSessionNotice(NOTICE[ended] ?? NOTICE.session_ended);
         // Session invalid or expired
         localStorage.removeItem('irongate_user');
         setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
@@ -110,6 +140,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Store user info (but NOT token)
       localStorage.setItem('irongate_user', JSON.stringify(user));
+      setSessionNotice(null);
 
       setAuthState({
         user,
@@ -188,6 +219,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       localStorage.removeItem('irongate_user');
       localStorage.removeItem('irongate_remember');
+      setSessionNotice(null);
       
       setAuthState({
         user: null,
@@ -218,6 +250,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         logout,
         updateUser,
         reloadUser: checkAuth,
+        sessionNotice,
       }}
     >
       {children}

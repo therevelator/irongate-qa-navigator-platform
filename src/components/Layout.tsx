@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
+  LayoutDashboard, BarChart3, LogOut, MonitorSmartphone, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
   CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints, Globe,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import API_URL from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import {
   ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin,
   type PolicyActor,
@@ -161,6 +162,18 @@ const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), selec
 
 const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, onTabChange, onOpenPulse }) => {
   const { user, logout } = useAuth();
+  // "Sign out my other devices": every other session ends; this one gets a new cookie and stays.
+  const signOutOthers = async () => {
+    if (!window.confirm('Sign out on all your other devices and browsers? This one stays signed in.')) return;
+    try {
+      const res = await fetch(`${API_URL}/auth/sessions/sign-out-others`, { method: 'POST', credentials: 'include' });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) toast.success(body.message || 'Signed out on all other devices.');
+      else toast.error(body.error || 'Could not sign out the other devices.');
+    } catch {
+      toast.error('The server could not be reached.');
+    }
+  };
   const { isDark, toggleMode } = useTheme();
   // Navigation lives in a drawer behind the burger button. On wide screens it can be pinned
   // (docked beside the content); the pin is the only preference remembered.
@@ -371,6 +384,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{ROLE_LABEL[role] ?? role}</p>
               </div>
+              <button
+                onClick={signOutOthers}
+                title="Sign out my other devices"
+                aria-label="Sign out my other devices"
+                data-testid="sign-out-others"
+                className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-white dark:hover:bg-slate-800"
+              >
+                <MonitorSmartphone size={16} />
+                <span className="sr-only">Sign out my other devices</span>
+              </button>
               <button
                 onClick={logout}
                 title="Sign out"

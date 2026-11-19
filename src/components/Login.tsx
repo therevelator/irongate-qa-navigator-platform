@@ -33,7 +33,7 @@ const ProviderIcon: React.FC<{ id: string }> = ({ id }) =>
   );
 
 const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
-  const { login, isLoading } = useAuth();
+  const { login, isLoading, sessionNotice } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
@@ -143,6 +143,13 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
 
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900 dark:text-white">Sign in</h1>
           <p className="mt-1.5 text-sm text-slate-500 dark:text-slate-400">Use your work account to continue.</p>
+
+          {sessionNotice && !error && (
+            <div role="status" data-testid="session-notice" className="mt-6 flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+              <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+              <span>{sessionNotice}</span>
+            </div>
+          )}
 
           {error && (
             <div role="alert" className="mt-6 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">

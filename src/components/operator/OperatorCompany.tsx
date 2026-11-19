@@ -158,6 +158,9 @@ const UsersTab: React.FC<{ companyId: string; reason: string; onAction: (a: Repa
                 description: `${u.is_active ? 'Deactivates' : 'Reactivates'} the account of ${u.name ?? u.email}. A super admin of the company can undo this in their Activity log.`,
                 path: `${base}/users/${encodeURIComponent(u.id)}/${u.is_active ? 'deactivate' : 'reactivate'}`,
               })}>{u.is_active ? 'Deactivate' : 'Reactivate'}</ActionButton>
+              {u.is_active && (
+                <ActionButton testId="op-user-sign-out" onClick={() => onAction({ title: 'Sign out everywhere', description: `Ends every session of ${u.name ?? u.email} on every device. They can sign in again at once.`, path: `${base}/users/${encodeURIComponent(u.id)}/sign-out-everywhere` })}>Sign out everywhere</ActionButton>
+              )}
               {(u.failed_login_attempts > 0 || u.locked_until) && (
                 <ActionButton onClick={() => onAction({ title: 'Clear sign-in lockout', description: `Resets the failed sign-in count and lockout of ${u.name ?? u.email}.`, path: `${base}/users/${encodeURIComponent(u.id)}/clear-lockout` })}>Clear lockout</ActionButton>
               )}

@@ -5,6 +5,7 @@ import { API_URL } from '../config/api';
 import { Page, PageIntro, Card, CardHeader, buttonClass, inputClass, cx } from './ui';
 import KpiTargetsConfig from './KpiTargetsConfig';
 import AlertSettings from './AlertSettings';
+import SessionSettings from './SessionSettings';
 
 interface ParametersConfigurationProps {
   onBack?: () => void;
@@ -219,6 +220,8 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
           scopeLabel={scopeLabel}
           applyToAll={companyScope && applyToAll}
         />
+
+        <SessionSettings />
 
         <AlertSettings
           scopeType={selectedTeam !== 'all' ? 'team' : selectedDepartment !== 'all' ? 'department' : 'company'}

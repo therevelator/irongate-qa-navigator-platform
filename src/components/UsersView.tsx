@@ -1132,7 +1132,29 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 <Send size={14} />{sendingResetLink ? 'Sending…' : 'Send reset link'}
               </button>
             </div>
-            <p className="text-xs text-gray-500 dark:text-slate-400">Or set a new password yourself and tell them:</p>
+            <div className="flex items-center justify-between gap-3 rounded-md border border-gray-200 dark:border-slate-700 p-3">
+              <p className="text-sm text-gray-700 dark:text-gray-300">
+                {selectedUser?.id === user?.id ? 'Sign out on all your other devices.' : 'Sign them out on every device and browser.'}
+              </p>
+              <button
+                type="button" data-testid="sign-out-everywhere-btn"
+                onClick={async () => {
+                  if (!selectedUser) return;
+                  try {
+                    const response = await fetch(`${API_URL}/admin/users/${selectedUser.id}/sign-out-everywhere`, { method: 'POST', credentials: 'include' });
+                    const body = await response.json().catch(() => ({}));
+                    if (response.ok) toast.success(body.message || 'Signed out everywhere');
+                    else toast.error(`Failed: ${body.error || 'Unknown error'}`);
+                  } catch {
+                    toast.error('Error signing the user out');
+                  }
+                }}
+                className="shrink-0 px-3 py-1.5 border border-gray-300 dark:border-slate-600 rounded-md text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                Sign out everywhere
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-slate-400">Or set a new password yourself and tell them (this also signs them out everywhere):</p>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
               <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required minLength={6} placeholder="Enter new password" />
