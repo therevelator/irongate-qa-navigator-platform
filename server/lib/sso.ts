@@ -123,12 +123,13 @@ export class SsoError extends Error {
 const b64url = (buf: Buffer) => buf.toString('base64url');
 export const pkceChallenge = (verifier: string) => b64url(createHash('sha256').update(verifier).digest());
 
-export interface SsoState { p: ProviderId; s: string; n: string; v: string; i?: string | null }
+/** p provider, s state, n nonce, v PKCE verifier, i invitation token, r "Keep me signed in". */
+export interface SsoState { p: ProviderId; s: string; n: string; v: string; i?: string | null; r?: boolean }
 
 /** Start: state, nonce and PKCE verifier (kept in a signed, short-lived cookie) and the provider URL. */
-export async function beginSignIn(cfg: ProviderConfig, secret: string, inviteToken?: string | null): Promise<{ url: string; stateCookie: string }> {
+export async function beginSignIn(cfg: ProviderConfig, secret: string, inviteToken?: string | null, remember = false): Promise<{ url: string; stateCookie: string }> {
   const doc = await discover(cfg);
-  const state: SsoState = { p: cfg.id, s: b64url(randomBytes(32)), n: b64url(randomBytes(32)), v: b64url(randomBytes(48)), i: inviteToken || null };
+  const state: SsoState = { p: cfg.id, s: b64url(randomBytes(32)), n: b64url(randomBytes(32)), v: b64url(randomBytes(48)), i: inviteToken || null, r: remember === true };
   const url = new URL(doc.authorization_endpoint);
   url.searchParams.set('response_type', 'code');
   url.searchParams.set('client_id', cfg.clientId);

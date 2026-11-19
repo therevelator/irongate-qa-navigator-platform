@@ -39,7 +39,7 @@ const asCookie = (token: string) => `irongate_token=${token}`;
 const me = (cookie: string) => request(app).get('/api/auth/me').set('Cookie', cookie);
 /** Any route behind authenticateToken. */
 const authed = (cookie: string) => request(app).get('/api/admin/users').set('Cookie', cookie);
-const signIn = (addr: string, password = NEW_PW) => request(app).post('/api/auth/login').send({ email: addr, password });
+const signIn = (addr: string, password = NEW_PW, rememberMe?: boolean) => request(app).post('/api/auth/login').send({ email: addr, password, ...(rememberMe === undefined ? {} : { rememberMe }) });
 let ipSeq = 0;
 const newIp = () => `203.0.113.${(++ipSeq % 250) + 1}`;
 
@@ -257,12 +257,12 @@ describe('Sign-in lifetime (company setting)', () => {
     expect((await me(twoHours)).status).toBe(200);
   });
 
-  it('SES-009: at sign-in the JWT exp and the cookie max age follow the setting', async () => {
+  it('SES-009: at sign-in the JWT exp and ("Keep me signed in") the cookie max age follow the setting', async () => {
     if (skip()) return;
     const admin = asCookie(tokenFor(foreignUserId, nowSec() - 60));
     for (const hours of [1, 24, 720]) {
       expect((await putS(admin, { lifetimeHours: hours })).status).toBe(200);
-      const r = await signIn(foreignEmail);
+      const r = await signIn(foreignEmail, NEW_PW, true);
       expect(r.status).toBe(200);
       const setCookie = String(r.headers['set-cookie']);
       expect(setCookie).toMatch(new RegExp(`Max-Age=${hours * 3600}[;,]|Max-Age=${hours * 3600}$`));

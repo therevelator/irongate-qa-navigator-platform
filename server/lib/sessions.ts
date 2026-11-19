@@ -22,6 +22,15 @@ const onPool: Exec = (sql, params) => query<never[]>(sql, params);
  *       lengthening it only applies to new sign-ins (JWT exp and the cookie's max age are set
  *       from the setting at sign-in).
  *
+ *
+ * "Keep me signed in" (the sign-in form, and the SSO buttons below it): ticked = a persistent cookie
+ *   (max age = the company lifetime); unticked (and every sign-in without the box: registration,
+ *   accepting an invitation) = a browser-session cookie with no Max-Age / Expires, which the browser
+ *   drops when it closes. Either way the token (JWT exp) and the per-request check above never let it
+ *   outlive the company lifetime. The choice is kept in the token (`p`), so a re-issued cookie ("Sign
+ *   out my other devices", changing your own password) keeps it. Tokens from before this rule have
+ *   no `p` and count as persistent (that is how their cookie was set).
+ *
  * A refused session answers 401 with code session_ended / session_expired and the header
  * X-Session-Ended, so the app shows the sign-in screen with a clear message.
  */
@@ -91,13 +100,36 @@ export async function lifetimeForUser(userId: string, exec: Exec = onPool): Prom
   return lifetimeHours(row?.v);
 }
 
-/** Sign the session token and set the cookie; exp and max age follow the company's lifetime. */
-export async function issueSessionCookie(res: express.Response, userId: string, secret: string): Promise<{ token: string; hours: number }> {
-  const hours = await lifetimeForUser(userId);
-  const token = jwt.sign({ userId }, secret, { expiresIn: hours * 3600 });
-  res.cookie(SESSION_COOKIE, token, { ...cookieOptions(), maxAge: hours * 3600 * 1000 });
-  return { token, hours };
+export interface SessionCookieOptions {
+  /** "Keep me signed in": a persistent cookie. Default false: a browser-session cookie. */
+  persistent?: boolean;
 }
+
+/**
+ * Sign the session token and set the cookie. exp follows the company's lifetime; the cookie is
+ * persistent (max age = the lifetime) only with `persistent`, else a browser-session cookie.
+ */
+export async function issueSessionCookie(
+  res: express.Response, userId: string, secret: string, opts: SessionCookieOptions = {},
+): Promise<{ token: string; hours: number; persistent: boolean }> {
+  const hours = await lifetimeForUser(userId);
+  const persistent = opts.persistent === true;
+  const token = jwt.sign({ userId, p: persistent }, secret, { expiresIn: hours * 3600 });
+  res.cookie(SESSION_COOKIE, token, persistent ? { ...cookieOptions(), maxAge: hours * 3600 * 1000 } : cookieOptions());
+  return { token, hours, persistent };
+}
+
+/** Whether the caller's current session cookie is persistent (for re-issuing it with the same choice). */
+export function currentSessionPersistent(req: express.Request): boolean {
+  const token = (req as any).cookies?.[SESSION_COOKIE];
+  if (typeof token !== 'string') return false;
+  const decoded = jwt.decode(token) as { p?: unknown } | null;
+  if (!decoded || typeof decoded !== 'object') return false;
+  return decoded.p === undefined ? true : decoded.p === true;
+}
+
+/** The "Keep me signed in" value of a request body (only a real true counts). */
+export const wantsPersistentSession = (v: unknown): boolean => v === true || v === 'true';
 
 /** Now, truncated to the second (see the header): the value stored in sessions_valid_after. */
 export const sessionCutoff = (now = Date.now()) => new Date(Math.floor(now / 1000) * 1000);

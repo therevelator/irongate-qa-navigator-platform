@@ -155,21 +155,38 @@ test.describe('Sign-in', { tag: [TAG.area('auth')] }, () => {
     expect(calls).toBe(1);
   });
 
-  test('AUTH-14 "Keep me signed in" changes how long the sign-in lasts', { tag: [TAG.negative] }, async ({ browser }) => {
-    test.fail(true, 'Found issue FI-03 (docs/testing/E2E_FLOWS.md): the checkbox is sent but the server ignores it.');
-    const expiry = async (keep: boolean) => {
+  test('AUTH-14 "Keep me signed in": unticked a browser-session cookie, ticked a cookie for the company sign-in lifetime', async ({ browser }) => {
+    const cookieAfterSignIn = async (keep: boolean) => {
       const ctx = await browser.newContext();
       const page = await ctx.newPage();
       await page.goto('/');
+      await expect(page.getByText('Unticked, you are signed out when you close the browser.')).toBeVisible();
       if (keep) await page.getByLabel('Keep me signed in').check();
       await signInWithForm(page, ROLES.viewer);
+      await expect(page.getByTestId('dashboard')).toBeVisible();
       const cookie = (await ctx.cookies()).find((c) => c.name === 'irongate_token');
       await ctx.close();
-      return cookie?.expires ?? 0;
+      return cookie;
     };
-    const without = await expiry(false);
-    const withKeep = await expiry(true);
-    expect(Math.abs(withKeep - without)).toBeGreaterThan(60);
+    const session = await cookieAfterSignIn(false);
+    expect(session, 'session cookie').toBeTruthy();
+    expect(session!.expires).toBe(-1); // a browser-session cookie: gone when the browser closes
+    const kept = await cookieAfterSignIn(true);
+    const days = (kept!.expires - Date.now() / 1000) / 86400;
+    expect(days).toBeGreaterThan(6.9); // the demo company's sign-in lifetime: 7 days (Parameters → Sign-in)
+    expect(days).toBeLessThan(7.1);
+  });
+
+  test('AUTH-15 "Keep me signed in" also applies to the single sign-on buttons (stubbed providers)', async ({ page }) => {
+    await page.route(`${API_URL}/auth/providers`, (r) => r.fulfill({
+      json: { sso: [{ id: 'google', label: 'Google', startUrl: '/auth/sso/google/start' }], demoMode: false },
+    }));
+    await page.goto('/');
+    await expect(page.getByTestId('sso-google')).toHaveAttribute('href', `${API_URL}/auth/sso/google/start`);
+    await page.getByLabel('Keep me signed in').check();
+    await expect(page.getByTestId('sso-google')).toHaveAttribute('href', `${API_URL}/auth/sso/google/start?remember=1`);
+    await page.getByLabel('Keep me signed in').uncheck();
+    await expect(page.getByTestId('sso-google')).toHaveAttribute('href', `${API_URL}/auth/sso/google/start`);
   });
 });
 
@@ -194,7 +211,7 @@ test.describe('Sign out and sessions', { tag: [TAG.area('auth')] }, () => {
     await expect(page).toHaveURL(/\/analytics\/pulse/);
   });
 
-  test('AUTH-22 a session ended elsewhere (signed out everywhere) sends the open app to sign-in with a message, and the page opens again after signing in', { tag: [TAG.negative] }, async ({ page, app }) => {
+  test('AUTH-22 a session ended elsewhere (signed out everywhere) sends the open app to sign-in with a message that survives a reload, and the page opens again after signing in', { tag: [TAG.negative] }, async ({ page, app }) => {
     const user = await createFixtureUser();
     try {
       await page.goto('/');
@@ -205,9 +222,18 @@ test.describe('Sign out and sessions', { tag: [TAG.area('auth')] }, () => {
       await app.go('nav-technical-debt');
       await expect(page.getByTestId('session-notice')).toHaveText('Your session has ended. Please sign in again.');
       await expect(page).toHaveURL(/\/analytics\/technical-debt/);
+      // The refused request cleared the cookie; after a reload the reason is still shown (FI-16).
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+      await expect(page.getByTestId('session-notice')).toHaveText('Your session has ended. Please sign in again.');
       await sql(`UPDATE users SET sessions_valid_after = now() - interval '5 seconds' WHERE id = $1`, [user.id]);
       await signInWithForm(page, user);
       await expect(app.title).toHaveText('Technical debt');
+      // A successful sign-in clears the reason: signing out and reloading shows the plain sign-in screen.
+      await app.signOut();
+      await page.reload();
+      await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+      await expect(page.getByTestId('session-notice')).toHaveCount(0);
     } finally {
       await deleteFixtureUser(user.id);
     }

@@ -106,8 +106,12 @@ test.describe('Password reset: negative cases', { tag: [TAG.area('auth')] }, () 
       await page.goto(`/reset-password?token=${token}`);
       await choose(page, STRONG_PASSWORD);
       await expect(page.getByTestId('reset-done')).toBeVisible();
-      // The other browser's next request is refused (and the cookie cleared): sign-in with the message.
-      await other.page.evaluate((api) => fetch(`${api}/teams`, { credentials: 'include' }).catch(() => undefined), API_URL);
+      // The other browser reloads: its session is refused (and the cookie cleared): sign-in with the message.
+      await other.page.reload();
+      await expect(other.page.getByTestId('session-notice')).toHaveText('Your session has ended. Please sign in again.');
+      // Reloaded again, without the cookie, the sign-in screen still says why (FI-16).
+      await other.page.reload();
+      await expect(other.page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
       await expect(other.page.getByTestId('session-notice')).toHaveText('Your session has ended. Please sign in again.');
     } finally {
       await other.ctx.close();

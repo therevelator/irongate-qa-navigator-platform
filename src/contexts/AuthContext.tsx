@@ -47,6 +47,21 @@ const NOTICE: Record<string, string> = {
   session_expired: 'Your sign-in has expired. Please sign in again.',
 };
 
+/**
+ * Why the session ended, kept for this browser tab (sessionStorage): the first refused request
+ * clears the cookie, so after a reload the server can no longer say why; the sign-in screen still
+ * shows the message. Removed by the next successful sign-in (or session check) and by signing out.
+ */
+const NOTICE_KEY = 'irongate_session_notice';
+const storedNotice = (): string | null => {
+  try {
+    const code = sessionStorage.getItem(NOTICE_KEY);
+    return code ? NOTICE[code] ?? NOTICE.session_ended : null;
+  } catch { return null; }
+};
+const keepNotice = (code: string) => { try { sessionStorage.setItem(NOTICE_KEY, NOTICE[code] ? code : 'session_ended'); } catch { /* storage blocked */ } };
+const dropNotice = () => { try { sessionStorage.removeItem(NOTICE_KEY); } catch { /* storage blocked */ } };
+
 /** Map the API user (snake_case) to the app's User, including the role assignments. */
 export function mapApiUser(u: any): User {
   return {
@@ -88,7 +103,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     isLoading: true,
     error: null,
   });
-  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(storedNotice);
   const [isInitializing, setIsInitializing] = useState(true);
 
   // A session ended by the server (expired, or signed out everywhere) on ANY API call: back to the
@@ -100,6 +115,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const ended = res.status === 401 ? res.headers.get(SESSION_ENDED_HEADER) : null;
       if (ended) {
         localStorage.removeItem('irongate_user');
+        keepNotice(ended);
         setSessionNotice(NOTICE[ended] ?? NOTICE.session_ended);
         setAuthState({ user: null, isAuthenticated: false, isLoading: false, error: null });
       }
@@ -123,10 +139,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const mappedUser = mapApiUser(user);
         // Cache user info in localStorage for faster subsequent loads
         localStorage.setItem('irongate_user', JSON.stringify(mappedUser));
+        dropNotice();
+        setSessionNotice(null);
         setAuthState({ user: mappedUser, isAuthenticated: true, isLoading: false, error: null });
       } else {
         const ended = response.headers.get(SESSION_ENDED_HEADER);
-        if (ended) setSessionNotice(NOTICE[ended] ?? NOTICE.session_ended);
+        if (ended) { keepNotice(ended); setSessionNotice(NOTICE[ended] ?? NOTICE.session_ended); }
         // Session invalid or expired
         localStorage.removeItem('irongate_user');
         setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
@@ -157,6 +175,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Store user info (but NOT token)
       localStorage.setItem('irongate_user', JSON.stringify(user));
+      dropNotice();
       setSessionNotice(null);
 
       setAuthState({
@@ -194,6 +213,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const user: User = { ...mapApiUser(apiUser), assignedTeams: apiUser.assignedTeams || [apiUser.primary_team_id] };
       
       localStorage.setItem('irongate_user', JSON.stringify(user));
+      dropNotice();
+      setSessionNotice(null);
       // No token storage in localStorage
       
       setAuthState({
@@ -224,6 +245,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       localStorage.removeItem('irongate_user');
       localStorage.removeItem('irongate_remember');
+      dropNotice();
       setSessionNotice(null);
       
       setAuthState({

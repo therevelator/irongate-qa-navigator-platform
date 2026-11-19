@@ -322,6 +322,18 @@ describe('Single sign-on (mocked OIDC providers)', () => {
     expect(other.error).toBe('invalid_token');
   });
 
+  it('SSO-012: "Keep me signed in" (remember=1 on the start URL) gives a persistent cookie; without it a browser-session cookie', async () => {
+    if (skip()) return;
+    for (const [query, persistent] of [['', false], ['?remember=1', true]] as const) {
+      const { params, cookie } = await start('google', query);
+      const out = await callback('google', params.state, issueCode(params, googleClaims(emails.known)), cookie);
+      expect(out.error).toBeNull();
+      const raw = (out.res.headers['set-cookie'] as unknown as string[]).find((c) => c.startsWith('irongate_token=') && !c.startsWith('irongate_token=;'))!;
+      expect(/Max-Age=/i.test(raw)).toBe(persistent);
+      expect((await liveGet('/api/auth/me', out.session)).status).toBe(200);
+    }
+  });
+
   it('SSO-011: DEMO_MODE decides whether the demo accounts are offered', async () => {
     if (!up) return;
     expect(demoModeEnabled({ NODE_ENV: 'development' })).toBe(true);

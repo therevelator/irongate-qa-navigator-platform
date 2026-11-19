@@ -163,7 +163,7 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
               {ssoProviders.map((p) => (
                 <a
                   key={p.id}
-                  href={`${API_URL}${p.startUrl}`}
+                  href={`${API_URL}${p.startUrl}${rememberMe ? `${p.startUrl.includes('?') ? '&' : '?'}remember=1` : ''}`}
                   className="w-full h-11 inline-flex items-center justify-center gap-2.5 rounded-md border border-slate-300 bg-white text-sm font-medium text-slate-800 hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-brand-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:hover:bg-slate-800 transition-colors"
                   data-testid={`sso-${p.id}`}
                 >
@@ -218,13 +218,19 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
-              <input
-                type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500" disabled={isLoading}
-              />
-              Keep me signed in
-            </label>
+            <div>
+              <label className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+                <input
+                  type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)}
+                  className="h-4 w-4 rounded border-slate-300 text-brand-700 focus:ring-brand-500" disabled={isLoading}
+                  aria-describedby="remember-hint"
+                />
+                Keep me signed in
+              </label>
+              <p id="remember-hint" className="mt-1 pl-6 text-xs text-slate-500 dark:text-slate-400">
+                Unticked, you are signed out when you close the browser.
+              </p>
+            </div>
 
             <button
               type="submit" disabled={isLoading}

@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
 import { inviteLimiter } from '../middleware/rateLimit';
-import { issueSessionCookie } from '../lib/sessions';
+import { issueSessionCookie, type SessionCookieOptions } from '../lib/sessions';
 import { recordAudit } from '../lib/audit';
 import {
   providerConfig, enabledProviders, beginSignIn, checkState, completeSignIn, appBaseUrl, SsoError, PROVIDER_LABEL, type ProviderId,
@@ -17,7 +17,9 @@ import { acceptInvitation, findByToken, openInvitationForEmail, statusMessage, I
  *
  *   GET  /providers                     which sign-in methods the login page shows (SSO buttons only
  *                                       when configured; demo account chips only when DEMO_MODE)
- *   GET  /sso/:provider/start[?invite=] redirect to Google / Microsoft (state + nonce + PKCE)
+ *   GET  /sso/:provider/start[?invite=][&remember=1]
+ *                                       redirect to Google / Microsoft (state + nonce + PKCE);
+ *                                       remember=1 = "Keep me signed in" ticked on the sign-in page
  *   GET  /sso/:provider/callback        verify, match the person, start the session, back to the app
  *   GET  /invitations/:token            what an invitation is for (accept page)
  *   POST /invitations/accept            { token, firstName, lastName, password }
@@ -31,10 +33,11 @@ const router = express.Router();
 const isProduction = () => process.env.NODE_ENV === 'production';
 
 /** The session cookie (same for password, invitation and SSO sign-in). */
-/** Lifetime (JWT exp and cookie max age) = the company's "Sign-in lasts" setting (server/lib/sessions.ts). */
-export async function setSessionCookie(res: express.Response, userId: string): Promise<void> {
+/** Lifetime (JWT exp) = the company's "Sign-in lasts" setting; the cookie is persistent only with
+ *  "Keep me signed in" (server/lib/sessions.ts). */
+export async function setSessionCookie(res: express.Response, userId: string, opts: SessionCookieOptions = {}): Promise<void> {
   noteSignIn(res, userId); // user activity log: a sign-in (password, invitation, SSO)
-  await issueSessionCookie(res, userId, JWT_SECRET);
+  await issueSessionCookie(res, userId, JWT_SECRET, opts);
 }
 
 /** DEMO_MODE: demo account chips on the login page. Default on for local development only. */
@@ -91,7 +94,8 @@ router.get('/sso/:provider/start', inviteLimiter, async (req, res) => {
   if (!cfg) return res.status(404).json({ error: 'This sign-in method is not enabled' });
   const invite = typeof req.query.invite === 'string' && req.query.invite.startsWith('igi_') && req.query.invite.length < 200 ? req.query.invite : null;
   try {
-    const { url, stateCookie } = await beginSignIn(cfg, JWT_SECRET, invite);
+    const remember = req.query.remember === '1' || req.query.remember === 'true';
+    const { url, stateCookie } = await beginSignIn(cfg, JWT_SECRET, invite, remember);
     res.cookie(STATE_COOKIE, stateCookie, stateCookieOptions());
     res.redirect(302, url);
   } catch (e: any) {
@@ -154,7 +158,7 @@ router.get('/sso/:provider/callback', inviteLimiter, async (req: any, res) => {
       user = { id: created.userId };
     }
     await query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
-    await setSessionCookie(res, user.id);
+    await setSessionCookie(res, user.id, { persistent: st.r === true });
     res.redirect(302, `${appBaseUrl()}/`);
   } catch (e: any) {
     if (e instanceof SsoError || e instanceof InvitationError) {
