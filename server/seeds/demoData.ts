@@ -1800,7 +1800,9 @@ function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: stri
   const today = ds.today;
   const teams = company.teams;
   const respondents = (team: TeamCtx) => team.members.length;
-  const low = [...teams].sort((a, b) => respondents(a) - respondents(b) || a.id.localeCompare(b.id))[0]?.id;
+  // One team (the smallest) answers too rarely to be shown (k-anonymity in action), in companies with
+  // more than three teams; a small company keeps every team's results visible.
+  const low = teams.length > 3 ? [...teams].sort((a, b) => respondents(a) - respondents(b) || a.id.localeCompare(b.id))[0]?.id : undefined;
   const results = new Map<string, Array<{ start: string; end: string; n: number; mean: number }>>();
   const cadences = new Map<string, CadenceRow[]>();
   const autoOff = company.isDemo ? [...teams].sort((a, b) => a.id.localeCompare(b.id))[1]?.id : undefined;

@@ -372,8 +372,9 @@ Demo mode is independent of sample data (section 4.7).
 ### Production reseed
 
 `scripts/reseed/build.sh <out> [day]` builds `000_wipe.sql` (empties every public table except
-`platform_operators`), `001.sql` … (one showcase company, Meridian Financial Technologies, INSERTs
-only, each file standalone, password hashes as per-role placeholders) and `operator.sql` (the
+`platform_operators`), `001.sql` … (one showcase company, Meridian Financial Technologies: three
+Scrum teams with Product Owner, Scrum Master and Developers, a high-performing, a struggling and an
+improving team; INSERTs only, each file standalone, password hashes as per-role placeholders) and `operator.sql` (the
 platform support account, hash placeholder). See [`scripts/reseed/README.md`](../scripts/reseed/README.md).
 
 ---
