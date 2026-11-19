@@ -5,6 +5,8 @@ import { Badge, Card, CardHeader, buttonClass } from './ui';
 interface SampleStatus {
   enabled: boolean;
   message: string | null;
+  /** Also create the separate fictional sample company (local development / DEMO_MODE only). */
+  separateCompany?: boolean;
   seeded: boolean;
   companyName: string;
   teams: number;
@@ -63,7 +65,7 @@ const SampleDataPanel: React.FC = () => {
       <CardHeader
         title="Sample data"
         subtitle={status
-          ? <>Creates the fictional company “{status.companyName}” ({status.teams} teams, {status.users} users) and fills your own company’s active teams that have no data yet{status.ownCompany ? <> ({status.ownCompany.lacking} of {status.ownCompany.teams} teams lack some data)</> : null}, with about 120 days of consistent sample history in every module. Existing values are never changed; sample rows can be removed with <code className="font-mono">npm run seed:demo:clear</code>. Values are generated, not measurements.</>
+          ? <>{status.separateCompany !== false ? <>Creates the fictional company “{status.companyName}” ({status.teams} teams, {status.users} users) and fills</> : 'Fills'} your own company’s active teams that have no data yet{status.ownCompany ? <> ({status.ownCompany.lacking} of {status.ownCompany.teams} teams lack some data)</> : null}, with about 120 days of consistent sample history in every module. Existing values are never changed; sample rows can be removed with <code className="font-mono">npm run seed:demo:clear</code>. Values are generated, not measurements.</>
           : 'Load a fictional sample company for demos.'}
         action={<span className="flex gap-2"><Badge tone="warn">Sample data</Badge>{status?.seeded && <Badge tone="good">Loaded</Badge>}</span>}
       />
@@ -95,7 +97,7 @@ const SampleDataPanel: React.FC = () => {
         <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-800 dark:bg-red-950/40 dark:text-red-300" role="alert">{error}</p>
       )}
 
-      {status?.seeded && (
+      {status?.seeded && status.logins.length > 0 && (
         <div className="mt-4 text-sm text-slate-700 dark:text-slate-300">
           <p className="mb-1">Sign out and sign in to the sample company with password <code className="font-mono">{status.password}</code>:</p>
           <ul className="space-y-0.5">

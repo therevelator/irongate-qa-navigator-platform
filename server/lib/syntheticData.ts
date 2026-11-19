@@ -10,6 +10,16 @@
  * This keeps demo data out of environments where the numbers are shown to
  * people as real measurements.
  */
+/**
+ * "Load sample data" also creates the separate fictional sample company (shared users, known
+ * password) only where demo accounts make sense: local development, or DEMO_MODE=true. In
+ * production and on Netlify it only fills the caller's own company (no shared accounts).
+ */
+export function separateSampleCompanyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (env.DEMO_MODE !== undefined && env.DEMO_MODE !== '') return env.DEMO_MODE === 'true' || env.DEMO_MODE === '1';
+  return env.NODE_ENV !== 'production' && !env.NETLIFY && !env.AWS_LAMBDA_FUNCTION_NAME;
+}
+
 export function isSyntheticDataEnabled(): boolean {
   return process.env.ENABLE_SYNTHETIC_DATA === 'true';
 }

@@ -40,10 +40,14 @@ export async function setSessionCookie(res: express.Response, userId: string, op
   await issueSessionCookie(res, userId, JWT_SECRET, opts);
 }
 
-/** DEMO_MODE: demo account chips on the login page. Default on for local development only. */
+/**
+ * DEMO_MODE: demo account chips on the login page. Default on for local development only: off in
+ * production, on Netlify (NETLIFY or the Lambda runtime) unless DEMO_MODE=true. Only accounts that
+ * exist and are active are offered (none after the demo data is removed).
+ */
 export function demoModeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
   if (env.DEMO_MODE !== undefined && env.DEMO_MODE !== '') return env.DEMO_MODE === 'true' || env.DEMO_MODE === '1';
-  return env.NODE_ENV !== 'production' && !env.NETLIFY;
+  return env.NODE_ENV !== 'production' && !env.NETLIFY && !env.AWS_LAMBDA_FUNCTION_NAME;
 }
 
 const DEMO_ACCOUNTS = [
@@ -54,15 +58,21 @@ const DEMO_ACCOUNTS = [
   { role: ROLE_LABELS.viewer, email: 'viewer@irongate.com' },
 ];
 
-router.get('/providers', (_req, res) => {
+router.get('/providers', async (_req, res) => {
   const sso = enabledProviders().map((id) => ({ id, label: PROVIDER_LABEL[id], startUrl: `/auth/sso/${id}/start` }));
-  const demo = demoModeEnabled();
+  let demoAccounts: typeof DEMO_ACCOUNTS = [];
+  if (demoModeEnabled()) {
+    const rows = await query<any[]>('SELECT LOWER(email) AS email FROM users WHERE LOWER(email) = ANY(?::text[]) AND is_active', [DEMO_ACCOUNTS.map((a) => a.email)]).catch(() => []);
+    const present = new Set(rows.map((r: any) => r.email));
+    demoAccounts = DEMO_ACCOUNTS.filter((a) => present.has(a.email));
+  }
+  const demo = demoAccounts.length > 0;
   res.set('Cache-Control', 'no-store');
   res.json({
     password: true,
     sso,
     demoMode: demo,
-    ...(demo ? { demoAccounts: DEMO_ACCOUNTS, demoPassword: 'demo123' } : {}),
+    ...(demo ? { demoAccounts, demoPassword: 'demo123' } : {}),
   });
 });
 

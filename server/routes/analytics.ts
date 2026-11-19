@@ -11,7 +11,7 @@ import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues, teamKpiTrack } from '../../src/config/metricsConfig';
 import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT, techDebtRoi } from '../lib/metricFormulas';
-import { isSyntheticDataEnabled } from '../lib/syntheticData';
+import { isSyntheticDataEnabled, separateSampleCompanyEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
@@ -1043,18 +1043,20 @@ router.get('/seed-data/status', authenticateToken, async (req: any, res) => {
     }
     const enabled = isSyntheticDataEnabled();
     const summary = demoSummary(todayUtc());
+    const separate = separateSampleCompanyEnabled();
     res.json({
       enabled,
       message: enabled ? null : SYNTHETIC_DISABLED_MESSAGE,
-      seeded: await isDemoSeeded(),
+      separateCompany: separate,
+      seeded: separate ? await isDemoSeeded() : false,
       ownCompany: req.user.companyId && !String(req.user.companyId).startsWith('demo-')
         ? await teamsLackingData(req.user.companyId)
         : null,
       companyName: summary.companyName,
       teams: summary.teams,
       users: summary.users,
-      logins: summary.logins,
-      password: summary.password,
+      logins: separate ? summary.logins : [],
+      password: separate ? summary.password : '',
     });
   } catch (error) {
     console.error('Error reading sample data status:', error);
@@ -1071,7 +1073,9 @@ router.post('/seed-data', authenticateToken, async (req: any, res) => {
       return res.status(409).json({ error: SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
 
-    const result = await runDemoSeed();
+    // The separate sample company (shared accounts) only where demo accounts make sense.
+    const separate = separateSampleCompanyEnabled();
+    const result = separate ? await runDemoSeed() : { insertedTotal: 0, inserted: {}, companyName: null as string | null, logins: [] as any[], password: '' };
     const companyId = String(req.user.companyId ?? '');
     const fill = companyId && !companyId.startsWith('demo-') ? await runFillExisting({ companyIds: [companyId] }) : null;
     const filledTeams = fill?.companies[0]?.teamsFilled ?? 0;
@@ -1079,8 +1083,8 @@ router.post('/seed-data', authenticateToken, async (req: any, res) => {
     res.json({
       success: true,
       message: total > 0
-        ? `Sample data loaded: ${result.insertedTotal} rows for "${result.companyName}"` +
-          (fill ? ` and ${fill.insertedTotal} rows for ${filledTeams} of your teams that lacked data.` : '.')
+        ? (separate ? `Sample data loaded: ${result.insertedTotal} rows for "${result.companyName}"` + (fill ? ' and ' : '.') : 'Sample data loaded: ') +
+          (fill ? `${fill.insertedTotal} rows for ${filledTeams} of your teams that lacked data.` : '')
         : 'Sample data is already loaded (nothing new to add).',
       companyName: result.companyName,
       insertedTotal: total,
