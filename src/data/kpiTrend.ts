@@ -29,3 +29,27 @@ export const describeChange = (history: HistoryPoint[], lowerIsBetter: boolean, 
   const pct = prev.value !== 0 ? (delta / Math.abs(prev.value)) * 100 : null;
   return { delta, pct, direction, tone, prevDate: prev.date };
 };
+
+/**
+ * Change of a metric over a period: the latest snapshot against the latest snapshot dated at least
+ * `days` days before it (e.g. "+4 pts vs 30 days ago"). Null when the history does not reach back
+ * that far. Same polarity rules as describeChange.
+ */
+export const changeOverDays = (history: HistoryPoint[], days: number, lowerIsBetter: boolean, hasDirection: boolean): KpiChange | null => {
+  if (history.length < 2) return null;
+  const last = history[history.length - 1];
+  const cutoff = Date.parse(`${String(last.date).slice(0, 10)}T00:00:00Z`) - days * 86_400_000;
+  let prev: HistoryPoint | null = null;
+  for (const p of history) {
+    if (Date.parse(`${String(p.date).slice(0, 10)}T00:00:00Z`) <= cutoff) prev = p;
+  }
+  if (!prev) return null;
+  return describeChange([prev, last], lowerIsBetter, hasDirection);
+};
+
+/** The points of the last `days` days of a history (for 30 / 90 day sparklines). */
+export const lastDays = (history: HistoryPoint[], days: number): HistoryPoint[] => {
+  if (!history.length) return [];
+  const last = Date.parse(`${String(history[history.length - 1].date).slice(0, 10)}T00:00:00Z`);
+  return history.filter((p) => Date.parse(`${String(p.date).slice(0, 10)}T00:00:00Z`) >= last - days * 86_400_000);
+};

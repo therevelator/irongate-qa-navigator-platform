@@ -17,11 +17,14 @@ import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
 import { canViewIndividualDevelopers, canViewTeamAnalytics, canUseFormulaMode } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
-import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay, Mail, Link2 } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay, Mail, Link2, ArrowUpRight, ArrowDownRight, Trophy, Target, UserRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { tvMailto, tvShareUrl } from './tv/tvNavigation';
-import BatteryIndicator from './BatteryIndicator';
-import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
+import HeroBattery from './HeroBattery';
+import { AreaChart, Area, Tooltip, ResponsiveContainer, YAxis, ReferenceLine } from 'recharts';
+import { statusWithTarget, targetLabel, watchBand } from '../lib/targetText';
+import { qaScoreInputLosses } from '../../server/lib/metricFormulas';
+import { ROLE_LABELS, ROLE_LABELS_PLURAL } from '../../server/lib/roleLabels';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, cx, toneText, buttonClass } from './ui';
 import type { Tone } from './ui';
 import MetricInfoTrigger from './MetricInfoTrigger';
@@ -29,7 +32,7 @@ import { FormulaSwitch } from './FormulaNote';
 import { useShowFormulas } from '../hooks/useShowFormulas';
 import { SIZING_ACCURACY_TOLERANCE } from '../data/metricCatalog';
 import type { MetricCatalogKey } from '../data/metricCatalog';
-import { describeChange, type HistoryPoint } from '../data/kpiTrend';
+import { changeOverDays, describeChange, lastDays, type HistoryPoint } from '../data/kpiTrend';
 import { ConfidenceNote, SampleMarker, StaleNote, type ConfidenceInfo } from './MetricQuality';
 import SampleDataBanner from './SampleDataBanner';
 import { PulseTeamSummary } from './PulseSurveyResults';
@@ -206,6 +209,18 @@ export const METRIC_EXPLANATIONS: Record<string, { short: string; detailed: stri
   }
 };
 
+interface TeamPerson { name: string; jobTitle: string | null }
+
+/** Header facts from GET /api/teams/:id (server/routes/teams.ts). */
+interface TeamFacts {
+  qaRank: { position: number; of: number; scope: 'company' | 'scope' } | null;
+  memberCount: number | null;
+  memberRoles: Record<string, number>;
+  teamLeads: TeamPerson[];
+  productOwners: TeamPerson[];
+  membersHidden: boolean;
+}
+
 interface TeamMember {
   id: string;
   email: string;
@@ -293,10 +308,10 @@ const statusTone = (s: KPIStatus): Tone => STATUS_BADGE[s].tone;
 
 const fmt = (v: number | null | undefined, digits = 1) => (v == null || Number.isNaN(v) ? '—' : v.toFixed(digits));
 
+/** "Target ≥ 80% · Watch: 70–80%": the target valid at the value's date and the watch band (src/lib/targetText.ts). */
 const thresholdText = (t: Threshold | null, unit: string) => {
   if (!t) return null;
-  const u = unit && !unit.startsWith('/') && unit !== '%' ? ` ${unit}` : unit;
-  return t.lowerIsBetter ? `Target ≤ ${t.good}${u} · watch ≤ ${t.warning}${u}` : `Target ≥ ${t.good}${u} · watch ≥ ${t.warning}${u}`;
+  return `${targetLabel(t, unit)} · ${watchBand(t, unit)}`;
 };
 
 const TrendLine: React.FC<{ change: ReturnType<typeof describeChange>; unit?: string; usePoints?: boolean }> = ({ change, unit = '', usePoints }) => {
@@ -370,6 +385,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
   const [devMetricsUnavailable, setDevMetricsUnavailable] = useState<string | null>(null);
   const [metricIntervals, setMetricIntervals] = useState<Record<string, { interval_value: number; interval_unit: string }>>({});
   const [kpiHistory, setKpiHistory] = useState<Record<string, HistoryPoint[]>>({});
+  // GET /api/teams/:id extras for the header: rank in the caller's scope, people per role, leads and Product Owners.
+  const [teamFacts, setTeamFacts] = useState<TeamFacts | null>(null);
+  const [trendDays, setTrendDays] = useState<30 | 90>(30);
   const [historyForbidden, setHistoryForbidden] = useState(false);
 
   const intervalLabel = (historyKey: string): string | null => {
@@ -443,6 +461,16 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
         const snap = data.team?.kpiData?.snapshotDate ?? data.team?.snapshotDate ?? null;
         if (!cancelled && snap) setSnapshotDate(snap);
         if (!cancelled && data.team) setFreshness({ at: data.team.lastUpdated ?? null, outdated: !!data.team.dataOutdated });
+        if (!cancelled && data.team) {
+          setTeamFacts({
+            qaRank: data.team.qaRank ?? null,
+            memberCount: toNum(data.team.memberCount),
+            memberRoles: data.team.memberRoles ?? {},
+            teamLeads: data.team.teamLeads ?? [],
+            productOwners: data.team.productOwners ?? [],
+            membersHidden: !!data.team.membersHidden,
+          });
+        }
 
         let byId: Record<string, DevMetricRow> = {};
         let byName: Record<string, DevMetricRow> = {};
@@ -529,7 +557,20 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
   const qaScore = toNum(team.qaScore);
   const qaThreshold = getThreshold('qaScore', team.kpiThresholds);
   const qaStatus = statusFor(qaScore, qaThreshold);
-  const qaChange = describeChange(kpiHistory.qa_score || [], false, true);
+  // What costs the QA score most (stale inputs left out, as the score itself): shared formula.
+  const qaLosses = useMemo(() => {
+    const st = team.kpiStaleness ?? {};
+    const stale = (['test_coverage', 'defect_escape_rate', 'change_failure_rate', 'code_quality_score'] as const)
+      .filter((col) => st[QA_INPUT_KEY[col]]?.stale);
+    return qaScoreInputLosses({
+      test_coverage: toNum(kpi.testCoverage), defect_escape_rate: toNum(kpi.defectEscapeRate),
+      change_failure_rate: toNum(kpi.changeFailureRate), code_quality_score: toNum(kpi.codeQualityScore),
+    }, stale).map((l) => {
+      const key = QA_INPUT_KEY[l.key];
+      const threshold = getThreshold(key, team.kpiThresholds);
+      return { ...l, threshold, unit: key === 'codeQualityScore' ? '/100' : '%', status: statusFor(l.value, threshold) };
+    });
+  }, [team.kpiStaleness, team.kpiThresholds, kpi.testCoverage, kpi.defectEscapeRate, kpi.changeFailureRate, kpi.codeQualityScore]);
   const debt = toNum(team.technicalDebtScore);
   const debtThreshold = getThreshold('technicalDebtScore', team.kpiThresholds);
   const debtStatus = statusFor(debt, debtThreshold);
@@ -560,7 +601,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
   const info = (
     metricKey: MetricCatalogKey,
     child: React.ReactNode,
-    opts: { value?: React.ReactNode; variant?: 'card' | 'section'; context?: string; key?: React.Key } = {},
+    opts: { value?: React.ReactNode; variant?: 'card' | 'section'; context?: string; key?: React.Key; className?: string } = {},
   ) => (
     <MetricInfoTrigger
       key={opts.key}
@@ -572,6 +613,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
       teamId={String(team.id)}
       context={opts.context ?? team.name}
       variant={opts.variant}
+      className={opts.className}
     >
       {child}
     </MetricInfoTrigger>
@@ -647,43 +689,40 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
         )}
 
         {/* Headline scores */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3" data-testid="team-kpis">
-          {info('qa_score', <div className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-            <BatteryIndicator percentage={qaScore} size="lg" good={qaThreshold?.good} warn={qaThreshold?.warning} label="QA score" showValue={false} />
-            <div className="min-w-0">
-              <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
-                QA score <InfoTip text={METRIC_EXPLANATIONS.qaScore.detailed} />
-              </p>
-              <p className="mt-1 text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
-                {qaScore == null ? '—' : Math.round(qaScore)}
-                <span className="ml-1 text-sm font-normal text-slate-500 dark:text-slate-400">/100</span>
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <Badge tone={statusTone(qaStatus)}>{STATUS_BADGE[qaStatus].label}</Badge>
-                {qaChange ? <TrendLine change={qaChange} usePoints unit=" pts" /> : (
-                  <span className="text-xs text-slate-500 dark:text-slate-400">{historyForbidden ? 'Trend shown to teams in your analytics scope' : 'No earlier snapshot to compare'}</span>
-                )}
-              </div>
-              <ConfidenceNote c={team.qaScoreConfidence} className="mt-1.5" testId="team-qa-confidence" />
-            </div>
-          </div>, { value: shown(qaScore == null ? null : Math.round(qaScore), '/100') })}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="team-kpis">
+          {info('qa_score', <QaScoreCard
+            qaScore={qaScore}
+            threshold={qaThreshold}
+            status={qaStatus}
+            history={kpiHistory.qa_score || []}
+            trendDays={trendDays}
+            onTrendDays={setTrendDays}
+            confidence={team.qaScoreConfidence}
+            facts={teamFacts}
+            losses={qaLosses}
+            memberCountFallback={toNum(team.memberCount)}
+            chart={ct}
+          />, { value: shown(qaScore == null ? null : Math.round(qaScore), '/100'), className: 'sm:col-span-2' })}
           {info('technical_debt_score', <StatTile
             label="Technical debt score"
             value={debt == null ? '—' : Math.round(debt)}
             unit={debt == null ? undefined : '/100'}
             tone={statusTone(debtStatus)}
-            caption={debt == null ? 'No data recorded' : `Lower is better · ${STATUS_BADGE[debtStatus].label.toLowerCase()}`}
+            caption={debt == null ? 'No data recorded' : <span data-testid="debt-target">Lower is better · {statusWithTarget(debtThreshold, '/100', debtStatus)}</span>}
           />, { value: shown(debt == null ? null : Math.round(debt), '/100') })}
           {info('sizing_accuracy', <StatTile
             label="Task sizing accuracy"
             value={sizing == null ? '—' : sizing.toFixed(2)}
             unit={sizing == null ? undefined : '× estimate'}
             tone={sizing == null ? 'neutral' : Math.abs(sizing - 1) <= SIZING_ACCURACY_TOLERANCE.good ? 'good' : Math.abs(sizing - 1) <= SIZING_ACCURACY_TOLERANCE.warning ? 'warn' : 'bad'}
-            caption={sizing == null ? 'No data recorded' : sizing < 1 - SIZING_ACCURACY_TOLERANCE.good ? 'Overestimated (actual < estimate)' : sizing > 1 + SIZING_ACCURACY_TOLERANCE.good ? 'Underestimated (actual > estimate)' : `Within ±${Math.round(SIZING_ACCURACY_TOLERANCE.good * 100)}% of estimate`}
+            caption={sizing == null ? 'No data recorded' : <>
+              {sizing < 1 - SIZING_ACCURACY_TOLERANCE.good ? 'Overestimated (actual < estimate)' : sizing > 1 + SIZING_ACCURACY_TOLERANCE.good ? 'Underestimated (actual > estimate)' : `Within ±${Math.round(SIZING_ACCURACY_TOLERANCE.good * 100)}% of estimate`}
+              <span className="block text-slate-500 dark:text-slate-400" data-testid="sizing-target">Target 1.00 ± {SIZING_ACCURACY_TOLERANCE.good.toFixed(2)} · Watch: up to ± {SIZING_ACCURACY_TOLERANCE.warning.toFixed(2)}</span>
+            </>}
           />, { value: shown(sizing == null ? null : sizing.toFixed(2), '× estimate') })}
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6" data-testid="team-headline-kpis">
           {headline.map(h => {
             const k = kpiById(h.key);
             const stale = k.value == null ? null : staleOf(k);
@@ -693,9 +732,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
                 value={k.value == null ? '—' : <span className={stale ? 'text-slate-500 dark:text-slate-400' : undefined}>{fmt(k.value, k.key === 'defectDensity' ? 2 : 1)}</span>}
                 unit={k.value == null ? undefined : k.unit}
                 tone={stale ? 'neutral' : statusTone(k.status)}
-                caption={k.value == null ? 'No data recorded' : stale
-                  ? <StaleNote staleSince={stale.staleSince} recordedAt={stale.recordedAt} testId={`kpi-headline-stale-${k.historyKey}`} />
-                  : <>{STATUS_BADGE[k.status].label}{showFormulas && isSample(k.historyKey) && <SampleMarker className="ml-1.5" />}</>}
+                caption={k.value == null
+                  ? <>No data recorded{k.threshold && <span className="block text-slate-500 dark:text-slate-400">{targetLabel(k.threshold, k.unit)}</span>}</>
+                  : stale
+                    ? <><StaleNote staleSince={stale.staleSince} recordedAt={stale.recordedAt} testId={`kpi-headline-stale-${k.historyKey}`} />{k.threshold && <span className="block text-slate-500 dark:text-slate-400">{targetLabel(k.threshold, k.unit)}</span>}</>
+                    : <span data-testid={`kpi-headline-target-${k.historyKey}`}>{statusWithTarget(k.threshold, k.unit, k.status) ?? STATUS_BADGE[k.status].label}{showFormulas && isSample(k.historyKey) && <SampleMarker className="ml-1.5" />}</span>}
               />
             ), { key: h.key, value: shown(k.value == null ? null : fmt(k.value, k.key === 'defectDensity' ? 2 : 1), k.unit) });
           })}
@@ -997,6 +1038,170 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
         value: devAISuggestions?.developers?.length ? `${devAISuggestions.developers.length} developers · ${devAISuggestions.source === 'groq' ? 'AI' : 'rule-based'}` : undefined,
       })}
     </Page>
+  );
+};
+
+/** QA score inputs (snake_case formula keys) -> team KPI keys. */
+const QA_INPUT_KEY = {
+  test_coverage: 'testCoverage',
+  defect_escape_rate: 'defectEscapeRate',
+  change_failure_rate: 'changeFailureRate',
+  code_quality_score: 'codeQualityScore',
+} as const;
+
+type QaLoss = ReturnType<typeof qaScoreInputLosses>[number] & { threshold: Threshold | null; unit: string; status: KPIStatus };
+
+const peopleText = (n: number) => `${n} ${n === 1 ? 'person' : 'people'}`;
+const ROLE_ORDER = ['team_lead', 'qa_engineer', 'viewer', 'qa_manager', 'super_admin'];
+
+/**
+ * The QA score card of Team detail: the 3D battery (horizontal, animated liquid), the score with
+ * its status and target, the change over 30 days, a 30 / 90 day trend, the rank among the teams
+ * the viewer may see, the input that costs the score most, and the team's people. Every number
+ * comes from the API (latest snapshot, /kpi-history, GET /api/teams/:id); missing ones are left out.
+ */
+const QaScoreCard: React.FC<{
+  qaScore: number | null;
+  threshold: Threshold | null;
+  status: KPIStatus;
+  history: HistoryPoint[];
+  trendDays: 30 | 90;
+  onTrendDays: (d: 30 | 90) => void;
+  confidence?: ConfidenceInfo | null;
+  facts: TeamFacts | null;
+  losses: QaLoss[];
+  memberCountFallback: number | null;
+  chart: ReturnType<typeof chartTheme>;
+}> = ({ qaScore, threshold, status, history, trendDays, onTrendDays, confidence, facts, losses, memberCountFallback, chart }) => {
+  const change = changeOverDays(history, 30, false, true);
+  const points = lastDays(history, trendDays);
+  const weakest = losses.find((l) => l.pointsLost >= 0.5) ?? null;
+  const memberCount = facts?.memberCount ?? memberCountFallback;
+  const roles = facts ? ROLE_ORDER.filter((r) => (facts.memberRoles[r] ?? 0) > 0)
+    .map((r) => `${facts.memberRoles[r]} ${(facts.memberRoles[r] === 1 ? ROLE_LABELS[r] : ROLE_LABELS_PLURAL[r]).toLowerCase()}`) : [];
+  const leads = facts?.teamLeads ?? [];
+  const owners = facts?.productOwners ?? [];
+  const statusLine = statusWithTarget(threshold, '/100', status);
+
+  return (
+    <div className="h-full rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:col-span-2" data-testid="team-qa-card">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          <HeroBattery value={qaScore} size="md" orientation="horizontal" liquid label="QA score" />
+          <div className="min-w-0">
+            <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+              QA score <InfoTip text={METRIC_EXPLANATIONS.qaScore.detailed} />
+            </p>
+            <p className="mt-0.5 text-3xl font-semibold tabular-nums tracking-tight text-slate-900 dark:text-white" data-testid="team-qa-score">
+              {qaScore == null ? '—' : Math.round(qaScore)}
+              <span className="ml-1 text-sm font-normal text-slate-500 dark:text-slate-400">/100</span>
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+              <Badge tone={statusTone(status)}>{STATUS_BADGE[status].label}</Badge>
+              {threshold && <span className="text-xs text-slate-600 dark:text-slate-300" data-testid="team-qa-target">{status === 'warning' ? statusLine : targetLabel(threshold, '/100')}</span>}
+            </div>
+            <p className="mt-1.5 text-xs" data-testid="team-qa-change">
+              {change ? (
+                <span className="inline-flex flex-wrap items-center gap-x-1">
+                  <span className={cx('inline-flex items-center gap-0.5 whitespace-nowrap font-medium', toneText(change.tone))}>
+                    {change.direction === 'up' ? <ArrowUpRight size={14} aria-hidden /> : change.direction === 'down' ? <ArrowDownRight size={14} aria-hidden /> : <Minus size={14} aria-hidden />}
+                    {change.direction === 'flat' ? '±0' : `${change.delta > 0 ? '+' : '−'}${Math.abs(change.delta).toFixed(0)}`} pts
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400">vs 30 days ago ({formatAsOf(change.prevDate)})</span>
+                </span>
+              ) : <span className="text-slate-500 dark:text-slate-400">No snapshot 30 days back to compare</span>}
+            </p>
+            <ConfidenceNote c={confidence} className="mt-1" testId="team-qa-confidence" />
+          </div>
+        </div>
+
+        {/* 30 / 90 day trend */}
+        <div className="w-full lg:w-56 lg:flex-shrink-0" data-testid="team-qa-trend">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <p className="text-xs text-slate-500 dark:text-slate-400">Trend</p>
+            <div className="inline-flex rounded border border-slate-200 p-0.5 dark:border-slate-700" role="group" aria-label="Trend period">
+              {([30, 90] as const).map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  aria-pressed={trendDays === d}
+                  onClick={() => onTrendDays(d)}
+                  className={cx('rounded px-1.5 py-0.5 text-[11px] font-medium tabular-nums',
+                    trendDays === d ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white')}
+                  data-testid={`team-qa-trend-${d}`}
+                >
+                  {d} d
+                </button>
+              ))}
+            </div>
+          </div>
+          {points.length >= 2 ? (
+            <div className="h-14" role="img" aria-label={`QA score over the last ${trendDays} days: from ${Math.round(points[0].value)} to ${Math.round(points[points.length - 1].value)}${threshold ? `, target ${threshold.good}` : ''}`}>
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={points} margin={{ top: 4, right: 2, bottom: 2, left: 2 }}>
+                  <YAxis hide domain={[(min: number) => Math.max(0, Math.floor(Math.min(min, threshold?.good ?? min) - 5)), (max: number) => Math.min(100, Math.ceil(Math.max(max, threshold?.good ?? max) + 3))]} />
+                  {threshold && <ReferenceLine y={threshold.good} stroke={chart.axis} strokeDasharray="3 3" strokeWidth={1} />}
+                  <Tooltip contentStyle={chart.tooltip.contentStyle} labelStyle={chart.tooltip.labelStyle} itemStyle={chart.tooltip.itemStyle}
+                    labelFormatter={(_l: any, p: any) => formatAsOf(p?.[0]?.payload?.date) ?? ''}
+                    formatter={(v: any) => [`${Math.round(Number(v))}/100`, 'QA score']} />
+                  <Area type="monotone" dataKey="value" stroke={chart.series} fill={chart.series} fillOpacity={0.1} strokeWidth={1.5} isAnimationActive={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="flex h-14 items-center text-xs text-slate-500 dark:text-slate-400">Not enough snapshots in the last {trendDays} days</p>
+          )}
+          {threshold && points.length >= 2 && <p className="text-[11px] text-slate-500 dark:text-slate-400">Dashed line: target {threshold.good}</p>}
+        </div>
+      </div>
+
+      {/* Facts */}
+      <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 border-t border-slate-100 pt-3 text-xs dark:border-slate-800 sm:grid-cols-2" data-testid="team-qa-facts">
+        {facts?.qaRank && (
+          <div className="flex items-start gap-2" data-testid="team-qa-rank">
+            <Trophy size={14} className="mt-0.5 flex-shrink-0 text-slate-400" aria-hidden />
+            <div>
+              <dt className="text-slate-500 dark:text-slate-400">Rank by QA score</dt>
+              <dd className="font-medium text-slate-900 dark:text-white">{facts.qaRank.position} of {facts.qaRank.of} {facts.qaRank.scope === 'company' ? 'teams in the company' : 'teams you can see'}</dd>
+            </div>
+          </div>
+        )}
+        {weakest && (
+          <div className="flex items-start gap-2" data-testid="team-qa-weakest">
+            <Target size={14} className="mt-0.5 flex-shrink-0 text-slate-400" aria-hidden />
+            <div className="min-w-0">
+              <dt className="text-slate-500 dark:text-slate-400">Costs the score most</dt>
+              <dd className="font-medium text-slate-900 dark:text-white">
+                {weakest.label} {fmt(weakest.value, weakest.unit === '%' ? 1 : 0)}{weakest.unit === '%' ? '%' : '/100'}
+                <span className="font-normal text-slate-500 dark:text-slate-400"> · −{weakest.pointsLost.toFixed(0)} pts{weakest.threshold ? ` · ${targetLabel(weakest.threshold, weakest.unit)}` : ''}</span>
+              </dd>
+            </div>
+          </div>
+        )}
+        {memberCount != null && (
+          <div className="flex items-start gap-2" data-testid="team-qa-people">
+            <Users size={14} className="mt-0.5 flex-shrink-0 text-slate-400" aria-hidden />
+            <div>
+              <dt className="text-slate-500 dark:text-slate-400">Team</dt>
+              <dd className="font-medium text-slate-900 dark:text-white">{peopleText(memberCount)}{roles.length > 0 && <span className="font-normal text-slate-500 dark:text-slate-400"> · {roles.join(', ')}</span>}</dd>
+            </div>
+          </div>
+        )}
+        {(leads.length > 0 || owners.length > 0) && (
+          <div className="flex items-start gap-2" data-testid="team-qa-roles">
+            <UserRound size={14} className="mt-0.5 flex-shrink-0 text-slate-400" aria-hidden />
+            <div className="min-w-0 space-y-0.5">
+              {leads.map((p) => (
+                <div key={`lead-${p.name}`}><dt className="inline text-slate-500 dark:text-slate-400">{p.jobTitle && /scrum master/i.test(p.jobTitle) ? 'Scrum Master' : 'Team lead'}: </dt><dd className="inline font-medium text-slate-900 dark:text-white">{p.name}</dd></div>
+              ))}
+              {owners.map((p) => (
+                <div key={`po-${p.name}`}><dt className="inline text-slate-500 dark:text-slate-400">Product Owner: </dt><dd className="inline font-medium text-slate-900 dark:text-white">{p.name}</dd></div>
+              ))}
+            </div>
+          </div>
+        )}
+      </dl>
+    </div>
   );
 };
 

@@ -172,6 +172,48 @@ export function qaScoreComposite(row: QaScoreInputs | null | undefined, stale: I
   return { ...composite(r.score, used, QA_SCORE_INPUTS.length), status: r.status, staleInputs, missingInputs };
 }
 
+export const QA_SCORE_INPUT_LABELS: Record<keyof typeof QA_SCORE_WEIGHTS, string> = {
+  test_coverage: 'Test coverage',
+  defect_escape_rate: 'Defect escape rate',
+  change_failure_rate: 'Change failure rate',
+  code_quality_score: 'Code quality score',
+};
+
+export interface QaInputLoss {
+  key: keyof typeof QA_SCORE_WEIGHTS;
+  label: string;
+  /** The recorded value (e.g. escape rate 12 %), not the 0–100 term. */
+  value: number;
+  /** The input's 0–100 term in the formula (100 − rate for the two rates). */
+  term: number;
+  /** Points the input keeps the QA score below 100: (100 − term) × weight ÷ (weights used). */
+  pointsLost: number;
+}
+
+/**
+ * How much each input of the current QA score costs (computeQaScore with stale inputs left out,
+ * as qaScoreComposite): sorted by points lost, the first is the input dragging the score down
+ * most. Empty when there is no score. The points lost add up to 100 − the unrounded score.
+ */
+export function qaScoreInputLosses(row: QaScoreInputs | null | undefined, stale: Iterable<string> = []): QaInputLoss[] {
+  const staleSet = new Set(stale);
+  const fresh: QaScoreInputs = {};
+  for (const key of QA_SCORE_INPUTS) {
+    const v = toNum(row?.[key]);
+    if (v !== null && !staleSet.has(key)) fresh[key] = v;
+  }
+  if (computeQaScore(fresh).score === null) return [];
+  const terms = QA_SCORE_INPUTS.filter((k) => fresh[k] !== undefined).map((key) => {
+    const value = fresh[key] as number;
+    const term = clamp(key === 'defect_escape_rate' || key === 'change_failure_rate' ? 100 - value : value, 0, 100);
+    return { key, value, term };
+  });
+  const weightSum = terms.reduce((sum, t) => sum + QA_SCORE_WEIGHTS[t.key], 0);
+  return terms
+    .map((t) => ({ ...t, label: QA_SCORE_INPUT_LABELS[t.key], pointsLost: ((100 - t.term) * QA_SCORE_WEIGHTS[t.key]) / weightSum }))
+    .sort((a, b) => b.pointsLost - a.pointsLost);
+}
+
 // ============================================================================
 // COMPANY AGGREGATES (team-size weighted, with the distribution)
 // ============================================================================
