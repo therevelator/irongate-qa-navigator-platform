@@ -1,6 +1,6 @@
 # Manual test cases
 
-382 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+386 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -32,7 +32,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Administration: update frequency](#administration-update-frequency) (1)
 - [Alerts and notifications](#alerts-and-notifications) (11)
 - [Tracked actions](#tracked-actions) (10)
-- [Wellbeing pulse](#wellbeing-pulse) (23)
+- [Wellbeing pulse](#wellbeing-pulse) (24)
 - [Developer productivity](#developer-productivity) (1)
 - [Overview](#overview) (4)
 - [Organisation: departments](#organisation-departments) (3)
@@ -41,7 +41,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Activity](#activity) (4)
 - [User activity](#user-activity) (4)
 - [Invitations](#invitations) (1)
-- [Platform support](#platform-support) (20)
+- [Platform support](#platform-support) (23)
 - [Navigation and access control](#navigation-and-access-control) (12)
 - [Users and teams](#users-and-teams) (6)
 - [Analytics](#analytics) (4)
@@ -7858,6 +7858,31 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/pulse-survey.spec.ts › Wellbeing pulse survey › A team with fewer than 3 responses shows no results`
 
+### TC-ORG-070: The pulse survey goes to team members only, not to a stakeholder with read access
+
+**Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F11.6, F11.7, F11.10, F11.11
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data loaded
+- A team with a team lead, at least three software engineers and a Product Owner (a viewer listed as a team member)
+- A stakeholder (e.g. Head of Product) with a Viewer assignment on that team who is not a member of it (super admin: Users > the person > assignments > Viewer on the team, without adding them to the team)
+
+**Test data**
+
+- Passwords of the demo accounts: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the team lead, open the team's Wellbeing pulse and click "Send survey". | The confirmation reports the number of members it was sent to: the team lead, the engineers and the Product Owner, not the stakeholder. |
+| 2 | Sign in as the stakeholder and open the team. | The team is visible read-only; there is no pending-pulse banner and the pulse page offers no survey to answer. |
+| 3 | Sign in as the Product Owner. | They can answer the survey. |
+| 4 | As the team lead, after the reminder period, click "Send reminder" and look at the list of members who have not answered. | The reminder count and the non-responder names never include the stakeholder; the response rate counts the members only. |
+
+**Notes:** Recipients, response rate, reminders, escalation names, the banner and the right to answer all use the same set: the people who work in the team.
+
+*Automated:* `API tests/api/pulse-stakeholders.test.ts PSTK-001 … PSTK-005`
+
 ## Developer productivity
 
 ### TC-ORG-024: Developer productivity withholds team figures below 3 opted-in developers
@@ -8919,7 +8944,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/platform/operator-extras.spec.ts › Platform support panel › OPS-08 every module of a company in detail: all developer rows, single pulse answers, module data`
 
-### TC-ORG-062: Create a company with its first super admin, then add a department, a team and a person
+### TC-ORG-062: Create a company with its first person (Super admin by default), then add a department, a team and a person
 
 **Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.9
 
@@ -8935,12 +8960,13 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Open /operator, enter the operator's e-mail and password under "Platform support sign-in" and click "Sign in". | The amber bar reads "IronGate platform support" with the operator's name and "Sign out"; the platform overview shows the tiles Companies, Active sessions, Sign-ins (7 days), Failed sign-ins (7 days), Errors (24 h), Database size, and the "Companies", "Scheduled jobs" and "Main tables" sections. |
-| 2 | Click "Create company". Enter a unique company name, the first super admin's e-mail (e.g. boss@<unique>.example), choose "Password set now", enter first name, last name and a strong password (e.g. Ui-Tests-Passw0rd!) and click "Create company". | A message says "<name> created" and the new company opens with its first department "General" and team "Team 1". |
-| 3 | Click "Add department", type Quality and click "Save". | A section "Quality" appears. |
-| 4 | Click "Add team", type Beta squad, choose the department Quality and click "Save". | Beta squad is listed under Quality. |
-| 5 | Open "Users", click "Add person", fill first name, last name, a new e-mail, role Software engineer, team Beta squad and a strong password, click "Save". | The person appears in the users table. |
-| 6 | Click "Add person" again with the same e-mail. | The form shows "Email already registered" (the company app's own rule). |
-| 7 | Sign in to the app (/) with the super admin's e-mail and password. | The dashboard opens; the person is a super admin of the new company. |
+| 2 | Click "Create company". Enter a unique company name and, under "First person: e-mail", the first person's e-mail (e.g. boss@<unique>.example). | A "Role" field appears with "Super admin" selected and the help text "Every company needs a super admin to manage it; you can also manage it yourself from this panel." |
+| 3 | Keep the role "Super admin", choose "Password set now", enter first name, last name and a strong password (e.g. Ui-Tests-Passw0rd!) and click "Create company". | A message says "<name> created" and the new company opens with its first department "General" and team "Team 1". |
+| 4 | Click "Add department", type Quality and click "Save". | A section "Quality" appears. |
+| 5 | Click "Add team", type Beta squad, choose the department Quality and click "Save". | Beta squad is listed under Quality. |
+| 6 | Open "Users", click "Add person", fill first name, last name, a new e-mail, role Software engineer, team Beta squad and a strong password, click "Save". | The person appears in the users table. |
+| 7 | Click "Add person" again with the same e-mail. | The form shows "Email already registered" (the company app's own rule). |
+| 8 | Sign in to the app (/) with the super admin's e-mail and password. | The dashboard opens; the person is a super admin of the new company. |
 
 **After the test:** Delete the company in platform support (Delete, type its name).
 
@@ -9058,6 +9084,95 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** Do not enter wrong passwords more than 4 times in a row: the 5th locks the operator account for 15 minutes.
 
 *Automated:* `tests/e2e/platform/operator-crud.spec.ts › Platform support: changes › OPC-05 last views, sessions and the access log of a company`
+
+### TC-ORG-067: Create a company whose first person is invited as a Software engineer of the first team
+
+**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.9
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
+
+**Test data**
+
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /operator and sign in as the operator. | The platform overview is shown. |
+| 2 | Click "Create company", enter a unique company name and a first person's e-mail (e.g. dev@<unique>.example). | The "Role" field shows "Super admin" with the help text "Every company needs a super admin to manage it; you can also manage it yourself from this panel." |
+| 3 | Choose the role "Software engineer of the first team", keep "Invitation e-mail" and click "Create company". | The company opens. |
+| 4 | Open "Users" and look at the invitations. | One pending invitation for dev@<unique>.example as Software engineer of "Team 1"; there is no super admin invitation. |
+| 5 | Optional: repeat with "Manager of the first department" and "Password set now". | The person is created as Manager of "General" (no super admin assignment) and can sign in to the app. |
+
+**After the test:** Delete the companies in platform support (Delete, type the name).
+
+**Notes:** Before this change the first person was always a super admin. The operator can manage a company without a super admin from this panel.
+
+*Automated:* `tests/e2e/platform/operator-crud.spec.ts › Platform support: changes › OPC-01b the first person can be invited as a software engineer of the first team; API tests/api/operator-crud.test.ts OPC-003c`
+
+### TC-ORG-068: Demo Data: departments, Scrum teams and people with one year of data; the shared password is shown once
+
+**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.14
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
+- A fresh organisation registered for this test (Create an account: any company name, its owner's e-mail and password); delete it afterwards in platform support (Delete, type its name).
+
+**Test data**
+
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
+- Sizes: Departments 1, Teams per department 1, Members per team 3
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /operator, sign in as the operator and open the fresh organisation. | The company view opens with the buttons "Demo Data" and "Populate metrics". |
+| 2 | Click "Demo Data". | A modal "Demo Data for <company>" opens with Departments (1–10) = 3, Teams per department (1–8) = 3, Members per team (3–12) = 6 and the preview "Creates 3 departments, 9 teams, 57 people and one year of data." |
+| 3 | Change Members per team to 2. | The preview reads "Enter whole numbers within the ranges shown." and "Generate" is disabled. |
+| 4 | Enter Departments 1, Teams per department 1, Members per team 3. | The preview reads "Creates 1 department, 1 team, 4 people and one year of data." |
+| 5 | Click "Generate". | The modal says "Created 1 department, 1 team and 4 people. Now filling one year of data…" with a progress bar and the step, and asks to keep the window open. |
+| 6 | Wait until the job finishes (under a minute locally). | "Done: 1 department, 1 team and 4 people with one year of data (… rows)." The shared password is shown with a "Copy" button, and "One sign-in per role level" lists Manager (Head of … Engineering), Team lead (Scrum Master), Software engineer and Viewer (Product Owner) with e-mail addresses on the company's domain. |
+| 7 | Click "Copy", then "Done". Open the Organisation section. | The modal closes. A new department (e.g. Payments) with its manager and a new team (e.g. Checkout Core) with its four people are listed. |
+| 8 | In a private window sign in to the app with the Team lead's e-mail and the copied password and open the team. | The sign-in works. The team shows a year of history: KPI trends over 12 months, pipelines, tests, flaky tests, technical debt, DORA, sprints, the wellbeing pulse with comments, actions and alerts. No sample-data banner is shown. |
+| 9 | Back in platform support, click "Demo Data" again. | The password of the first run is not shown again (it was shown once only). |
+
+**After the test:** Delete the organisation in platform support (Delete, type its name).
+
+**Notes:** Each run adds new departments and teams with new names; existing ones and other companies are never changed. On Netlify the data is written by a background function and the modal polls it. If the company uses a public e-mail domain (gmail.com…), the e-mails are first.last@<company-slug>.example.
+
+*Automated:* `tests/e2e/platform/operator-demo-data.spec.ts › Platform support: Demo Data › OPD-01 Demo Data: sizes and preview, progress, then the password and one login per role level; Populate metrics`
+
+### TC-ORG-069: Populate metrics fills a year of data for teams without data and creates nobody
+
+**Type:** Positive · **Priority:** High · **Role:** Platform operator · **Flow:** F14.14
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A platform operator account exists (platform support, not a company user): create it with npm run operator:create -- --email operator@platform-support.uitest.example --name "UI Test Operator" (password Ui-Operator-Passw0rd!).
+- A fresh organisation registered for this test; as its owner (Users page) add a team lead and two software engineers to its team.
+
+**Test data**
+
+- Operator: operator@platform-support.uitest.example / Ui-Operator-Passw0rd!
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /operator, sign in as the operator and open the organisation. Note the number of users. | The company view opens. |
+| 2 | Click "Populate metrics". | A modal "Populate metrics of <company>" explains that one year of sample data is filled for every team without data, that nobody is created and that a team without a team lead or software engineer is skipped. |
+| 3 | Click "Populate metrics" in the modal and wait. | A progress bar is shown, then "Done: one year of data for 1 team (… rows)." No password is shown. |
+| 4 | Check the number of users. | Unchanged: nobody was created. |
+| 5 | Sign in as the organisation's owner and open the team. | Every module shows a year of data (KPIs, pipelines, tests, pulse, sprints, actions, alerts). |
+| 6 | In platform support click "Populate metrics" again and run it. | "Done: one year of data for 0 teams (… rows); 1 team that already had sample data topped up." |
+
+**After the test:** Delete the organisation in platform support (Delete, type its name).
+
+**Notes:** Only one sample-data job runs per company at a time: a second start while one runs says "Sample data is already being generated for this company. Wait until it has finished."
+
+*Automated:* `tests/e2e/platform/operator-demo-data.spec.ts › OPD-01 (Populate metrics part); API tests/api/demo-data.test.ts DD-008`
 
 ## Navigation and access control
 

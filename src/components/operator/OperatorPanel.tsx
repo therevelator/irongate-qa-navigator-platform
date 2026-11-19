@@ -112,15 +112,22 @@ const OperatorPanel: React.FC = () => {
 
 const createCompanySpec = (onCreated: (c: { id: string; name: string }) => void): FormSpec => ({
   title: 'Create company',
-  description: 'Creates the organisation with a first department and team. The first super admin is created with a password or invited by e-mail.',
+  description: 'Creates the organisation with a first department and team, and optionally its first person, created with a password or invited by e-mail.',
   submitLabel: 'Create company',
-  initial: { departmentName: 'General', teamName: 'Team 1', adminMode: 'invite' },
+  initial: { departmentName: 'General', teamName: 'Team 1', adminMode: 'invite', adminRole: 'super_admin' },
   fields: [
     { name: 'name', label: 'Company name', required: true },
-    { name: 'domain', label: 'E-mail domain', help: 'Defaults to the domain of the first super admin.' },
+    { name: 'domain', label: 'E-mail domain', help: 'Defaults to the domain of the first person.' },
     { name: 'departmentName', label: 'First department', required: true },
     { name: 'teamName', label: 'First team', required: true },
-    { name: 'adminEmail', label: 'First super admin: e-mail', type: 'email' },
+    { name: 'adminEmail', label: 'First person: e-mail', type: 'email' },
+    { name: 'adminRole', label: 'Role', type: 'select', when: (v) => !!v.adminEmail, options: [
+      { value: 'super_admin', label: 'Super admin' },
+      { value: 'qa_manager', label: 'Manager of the first department' },
+      { value: 'team_lead', label: 'Team lead of the first team' },
+      { value: 'qa_engineer', label: 'Software engineer of the first team' },
+      { value: 'viewer', label: 'Viewer of the first team' },
+    ], help: 'Every company needs a super admin to manage it; you can also manage it yourself from this panel.' },
     { name: 'adminMode', label: 'How they get access', type: 'select', options: [{ value: 'invite', label: 'Invitation e-mail' }, { value: 'password', label: 'Password set now' }], when: (v) => !!v.adminEmail },
     { name: 'adminFirstName', label: 'First name', when: (v) => !!v.adminEmail && v.adminMode === 'password' },
     { name: 'adminLastName', label: 'Last name', when: (v) => !!v.adminEmail && v.adminMode === 'password' },
@@ -131,10 +138,10 @@ const createCompanySpec = (onCreated: (c: { id: string; name: string }) => void)
       method: 'POST',
       body: {
         name: v.name, domain: v.domain, departmentName: v.departmentName, teamName: v.teamName,
-        admin: v.adminEmail ? { email: v.adminEmail, mode: v.adminMode, firstName: v.adminFirstName, lastName: v.adminLastName, password: v.adminPassword } : undefined,
+        admin: v.adminEmail ? { email: v.adminEmail, role: v.adminRole || 'super_admin', mode: v.adminMode, firstName: v.adminFirstName, lastName: v.adminLastName, password: v.adminPassword } : undefined,
       },
     });
-    if (out.admin?.error) throw new Error(`The company was created, but the first super admin was not: ${out.admin.error}`);
+    if (out.admin?.error) throw new Error(`The company was created, but the first person was not: ${out.admin.error}`);
     onCreated({ id: out.company.id, name: out.company.name });
     return out;
   },

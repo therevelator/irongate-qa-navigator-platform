@@ -255,11 +255,12 @@ Derived from the code, then checked against the documentation:
 | F14.6 | Phone layout | P | — | legacy:platform-operator "works at 390 px…" | — |
 | F14.7 | Refresh sample data now (started in the background on Netlify, run directly elsewhere) | P | — | OPS-07 | OPS-05 failed action; API `platform-operator.test.ts` OP-011 (failed start, off) |
 | F14.8 | Every module of a company in detail (all developer rows, single pulse answers and who answered, module rows); secrets never shown | P | — | OPS-08 | API `platform-operator.test.ts` OP-007 (no hash, token, webhook or credential) |
-| F14.9 | Create a company (first super admin by password), add a department, a team and a person | P | — | OPC-01 | OPC-01 duplicate e-mail refused with the company app's message; API `operator-crud.test.ts` |
+| F14.9 | Create a company (first person by password, Super admin by default, or another role: OPC-01b), add a department, a team and a person | P | — | OPC-01, OPC-01b; API `operator-crud.test.ts` OPC-003c | OPC-01 duplicate e-mail refused with the company app's message; API `operator-crud.test.ts` |
 | F14.10 | A person's page: sign-in history, sessions with status, Revoke one session | P | — | OPC-02 | API `auth-events-sessions.test.ts` AE-005 (other sessions stay; another company's session 404) |
 | F14.11 | Suspend a company: Suspended badge; its people see "access is suspended" at sign-in and on their open session; reactivate | P | — | OPC-03 | API `auth-events-sessions.test.ts` SU-001 (API keys, invitations), SU-002 (jobs skip) |
 | F14.12 | Delete a team / a company only with the typed name | P | — | OPC-04 | OPC-04 wrong name keeps the button disabled |
 | F14.13 | Last views per team, sessions, access log with CSV, sign-ins filtered | P | — | OPC-05 | — |
+| F14.14 | Demo Data: sizes with a live preview, progress, then the shared password (shown once) and one sign-in per role level; Populate metrics fills teams without data and creates nobody | P | Every company user (API 401) | OPD-01; API `demo-data.test.ts` DD-002 … DD-005, DD-007, DD-008 | OPD-01 out-of-range size disables Generate; API `demo-data.test.ts` DD-001 (no token, company session, bad sizes), DD-006 (other companies untouched), DD-009 (background start failed: 502 with the reason) |
 
 ## 15. Accessibility
 

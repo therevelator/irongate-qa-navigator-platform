@@ -357,8 +357,10 @@ Customer access by IronGate support is covered by the customer's written contrac
 **What it changes.** Everything in any company, with the company app's own rules (the server runs the
 company app's handler as a super admin of that company, without a user id):
 
-- **Companies**: create (first department and team, and a first super admin with a password or an
-  invitation), edit the name, e-mail domain and "hide the sample-data notices", how long sign-ins last,
+- **Companies**: create (first department and team, and a first person with a password or an
+  invitation; their role is Super admin by default, or Manager of the first department, or Team lead /
+  Software engineer / Viewer of the first team: "Every company needs a super admin to manage it; you can
+  also manage it yourself from this panel."), edit the name, e-mail domain and "hide the sample-data notices", how long sign-ins last,
   **Suspend** / **Reactivate**, **Delete** (type the company's name; every table of the company goes);
 - **Departments**: add, edit, add / remove managers, delete (refused while it has active teams or people);
 - **Teams**: add, edit, move to another department, set the lead, archive / restore, delete for good
@@ -374,6 +376,27 @@ company app's handler as a super admin of that company, without a user id):
 - repairs: refresh sample data now (on Netlify it starts the background refresh function and reports
   "started"; the result appears under `demo-refresh-background`), recompute KPI snapshots, re-run the
   alert evaluation.
+- **Demo Data** (something to show a prospect): a modal asks for Departments (1–10), Teams per
+  department (1–8) and Members per team (3–12) and previews the result ("Creates 3 departments, 9
+  teams, 57 people and one year of data": the members of every team plus one manager per department).
+  It adds departments and teams with realistic product names the company does not use yet, a manager
+  per department ("Head of … Engineering"), and Scrum teams: a Product Owner (Viewer, member of the
+  team), a Scrum Master (Team lead) and software engineers with real job titles (Senior Backend
+  Engineer, Frontend Engineer, QA Automation Engineer, Mobile Engineer, UX Designer, DevOps Engineer…),
+  realistic international names, e-mails on the company's domain (`first.last@<company-slug>.example`
+  when the company uses a public e-mail domain such as gmail.com) and join dates over the last year.
+  Then one year of data in every module is written for the new teams (KPIs, pipelines with releases at
+  sprint ends and hotfixes, tests, flaky tests, technical debt, DORA, performance, developer
+  productivity, sprints, a pulse every two weeks answered by the team's members with comments, retro
+  actions, alert history, business impact, targets, an API key with its ingestion log, completed
+  onboarding), with different stories per team (steady and strong, struggling, improving, dip and
+  recovery, declining). The modal shows progress, then **one shared password, shown once** (copy it),
+  and one sign-in per role level (Manager, Team lead, Software engineer, Viewer). The company's
+  sample-data notice is hidden; the data is sample data, so the nightly refresh keeps it current and
+  **Remove sample data** removes it. Running it again adds more departments and teams;
+- **Populate metrics**: one year of data in every module for every team of the company that has none
+  yet (for an organisation that set up its own departments, teams and people). Nobody is created; a
+  team without a team lead or software engineer is skipped. Only that company is changed.
 
 Destructive actions (delete, deactivate, archive, suspend, revoke, sign out everywhere, set a password,
 remove an assignment) are confirmed in the page; deletes need the typed name or e-mail. Nothing asks for a

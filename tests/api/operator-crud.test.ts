@@ -115,6 +115,37 @@ describe('Platform operator: changes in any company', () => {
     await db.query('DELETE FROM companies WHERE id = $1', [res.body.company.id]);
   });
 
+  test('OPC-003c the first person may get another role: invitation or password with the right scope', async () => {
+    if (skip()) return;
+    // Invitation: software engineer of the first team.
+    const inv = await op('post', '/companies', { name: `OpCrud Eng ${stamp}`, domain: `opceng${stamp}.test`, admin: { email: `eng-${stamp}@opceng${stamp}.test`, role: 'qa_engineer', mode: 'invite' } });
+    expect(inv.status).toBe(201);
+    expect(inv.body.admin).toEqual(expect.objectContaining({ mode: 'invite', role: 'qa_engineer', status: 201 }));
+    expect((await db.query('SELECT role, scope_type, scope_id FROM invitations WHERE company_id = $1', [inv.body.company.id])).rows)
+      .toEqual([{ role: 'qa_engineer', scope_type: 'team', scope_id: inv.body.teamId }]);
+    // Password: manager of the first department (no super admin assignment).
+    const mgr = await op('post', '/companies', {
+      name: `OpCrud Mgr ${stamp}`, domain: `opcmgr${stamp}.test`,
+      admin: { email: `mgr-${stamp}@opcmgr${stamp}.test`, role: 'qa_manager', mode: 'password', firstName: 'Mia', lastName: 'Manager', password: NEW_PW },
+    });
+    expect(mgr.status).toBe(201);
+    expect(mgr.body.admin).toEqual(expect.objectContaining({ mode: 'password', role: 'qa_manager', status: 201 }));
+    expect((await db.query(`SELECT role, scope_type, scope_id FROM role_assignments WHERE user_id = $1 AND revoked_at IS NULL`, [mgr.body.admin.userId])).rows)
+      .toEqual([{ role: 'qa_manager', scope_type: 'department', scope_id: mgr.body.departmentId }]);
+    // Password: team lead of the first team.
+    const lead = await op('post', '/companies', {
+      name: `OpCrud Lead ${stamp}`, domain: `opclead${stamp}.test`,
+      admin: { email: `lead-${stamp}@opclead${stamp}.test`, role: 'team_lead', mode: 'password', firstName: 'Leo', lastName: 'Lead', password: NEW_PW },
+    });
+    expect(lead.status).toBe(201);
+    expect((await db.query(`SELECT role, scope_type, scope_id FROM role_assignments WHERE user_id = $1 AND revoked_at IS NULL`, [lead.body.admin.userId])).rows)
+      .toEqual([{ role: 'team_lead', scope_type: 'team', scope_id: lead.body.teamId }]);
+    // An unknown role is refused before anything is created.
+    expect((await op('post', '/companies', { name: `OpCrud Bad ${stamp}`, admin: { email: `x-${stamp}@opcbad${stamp}.test`, role: 'owner', mode: 'invite' } })).status).toBe(400);
+    expect((await db.query('SELECT count(*)::int AS n FROM companies WHERE name = $1', [`OpCrud Bad ${stamp}`])).rows[0].n).toBe(0);
+    for (const r of [inv, mgr, lead]) await db.query('DELETE FROM companies WHERE id = $1', [r.body.company.id]);
+  });
+
   test('OPC-001 every write needs an operator session (company accounts get 401)', async () => {
     if (skip()) return;
     const routes: Array<['post' | 'put' | 'delete', string]> = [

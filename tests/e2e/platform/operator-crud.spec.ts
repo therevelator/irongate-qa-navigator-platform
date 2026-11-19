@@ -10,6 +10,7 @@ import { signInWithForm } from '../support/auth';
  * Platform support panel: changing a company (src/components/operator/*, server/routes/operator.ts).
  *
  *   OPC-01 create a company with a first super admin, then add a department, a team and a person
+ *   OPC-01b the first person may get another role (software engineer of the first team, invited)
  *   OPC-02 a person's page: sign-in history, sessions (valid) and Revoke of one session
  *   OPC-03 suspend a company: badge in the list; its people see "Your organisation's access is
  *          suspended" at sign-in and on their open session; reactivate
@@ -25,6 +26,25 @@ const openCompany = async (page: import('@playwright/test').Page, name: string) 
 test.describe('Platform support: changes', { tag: [TAG.area('operator')] }, () => {
   test.setTimeout(120000);
 
+  test('OPC-01b the first person can be invited as a software engineer of the first team', async ({ page }) => {
+    const id = uid('opcr');
+    const name = `Op Engineer First ${id}`;
+    await operatorSignIn(page);
+    await page.getByTestId('op-create-company').click();
+    await page.getByTestId('op-f-name').fill(name);
+    await page.getByTestId('op-f-adminEmail').fill(`dev@${id}.uitest.example`);
+    await page.getByTestId('op-f-adminRole').selectOption('qa_engineer');
+    await page.getByTestId('op-form-submit').click();
+    await expect(page.getByTestId('op-company-name')).toHaveText(name, { timeout: 30000 });
+    const companyId = (await sql<{ id: string }>('SELECT id FROM companies WHERE name = $1', [name]))[0].id;
+    try {
+      const inv = await sql<{ role: string; scope_type: string }>('SELECT role, scope_type FROM invitations WHERE company_id = $1', [companyId]);
+      expect(inv).toEqual([{ role: 'qa_engineer', scope_type: 'team' }]);
+    } finally {
+      await sql('DELETE FROM companies WHERE id = $1', [companyId]);
+    }
+  });
+
   test('OPC-01 create a company, then a department, a team and a person', async ({ page }) => {
     const id = uid('opc');
     const name = `Op Created ${id}`;
@@ -32,6 +52,9 @@ test.describe('Platform support: changes', { tag: [TAG.area('operator')] }, () =
     await page.getByTestId('op-create-company').click();
     await page.getByTestId('op-f-name').fill(name);
     await page.getByTestId('op-f-adminEmail').fill(`boss@${id}.uitest.example`);
+    // The first person's role: super admin by default, with the reason.
+    await expect(page.getByTestId('op-f-adminRole')).toHaveValue('super_admin');
+    await expect(page.getByText('Every company needs a super admin to manage it; you can also manage it yourself from this panel.')).toBeVisible();
     await page.getByTestId('op-f-adminMode').selectOption('password');
     await page.getByTestId('op-f-adminFirstName').fill('Bo');
     await page.getByTestId('op-f-adminLastName').fill('Ss');
