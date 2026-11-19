@@ -26,6 +26,12 @@ or a manager of two departments); their access is the union. Data never crosses 
   API keys, sessions; suspend or delete a company), through the company app's own rules. No reason is asked and nothing
   an operator does is logged (not in the company's Activity log, not anywhere else). Sees no company dashboards through
   the company app.
+  Only the operator has **Demo Data** (departments, teams and people with a year of sample data, one shared password
+  shown once) and **Populate metrics** (a year of sample data for a company's teams without data) on a company: the
+  `/api/operator/companies/:companyId/demo-data`, `…/populate-metrics` and `…/demo-data/jobs/…` routes answer 401 to
+  everyone else, company super admins included. The people it creates get ordinary company roles: Manager of their
+  department, Team lead (Scrum Master), Software engineer, and Viewer for the Product Owner (a team member, so they
+  take the team's pulse; a viewer who is not a team member never gets the pulse survey).
 - **Super admin.** Sees every team of the company and everything in it, and may change everything: people and their
   access, departments, teams, KPI targets, parameters, expected update frequency, alert rules, Slack, API keys, session
   length, sample data and job titles. Reads the change history, the ingestion log and the user activity log.

@@ -807,8 +807,9 @@ each team and department from the user activity log, by whom, and the most activ
 access log (the company's user activity: every request and screen, filters incl. IP; CSV), settings
 and targets, data, modules, alerts and actions, the wellbeing pulse, the Activity log and server errors.
 
-*What it changes.* Everything in any company: create a company (first department, team and super
-admin with a password or an invitation), rename it, its e-mail domain, "hide the sample-data
+*What it changes.* Everything in any company: create a company (first department, team and a first person with a password
+or an invitation: super admin by default, or manager of the first department, team lead / software
+engineer / viewer of the first team), rename it, its e-mail domain, "hide the sample-data
 notices", how long sign-ins last, **suspend / reactivate**, delete it (type its name); departments
 (create, edit, managers, delete); teams (create, edit, move, lead, archive / restore, delete for good
 with the typed name); people (create with a password or invite, edit name / e-mail, role and primary
@@ -820,6 +821,40 @@ revoke); saved views (rename, share, delete); single sessions (revoke). Changes 
 offers run **the company app's own handler** on the server (same validation and rules, as a super
 admin of that company without a user id: `forward()` in `server/routes/operator.ts`). Destructive
 actions are confirmed in the page; the API wants `{ confirm: true }`. No reason is asked for.
+
+*Sample data for a sales demo* (company view, `server/lib/demoGenerate.ts`, `server/seeds/demoOrg.ts`,
+`src/components/operator/OperatorDemoData.tsx`). **Demo Data** opens a modal: Departments (1–10), Teams
+per department (1–8), Members per team (3–12), with a preview ("Creates 3 departments, 9 teams, 57
+people and one year of data": members per team plus one manager per department). It creates, in one
+transaction, departments and teams with product-aligned names that the company does not use yet, a
+department manager each (Manager, "Head of … Engineering"), Scrum teams (Product Owner = Viewer and
+team member, Scrum Master = Team lead, the rest Software engineers with job titles such as Senior
+Backend Engineer, QA Automation Engineer, Mobile Engineer, UX Designer, DevOps Engineer), international
+names, role assignments, team members, primary teams and join dates over the last ~13 months. E-mails
+are `first.last@<company domain>`, or `first.last@<company-slug>.example` when the company's domain is a
+public e-mail domain. Everyone gets ONE generated password (about 80 bits; only its bcrypt hash is
+stored), shown once in the modal with one sign-in per role level. The company's sample-data notice is
+hidden. A job then writes ONE YEAR of every module for the new teams with the demo seed's model
+(`runFillExisting` with a year-long `SampleShape`): KPI snapshots and metric values, company snapshots,
+pipelines with releases at each team's sprint end plus hotfixes, test runs, flaky tests, technical
+debt, DORA, performance, developer productivity (from each person's join date), sprint velocity, a
+pulse every two weeks (answers and comments from team members only) and, from the Meridian showcase
+content, retro actions of every sprint, alert history, an API key with its CI ingestion log, a
+completed onboarding and a raised coverage target. Teams get different stories (strong, struggling,
+improving, dip and recovery, declining). Every data row is a sample row, so the nightly refresh keeps
+them current and "Remove sample data" removes them. A second run adds new departments and teams.
+**Populate metrics** writes the same year for every team of the company that has no data yet, without
+creating anyone (a team without a team lead or engineer is skipped; teams with sample data are only
+topped up). Only that company is touched; one job per company at a time (409 otherwise).
+Jobs are rows of `demo_data_jobs` (migration `20261128000000_demo_data_jobs.sql`) and `job_runs`
+(`demo-data`). On Netlify the API answers 202 and starts the background function
+`netlify/functions/demo-data-background.ts` (15 minutes) with an HMAC of the job id
+(`DEMO_REFRESH_SECRET`, else `JWT_SECRET`); a long-running server runs the job in-process. The modal
+polls the job (progress, then done with the password, or the error). Every statement is a multi-row
+INSERT or a server-side INSERT … SELECT: 3 × 3 × 8 (75 people) with a year of data is about 370 round
+trips and 193 000 rows (~12 s on a local database, ~60 s at 150 ms per round trip).
+API: `POST /api/operator/companies/:companyId/demo-data { departments, teamsPerDepartment, membersPerTeam }`,
+`POST …/populate-metrics`, `GET …/demo-data/jobs/:jobId` and `…/demo-data/jobs/latest`.
 
 *Not logged.* Nothing an operator does is logged: no entry in the company's Activity log
 (`recordAudit` is a no-op inside an operator request, `server/lib/platformContext.ts`), no user
