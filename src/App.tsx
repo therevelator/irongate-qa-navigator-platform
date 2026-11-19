@@ -293,8 +293,8 @@ function App() {
   // Use API teams if available, otherwise fall back to mock teams
   const apiTeams = userTeams.length > 0 ? userTeams : teams;
 
-  // Filter teams based only on active tab (department), not role.
-  // Everyone sees all teams by default; selecting a department tab just narrows by department.
+  // GET /api/teams lists only the teams of the caller's analytics scope (the server decides);
+  // selecting a department tab just narrows that list by department.
   let filteredTeams = apiTeams;
 
   if (activeTab !== 'all') {
