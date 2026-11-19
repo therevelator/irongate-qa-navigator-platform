@@ -108,11 +108,15 @@ export function sessionProblem(decoded: { iat?: unknown }, row: SessionRow, now 
   return null;
 }
 
-/** Answer a refused session (401, or 403 for a suspended company; + header; the cookie is cleared). */
+/**
+ * Answer a refused session (401, or 403 for a suspended company; + header). The cookie is cleared,
+ * except for a suspended company: every later request (the app's session check included) then
+ * still says why. The suspension revoked the session rows, so the cookie is useless afterwards anyway.
+ */
 export function refuseSession(res: express.Response, problem: SessionProblem): void {
   res.setHeader(SESSION_ENDED_HEADER, problem.code);
   res.setHeader('Access-Control-Expose-Headers', `X-Request-Id, ${SESSION_ENDED_HEADER}`);
-  clearSessionCookie(res);
+  if (problem.code !== 'company_suspended') clearSessionCookie(res);
   res.status(problem.status ?? 401).json({ error: problem.message, code: problem.code });
 }
 
