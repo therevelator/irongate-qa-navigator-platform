@@ -81,6 +81,7 @@ import { AssignmentChips, type AssignmentRow } from './AssignmentChips';
 import { buttonClass } from './ui';
 import ExportCsvButton from './ExportCsvButton';
 import { ROLE_LABELS } from '../lib/policyActor';
+import { loadErrorMessage, NETWORK_ERROR } from '../lib/loadError';
 
 interface UsersViewProps {
   is3DMode?: boolean;
@@ -94,6 +95,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   const [departments, setDepartments] = useState<any[]>([]);
   const [roles, setRoles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -137,6 +139,9 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
       if (usersRes.ok) {
         const data = await usersRes.json();
         setUsers(data);
+        setLoadError(null);
+      } else {
+        setLoadError(await loadErrorMessage(usersRes, 'the users'));
       }
       if (teamsRes.ok) {
         const data = await teamsRes.json();
@@ -164,6 +169,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
       }
     } catch (error) {
       console.error('Error fetching users:', error);
+      setLoadError(NETWORK_ERROR('the users'));
       setRoles([
         { id: 'super_admin', name: ROLE_LABELS.super_admin },
         { id: 'qa_manager', name: ROLE_LABELS.qa_manager },
@@ -457,7 +463,12 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
         </div>
 
         {/* Users Grid/List */}
-        {filteredUsers.length === 0 ? (
+        {loadError && (
+          <div role="alert" data-testid="load-error" className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            {loadError}
+          </div>
+        )}
+        {loadError ? null : filteredUsers.length === 0 ? (
           <div className="bg-white dark:bg-slate-800 rounded-2xl p-12 text-center border border-gray-200 dark:border-slate-700">
             <Users className="w-16 h-16 mx-auto mb-4 text-gray-300 dark:text-slate-600" />
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">No users found</h3>

@@ -26,6 +26,7 @@ interface Department {
 }
 
 import API_URL from '../config/api';
+import { loadErrorMessage, NETWORK_ERROR } from '../lib/loadError';
 
 interface DepartmentsViewProps {
   /** Open a team's detail page (the same view the dashboard opens). */
@@ -47,6 +48,7 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
   const [departments, setDepartments] = useState<Department[]>([]);
   const [teams, setTeams] = useState<CandidateTeam[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -66,11 +68,13 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
         fetch(`${API_URL}/admin/teams`, { credentials: 'include' }),
         fetch(`${API_URL}/admin/users`, { credentials: 'include' }),
       ]);
-      if (deptsRes.ok) setDepartments(await deptsRes.json());
+      if (deptsRes.ok) { setDepartments(await deptsRes.json()); setLoadError(null); }
+      else setLoadError(await loadErrorMessage(deptsRes, 'the departments'));
       if (teamsRes.ok) setTeams(await teamsRes.json());
       if (usersRes.ok) setUsers(await usersRes.json());
     } catch (error) {
       console.error('Error fetching data:', error);
+      setLoadError(NETWORK_ERROR('the departments'));
     } finally {
       setLoading(false);
     }
@@ -216,7 +220,9 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
               {filteredDepartments.length === 0 ? (
                 <tr>
                   <td colSpan={6}>
-                    <EmptyState icon={<Building2 size={28} aria-hidden="true" />} title="No departments found" description={searchTerm ? 'No department matches your search.' : 'Create a department to group teams.'} />
+                    {loadError ? (
+                      <div role="alert" data-testid="load-error" className="m-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">{loadError}</div>
+                    ) : <EmptyState icon={<Building2 size={28} aria-hidden="true" />} title="No departments found" description={searchTerm ? 'No department matches your search.' : 'Create a department to group teams.'} />}
                   </td>
                 </tr>
               ) : (

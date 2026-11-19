@@ -11,6 +11,7 @@ import { canManageTeam, canWriteTeamData, canManageCompanyConfig, ledTeamIds, ty
 import { policyActorOf } from '../lib/policyActor';
 import { ROLE_LABELS } from '../lib/policyActor';
 import ExportCsvButton from './ExportCsvButton';
+import { loadErrorMessage, NETWORK_ERROR } from '../lib/loadError';
 
 interface TeamMetrics {
   qa_score: number | null;
@@ -71,6 +72,7 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
   const [users, setUsers] = useState<TeamUser[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [showEditModal, setShowEditModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -88,11 +90,13 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
         fetch(`${API_URL}/admin/users`, { credentials: 'include' }),
         fetch(`${API_URL}/admin/departments`, { credentials: 'include' }),
       ]);
-      if (teamsRes.ok) setTeams(await teamsRes.json());
+      if (teamsRes.ok) { setTeams(await teamsRes.json()); setLoadError(null); }
+      else setLoadError(await loadErrorMessage(teamsRes, 'the teams'));
       if (usersRes.ok) setUsers(await usersRes.json());
       if (deptsRes.ok) setDepartments(await deptsRes.json());
     } catch (error) {
       console.error('Error fetching data:', error);
+      setLoadError(NETWORK_ERROR('the teams'));
     } finally {
       setLoading(false);
     }
@@ -210,7 +214,12 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
           />
         </div>
 
-        {filteredTeams.length === 0 ? (
+{loadError && (
+          <div role="alert" data-testid="load-error" className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+            {loadError}
+          </div>
+        )}
+        {loadError ? null : filteredTeams.length === 0 ? (
           <Card><EmptyState icon={<Building2 size={28} />} title="No teams found" description="Adjust the search term." /></Card>
         ) : (
           <div className="space-y-3">
