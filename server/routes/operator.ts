@@ -521,7 +521,7 @@ router.get('/companies/:companyId/organisation', ...op, view('organisation', asy
 
 router.get('/companies/:companyId/users', ...op, view('users', async (_req, res, company) => {
   const users = await query<any[]>(
-    `SELECT u.id, ${fullNameSql('u')} AS name, u.email, u.role, u.is_active, u.last_login, u.created_at,
+    `SELECT u.id, ${fullNameSql('u')} AS name, u.email, u.job_title, u.role, u.is_active, u.last_login, u.created_at,
             u.failed_login_attempts, u.locked_until, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked,
             u.developer_insights_enabled, u.email_verified, u.email_verified_at, u.first_name, u.last_name, u.phone, u.timezone,
             u.department_id, d.name AS department_name, u.primary_team_id, t.name AS primary_team_name, u.updated_at, u.sessions_valid_after,
@@ -859,7 +859,7 @@ router.get('/companies/:companyId/users/:userId', ...op, view('user_detail', asy
   const id = req.params.userId;
   if (typeof id !== 'string' || !ID.test(id)) return void res.status(400).json({ error: 'Invalid user id' });
   const user = await queryOne<any>(
-    `SELECT u.id, ${fullNameSql('u')} AS name, u.first_name, u.last_name, u.email, u.role, u.is_active, u.last_login, u.created_at, u.updated_at,
+    `SELECT u.id, ${fullNameSql('u')} AS name, u.first_name, u.last_name, u.email, u.job_title, u.role, u.is_active, u.last_login, u.created_at, u.updated_at,
             u.failed_login_attempts, u.locked_until, (u.locked_until IS NOT NULL AND u.locked_until > now()) AS locked, u.developer_insights_enabled, u.email_verified, u.phone, u.timezone,
             u.department_id, d.name AS department_name, u.primary_team_id, t.name AS primary_team_name, u.sessions_valid_after,
             (u.password_hash IS NOT NULL) AS password_set,

@@ -180,9 +180,10 @@ describe('Platform operator: changes in any company', () => {
     const sa = await op('post', `${base}/users`, { email: `opc-sa-${stamp}@opcrud${stamp}.test`, password: NEW_PW, firstName: 'Su', lastName: 'Per', role: 'super_admin', teamId });
     expect(sa.status).toBe(201);
     expect((await db.query('SELECT role FROM users WHERE id = $1', [sa.body.id])).rows[0].role).toBe('super_admin');
-    const ed = await op('put', `${base}/users/${u.body.id}`, { firstName: 'Pers', role: 'qa_engineer', departmentId: deptId, primaryTeamId: teamId });
+    const ed = await op('put', `${base}/users/${u.body.id}`, { firstName: 'Pers', jobTitle: 'Scrum Master', role: 'qa_engineer', departmentId: deptId, primaryTeamId: teamId });
     expect(ed.status).toBe(200);
-    expect(ed.body).toEqual(expect.objectContaining({ first_name: 'Pers', role: 'qa_engineer' }));
+    expect(ed.body).toEqual(expect.objectContaining({ first_name: 'Pers', role: 'qa_engineer', job_title: 'Scrum Master' }));
+    expect((await op('get', `${base}/users/${u.body.id}`)).body.user.job_title).toBe('Scrum Master');
     // Assignments: add a manager of the department, remove it again.
     const add = await op('post', `${base}/users/${u.body.id}/assignments`, { role: 'qa_manager', scopeId: deptId });
     expect(add.status).toBe(201);

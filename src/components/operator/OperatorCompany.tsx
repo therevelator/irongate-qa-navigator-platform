@@ -315,7 +315,7 @@ const UsersTab: React.FC<TabProps & { onOpenUser: (id: string) => void }> = ({ c
         <DataTable testId="op-users" rows={data.users} rowTestId={(u: any) => `op-user-row-${u.email}`} columns={[
           { key: 'name', label: 'Name', render: (u: any) => (
             <button type="button" className="text-left" onClick={() => onOpenUser(u.id)} data-testid="op-open-user">
-              <p className="font-medium text-brand-700 hover:underline dark:text-brand-300">{u.name ?? '—'}</p><p className="break-all text-xs text-slate-500 dark:text-slate-400">{u.email}</p>
+              <p className="font-medium text-brand-700 hover:underline dark:text-brand-300">{u.name ?? '—'}</p><p className="break-all text-xs text-slate-500 dark:text-slate-400">{u.email}</p>{u.job_title && <p className="text-xs text-slate-500 dark:text-slate-400">{u.job_title}</p>}
             </button>
           ) },
           { key: 'is_active', label: 'Status', render: (u: any) => <>{u.is_active ? <Badge tone="good">Active</Badge> : <Badge tone="bad">Inactive</Badge>} {u.locked && <Badge tone="warn">Locked</Badge>} {u.sso_linked && <Badge>SSO</Badge>}</> },

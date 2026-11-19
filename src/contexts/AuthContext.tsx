@@ -154,7 +154,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         // read (for example one cut off by a reload), or the browser dropped the cookie. Say so
         // instead of showing the plain sign-in screen.
         const hadSession = localStorage.getItem('irongate_user') !== null;
-        const code = ended ?? (hadSession ? 'session_ended' : null);
+        // A reason another request of this page already stored (it may have answered first and
+        // cleared the cookie, e.g. company_suspended) is kept.
+        let kept: string | null = null;
+        try { kept = sessionStorage.getItem(NOTICE_KEY); } catch { /* storage blocked */ }
+        const code = ended ?? kept ?? (hadSession ? 'session_ended' : null);
         if (code) { keepNotice(code); setSessionNotice(NOTICE[code] ?? NOTICE.session_ended); }
         // Session invalid or expired
         localStorage.removeItem('irongate_user');

@@ -36,9 +36,13 @@ const OperatorUser: React.FC<{ companyId: string; companyName: string; userId: s
   const who = u.name ?? u.email;
 
   const editProfile = () => setForm({
-    title: `Edit ${who}`, initial: { firstName: u.first_name ?? '', lastName: u.last_name ?? '', email: u.email },
-    fields: [{ name: 'firstName', label: 'First name', required: true }, { name: 'lastName', label: 'Last name', required: true }, { name: 'email', label: 'E-mail', type: 'email', required: true }],
-    submit: (v) => opFetch(ubase, { method: 'PUT', body: v }),
+    title: `Edit ${who}`, initial: { firstName: u.first_name ?? '', lastName: u.last_name ?? '', email: u.email, jobTitle: u.job_title ?? '' },
+    fields: [
+      { name: 'firstName', label: 'First name', required: true }, { name: 'lastName', label: 'Last name', required: true },
+      { name: 'email', label: 'E-mail', type: 'email', required: true },
+      { name: 'jobTitle', label: 'Job title', help: 'Shown in the top bar and on Team detail; empty = the role label.' },
+    ],
+    submit: (v) => opFetch(ubase, { method: 'PUT', body: { ...v, jobTitle: v.jobTitle ?? '' } }),
   });
   const editRole = () => setForm({
     title: `Role and primary team of ${who}`,
@@ -103,6 +107,7 @@ const OperatorUser: React.FC<{ companyId: string; companyName: string; userId: s
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Section title="Profile">
           <dl className="grid grid-cols-2 gap-x-4 gap-y-1 px-4 py-3 text-sm">
+            <dt className="text-slate-500">Job title</dt><dd data-testid="op-user-job-title">{u.job_title ?? '—'}</dd>
             <dt className="text-slate-500">Department</dt><dd>{u.department_name ?? '—'}</dd>
             <dt className="text-slate-500">Primary team</dt><dd>{u.primary_team_name ?? '—'}</dd>
             <dt className="text-slate-500">Created</dt><dd>{fmtDate(u.created_at)}</dd>

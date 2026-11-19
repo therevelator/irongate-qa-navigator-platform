@@ -116,6 +116,7 @@ test.describe('Platform support panel', { tag: [TAG.area('operator')] }, () => {
     await signInAs(freshCompany, '/activity');
     await expect(page.getByTestId('activity-row').first()).toBeVisible({ timeout: 30000 }); // the registration's own entry
     await expect(page.locator('#main-scroll')).not.toContainText('platform support', { ignoreCase: true });
-    await expect(page.locator('#main-scroll')).not.toContainText(dept);
+    // The department exists (it is offered as a filter), but no entry records its creation.
+    await expect(page.getByTestId('activity-row').filter({ hasText: dept })).toHaveCount(0);
   });
 });
