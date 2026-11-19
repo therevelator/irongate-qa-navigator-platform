@@ -11,9 +11,10 @@ import type { TeamPulseData } from './PulseSurveyResults';
  * "Send survey to the team" (POST /api/pulse/teams/:id/send), reminders (…/remind) and automatic
  * sending (PUT …/auto-send) for the team's lead, its QA managers and admins.
  *
- * Privacy: the panel shows who has not been SENT the survey (sending is not answering), but about
- * answering only counts, and those only from 3 answers on. Personal links are never shown: a
- * manager holding one could answer as someone else.
+ * Privacy: the panel shows who has not been SENT the survey (sending is not answering). About
+ * answering it shows counts (from 3 answers on) and, only after the period's escalation and only to
+ * the people it went to, the names of members who have NOT answered yet. Never anything about what
+ * anyone answered. Personal links are never shown: a manager holding one could answer as someone else.
  */
 
 export interface PulseSendStatus {
@@ -113,8 +114,22 @@ export const PulseSendPanel: React.FC<{ data: TeamPulseData; sending: PulseSendS
         <p className="text-slate-700 dark:text-slate-300" data-testid="pulse-send-status">{statusText}</p>
         <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="pulse-send-answered">
           Answers so far: {data.currentPeriod.responsesSoFarText.toLowerCase()}
-          {data.currentPeriod.responseRate != null ? ` (${data.currentPeriod.responseRate}% of those sent)` : ''}. Who answered is never shown.
+          {data.currentPeriod.responseRate != null ? ` (${data.currentPeriod.responseRate}% of those sent)` : ''}. What anyone answered is never shown.
         </p>
+
+        {data.nonResponders && (
+          <div data-testid="pulse-non-responders">
+            <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
+              Not answered yet ({data.nonResponders.members.length}) · escalated to you on {formatAsOf(data.nonResponders.escalatedAt)}
+            </p>
+            {data.nonResponders.members.length ? (
+              <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                {data.nonResponders.members.map((m) => <li key={m.id}><Badge tone="warn" className="whitespace-nowrap">{m.name}</Badge></li>)}
+              </ul>
+            ) : <p className="mt-1 text-xs text-slate-600 dark:text-slate-300">Everyone has answered now.</p>}
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Only whether people answered; never what they answered.</p>
+          </div>
+        )}
 
         {!sending.emailConfigured && (
           <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pulse-email-off">

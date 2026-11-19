@@ -46,6 +46,11 @@ export interface TeamPulseData {
   threshold: number;
   canRespond: boolean;
   canSetCadence: boolean;
+  /** Lead, QA manager of the department or admin: may set the non-response warning, reminders and escalation. */
+  canSetReminders: boolean;
+  reminders: PulseReminderInfo | null;
+  /** After the period's escalation, to the people it went to: who has not answered yet (names only). */
+  nonResponders: { escalatedAt: string; members: Array<{ id: string; name: string }> } | null;
   /** Lead, QA manager or admin of the team: may e-mail the survey and reminders. */
   canSend: boolean;
   /** Send status (only with canSend). */
@@ -58,6 +63,17 @@ export interface TeamPulseData {
   formula: string;
   privacy: string;
   suppressedText: string;
+}
+
+export interface PulseReminderInfo {
+  settings: { warningAfterDays: number; reminderEmails: boolean; reminderEveryDays: number; escalateAfterDays: number; escalateTo: 'team_lead' | 'department_managers' | 'both' };
+  effective: { warningAfterDays: number; reminderEveryDays: number; escalateAfterDays: number; shortened: boolean };
+  sentDay: string | null;
+  limits: Record<'warningAfterDays' | 'reminderEveryDays' | 'escalateAfterDays', { min: number; max: number }>;
+  escalateToOptions: Array<{ value: string; label: string }>;
+  recipients: string[];
+  fallbackToAdmins: boolean;
+  periodLastDay: string;
 }
 
 export const CADENCE_LABEL: Record<PulseCadence, string> = CADENCE_LABELS;

@@ -13,6 +13,7 @@ import {
 } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
 import { fetchOperatorStatus } from '../lib/operatorClient';
+import PulsePendingBanner from './PulsePendingBanner';
 import NotificationsBell from './NotificationsBell';
 import { NOTIFICATIONS_TAB_EVENT, NOTIFICATIONS_TAB_KEY } from './NotificationsCenter';
 
@@ -28,6 +29,8 @@ interface LayoutProps {
   onGridChange?: (cols: 1 | 2 | 3) => void;
   is3DMode?: boolean;
   on3DModeChange?: (is3D: boolean) => void;
+  /** Open the wellbeing pulse of a team (the pending-survey banner). */
+  onOpenPulse?: (teamId: string) => void;
 }
 
 type Role = 'super_admin' | 'qa_manager' | 'team_lead' | 'qa_engineer' | 'viewer';
@@ -162,7 +165,7 @@ const useMediaQuery = (q: string) => {
 
 const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, onTabChange }) => {
+const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, onTabChange, onOpenPulse }) => {
   const { user, logout } = useAuth();
   const { isDark, toggleMode } = useTheme();
   // Navigation lives in a drawer behind the burger button. On wide screens it can be pinned
@@ -445,6 +448,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
           </div>
         </header>
 
+        {onOpenPulse && <PulsePendingBanner userId={user?.id ? String(user.id) : null} onOpen={onOpenPulse} />}
         <main id="main-scroll" className="flex-1 overflow-auto flex flex-col">
           <div className="flex-1">{children}</div>
           <footer className="px-4 sm:px-8 py-4 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2">

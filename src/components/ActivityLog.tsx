@@ -61,7 +61,7 @@ const ACTION_LABEL: Record<string, string> = {
   'department.create': 'Department created', 'department.rename': 'Department renamed', 'department.deactivate': 'Department deleted', 'department.activate': 'Department reactivated',
   'team.create': 'Team created', 'team.update': 'Team changed', 'team.move': 'Team moved', 'team.lead_change': 'Team lead changed',
   'team.deactivate': 'Team deactivated', 'team.activate': 'Team reactivated',
-  'team.pulse_cadence': 'Pulse cadence', 'team.pulse_auto_send': 'Pulse automatic sending', 'team.pulse_send': 'Pulse survey sent', 'team.pulse_reminder': 'Pulse reminder sent',
+  'team.pulse_cadence': 'Pulse cadence', 'team.pulse_auto_send': 'Pulse automatic sending', 'team.pulse_send': 'Pulse survey sent', 'team.pulse_reminder': 'Pulse reminder sent', 'team.pulse_reminders': 'Pulse reminder settings', 'team.pulse_escalation': 'Pulse escalation',
   'invitation.create': 'Invitation sent', 'invitation.resend': 'Invitation re-sent', 'invitation.revoke': 'Invitation revoked', 'invitation.accept': 'Invitation accepted',
   'config.update': 'Settings changed', 'targets.update': 'KPI targets', 'config.metric_interval': 'Update frequency', 'config.pipeline': 'Pipeline settings',
   'api_key.create': 'API key created', 'api_key.revoke': 'API key revoked', 'sso.link': 'Single sign-on linked', 'company.create': 'Organisation created',

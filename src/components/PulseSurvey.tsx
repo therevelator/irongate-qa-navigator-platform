@@ -4,6 +4,7 @@ import { Card, CardHeader, EmptyState, Page, PageIntro } from './ui';
 import { PulseSendPanel } from './PulseSurveySend';
 import { PulseResults, useTeamPulse } from './PulseSurveyResults';
 import { PulseCadenceControl, PulseSurveyForm } from './PulseSurveyForm';
+import { PulseReminderSettings } from './PulseReminders';
 
 /**
  * Wellbeing pulse (Analytics module, one team from the analytics scope): answer the team's
@@ -33,12 +34,13 @@ const PulseSurvey: React.FC<{ teamId: string }> = ({ teamId }) => {
             {data.canSend && data.sending && (
               <Card><PulseSendPanel data={data} sending={data.sending} onChanged={reload} /></Card>
             )}
+            {data.canSetReminders && data.reminders && <Card><PulseReminderSettings data={data} reminders={data.reminders} onChanged={reload} /></Card>}
             <PulseSurveyForm data={data} onSubmitted={reload} />
             <Card>
               <CardHeader title="How your answers are protected" />
               <ul className="space-y-2 text-sm text-slate-700 dark:text-slate-300" data-testid="pulse-privacy">
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Answers are stored without your name, user id or the time you answered. Only the period is kept.</li>
-                <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />A separate list records that you answered this period, only so you cannot answer twice. It cannot be matched to an answer.</li>
+                <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />A separate list records whether you answered this period: so you cannot answer twice, for reminders, and so your team lead or managers can see who has not answered yet. It holds no time and cannot be matched to an answer.</li>
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Results are averages, shown only after a period ends and only when at least {data.threshold} people answered.</li>
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />E-mailed survey links are personal, work once and expire when the period ends. Answering through a link is stored the same way: without your name.</li>
                 <li className="flex gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-slate-400" aria-hidden />Comments are shown to the team lead, QA managers and admins with the period’s results, in alphabetical order.</li>

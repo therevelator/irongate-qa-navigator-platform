@@ -127,7 +127,7 @@ const PulseAnswerLink: React.FC = () => {
       </p>
       <p className="mt-4 flex gap-2 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300">
         <ShieldCheck size={14} className="mt-0.5 shrink-0" aria-hidden />
-        <span>Anonymous: your answers are stored without your name. This personal link works once and only for this survey. Do not forward it.</span>
+        <span>Your answers are anonymous. Your manager can see whether you have responded, not what you answered. This personal link works once and only for this survey. Do not forward it.</span>
       </p>
       <div className="mt-6" data-testid="pulse-link-form">
         <PulseAnswerForm set={info as PulseQuestionSet} onSubmit={submit} />

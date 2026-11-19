@@ -247,6 +247,14 @@ function App() {
     return () => { clearTimeout(timer); ws?.close(); };
   }, [user?.id]);
 
+  // Open a team's wellbeing pulse (the pending-survey banner): the team becomes the analytics scope.
+  const openPulse = (teamId: string) => {
+    analyticsScope.setTeamId(teamId);
+    window.history.pushState(null, '', `${VIEW_TO_PATH['team-pulse']}?${URL_TEAM_PARAM}=${encodeURIComponent(teamId)}`);
+    setSelectedTeam(null);
+    setCurrentView('team-pulse');
+  };
+
   // Open a team's detail view by id (Departments page). The list may be stale after a team
   // moved department, so a miss refetches it once.
   const openTeamById = async (teamId: string) => {
@@ -308,6 +316,7 @@ function App() {
         activeTab={activeTab}
         onTabChange={setActiveTab}
         hideSidebar
+        onOpenPulse={openPulse}
       >
         <TeamDetailView
           team={selectedTeam}
@@ -336,6 +345,7 @@ function App() {
       onGridChange={setGridColumns}
       is3DMode={is3DMode}
       on3DModeChange={setIs3DMode}
+      onOpenPulse={openPulse}
     >
       {content}
     </Layout>
@@ -400,6 +410,7 @@ function App() {
         onGridChange={setGridColumns}
         is3DMode={is3DMode}
         on3DModeChange={setIs3DMode}
+        onOpenPulse={openPulse}
       >
         <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} gridColumns={gridColumns} is3DMode={is3DMode} />
       </Layout>

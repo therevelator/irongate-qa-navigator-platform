@@ -87,7 +87,7 @@ export const PulseAnswerForm: React.FC<{ set: PulseQuestionSet; onSubmit: (answe
       {error && <p className="text-sm text-red-700 dark:text-red-400" role="alert">{error}</p>}
       <div className="flex flex-wrap items-center gap-3">
         <button type="submit" className={buttonClass.primary} disabled={saving} data-testid="pulse-submit">{saving ? 'Sending…' : 'Send anonymously'}</button>
-        <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"><Lock size={12} aria-hidden /> Your name is not stored with your answers.</span>
+        <span className="inline-flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400"><Lock size={12} aria-hidden /> Your answers are anonymous. Your manager can see whether you have responded, not what you answered.</span>
       </div>
     </form>
   );
