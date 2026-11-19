@@ -3,7 +3,7 @@ import rateLimit from 'express-rate-limit';
 import { authenticateToken, type AuthRequest } from '../middleware/auth';
 import { policyActor } from '../middleware/access';
 import { canViewUserActivity } from '../lib/userPolicy';
-import { ctxOf } from '../lib/requestContext';
+import { ctxOf, clientIp } from '../lib/requestContext';
 import { recordScreenViews, skipActivity } from '../lib/userActivity';
 import { filtersFromQuery, listUserActivity, userActivityFacets } from '../lib/userActivityQuery';
 import { toCsv, csvFileName, type CsvColumn } from '../../src/lib/csv';
@@ -27,7 +27,7 @@ const screenLimiter = rateLimit({
   max: 60,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req: any) => `u:${req.user?.id ?? req.ip}`,
+  keyGenerator: (req: any) => `u:${req.user?.id ?? clientIp(req)}`,
   message: { error: 'Too many screen events, please slow down.' },
 });
 

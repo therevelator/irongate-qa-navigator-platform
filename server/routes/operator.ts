@@ -111,7 +111,7 @@ const stepUpLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  keyGenerator: (req: any) => `op:${req.user?.id ?? req.ip}`,
+  keyGenerator: (req: any) => `op:${req.user?.id ?? clientIp(req)}`,
   message: { error: 'Too many attempts. Try again in 15 minutes.' },
 });
 
