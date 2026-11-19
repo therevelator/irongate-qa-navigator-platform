@@ -31,8 +31,9 @@ the server; access never depends on them alone.
 
 | Capability (helper) | super_admin | qa_manager | team_lead | qa_engineer | viewer |
 |---|---|---|---|---|---|
-| Overview dashboard; team KPIs on the team list (company-visible) | yes | yes | yes | yes | yes |
-| Analytics modules, Compare teams (`canCompareTeams`), TV mode, team KPI history | all teams | their departments' teams | their teams | their teams | their teams |
+| Overview dashboard and team detail: the teams of the analytics scope (full matrix: [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md)) | all teams | their departments' teams | their teams | their teams | their teams |
+| Analytics modules, Compare teams (`canCompareTeams`), team KPI history | all teams | their departments' teams | their teams | their teams | their teams |
+| TV mode (`canViewTeamTv`, wall screen, team figures only) | any team of the company | any team of the company | any team of the company | any team of the company | any team of the company |
 | Per-team metric detail: history, velocity, metric bundles (`canReadTeamDetail` = analytics scope) | all teams | their departments' teams | their teams | their teams | their teams |
 | Team member names and e-mails (`canViewTeamMembers`) | all teams | their departments' teams | their teams | their teams | their teams |
 | Other developers' individual rows (`canViewDeveloperRow`) | people who opted in | people who opted in, their departments | people who opted in, their teams | own row only | own row only |
