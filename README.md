@@ -396,7 +396,8 @@ their scope (`GET /api/tv/teams`).
 - Refreshes every 60 s, on the live "metrics updated" event and when the tab becomes
   visible; a failed refresh keeps the last data on screen and says so.
 - Keys: **F** full screen (if the browser refuses, a message suggests F11), **T** light/dark
-  (dark by default, remembered separately from the app theme), **R** auto-rotate the panels
+  (dark by default, remembered separately from the app theme; with the Graphite or Porcelain app theme, dark is Graphite and light
+  Porcelain), **R** auto-rotate the panels
   every 20 s, **← →** or **1–3** panels, **Esc** exit. The controls bar appears on mouse
   move and hides after 4 s, with the cursor.
 - Kiosk URL options: `?team=<id>&theme=light|dark&rotate=1`. The layout scales with the
@@ -493,7 +494,9 @@ current targets; existing snapshot rows are not rewritten).
   company badge, the person with their job title (`users.job_title`, migration
   `20261126000000_users_job_title.sql`, set by super admins on the Users page; the role label when empty),
   **What you can do here** (generated from `server/lib/userPolicy.ts` by `src/lib/accessSummary.ts`), the
-  bell, the theme toggle and the account menu. The navigation shows only pages the person may open
+  bell, the **Appearance** menu (theme: Light, Dark, Graphite, Porcelain, Match system; score display: Battery or Gauge; kept in the
+  browser and applied before the first paint: `src/lib/appearance.ts`, `src/styles/themes.css`, `src/components/ScoreVisual.tsx`)
+  and the account menu. The navigation shows only pages the person may open
   (`src/lib/viewAccess.ts`, also used by the router).
 - **Targets next to every status** (`src/lib/targetText.ts`): "Off target · Target ≥ 80%", "Watch: 70–80% ·
   Target ≥ 80%", with the target valid at the value's date.

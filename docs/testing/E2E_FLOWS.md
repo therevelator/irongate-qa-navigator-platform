@@ -96,7 +96,7 @@ Derived from the code, then checked against the documentation:
 | F4.7 | Navigation drawer: Escape, backdrop, focus back to the menu button | All | — | NAV-15 | — |
 | F4.8 | Pin the navigation on wide screens (remembered) | All | — | NAV-16 | — |
 | F4.9 | Brand button → overview | All | — | NAV-17 | — |
-| F4.10 | Dark / light theme (kept per browser, system preference ignored) | All | — | UX-01, LIVE-04 | UX-02 |
+| F4.10 | Appearance menu: theme (Light, Dark, Graphite, Porcelain, Match system) and score display (Battery, Gauge), kept per browser, applied before the first paint; system preference only with Match system | All | — | UX-01, LIVE-04, APR-01, APR-02, APR-03, APR-04, APR-05, A11Y-20…24 | UX-02 |
 | F4.11 | Phone layout (390 px) without sideways scrolling | All | — | UX-10, UX-11 (18 pages), UX-12, legacy:platform-operator, legacy:revenue-impact | UX-13 very long unicode names |
 | F4.12 | Pending wellbeing-pulse banner (Answer now / Not today) | Members who have not answered | Others | legacy:pulse-reminders | legacy:pulse-reminders ("Not today") |
 | F4.13 | Notifications bell (unread count, latest, mark read, acknowledge) | All | — | legacy:alerts-actions "…bell…" | legacy:alerts-actions (engineer cannot acknowledge) |
@@ -196,7 +196,7 @@ Derived from the code, then checked against the documentation:
 | F10.6 | Alert rules per level (on/off, parameters, inherit) | A (company), M (department, team) | L E V | ALR-01, ALR-02, legacy:alerts-actions | NAV-03 |
 | F10.7 | "Evaluate alerts now" | A | M L E V | DIG-01 | PAR-05 (no Slack / evaluate card for a manager) |
 | F10.8 | Slack webhook: save (masked), test message, remove | A | M L E V | SLK-01 (local receiver) | SLK-01 non-Slack URL refused, URL never shown again; PAR-05 |
-| F10.9 | Tracked actions: create (owner, KPI, due date), edit, done with computed outcome, delete (with cancel) | A, M (dept), L (own team) | E V (create / edit / delete) | ACT-01, legacy:alerts-actions | ACT-02 title length and markup, ACT-03 double click creates one, ACT-05 failed save, ACT-04 API refuses E |
+| F10.9 | Tracked actions: create (owner, KPI, due date), edit, done with computed outcome, delete (with cancel) | A, M (dept), L (own team) | E V (create / edit / delete) | ACT-01, APL-01…04 (grouped by status, paging, remembered state), legacy:alerts-actions | ACT-02 title length and markup, ACT-03 double click creates one, ACT-05 failed save, ACT-04 API refuses E |
 | F10.10 | Action owner changes the status of their own action only | Owner (any role) | Others | ACT-04 | ACT-04 (no status on others' actions, no edit) |
 
 ## 11. Wellbeing pulse
