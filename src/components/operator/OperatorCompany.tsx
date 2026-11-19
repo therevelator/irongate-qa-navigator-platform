@@ -212,7 +212,10 @@ const SettingsTab: React.FC<{ companyId: string; reason: string }> = ({ companyI
       <Section title="Update frequency (overrides)">
         <DataTable rows={data.intervals} rowKey={(r: any) => r.metric_key} columns={[{ key: 'metric_key', label: 'Metric' }, { key: 'interval', label: 'Every', render: (r: any) => `${r.interval_value} ${r.interval_unit}` }]} />
       </Section>
-      <Section title="Slack and saved views">
+      <Section title="E-mail, Slack and saved views">
+        <p className="px-4 pt-3 text-sm text-slate-700 dark:text-slate-300" data-testid="operator-email-channel">
+          E-mail (this server): {data.emailChannel === 'resend' ? 'Resend' : data.emailChannel === 'smtp' ? 'SMTP' : 'not configured (written to the server log)'}
+        </p>
         <p className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">
           Slack: {data.notificationSettings?.slack_configured ? `configured (${data.notificationSettings.slack_webhook_hint ?? 'hidden'}), ${data.notificationSettings.slack_enabled ? 'on' : 'off'}` : 'not configured'}
         </p>

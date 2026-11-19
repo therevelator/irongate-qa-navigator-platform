@@ -187,18 +187,19 @@ const AlertSettings: React.FC<{ scopeType: 'company' | 'department' | 'team'; sc
 const NotificationChannels: React.FC = () => {
   const [s, setS] = useState<Settings | null>(null);
   const [smtp, setSmtp] = useState(false);
+  const [emailChannel, setEmailChannel] = useState<'resend' | 'smtp' | 'log'>('log');
   const [forbidden, setForbidden] = useState(false);
   const [url, setUrl] = useState('');
   const [form, setForm] = useState({ slackEnabled: false, slackMinSeverity: 'critical' as Severity, slackDigest: false });
   const [busy, setBusy] = useState<string | null>(null);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
-  const apply = (r: { settings: Settings; smtpConfigured: boolean }) => {
-    setS(r.settings); setSmtp(r.smtpConfigured);
+  const apply = (r: { settings: Settings; smtpConfigured: boolean; emailChannel?: 'resend' | 'smtp' | 'log' }) => {
+    setS(r.settings); setSmtp(r.smtpConfigured); setEmailChannel(r.emailChannel ?? (r.smtpConfigured ? 'smtp' : 'log'));
     setForm({ slackEnabled: r.settings.slackEnabled, slackMinSeverity: r.settings.slackMinSeverity, slackDigest: r.settings.slackDigest });
   };
   useEffect(() => {
-    api<{ settings: Settings; smtpConfigured: boolean }>('/notifications/settings').then(apply).catch((e) => { if (e.status === 403) setForbidden(true); });
+    api<{ settings: Settings; smtpConfigured: boolean; emailChannel?: 'resend' | 'smtp' | 'log' }>('/notifications/settings').then(apply).catch((e) => { if (e.status === 403) setForbidden(true); });
   }, []);
   if (forbidden || !s) return null;
 
@@ -258,7 +259,7 @@ const NotificationChannels: React.FC = () => {
         <div>
           <p className="text-sm font-medium text-slate-900 dark:text-white">Email and the weekly digest</p>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            {smtp ? 'Email is sent through the SMTP server configured on this server.' : 'SMTP is not configured on this server (SMTP_HOST): emails are written to the server log instead of being sent.'}
+            {smtp ? (emailChannel === 'resend' ? 'Email is sent through Resend (RESEND_API_KEY is set on this server).' : 'Email is sent through the SMTP server configured on this server.') : 'Email is not configured on this server (RESEND_API_KEY or SMTP_HOST): emails are written to the server log instead of being sent.'}
             {' '}The weekly digest goes out on Mondays at 07:00 UTC to super admins, managers and team leads who have it on.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">

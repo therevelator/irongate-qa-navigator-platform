@@ -23,6 +23,7 @@ import { evaluateCompany } from '../lib/alerts';
 import { onboardingStatus } from '../lib/onboarding';
 import { reissueInvitation, sendInvitationEmail, statusSql } from '../lib/invitations';
 import { JOB_NAMES, withJobRun } from '../lib/opsLog';
+import { mailChannel } from '../lib/mailer';
 import { filtersFromQuery, listUserActivity, userActivityFacets } from '../lib/userActivityQuery';
 
 /**
@@ -409,7 +410,8 @@ router.get('/companies/:companyId/settings', ...op, view('settings', async (_req
     'SELECT slack_enabled, slack_min_severity, slack_digest, slack_webhook_hint, (slack_webhook_enc IS NOT NULL) AS slack_configured, updated_at FROM company_notification_settings WHERE company_id = ?',
     [company.id],
   );
-  res.json({ configs: masked, targets, intervals, savedViews, notificationSettings: notify ?? null });
+  // E-mail channel of this server (Resend / SMTP / log): which one, never its settings.
+  res.json({ configs: masked, targets, intervals, savedViews, notificationSettings: notify ?? null, emailChannel: mailChannel() });
 }));
 
 router.get('/companies/:companyId/data', ...op, view('data', async (req, res, company) => {

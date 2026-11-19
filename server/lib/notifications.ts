@@ -306,7 +306,7 @@ async function sendOne(d: any, webhooks: Map<string, string | null>): Promise<{ 
   if (d.channel === 'email') {
     const r = await sendMail({ to: d.recipient, subject: d.subject ?? 'IronGate notification', text: d.payload?.text ?? '', html: d.payload?.html });
     if (r.delivered) return { status: 'sent' };
-    return r.channel === 'log' ? { status: 'logged', error: 'SMTP is not configured: the email was logged, not sent' } : { status: 'failed', error: r.error };
+    return r.channel === 'log' ? { status: 'logged', error: 'E-mail is not configured (RESEND_API_KEY / SMTP_HOST): the email was logged, not sent' } : { status: 'failed', error: r.error };
   }
   if (!webhooks.has(d.company_id)) {
     const s = await getSettings(d.company_id);

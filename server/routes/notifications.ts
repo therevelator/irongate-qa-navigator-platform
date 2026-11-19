@@ -3,6 +3,7 @@ import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { policyActor } from '../middleware/access';
 import { recordAudit } from '../lib/audit';
+import { mailChannel } from '../lib/mailer';
 import { canAcknowledgeAlert, canManageNotificationSettings, canReceiveDigest, loadActor } from '../lib/alertPolicy';
 import { isSeverity } from '../lib/alerts';
 import {
@@ -174,7 +175,7 @@ router.post('/digest/test', authenticateToken, async (req: AuthRequest, res) => 
       delivered,
       to: me.email,
       subject: r.subject,
-      message: delivered ? `Test digest sent to ${me.email}` : r.status === 'logged' ? 'Email is not configured on this server (SMTP_HOST is not set): the digest was written to the server log instead.' : `The digest could not be sent: ${r.error ?? 'unknown error'}`,
+      message: delivered ? `Test digest sent to ${me.email}` : r.status === 'logged' ? 'Email is not configured on this server (RESEND_API_KEY or SMTP_HOST is not set): the digest was written to the server log instead.' : `The digest could not be sent: ${r.error ?? 'unknown error'}`,
     });
   } catch (error) {
     console.error('Test digest error:', error);
@@ -189,7 +190,7 @@ router.post('/digest/test', authenticateToken, async (req: AuthRequest, res) => 
 router.get('/settings', authenticateToken, async (req: AuthRequest, res) => {
   try {
     if (!canManageNotificationSettings(policyActor(req))) return res.status(403).json({ error: 'Only administrators can manage notification settings' });
-    res.json({ settings: publicSettings(await getSettings(req.companyId as string)), smtpConfigured: !!process.env.SMTP_HOST });
+    res.json({ settings: publicSettings(await getSettings(req.companyId as string)), smtpConfigured: mailChannel() !== 'log', emailChannel: mailChannel() });
   } catch (error) {
     console.error('Get notification settings error:', error);
     res.status(500).json({ error: 'Failed to load the notification settings' });
@@ -248,7 +249,7 @@ router.put('/settings', authenticateToken, async (req: AuthRequest, res) => {
       after: view({ configured, hint: next.hint, enabled: next.enabled, minSeverity: next.minSeverity, digest: next.digest }),
       departmentIds: [], subjectIds: [companyId],
     });
-    res.json({ settings: publicSettings(await getSettings(companyId)), smtpConfigured: !!process.env.SMTP_HOST });
+    res.json({ settings: publicSettings(await getSettings(companyId)), smtpConfigured: mailChannel() !== 'log', emailChannel: mailChannel() });
   } catch (error) {
     console.error('Save notification settings error:', error);
     res.status(500).json({ error: 'Failed to save the notification settings' });

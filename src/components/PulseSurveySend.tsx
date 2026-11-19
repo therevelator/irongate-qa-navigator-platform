@@ -137,7 +137,7 @@ export const PulseSendPanel: React.FC<{ data: TeamPulseData; sending: PulseSendS
         {!sending.emailConfigured && (
           <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" data-testid="pulse-email-off">
             <Info size={14} className="mt-0.5 shrink-0" aria-hidden />
-            <p>E-mail is not configured on this server (SMTP), so the survey cannot be e-mailed. Members can answer in the app under Analytics, Wellbeing pulse. Personal links are never shown here, so nobody can answer for someone else.</p>
+            <p>E-mail is not configured on this server (Resend or SMTP), so the survey cannot be e-mailed. Members can answer in the app under Analytics, Wellbeing pulse. Personal links are never shown here, so nobody can answer for someone else.</p>
           </div>
         )}
 

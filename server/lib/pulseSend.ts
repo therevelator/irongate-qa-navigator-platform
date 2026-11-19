@@ -30,7 +30,7 @@ import { createHash, randomBytes } from 'crypto';
 import { query, queryOne } from '../../src/lib/db';
 import { execOn, loadGrants, teamMembers, departmentManagers, teamLeadOf, type Exec } from './assignments';
 import { recordAudit } from './audit';
-import { escapeHtml, getMailer, sendMail } from './mailer';
+import { escapeHtml, getMailer, sendMail, type MailChannel } from './mailer';
 import { appBaseUrl } from './sso';
 import { canTakePulseSurvey } from './userPolicy';
 import { K_ANONYMITY_MIN, meetsKAnonymity } from './privacy';
@@ -178,8 +178,8 @@ export interface SendOutcome {
   /** Members e-mailed by this send (null: withheld, see reminderCountShown). */
   recipients: number | null;
   delivered: number | null;
-  /** 'smtp' when e-mail is configured, else 'log' (nothing leaves the server). */
-  channel: 'smtp' | 'log';
+  /** 'resend' or 'smtp' when e-mail is configured, else 'log' (nothing leaves the server). */
+  channel: MailChannel;
   emailConfigured: boolean;
   sendId: string | null;
 }

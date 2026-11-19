@@ -30,7 +30,7 @@ export interface Invitation {
   invited_by_name: string | null;
 }
 
-interface Delivery { delivered: boolean; channel: 'smtp' | 'log'; error: string | null }
+interface Delivery { delivered: boolean; channel: 'resend' | 'smtp' | 'log'; error: string | null }
 interface SendResult { invitation: Invitation; delivery: Delivery; link: string | null }
 
 const ROLE_NAMES = ROLE_LABELS;
