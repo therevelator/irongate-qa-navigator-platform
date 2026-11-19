@@ -57,9 +57,22 @@ f"INSERT INTO public.departments (id, company_id, name, description, is_active, 
 for k,(tid,name,plat,desc) in T.items():
     out.append(f"INSERT INTO public.teams (id, company_id, department_id, name, platform, description, is_active, ai_enabled, created_at) VALUES ({q(tid)}, {q(CO)}, {q(DEPT)}, {q(name)}, {q(plat)}, {q(desc)}, TRUE, FALSE, now() - interval '380 days') ON CONFLICT DO NOTHING;")
 rows=[]; ras=[]; tms=[]; people=[]
+# Join dates (days ago): leadership and stakeholders early (the auditor recently), Product Owners
+# and Scrum Masters at team start, developers spread over the year.
+JOIN = {'Eleanor Vance': 395, 'Marcus Reid': 390, 'Priya Natarajan': 384, 'Sophie Laurent': 372, 'Gareth Owens': 330, 'Hannah Kessler': 75,
+        'Olivia Grant': 370, 'Daniel Osei': 368, 'James Whitaker': 366, 'Nadia Petrova': 362, 'Isabel Costa': 365, 'Henrik Larsen': 360,
+        'Peter Lang': 300}
+dev_ix = {}
+def joined(f, l, tk):
+    n = f'{f} {l}'
+    if n in JOIN: return JOIN[n]
+    j = dev_ix.get(tk, 0); dev_ix[tk] = j + 1
+    return [362, 358, 350, 341, 333, 326][j % 6] - (0 if tk == 'pay' else 4 if tk == 'lend' else 8)
+joins = {}
 for i,(f,l,title,role,tk,extra,active) in enumerate(P):
     u=uid(f,l); team=T[tk][0] if tk else None
-    created=f"now() - interval '{360-i*3} days'"
+    joins[u] = joined(f, l, tk)
+    created=f"now() - interval '{joins[u]} days'"
     rows.append(f"({q(u)}, {q(mail(f,l))}, {q(HASH[role])}, {q(f)}, {q(l)}, {q(role)}, {q(CO)}, {q(DEPT)}, {q(team)}, 'Europe/London', {str(active).upper()}, TRUE, {'TRUE' if role in ('qa_engineer','team_lead') and (f,l)!=('Leo','Fischer') else 'FALSE'}, {created}, {('now() - interval ' + q(str(1 + i % 5) + ' days')) if active else 'NULL'})")
     if role=='super_admin': ras.append((u,role,'company',CO,active))
     elif role=='qa_manager': ras.append((u,role,'department',DEPT,active))
@@ -77,9 +90,9 @@ out.append("INSERT INTO public.users (id, email, password_hash, first_name, last
 ra=[]
 for (u,r,st,sid,active) in ras:
     rid=f"mft-ra-{u[6:]}-{sid[-12:]}"[:36]
-    ra.append(f"({q(rid)}, {q(CO)}, {q(u)}, {q(r)}, {q(st)}, {q(sid)}, now() - interval '300 days', 'mft-u-eleanor-vance', {'NULL' if active else chr(39)+'now'+chr(39)+'::timestamptz - interval '+chr(39)+'21 days'+chr(39)}, {'NULL' if active else q('mft-u-priya-natarajan')})")
+    ra.append(f"({q(rid)}, {q(CO)}, {q(u)}, {q(r)}, {q(st)}, {q(sid)}, now() - interval '{joins[u]} days', 'mft-u-eleanor-vance', {'NULL' if active else chr(39)+'now'+chr(39)+'::timestamptz - interval '+chr(39)+'21 days'+chr(39)}, {'NULL' if active else q('mft-u-priya-natarajan')})")
 out.append("INSERT INTO public.role_assignments (id, company_id, user_id, role, scope_type, scope_id, created_at, created_by, revoked_at, revoked_by) VALUES\n"+",\n".join(ra)+"\nON CONFLICT DO NOTHING;")
-out.append("INSERT INTO public.team_members (user_id, team_id, role, joined_at) VALUES\n"+",\n".join(f"({q(u)}, {q(t)}, {q(r)}, now() - interval '300 days')" for u,t,r in tms)+"\nON CONFLICT DO NOTHING;")
+out.append("INSERT INTO public.team_members (user_id, team_id, role, joined_at) VALUES\n"+",\n".join(f"({q(u)}, {q(t)}, {q(r)}, now() - interval '{joins[u] - 1} days')" for u,t,r in tms)+"\nON CONFLICT DO NOTHING;")
 out.append(f"UPDATE public.teams SET lead_id = CASE id WHEN {q(T['pay'][0])} THEN 'mft-u-daniel-osei' WHEN {q(T['lend'][0])} THEN 'mft-u-nadia-petrova' WHEN {q(T['mob'][0])} THEN 'mft-u-henrik-larsen' END WHERE company_id = {q(CO)};")
 out.append(f"UPDATE public.departments SET manager_id = 'mft-u-priya-natarajan' WHERE id = {q(DEPT)};")
 out.append(f"""-- Pending invitations (their token hashes match no token: resend to issue a usable link).

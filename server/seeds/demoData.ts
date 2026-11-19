@@ -17,6 +17,7 @@
  */
 
 import { createHash } from 'crypto';
+import { readFileSync } from 'fs';
 import { computeQaScore, computeDdps, TECH_DEBT_SEVERITY_WEIGHTS } from '../lib/metricFormulas';
 import { calculateWorkloadBalance } from '../../src/data/advancedFeatures';
 import { DEFAULT_METRIC_INTERVALS } from '../lib/metricIntervals';
@@ -38,11 +39,18 @@ export const DEMO_PASSWORD = 'demo123';
 /** bcrypt (cost 10) hash of DEMO_PASSWORD, fixed so the SQL output is reproducible. */
 export const DEMO_PASSWORD_HASH = '$2b$10$puGdBtySdfzNUo5zCLPRg.fAMlRhZwSpwPCYe9QgHWhamOIJXfTXe';
 
+/**
+ * History lengths. The defaults suit the in-app sample data; a longer showcase (scripts/reseed)
+ * sets SAMPLE_HISTORY_DAYS, SAMPLE_EVENT_DAYS, SAMPLE_PERF_DAYS, SAMPLE_DEV_DAYS and
+ * SAMPLE_PULSE_WEEKS (e.g. a full year). The nightly refresh uses the defaults: it only adds the
+ * missing recent days, so a longer history stays as it is.
+ */
+const envDays = (key: string, def: number) => { const v = Number(process.env[key]); return Number.isInteger(v) && v > 0 && v <= 1500 ? v : def; };
 /** Number of days of KPI history (today and the previous HISTORY_DAYS days). */
-const HISTORY_DAYS = 120;
+const HISTORY_DAYS = envDays('SAMPLE_HISTORY_DAYS', 120);
 /** Days of event-level history (pipeline runs, test executions, suite runs). */
-const EVENT_DAYS = 30;
-const PERF_DAYS = 90;
+const EVENT_DAYS = envDays('SAMPLE_EVENT_DAYS', 30);
+const PERF_DAYS = envDays('SAMPLE_PERF_DAYS', 90);
 const PIPELINE_COST_PER_MINUTE = 0.12;
 
 // ============================================================================
@@ -263,6 +271,8 @@ interface TeamDef {
   key: string; id: string; code: string; name: string; dept: string; platform: string; description: string;
   /** Health today (0..1) and change over the last 120 days (positive = improving). */
   h: number; change: number; phase: number; sprintOffset: number;
+  /** Optional story: health at given days ago, linearly interpolated (SAMPLE_TEAM_STORIES). */
+  story?: Array<[number, number]>;
   areas: string[]; endpoints: Array<[string, string, number]>; revenue: number;
 }
 interface UserDef {
@@ -375,7 +385,7 @@ export type TeamGroup = Exclude<Group, 'base' | 'dev'>;
 /** A team with real rows at most this many days old keeps that data (e.g. its KPI history). */
 export const RECENT_DAYS = 30;
 /** Days of developer productivity snapshots (covers the 6-month DDPS range). */
-export const DEV_DAYS = 180;
+export const DEV_DAYS = envDays('SAMPLE_DEV_DAYS', 180);
 
 /**
  * SQL condition: the team already has real (non-demo) data for a group *in the window the
@@ -496,7 +506,8 @@ export function teamDefFor(t: { id: string; name: string; platform: string | nul
   const slug = t.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 24) || 'team';
   return {
     key: t.id, id: t.id, code, name: t.name, dept: '', platform: t.platform || PLATFORMS[Math.floor(rnd('plat', t.id) * PLATFORMS.length)],
-    description: t.description ?? '', h: round(0.32 + 0.62 * rnd('h', t.id), 3), change: round((rnd('chg', t.id) - 0.45) * 0.2, 3),
+    description: t.description ?? '', h: teamStories()[t.id] ? storyAt(teamStories()[t.id], 0) : round(0.32 + 0.62 * rnd('h', t.id), 3), change: round((rnd('chg', t.id) - 0.45) * 0.2, 3),
+    story: teamStories()[t.id],
     phase: rnd('phase', t.id) * 6, sprintOffset: rnd('spo', t.id) < 0.5 ? 0 : 7,
     revenue: Math.round(300_000 + 1_900_000 * rnd('rev', t.id)),
     areas: order(GENERIC_AREAS, 'area').slice(0, 8),
@@ -570,8 +581,45 @@ const SPRINT_COLS = ['sprint_velocity', 'sprint_commitment_rate', 'sprint_carryo
 export const KPI_COLUMNS = [...KPI_METRICS.map(m => m.col), ...SPRINT_COLS];
 
 /** Team health on a date, t days before today (0..1). */
+function storyAt(story: Array<[number, number]>, t: number): number {
+  const pts = [...story].sort((a, b) => a[0] - b[0]);
+  if (t <= pts[0][0]) return pts[0][1];
+  for (let i = 1; i < pts.length; i++) {
+    if (t <= pts[i][0]) return lerp(pts[i - 1][1], pts[i][1], (t - pts[i - 1][0]) / (pts[i][0] - pts[i - 1][0]));
+  }
+  return pts[pts.length - 1][1];
+}
+
 function teamHealth(team: TeamDef, t: number): number {
-  return clamp(team.h - team.change * (t / HISTORY_DAYS) + 0.025 * Math.sin((2 * Math.PI * t) / 41 + team.phase), 0.04, 0.98);
+  const base = team.story ? storyAt(team.story, t) : team.h - team.change * (t / HISTORY_DAYS);
+  return clamp(base + 0.025 * Math.sin((2 * Math.PI * t) / 41 + team.phase), 0.04, 0.98);
+}
+
+/**
+ * SAMPLE_TEAM_STORIES: JSON file { "<team id>": [[daysAgo, health 0..1], …] } giving teams of the
+ * showcase a story over time (e.g. steady, declining, dip and recovery). Read once.
+ */
+let storiesCache: Record<string, Array<[number, number]>> | null = null;
+function teamStories(): Record<string, Array<[number, number]>> {
+  if (storiesCache) return storiesCache;
+  storiesCache = {};
+  const file = process.env.SAMPLE_TEAM_STORIES;
+  if (file) {
+    try {
+      storiesCache = JSON.parse(readFileSync(file, 'utf8'));
+    } catch (e) {
+      throw new Error(`SAMPLE_TEAM_STORIES: cannot read ${file}: ${(e as Error).message}`);
+    }
+  }
+  return storiesCache!;
+}
+
+/** SAMPLE_SPRINT_RELEASES=<YYYY-MM-DD, a sprint's first Monday>: deployments cluster at sprint ends. */
+function sprintDay(date: string): number | null {
+  const anchor = process.env.SAMPLE_SPRINT_RELEASES;
+  if (!anchor || !/^\d{4}-\d{2}-\d{2}$/.test(anchor)) return null;
+  const d = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${anchor}T00:00:00Z`)) / DAY_MS);
+  return ((d % 14) + 14) % 14;
 }
 
 function metricValue(team: TeamDef, m: MetricDef, t: number, date: string): number {
@@ -1259,7 +1307,16 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       const h = teamHealth(team, t);
       const wk = isWeekday(date);
       const rng = new Rng('pipe', team.key, date);
-      const mainRuns = wk ? Math.max(1, Math.round((k.deployment_frequency_per_week / 5) * 1.15 + rng.float() - 0.5)) : rng.chance(0.15) ? 1 : 0;
+      // Release cadence: by default about the KPI's deployments per working day; with sprint releases
+      // most deployments of a sprint go out on its last Thursday and Friday, the rest are hotfixes.
+      const sd = sprintDay(date);
+      const perSprint = (k.deployment_frequency_per_week * 2) * 1.15;
+      const mainRuns = sd === null
+        ? (wk ? Math.max(1, Math.round((k.deployment_frequency_per_week / 5) * 1.15 + rng.float() - 0.5)) : rng.chance(0.15) ? 1 : 0)
+        : !wk ? 0
+        : sd === 10 || sd === 11 ? Math.max(1, Math.round(perSprint * 0.43 + rng.float() - 0.5))
+        : (rng.chance(perSprint * 0.14 / 8) ? 1 : 0);
+      const hotfix = sd !== null && sd !== 10 && sd !== 11;
       const featureRuns = wk ? 1 + rng.int(0, 2) : rng.chance(0.3) ? 1 : 0;
       const day = { total: 0, ok: 0, failed: 0, build: [] as number[], test: [] as number[], deploy: [] as number[], failsByStage: STAGES.map(() => 0) };
       const nExec = Math.min(mainRuns + featureRuns, 12);
@@ -1267,7 +1324,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
         const isMain = e < mainRuns;
         const lastStage = isMain ? STAGES.length : 4;
         let clock = ts(date, 8 + Math.floor(((e + rng.float()) * 11) / Math.max(nExec, 1)), rng.int(0, 59), rng.int(0, 59));
-        const branch = isMain ? 'main' : `feature/${team.code}-${200 + rng.int(0, 299)}-${team.areas[rng.int(0, team.areas.length - 1)].toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.slice(0, 100);
+        const branch = isMain ? (hotfix ? `hotfix/${team.code}-${100 + rng.int(0, 899)}`.toLowerCase() : 'main') : `feature/${team.code}-${200 + rng.int(0, 299)}-${team.areas[rng.int(0, team.areas.length - 1)].toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.slice(0, 100);
         const author = authors[rng.int(0, authors.length - 1)];
         const sha = sha1(`${team.key}|${date}|${e}`);
         let outcome: 'ok' | 'failed' | 'cancelled' = 'ok';
@@ -1766,7 +1823,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
 // Wellbeing pulse survey (anonymous answers; server/lib/pulse.ts)
 // ============================================================================
 
-const PULSE_WEEKS = 16;
+const PULSE_WEEKS = envDays('SAMPLE_PULSE_WEEKS', 16);
 const PULSE_COMMENTS = [
   'Too many context switches this sprint.',
   'Pairing sessions helped a lot.',
@@ -1847,7 +1904,8 @@ function emitPulse(ds: Dataset, company: CompanyInput): { companyOn: (date: stri
     const current = periodFor(rows, today);
     let p = current;
     const since = addDays(today, cadence === 'quarterly' ? -400 : -7 * PULSE_WEEKS);
-    const first = rows[0]?.effective_from ?? DEFAULT_ANCHOR;
+    // A longer showcase history also runs before the default anchor (periods continue backwards).
+    const first = rows[0]?.effective_from ?? (process.env.SAMPLE_PULSE_WEEKS ? since : DEFAULT_ANCHOR);
     for (;;) {
       p = periodFor(rows, addDays(p.start, -1));
       if (p.start < since || p.start < first) break;

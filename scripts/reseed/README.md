@@ -16,13 +16,21 @@ scripts/reseed/build.sh /path/to/out 2026-11-19
    an external auditor) and per team a Product Owner (viewer), a Scrum Master (team lead) and 5–6
    Developers (software engineers: backend, frontend, mobile, QA / test automation, UX); a DevOps
    engineer shared by two teams, a leaver (deactivated) and two pending invitations.
-   `npm run seed:demo -- --fill-existing --company mft-meridian` then fills every module with
-   consistent sample history (sample rows: the nightly refresh keeps them current). The team ids
-   are chosen so that the generated history tells three stories: **Payments Core** high-performing,
-   **Lending Journey** struggling (defect escape around 20 %, flaky tests, the lowest pulse),
-   **Mobile Experience** improving. `showcase-content.sql` words tracked actions as sprint retro
-   actions ("Sprint 46 retro: …"), names the saved views after Scrum events and gives the pulse
-   comments each team's retrospective voice.
+   `npm run seed:demo -- --fill-existing --company mft-meridian` then fills every module with a
+   **full year** of consistent sample history (sample rows: the nightly refresh keeps them
+   current), with `SAMPLE_HISTORY_DAYS=365`, `SAMPLE_EVENT_DAYS=365`, `SAMPLE_PERF_DAYS=180`,
+   `SAMPLE_DEV_DAYS=365`, `SAMPLE_PULSE_WEEKS=52` (a pulse every sprint), the teams' stories from
+   `stories.json` (`SAMPLE_TEAM_STORIES`: health per days ago) and releases at sprint ends
+   (`SAMPLE_SPRINT_RELEASES=2026-11-09`: most deployments of a sprint on its last Thursday and
+   Friday, the rest hotfixes on `hotfix/…` branches). Stories: **Payments Core** steady high,
+   **Lending Journey** declining over the last four to five months (defect escape around 20 %,
+   flaky tests, the lowest pulse), **Mobile Experience** dipping mid-year and recovering. The values
+   at today match the teams' default profiles, so the nightly refresh continues without a jump.
+   `showcase-content.sql` adds the Scrum layer: retro actions for every sprint of the year
+   ("Sprint 46 retro: …"), the alert history (every stretch of three days or more off target, resolved
+   when back), saved views named after Scrum events, retrospective pulse comments, company KPI targets
+   set by the CTO (coverage target raised from 75 % to 80 % in May), an API key with a year of CI
+   pushes in the ingestion log and a completed onboarding checklist.
 3. `export.mjs` writes:
    - `000_wipe.sql`: `TRUNCATE … RESTART IDENTITY CASCADE` of every public table (listed), except
      `platform_operators`; nothing is dropped, other schemas are untouched.

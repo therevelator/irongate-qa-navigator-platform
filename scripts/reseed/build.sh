@@ -20,7 +20,11 @@ mkdir -p "$OUT"
 psql "$ADMIN" -qc "DROP DATABASE IF EXISTS $DB" -c "CREATE DATABASE $DB"
 for f in $(ls supabase/migrations/*.sql | sort); do psql "$URL" -v ON_ERROR_STOP=1 -qX -f "$f" > /dev/null; done
 psql "$URL" -v ON_ERROR_STOP=1 -qX -f scripts/reseed/showcase.sql
-DATABASE_URL=$URL npm run --silent seed:demo -- --fill-existing --company mft-meridian --today "$TODAY" > /dev/null
+# A full year of history, the teams' stories (scripts/reseed/stories.json) and releases at sprint
+# ends (two-week sprints; Sprint 47 started on Monday 2026-11-09).
+DATABASE_URL=$URL SAMPLE_HISTORY_DAYS=365 SAMPLE_EVENT_DAYS=365 SAMPLE_PERF_DAYS=180 SAMPLE_DEV_DAYS=365 SAMPLE_PULSE_WEEKS=52 \
+  SAMPLE_TEAM_STORIES=scripts/reseed/stories.json SAMPLE_SPRINT_RELEASES=2026-11-09 \
+  npm run --silent seed:demo -- --fill-existing --company mft-meridian --today "$TODAY" > /dev/null
 psql "$URL" -v ON_ERROR_STOP=1 -qX -f scripts/reseed/showcase-content.sql
 
 # 000_wipe.sql: every public table except platform_operators, listed explicitly.
