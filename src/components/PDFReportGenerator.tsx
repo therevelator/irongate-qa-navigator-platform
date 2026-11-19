@@ -149,7 +149,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
 
       let logoDataUrl: string | null = null;
       try {
-        const response = await fetch('/irongate-logo.png');
+        const response = await fetch('/brand/irongate-logo-pdf.png');
         if (response.ok) {
           const blob = await response.blob();
           logoDataUrl = await new Promise<string>((resolve) => {
@@ -164,7 +164,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
 
       // Header
       if (logoDataUrl) {
-        try { doc.addImage(logoDataUrl, 'PNG', 14, 10, 12, 12); } catch { /* ignore */ }
+        try { doc.addImage(logoDataUrl, 'PNG', 14, 10, 8.2, 12); } catch { /* ignore */ }
       }
       doc.setTextColor(15, 23, 42);
       doc.setFont('helvetica', 'bold');
