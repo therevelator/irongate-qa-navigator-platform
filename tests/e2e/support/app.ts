@@ -41,12 +41,46 @@ export class AppShell {
     await expect(this.page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
   }
 
+  /** The Appearance menu in the top bar (src/components/HeaderParts.tsx AppearanceMenu). */
+  get appearanceButton(): Locator { return this.page.getByRole('button', { name: 'Appearance' }); }
+  get appearanceMenu(): Locator { return this.page.getByRole('menu', { name: 'Appearance' }); }
+
+  async openAppearance(): Promise<void> {
+    if ((await this.appearanceButton.getAttribute('aria-expanded')) !== 'true') await this.appearanceButton.click();
+    await expect(this.appearanceMenu).toBeVisible();
+  }
+
+  async closeAppearance(): Promise<void> {
+    if ((await this.appearanceButton.getAttribute('aria-expanded')) !== 'true') return;
+    await this.page.keyboard.press('Escape');
+    await expect(this.appearanceMenu).toHaveCount(0);
+  }
+
+  /** Pick a theme by its menu label (Light, Dark, Graphite, Porcelain, Match system); the menu is closed after. */
+  async setTheme(label: 'Light' | 'Dark' | 'Graphite' | 'Porcelain' | 'Match system'): Promise<void> {
+    await this.openAppearance();
+    await this.appearanceMenu.getByRole('menuitemradio', { name: new RegExp(`^${label}`) }).click();
+    await this.closeAppearance();
+  }
+
+  async setScoreDisplay(label: 'Battery' | 'Gauge'): Promise<void> {
+    await this.openAppearance();
+    await this.appearanceMenu.getByRole('menuitemradio', { name: label, exact: true }).click();
+    await this.closeAppearance();
+  }
+
+  /** Light <-> Dark (the old one-click switch, now through the Appearance menu). */
   async toggleTheme(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Toggle colour theme' }).click();
+    await this.setTheme((await this.isDark()) ? 'Light' : 'Dark');
   }
 
   async isDark(): Promise<boolean> {
     return this.page.evaluate(() => document.documentElement.classList.contains('dark'));
+  }
+
+  /** The theme on <html> (data-theme). */
+  async theme(): Promise<string | null> {
+    return this.page.evaluate(() => document.documentElement.getAttribute('data-theme'));
   }
 }
 
