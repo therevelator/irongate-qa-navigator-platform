@@ -12,6 +12,7 @@ import {
 } from './OperatorBits';
 import AuthEventsList from './OperatorAuthEvents';
 import OperatorUser from './OperatorUser';
+import { DemoDataDialog, type DemoMode } from './OperatorDemoData';
 import { fmtDate, fmtDay } from './format';
 
 /**
@@ -69,6 +70,7 @@ const OperatorCompany: React.FC<{ company: { id: string; name: string }; onBack:
   const [bump, setBump] = useState(0);
   const [userId, setUserId] = useState<string | null>(null);
   const [form, setForm] = useState<FormSpec | null>(null);
+  const [demoMode, setDemoMode] = useState<DemoMode | null>(null);
   const summary = useSection<any>(company.id, 'summary');
   const orgQ = useSection<Org>(company.id, 'organisation');
   const org = orgQ.data;
@@ -123,6 +125,8 @@ const OperatorCompany: React.FC<{ company: { id: string; name: string }; onBack:
           {suspended
             ? <SmallButton testId="op-reactivate-company" onClick={() => run({ title: `Reactivate ${name}`, description: 'Its users can sign in again (sessions ended by the suspension stay ended). Scheduled jobs include it again.', path: `${base}/reactivate`, destructive: true, confirmLabel: 'Reactivate' })}>Reactivate</SmallButton>
             : <SmallButton testId="op-suspend-company" danger onClick={suspend}>Suspend</SmallButton>}
+          <SmallButton testId="op-demo-data" onClick={() => setDemoMode('generate')} title="Generate departments, teams, people and a year of sample data">Demo Data</SmallButton>
+          <SmallButton testId="op-populate-metrics" onClick={() => setDemoMode('populate')} title="Fill a year of sample data for the teams that have none">Populate metrics</SmallButton>
           <SmallButton testId="op-evaluate-alerts" onClick={() => run({ title: 'Re-run alert evaluation', description: '', path: `${base}/actions/evaluate-alerts`, doneMessage: (o) => `Alerts evaluated: ${o.opened} opened, ${o.resolved} resolved` })}>Re-run alerts</SmallButton>
           <SmallButton testId="op-recompute" onClick={() => run({ title: 'Recompute KPI snapshots', description: '', path: `${base}/actions/recompute-snapshots`, doneMessage: (o) => `Recomputed ${o.teams?.length ?? 0} team(s)` })}>Recompute snapshots</SmallButton>
           <SmallButton testId="op-delete-company" danger onClick={() => run({
@@ -173,6 +177,7 @@ const OperatorCompany: React.FC<{ company: { id: string; name: string }; onBack:
       </div>
 
       {dialog}
+      <DemoDataDialog mode={demoMode} companyId={company.id} companyName={name} onClose={() => setDemoMode(null)} onChanged={refresh} />
       <FormDialog spec={form} onClose={() => setForm(null)} onDone={refresh} />
     </div>
   );
