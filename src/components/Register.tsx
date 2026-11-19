@@ -63,7 +63,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 sm:p-8">
+    <div className="ig-app-bg min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 sm:p-8">
       <div className="w-full max-w-xl">
         <div className="mb-8 flex items-center gap-3">
           <BrandMark height={36} />

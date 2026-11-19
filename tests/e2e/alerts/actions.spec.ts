@@ -56,6 +56,10 @@ test.describe('Tracked actions', { tag: [TAG.area('actions')] }, () => {
 
     await renamed.getByTestId('action-status').selectOption('done');
     await expect(page.getByText('Marked done; the outcome is computed from the stored values')).toBeVisible();
+    // Done actions move to the Done group, collapsed by default (Team detail → Action plan).
+    await expect(page.getByTestId('action-group-toggle-done')).toHaveText(/Done \(1\)/);
+    await expect(renamed).toBeHidden();
+    await page.getByTestId('action-group-toggle-done').click();
     await expect(renamed.getByTestId('action-outcomes')).toBeVisible();
 
     page.once('dialog', (d) => d.dismiss());

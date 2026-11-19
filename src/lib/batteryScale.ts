@@ -13,8 +13,9 @@
  *
  * Each band has a five-stop palette for the glossy 3D battery (bottom edge, base, body, surface
  * highlight, surface edge) and a flat colour. Every body colour keeps at least 3:1 contrast against
- * the dark battery shell (BATTERY_SHELL), which is the same in light and dark mode
- * (tests/api/battery-scale.test.ts checks it).
+ * the empty part of the battery (the shell) in every theme: BATTERY_SHELL in Light and Dark, a
+ * smoky glass in Graphite and Porcelain (BATTERY_SHELLS; tests/api/battery-scale.test.ts and
+ * tests/api/appearance.test.ts check it). The liquid colours themselves are the same in every theme.
  */
 
 export type BatteryBandKey = 'red' | 'deepAmber' | 'amber' | 'yellow' | 'lightGreen' | 'green';
@@ -30,8 +31,23 @@ export interface BatteryBand {
   flat: string;
 }
 
-/** The empty part of every battery (dark glass), the same in both themes. */
+/** The empty part of every battery (dark glass) in the Light and Dark themes. */
 export const BATTERY_SHELL = '#0f172a';
+
+/**
+ * The empty part of the battery per theme. The glass themes use a neutral smoky glass (with silver
+ * rims and nib, src/styles/themes.css: --battery-*). Components read it through BATTERY_SHELL_CSS
+ * so the shell follows the theme without a re-render.
+ */
+export const BATTERY_SHELLS: Record<'light' | 'dark' | 'graphite' | 'porcelain', string> = {
+  light: BATTERY_SHELL,
+  dark: BATTERY_SHELL,
+  graphite: '#17191d',
+  porcelain: '#22262c',
+};
+
+/** CSS value of the current theme's shell (custom property set per theme, Light/Dark fallback). */
+export const BATTERY_SHELL_CSS = `var(--battery-shell, ${BATTERY_SHELL})`;
 
 export const BATTERY_BANDS: BatteryBand[] = [
   { key: 'red', min: 0, label: 'Below 30', stops: ['#7a0a0a', '#e0392f', '#d33a2c', '#f25a4b', '#5c0707'], flat: '#e0392f' },

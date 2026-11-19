@@ -36,7 +36,7 @@ const goTo = (path: string) => {
 };
 
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-start sm:items-center justify-center px-4 py-10">
+  <div className="ig-app-bg min-h-screen bg-slate-50 dark:bg-slate-950 flex items-start sm:items-center justify-center px-4 py-10">
     <main className="w-full max-w-md">
       <div className="mb-8 flex items-center gap-3">
         <BrandMark height={36} />

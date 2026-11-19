@@ -515,7 +515,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
         const teamUsers = getUsersByTeam(selectedTeam.id);
         
         return (
-          <div className="min-h-screen bg-white dark:bg-slate-900 p-8">
+          <div className="ig-page min-h-screen bg-white dark:bg-slate-900 p-8">
             <div className="max-w-7xl mx-auto space-y-6">
               {/* Back Button */}
               <button
@@ -641,7 +641,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
         );
       })() : (
         /* Main Admin Panel View */
-    <div className="min-h-screen bg-white dark:bg-slate-900 p-4 sm:p-8" data-testid="admin-panel">
+    <div className="ig-page min-h-screen bg-white dark:bg-slate-900 p-4 sm:p-8" data-testid="admin-panel">
       <div className="max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">

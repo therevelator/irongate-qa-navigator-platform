@@ -26,7 +26,7 @@ const primaryButton =
   'w-full h-11 inline-flex items-center justify-center gap-2 rounded-md bg-brand-700 text-sm font-medium text-white hover:bg-brand-800 disabled:opacity-60 disabled:cursor-not-allowed transition-colors';
 
 const Shell: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-start sm:items-center justify-center px-4 py-10">
+  <div className="ig-app-bg min-h-screen bg-slate-50 dark:bg-slate-950 flex items-start sm:items-center justify-center px-4 py-10">
     <main className="w-full max-w-md">
       <div className="mb-8 flex items-center gap-3">
         <BrandMark height={36} />

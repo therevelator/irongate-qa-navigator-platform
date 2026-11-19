@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { clampScore } from './BatteryIndicator';
-import { batteryBand, BATTERY_SHELL } from '../lib/batteryScale';
+import { batteryBand, BATTERY_SHELL_CSS } from '../lib/batteryScale';
 
 /**
  * The original glossy 3D battery: a glass body with metallic highlights, a nib and a charge level
@@ -10,7 +10,7 @@ import { batteryBand, BATTERY_SHELL } from '../lib/batteryScale';
  * with prefers-reduced-motion, and the wave never changes the battery's size (no layout shift).
  * Null renders an empty (dark) battery; the caller shows "—" as the value.
  */
-interface HeroBatteryProps {
+export interface HeroBatteryProps {
   value: number | string | null | undefined;
   /** Accepted for compatibility; the colour follows the value's band (batteryBand), not the status. */
   good?: number;
@@ -39,7 +39,7 @@ const GLASS =
 const NIB =
   'linear-gradient(to right, rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 14%, rgba(255,255,255,0.8) 14%, rgba(255,255,255,0.3) 40%, ' +
   'rgba(255,255,255,0) 41%, rgba(255,255,255,0) 80%, rgba(255,255,255,0.2) 80%, rgba(255,255,255,0.4) 86%, rgba(255,255,255,0.6) 90%, ' +
-  'rgba(255,255,255,0.1) 92%, rgba(255,255,255,0.1) 95%, rgba(255,255,255,0.5) 98%), linear-gradient(#64748b, #334155)';
+  'rgba(255,255,255,0.1) 92%, rgba(255,255,255,0.1) 95%, rgba(255,255,255,0.5) 98%), linear-gradient(var(--battery-nib-a, #64748b), var(--battery-nib-b, #334155))';
 
 const OVERLAY =
   'linear-gradient(to right, rgba(255,255,255,0.3) 4%, rgba(255,255,255,0.2) 5%, transparent 5%, transparent 14%, rgba(255,255,255,0.3) 14%, ' +
@@ -72,7 +72,7 @@ const useAnimatedCharge = (target: number) => {
 
 /** Gradients are written for the vertical battery; the horizontal one turns them by 90°. */
 const turn = (g: string, horizontal: boolean) =>
-  horizontal ? g.replace(/to right/g, 'to bottom').replace(/to top/g, 'to right').replace(/linear-gradient\(#/g, 'linear-gradient(to right, #') : g;
+  horizontal ? g.replace(/to right/g, 'to bottom').replace(/to top/g, 'to right').replace(/linear-gradient\(var\(/g, 'linear-gradient(to right, var(') : g;
 
 const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orientation = 'vertical', liquid = false, label, className = '' }) => {
   const value = clampScore(raw);
@@ -86,12 +86,12 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
   const c = useAnimatedCharge(target);
 
   const body = turn(empty
-    ? `linear-gradient(to top, transparent 5%, #1e293b 5%, ${BATTERY_SHELL} 95%, transparent 95%), ${GLASS}`
+    ? `linear-gradient(to top, transparent 5%, var(--battery-shell-top, #1e293b) 5%, ${BATTERY_SHELL_CSS} 95%, transparent 95%), ${GLASS}`
     : (() => {
         const col = band!.stops;
         return (
           `linear-gradient(to top, transparent 5%, ${col[0]} 5%, ${col[0]} 7%, ${col[1]} 8%, ${col[1]} 10%, ${col[2]} 11%, ` +
-          `${col[2]} ${c - 3}%, ${col[3]} ${c - 2}%, ${col[3]} ${c}%, ${col[4]} ${c}%, ${BATTERY_SHELL} ${c + 5}%, ${BATTERY_SHELL} 95%, transparent 95%), ${GLASS}`
+          `${col[2]} ${c - 3}%, ${col[3]} ${c - 2}%, ${col[3]} ${c}%, ${col[4]} ${c}%, ${BATTERY_SHELL_CSS} ${c + 5}%, ${BATTERY_SHELL_CSS} 95%, transparent 95%), ${GLASS}`
         );
       })(), horizontal);
 
@@ -165,10 +165,10 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
           height: bodyH,
           borderRadius: horizontal ? `${r / 2}px ${r}px ${r}px ${r / 2}px` : `${r}px ${r}px ${r / 2}px ${r / 2}px`,
           ...(horizontal
-            ? { borderLeft: '2px solid rgba(255,255,255,0.2)', borderRight: '2px solid rgba(255,255,255,0.2)' }
-            : { borderTop: '2px solid rgba(255,255,255,0.2)', borderBottom: '2px solid rgba(255,255,255,0.2)' }),
+            ? { borderLeft: '2px solid var(--battery-edge, rgba(255,255,255,0.2))', borderRight: '2px solid var(--battery-edge, rgba(255,255,255,0.2))' }
+            : { borderTop: '2px solid var(--battery-edge, rgba(255,255,255,0.2))', borderBottom: '2px solid var(--battery-edge, rgba(255,255,255,0.2))' }),
           backgroundImage: body,
-          boxShadow: '0 4px 10px rgba(15,23,42,0.18)',
+          boxShadow: 'var(--battery-shadow, 0 4px 10px rgba(15,23,42,0.18))',
           opacity: empty ? 0.55 : 1,
         }}
       >
@@ -181,8 +181,8 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
             left: s.inset,
             top: 0,
             borderRadius: r / 2,
-            borderLeft: `${s.band}px solid black`,
-            borderRight: `${s.band}px solid black`,
+            borderLeft: `${s.band}px solid var(--battery-rim, black)`,
+            borderRight: `${s.band}px solid var(--battery-rim, black)`,
             backgroundImage: turn(OVERLAY, true),
             pointerEvents: 'none',
           } : {
@@ -192,8 +192,8 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
             top: s.inset,
             left: 0,
             borderRadius: r / 2,
-            borderTop: `${s.band}px solid black`,
-            borderBottom: `${s.band}px solid black`,
+            borderTop: `${s.band}px solid var(--battery-rim, black)`,
+            borderBottom: `${s.band}px solid var(--battery-rim, black)`,
             backgroundImage: OVERLAY,
             pointerEvents: 'none',
           }}

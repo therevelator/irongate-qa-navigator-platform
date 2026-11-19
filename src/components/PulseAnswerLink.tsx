@@ -22,7 +22,7 @@ interface LinkInfo extends Partial<PulseQuestionSet> {
 }
 
 const Shell: React.FC<{ children: React.ReactNode; wide?: boolean }> = ({ children, wide }) => (
-  <div className="min-h-screen bg-slate-50 px-4 py-10 dark:bg-slate-950">
+  <div className="ig-app-bg min-h-screen bg-slate-50 px-4 py-10 dark:bg-slate-950">
     <main className={wide ? 'mx-auto w-full max-w-2xl' : 'mx-auto w-full max-w-md'}>
       <div className="mb-8 flex items-center gap-3">
         <BrandMark height={36} />

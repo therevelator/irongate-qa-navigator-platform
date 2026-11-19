@@ -1,15 +1,24 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useId, useState } from 'react';
+import { ChevronDown, Pencil, Plus, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import Modal from './Modal';
-import { Badge, Card, CardHeader, EmptyState, buttonClass, cx, inputClass, type Tone } from './ui';
+import { Badge, Card, EmptyState, buttonClass, cx, inputClass, type Tone } from './ui';
 import { api, shortDate } from './NotificationParts';
+import Pagination from './Pagination';
+import { useAuth } from '../contexts/AuthContext';
+import { DEFAULT_PAGE_SIZE, PAGE_SIZES as PAGE_SIZE_OPTIONS, paginate } from '../lib/pagination';
+import { actionPlanViewKey, groupByStatus, parseActionPlanView, type ActionPlanViewState } from '../lib/actionPlanView';
 
 /**
  * Team detail → "Action plan": the team's tracked actions (GET /api/actions?teamId=), with owner,
  * due date, status, the linked KPI with its baseline and current value, and the outcome computed
  * by the server at completion and 14 / 30 days later. Leads, the department's QA managers and
  * administrators create and edit actions; an action's owner can change its status.
+ *
+ * The list is grouped by status (Open, In progress, Done, Dropped), each group an accordion with
+ * its count, paged per group (5 / 10 / 20 per page). Open and In progress start expanded, Done and
+ * Dropped collapsed; the whole section can be collapsed too. The expanded state is remembered per
+ * person in this browser (src/lib/actionPlanView.ts).
  */
 
 export interface ActionDraft { title: string; description?: string; metricKey?: string | null; /** Recommendation KPI text, mapped to a metric. */ kpi?: string; origin?: 'recommendation' | 'alert' | 'manual'; alertId?: string | null }
@@ -58,7 +67,18 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ action: TrackedAction | null; draft: ActionDraft | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [showClosed, setShowClosed] = useState(false);
+  const { user } = useAuth();
+  const viewKey = actionPlanViewKey(user?.id);
+  const [view, setView] = useState<ActionPlanViewState>(() => readView(viewKey));
+  useEffect(() => { setView(readView(viewKey)); }, [viewKey]);
+  const updateView = (next: ActionPlanViewState) => {
+    setView(next);
+    try { localStorage.setItem(viewKey, JSON.stringify(next)); } catch { /* storage unavailable: kept for this page only */ }
+  };
+  const [pages, setPages] = useState<Record<Status, { page: number; size: number }>>({
+    open: { page: 1, size: DEFAULT_PAGE_SIZE }, in_progress: { page: 1, size: DEFAULT_PAGE_SIZE }, done: { page: 1, size: DEFAULT_PAGE_SIZE }, dropped: { page: 1, size: DEFAULT_PAGE_SIZE },
+  });
+  const sectionId = useId();
 
   const load = useCallback(async () => {
     try { setData(await api<ActionsResponse>(`/actions?teamId=${encodeURIComponent(teamId)}`)); setError(null); }
@@ -91,86 +111,143 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
 
   if (!data && !error) return null;
   const actions = data?.actions ?? [];
-  const active = actions.filter((a) => a.status === 'open' || a.status === 'in_progress' || a.status === 'done');
-  const closed = actions.filter((a) => a.status === 'dropped');
-  const list = showClosed ? actions : active;
+  const groups = groupByStatus(actions);
+
+  const renderItem = (a: TrackedAction) => (
+    <li key={a.id} className="py-3" data-testid="action-item">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-medium text-slate-900 dark:text-white">{a.title}</p>
+            <Badge tone={STATUS_META[a.status].tone}>{STATUS_META[a.status].label}</Badge>
+            {a.overdue && <Badge tone="bad">Overdue</Badge>}
+            {a.origin === 'recommendation' && <span className="text-xs text-slate-500 dark:text-slate-400">from a recommendation</span>}
+            {a.origin === 'alert' && <span className="text-xs text-slate-500 dark:text-slate-400">from an alert</span>}
+          </div>
+          {a.description && <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{a.description}</p>}
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Owner: {a.owner?.name ?? 'unassigned'} · Due {a.dueDate ? shortDate(a.dueDate) : '—'}
+            {a.completedAt ? ` · done ${shortDate(a.completedAt)}` : ''}
+          </p>
+          {a.metric && (
+            <p className="mt-1 text-xs text-slate-600 dark:text-slate-300" data-testid="action-metric">
+              <span className="font-medium">{a.metric.label}</span> ({a.metric.lowerIsBetter ? 'lower is better' : 'higher is better'}): baseline {fmtValue(a.baseline?.value, a.metric)}
+              {a.baseline?.at ? ` (${shortDate(a.baseline.at)})` : a.baseline ? '' : ' (no value recorded when created)'}
+              {' → '}now {fmtValue(a.current?.value, a.metric)}{a.current ? ` (${shortDate(a.current.at)})` : ''}
+            </p>
+          )}
+          {a.outcomes.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2" data-testid="action-outcomes">
+              {a.outcomes.map((o) => (
+                <span key={o.checkpoint} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
+                  {o.label}: <Badge tone={OUTCOME_META[o.outcome].tone}>{OUTCOME_META[o.outcome].label}</Badge>
+                  {o.value !== null ? <span className="tabular-nums">{fmtValue(o.value, a.metric)}</span> : o.outcome === 'pending' && o.dueAt ? <span>on {shortDate(o.dueAt)}</span> : null}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {a.canUpdateStatus && (
+            <label className="sr-only" htmlFor={`status-${a.id}`}>Status of {a.title}</label>
+          )}
+          {a.canUpdateStatus && (
+            <select id={`status-${a.id}`} value={a.status} disabled={busy === a.id} onChange={(e) => setStatus(a, e.target.value as Status)} className={cx(inputClass, 'w-36')} data-testid="action-status">
+              {(Object.keys(STATUS_META) as Status[]).map((st) => <option key={st} value={st}>{STATUS_META[st].label}</option>)}
+            </select>
+          )}
+          {a.canEdit && (
+            <>
+              <button type="button" onClick={() => setEditing({ action: a, draft: null })} className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800" aria-label={`Edit ${a.title}`} title="Edit"><Pencil size={15} aria-hidden /></button>
+              <button type="button" onClick={() => remove(a)} disabled={busy === a.id} className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700 dark:text-slate-400 dark:hover:bg-red-950/40 dark:hover:text-red-300" aria-label={`Delete ${a.title}`} title="Delete"><Trash2 size={15} aria-hidden /></button>
+            </>
+          )}
+        </div>
+      </div>
+    </li>
+  );
 
   return (
     <Card>
       <div data-testid="action-plan">
-        <CardHeader
-          title="Action plan"
-          subtitle="Tracked actions of this team. Baselines and outcomes are computed from the stored metric values, not entered."
-          action={data?.canManage ? (
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold text-slate-900 dark:text-white">
+              <button
+                type="button"
+                className="-ml-1 inline-flex items-center gap-1.5 rounded px-1 text-left hover:text-slate-700 dark:hover:text-slate-200"
+                aria-expanded={view.section}
+                aria-controls={`${sectionId}-body`}
+                onClick={() => updateView({ ...view, section: !view.section })}
+                data-testid="action-plan-toggle"
+              >
+                <ChevronDown size={16} aria-hidden className={cx('flex-shrink-0 transition-transform motion-reduce:transition-none', !view.section && '-rotate-90')} />
+                Action plan
+                {actions.length > 0 && <span className="font-normal text-slate-500 dark:text-slate-400">({actions.length})</span>}
+              </button>
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Tracked actions of this team. Baselines and outcomes are computed from the stored metric values, not entered.</p>
+          </div>
+          {data?.canManage && (
             <button type="button" onClick={() => setEditing({ action: null, draft: null })} className={cx(buttonClass.primary, 'whitespace-nowrap')} data-testid="action-new"><Plus size={15} aria-hidden /> New action</button>
-          ) : undefined}
-        />
-        {error ? <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
-          : list.length === 0 ? (
-            <EmptyState title="No actions yet" description={data?.canManage ? 'Create one, or use “Create action” on a recommendation below.' : 'Actions created by the team lead or a manager appear here.'} />
-          ) : (
-            <ul className="divide-y divide-slate-100 dark:divide-slate-800" data-testid="action-list">
-              {list.map((a) => (
-                <li key={a.id} className="py-3" data-testid="action-item">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="text-sm font-medium text-slate-900 dark:text-white">{a.title}</p>
-                        <Badge tone={STATUS_META[a.status].tone}>{STATUS_META[a.status].label}</Badge>
-                        {a.overdue && <Badge tone="bad">Overdue</Badge>}
-                        {a.origin === 'recommendation' && <span className="text-xs text-slate-500 dark:text-slate-400">from a recommendation</span>}
-                        {a.origin === 'alert' && <span className="text-xs text-slate-500 dark:text-slate-400">from an alert</span>}
-                      </div>
-                      {a.description && <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{a.description}</p>}
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-                        Owner: {a.owner?.name ?? 'unassigned'} · Due {a.dueDate ? shortDate(a.dueDate) : '—'}
-                        {a.completedAt ? ` · done ${shortDate(a.completedAt)}` : ''}
-                      </p>
-                      {a.metric && (
-                        <p className="mt-1 text-xs text-slate-600 dark:text-slate-300" data-testid="action-metric">
-                          <span className="font-medium">{a.metric.label}</span> ({a.metric.lowerIsBetter ? 'lower is better' : 'higher is better'}): baseline {fmtValue(a.baseline?.value, a.metric)}
-                          {a.baseline?.at ? ` (${shortDate(a.baseline.at)})` : a.baseline ? '' : ' (no value recorded when created)'}
-                          {' → '}now {fmtValue(a.current?.value, a.metric)}{a.current ? ` (${shortDate(a.current.at)})` : ''}
-                        </p>
-                      )}
-                      {a.outcomes.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2" data-testid="action-outcomes">
-                          {a.outcomes.map((o) => (
-                            <span key={o.checkpoint} className="inline-flex items-center gap-1.5 rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                              {o.label}: <Badge tone={OUTCOME_META[o.outcome].tone}>{OUTCOME_META[o.outcome].label}</Badge>
-                              {o.value !== null ? <span className="tabular-nums">{fmtValue(o.value, a.metric)}</span> : o.outcome === 'pending' && o.dueAt ? <span>on {shortDate(o.dueAt)}</span> : null}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2">
-                      {a.canUpdateStatus && (
-                        <label className="sr-only" htmlFor={`status-${a.id}`}>Status of {a.title}</label>
-                      )}
-                      {a.canUpdateStatus && (
-                        <select id={`status-${a.id}`} value={a.status} disabled={busy === a.id} onChange={(e) => setStatus(a, e.target.value as Status)} className={cx(inputClass, 'w-36')} data-testid="action-status">
-                          {(Object.keys(STATUS_META) as Status[]).map((s) => <option key={s} value={s}>{STATUS_META[s].label}</option>)}
-                        </select>
-                      )}
-                      {a.canEdit && (
-                        <>
-                          <button type="button" onClick={() => setEditing({ action: a, draft: null })} className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800" aria-label={`Edit ${a.title}`} title="Edit"><Pencil size={15} aria-hidden /></button>
-                          <button type="button" onClick={() => remove(a)} disabled={busy === a.id} className="inline-flex h-9 w-9 items-center justify-center rounded-md text-slate-500 hover:bg-red-50 hover:text-red-700 dark:text-slate-400 dark:hover:bg-red-950/40 dark:hover:text-red-300" aria-label={`Delete ${a.title}`} title="Delete"><Trash2 size={15} aria-hidden /></button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
           )}
-        <div className="mt-3 flex flex-col gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400 sm:flex-row sm:items-start sm:justify-between">
-          <p className="max-w-3xl">{data?.outcomeRule}</p>
-          {closed.length > 0 && (
-            <button type="button" onClick={() => setShowClosed((v) => !v)} className="shrink-0 font-medium text-brand-700 hover:underline dark:text-brand-300">
-              {showClosed ? 'Hide dropped actions' : `Show ${closed.length} dropped`}
-            </button>
+        </div>
+        <div id={`${sectionId}-body`} hidden={!view.section} data-testid="action-plan-body">
+          {error ? <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
+            : actions.length === 0 ? (
+              <EmptyState title="No actions yet" description={data?.canManage ? 'Create one, or use “Create action” on a recommendation below.' : 'Actions created by the team lead or a manager appear here.'} />
+            ) : (
+              <div className="space-y-2" data-testid="action-list">
+                {groups.map(({ status, items }) => {
+                  const expanded = view.groups[status];
+                  const pg = pages[status];
+                  const slice = paginate(items, pg.page, pg.size);
+                  const bodyId = `${sectionId}-${status}`;
+                  const label = STATUS_META[status].label;
+                  return (
+                    <section key={status} className="rounded-md border border-slate-200 dark:border-slate-800" data-testid={`action-group-${status}`} data-count={items.length}>
+                      <h4 className="text-sm">
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-3 py-2.5 text-left font-medium text-slate-800 hover:bg-slate-50 dark:text-slate-100 dark:hover:bg-slate-800/60"
+                          aria-expanded={expanded}
+                          aria-controls={bodyId}
+                          onClick={() => updateView({ ...view, groups: { ...view.groups, [status]: !expanded } })}
+                          data-testid={`action-group-toggle-${status}`}
+                        >
+                          <ChevronDown size={15} aria-hidden className={cx('flex-shrink-0 text-slate-500 transition-transform motion-reduce:transition-none dark:text-slate-400', !expanded && '-rotate-90')} />
+                          <span>{label} ({items.length})</span>
+                        </button>
+                      </h4>
+                      <div id={bodyId} hidden={!expanded} className="border-t border-slate-100 px-3 dark:border-slate-800">
+                        {items.length === 0 ? (
+                          <p className="py-3 text-xs text-slate-500 dark:text-slate-400">No {label.toLowerCase()} actions.</p>
+                        ) : (
+                          <>
+                            <ul className="divide-y divide-slate-100 dark:divide-slate-800" data-testid={`action-group-list-${status}`}>
+                              {slice.items.map(renderItem)}
+                            </ul>
+                            {items.length > Math.min(...PAGE_SIZE_OPTIONS) && (
+                              <Pagination
+                                slice={slice}
+                                pageSize={pg.size}
+                                onPage={(page) => setPages((p) => ({ ...p, [status]: { ...p[status], page } }))}
+                                onPageSize={(size) => setPages((p) => ({ ...p, [status]: { page: 1, size } }))}
+                                label={`${label} actions`}
+                                testId={`action-pager-${status}`}
+                                className="border-t border-slate-100 py-2.5 dark:border-slate-800"
+                              />
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </section>
+                  );
+                })}
+              </div>
+            )}
+          {data?.outcomeRule && (
+            <p className="mt-3 max-w-3xl border-t border-slate-100 pt-3 text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">{data.outcomeRule}</p>
           )}
         </div>
       </div>
@@ -180,6 +257,10 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
     </Card>
   );
 };
+
+function readView(key: string): ActionPlanViewState {
+  try { return parseActionPlanView(localStorage.getItem(key)); } catch { return parseActionPlanView(null); }
+}
 
 const ActionDialog: React.FC<{ teamId: string; teamName: string; metrics: MetricOption[]; action: TrackedAction | null; draft: ActionDraft | null; onClose: () => void; onSaved: () => void }> = ({ teamId, teamName, metrics, action, draft, onClose, onSaved }) => {
   const [owners, setOwners] = useState<Array<{ id: string; name: string; email: string }> | null>(null);

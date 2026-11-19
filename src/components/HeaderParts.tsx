@@ -1,5 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { HelpCircle, LogOut, MonitorSmartphone, X, Check, Minus } from 'lucide-react';
+import { HelpCircle, LogOut, MonitorSmartphone, X, Check, Minus, Palette, BatteryMedium, Gauge } from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
+import { SCORE_DISPLAY_OPTIONS, THEME_OPTIONS, type ThemePreference } from '../lib/appearance';
 
 import type { AccessSummary } from '../lib/accessSummary';
 
@@ -185,7 +187,7 @@ export const CompanyBadge: React.FC<{ name: string }> = ({ name }) => (
     title={name}
     data-testid="company-badge"
   >
-    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-700 text-[11px] font-semibold text-white dark:bg-brand-600" aria-hidden>
+    <span className="ig-company-avatar flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-brand-700 text-[11px] font-semibold text-white dark:bg-brand-600" aria-hidden>
       {initialsOf(name)}
     </span>
     <span className="hidden truncate font-medium md:inline">{name}</span>
@@ -193,3 +195,117 @@ export const CompanyBadge: React.FC<{ name: string }> = ({ name }) => (
   </span>
 );
 
+
+/** Little preview of each theme in the Appearance menu (decorative). */
+const THEME_SWATCH: Record<ThemePreference, string> = {
+  light: 'linear-gradient(135deg, #ffffff 0 50%, #e2e8f0 50%)',
+  dark: 'linear-gradient(135deg, #1e293b 0 50%, #0f172a 50%)',
+  graphite: 'linear-gradient(135deg, #4a4d54 0%, #22242a 55%, #141518 100%)',
+  porcelain: 'linear-gradient(135deg, #ffffff 0%, #f4ece2 55%, #e9e2ef 100%)',
+  system: 'linear-gradient(135deg, #ffffff 0 50%, #0f172a 50%)',
+};
+
+/**
+ * "Appearance" in the top bar: the colour theme (Light, Dark, Graphite, Porcelain, Match system)
+ * and the score display (Battery or Gauge). A menu of two radio groups: arrow keys move, Home/End
+ * jump, Enter/Space choose (the menu stays open to compare), Escape or Tab closes it and focus
+ * returns to the button. The choice is kept in this browser (src/contexts/ThemeContext.tsx).
+ */
+export const AppearanceMenu: React.FC = () => {
+  const { preference, setTheme, scoreDisplay, setScoreDisplay } = useTheme();
+  const [open, setOpen] = useState(false);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const close = React.useCallback(() => setOpen(false), []);
+  useDismiss(open, close, [menuRef, buttonRef], buttonRef);
+  useEffect(() => {
+    if (!open) return;
+    requestAnimationFrame(() => (menuRef.current?.querySelector<HTMLElement>('[aria-checked="true"]') ?? menuRef.current?.querySelector<HTMLElement>('[role="menuitemradio"]'))?.focus());
+  }, [open]);
+  const onMenuKey = (e: React.KeyboardEvent) => {
+    if (e.key === 'Tab') { close(); return; }
+    const items = Array.from(menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitemradio"]') ?? []);
+    const i = items.indexOf(document.activeElement as HTMLElement);
+    let next = -1;
+    if (e.key === 'ArrowDown') next = (i + 1) % items.length;
+    else if (e.key === 'ArrowUp') next = (i - 1 + items.length) % items.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = items.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    items[next]?.focus();
+  };
+  const item = 'flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 focus:bg-slate-100 focus:outline-none dark:text-slate-200 dark:hover:bg-slate-800 dark:focus:bg-slate-800';
+  const groupLabel = 'px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400';
+  return (
+    <div className="relative flex min-w-0">
+      <button
+        ref={buttonRef}
+        type="button"
+        // Like the old theme switch, this button may give up a few pixels on narrow phones.
+        className={iconButton.replace('flex-shrink-0 ', '')}
+        aria-label="Appearance"
+        title="Appearance"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={open ? 'appearance-menu' : undefined}
+        onClick={() => setOpen((o) => !o)}
+        data-testid="appearance-button"
+      >
+        <Palette size={16} aria-hidden />
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          id="appearance-menu"
+          role="menu"
+          aria-label="Appearance"
+          onKeyDown={onMenuKey}
+          className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          data-testid="appearance-menu"
+        >
+          <div role="group" aria-labelledby="appearance-theme-label">
+            <p id="appearance-theme-label" className={groupLabel}>Theme</p>
+            {THEME_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={preference === o.id}
+                className={item}
+                onClick={() => setTheme(o.id)}
+                data-testid={`theme-option-${o.id}`}
+              >
+                <span className="h-4 w-4 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600" style={{ background: THEME_SWATCH[o.id] }} aria-hidden />
+                <span className="flex-1">
+                  {o.label}
+                  <span className="block text-[11px] leading-tight text-slate-500 dark:text-slate-400">{o.hint}</span>
+                </span>
+                {preference === o.id && <Check size={15} className="flex-shrink-0 text-brand-700 dark:text-brand-300" aria-hidden />}
+              </button>
+            ))}
+          </div>
+          <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
+          <div role="group" aria-labelledby="appearance-score-label">
+            <p id="appearance-score-label" className={groupLabel}>Score display</p>
+            {SCORE_DISPLAY_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={scoreDisplay === o.id}
+                className={item}
+                onClick={() => setScoreDisplay(o.id)}
+                data-testid={`score-display-option-${o.id}`}
+              >
+                {o.id === 'battery' ? <BatteryMedium size={16} className="flex-shrink-0 -rotate-90 text-slate-500 dark:text-slate-400" aria-hidden /> : <Gauge size={16} className="flex-shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />}
+                <span className="flex-1">{o.label}</span>
+                {scoreDisplay === o.id && <Check size={15} className="flex-shrink-0 text-brand-700 dark:text-brand-300" aria-hidden />}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
