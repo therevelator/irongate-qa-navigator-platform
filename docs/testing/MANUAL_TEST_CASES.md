@@ -2150,7 +2150,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open http://localhost:5173/ and sign in as Viewer: E-mail address viewer@irongate.com, Password demo123, click Sign in. | The Overview page opens (top bar title "Overview"). |
 | 2 | Click the question-mark button "What you can do here" in the top bar. | A panel "What you can do here" opens below the button; keyboard focus moves into it. |
-| 3 | Read the panel. | A chip "Viewer · The Away Team"; the sentence "You see The Away Team. Other teams are not shown to you."; under "You can" the overview, team dashboards, Compare and Analytics for the teams in scope, pulse results, answering the pulse and "Show any team of NovaTech in TV mode …"; under "You cannot" among others "Change settings, KPI targets or alert rules." and "Invite people or change anyone's access." |
+| 3 | Read the panel. | A chip "Viewer · The Away Team"; the sentence "You see The Away Team. Other teams are not shown to you."; under "You can" the overview, team dashboards, TV mode, Compare and Analytics for the teams in scope, pulse results and answering the pulse; under "You cannot" among others "Change settings, KPI targets or alert rules." and "Invite people or change anyone's access." |
 | 4 | Press Escape. | The panel closes and the focus is back on the question-mark button. |
 | 5 | Open the panel again and click somewhere on the overview outside it. | The panel closes. |
 
@@ -2227,7 +2227,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-05 phone: company initials only; name, title and sign out in the account menu`
 
-### TC-AUTH-120: TV mode is in every role's navigation and opens with a team
+### TC-AUTH-120: TV mode is in every role's navigation and opens with a team of the role's scope
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.17
 
@@ -2243,7 +2243,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Open http://localhost:5173/ and sign in as Viewer: E-mail address viewer@irongate.com, Password demo123, click Sign in. | The Overview page opens (top bar title "Overview"). |
-| 2 | Open the navigation and click "TV mode". | TV mode opens full screen with The Away Team (the viewer's team) and a Team picker in the controls listing every team of NovaTech. |
+| 2 | Open the navigation and click "TV mode". | TV mode opens full screen with The Away Team (the viewer's only team); the controls offer no other team (the picker lists the teams in scope only). |
 | 3 | Press Escape. | The overview is shown again. |
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Navigation entries follow the access policy › HDR-06 TV mode is in everyone's navigation and opens with a team`
@@ -4235,7 +4235,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-03 kiosk options in the address (?theme=light&rotate=1)`
 
-### TC-DASH-030: TV mode shows any team of the company for every role; an unknown team is refused
+### TC-DASH-030: TV mode for a team outside the scope is refused, with a button to show the own team; the picker lists the scope only
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F6.8
 
@@ -4251,14 +4251,14 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Software engineer (engineer@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764026236967-uphpblii4. | TV mode opens full screen and shows the team name "QualityCowboys" (a team outside the engineer's analytics scope: TV mode shows any team of the own company). |
-| 2 | Move the mouse to show the controls and open the Team picker. | It lists every team of NovaTech grouped by department, among them The Away Team and Mavericks. |
-| 3 | Choose Mavericks. | The TV view shows "Mavericks". |
-| 4 | Open http://localhost:5173/tv?team=no-such-team. | The message "This team is not available to you" with "TV mode shows the teams of your own company. This team does not exist or belongs to another company." |
+| 1 | Sign in as Software engineer (engineer@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764026236967-uphpblii4. | Sign-in succeeds and the page at /tv?team=team-1764026236967-uphpblii4 opens inside the app frame. |
+| 2 | Look at the TV view. | The message "This team is not available to you" is shown with the explanation "TV mode can show the teams in your scope only: ..."; no data of QualityCowboys is shown. |
+| 3 | Click the button "Show Mavericks". | The TV view now shows the team name "Mavericks". |
+| 4 | Move the mouse to show the controls. | There is no Team picker with other teams: the engineer's scope holds one team (Mavericks), and GET /api/tv/teams lists only Mavericks. |
 
 **Notes:** Access control check.
 
-*Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-04 TV mode shows any team of the company, for every role; an unknown team is refused`
+*Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-04 a team outside the scope is refused, with a way to show the own team; the picker lists the scope only`
 
 ### TC-DASH-031: An e-mailed TV link opened while signed out shows the team right after signing in
 
@@ -7558,7 +7558,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team-lead-rbac.spec.ts › Team Lead Role-Based Access Control › Main Dashboard - Team Lead sees the teams of their scope only`
 
-### TC-ROLE-028: Viewer sees only her team on the overview; another team is refused, TV mode shows it
+### TC-ROLE-028: Viewer sees only her team on the overview; another team is refused (team detail and TV mode)
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F5.1
 
@@ -7576,7 +7576,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open http://localhost:5173, enter E-mail address viewer@irongate.com and Password demo123, then click Sign in. | The Overview page opens: the top bar title reads "Overview" and the "Team performance" section lists team cards. |
 | 2 | Look at the "Team performance" section and the summary card. | Only The Away Team is listed and the summary card is titled "Your team". |
-| 3 | Open http://localhost:3000/api/teams/team-1764026236967-uphpblii4 and then http://localhost:3000/api/tv/teams/team-1764026236967-uphpblii4 in the same browser. | The first answers 403 (team detail follows the scope); the second answers 200 (TV mode shows any team of the company). |
+| 3 | Open http://localhost:3000/api/teams/team-1764026236967-uphpblii4 and then http://localhost:3000/api/tv/teams/team-1764026236967-uphpblii4 in the same browser. | Both answer 403: team detail and TV mode follow the analytics scope. |
 
 *Automated:* `tests/e2e/viewer-rbac.spec.ts › Viewer Role-Based Access Control › Viewer sees only the teams she is assigned to on the dashboard`
 

@@ -19,6 +19,7 @@ unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 | [docs/pitch/](docs/pitch/) | Source of the 11-slide pitch deck, with speaker notes and the placeholders to fill |
 | [docs/release-r2/](docs/release-r2/) | The R2 release plan and its working rules |
 | [docs/reports/](docs/reports/) | The accuracy audits and the consistency report that led to the "no invented numbers" fixes |
+| [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md) | **Who can see and do what**: a plain-English summary per role and the matrix per page and module (scope rules), derived from the code |
 | [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md) | Who may do what, per role, written from `server/lib/userPolicy.ts` (R2) |
 | [docs/reports/r2-final-review.md](docs/reports/r2-final-review.md) | Release R2 final review: findings, fixes, deferred items; per-role security matrix in `tests/api/r2-security-matrix.test.ts` |
 
@@ -192,7 +193,7 @@ One definition per metric, shared by server and UI:
   and `server/lib/pulse.ts`; privacy threshold for aggregates of individual data: `server/lib/privacy.ts`.
 - Config inheritance (team, then department, then company): `server/lib/configResolver.ts`
 - Team membership (primary team or `team_members`): `server/lib/teamMembership.ts`
-- Who may do what: `server/lib/userPolicy.ts` (see [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md))
+- Who may do what: `server/lib/userPolicy.ts` (see [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md) and [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md))
 
 ## Dashboard
 
@@ -381,7 +382,8 @@ A full-screen view of ONE team for a meeting-room screen or a team wall: `/tv?te
 Open it from the team's page (Team detail): **Open TV mode**, **E-mail TV link** (opens your mail
 app with the team's TV link filled in) or **Copy link**. Whoever opens the link signs in and lands on
 that team's TV screen, if the team is in their scope (a signed-out visit keeps the address through
-sign-in). TV mode is not offered in the analytics scope bar.
+sign-in). **TV mode** is also in the navigation for every role, with a team picker listing the teams of
+their scope (`GET /api/tv/teams`).
 
 - Shows the team name, department, lead and member count, the QA score battery with its
   status and change since the previous snapshot, six key KPIs (value, target, status, change,
@@ -475,9 +477,29 @@ current targets; existing snapshot rows are not rewritten).
   company name; with "Show formulas & data sources" on, such values carry a "Sample" marker. A demo
   company can hide the banner, the markers, the TV label and the PDF / CSV notes with
   `companies.settings.hideSampleDataNotice = true` (set for the Meridian showcase by `scripts/reseed`).
-- **Team detail access**: the team and its KPIs are company-visible; member names and emails only for
-  people who may see that team's people (`canViewTeamMembers`: super admin, the department's QA
-  manager, people assigned to the team); KPI history follows the analytics scope.
+- **One scope for every page** (see [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md)): the overview list and
+  summary, team detail (KPIs, members, history), TV mode, Compare and the Analytics modules show the
+  teams of the caller's analytics scope only (`canViewTeamAnalytics`: super admin every team, a manager the
+  teams of their departments, everyone else the teams they are assigned to); another team answers 403.
+  Until this change the overview listed every team and team detail showed any team's KPIs, while
+  Compare, TV mode and Analytics were scoped. Super admins see "Company status"; everyone else "Your
+  team(s)" (`GET /api/analytics/company-summary` returns `scope`). TV mode is in everyone's navigation; its
+  team picker (`GET /api/tv/teams`) lists the teams in scope.
+
+## Top bar, targets everywhere, battery colours
+
+- **Top bar** (`src/components/Layout.tsx`, `src/components/HeaderParts.tsx`): the QE Navigator shield
+  (`public/brand/`, cut from the IronGate logo, a few KB each) and name, the page title; on the right the
+  company badge, the person with their job title (`users.job_title`, migration
+  `20261126000000_users_job_title.sql`, set by super admins on the Users page; the role label when empty),
+  **What you can do here** (generated from `server/lib/userPolicy.ts` by `src/lib/accessSummary.ts`), the
+  bell, the theme toggle and the account menu. The navigation shows only pages the person may open
+  (`src/lib/viewAccess.ts`, also used by the router).
+- **Targets next to every status** (`src/lib/targetText.ts`): "Off target · Target ≥ 80%", "Watch: 70–80% ·
+  Target ≥ 80%", with the target valid at the value's date.
+- **Battery colours** (`src/lib/batteryScale.ts`): <30 red, 30–45 deep amber, 45–60 amber, 60–75 yellow,
+  75–90 light green, 90–100 green, for every battery.
+- Meridian job titles for an existing database: `scripts/reseed/job_titles.sql` (UPDATE by e-mail).
 
 ## Compare teams, saved views, CSV export and onboarding
 

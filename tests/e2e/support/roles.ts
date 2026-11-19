@@ -27,7 +27,7 @@ export const DEMO = {
 };
 
 /** Navigation entries (data-testid nav-*) each role must see, from server/lib/userPolicy.ts. */
-const ANALYTICS = ['nav-dashboard', 'nav-analytics', 'nav-compare', 'nav-flaky-test-intelligence', 'nav-test-execution-timeline',
+const ANALYTICS = ['nav-dashboard', 'nav-analytics', 'nav-compare', 'nav-tv', 'nav-flaky-test-intelligence', 'nav-test-execution-timeline',
   'nav-technical-debt', 'nav-performance-metrics', 'nav-pipeline-visualization', 'nav-developer-productivity', 'nav-team-pulse',
   'nav-business-impact', 'nav-team-gamification', 'nav-pdf-report-generator'];
 export const NAV_BY_ROLE: Record<Role, string[]> = {

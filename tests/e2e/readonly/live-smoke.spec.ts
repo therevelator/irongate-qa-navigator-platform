@@ -41,6 +41,13 @@ test.describe('Live smoke (read-only)', { tag: [TAG.readonly, TAG.smoke, TAG.are
     await signInWithForm(page, credentialsOf('admin'));
     for (const id of (await app.navItems()).filter((n) => n !== 'nav-operator')) {
       await app.go(id);
+      if (id === 'nav-tv') {
+        // TV mode is full screen (no app chrome): leave it with its Exit button.
+        await expect(page.getByTestId('tv-mode')).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(page.getByTestId('nav-toggle')).toBeVisible();
+        continue;
+      }
       await expect(app.title).not.toBeEmpty();
     }
     noErrors();

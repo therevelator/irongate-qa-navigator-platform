@@ -1,7 +1,8 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
-import { assertTeamAnalytics } from '../middleware/access';
+import { assertTeamAnalytics, policyActor } from '../middleware/access';
+import { analyticsTeamsInScope } from '../lib/userPolicy';
 import { TECH_DEBT_OPEN_WEIGHT_SQL, techDebtScoreFromWeight, toNum, qaStatusFromScore } from '../lib/metricFormulas';
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 import { evaluateLatestSnapshot, kpiHistoryFor, loadDataClock, qaConfidenceJson, type EvalContext } from '../lib/kpiEvaluation';
@@ -15,9 +16,13 @@ import { loadTargetBook } from '../lib/targets';
  * name, department, lead, member count, the latest KPI snapshot, 90 days of KPI history and
  * the technical debt score. No member list and no individual developer data.
  *
+ * GET /api/tv/teams — the teams TV mode may show (the team picker): the active teams of the
+ * caller's analytics scope, with their department.
+ *
  * Scope: the shared analytics rule (assertTeamAnalytics → canViewTeamAnalytics in
- * server/lib/userPolicy.ts): super_admin any team of their company, qa_manager the teams of
- * their department, team_lead / qa_engineer / viewer their own team. Another company's team,
+ * server/lib/userPolicy.ts), as every other page: super_admin any team of their company, a QA
+ * manager the teams of the departments they manage, team_lead / qa_engineer / viewer the teams
+ * they are assigned to. Every role may use TV mode, for those teams only. Another company's team,
  * an unknown id and an out-of-scope team all get the same 403.
  */
 
@@ -50,9 +55,25 @@ const KPI_COLUMNS: Record<string, string> = {
 };
 const HISTORY_DAYS = 90;
 
+router.get('/teams', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const teams = await query<any[]>(
+      `SELECT t.id, t.name, t.department_id, d.name AS department_name
+         FROM teams t LEFT JOIN departments d ON d.id = t.department_id
+        WHERE t.company_id = ? AND t.is_active = TRUE
+        ORDER BY d.name NULLS LAST, t.name`,
+      [req.companyId]
+    );
+    res.json({ teams: analyticsTeamsInScope(policyActor(req), teams.map((t: any) => ({ ...t, id: String(t.id) }))) });
+  } catch (error) {
+    console.error('TV teams error:', error);
+    res.status(500).json({ error: 'Failed to load the teams' });
+  }
+});
+
 router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
   try {
-    const owned = await assertTeamAnalytics(req, res, req.params.id);
+    const owned = await assertTeamAnalytics(req, res, String(req.params.id));
     if (!owned) return;
 
     const team = await queryOne<any>(

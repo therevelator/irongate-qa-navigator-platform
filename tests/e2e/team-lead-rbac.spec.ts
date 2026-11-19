@@ -6,27 +6,17 @@ test.describe('Team Lead Role-Based Access Control', { tag: ['@area:navigation',
   test.describe.configure({ mode: 'default' });
   test.setTimeout(120000);
 
-  test('Main Dashboard - Team Lead sees ALL teams', async ({ page }) => {
+  test('Main Dashboard - Team Lead sees the teams of their scope only', async ({ page }) => {
     await setupAuth(page, 'team_lead');
 
-    // Wait for dashboard to load - look for team performance section
-    await page.waitForSelector('text=Team Performance', { timeout: 30000 });
-
-    // Ensure at least one team card has had a chance to render
     await page.waitForSelector('[data-testid="team-card"]', { timeout: 30000 });
 
-    // Count team cards - team lead should see ALL teams across all departments
+    // One scope for every page (docs/ROLE_ACCESS.md): the cards are exactly the teams of the analytics scope.
     const teamCards = page.locator('[data-testid="team-card"]');
-    const teamCount = await teamCards.count();
-
-    // Should see at least one team card (seed data may not always include multiple teams)
-    expect(teamCount).toBeGreaterThan(1);
-
-    // Verify we can see teams from different departments
-    const teamNames = await teamCards.locator('[data-testid="team-name"]').allTextContents();
-    expect(teamNames.length).toBeGreaterThan(1);
-
-    console.log(`Team Lead sees ${teamCount} teams on dashboard:`, teamNames);
+    const scope = await (await page.request.get('http://localhost:3000/api/analytics/scope')).json();
+    const names = ((scope.teams ?? []) as Array<{ name: string }>).map((t) => t.name).sort();
+    expect(names.length).toBeGreaterThan(0);
+    expect((await teamCards.locator('[data-testid="team-name"]').allTextContents()).sort()).toEqual(names);
   });
 
   test('Admin Teams - Team Lead sees only their own team', async ({ page }) => {

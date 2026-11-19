@@ -1155,49 +1155,43 @@ const QaScoreCard: React.FC<{
         </div>
       </div>
 
-      {/* Facts */}
+      {/* Facts (a definition list: dt / dd pairs grouped in divs) */}
       <dl className="mt-4 grid grid-cols-1 gap-x-6 gap-y-2.5 border-t border-slate-100 pt-3 text-xs dark:border-slate-800 sm:grid-cols-2" data-testid="team-qa-facts">
         {facts?.qaRank && (
-          <div className="flex items-start gap-2" data-testid="team-qa-rank">
-            <Trophy size={14} className="mt-0.5 flex-shrink-0 text-slate-400" aria-hidden />
-            <div>
-              <dt className="text-slate-500 dark:text-slate-400">Rank by QA score</dt>
-              <dd className="font-medium text-slate-900 dark:text-white">{facts.qaRank.position} of {facts.qaRank.of} {facts.qaRank.scope === 'company' ? 'teams in the company' : 'teams you can see'}</dd>
-            </div>
+          <div data-testid="team-qa-rank">
+            <dt className="flex items-center gap-2 text-slate-500 dark:text-slate-400"><Trophy size={14} className="flex-shrink-0 text-slate-400" aria-hidden />Rank by QA score</dt>
+            <dd className="pl-[22px] font-medium text-slate-900 dark:text-white">{facts.qaRank.position} of {facts.qaRank.of} {facts.qaRank.scope === 'company' ? 'teams in the company' : 'teams you can see'}</dd>
           </div>
         )}
         {weakest && (
-          <div className="flex items-start gap-2" data-testid="team-qa-weakest">
-            <Target size={14} className="mt-0.5 flex-shrink-0 text-slate-400" aria-hidden />
-            <div className="min-w-0">
-              <dt className="text-slate-500 dark:text-slate-400">Costs the score most</dt>
-              <dd className="font-medium text-slate-900 dark:text-white">
-                {weakest.label} {fmt(weakest.value, weakest.unit === '%' ? 1 : 0)}{weakest.unit === '%' ? '%' : '/100'}
-                <span className="font-normal text-slate-500 dark:text-slate-400"> · −{weakest.pointsLost.toFixed(0)} pts{weakest.threshold ? ` · ${targetLabel(weakest.threshold, weakest.unit)}` : ''}</span>
-              </dd>
-            </div>
+          <div className="min-w-0" data-testid="team-qa-weakest">
+            <dt className="flex items-center gap-2 text-slate-500 dark:text-slate-400"><Target size={14} className="flex-shrink-0 text-slate-400" aria-hidden />Costs the score most</dt>
+            <dd className="pl-[22px] font-medium text-slate-900 dark:text-white">
+              {weakest.label} {fmt(weakest.value, weakest.unit === '%' ? 1 : 0)}{weakest.unit === '%' ? '%' : '/100'}
+              <span className="font-normal text-slate-500 dark:text-slate-400"> · −{weakest.pointsLost.toFixed(0)} pts{weakest.threshold ? ` · ${targetLabel(weakest.threshold, weakest.unit)}` : ''}</span>
+            </dd>
           </div>
         )}
         {memberCount != null && (
-          <div className="flex items-start gap-2" data-testid="team-qa-people">
-            <Users size={14} className="mt-0.5 flex-shrink-0 text-slate-400" aria-hidden />
-            <div>
-              <dt className="text-slate-500 dark:text-slate-400">Team</dt>
-              <dd className="font-medium text-slate-900 dark:text-white">{peopleText(memberCount)}{roles.length > 0 && <span className="font-normal text-slate-500 dark:text-slate-400"> · {roles.join(', ')}</span>}</dd>
-            </div>
+          <div data-testid="team-qa-people">
+            <dt className="flex items-center gap-2 text-slate-500 dark:text-slate-400"><Users size={14} className="flex-shrink-0 text-slate-400" aria-hidden />Team</dt>
+            <dd className="pl-[22px] font-medium text-slate-900 dark:text-white">{peopleText(memberCount)}{roles.length > 0 && <span className="font-normal text-slate-500 dark:text-slate-400"> · {roles.join(', ')}</span>}</dd>
           </div>
         )}
         {(leads.length > 0 || owners.length > 0) && (
-          <div className="flex items-start gap-2" data-testid="team-qa-roles">
-            <UserRound size={14} className="mt-0.5 flex-shrink-0 text-slate-400" aria-hidden />
-            <div className="min-w-0 space-y-0.5">
-              {leads.map((p) => (
-                <div key={`lead-${p.name}`}><dt className="inline text-slate-500 dark:text-slate-400">{p.jobTitle && /scrum master/i.test(p.jobTitle) ? 'Scrum Master' : 'Team lead'}: </dt><dd className="inline font-medium text-slate-900 dark:text-white">{p.name}</dd></div>
-              ))}
-              {owners.map((p) => (
-                <div key={`po-${p.name}`}><dt className="inline text-slate-500 dark:text-slate-400">Product Owner: </dt><dd className="inline font-medium text-slate-900 dark:text-white">{p.name}</dd></div>
-              ))}
-            </div>
+          <div className="min-w-0" data-testid="team-qa-roles">
+            {leads.map((p) => (
+              <React.Fragment key={`lead-${p.name}`}>
+                <dt className="flex items-center gap-2 text-slate-500 dark:text-slate-400"><UserRound size={14} className="flex-shrink-0 text-slate-400" aria-hidden />{p.jobTitle && /scrum master/i.test(p.jobTitle) ? 'Scrum Master' : 'Team lead'}</dt>
+                <dd className="pl-[22px] font-medium text-slate-900 dark:text-white">{p.name}</dd>
+              </React.Fragment>
+            ))}
+            {owners.map((p) => (
+              <React.Fragment key={`po-${p.name}`}>
+                <dt className="mt-1 flex items-center gap-2 text-slate-500 dark:text-slate-400"><UserRound size={14} className="flex-shrink-0 text-slate-400" aria-hidden />Product Owner</dt>
+                <dd className="pl-[22px] font-medium text-slate-900 dark:text-white">{p.name}</dd>
+              </React.Fragment>
+            ))}
           </div>
         )}
       </dl>

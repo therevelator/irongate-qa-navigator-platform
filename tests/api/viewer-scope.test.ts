@@ -86,6 +86,16 @@ describe('A viewer scoped to one team sees that team only', () => {
     expect(JSON.stringify(refused.body)).not.toMatch(/qaScore|kpiData|@golden/);
   });
 
+  it('SCOPE-006: TV mode picker lists her team only; another company\'s team is refused', async () => {
+    if (!up) return;
+    expect(((await get('/api/tv/teams', c.vone)).body.teams ?? []).map((t: any) => t.id)).toEqual([PARTIAL]);
+    expect(((await get('/api/tv/teams', c.vtwo)).body.teams ?? []).map((t: any) => t.id).sort()).toEqual([BIG, PARTIAL].sort());
+    const tv = (await get(`/api/tv/teams/${PARTIAL}`, c.vone)).body;
+    expect(JSON.stringify(tv)).not.toMatch(/@golden\.example/);
+    const foreign = (await login('alex.morgan@northwind.example')).cookie;
+    if (foreign) expect((await get(`/api/tv/teams/${PARTIAL}`, foreign)).status).toBe(403);
+  });
+
   it('SCOPE-003: Analytics modules, revenue impact, pulse, alerts, actions, compare: another team 403', async () => {
     if (!up) return;
     const paths = [

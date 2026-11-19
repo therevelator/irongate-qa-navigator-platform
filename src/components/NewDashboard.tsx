@@ -15,7 +15,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { Page, PageIntro, Card, Badge, SegmentedControl, EmptyState, buttonClass, inputClass, cx, type Tone } from './ui';
 import HeroBattery from './HeroBattery';
 import KpiStatusModal, { type KpiStatusTeam, type KpiTab } from './KpiStatusModal';
-import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { openTvMode } from './tv/tvNavigation';
 import { ConfidenceNote, type ConfidenceInfo } from './MetricQuality';
 import SampleDataBanner from './SampleDataBanner';
@@ -224,7 +223,6 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, teamsError, onTeamCl
   const [columns, setColumns] = useState<Columns>(readColumns);
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [kpiModal, setKpiModal] = useState<KpiTab | null>(null);
-  const analyticsScope = useAnalyticsScope();
 
   useEffect(() => {
     try { localStorage.setItem(VIEW_KEY, view); } catch { /* storage unavailable */ }
@@ -523,7 +521,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, teamsError, onTeamCl
           if (t) onTeamClick?.(t);
         }}
         onOpenTv={(id) => { setKpiModal(null); openTvMode(id); }}
-        canOpenTv={(id) => analyticsScope.teams.some((t) => t.id === id)}
+        canOpenTv={() => true /* every listed team is in the caller's analytics scope (TV mode's rule) */}
       />
     </Page>
   );

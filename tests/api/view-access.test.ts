@@ -34,6 +34,11 @@ describe('canOpenView', () => {
     for (const v of ANALYTICS_VIEWS) expect(canOpenView(noTeam, v)).toBe(false);
   });
 
+  it('VIEW-004: TV mode entry for every role (the API limits it to the teams in scope)', () => {
+    for (const a of [admin, manager, lead, engineer, viewer, noTeam]) expect(canOpenView(a, 'tv')).toBe(true);
+    expect(canOpenView(null, 'tv')).toBe(false);
+  });
+
   it('VIEW-003: overview and notifications for everyone; unknown pages for nobody; signed out: overview only', () => {
     for (const a of [admin, viewer, noTeam]) {
       expect(canOpenView(a, 'dashboard')).toBe(true);
@@ -53,6 +58,7 @@ describe('accessSummary', () => {
     expect(s.cannot.join(' ')).toMatch(/read-only/);
     expect(s.cannot.join(' ')).toMatch(/Change settings/);
     expect(s.can.join(' ')).not.toMatch(/Invite people/);
+    expect(s.can.join(' ')).toMatch(/TV mode, Compare teams and the Analytics modules for the teams in your scope/);
   });
 
   it('ACC-002: a super admin sees every team and may change settings and job titles', () => {
