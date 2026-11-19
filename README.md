@@ -241,9 +241,62 @@ rules as assignments). The person opens `APP_URL/accept-invite?token=…`, sets 
 (10+ characters, three of lower / upper / digit / symbol, not containing the email name; or uses
 SSO) and gets exactly that assignment. Tokens are 256-bit random, stored only as SHA-256, single
 use, expire after 7 days (`INVITE_TTL_HOURS`) and can be revoked; **Resend** issues a new link and
-the old one stops working. With SMTP configured the email is sent; otherwise the API returns the
-link and the dialog shows it to copy (nothing fails silently). "Add with password" remains for
+the old one stops working. With e-mail configured (Resend or SMTP, see **E-mail** below) the email is
+sent; otherwise the API returns the link and the dialog shows it to copy (nothing fails silently). "Add with password" remains for
 demos and scripted setups.
+
+**Forgot password (reset by e-mail).** The sign-in screen has **Forgot password?**. The person
+enters their e-mail address; the answer is always the same ("If an account exists for that e-mail,
+we've sent a link") and takes about the same time, so nobody can test which addresses have an
+account. Only an **active** user gets an e-mail. The link `APP_URL/reset-password?token=…` works
+**once** and expires after **60 minutes**; a newer link closes the older ones. The new password
+follows the invitation rules above. After the change the person signs in again (no automatic
+sign-in), and gets a second e-mail: "Your password was changed; if this wasn't you, contact your
+administrator". A lockout is cleared. In **Users**, the key button (reset password) also offers
+**Send reset link**: the same e-mail, for whoever may reset that person's password today (super
+admins, managers of the person's department, team leads for their teams, each only for people ranked
+below them, and everyone for themselves). The direct reset stays.
+
+- Tokens: 32 random bytes (base64url, prefix `igr_`); the database stores only the SHA-256 (table
+  `password_resets`, one row per link, with expiry, used / closed time and the request's address).
+- The reset page removes the token from the address bar at once and sends no Referer.
+- Limits: 5 requests per 15 minutes per address and 3 per hour per e-mail address (the address is
+  hashed), 10 failed resets per 15 minutes per address.
+- The Activity log records "Password reset requested" and "Password changed via e-mail link"; the
+  User activity log records the requests by route only. Neither ever holds the token.
+- Sessions are signed cookies (7 days) with no server-side revocation, so a reset does **not**
+  sign out browsers that are already signed in.
+
+Migration: `supabase/migrations/20261123400000_password_resets.sql`. Endpoints:
+`POST /api/auth/forgot-password { email }`, `POST /api/auth/reset-password { token, password }`,
+`POST /api/admin/users/:id/send-reset-link`.
+
+**E-mail.** All e-mail of the app (invitations, password resets, pulse surveys, alerts, the weekly
+digest) goes through one mailer. The first configured channel wins: **Resend** (`RESEND_API_KEY`),
+then **SMTP** (`SMTP_HOST`), otherwise nothing is sent and the message is written to the server log
+(links to copy are shown where the app has them). The sender is `MAIL_FROM`
+(e.g. `IronGate QE Navigator <no-reply@qe.example.com>`); `SMTP_FROM` is the fallback.
+
+Set up Resend (https://resend.com):
+
+1. Create a Resend account.
+2. **Domains → Add domain**: enter the domain you send from (e.g. `qe.example.com`, or a subdomain
+   such as `mail.example.com`). Choose the region nearest your users.
+3. Add the DNS records Resend shows (an MX and a TXT record for SPF, a TXT record for DKIM; DMARC is
+   recommended) at your DNS provider. Wait until the domain shows **Verified**. Resend only sends
+   from verified domains.
+4. **API Keys → Create API key**: permission **Sending access**, limited to that domain. Copy it
+   (it starts with `re_`; it is shown once).
+5. On Netlify (Site configuration → Environment variables) or in `.env`, set `RESEND_API_KEY` to the
+   key and `MAIL_FROM` to a sender on the verified domain, e.g.
+   `IronGate QE Navigator <no-reply@qe.example.com>`. Set `APP_URL` to the public URL of the app
+   (Netlify's `URL` is used when unset). Redeploy.
+6. Check: **Parameters → Notification channels** says "Email is sent through Resend". Send a test
+   digest, or use **Forgot password?** with your own address.
+
+Without `MAIL_FROM` the Resend test sender `onboarding@resend.dev` is used, which only delivers to
+the Resend account's own address. A failed send (for example an unverified domain) is reported as
+"not sent", logged without the key and listed in the platform operator panel (server errors).
 
 **Single sign-on (Google, Microsoft).** Off unless configured; the login page asks
 `GET /api/auth/providers` and shows only the configured buttons. OpenID Connect with state,
@@ -263,7 +316,8 @@ registrations; accounts in your organisation; add a client secret; optional clai
 | `API_PUBLIC_URL` | only when the API has its own origin (local development: `http://localhost:3000`, the default) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | enable Google sign-in |
 | `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_TENANT` | enable Microsoft sign-in; `MS_TENANT` = your tenant id or domain (a single tenant is recommended: its addresses are trusted; with `organizations` only verified email claims are accepted) |
-| `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | send invitation emails (without `SMTP_HOST` links are shown to copy) |
+| `RESEND_API_KEY`, `MAIL_FROM` | send all e-mail through Resend (see **E-mail** above); `MAIL_FROM` needs a domain verified in Resend |
+| `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | send e-mail through SMTP instead (used when `RESEND_API_KEY` is not set; without either, links are shown to copy) |
 | `INVITE_TTL_HOURS` | invitation lifetime, default 168 |
 | `DEMO_MODE` | `true` shows the demo account chips on the login page; default on locally, off in production / on Netlify |
 
@@ -271,7 +325,8 @@ Endpoints: `GET|POST /api/admin/users/:id/assignments`, `DELETE /api/admin/users
 `GET /api/admin/audit`, `GET /api/admin/audit/facets`, `POST /api/admin/audit/:id/undo`,
 `GET|POST /api/admin/invitations`, `POST /api/admin/invitations/:id/resend|revoke`,
 `GET /api/auth/providers`, `GET /api/auth/sso/:provider/start|callback`,
-`GET /api/auth/invitations/:token`, `POST /api/auth/invitations/accept`.
+`GET /api/auth/invitations/:token`, `POST /api/auth/invitations/accept`,
+`POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `POST /api/admin/users/:id/send-reset-link`.
 
 ## Team TV mode
 
@@ -459,7 +514,7 @@ security on, no policies.
     participation list); the UI and the API return only a count, and not even that when it would reveal
     that 1 or 2 people answered; one reminder per 24 hours. Personal links are never returned by the
     API or shown to anyone but the recipient's mailbox, so nobody can answer as someone else.
-  - **Without SMTP** (`SMTP_HOST` unset) nothing is e-mailed: the page says e-mail is not configured and
+  - **Without e-mail** (neither `RESEND_API_KEY` nor `SMTP_HOST` set) nothing is e-mailed: the page says e-mail is not configured and
     that members can answer in the app (Analytics → Wellbeing pulse); the send is still logged as "not
     e-mailed". In development the log mailer prints the message; `MAIL_CAPTURE_FILE` (ignored in
     production) also writes it to a file for end-to-end tests.
@@ -544,7 +599,8 @@ Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (table
   company-wide roles about critical team alerts only. **Preferences** per person: in-app on/off, an email
   for each alert, the weekly digest (super admins, managers, team leads), minimum severity
   (defaults: in-app, no immediate email, digest on for leads and above, from warning). Email goes
-  through the one mailer (SMTP when `SMTP_*` is set, otherwise written to the server log).
+  through the one mailer (Resend when `RESEND_API_KEY` is set, else SMTP when `SMTP_*` is set,
+  otherwise written to the server log).
 - **Slack** (super admins, Parameters → Notification channels): one incoming webhook per company,
   posts alerts from a chosen severity and optionally a weekly summary. The URL must be a
   `https://hooks.slack.com/…` webhook; it is stored AES-256-GCM encrypted (key derived from
@@ -578,8 +634,9 @@ Migration: `supabase/migrations/20261121000000_alerts_digest_actions.sql` (table
 
 Environment (all optional; the Slack webhook is entered in the app, not in the environment):
 `SETTINGS_ENCRYPTION_KEY` (recommended in production, a long random string; otherwise `JWT_SECRET` is
-used), `APP_URL` (link in emails / Slack; Netlify's `URL` is used when unset), `SMTP_HOST`, `SMTP_PORT`,
-`SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (email; without them emails are logged), `PULSE_CRON=false` /
+used), `APP_URL` (link in emails / Slack; Netlify's `URL` is used when unset), `RESEND_API_KEY` and
+`MAIL_FROM`, or `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` (email; without them
+emails are logged), `PULSE_CRON=false` /
 `PULSE_SEND_CRON` (automatic pulse-survey e-mail), `ALERTS_CRON=false`
 (turn the local schedule off), `ALERTS_EVALUATE_CRON` / `DIGEST_CRON` (local schedule, UTC),
 `NOTIFY_SLACK_ALLOW_LOCAL=true` (tests only, ignored in production: accept a `http://127.0.0.1:<port>/`

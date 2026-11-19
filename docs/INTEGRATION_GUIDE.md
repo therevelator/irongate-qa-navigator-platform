@@ -189,6 +189,9 @@ Caveats, read them before you automate anything this way:
   business impact values are range-checked: an out-of-range or non-numeric value is `400` with the field named (since R2 Phase 4).
 - The session token cannot be revoked individually: `POST /api/auth/logout` only clears the cookie. Deactivating the user stops
   it at once (the server reloads the user on every request).
+- A forgotten password of that account is reset by e-mail: `POST /auth/forgot-password {"email": …}` (always `200`, the same
+  message whether or not the account exists) e-mails a link valid for 60 minutes; `POST /auth/reset-password {"token", "password"}`
+  sets the new password. A reset does not revoke session tokens already issued.
 - Invalid or expired session token: `403 {"error":"Invalid or expired token"}`; none: `401 {"error":"Access token required"}`.
 
 ---

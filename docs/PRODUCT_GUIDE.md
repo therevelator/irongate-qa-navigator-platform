@@ -152,9 +152,55 @@ assignment). The person opens `APP_URL/accept-invite?token=…`, sets a name and
 characters, three of lower case / upper case / digit / symbol, not containing the e-mail name) or uses
 SSO, and receives exactly that assignment. Tokens are 256-bit random values stored only as SHA-256
 hashes, single use, revocable, and expire after `INVITE_TTL_HOURS` (default 168 hours = 7 days, limited to
-1 to 720 hours). **Resend** issues a new link and invalidates the old one. With SMTP configured the
-invitation is e-mailed; without it the API returns the link and the dialog shows it to copy. Code:
+1 to 720 hours). **Resend** issues a new link and invalidates the old one. With e-mail configured
+(Resend or SMTP) the invitation is e-mailed; without it the API returns the link and the dialog shows it to copy. Code:
 [`server/lib/invitations.ts`](../server/lib/invitations.ts), [`server/routes/orgAdmin.ts`](../server/routes/orgAdmin.ts).
+
+### Forgot password (reset by e-mail)
+
+The sign-in screen has a **Forgot password?** link. It opens a page that asks for the e-mail address.
+
+- The answer is always the same: "If an account exists for that e-mail, we've sent a link". It takes
+  about the same time whatever the address. So nobody can find out which addresses have an account.
+- Only an **active** user gets an e-mail. A deactivated or unknown address gets nothing.
+- The e-mail has a link to `APP_URL/reset-password?token=…`. The link works **once** and expires after
+  **60 minutes**. Asking again sends a new link and the older one stops working. The e-mail says to ignore
+  it if you did not ask for it.
+- On the reset page you choose the new password twice. The rules are the invitation rules above.
+- After the change you sign in with the new password. The reset never signs you in. You also get an
+  e-mail: "Your password was changed; if this wasn't you, contact your administrator". A lockout from
+  failed sign-ins is cleared.
+- Limits: 5 requests per 15 minutes from one address, 3 per hour for one e-mail address, 10 failed
+  resets per 15 minutes from one address.
+
+**Send reset link (administrators).** In **Users**, the key button (reset password) now also offers
+**Send reset link**. It sends the same e-mail. It is allowed to whoever may reset that person's password
+directly: super admins, the managers of the person's department and team leads for their teams (ranked
+below them), and everyone for themselves. Setting a password directly still works as before.
+
+**Security.** The token is 32 random bytes. The database stores only its SHA-256 hash, in the table
+`password_resets` (one row per link: expiry, when it was used or closed, the request's address, which
+administrator sent it). The reset page removes the token from the address bar straight away and sends no
+Referer. The Activity log records "Password reset requested" and "Password changed via e-mail link". The
+User activity log records the requests by route only. Neither ever holds the token. Sessions are signed
+cookies valid for 7 days with no server-side revocation: a reset does **not** sign out a browser that is
+already signed in (deactivating the user does). Code: [`server/lib/passwordReset.ts`](../server/lib/passwordReset.ts),
+[`src/components/PasswordReset.tsx`](../src/components/PasswordReset.tsx).
+
+### E-mail
+
+All e-mail (invitations, password resets, pulse surveys, alerts, weekly digest) goes through one mailer
+([`server/lib/mailer.ts`](../server/lib/mailer.ts)). The first configured channel wins:
+
+1. **Resend** when `RESEND_API_KEY` is set. The sender is `MAIL_FROM`, which must use a domain verified in
+   Resend (setup steps in the README, section "Organisation, roles and access").
+2. **SMTP** when `SMTP_HOST` is set.
+3. Otherwise nothing is sent. The message is written to the server log, and the app shows links to copy
+   where it has them.
+
+A failed send is reported as "not sent" and listed in the operator panel's server errors. The API key is
+never logged. **Parameters → Notification channels** shows which channel is in use; so does the platform
+operator panel.
 
 ### Single sign-on (Google, Microsoft)
 
@@ -1120,7 +1166,7 @@ alert per condition: refreshed while the condition holds, resolved when it is go
   critical team alerts only.
 - **Preferences** per person: in-app on/off, an e-mail for each alert, the weekly digest (super admins, managers, team leads), minimum
   severity. Defaults: in-app on, no immediate e-mail, digest on for leads and above, from warning.
-- E-mail goes through the one mailer (SMTP when configured, otherwise written to the server log). Every e-mail and Slack message goes through
+- E-mail goes through the one mailer (Resend or SMTP when configured, otherwise written to the server log). Every e-mail and Slack message goes through
   an outbox (`notification_deliveries`) with a dedupe key and up to 3 attempts.
 
 ### Slack
@@ -1195,7 +1241,8 @@ Only names and purposes are listed here. Never commit real values; `.env` is git
 | `APP_URL` | for invitations, SSO, e-mail and Slack links | Public URL of the app (invitation links, SSO redirect and return, links in alert e-mails, digest and Slack). On Netlify defaults to `URL` |
 | `API_PUBLIC_URL` | no | Only when the API has its own origin (local development) |
 | `INVITE_TTL_HOURS` | no | Invitation lifetime, default 168 (1 to 720) |
-| `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | no | Outgoing e-mail (invitations, alert e-mails, weekly digest, wellbeing pulse survey). Without `SMTP_HOST` nothing is sent: messages are logged, invitation links are shown to copy, and the pulse survey is answered in the app (its personal links are never shown) |
+| `RESEND_API_KEY`, `MAIL_FROM` | no | Outgoing e-mail through Resend (preferred). `MAIL_FROM` is the sender, e.g. `IronGate QE Navigator <no-reply@qe.example.com>`, on a domain verified in Resend; without it Resend's test sender is used, which only reaches the Resend account's own address |
+| `SMTP_HOST`, `SMTP_PORT` (587), `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | no | Outgoing e-mail through SMTP, used when `RESEND_API_KEY` is not set (invitations, password resets, alert e-mails, weekly digest, wellbeing pulse survey). Without Resend or SMTP nothing is sent: messages are logged, invitation links are shown to copy, and the pulse survey is answered in the app (its personal links are never shown) |
 | `PULSE_CRON`, `PULSE_SEND_CRON` | no | `false` turns the local automatic pulse-survey e-mail off; its schedule in UTC (default `40 * * * *`, hourly). On Netlify the scheduled function `pulse-auto-send` does the same |
 | `MAIL_CAPTURE_FILE` | tests only | The log mailer also writes each message as a JSON line to this file (end-to-end tests follow survey links); ignored in production |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | no | Google sign-in (redirect URI `<APP_URL>/api/auth/sso/google/callback`) |
