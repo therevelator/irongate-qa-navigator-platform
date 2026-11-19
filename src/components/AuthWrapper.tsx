@@ -19,7 +19,7 @@ interface AuthWrapperProps {
 }
 
 const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isInitializing } = useAuth();
   const [showRegister, setShowRegister] = useState(false);
   // /accept-invite is public (the invited person has no account yet).
   const [acceptInvite, setAcceptInvite] = useState(isAcceptInvitePath);
@@ -34,10 +34,11 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   if (pulseLink) return <PulseAnswerLink />;
   if (password === 'reset') return <ResetPassword />;
   if (password === 'forgot') return <ForgotPassword />;
-  if (acceptInvite && !isLoading) return <AcceptInvite />;
+  if (acceptInvite && !isInitializing) return <AcceptInvite />;
 
-  // Show loading state
-  if (isLoading) {
+  // Loading state while the session is first checked. Not during a sign-in or registration: the
+  // form stays mounted so a wrong password or a taken e-mail is shown (and what was typed is kept).
+  if (isInitializing) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 flex items-center justify-center">
         <div className="text-center">

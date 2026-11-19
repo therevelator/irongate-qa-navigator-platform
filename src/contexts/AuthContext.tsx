@@ -12,6 +12,32 @@ interface AuthContextType extends AuthState {
   reloadUser: () => Promise<void>;
   /** Why the session ended (expired, or signed out everywhere): shown on the sign-in screen. */
   sessionNotice: string | null;
+  /** True only until the first session check has answered (the full-screen loader). A sign-in or
+   *  registration in progress sets isLoading, not this, so their forms stay mounted and can show errors. */
+  isInitializing: boolean;
+}
+
+/** fetch for the sign-in and registration forms: a network failure or an unreadable answer becomes a
+ *  message a person can act on (never "Failed to fetch" or a JSON parse error). */
+async function authRequest(url: string, body: unknown, fallback: string): Promise<any> {
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      credentials: 'include', // Send/Receive cookies
+    });
+  } catch {
+    throw new Error('The server could not be reached. Check your connection and try again.');
+  }
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const ref = data?.requestId ? ` Reference: ${data.requestId}.` : '';
+    if (response.status >= 500) throw new Error(`${fallback}: the server had a problem. Try again in a moment.${ref}`);
+    throw new Error(data?.error || fallback);
+  }
+  return data;
 }
 
 /** Header of a 401 for a session that ended (server/lib/sessions.ts). */
@@ -63,6 +89,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     error: null,
   });
   const [sessionNotice, setSessionNotice] = useState<string | null>(null);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   // A session ended by the server (expired, or signed out everywhere) on ANY API call: back to the
   // sign-in screen with a clear message. The address is kept, so a deep link opens after sign-in.
@@ -109,6 +136,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // Safer to assume logged out if the session cannot be verified.
       localStorage.removeItem('irongate_user');
       setAuthState(prev => ({ ...prev, isLoading: false, user: null, isAuthenticated: false }));
+    } finally {
+      setIsInitializing(false);
     }
   };
 
@@ -121,19 +150,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     try {
       // Real API authentication
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(credentials),
-        credentials: 'include' // Send/Receive cookies
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Login failed');
-      }
-
-      const { user: userData } = await response.json();
+      const { user: userData } = await authRequest(`${API_URL}/auth/login`, credentials, 'Sign-in failed');
 
       // Map backend user to frontend User type
       const user: User = { ...mapApiUser(userData), lastLogin: new Date().toISOString() };
@@ -171,19 +188,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     try {
       // Call real API for registration
-      const response = await fetch(`${API_URL}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-        credentials: 'include' // Send/Receive cookies
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.error || 'Registration failed');
-      }
-
-      const { user: apiUser } = await response.json();
+      const { user: apiUser } = await authRequest(`${API_URL}/auth/register`, data, 'Registration failed');
       
       // Map API response to User type
       const user: User = { ...mapApiUser(apiUser), assignedTeams: apiUser.assignedTeams || [apiUser.primary_team_id] };
@@ -251,6 +256,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         updateUser,
         reloadUser: checkAuth,
         sessionNotice,
+        isInitializing,
       }}
     >
       {children}
