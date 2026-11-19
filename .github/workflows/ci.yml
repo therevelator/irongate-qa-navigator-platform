@@ -93,10 +93,12 @@ jobs:
           path: /tmp/irongate-ci-logs/
           retention-days: 14
 
+  # Fast gate on every push: the @smoke subset of the UI suite. The full suite (sharded, nightly,
+  # pull requests, main) is the "UI tests" workflow (.github/workflows/ui-tests.yml).
   e2e:
-    name: End-to-end tests (Playwright)
+    name: End-to-end smoke (Playwright @smoke)
     runs-on: ubuntu-24.04  # Playwright 1.57 has no browser builds for ubuntu-latest (26.04) yet
-    timeout-minutes: 40
+    timeout-minutes: 25
     env:
       # The log mailer also writes each e-mail here (development aid), so the tests can follow
       # the links in invitation, pulse and password reset e-mails.
@@ -126,8 +128,10 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: E2E tests
-        run: npx playwright test --project=chromium
+      - name: E2E smoke tests
+        run: npx playwright test --project=chromium --grep @smoke --reporter=list,html
+        env:
+          PW_WORKERS: '3'
 
       - name: Upload Playwright report
         if: always()

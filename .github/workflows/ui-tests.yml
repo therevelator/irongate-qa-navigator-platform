@@ -1,0 +1,158 @@
+name: UI tests
+
+# The full Playwright UI suite (tests/e2e), sharded over four runners and merged into one HTML
+# report. How to run it locally and how to read the report: docs/testing/README.md.
+# The fast @smoke gate runs in ci.yml on every push.
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  schedule:
+    - cron: '17 3 * * *' # nightly, 03:17 UTC
+  workflow_dispatch:
+    inputs:
+      subset:
+        description: Which tests to run
+        type: choice
+        options: [all, smoke, negative, a11y, grep]
+        default: all
+      grep:
+        description: 'With subset "grep": a Playwright --grep string, e.g. "@area:pulse" or "@role:viewer"'
+        required: false
+        default: ''
+
+concurrency:
+  group: ui-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Local Postgres service only (never a remote database).
+  DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/irongate_qa
+  DB_HOST: 127.0.0.1
+  DB_PORT: '5432'
+  DB_USER: postgres
+  DB_PASSWORD: postgres
+  DB_NAME: irongate_qa
+  JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-else
+  API_RATE_LIMIT_MAX: '10000'
+  LOG_DIR: /tmp/irongate-ci-logs
+  # The log mailer also writes each e-mail here, so tests can follow invitation, reset and pulse links.
+  MAIL_CAPTURE_FILE: /tmp/irongate-ci-logs/mail.jsonl
+  PW_WORKERS: '3'
+
+jobs:
+  ui:
+    name: UI tests (shard ${{ matrix.shard }}/4)
+    runs-on: ubuntu-24.04  # Playwright 1.57 has no browser builds for ubuntu-latest (26.04) yet
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: irongate_qa
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d irongate_qa"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up database, API and web app
+        uses: ./.github/actions/setup-test-env
+        with:
+          start-web: 'true'
+
+      - name: Typecheck the tests
+        if: matrix.shard == 1
+        run: npx tsc --noEmit -p tsconfig.playwright.json
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: UI tests
+        env:
+          SUBSET: ${{ inputs.subset || 'all' }}
+          GREP: ${{ inputs.grep }}
+        run: |
+          args=()
+          case "$SUBSET" in
+            smoke) args=(--grep @smoke) ;;
+            negative) args=(--grep @negative) ;;
+            a11y) args=(--grep @a11y) ;;
+            grep) if [ -n "$GREP" ]; then args=(--grep "$GREP"); fi ;;
+          esac
+          echo "Subset: $SUBSET ${args[*]}"
+          npx playwright test --project=chromium --shard=${{ matrix.shard }}/4 --pass-with-no-tests "${args[@]}"
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: blob-report/
+          retention-days: 3
+
+      - name: Upload traces, screenshots, videos and service logs of failures
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ui-failures-shard-${{ matrix.shard }}
+          path: |
+            test-results/
+            /tmp/irongate-ci-logs/
+          retention-days: 14
+
+  report:
+    name: Merge the HTML report
+    if: ${{ !cancelled() }}
+    needs: ui
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v5
+        with:
+          path: all-blob-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge into one HTML report
+        run: npx playwright merge-reports --reporter html,github ./all-blob-reports
+
+      - name: Upload HTML report
+        uses: actions/upload-artifact@v6
+        with:
+          name: ui-tests-report
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Summary
+        run: |
+          {
+            echo "### UI tests"
+            echo "Download the **ui-tests-report** artifact and open \`index.html\` (or run \`npx playwright show-report <folder>\`)."
+            echo "Failures also have **ui-failures-shard-N** artifacts with traces, screenshots, videos and the API / web logs."
+          } >> "$GITHUB_STEP_SUMMARY"
