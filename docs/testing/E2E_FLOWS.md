@@ -22,7 +22,7 @@ Contents: [Where the flows come from](#where-the-flows-come-from) ·
 Derived from the code, then checked against the documentation:
 
 - **Routes**: `src/App.tsx` (`VIEW_TO_PATH`, `hasPermission`; unknown paths fall back to the overview,
-  forbidden ones redirect there) and `src/components/AuthWrapper.tsx` (public pages `/accept-invite`,
+  forbidden ones redirect there with the "You don't have access to …" message, `AccessDeniedNotice`) and `src/components/AuthWrapper.tsx` (public pages `/accept-invite`,
   `/pulse/answer`, `/forgot-password`, `/reset-password`; sign-in and registration).
 - **Navigation per role**: `src/components/Layout.tsx` (`NAV_GROUPS` with the `server/lib/userPolicy.ts`
   rules, the operator entry from `GET /api/operator/status`, top bar: notifications bell, theme switch,
@@ -36,12 +36,12 @@ Derived from the code, then checked against the documentation:
 
 | | Count |
 |---|---|
-| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **145** |
-| Flows with a happy-path UI test | **126** of the 130 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests; F1.6 is a recorded issue with a `test.fail`); the other 15 are negative-only by nature (limits, refusals, failures) |
-| Flows with at least one negative UI test | **104** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
-| UI tests (Playwright, `chromium` project) | **340** in 38 files: 73 existing (kept, tagged) + 267 new |
-| …tagged `@smoke` / `@negative` / `@a11y` / `@readonly` | 40 / 120 / 12 / 4 |
-| Other tests (unchanged, passing) | API 354 and database 24 (Jest); the golden baseline is untouched |
+| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **146** |
+| Flows with a happy-path UI test | **128** of the 131 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
+| Flows with at least one negative UI test | **105** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
+| UI tests (Playwright, `chromium` project) | **345** in 38 files: 73 existing (kept, tagged) + 272 new; no `test.fail` left |
+| …tagged `@smoke` / `@negative` / `@a11y` / `@readonly` | 40 / 121 / 13 / 4 |
+| Other tests (passing) | API 386 and database 29 (Jest); the golden baseline is untouched |
 
 ## 1. Sign-in and sessions
 
@@ -52,10 +52,10 @@ Derived from the code, then checked against the documentation:
 | F1.3 | Show / hide the password | – | – | AUTH-07 | — |
 | F1.4 | Demo account chips fill the form (demo mode) | – | – | AUTH-08 | AUTH-10 no chips when demo mode is off (stubbed providers) |
 | F1.5 | SSO buttons (Google, Microsoft) when configured | – | – | AUTH-10 (stubbed providers, links to the API start URLs) | AUTH-09 no buttons when not configured; AUTH-11 unconfigured provider refused, `sso_error` shown and removed from the address |
-| F1.6 | "Keep me signed in" | – | – | — | AUTH-14 `test.fail` → FI-03 |
+| F1.6 | "Keep me signed in": unticked a browser-session cookie, ticked a cookie for the company sign-in lifetime; also for the SSO buttons | – | – | AUTH-14, AUTH-15 | API tests (`keep-signed-in.test.ts`, `sso.test.ts` SSO-012) |
 | F1.7 | Sign out; Back / reload stay signed out | All | – | AUTH-20 | AUTH-20 (Back, reload, `/auth/me` 401) |
 | F1.8 | Deep link opened while signed out opens after sign-in | All | – | AUTH-21, TV-05 | NAV-11 unknown address while signed out → sign-in |
-| F1.9 | Session ended elsewhere (sign out everywhere / password reset): next request shows "Your session has ended", same page after signing in | All | – | AUTH-22 | PWR-07, legacy:sessions "Sign out my other devices…" |
+| F1.9 | Session ended elsewhere (sign out everywhere / password reset): next request shows "Your session has ended", also after a reload, same page after signing in | All | – | AUTH-22 | PWR-07 (reloads), legacy:sessions "Sign out my other devices…" |
 | F1.10 | Expired sign-in message | All | – | AUTH-23 | — |
 | F1.11 | Sign out my other devices (confirm) | All | – | legacy:sessions "Sign out my other devices…" | AUTH-24 cancel changes nothing, AUTH-25 server error shown |
 | F1.12 | Sign-in lifetime (Parameters → Sign-in) | A | M L E V | PAR-12, legacy:sessions "A super admin sets Sign-in lasts…" | PAR-05 not shown to a manager |
@@ -74,7 +74,8 @@ Derived from the code, then checked against the documentation:
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
-| F3.1 | Create an organisation (registrant becomes its super admin) | – | – | REG-01 | REG-02 required fields, REG-03 names with markup / symbols, REG-04 mismatched / weak passwords, REG-05 e-mail taken (form kept), REG-06 existing organisation name, REG-08 e-mail domain taken (FI-05, fixed) |
+| F3.1 | Create an organisation (registrant becomes its super admin) | – | – | REG-01 | REG-02 required fields, REG-03 names with markup / symbols, REG-04 mismatched / weak passwords (the invitation and reset rules, FI-18), REG-05 e-mail taken (form kept), REG-06 existing organisation name, REG-08 company e-mail domain taken (FI-05) |
+| F3.1b | Public e-mail domains (gmail.com, …): every person creates their own organisation, nobody joins by domain | – | – | REG-09 | API tests (`registration.test.ts`), database test CDOM-001 … 004 |
 | F3.2 | Back to sign-in from registration | – | – | REG-07 | — |
 | F3.3 | Invite a person (link shown when e-mail is not configured) | A, M, L (within their grants) | E V | INV-01, legacy:organisation "Invite by email…" | INV-06 invalid / existing e-mail, INV-09 role options per inviter |
 | F3.4 | Accept an invitation (exactly the invited role) | – | – | INV-01 | INV-04 expired, INV-05 wrong / incomplete link, INV-07 names / weak / reused e-mail name / mismatched, INV-08 opened while signed in |
@@ -87,8 +88,8 @@ Derived from the code, then checked against the documentation:
 |---|---|---|---|---|---|
 | F4.1 | Navigation entries per role | All | — | NAV-01 (each role, exact list) | NAV-01 (absent entries), OPS-01 (Platform entry) |
 | F4.2 | Every allowed page opens from its address | All (per page) | — | NAV-02 (each role), LIVE-03 | — |
-| F4.3 | Address of a page of another role → overview (there is no separate access-denied page, FI-14) | — | per RESTRICTED_PAGES | — | NAV-03 (each role), legacy:*-rbac, legacy:organisation, legacy:metrics-quality |
-| F4.4 | The API refuses what the UI hides | — | E V (and per rule) | — | NAV-04, NAV-05 (refusal during an action shown), BRIEF-03, PAR-06, DEV-03, PUL-02, ACT-04, ALT-01, ORG-25, ORG-33, ING-03, MM-07, legacy:comprehensive-rbac, legacy:team-lead-rbac "API restrictions" |
+| F4.3 | Address of a page of another role → overview with "You don't have access to <page>." (alert, focused, dismissible) | — | per RESTRICTED_PAGES | — | NAV-03 (each role), legacy:*-rbac, legacy:organisation, legacy:metrics-quality |
+| F4.4 | The API refuses what the UI hides (403 before the body is checked) | — | E V (and per rule) | — | NAV-04 (empty bodies), NAV-05 (refusal during an action shown), BRIEF-03, PAR-06, DEV-03, PUL-02, ACT-04, ALT-01, ORG-25, ORG-33, ING-03, MM-07, legacy:comprehensive-rbac, legacy:team-lead-rbac "API restrictions" |
 | F4.5 | Unknown routes → overview | All | — | NAV-10, LIVE-04 | NAV-10 (markup and unicode in the path) |
 | F4.6 | Back / Forward between pages, reload keeps page and `?team=` | All | — | NAV-12, NAV-13 | NAV-14 team outside scope in `?team=` |
 | F4.7 | Navigation drawer: Escape, backdrop, focus back to the menu button | All | — | NAV-15 | — |
@@ -139,11 +140,11 @@ Derived from the code, then checked against the documentation:
 |---|---|---|---|---|---|
 | F7.1 | Analytics hub opens each module | All | — | AN-01 | — |
 | F7.2 | Scope bar: department / team choice per role (fixed for L E V) | All | — | AN-02 (each role), legacy:team-lead-rbac "Static label" | NAV-14 |
-| F7.3 | Each module renders for a team (flaky tests, test execution, technical debt, performance, CI/CD pipeline, developer productivity, wellbeing pulse, business impact, team rankings, reports) | All (teams in scope) | — | AN-03, legacy:super-admin-rbac, legacy:viewer-rbac | AN-06 scope unavailable, AN-07 ×6 module data 500 (timeline: FI-08, fixed), AN-08 `test.fail` → FI-06 |
+| F7.3 | Each module renders for a team (flaky tests, test execution, technical debt, performance, CI/CD pipeline, developer productivity, wellbeing pulse, business impact, team rankings, reports) | All (teams in scope) | — | AN-03, legacy:super-admin-rbac, legacy:viewer-rbac | AN-06 scope unavailable, AN-07 ×6 module data 500 (timeline: FI-08, fixed), AN-08 / AN-09 developer productivity 500, offline, history (FI-06, fixed) |
 | F7.4 | Team choice kept in the address across modules | All | — | AN-04, NAV-13 | — |
 | F7.5 | CSV / PDF exports (module CSV, team PDF report) | All | — | AN-05, legacy:compare-views-onboarding | — |
 | F7.6 | Technical debt module | All | — | AN-03, AN-05, A11Y-06 | AN-07 |
-| F7.7 | Developer productivity: own row only for E V; opted-in rows for A M L; k-anonymous team figures | All | — | DEV-01, legacy:qa-engineer-rbac, legacy:pulse-survey "…below 3 opted-in developers" | AN-08 (FI-06) |
+| F7.7 | Developer productivity: own row only for E V; opted-in rows for A M L; k-anonymous team figures | All | — | DEV-01, legacy:qa-engineer-rbac, legacy:pulse-survey "…below 3 opted-in developers" | AN-08, AN-09 |
 | F7.8 | Developer insights opt-in (Users toggle) | A, M, L (people they manage) | E V; others' people | DEV-02 | DEV-03 API refuses a lead for a person not on their team |
 | F7.9 | Business impact: money summary, what-if, details, "All teams" roll-up | All; roll-up A M | roll-up: L E V | BIZ-01 (each role), legacy:revenue-impact | BIZ-02 empty / huge / negative what-if, legacy:revenue-impact (roll-up API refuses E) |
 | F7.10 | Compare teams (2–4 teams, window, only differences, CSV) | All (scope) | — | CMP-01, legacy:compare-views-onboarding | CMP-02 bad / too many ids and bad window, CMP-03 team outside scope, CMP-04 500, legacy:compare-views-onboarding (engineer scope) |
@@ -159,7 +160,7 @@ Derived from the code, then checked against the documentation:
 | F8.3 | Manual developer metrics, technical-debt impact, pipeline settings / stages, business-impact config | A M L (per section) | E V | API tests (`ingestion.test.ts`, `consistency.test.ts`); page renders in RES-01 | — |
 | F8.4 | KPI targets at company / department / team level, with history | A (all levels), M (department, team) | L E V | PAR-01, legacy:metrics-quality | PAR-02 one value only / watch on the wrong side, PAR-03 out of range refused by the API, PAR-05 manager read-only at company level, PAR-06 API refuses |
 | F8.5 | Apply to every department and team | A | M (FI-09, fixed) L E V | PAR-04 | PAR-05 (no option for a manager) |
-| F8.6 | Configuration values (SLA, financial) | A M | L E V | PAR-10 | PAR-11 negative value refused (FI-10) |
+| F8.6 | Configuration values (SLA, financial) | A M | L E V | PAR-10 | PAR-11 negative value refused (FI-10), PAR-14 above the range refused by the page and the API (FI-10b); API tests (`settings-validation.test.ts`) |
 | F8.7 | Expected update frequency (change, discard, save, reset) | A M | L E V | PAR-13 | NAV-03 |
 | F8.8 | Ingestion log (sources, entries, filters) | A, M (their departments) | L E V | ING-01, ING-03, legacy:metrics-quality | ING-03 API refuses E, legacy:metrics-quality |
 
@@ -200,7 +201,7 @@ Derived from the code, then checked against the documentation:
 | F11.6 | Send survey to the team | A M L | E V | PUL-17, legacy:pulse-sending | PUL-02 |
 | F11.7 | Send reminder to those who have not answered | A M L | E V | PUL-18 (delivery stubbed) | PUL-17 (off when nothing was e-mailed) |
 | F11.8 | Answer through the personal e-mailed link (no sign-in) | Link holder | — | legacy:pulse-sending | legacy:pulse-sending (used / wrong link), PUL-14 expired link, PUL-15 double submit records one answer, markup in the comment |
-| F11.9 | Reminder / warning / escalation settings | A M L | E V | legacy:pulse-reminders | PUL-11 out of range (reason shown; FI-12) |
+| F11.9 | Reminder / warning / escalation settings | A M L | E V | legacy:pulse-reminders | PUL-11 out of range (reason in the page's words, FI-12) |
 | F11.10 | Escalation list of members who have not answered | People the escalation went to | Everyone else | PUL-12 | PUL-13 (manager not told: no list) |
 | F11.11 | Pending-pulse banner | see F4.12 | | | |
 | F11.12 | Personal links never shown in the app | — | Everyone | PUL-01, PUL-17, legacy:pulse-sending | — |
@@ -218,7 +219,7 @@ Derived from the code, then checked against the documentation:
 | F12.7 | Edit a user (name, e-mail; role / department per rules) | A, M | L E V; self: name and e-mail only | ORG-20 | ORG-24 |
 | F12.8 | Deactivate / activate a user | A, M, L (people they manage) | E V; self | ORG-20, legacy:team-lead-rbac "Toggle User Status" | ORG-24 not oneself, ORG-25 manager cannot touch the super admin (API 403), NAV-05 |
 | F12.9 | Delete (= deactivate) a user (with confirmation) | A, M | L E V | ORG-20 | ORG-24 |
-| F12.10 | Role assignments (chips): add, remove | A, M, L (within grants) | E V; own assignments | ORG-23 | — (no confirmation on removal: FI-17) |
+| F12.10 | Role assignments (chips): add, remove after a confirmation in the page | A, M, L (within grants) | E V; own assignments | ORG-23 | ORG-23 (Cancel and Escape keep the assignment) |
 | F12.11 | Sign out everywhere for a user (Users → key button) | Whoever may reset the password | — | API tests (`sessions.test.ts`); AUTH-22 covers the effect | — |
 | F12.12 | Admin console: organisation structure, create team / user / department | A M | L E V | ORG-04, legacy:qa-manager-rbac "admin panel" | NAV-03 |
 
@@ -247,7 +248,7 @@ Derived from the code, then checked against the documentation:
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
-| F15.1 | No serious / critical axe violations on sign-in, forgot password, registration, overview, compare, pulse, technical debt, notifications, users, parameters, activity, team detail, navigation in dark mode | — | — | A11Y-01 … A11Y-12 | known issues KA11Y-01 … 04 below |
+| F15.1 | No serious / critical axe violations on sign-in, forgot password, registration, overview, compare, pulse, technical debt, notifications, users, parameters, activity, team detail, navigation in dark mode; compare, users and team detail in dark mode | — | — | A11Y-01 … A11Y-13 | none accepted (KA11Y-01 … 04 fixed) |
 
 ## 16. Resilience (cross-cutting)
 
@@ -305,36 +306,33 @@ Fixed (each with a test):
 | FI-07 | The overview showed "No teams match" when `GET /api/teams` failed | Load error with the request id | DASH-09, DASH-10 |
 | FI-08 | Test execution showed "No test runs in this period" when its request failed | Load error | AN-07 (timeline) |
 | FI-09 | Parameters offered "Apply to every department and team" (ticked by default) to managers; the API refuses it, so a manager's company-level save failed | Option shown and sent for super admins only | PAR-05 |
-| FI-10 | Configuration values such as a P95 response time of −5 were stored as typed | The page refuses negative and non-numeric values (the API still accepts any value: see FI-10b) | PAR-11 |
+| FI-10 | Configuration values such as a P95 response time of −5 were stored as typed | The page refuses negative and non-numeric values (the API refuses them too: FI-10b) | PAR-11 |
 | FI-19 | On a phone the Users toolbar (grid size, Export CSV, Invite, Add with password) was wider than the screen: the page scrolled sideways | The toolbar wraps | UX-11 (Users) |
 | FI-11 | The create / edit user and department forms had labels not linked to their fields (unnamed fields for screen readers) | `htmlFor` / `id` | ORG-01, ORG-20 … ORG-23 |
 | FI-20 | User activity rows are written in batches; a buffered row for an organisation deleted in the meantime broke the foreign key and lost every other row of the batch (a super admin then saw an empty User activity page) | That row alone is dropped | UAB-001 (database), ORG-32 |
 | FI-21 | The local runner kept the server logs and the captured e-mails under `test-results/`, which Playwright empties when a run starts: e-mailed links were lost and PWR-08 failed on a full local run | Logs and e-mails go to `logs/ui-tests/` | PWR-08 |
+| FI-03 | "Keep me signed in" was sent with the sign-in but ignored: the sign-in lasted the company's sign-in lifetime either way | Unticked: a browser-session cookie (no `Max-Age` / `Expires`); ticked: a persistent cookie for the company lifetime. The token expires after that lifetime either way and the per-request check still refuses older sessions. The choice is kept in the token, so "Sign out my other devices" and changing your own password keep it; the SSO buttons pass it through the provider round trip (`remember=1` in the signed state). Registration and invitations give a browser-session cookie. Same code for Express and the Netlify function (shared routes) | AUTH-14, AUTH-15; API `keep-signed-in.test.ts` KEEP-01 … 05, `sso.test.ts` SSO-012, `sessions.test.ts` SES-009 |
+| FI-05b | One organisation per e-mail domain: a second person with a public domain (gmail.com, outlook.com) could not create an organisation | Product decision: public e-mail domains (`src/lib/emailDomains.ts`) never block a registration and may be shared by many organisations; a company domain still belongs to one organisation (409 with the clear message). Migration `20261124000000_public_email_domains.sql`: column `companies.email_domain_public`, the unique constraint `companies_domain` replaced by the partial unique index `companies_domain_company_unique`. Nothing joins or matches people by domain (invitations and SSO use the exact address); sample developers added to a company with a public domain get a reserved `.invalid` address instead of `@gmail.com` | REG-08, REG-09; API `registration.test.ts` REGAPI-01 … 04; database `companyDomain.test.ts` CDOM-001 … 004 |
+| FI-06 | Developer productivity showed "No data recorded" when its requests failed (500) | Load error with the request id (developer metrics and the DDPS snapshot history) | AN-08, AN-09 |
+| FI-10b | `POST /api/admin/configs` stored any value for any key | The page's rules, shared (`src/lib/configRules.ts`): SLA and financial values are numbers from 0 to a maximum; other keys need a valid name and short text; one refused value stores nothing. Expected update frequency (`PUT /api/settings/metric-intervals[/:key]`): a whole number from 1 to 100 and a known unit, the bulk save stores nothing when a row is refused | PAR-11, PAR-14; API `settings-validation.test.ts` CFGV-01 … 03 |
+| FI-12 | Pulse validation showed API field names ("warningAfterDays must be a whole number from 0 to 30") | The reasons use the page's words for every reminder, escalation, cadence and automatic-sending check, and the survey answer check names the question | PUL-11; API `settings-validation.test.ts` CFGV-04 |
+| FI-13 | The developer-insights opt-in button in Users was labelled "Enable / Disable AI Insights" and toasted "AI insights enabled" | "Enable / Disable developer insights" (title, accessible name, `aria-pressed`), toasts "Developer insights enabled / disabled" | DEV-02 |
+| FI-14 | A page a role may not open redirected silently to the overview | The overview opens with an alert "You don't have access to <page>." (focused, dismissible, gone with the next page change), the same for every guarded route (`src/App.tsx`, `AccessDeniedNotice`) | NAV-03 (each role) |
+| FI-15 | Some admin endpoints validated the body before checking permissions (a viewer posting an empty body to `/api/admin/users` got 400, not 403) | Audit of the mutating routes; a permission gate now runs first in create user, direct password reset, role assignments (add / remove), targets, alert rules, manual and developer metrics and every team-data write (`assertTeamWrite`), tracked action changes and saved-view sharing | NAV-04 (empty bodies, exact 403); API `permission-order.test.ts` PERM-01 … 03 |
+| FI-16 | After a session ended elsewhere, the first refused request cleared the cookie; a reload then showed the plain sign-in screen without "Your session has ended" | The reason is kept for the tab (sessionStorage) and shown after a reload; removed by the next successful sign-in and by signing out. A browser that was signed in (cached user, removed only by signing out) but lost its cookie, for example when the refusal answered a request cut off by a reload, shows it too | AUTH-22, PWR-07 (both reload) |
+| FI-17 | Removing a role assignment chip took effect on one click, without confirmation | A confirmation dialog in the page (Cancel / Escape keep it; no `window.confirm`) | ORG-23 |
+| FI-18 | Registration accepted weaker passwords (8 characters, strength score) than invitations and resets; the API checked 8 characters | Registration uses the shared rules of `src/lib/passwordPolicy.ts` in the form (live checklist) and in the API (10+ characters, three classes, not the e-mail name); test passwords updated | REG-04; API `registration.test.ts` REGAPI-05, `security.test.ts` SEC-006 |
+| KA11Y-01 … 04 | Colour contrast below WCAG AA: greyed values on Compare (`text-slate-400`, and `opacity-80` on stale cells), role avatars, department line and small labels on Users, stale KPI values on Team detail, navigation group headings and the brand mark in dark mode | Greyed text `text-slate-500` / `dark:text-slate-400` everywhere it was `text-slate-400 dark:text-slate-500`, no opacity on stale cells, avatars on 700 shades, brand mark `dark:bg-brand-600` | A11Y-04, A11Y-08, A11Y-11, A11Y-12 (no known violations left), A11Y-13 (the same pages in dark mode) |
 
 Recorded (larger, or a product decision; tests marked `test.fail` where a behaviour is asserted):
 
-| # | Issue | Test |
-|---|---|---|
-| FI-03 | "Keep me signed in" is sent with the sign-in but the server ignores it: the sign-in lasts the company's sign-in lifetime either way. Remove the checkbox or implement it (e.g. a browser-session cookie when unticked) | AUTH-14 (`test.fail`) |
-| FI-05b | One organisation per e-mail domain: a second person with a public domain (gmail.com, outlook.com) cannot create an organisation. Product decision | REG-08 documents the message |
-| FI-06 | Developer productivity shows "No data recorded" when its requests fail (500), instead of an error | AN-08 (`test.fail`) |
-| FI-10b | `POST /api/admin/configs` stores any value for any key (no server-side validation of the numeric settings) | PAR-11 covers the page |
-| FI-12 | Pulse reminder validation shows the API field name: "warningAfterDays must be a whole number from 0 to 30" | PUL-11 |
-| FI-13 | The developer-insights opt-in button in Users is labelled "Enable / Disable AI Insights" and toasts "AI insights enabled", although it switches developer insights | DEV-02 |
-| FI-14 | A page a role may not open redirects silently to the overview; there is no access-denied message | NAV-03 |
-| FI-15 | Some admin endpoints validate the body before checking permissions (a viewer posting an empty body to `/api/admin/users` gets 400, not 403) | NAV-04 uses a valid body |
-| FI-16 | After a session ends elsewhere, the first refused request clears the cookie; a reload after that shows the plain sign-in screen without "Your session has ended" | PWR-07 / AUTH-22 trigger a request instead of reloading |
-| FI-17 | Removing a role assignment chip takes effect on one click, without confirmation (deleting a user or department asks) | ORG-23 |
-| FI-18 | Registration accepts weaker passwords (8 characters, strength score) than invitations and resets (10 characters, 3 classes, no e-mail name); the API only checks 8 characters | REG-04 |
+None open. Every issue recorded so far is in the table above.
 
 ## Known accessibility issues
 
-axe-core (WCAG 2.1 A/AA), serious or critical, existing before this suite; the tests list them per page
-and fail if a new rule appears or a listed one disappears:
-
-| # | Page | Rule | Elements |
-|---|---|---|---|
-| KA11Y-01 | Compare teams | color-contrast | Greyed (stale / not judged) values `text-slate-400` |
-| KA11Y-02 | Users | color-contrast | Role badges and avatar initials in the user cards |
-| KA11Y-03 | Team detail | color-contrast | Stale KPI values (`text-slate-400`, `data-stale`) |
-| KA11Y-04 | Navigation, dark mode | color-contrast | Group headings (`dark:text-slate-500`) and the brand mark text |
+axe-core (WCAG 2.1 A/AA), serious or critical. None are accepted: every page in A11Y-01 … A11Y-13 must have
+zero serious or critical violations (the `known` lists in `tests/e2e/ux/accessibility.spec.ts` are empty).
+The four colour-contrast issues listed here before (KA11Y-01 Compare teams, KA11Y-02 Users, KA11Y-03 Team
+detail, KA11Y-04 navigation in dark mode) are fixed; see "Found issues". A new problem that has to be
+accepted for a while is listed here and in that page's `known` list (the check fails when it disappears, so
+the list stays current).

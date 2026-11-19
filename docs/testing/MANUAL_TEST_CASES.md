@@ -1,23 +1,23 @@
 # Manual test cases
 
-340 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+345 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
 ## Contents
 
-- [Sign-in and sessions](#sign-in-and-sessions) (28)
-- [Registration and invitations](#registration-and-invitations) (17)
+- [Sign-in and sessions](#sign-in-and-sessions) (29)
+- [Registration and invitations](#registration-and-invitations) (18)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (24)
-- [Accessibility](#accessibility) (12)
+- [Accessibility](#accessibility) (13)
 - [Theme and phone layout](#theme-and-phone-layout) (23)
 - [Overview (dashboard)](#overview-dashboard) (15)
 - [Executive briefing](#executive-briefing) (3)
 - [Team detail](#team-detail) (17)
 - [Team TV mode](#team-tv-mode) (8)
 - [Business impact](#business-impact) (9)
-- [Analytics modules](#analytics-modules) (17)
+- [Analytics modules](#analytics-modules) (18)
 - [Developer insights](#developer-insights) (3)
 - [Compare teams](#compare-teams) (6)
 - [Saved views](#saved-views) (5)
@@ -28,7 +28,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [API keys and ingestion](#api-keys-and-ingestion) (3)
 - [Sample (demo) data](#sample-demo-data) (4)
 - [Administration: KPI targets](#administration-kpi-targets) (5)
-- [Administration: parameters](#administration-parameters) (3)
+- [Administration: parameters](#administration-parameters) (4)
 - [Administration: update frequency](#administration-update-frequency) (1)
 - [Alerts and notifications](#alerts-and-notifications) (11)
 - [Tracked actions](#tracked-actions) (6)
@@ -450,7 +450,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign-in › AUTH-13 double-clicking Sign in signs in once`
 
-### TC-AUTH-018: "Keep me signed in" changes how long the sign-in lasts
+### TC-AUTH-018: "Keep me signed in": unticked a browser-session cookie, ticked a cookie for the company sign-in lifetime
 
 **Type:** Negative · **Priority:** Low · **Role:** Signed out · **Flow:** F1.6
 
@@ -467,16 +467,39 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | In private window 1, open /, leave 'Keep me signed in' unticked, and sign in as viewer@irongate.com / demo123. | The overview opens. |
-| 2 | In DevTools > Application > Cookies for the API site, note the Expires value of the irongate_token cookie. | A cookie irongate_token exists with an expiry date. |
-| 3 | Close window 1. In private window 2, open /, tick 'Keep me signed in' and sign in with the same account. | The overview opens. |
-| 4 | Note the Expires value of irongate_token again and compare with step 2. | Expected by the specification: the two expiry times differ by more than one minute. |
+| 1 | In private window 1, open /. | Under the Keep me signed in box the hint reads 'Unticked, you are signed out when you close the browser.' |
+| 2 | Leave 'Keep me signed in' unticked and sign in as viewer@irongate.com / demo123. | The overview opens. |
+| 3 | In DevTools > Application > Cookies for the API site, look at the irongate_token cookie. | Its Expires / Max-Age column reads 'Session' (a browser-session cookie). |
+| 4 | Close window 1. In private window 2, open /, tick 'Keep me signed in' and sign in with the same account. | The overview opens. |
+| 5 | Look at the irongate_token cookie again. | It has an expiry date about 7 days from now (the demo company's sign-in lifetime, Parameters → Sign-in). |
+| 6 | Close private window 1 and 2, open a new private window and open / (optional check of the unticked case). | The sign-in screen is shown (the browser-session cookie did not survive closing the browser). |
 
-**Notes:** Known issue FI-03: the server ignores the checkbox, both cookies expire at the same time. This test is expected to FAIL until FI-03 is fixed (automated as test.fail). Requires DevTools.
+**Notes:** Requires DevTools. The server also refuses a session older than the company sign-in lifetime on every request, ticked or not (FI-03, fixed).
 
-*Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign-in › AUTH-14 "Keep me signed in" changes how long the sign-in lasts`
+*Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign-in › AUTH-14 "Keep me signed in": unticked a browser-session cookie, ticked a cookie for the company sign-in lifetime`
 
-### TC-AUTH-019: Signing out returns to the sign-in screen; Back and reload do not show the app
+### TC-AUTH-019: "Keep me signed in" also applies to the Google / Microsoft buttons
+
+**Type:** Positive · **Priority:** Low · **Role:** Signed out · **Flow:** F1.6, F1.5
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- Single sign-on (Google) configured on the server, or DevTools > Network > override the response of /api/auth/providers with {"sso":[{"id":"google","label":"Google","startUrl":"/auth/sso/google/start"}],"demoMode":false}
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open the sign-in screen (/). | The button 'Continue with Google' is shown. |
+| 2 | Hover (or inspect) 'Continue with Google' and read its link. | It points to <API>/auth/sso/google/start (no remember parameter). |
+| 3 | Tick 'Keep me signed in' and read the link again. | It now ends with /auth/sso/google/start?remember=1. |
+| 4 | Untick 'Keep me signed in'. | The link is back to /auth/sso/google/start. |
+
+**Notes:** The real provider round trip is covered by the API test tests/api/sso.test.ts SSO-012 (persistent cookie only with remember=1). Requires SSO configured or a DevTools response override.
+
+*Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign-in › AUTH-15 "Keep me signed in" also applies to the single sign-on buttons (stubbed providers)`
+
+### TC-AUTH-020: Signing out returns to the sign-in screen; Back and reload do not show the app
 
 **Type:** Positive · **Priority:** High · **Role:** Software engineer · **Flow:** F1.7
 
@@ -501,7 +524,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign out and sessions › AUTH-20 signing out returns to the sign-in screen; Back and reload do not show the app`
 
-### TC-AUTH-020: A deep link opened while signed out opens after signing in
+### TC-AUTH-021: A deep link opened while signed out opens after signing in
 
 **Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F1.8
 
@@ -524,7 +547,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign out and sessions › AUTH-21 a deep link opened while signed out opens after signing in`
 
-### TC-AUTH-021: A session ended elsewhere sends the open app to sign-in with a message; the page opens again after signing in
+### TC-AUTH-022: A session ended elsewhere sends the open app to sign-in with a message that survives a reload; the page opens again after signing in
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F1.9
 
@@ -546,15 +569,17 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 3 | In Browser B, sign in as admin@irongate.com / demo123, open Users, search for the test person, click its key button (Reset Password) and click 'Sign out everywhere'. | A confirmation message says the person was signed out on every device. |
 | 4 | Back in Browser A, open the navigation and click Technical debt. | The sign-in screen appears with the notice 'Your session has ended. Please sign in again.' |
 | 5 | Look at the address bar in Browser A. | It still contains /analytics/technical-debt. |
-| 6 | Sign in again as the test person in Browser A. | The Technical debt page opens (title Technical debt). |
+| 6 | Reload the page in Browser A (F5). | The sign-in screen still shows the notice 'Your session has ended. Please sign in again.' and the address still contains /analytics/technical-debt. |
+| 7 | Sign in again as the test person in Browser A. | The Technical debt page opens (title Technical debt). |
+| 8 | In Browser A, sign out (navigation > Sign out) and reload the page. | The plain sign-in screen is shown, without the notice (a successful sign-in removed it). |
 
 **After the test:** Sign in as admin@irongate.com / demo123, open Users, find the test person and delete (deactivate) it
 
-**Notes:** The automated test ends the sessions directly in the database; 'Sign out everywhere' (Users > key button) does the same. Known issue FI-16: reloading instead of navigating may show the plain sign-in screen without the notice.
+**Notes:** The automated test ends the sessions directly in the database; 'Sign out everywhere' (Users > key button) does the same. The notice is kept for the browser tab (FI-16, fixed).
 
-*Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign out and sessions › AUTH-22 a session ended elsewhere (signed out everywhere) sends the open app to sign-in with a message, and the page opens again after signing in`
+*Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign out and sessions › AUTH-22 a session ended elsewhere (signed out everywhere) sends the open app to sign-in with a message that survives a reload, and the page opens again after signing in`
 
-### TC-AUTH-022: An expired sign-in says so
+### TC-AUTH-023: An expired sign-in says so
 
 **Type:** Negative · **Priority:** Medium · **Role:** Viewer · **Flow:** F1.10
 
@@ -581,7 +606,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign out and sessions › AUTH-23 an expired sign-in says so`
 
-### TC-AUTH-023: "Sign out my other devices" can be cancelled and then nothing changes
+### TC-AUTH-024: "Sign out my other devices" can be cancelled and then nothing changes
 
 **Type:** Negative · **Priority:** Medium · **Role:** Software engineer · **Flow:** F1.11
 
@@ -606,7 +631,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign out and sessions › AUTH-24 "Sign out my other devices" can be cancelled and then nothing changes`
 
-### TC-AUTH-024: "Sign out my other devices" reports a server failure
+### TC-AUTH-025: "Sign out my other devices" reports a server failure
 
 **Type:** Negative · **Priority:** Medium · **Role:** Viewer · **Flow:** F1.11
 
@@ -634,7 +659,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/sign-in.spec.ts › Sign out and sessions › AUTH-25 "Sign out my other devices" reports a server failure`
 
-### TC-AUTH-051: A super admin sets "Sign-in lasts" to 1 hour; the next sign-in lasts 1 hour
+### TC-AUTH-053: A super admin sets "Sign-in lasts" to 1 hour; the next sign-in lasts 1 hour
 
 **Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F1.12
 
@@ -655,17 +680,17 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. Then type /parameters-config after the site address in the address bar and press Enter. | The page at /parameters-config opens. |
 | 2 | Find the 'Sign-in' card and open the 'Sign-in lasts' list. | The list offers several durations; the current one is selected. |
 | 3 | Choose 1 hour and click Save. | A message 'Sign-in now lasts 1 hour' appears; below the list the text reads 'Current: 1 hour. Shortening it signs out anyone signed in for longer than the new limit.' |
-| 4 | In the second browser sign in as admin@irongate.com / demo123. | The overview opens. |
+| 4 | In the second browser tick 'Keep me signed in' and sign in as admin@irongate.com / demo123. | The overview opens. |
 | 5 | In DevTools > Application > Cookies (API site) look at the Expires value of irongate_token. | It expires about 1 hour from now (between 54 and 61 minutes). |
 | 6 | In the second browser open /parameters-config. | 'Sign-in lasts' shows 1 hour. |
 
 **After the test:** Set 'Sign-in lasts' back to its previous value (the default) and click Save
 
-**Notes:** Cookie check requires DevTools.
+**Notes:** Cookie check requires DevTools. Without 'Keep me signed in' the cookie is a browser-session cookie (Expires: Session); the sign-in still ends after 1 hour.
 
 *Automated:* `tests/e2e/sessions.spec.ts › Sign-in lifetime and signing out other devices › A super admin sets "Sign-in lasts" to 1 hour; the next sign-in lasts 1 hour`
 
-### TC-AUTH-052: "Sign out my other devices" keeps this browser and signs the other one out with a message
+### TC-AUTH-054: "Sign out my other devices" keeps this browser and signs the other one out with a message
 
 **Type:** Positive · **Priority:** High · **Role:** Software engineer · **Flow:** F1.11, F1.9
 
@@ -686,14 +711,13 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 3 | In Browser B open the navigation and click 'Sign out my other devices'; click OK in the confirmation. | The message 'You were signed out on all other devices. This device stays signed in.' appears. |
 | 4 | In Browser A open the navigation and click any page (e.g. Compare teams). | Browser A shows the sign-in screen with the notice 'Your session has ended. Please sign in again.' |
 | 5 | In Browser B reload the page. | Browser B still shows the overview (still signed in). |
+| 6 | Reload the browser that was signed out. | The sign-in screen still shows 'Your session has ended. Please sign in again.' (FI-16, fixed). |
 
 **After the test:** Sign in as admin@irongate.com / demo123, open Users, find the test person and delete (deactivate) it
 
-**Notes:** Known issue FI-16: reloading Browser A instead of navigating may show the sign-in screen without the notice.
-
 *Automated:* `tests/e2e/sessions.spec.ts › Sign-in lifetime and signing out other devices › "Sign out my other devices" keeps this browser and signs the other one out with a message`
 
-### TC-ADM-025: A super admin changes 'Sign-in lasts' and the current value label follows
+### TC-ADM-026: A super admin changes 'Sign-in lasts' and the current value label follows
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F1.12
 
@@ -746,7 +770,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Registration and invitations
 
-### TC-AUTH-025: A new organisation is created and its creator is signed in as super admin
+### TC-AUTH-026: A new organisation is created and its creator is signed in as super admin
 
 **Type:** Positive · **Priority:** High · **Role:** Signed out · **Flow:** F3.1
 
@@ -759,7 +783,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 - First name: Ada
 - Last name: O'Neil-Smith
-- Work email: ada@<unique>.uitest.example (e.g. ada@reg-20261119a.uitest.example)
+- Email: ada@<unique>.uitest.example (e.g. ada@reg-20261119a.uitest.example)
 - Organisation name: UI Reg <unique> (e.g. UI Reg 20261119a)
 - First department: Engineering
 - First team: Payments QA
@@ -767,8 +791,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Work email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
-| 2 | Fill in every field with the test data. | Below the password a strength indicator reads Strong. |
+| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
+| 2 | Fill in every field with the test data. | The three password rules below the password all show a tick (met). |
 | 3 | Click Create account. | The button reads Creating account…; then the overview (dashboard) opens. |
 | 4 | Look at the top of the overview. | A greeting heading contains Ada (e.g. 'Good morning, Ada'), and the 'Set up your organisation' checklist is shown. |
 | 5 | Open the navigation. | Under your name the role reads Super admin. |
@@ -778,7 +802,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-01 a new organisation is created and its creator is signed in as super admin`
 
-### TC-AUTH-026: Registration: every field is required
+### TC-AUTH-027: Registration: every field is required
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F3.1
 
@@ -789,17 +813,17 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 **Test data**
 
-- First name Ada, Last name Lovelace, Work email a@b.example, Organisation name X Org, First department D (First team and passwords left empty)
+- First name Ada, Last name Lovelace, Email a@b.example, Organisation name X Org, First department D (First team and passwords left empty)
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Work email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
+| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
 | 2 | Click Create account with all fields empty. | The message 'Please complete all fields.' appears. |
-| 3 | Fill in First name, Last name, Work email, Organisation name and First department only, and click Create account. | The message 'Please complete all fields.' is still shown; no organisation is created and you stay on the form. |
+| 3 | Fill in First name, Last name, Email, Organisation name and First department only, and click Create account. | The message 'Please complete all fields.' is still shown; no organisation is created and you stay on the form. |
 
 *Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-02 every field is required`
 
-### TC-AUTH-027: Registration: names and organisation names with markup or symbols are refused
+### TC-AUTH-028: Registration: names and organisation names with markup or symbols are refused
 
 **Type:** Negative · **Priority:** High · **Role:** Signed out · **Flow:** F3.1, F16.9
 
@@ -812,7 +836,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 - First name: <img src=x onerror=alert(1)>
 - Last name: Lovelace
-- Work email: a unique address, e.g. reg-xss-1@uitest.example
+- Email: a unique address, e.g. reg-xss-1@uitest.example
 - Organisation name: Org, then Evil <script>
 - First department: D
 - First team: T
@@ -820,13 +844,13 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Work email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
+| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
 | 2 | Fill every field with the test data, using <img src=x onerror=alert(1)> as First name, and click Create account. | The message 'Names may contain letters, spaces, hyphens and apostrophes only.' appears; no alert box pops up. |
 | 3 | Change First name to Ada and Organisation name to Evil <script>, then click Create account. | The message 'Organisation name may contain letters, numbers, spaces and the characters - ' & .' appears; nothing is created. |
 
 *Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-03 names and organisation names with markup or symbols are refused`
 
-### TC-AUTH-028: Registration: mismatched and weak passwords are refused
+### TC-AUTH-029: Registration: mismatched and weak passwords are refused (the invitation and reset rules)
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F3.1
 
@@ -837,22 +861,25 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 **Test data**
 
-- First name Ada, Last name Lovelace, Work email reg-pw-1@uitest.example, Organisation name Some Org, First department D, First team T
+- First name Ada, Last name Lovelace, Email lovelace@reg-pw-<unique>.uitest.example, Organisation name Some Org, First department D, First team T
 - Password Ui-Tests-Passw0rd! / Confirm Ui-Tests-Passw0rd!x
-- Then Password password / Confirm password
+- Weak passwords: Abcdefg1! (9 characters), abcdefghijkl (one kind of character), Lovelace-2024! (contains the e-mail name)
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Work email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
+| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
 | 2 | Fill in the details, type Ui-Tests-Passw0rd! as Password and Ui-Tests-Passw0rd!x as Confirm password, then click Create account. | The message 'The passwords do not match.' appears. |
-| 3 | Change both Password and Confirm password to: password | The strength indicator reads Weak. |
-| 4 | Click Create account. | A message starting 'Choose a stronger password' appears ('…at least 8 characters with upper-case letters, numbers or symbols.'); nothing is created. |
+| 3 | Type Abcdefg1! in Password and Confirm password. | Below the password, the rule 'At least 10 characters' shows (not met). |
+| 4 | Click Create account. | The message 'Choose a stronger password (see the rules below the password).' appears; nothing is created. |
+| 5 | Type abcdefghijkl in both fields and click Create account. | 'Three of: lower case, upper case, number, symbol' is not met; the same message appears. |
+| 6 | Type Lovelace-2024! in both fields and click Create account. | 'Does not contain your email name' is not met; the same message appears. |
+| 7 | Optional (API client): send POST <API>/auth/register with the same details, a new e-mail and password Abcdefg1!. | Status 400 with error 'The password must be 10 to 128 characters long.'; no organisation is created. |
 
-**Notes:** Known issue FI-18: registration accepts weaker passwords than invitations and resets.
+**Notes:** Registration uses the same password rules as accepting an invitation and resetting a password (FI-18, fixed). The API step needs an API client.
 
-*Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-04 mismatched and weak passwords are refused`
+*Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-04 mismatched and weak passwords are refused (the invitation and reset rules)`
 
-### TC-AUTH-029: Registration: an e-mail that already has an account is refused and the form keeps what was typed
+### TC-AUTH-030: Registration: an e-mail that already has an account is refused and the form keeps what was typed
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F3.1
 
@@ -864,14 +891,14 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Test data**
 
 - First name Ada, Last name Lovelace
-- Work email: viewer@irongate.com
+- Email: viewer@irongate.com
 - Organisation name: UI Dup <unique> (e.g. UI Dup 1119a)
 - First department D, First team T
 - Password / Confirm: Ui-Tests-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Work email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
+| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
 | 2 | Fill in all fields with the test data and click Create account. | The message 'Email already registered' appears. |
 | 3 | Look at the form. | The form is still shown and First name still contains Ada (what was typed is kept). |
 
@@ -879,7 +906,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-05 an e-mail that already has an account is refused, and what was typed stays`
 
-### TC-AUTH-030: Registration: the name of an existing organisation is refused
+### TC-AUTH-031: Registration: the name of an existing organisation is refused
 
 **Type:** Negative · **Priority:** High · **Role:** Signed out · **Flow:** F3.1
 
@@ -892,19 +919,19 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Test data**
 
 - First name Ada, Last name Lovelace
-- Work email: a unique address, e.g. reg-dup-org@uitest.example
+- Email: a unique address, e.g. reg-dup-org@uitest.example
 - Organisation name: NovaTech (exact name of the existing demo organisation)
 - First department D, First team T
 - Password / Confirm: Ui-Tests-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Work email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
+| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
 | 2 | Fill in all fields, using the existing organisation's name, and click Create account. | The message 'An organisation with this name already exists. Ask its administrator to create an account for you.' appears; you are not added to that organisation. |
 
 *Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-06 the name of an existing organisation is refused (no joining by name)`
 
-### TC-AUTH-031: Registration: a second organisation for the same e-mail domain is refused with a clear message
+### TC-AUTH-032: Registration: a second organisation for the same company e-mail domain is refused with a clear message
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F3.1
 
@@ -917,23 +944,54 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Test data**
 
 - First name Ada, Last name Lovelace
-- Work email: someone.else@reg-dom-1119.uitest.example (same domain)
+- Email: someone.else@reg-dom-1119.uitest.example (same domain)
 - Organisation name: UI Other <unique>
 - First department D, First team T
 - Password / Confirm: Ui-Tests-Passw0rd!
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Work email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
-| 2 | Fill in all fields with the test data and click Create account. | The message 'An organisation already uses the e-mail domain reg-dom-1119.uitest.example. Ask its administrator to invite you.' appears (with your domain); no organisation is created. |
+| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
+| 2 | Type the test e-mail (same company domain) in Email. | The hint under Email reads 'With a company address, yours is the only organisation for that e-mail domain. Personal addresses (gmail.com, outlook.com, …) work too.' |
+| 3 | Fill in the other fields with the test data and click Create account. | The message 'An organisation already uses the e-mail domain reg-dom-1119.uitest.example. Ask its administrator to invite you.' appears (with your domain); no organisation is created. |
 
 **After the test:** Ask a developer / database administrator to delete the test organisation created for the precondition (there is no delete in the UI)
 
-**Notes:** Regression for FI-05 (used to fail with 500). FI-05b: one organisation per e-mail domain is a product decision.
+**Notes:** A company domain belongs to one organisation (FI-05). Public e-mail domains are not limited: see the next case (FI-05b).
 
-*Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-08 a second organisation for the same e-mail domain is refused with a clear message`
+*Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-08 a second organisation for the same company e-mail domain is refused with a clear message`
 
-### TC-AUTH-032: Registration: "Sign in" goes back to the sign-in screen
+### TC-AUTH-033: Registration: people with a gmail.com address each create their own organisation
+
+**Type:** Positive · **Priority:** High · **Role:** Signed out · **Flow:** F3.1b
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Two fresh private windows (no IronGate session)
+
+**Test data**
+
+- First person: Gail First, uitest.first.<unique>@gmail.com, organisation UI Gmail first <unique>
+- Second person: Gail Second, uitest.second.<unique>@gmail.com, organisation UI Gmail second <unique>
+- Department Engineering, team Team, password Ui-Tests-Passw0rd! (both)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | In window 1 open / and click 'Create an account'. | The heading 'Create your organisation' is shown. |
+| 2 | Type the first person's gmail.com address in Email. | The hint under Email reads 'gmail.com is a personal e-mail provider, so it is not linked to your organisation. You invite the people who join.' |
+| 3 | Fill in the other fields and click Create account. | The overview of the new organisation opens. |
+| 4 | Open /users. | Exactly one user card is shown: the first person. |
+| 5 | In window 2 repeat steps 1–3 with the second person's gmail.com address and organisation name. | No domain error: the overview of a second, separate organisation opens. |
+| 6 | Open /users in window 2. | Exactly one user card is shown: the second person (nobody was added because of the shared gmail.com domain). |
+
+**After the test:** Remove both test organisations (database clean-up or the platform support panel).
+
+**Notes:** Product decision FI-05b (fixed): public e-mail domains (gmail.com, outlook.com, hotmail.com, yahoo.com, icloud.com, proton.me, …) never block a registration; nothing joins people to an organisation by domain. API tests: tests/api/registration.test.ts.
+
+*Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-09 people with a public e-mail address (gmail.com) each create their own organisation`
+
+### TC-AUTH-034: Registration: "Sign in" goes back to the sign-in screen
 
 **Type:** Positive · **Priority:** Low · **Role:** Signed out · **Flow:** F3.2
 
@@ -944,12 +1002,12 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Work email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
+| 1 | Open the sign-in screen (/) and click 'Create an account' (below the form, after 'New organisation?'). | The heading 'Create your organisation' is shown with the fields First name, Last name, Email, Organisation name, First department, First team, Password and Confirm password and a Create account button. |
 | 2 | Click 'Sign in' (after 'Already have an account?'). | The sign-in screen with the heading Sign in is shown. |
 
 *Automated:* `tests/e2e/auth/register.spec.ts › Registration › REG-07 "Sign in" goes back to the sign-in screen`
 
-### TC-AUTH-041: A super admin invites a viewer; the person accepts and gets exactly that role
+### TC-AUTH-043: A super admin invites a viewer; the person accepts and gets exactly that role
 
 **Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F3.3, F3.4, F3.6
 
@@ -983,7 +1041,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-01 a super admin invites a viewer; the person accepts and gets exactly that role`
 
-### TC-AUTH-042: Resending an invitation makes a new link and the old one stops working
+### TC-AUTH-044: Resending an invitation makes a new link and the old one stops working
 
 **Type:** Negative · **Priority:** High · **Role:** Super admin · **Flow:** F3.5
 
@@ -1013,7 +1071,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-02 resending makes a new link and the old one stops working`
 
-### TC-AUTH-043: A revoked invitation cannot be used
+### TC-AUTH-045: A revoked invitation cannot be used
 
 **Type:** Negative · **Priority:** High · **Role:** Super admin · **Flow:** F3.5
 
@@ -1042,7 +1100,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-03 a revoked invitation cannot be used`
 
-### TC-AUTH-044: An expired invitation says so and offers no form
+### TC-AUTH-046: An expired invitation says so and offers no form
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F3.4
 
@@ -1066,7 +1124,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-04 an expired invitation says so and offers no form`
 
-### TC-AUTH-045: A wrong or incomplete invitation link says the invitation cannot be used
+### TC-AUTH-047: A wrong or incomplete invitation link says the invitation cannot be used
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F3.4
 
@@ -1088,7 +1146,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-05 a wrong or incomplete link says the invitation cannot be used`
 
-### TC-AUTH-046: The invite dialog checks the e-mail; an address that already has an account is refused
+### TC-AUTH-048: The invite dialog checks the e-mail; an address that already has an account is refused
 
 **Type:** Negative · **Priority:** Medium · **Role:** Super admin · **Flow:** F3.3
 
@@ -1113,7 +1171,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-06 the invite dialog checks the e-mail; the API refuses an address that already has an account`
 
-### TC-AUTH-047: The accept-invitation form checks names, password strength and the repeat
+### TC-AUTH-049: The accept-invitation form checks names, password strength and the repeat
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F3.4
 
@@ -1147,7 +1205,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-07 the accept form checks names, password strength and the repeat`
 
-### TC-AUTH-048: An invitation opened while signed in asks to sign out first
+### TC-AUTH-050: An invitation opened while signed in asks to sign out first
 
 **Type:** Negative · **Priority:** Medium · **Role:** Super admin · **Flow:** F3.4
 
@@ -1174,7 +1232,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-08 an invitation opened while signed in asks to sign out first`
 
-### TC-AUTH-049: Invite role options: a manager may invite team leads, engineers and viewers; a team lead engineers and viewers
+### TC-AUTH-051: Invite role options: a manager may invite team leads, engineers and viewers; a team lead engineers and viewers
 
 **Type:** Positive · **Priority:** High · **Role:** Manager · **Flow:** F3.3
 
@@ -1202,7 +1260,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Forgot / reset password
 
-### TC-AUTH-033: The forgot-password form checks the address format
+### TC-AUTH-035: The forgot-password form checks the address format
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F2.1
 
@@ -1223,7 +1281,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/password-reset.spec.ts › Password reset: negative cases › PWR-01 the forgot-password form checks the address format`
 
-### TC-AUTH-034: Forgot password: an unknown address gets the same answer and no e-mail is sent
+### TC-AUTH-036: Forgot password: an unknown address gets the same answer and no e-mail is sent
 
 **Type:** Negative · **Priority:** High · **Role:** Signed out · **Flow:** F2.1
 
@@ -1248,7 +1306,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/password-reset.spec.ts › Password reset: negative cases › PWR-02 an unknown address gets the same answer and no e-mail is sent`
 
-### TC-AUTH-035: The forgot-password form survives an unreachable server
+### TC-AUTH-037: The forgot-password form survives an unreachable server
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F2.1
 
@@ -1273,7 +1331,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/password-reset.spec.ts › Password reset: negative cases › PWR-03 the forgot-password form survives an unreachable server`
 
-### TC-AUTH-036: A reset page without a token or with a wrong token offers no reset
+### TC-AUTH-038: A reset page without a token or with a wrong token offers no reset
 
 **Type:** Negative · **Priority:** High · **Role:** Signed out · **Flow:** F2.1
 
@@ -1297,7 +1355,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/password-reset.spec.ts › Password reset: negative cases › PWR-04 a reset page without a token or with a wrong token offers no reset`
 
-### TC-AUTH-037: An expired reset link is refused and the old password keeps working
+### TC-AUTH-039: An expired reset link is refused and the old password keeps working
 
 **Type:** Negative · **Priority:** High · **Role:** Signed out · **Flow:** F2.1
 
@@ -1327,7 +1385,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/password-reset.spec.ts › Password reset: negative cases › PWR-05 an expired link is refused and the password stays as it was`
 
-### TC-AUTH-038: Weak and mismatched new passwords are refused before anything is sent
+### TC-AUTH-040: Weak and mismatched new passwords are refused before anything is sent
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F2.1
 
@@ -1354,7 +1412,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/password-reset.spec.ts › Password reset: negative cases › PWR-06 weak and mismatched new passwords are refused before anything is sent`
 
-### TC-AUTH-039: Completing a password reset signs the person out on their other devices
+### TC-AUTH-041: Completing a password reset signs the person out on their other devices
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F2.2, F1.9
 
@@ -1376,15 +1434,16 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | In Browser A, open the reset link from the e-mail. | The page 'Choose a new password' is shown. |
 | 2 | Type Ui-Tests-Passw0rd!2 in 'New password' and Ui-Tests-Passw0rd!2 in 'Repeat the new password', then click Change password. | — |
 | 3 | Look at Browser A. | 'Password changed' with 'Your password was changed. Sign in with your new password.' is shown. |
-| 4 | In Browser B, open the navigation and click any page (e.g. Compare teams). | Browser B shows the sign-in screen with the notice 'Your session has ended. Please sign in again.' |
+| 4 | Reload Browser B (F5). | Browser B shows the sign-in screen with the notice 'Your session has ended. Please sign in again.' |
+| 5 | Reload Browser B again. | The sign-in screen still shows the same notice (it is kept for the tab, FI-16). |
 
 **After the test:** Sign in as admin@irongate.com / demo123, open Users, find the test person and delete (deactivate) it
 
-**Notes:** Known issue FI-16: reloading Browser B instead of navigating may show the sign-in screen without the notice.
+**Notes:** The reason a session ended is kept for the browser tab until the next successful sign-in (FI-16, fixed).
 
 *Automated:* `tests/e2e/auth/password-reset.spec.ts › Password reset: negative cases › PWR-07 completing a reset signs the person out on their other devices`
 
-### TC-AUTH-040: An administrator sends a reset link from Users; it arrives and works
+### TC-AUTH-042: An administrator sends a reset link from Users; it arrives and works
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F2.3
 
@@ -1417,7 +1476,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/password-reset.spec.ts › Password reset: negative cases › PWR-08 an administrator sends a reset link from Users; it arrives and works`
 
-### TC-AUTH-050: Forgot password, follow the e-mailed link, choose a new password, sign in with it; the link works once
+### TC-AUTH-052: Forgot password, follow the e-mailed link, choose a new password, sign in with it; the link works once
 
 **Type:** Positive · **Priority:** High · **Role:** Signed out · **Flow:** F2.1
 
@@ -1457,7 +1516,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Navigation, routes and the app frame
 
-### TC-AUTH-053: Super admin sees exactly the navigation entries of the role
+### TC-AUTH-055: Super admin sees exactly the navigation entries of the role
 
 **Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F4.1
 
@@ -1481,7 +1540,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 admin sees exactly the navigation entries of the role`
 
-### TC-AUTH-054: Super admin: every page of the role opens from its address with its title
+### TC-AUTH-056: Super admin: every page of the role opens from its address with its title
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.2
 
@@ -1503,7 +1562,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-02 admin: every page of the role opens from its address with its title`
 
-### TC-AUTH-055: Manager sees exactly the navigation entries of the role
+### TC-AUTH-057: Manager sees exactly the navigation entries of the role
 
 **Type:** Positive · **Priority:** High · **Role:** Manager · **Flow:** F4.1
 
@@ -1526,7 +1585,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 manager sees exactly the navigation entries of the role`
 
-### TC-AUTH-056: Manager: every page of the role opens from its address with its title
+### TC-AUTH-058: Manager: every page of the role opens from its address with its title
 
 **Type:** Positive · **Priority:** Medium · **Role:** Manager · **Flow:** F4.2
 
@@ -1548,7 +1607,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-02 manager: every page of the role opens from its address with its title`
 
-### TC-AUTH-057: Manager: pages of other roles typed in the address bar lead to the overview
+### TC-AUTH-059: Manager: pages of other roles typed in the address bar lead to the overview with an access message
 
 **Type:** Negative · **Priority:** High · **Role:** Manager · **Flow:** F4.3
 
@@ -1567,13 +1626,15 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Manager (manager@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses and press Enter: /departments, /user-activity. | Each time the overview (dashboard) is shown with the title Overview, and the address bar changes back to / (the restricted page never appears). |
+| 2 | One after another, type each of these addresses and press Enter: /departments, /user-activity. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Departments."); it has keyboard focus. |
+| 3 | Click the × (Dismiss) on the message. | The message disappears. |
+| 4 | Type the first address again, then open Compare teams from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
 
-**Notes:** Known issue FI-14: there is no access-denied message; the redirect is silent.
+**Notes:** The access message is the same for every guarded page (FI-14, fixed).
 
-*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-03 manager: pages of other roles typed in the address bar lead to the overview`
+*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-03 manager: pages of other roles typed in the address bar lead to the overview with an access message`
 
-### TC-AUTH-058: Team lead sees exactly the navigation entries of the role
+### TC-AUTH-060: Team lead sees exactly the navigation entries of the role
 
 **Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F4.1
 
@@ -1596,7 +1657,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 lead sees exactly the navigation entries of the role`
 
-### TC-AUTH-059: Team lead: every page of the role opens from its address with its title
+### TC-AUTH-061: Team lead: every page of the role opens from its address with its title
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F4.2
 
@@ -1618,7 +1679,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-02 lead: every page of the role opens from its address with its title`
 
-### TC-AUTH-060: Team lead: pages of other roles typed in the address bar lead to the overview
+### TC-AUTH-062: Team lead: pages of other roles typed in the address bar lead to the overview with an access message
 
 **Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F4.3
 
@@ -1642,13 +1703,15 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Team lead (lead@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses and press Enter: /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, and the address bar changes back to / (the restricted page never appears). |
+| 2 | One after another, type each of these addresses and press Enter: /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Departments."); it has keyboard focus. |
+| 3 | Click the × (Dismiss) on the message. | The message disappears. |
+| 4 | Type the first address again, then open Compare teams from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
 
-**Notes:** Known issue FI-14: there is no access-denied message; the redirect is silent.
+**Notes:** The access message is the same for every guarded page (FI-14, fixed).
 
-*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-03 lead: pages of other roles typed in the address bar lead to the overview`
+*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-03 lead: pages of other roles typed in the address bar lead to the overview with an access message`
 
-### TC-AUTH-061: Software engineer sees exactly the navigation entries of the role
+### TC-AUTH-063: Software engineer sees exactly the navigation entries of the role
 
 **Type:** Positive · **Priority:** High · **Role:** Software engineer · **Flow:** F4.1
 
@@ -1671,7 +1734,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 engineer sees exactly the navigation entries of the role`
 
-### TC-AUTH-062: Software engineer: every page of the role opens from its address with its title
+### TC-AUTH-064: Software engineer: every page of the role opens from its address with its title
 
 **Type:** Positive · **Priority:** Medium · **Role:** Software engineer · **Flow:** F4.2
 
@@ -1693,7 +1756,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-02 engineer: every page of the role opens from its address with its title`
 
-### TC-AUTH-063: Software engineer: pages of other roles typed in the address bar lead to the overview
+### TC-AUTH-065: Software engineer: pages of other roles typed in the address bar lead to the overview with an access message
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F4.3
 
@@ -1720,13 +1783,15 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Software engineer (engineer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses and press Enter: /users, /teams, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /manual-metrics, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, and the address bar changes back to / (the restricted page never appears). |
+| 2 | One after another, type each of these addresses and press Enter: /users, /teams, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /manual-metrics, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Departments."); it has keyboard focus. |
+| 3 | Click the × (Dismiss) on the message. | The message disappears. |
+| 4 | Type the first address again, then open Compare teams from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
 
-**Notes:** Known issue FI-14: there is no access-denied message; the redirect is silent.
+**Notes:** The access message is the same for every guarded page (FI-14, fixed).
 
-*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-03 engineer: pages of other roles typed in the address bar lead to the overview`
+*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-03 engineer: pages of other roles typed in the address bar lead to the overview with an access message`
 
-### TC-AUTH-064: Viewer sees exactly the navigation entries of the role
+### TC-AUTH-066: Viewer sees exactly the navigation entries of the role
 
 **Type:** Positive · **Priority:** High · **Role:** Viewer · **Flow:** F4.1
 
@@ -1749,7 +1814,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 viewer sees exactly the navigation entries of the role`
 
-### TC-AUTH-065: Viewer: every page of the role opens from its address with its title
+### TC-AUTH-067: Viewer: every page of the role opens from its address with its title
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.2
 
@@ -1771,7 +1836,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-02 viewer: every page of the role opens from its address with its title`
 
-### TC-AUTH-066: Viewer: pages of other roles typed in the address bar lead to the overview
+### TC-AUTH-068: Viewer: pages of other roles typed in the address bar lead to the overview with an access message
 
 **Type:** Negative · **Priority:** High · **Role:** Viewer · **Flow:** F4.3
 
@@ -1798,13 +1863,15 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses and press Enter: /users, /teams, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /manual-metrics, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, and the address bar changes back to / (the restricted page never appears). |
+| 2 | One after another, type each of these addresses and press Enter: /users, /teams, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /manual-metrics, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Departments."); it has keyboard focus. |
+| 3 | Click the × (Dismiss) on the message. | The message disappears. |
+| 4 | Type the first address again, then open Compare teams from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
 
-**Notes:** Known issue FI-14: there is no access-denied message; the redirect is silent.
+**Notes:** The access message is the same for every guarded page (FI-14, fixed).
 
-*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-03 viewer: pages of other roles typed in the address bar lead to the overview`
+*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-03 viewer: pages of other roles typed in the address bar lead to the overview with an access message`
 
-### TC-AUTH-067: The API refuses what the navigation hides, even when called directly
+### TC-AUTH-069: The API refuses what the navigation hides, even when called directly (403 before the body is checked)
 
 **Type:** Negative · **Priority:** High · **Role:** Viewer · **Flow:** F4.4
 
@@ -1818,22 +1885,22 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 - Viewer: viewer@irongate.com / demo123
 - Engineer: engineer@irongate.com / demo123
-- Body for POST /api/admin/users: e-mail uit-nope@uitest.example, password Ui-Tests-Passw0rd!, first name No, last name Pe, role viewer, team The Away Team (team-1764200682441-sckxod8xd)
+- Body for every POST / PUT: an empty JSON object {}
 
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | In a new tab of the same browser open <API>/admin/audit (e.g. http://localhost:3000/api/admin/audit). | The API refuses: status 401, 403 or 404, no audit data. |
-| 3 | Open <API>/activity/log. | Refused (401, 403 or 404). |
-| 4 | With the API client and the viewer's cookie, send POST <API>/admin/users with the test body. | Refused (401, 403 or 404); no user uit-nope@uitest.example is created. |
-| 5 | Sign out, sign in as engineer@irongate.com / demo123 and open <API>/ingestion-log. | Refused (401, 403 or 404). |
-| 6 | With the API client and the engineer's cookie, send PUT <API>/targets with an empty JSON body {}. | Refused (401, 403 or 404). |
+| 2 | In a new tab of the same browser open <API>/admin/audit (e.g. http://localhost:3000/api/admin/audit). | Status 403, no audit data. |
+| 3 | Open <API>/activity/log. | Status 403. |
+| 4 | With the API client and the viewer's cookie, send POST <API>/admin/users, POST <API>/admin/configs and POST <API>/metrics/manual, each with the body {}. | Each answers 403 (not 400): the refusal does not describe a valid body. |
+| 5 | Sign out, sign in as engineer@irongate.com / demo123 and open <API>/ingestion-log. | Status 403. |
+| 6 | With the engineer's cookie, send PUT <API>/targets, PUT <API>/alerts/rules and POST <API>/admin/users, each with {}. | Each answers 403. |
 
-**Notes:** Requires an API client / DevTools for the PUT and POST calls. Known issue FI-15: some admin endpoints validate the body first, so a valid body is used for POST /admin/users.
+**Notes:** Requires an API client / DevTools for the PUT and POST calls. Permission checks run before validation (FI-15, fixed); API test tests/api/permission-order.test.ts.
 
-*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-04 the API refuses what the navigation hides, even when called directly`
+*Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-04 the API refuses what the navigation hides, even when called directly (403 before the body is checked)`
 
-### TC-AUTH-068: A refusal by the API during an action is shown and the page stays usable
+### TC-AUTH-070: A refusal by the API during an action is shown and the page stays usable
 
 **Type:** Negative · **Priority:** Medium · **Role:** Team lead · **Flow:** F4.4
 
@@ -1860,7 +1927,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-05 a refusal by the API during an action is shown, the page stays usable`
 
-### TC-AUTH-069: Unknown addresses open the overview instead of a blank page
+### TC-AUTH-071: Unknown addresses open the overview instead of a blank page
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F4.5
 
@@ -1883,7 +1950,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-10 unknown addresses open the overview instead of a blank page`
 
-### TC-AUTH-070: Unknown addresses while signed out show the sign-in screen
+### TC-AUTH-072: Unknown addresses while signed out show the sign-in screen
 
 **Type:** Negative · **Priority:** Medium · **Role:** Signed out · **Flow:** F1.8, F4.5
 
@@ -1902,7 +1969,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-11 unknown addresses while signed out show the sign-in screen`
 
-### TC-AUTH-071: Back and Forward move between pages opened from the navigation
+### TC-AUTH-073: Back and Forward move between pages opened from the navigation
 
 **Type:** Positive · **Priority:** High · **Role:** Manager · **Flow:** F4.6
 
@@ -1927,7 +1994,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-12 Back and Forward move between pages opened from the navigation`
 
-### TC-AUTH-072: Reloading keeps the page and the analytics team (?team=)
+### TC-AUTH-074: Reloading keeps the page and the analytics team (?team=)
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.6, F7.4
 
@@ -1950,7 +2017,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-13 reloading keeps the page and the analytics team (?team=)`
 
-### TC-AUTH-073: A team outside the scope in ?team= is not shown
+### TC-AUTH-075: A team outside the scope in ?team= is not shown
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F4.6, F7.2
 
@@ -1972,7 +2039,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-14 a team outside the scope in ?team= is not shown`
 
-### TC-AUTH-074: The navigation drawer closes with Escape and the backdrop and gives focus back to the menu button
+### TC-AUTH-076: The navigation drawer closes with Escape and the backdrop and gives focus back to the menu button
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.7
 
@@ -1995,7 +2062,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-15 the drawer closes with Escape and the backdrop, and gives focus back to the menu button`
 
-### TC-AUTH-075: On a wide screen the navigation can be pinned and stays pinned after a reload
+### TC-AUTH-077: On a wide screen the navigation can be pinned and stays pinned after a reload
 
 **Type:** Positive · **Priority:** Low · **Role:** Viewer · **Flow:** F4.8
 
@@ -2021,7 +2088,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-16 on a wide screen the navigation can be pinned and stays pinned after a reload`
 
-### TC-AUTH-076: The brand button returns to the overview from any page
+### TC-AUTH-078: The brand button returns to the overview from any page
 
 **Type:** Positive · **Priority:** Low · **Role:** Team lead · **Flow:** F4.9
 
@@ -2045,7 +2112,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Accessibility
 
-### TC-AUTH-077: Sign-in screen has no serious or critical accessibility violations
+### TC-AUTH-079: Sign-in screen has no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Signed out · **Flow:** F15.1
 
@@ -2062,7 +2129,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-01 sign-in screen`
 
-### TC-AUTH-078: Forgot-password and registration screens have no serious or critical accessibility violations
+### TC-AUTH-080: Forgot-password and registration screens have no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Signed out · **Flow:** F15.1
 
@@ -2081,7 +2148,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-02 forgot password and registration`
 
-### TC-AUTH-079: Overview page has no new serious or critical accessibility violations
+### TC-AUTH-081: Overview page has no new serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2104,7 +2171,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-03 Overview`
 
-### TC-AUTH-080: Compare teams page has no new serious or critical accessibility violations
+### TC-AUTH-082: Compare teams page has no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2123,13 +2190,13 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. Then type /compare after the site address in the address bar and press Enter. | The page at /compare opens. |
 | 2 | Check the top bar title and wait until the page has finished loading (no spinners). | The title reads Compare teams. |
-| 3 | Run the axe-core scan on the whole page and filter the results to impact Serious and Critical. | The only serious/critical rule reported is color-contrast (known issue KA11Y-01: greyed stale / not-judged values); no other serious or critical violation is reported, and color-contrast is still present (if it is gone, report that the known issue looks fixed). |
+| 3 | Run the axe-core scan on the whole page and filter the results to impact Serious and Critical. | No serious or critical violation is reported (colour contrast included). |
 
-**Notes:** Known accessibility issue KA11Y-01: greyed stale / not-judged values.
+**Notes:** KA11Y-01 (colour contrast) is fixed: no known violation is accepted on this page any more.
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-04 Compare teams`
 
-### TC-AUTH-081: Wellbeing pulse page has no new serious or critical accessibility violations
+### TC-AUTH-083: Wellbeing pulse page has no new serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2152,7 +2219,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-05 Wellbeing pulse`
 
-### TC-AUTH-082: Technical debt page has no new serious or critical accessibility violations
+### TC-AUTH-084: Technical debt page has no new serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2175,7 +2242,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-06 Technical debt`
 
-### TC-AUTH-083: Notifications page has no new serious or critical accessibility violations
+### TC-AUTH-085: Notifications page has no new serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2198,7 +2265,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-07 Notifications`
 
-### TC-AUTH-084: Users page has no new serious or critical accessibility violations
+### TC-AUTH-086: Users page has no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2217,13 +2284,13 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. Then type /users after the site address in the address bar and press Enter. | The page at /users opens. |
 | 2 | Check the top bar title and wait until the page has finished loading (no spinners). | The title reads Users. |
-| 3 | Run the axe-core scan on the whole page and filter the results to impact Serious and Critical. | The only serious/critical rule reported is color-contrast (known issue KA11Y-02: role badges and avatar initials in the user cards); no other serious or critical violation is reported, and color-contrast is still present (if it is gone, report that the known issue looks fixed). |
+| 3 | Run the axe-core scan on the whole page and filter the results to impact Serious and Critical. | No serious or critical violation is reported (colour contrast included). |
 
-**Notes:** Known accessibility issue KA11Y-02: role badges and avatar initials in the user cards.
+**Notes:** KA11Y-02 (colour contrast) is fixed: no known violation is accepted on this page any more.
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-08 Users`
 
-### TC-AUTH-085: Parameters page has no new serious or critical accessibility violations
+### TC-AUTH-087: Parameters page has no new serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2246,7 +2313,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-09 Parameters`
 
-### TC-AUTH-086: Activity page has no new serious or critical accessibility violations
+### TC-AUTH-088: Activity page has no new serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2269,7 +2336,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-10 Activity`
 
-### TC-AUTH-087: Team detail has no new serious or critical accessibility violations
+### TC-AUTH-089: Team detail has no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1
 
@@ -2289,13 +2356,13 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
 | 2 | On the overview, click the team card 'The Away Team'. | The team detail page of The Away Team opens. |
 | 3 | Wait until it has finished loading. | KPI sections are shown. |
-| 4 | Run the axe-core scan on the whole page and filter the results to impact Serious and Critical. | The only serious/critical rule reported is color-contrast (known issue KA11Y-03: stale KPI values); no other serious or critical violation is reported, and color-contrast is still present (if it is gone, report that the known issue looks fixed). |
+| 4 | Run the axe-core scan on the whole page and filter the results to impact Serious and Critical. | No serious or critical violation is reported (colour contrast included). |
 
-**Notes:** Known accessibility issue KA11Y-03.
+**Notes:** KA11Y-03 (colour contrast) is fixed: no known violation is accepted on this page any more.
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-11 team detail`
 
-### TC-AUTH-088: Navigation drawer in dark mode has no new serious or critical accessibility violations
+### TC-AUTH-090: Navigation drawer in dark mode has no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
 
@@ -2315,16 +2382,43 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as Super admin (admin@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
 | 2 | Click the theme switch in the top bar (tooltip 'Switch to dark mode'). | The app turns dark. |
 | 3 | Open the navigation. | The drawer is shown in dark colours. |
-| 4 | Run the axe-core scan on the whole page (overview with the open drawer) and filter the results to impact Serious and Critical. | The only serious/critical rule reported is color-contrast (known issue KA11Y-04: group headings and the brand mark text); no other serious or critical violation is reported, and color-contrast is still present (if it is gone, report that the known issue looks fixed). |
+| 4 | Run the axe-core scan on the whole page (overview with the open drawer) and filter the results to impact Serious and Critical. | No serious or critical violation is reported (colour contrast included). |
 | 5 | Press Escape and click the theme switch again. | The drawer closes and the app is back in light mode. |
 
-**Notes:** Known accessibility issue KA11Y-04.
+**Notes:** KA11Y-04 (colour contrast) is fixed: no known violation is accepted on this page any more.
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-12 navigation drawer and dark mode overview`
 
+### TC-AUTH-091: Compare teams, Users and Team detail have no serious or critical accessibility violations in dark mode
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- An accessibility checker browser extension using axe-core (e.g. axe DevTools) configured for WCAG 2.1 A and AA rules
+- The app is in light mode at the start
+
+**Test data**
+
+- Super admin: admin@irongate.com / demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123) and open /compare. | The title reads Compare teams. |
+| 2 | Click the theme switch in the top bar (tooltip 'Switch to dark mode'). | The app turns dark. |
+| 3 | Wait until the page has loaded and run the axe-core scan; filter to Serious and Critical. | No serious or critical violation. |
+| 4 | Open /users, wait until it has loaded and run the scan again. | No serious or critical violation. |
+| 5 | Open the overview, click the team card 'The Away Team', wait until it has loaded and run the scan. | No serious or critical violation. |
+| 6 | Click the theme switch again. | The app is back in light mode. |
+
+*Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-13 compare teams, users and team detail in the dark theme`
+
 ## Theme and phone layout
 
-### TC-AUTH-089: The theme switch toggles dark mode and the choice survives a reload and signing out
+### TC-AUTH-092: The theme switch toggles dark mode and the choice survives a reload and signing out
 
 **Type:** Positive · **Priority:** High · **Role:** Viewer · **Flow:** F4.10
 
@@ -2348,7 +2442,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Theme › UX-01 the theme switch toggles dark mode and the choice survives a reload and signing out`
 
-### TC-AUTH-090: The system dark preference does not override the light default
+### TC-AUTH-093: The system dark preference does not override the light default
 
 **Type:** Positive · **Priority:** Low · **Role:** Signed out · **Flow:** F4.10
 
@@ -2365,7 +2459,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Theme › UX-02 the system dark preference does not override the light default`
 
-### TC-AUTH-091: Sign-in, forgot-password and registration screens fit a phone
+### TC-AUTH-094: Sign-in, forgot-password and registration screens fit a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Signed out · **Flow:** F4.11
 
@@ -2384,7 +2478,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-10 sign-in, forgot-password and registration screens fit the phone`
 
-### TC-AUTH-092: Overview has no sideways scrolling on a phone
+### TC-AUTH-095: Overview has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2407,7 +2501,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Overview has no sideways scrolling on a phone`
 
-### TC-AUTH-093: Compare teams has no sideways scrolling on a phone
+### TC-AUTH-096: Compare teams has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2430,7 +2524,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Compare teams has no sideways scrolling on a phone`
 
-### TC-AUTH-094: Analytics has no sideways scrolling on a phone
+### TC-AUTH-097: Analytics has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2453,7 +2547,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Analytics has no sideways scrolling on a phone`
 
-### TC-AUTH-095: Technical debt has no sideways scrolling on a phone
+### TC-AUTH-098: Technical debt has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2476,7 +2570,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Technical debt has no sideways scrolling on a phone`
 
-### TC-AUTH-096: Wellbeing pulse has no sideways scrolling on a phone
+### TC-AUTH-099: Wellbeing pulse has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2499,7 +2593,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Wellbeing pulse has no sideways scrolling on a phone`
 
-### TC-AUTH-097: Business impact has no sideways scrolling on a phone
+### TC-AUTH-100: Business impact has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2522,7 +2616,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Business impact has no sideways scrolling on a phone`
 
-### TC-AUTH-098: Developer productivity has no sideways scrolling on a phone
+### TC-AUTH-101: Developer productivity has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2545,7 +2639,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Developer productivity has no sideways scrolling on a phone`
 
-### TC-AUTH-099: Notifications has no sideways scrolling on a phone
+### TC-AUTH-102: Notifications has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2568,7 +2662,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Notifications has no sideways scrolling on a phone`
 
-### TC-AUTH-100: Users has no sideways scrolling on a phone
+### TC-AUTH-103: Users has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2593,7 +2687,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Users has no sideways scrolling on a phone`
 
-### TC-AUTH-101: Teams has no sideways scrolling on a phone
+### TC-AUTH-104: Teams has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2616,7 +2710,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Teams has no sideways scrolling on a phone`
 
-### TC-AUTH-102: Departments has no sideways scrolling on a phone
+### TC-AUTH-105: Departments has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2639,7 +2733,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Departments has no sideways scrolling on a phone`
 
-### TC-AUTH-103: Activity has no sideways scrolling on a phone
+### TC-AUTH-106: Activity has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2662,7 +2756,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Activity has no sideways scrolling on a phone`
 
-### TC-AUTH-104: User activity has no sideways scrolling on a phone
+### TC-AUTH-107: User activity has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2685,7 +2779,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 User activity has no sideways scrolling on a phone`
 
-### TC-AUTH-105: Parameters has no sideways scrolling on a phone
+### TC-AUTH-108: Parameters has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2708,7 +2802,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Parameters has no sideways scrolling on a phone`
 
-### TC-AUTH-106: Manual metrics has no sideways scrolling on a phone
+### TC-AUTH-109: Manual metrics has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2731,7 +2825,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Manual metrics has no sideways scrolling on a phone`
 
-### TC-AUTH-107: Admin console has no sideways scrolling on a phone
+### TC-AUTH-110: Admin console has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2754,7 +2848,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Admin console has no sideways scrolling on a phone`
 
-### TC-AUTH-108: Ingestion log has no sideways scrolling on a phone
+### TC-AUTH-111: Ingestion log has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2777,7 +2871,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Ingestion log has no sideways scrolling on a phone`
 
-### TC-AUTH-109: Expected update frequency has no sideways scrolling on a phone
+### TC-AUTH-112: Expected update frequency has no sideways scrolling on a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11
 
@@ -2800,7 +2894,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-11 Expected update frequency has no sideways scrolling on a phone`
 
-### TC-AUTH-110: Team detail, its members and the navigation drawer fit a phone
+### TC-AUTH-113: Team detail, its members and the navigation drawer fit a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.11
 
@@ -2823,7 +2917,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/theme-and-phone.spec.ts › Phone layout (390 px) › UX-12 team detail, its members and the navigation drawer fit the phone`
 
-### TC-AUTH-111: Very long names and unicode do not break the phone layout
+### TC-AUTH-114: Very long names and unicode do not break the phone layout
 
 **Type:** Negative · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.11, F16.11
 
@@ -4125,7 +4219,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/analytics/business-impact.spec.ts › Business impact › BIZ-02 what-if with empty, huge and negative changes keeps the page working`
 
-### TC-DASH-079: Super admin: money summary first, explanations behind "How is this calculated?", What-if, Details and All teams
+### TC-DASH-080: Super admin: money summary first, explanations behind "How is this calculated?", What-if, Details and All teams
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.9
 
@@ -4154,7 +4248,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/revenue-impact.spec.ts › Business impact: revenue impact › super admin: money summary first, explanations behind "How is this calculated?", what-if and all teams`
 
-### TC-DASH-080: Software engineer: no All teams / Data entry tabs, the roll-up API refuses; money summary for the own team
+### TC-DASH-081: Software engineer: no All teams / Data entry tabs, the roll-up API refuses; money summary for the own team
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F7.9, F4.4
 
@@ -4178,7 +4272,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/revenue-impact.spec.ts › Business impact: revenue impact › QA engineer: no roll-up tab and the roll-up API refuses; the money summary is shown for the own team`
 
-### TC-DASH-081: Phone width: the money summary fits without horizontal scrolling
+### TC-DASH-082: Phone width: the money summary fits without horizontal scrolling
 
 **Type:** Positive · **Priority:** Low · **Role:** Manager · **Flow:** F4.11, F7.9
 
@@ -4628,7 +4722,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/analytics/modules.spec.ts › Analytics › AN-07 /analytics/reports: a server error shows a message, not an empty module`
 
-### TC-DASH-057: Developer productivity: a server error is shown as an error, not as "no data"
+### TC-DASH-057: Developer productivity: a server error is shown with its reference, not as "no data"
 
 **Type:** Negative · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.3, F7.7
 
@@ -4646,17 +4740,44 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Switch on the mock rule / request blocking for the developer-metrics request. | The rule is active. |
 | 2 | Sign in as Super admin (admin@irongate.com / demo123), then open http://localhost:5173/analytics/productivity?team=team-1764200682441-sckxod8xd. | Sign-in succeeds and the page at /analytics/productivity?team=team-1764200682441-sckxod8xd opens inside the app frame. |
-| 3 | Wait up to 5 seconds and look at the module content. | EXPECTED (desired) result: an error message starting with "Could not load" is shown. KNOWN ACTUAL result: "No data recorded" is shown. |
+| 3 | Look at the module content. | A red message reads "Could not load the developer metrics: the server had a problem. Try again in a moment. Reference: rid-dev." No "No data recorded" and no "No developer metrics recorded" is shown. |
 
 **After the test:** Switch off the mock rule / blocking.
 
-**Notes:** Known issue FI-06: this test is marked as expected-to-fail (test.fail) in the automated suite; record the case as Failed / Known issue until FI-06 is fixed. Requires a proxy/mock tool (e.g. Requestly, Charles, Fiddler or mitmproxy) that can answer the named API request with a chosen HTTP status and JSON body; DevTools request blocking only simulates a network failure.
+**Notes:** FI-06 (fixed). Requires a proxy/mock tool (e.g. Requestly, Charles, Fiddler or mitmproxy) that can answer the named API request with HTTP 500 and the JSON body; DevTools request blocking reproduces the network-failure case (next test case).
 
-*Automated:* `tests/e2e/analytics/modules.spec.ts › Analytics › AN-08 developer productivity: a server error is not shown as "no data"`
+*Automated:* `tests/e2e/analytics/modules.spec.ts › Analytics › AN-08 developer productivity: a server error is shown with its reference, not as "no data"`
+
+### TC-DASH-058: Developer productivity: an unreachable server and a failed snapshot history are errors too
+
+**Type:** Negative · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.3, F7.7
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+- DevTools > Network request blocking available; for step 4 a proxy/mock tool that answers GET /api/analytics/ddps-history with HTTP 500 {"error":"Internal server error","requestId":"rid-hist"}
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123). In DevTools block the request URL pattern *api/analytics/developer-metrics*. | Blocking is active. |
+| 2 | Open http://localhost:5173/analytics/productivity?team=team-1764200682441-sckxod8xd. | A red message reads "Could not load the developer metrics: the server could not be reached. Check your connection and try again." |
+| 3 | Remove the block, switch on the mock rule for ddps-history and reload the page. | The developer figures load (no red message at the top). |
+| 4 | Look at the card "Recorded DDPS snapshots". | It shows "Could not load the DDPS snapshots: the server had a problem. Try again in a moment. Reference: rid-hist." instead of "No snapshots recorded". |
+
+**After the test:** Remove the request block and the mock rule.
+
+**Notes:** FI-06 (fixed). Requires DevTools and a proxy/mock tool.
+
+*Automated:* `tests/e2e/analytics/modules.spec.ts › Analytics › AN-09 developer productivity: an unreachable server and a failed snapshot history are errors too`
 
 ## Developer insights
 
-### TC-DASH-058: A software engineer sees only their own developer row in Developer productivity
+### TC-DASH-059: A software engineer sees only their own developer row in Developer productivity
 
 **Type:** Positive · **Priority:** High · **Role:** Software engineer · **Flow:** F7.7
 
@@ -4679,7 +4800,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/analytics/modules.spec.ts › Developer insights opt-in › DEV-01 an engineer sees only their own developer row`
 
-### TC-DASH-059: A super admin switches a person's developer insights on and off in Users
+### TC-DASH-060: A super admin switches a person's developer insights on and off in Users
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.8
 
@@ -4697,18 +4818,18 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Super admin (admin@irongate.com / demo123), then open http://localhost:5173/users. | Sign-in succeeds and the page at /users opens inside the app frame. |
-| 2 | Type the test person's e-mail into "Search users by name, email, team...". | Exactly the test person's user card is shown; its insights toggle (robot icon) has the tooltip "Enable AI Insights" (developer insights off). |
-| 3 | Click the insights toggle on that card. | A success toast confirms the change ("AI insights enabled") and the tooltip changes to "Disable AI Insights" (screen-reader status "Developer insights on"). |
-| 4 | Reload the page and search for the person again. | The toggle still shows "Disable AI Insights": the setting was saved. |
-| 5 | Click the insights toggle again. | The tooltip changes back to "Enable AI Insights" (developer insights off). |
+| 2 | Type the test person's e-mail into "Search users by name, email, team...". | Exactly the test person's user card is shown; its insights toggle (robot icon) is named "Enable developer insights" (tooltip) and is not pressed. |
+| 3 | Click the insights toggle on that card. | A toast "Developer insights enabled" appears; the toggle is now named "Disable developer insights" and pressed. |
+| 4 | Reload the page and search for the person again. | The toggle still reads "Disable developer insights": the setting was saved. |
+| 5 | Click the insights toggle again. | A toast "Developer insights disabled" appears; the toggle reads "Enable developer insights" again. |
 
 **After the test:** Delete the test person in Users.
 
-**Notes:** Known issue FI-13: the button and toast say "AI Insights" although they switch developer insights.
+**Notes:** Wording fixed (FI-13): nothing on the button or the toasts says "AI insights" any more.
 
 *Automated:* `tests/e2e/analytics/modules.spec.ts › Developer insights opt-in › DEV-02 a super admin switches a person's developer insights on and off in Users`
 
-### TC-DASH-060: A team lead cannot change the developer-insights opt-in of a person outside their team
+### TC-DASH-061: A team lead cannot change the developer-insights opt-in of a person outside their team
 
 **Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F7.8, F4.4
 
@@ -4730,7 +4851,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Open http://localhost:5173/ and sign in as Team lead: E-mail address lead@irongate.com, Password demo123, click Sign in. | The Overview page opens (top bar title "Overview") with a greeting "Good morning / afternoon / evening, <first name>". |
 | 2 | With an API client and the team lead's session cookie send PATCH http://localhost:3000/api/admin/users/<person id>/developer-insights-toggle with JSON body {"enabled": true}. | The API answers 403 or 404. |
 | 3 | Open the navigation menu (menu button at the top left) and click Sign out. | The sign-in page with the heading "Sign in" is shown. |
-| 4 | Sign in as Super admin (admin@irongate.com / demo123), open Users and search for the test person. | The person's insights toggle still shows "Enable AI Insights": developer insights stayed off. |
+| 4 | Sign in as Super admin (admin@irongate.com / demo123), open Users and search for the test person. | The person's insights toggle still shows "Enable developer insights": developer insights stayed off. |
 
 **After the test:** Delete the test person in Users.
 
@@ -4740,7 +4861,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Compare teams
 
-### TC-DASH-061: Compare at most four teams; removing one brings the add list back; the trend window is kept in the address
+### TC-DASH-062: Compare at most four teams; removing one brings the add list back; the trend window is kept in the address
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.10
 
@@ -4766,7 +4887,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Compare teams › CMP-01 at most four teams; removing one brings the add list back; the window is kept in the address`
 
-### TC-DASH-062: An address with unknown ids, too many ids or a bad window falls back safely
+### TC-DASH-063: An address with unknown ids, too many ids or a bad window falls back safely
 
 **Type:** Negative · **Priority:** Medium · **Role:** Manager · **Flow:** F7.10, F16.9
 
@@ -4789,7 +4910,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Compare teams › CMP-02 an address with unknown ids, too many ids or a bad window falls back safely`
 
-### TC-DASH-063: A team outside the scope in the address is not compared
+### TC-DASH-064: A team outside the scope in the address is not compared
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F7.10
 
@@ -4813,7 +4934,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Compare teams › CMP-03 a team outside the scope in the address is not compared`
 
-### TC-DASH-064: A failed comparison request shows a message
+### TC-DASH-065: A failed comparison request shows a message
 
 **Type:** Negative · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.10
 
@@ -4840,7 +4961,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Compare teams › CMP-04 a failed comparison request shows a message`
 
-### TC-DASH-069: Compare teams from the navigation: add a team, differences are highlighted, "Only rows that differ" filters
+### TC-DASH-070: Compare teams from the navigation: add a team, differences are highlighted, "Only rows that differ" filters
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.10
 
@@ -4863,7 +4984,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare-views-onboarding.spec.ts › Compare teams, saved views, CSV export, onboarding › Compare teams: open from the navigation, add a team, differences are highlighted`
 
-### TC-DASH-070: Compare teams: a software engineer only gets teams of their own scope; the API refuses others
+### TC-DASH-071: Compare teams: a software engineer only gets teams of their own scope; the API refuses others
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F7.10, F4.4
 
@@ -4888,7 +5009,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Saved views
 
-### TC-DASH-065: A super admin shares a view; a manager sees it read-only and cannot share their own
+### TC-DASH-066: A super admin shares a view; a manager sees it read-only and cannot share their own
 
 **Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F7.11, F7.12
 
@@ -4922,7 +5043,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Saved views › VIEW-01 a super admin shares a view; a manager sees it read-only and cannot share their own`
 
-### TC-DASH-066: An empty view name cannot be saved; a name with markup is shown as text; a double click saves once
+### TC-DASH-067: An empty view name cannot be saved; a name with markup is shown as text; a double click saves once
 
 **Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F7.11, F16.9, F16.10
 
@@ -4952,7 +5073,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Saved views › VIEW-02 an empty name cannot be saved; a name with markup is shown as text; a double click saves once`
 
-### TC-DASH-067: A saved view of an analytics module keeps the team
+### TC-DASH-068: A saved view of an analytics module keeps the team
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.11
 
@@ -4980,7 +5101,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Saved views › VIEW-03 a view of an analytics module keeps the team`
 
-### TC-DASH-068: A failed save of a view is reported and nothing is listed
+### TC-DASH-069: A failed save of a view is reported and nothing is listed
 
 **Type:** Negative · **Priority:** Medium · **Role:** Viewer · **Flow:** F7.11
 
@@ -5010,7 +5131,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Saved views › VIEW-04 a failed save is reported and nothing is listed`
 
-### TC-DASH-071: Saved view round trip on the overview: save, change the choices, apply, delete
+### TC-DASH-072: Saved view round trip on the overview: save, change the choices, apply, delete
 
 **Type:** Positive · **Priority:** Medium · **Role:** Software engineer · **Flow:** F5.10, F7.11
 
@@ -5037,7 +5158,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## CSV export
 
-### TC-DASH-072: CSV download from the overview and from the team comparison
+### TC-DASH-073: CSV download from the overview and from the team comparison
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F5.8, F7.5, F7.10
 
@@ -5066,7 +5187,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Onboarding
 
-### TC-DASH-073: Onboarding checklist shows progress from the real state; it can be hidden and shown again
+### TC-DASH-074: Onboarding checklist shows progress from the real state; it can be hidden and shown again
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.1, F9.2
 
@@ -5096,7 +5217,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare-views-onboarding.spec.ts › Compare teams, saved views, CSV export, onboarding › Onboarding checklist: progress from the real state, hide and show again`
 
-### TC-DASH-074: The onboarding checklist is not shown to a manager
+### TC-DASH-075: The onboarding checklist is not shown to a manager
 
 **Type:** Negative · **Priority:** Medium · **Role:** Manager · **Flow:** F9.1
 
@@ -5123,7 +5244,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Preconditions**
 
 - App running at the test URL.
-- A brand-new organisation registered for this test: on the sign-in page click 'Create an account', fill First name 'Uitest', Last name 'Owner', Work email 'owner@<unique>.uitest.example', Organisation name 'UI Test <unique>', First department 'Engineering', First team 'Core Team', Password and Confirm password 'Ui-Tests-Passw0rd!', and click 'Create account'. Its first user is its super admin.
+- A brand-new organisation registered for this test: on the sign-in page click 'Create an account', fill First name 'Uitest', Last name 'Owner', Email 'owner@<unique>.uitest.example', Organisation name 'UI Test <unique>', First department 'Engineering', First team 'Core Team', Password and Confirm password 'Ui-Tests-Passw0rd!', and click 'Create account'. Its first user is its super admin.
 
 **Test data**
 
@@ -5172,7 +5293,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## KPI targets and ingestion log
 
-### TC-DASH-075: The overview and the team detail say what the QA score is based on
+### TC-DASH-076: The overview and the team detail say what the QA score is based on
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F5.2
 
@@ -5194,7 +5315,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/metrics-quality.spec.ts › Confidence, KPI targets and the ingestion log › The dashboard and team detail say what the QA score is based on`
 
-### TC-DASH-076: Parameters shows the KPI targets with their history
+### TC-DASH-077: Parameters shows the KPI targets with their history
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F8.4
 
@@ -5215,7 +5336,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/metrics-quality.spec.ts › Confidence, KPI targets and the ingestion log › Parameters shows KPI targets with their history`
 
-### TC-DASH-077: A manager has the Ingestion log in the navigation and can open it
+### TC-DASH-078: A manager has the Ingestion log in the navigation and can open it
 
 **Type:** Positive · **Priority:** Medium · **Role:** Manager · **Flow:** F8.8
 
@@ -5236,7 +5357,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/metrics-quality.spec.ts › Confidence, KPI targets and the ingestion log › Ingestion log is in the navigation for super admins and QA managers only`
 
-### TC-DASH-078: A software engineer has no Ingestion log; its address redirects to the overview
+### TC-DASH-079: A software engineer has no Ingestion log; its address redirects to the overview
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F8.8, F4.3
 
@@ -5253,9 +5374,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open http://localhost:5173/ and sign in as Software engineer: E-mail address engineer@irongate.com, Password demo123, click Sign in. | The Overview page opens (top bar title "Overview") with a greeting "Good morning / afternoon / evening, <first name>". |
 | 2 | Open the navigation menu. | There is no "Ingestion log" entry. |
-| 3 | Type http://localhost:5173/ingestion-log into the address bar and press Enter. | The Overview is shown and the address changes to / (no ingestion data shown). |
+| 3 | Type http://localhost:5173/ingestion-log into the address bar and press Enter. | The Overview is shown and the address changes to / (no ingestion data shown), with the alert "You don't have access to Ingestion log." |
 
-**Notes:** Access control check. Known issue FI-14: the redirect happens silently, without an access-denied message.
+**Notes:** Access control check. The overview shows "You don't have access to <page>." after the redirect (FI-14, fixed).
 
 *Automated:* `tests/e2e/metrics-quality.spec.ts › Confidence, KPI targets and the ingestion log › An engineer has no Ingestion log`
 
@@ -5880,13 +6001,39 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 **After the test:** Remove the test organisation (see TC-C-008).
 
-**Notes:** Covers FI-10 (fixed on the page). Known issue FI-10b: the API itself still accepts any value; this test only covers the page.
+**Notes:** Covers FI-10 (page) and FI-10b (fixed): the API refuses the same values; see the next case.
 
 *Automated:* `tests/e2e/admin/parameters.spec.ts › Configuration values and sign-in lifetime › PAR-11 a negative or non-numeric configuration value is not stored`
 
+### TC-ADM-025: A configuration value above its range is refused by the page and by the API
+
+**Type:** Negative · **Priority:** Medium · **Role:** Super admin · **Flow:** F8.6
+
+**Preconditions**
+
+- App running at the test URL.
+- A brand-new organisation registered for this test (see TC-C-008 preconditions).
+
+**Test data**
+
+- E-mail: owner@<unique>.uitest.example
+- Password: Ui-Tests-Passw0rd!
+- Error rate threshold (%): 150
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the new organisation's super admin, open Parameters and untick 'Apply to every department and team'. | The 'Performance SLA' card is shown. |
+| 2 | Enter 150 in 'Error rate threshold (%)' and click 'Save configuration'. | An error toast 'Error rate threshold (%): enter a number from 0 to 100, or leave it empty to inherit.' appears; no 'Configuration saved' toast. |
+| 3 | Optional (API client, same session cookie): send POST <API>/admin/configs with {"departmentId":"all","teamId":"all","configs":{"sla_error_rate_percent":"150","sla_response_time_ms":"-5"}}. | Status 400; errors lists 'Error rate threshold (%): enter a number from 0 to 100, …' and 'P95 response time (ms): enter a number of 0 or more, …'. |
+| 4 | Reload the page. | 'Error rate threshold (%)' does not show 150. |
+
+**Notes:** FI-10b (fixed): the server applies the page rules (src/lib/configRules.ts). The API step needs an API client.
+
+*Automated:* `tests/e2e/admin/parameters.spec.ts › Configuration values and sign-in lifetime › PAR-14 a configuration value above its range is refused by the page and by the API`
+
 ## Administration: update frequency
 
-### TC-ADM-026: Expected update frequency: change, discard, save and reset to default
+### TC-ADM-027: Expected update frequency: change, discard, save and reset to default
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F8.7
 
@@ -5915,7 +6062,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Alerts and notifications
 
-### TC-ADM-027: A super admin switches the 'Metric stale' alert rule off for the company and back on
+### TC-ADM-028: A super admin switches the 'Metric stale' alert rule off for the company and back on
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F10.6
 
@@ -5941,7 +6088,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/admin/parameters.spec.ts › Alert rules, Slack and the digest › ALR-01 a super admin switches an alert rule off for the company and back`
 
-### TC-ADM-028: A team's alert rule inherits until 'Inherit' is unticked
+### TC-ADM-029: A team's alert rule inherits until 'Inherit' is unticked
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F10.6
 
@@ -5966,7 +6113,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/admin/parameters.spec.ts › Alert rules, Slack and the digest › ALR-02 a team rule inherits until "inherit" is unticked`
 
-### TC-ADM-029: Slack: a non-Slack webhook is refused; a valid one is stored masked, tested and removed
+### TC-ADM-030: Slack: a non-Slack webhook is refused; a valid one is stored masked, tested and removed
 
 **Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F10.8
 
@@ -5998,7 +6145,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/admin/parameters.spec.ts › Alert rules, Slack and the digest › SLK-01 Slack: a webhook that is not Slack is refused; a valid one is stored masked, tested and removed`
 
-### TC-ADM-030: 'Evaluate alerts now' and the test digest report what they did
+### TC-ADM-031: 'Evaluate alerts now' and the test digest report what they did
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F10.7, F10.5
 
@@ -6022,7 +6169,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/admin/parameters.spec.ts › Alert rules, Slack and the digest › DIG-01 "Evaluate alerts now" and the test digest report what they did`
 
-### TC-ADM-031: A team lead can send themselves a test digest; a software engineer has no digest option
+### TC-ADM-032: A team lead can send themselves a test digest; a software engineer has no digest option
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.5
 
@@ -6044,7 +6191,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/admin/parameters.spec.ts › Alert rules, Slack and the digest › DIG-02 a team lead can send themselves a test digest; an engineer has no digest`
 
-### TC-ADM-032: Notification preferences: nothing to save until something changes; a failed save is reported
+### TC-ADM-033: Notification preferences: nothing to save until something changes; a failed save is reported
 
 **Type:** Negative · **Priority:** Medium · **Role:** Viewer · **Flow:** F10.4
 
@@ -6072,7 +6219,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/admin/parameters.spec.ts › Alert rules, Slack and the digest › DIG-03 notification preferences: nothing to save until something changes; a failed save is reported`
 
-### TC-ADM-038: A software engineer cannot acknowledge an alert, even through the API
+### TC-ADM-039: A software engineer cannot acknowledge an alert, even through the API
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F10.2
 
@@ -6098,7 +6245,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ALT-01 alerts cannot be acknowledged by an engineer even through the API`
 
-### TC-ADM-039: A team lead sees a new alert in the bell, marks everything read and acknowledges the alert
+### TC-ADM-040: A team lead sees a new alert in the bell, marks everything read and acknowledges the alert
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F4.13, F10.1, F10.2, F10.3
 
@@ -6132,7 +6279,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts-actions.spec.ts › Alerts, notifications and tracked actions › A team lead sees a new alert in the bell, can open the panel and mark everything read`
 
-### TC-ADM-040: Notification preferences can be changed and saved
+### TC-ADM-041: Notification preferences can be changed and saved
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.4, F10.5
 
@@ -6155,7 +6302,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts-actions.spec.ts › Alerts, notifications and tracked actions › Notification preferences can be changed and saved`
 
-### TC-ADM-041: A software engineer has no digest option and cannot acknowledge alerts
+### TC-ADM-042: A software engineer has no digest option and cannot acknowledge alerts
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F10.2, F10.5
 
@@ -6177,7 +6324,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts-actions.spec.ts › Alerts, notifications and tracked actions › An engineer has no digest option and cannot acknowledge alerts`
 
-### TC-ADM-042: Parameters shows the alert rules and, for super admins, the Slack settings with a masked webhook field
+### TC-ADM-043: Parameters shows the alert rules and, for super admins, the Slack settings with a masked webhook field
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F10.6, F10.8
 
@@ -6201,7 +6348,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Tracked actions
 
-### TC-ADM-033: A team lead creates an action for a member, edits it, marks it done and deletes it after a cancel
+### TC-ADM-034: A team lead creates an action for a member, edits it, marks it done and deletes it after a cancel
 
 **Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F10.9
 
@@ -6233,7 +6380,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ACT-01 a lead creates an action for a member, edits it, marks it done (outcome shown) and deletes it after a cancel`
 
-### TC-ADM-034: An action title must have 3 to 200 characters; markup in a title is shown as plain text
+### TC-ADM-035: An action title must have 3 to 200 characters; markup in a title is shown as plain text
 
 **Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F10.9
 
@@ -6264,7 +6411,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ACT-02 a title must have 3 to 200 characters; markup in a title is only text`
 
-### TC-ADM-035: A double click on 'Create action' creates only one action
+### TC-ADM-036: A double click on 'Create action' creates only one action
 
 **Type:** Negative · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
 
@@ -6289,7 +6436,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ACT-03 a double click on "Create action" creates one action`
 
-### TC-ADM-036: The owner (a software engineer) may change the status of their own action only
+### TC-ADM-037: The owner (a software engineer) may change the status of their own action only
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F10.10, F10.9
 
@@ -6320,7 +6467,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ACT-04 the owner (a software engineer) may change the status of their action only`
 
-### TC-ADM-037: A failed action save keeps the form open with the reason
+### TC-ADM-038: A failed action save keeps the form open with the reason
 
 **Type:** Negative · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
 
@@ -6348,7 +6495,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/alerts/actions.spec.ts › Tracked actions › ACT-05 a failed save keeps the form open with the reason`
 
-### TC-ADM-043: A team lead creates a tracked action on Team detail, moves it to In progress, and TV mode shows it without owner names
+### TC-ADM-044: A team lead creates a tracked action on Team detail, moves it to In progress, and TV mode shows it without owner names
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9, F6.12
 
@@ -6572,7 +6719,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/pulse/pulse-roles-and-negatives.spec.ts › Wellbeing pulse: changes on a fixture team › PUL-10 a manager changes the cadence: it applies from the next period; choosing the current one cancels`
 
-### TC-ORG-008: Reminder settings outside the allowed range are refused with the reason; a valid value saves
+### TC-ORG-008: Reminder settings outside the allowed range are refused with the reason in the page's words; a valid value saves
 
 **Type:** Negative · **Priority:** Medium · **Role:** Team lead · **Flow:** F11.9
 
@@ -6591,14 +6738,15 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Fixture Lead (the fixture team's lead). | The Overview opens. |
 | 2 | Open /analytics/pulse?team=<id of UI Team X>. | The "Reminders and escalation" card is visible. |
-| 3 | In "Warn members who have not answered" type 99 and click "Save". | A red error appears inside the card containing "from 0 to 30" (currently worded "warningAfterDays must be a whole number from 0 to 30"). Nothing is saved. |
-| 4 | Change the value to 3 and click "Save". | A confirmation "Reminder settings saved." appears and the red error is gone. |
+| 3 | In "Warn members who have not answered" type 99 and click "Save". | A red error inside the card reads "The in-app warning to members who have not answered must be a whole number of days from 0 to 30." (no API field names such as warningAfterDays). Nothing is saved. |
+| 4 | Change it to 3, type 61 in "Escalate" and click "Save". | The error reads "The escalation must be a whole number of days from 1 to 60." |
+| 5 | Change "Escalate" back to 5 and click "Save". | A confirmation "Reminder settings saved." appears and the red error is gone. |
 
 **After the test:** Delete UI Team X and its four users (Teams > Delete team; Users > Delete), or ask a developer to remove them.; Set "Warn members who have not answered" back to its previous value if needed.
 
-**Notes:** Known issue FI-12: the message shows the API field name "warningAfterDays" instead of a readable label.
+**Notes:** Messages in the page's words (FI-12, fixed).
 
-*Automated:* `tests/e2e/pulse/pulse-roles-and-negatives.spec.ts › Wellbeing pulse: changes on a fixture team › PUL-11 reminder settings outside the allowed range are refused with the reason`
+*Automated:* `tests/e2e/pulse/pulse-roles-and-negatives.spec.ts › Wellbeing pulse: changes on a fixture team › PUL-11 reminder settings outside the allowed range are refused with the reason, in the page's words`
 
 ### TC-ORG-009: After the escalation the team lead sees who has not answered (names only, never answers)
 
@@ -7399,7 +7547,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/org/organisation-admin.spec.ts › Users and assignments › ORG-22 names with markup are shown as text on the users page`
 
-### TC-ORG-035: A role assignment is added as a chip and removed again
+### TC-ORG-035: A role assignment is added as a chip and removed again after a confirmation in the page
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F12.10
 
@@ -7421,13 +7569,16 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 2 | Open /users. | The "Users" page opens. |
 | 3 | Click "Add with password" (Demo). In the dialog "Add a user with a password" enter First Name "Chip", Last Name "Holder", Email "chip-<unique>@<organisation domain>", Password "Ui-Tests-Passw0rd!", Role "Software engineer", Department "Engineering", Primary Team "Core Team", then click "Create User". | "User created successfully!" appears; Chip Holder's card shows their assignment chip(s), e.g. "Software engineer · Core Team". Note the number of chips. |
 | 4 | On Chip Holder's card click "+ Add". In "Add an assignment for Chip Holder" choose Role "Viewer", choose a team/department in the second drop-down, click "Add assignment". | The dialog closes; the card shows one more chip "Viewer · <scope>". |
-| 5 | Click the small x on the "Viewer · <scope>" chip (Remove Viewer of <scope> from Chip Holder). | A message "Chip Holder: removed Viewer of <scope>" appears and the chip count is back to the original number. |
+| 5 | Click the small x on the "Viewer · <scope>" chip (Remove Viewer of <scope> from Chip Holder). | A dialog "Remove this assignment?" opens in the page: "Remove Viewer of <scope> from Chip Holder? …" with Cancel and Remove assignment. No browser pop-up. |
+| 6 | Click Cancel. | The dialog closes; the Viewer chip is still there. |
+| 7 | Click the x again and press Escape. | The dialog closes; the chip is still there. |
+| 8 | Click the x again and click "Remove assignment". | A message "Chip Holder: removed Viewer of <scope>" appears and the chip count is back to the original number. |
 
 **After the test:** The test organisation cannot be removed in the app: ask a developer to delete it from the test database, or leave it (it is isolated from the demo data).
 
-**Notes:** Known issue FI-17: removing a chip takes effect on one click, without confirmation.
+**Notes:** Removing an assignment asks first (FI-17, fixed).
 
-*Automated:* `tests/e2e/org/organisation-admin.spec.ts › Users and assignments › ORG-23 an assignment is added as a chip and removed again`
+*Automated:* `tests/e2e/org/organisation-admin.spec.ts › Users and assignments › ORG-23 an assignment is added as a chip and removed again after a confirmation in the page`
 
 ### TC-ORG-036: Nobody can deactivate or delete themselves
 
@@ -7578,9 +7729,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open the sign-in page and sign in as Software engineer (engineer@irongate.com / demo123). | The Overview opens; the top bar shows the menu (burger) button. |
 | 2 | Click the menu (burger) button. | The navigation opens; there is no "Activity" entry. |
-| 3 | Enter /activity in the address bar and press Enter. | The Overview (dashboard) is shown and the address changes to "/". No access-denied message is shown. |
+| 3 | Enter /activity in the address bar and press Enter. | The Overview (dashboard) is shown and the address changes to "/", with the alert "You don't have access to Activity." |
 
-**Notes:** Known issue FI-14: forbidden pages redirect silently to the overview.
+**Notes:** The redirect shows "You don't have access to <page>." (FI-14, fixed).
 
 *Automated:* `tests/e2e/organisation.spec.ts › Organisation, invitations and activity › An engineer has no Activity page`
 
@@ -7673,9 +7824,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Open the sign-in page and sign in as Manager (manager@irongate.com / demo123). | The Overview opens; the top bar shows the menu (burger) button. |
-| 2 | Enter /user-activity in the address bar and press Enter. | The Overview (dashboard) is shown and the address changes to "/". |
+| 2 | Enter /user-activity in the address bar and press Enter. | The Overview (dashboard) is shown and the address changes to "/", with the alert "You don't have access to User activity." |
 
-**Notes:** Known issue FI-14: no access-denied message, silent redirect.
+**Notes:** The redirect shows "You don't have access to <page>." (FI-14, fixed).
 
 *Automated:* `tests/e2e/platform-operator.spec.ts › User activity › a QA manager has no User activity page`
 
@@ -8195,12 +8346,12 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Open http://localhost:5173, enter E-mail address engineer@irongate.com and Password demo123, then click Sign in. | The Overview page opens: the top bar title reads "Overview" and the "Team performance" section lists team cards. |
-| 2 | Type http://localhost:5173/users in the address bar and press Enter; wait 2 seconds. | The app shows the Overview page and the address is no longer /users. |
-| 3 | Repeat with http://localhost:5173/teams. | The Overview is shown; the address is no longer /teams. |
-| 4 | Repeat with http://localhost:5173/departments. | The Overview is shown; the address is no longer /departments. |
-| 5 | Repeat with http://localhost:5173/admin-panel. | The Overview is shown; the address is no longer /admin-panel. |
+| 2 | Type http://localhost:5173/users in the address bar and press Enter; wait 2 seconds. | The app shows the Overview page and the address is no longer /users; an alert reads "You don't have access to <that page>." |
+| 3 | Repeat with http://localhost:5173/teams. | The Overview is shown; the address is no longer /teams; an alert reads "You don't have access to <that page>." |
+| 4 | Repeat with http://localhost:5173/departments. | The Overview is shown; the address is no longer /departments; an alert reads "You don't have access to <that page>." |
+| 5 | Repeat with http://localhost:5173/admin-panel. | The Overview is shown; the address is no longer /admin-panel; an alert reads "You don't have access to <that page>." |
 
-**Notes:** Known issue FI-14: there is no access-denied message; the redirect to the overview is silent by design.
+**Notes:** Each redirect shows "You don't have access to <page>." at the top of the overview (FI-14, fixed).
 
 *Automated:* `tests/e2e/qa-engineer-rbac.spec.ts › QA Engineer Role-Based Access Control › QA Engineer cannot access restricted pages directly`
 
@@ -8293,12 +8444,12 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Open http://localhost:5173, enter E-mail address viewer@irongate.com and Password demo123, then click Sign in. | The Overview page opens: the top bar title reads "Overview" and the "Team performance" section lists team cards. |
-| 2 | Type http://localhost:5173/users in the address bar, press Enter and wait 2 seconds. | The Overview page is shown and the address is no longer /users. |
-| 3 | Repeat with /teams and /departments. | Each time the Overview is shown and the address no longer contains the typed path. |
-| 4 | Repeat with /admin-panel and /manual-metrics. | Each time the Overview is shown. |
-| 5 | Repeat with /metric-intervals and /parameters-config. | Each time the Overview is shown; no management page content appears. |
+| 2 | Type http://localhost:5173/users in the address bar, press Enter and wait 2 seconds. | The Overview page is shown and the address is no longer /users; an alert reads "You don't have access to <that page>." |
+| 3 | Repeat with /teams and /departments. | Each time the Overview is shown and the address no longer contains the typed path; an alert reads "You don't have access to <that page>." |
+| 4 | Repeat with /admin-panel and /manual-metrics. | Each time the Overview is shown; an alert reads "You don't have access to <that page>." |
+| 5 | Repeat with /metric-intervals and /parameters-config. | Each time the Overview is shown; no management page content appears; an alert reads "You don't have access to <that page>." |
 
-**Notes:** Known issue FI-14: there is no access-denied message; the redirect to the overview is silent.
+**Notes:** Each redirect shows "You don't have access to <page>." at the top of the overview (FI-14, fixed).
 
 *Automated:* `tests/e2e/viewer-rbac.spec.ts › Viewer Role-Based Access Control › Viewer cannot access any admin or management pages`
 
@@ -8482,13 +8633,13 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 3 | Hover the AI toggle button on the team row and note its tooltip. | The tooltip reads "Turn AI suggestions off" or "Turn AI suggestions on". |
 | 4 | Click the AI toggle button and wait 2 seconds. | A message "AI suggestions turned on" or "AI suggestions turned off" appears and the tooltip flips. |
 | 5 | Click the AI toggle again. | The setting returns to its original state. |
-| 6 | Go to http://localhost:5173/users and hover the insights button on the first user card that has one. | The tooltip reads "Enable AI Insights" or "Disable AI Insights". |
-| 7 | Click that button and wait 2 seconds. | A confirmation message appears and the tooltip flips (developer insights switched on / off). |
+| 6 | Go to http://localhost:5173/users and hover the insights button on the first user card that has one. | The tooltip reads "Enable developer insights" or "Disable developer insights". |
+| 7 | Click that button and wait 2 seconds. | A message "Developer insights enabled" or "Developer insights disabled" appears and the tooltip flips. |
 | 8 | Click the button again. | The setting returns to its original state. |
 
 **After the test:** Leave the team AI setting and the user's developer insights in their original state.
 
-**Notes:** Known issue FI-13: the user button is labelled "Enable / Disable AI Insights" although it switches developer insights.
+**Notes:** The user button and its messages say "developer insights" (FI-13, fixed).
 
 *Automated:* `tests/e2e/team-lead-rbac.spec.ts › Team Lead Role-Based Access Control › Toggle AI - For their team and team users`
 
