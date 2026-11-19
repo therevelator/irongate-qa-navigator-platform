@@ -41,7 +41,7 @@ Derived from the code, then checked against the documentation:
 | Flows with at least one negative UI test | **107** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
 | UI tests (Playwright, `chromium` project) | **366** in 41 files: 73 existing (kept, tagged) + 293 new; no `test.fail` left |
 | …tagged `@smoke` / `@negative` / `@a11y` / `@readonly` | 40 / 121 / 13 / 4 |
-| Other tests (passing) | API 395 and database 29 (Jest); the golden baseline is untouched |
+| Other tests (passing) | API 426 and database 29 (Jest); the golden baseline is untouched |
 
 ## 1. Sign-in and sessions
 
