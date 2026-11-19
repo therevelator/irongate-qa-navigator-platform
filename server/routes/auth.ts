@@ -13,9 +13,12 @@ import { requestPasswordReset, completePasswordReset, PasswordResetError } from 
 import { clientIp } from '../lib/requestContext';
 import { recordServerError } from '../lib/opsLog';
 import {
-  clearSessionCookie, endUserSessions, issueSessionCookie, lifetimeHours, lifetimeSettingSql, refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE,
+  clearSessionCookie, currentSessionPersistent, endUserSessions, issueSessionCookie, wantsPersistentSession, lifetimeHours, lifetimeSettingSql, refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE,
 } from '../lib/sessions';
 import { authenticateToken, type AuthRequest } from '../middleware/auth';
+import { passwordProblem } from '../../src/lib/passwordPolicy';
+import { emailDomainOf, isPublicEmailDomain } from '../../src/lib/emailDomains';
+import { EMAIL_RE } from '../lib/invitations';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -59,6 +62,9 @@ const generateUUID = (): string => {
   });
 };
 
+const domainTakenMessage = (domain: string) =>
+  `An organisation already uses the e-mail domain ${domain}. Ask its administrator to invite you.`;
+
 // Register
 router.post('/register', authLimiter, async (req, res) => {
   try {
@@ -72,8 +78,13 @@ router.post('/register', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    if (typeof password !== 'string' || password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    if (typeof email !== 'string' || email.length > 255 || !EMAIL_RE.test(email.trim())) {
+      return res.status(400).json({ error: 'Enter a valid e-mail address.' });
+    }
+    // The same password rules as accepting an invitation and resetting a password (src/lib/passwordPolicy.ts).
+    const weak = typeof password === 'string' ? passwordProblem(password, email) : 'The password is required.';
+    if (weak) {
+      return res.status(400).json({ error: weak });
     }
 
     // Check if user already exists
@@ -86,8 +97,11 @@ router.post('/register', authLimiter, async (req, res) => {
       return res.status(400).json({ error: 'Email already registered' });
     }
 
-    // Extract domain from email for company
-    const emailDomain = email.split('@')[1] || 'unknown.com';
+    // The organisation's e-mail domain (src/lib/emailDomains.ts): a company domain belongs to one
+    // organisation only; a public one (gmail.com, outlook.com, …) never blocks a registration.
+    // Nobody is ever added to an organisation because of their domain.
+    const emailDomain = emailDomainOf(email);
+    const publicDomain = isPublicEmailDomain(emailDomain);
 
     // Registration only ever creates a NEW organisation, and its first user becomes
     // that organisation's super_admin. Joining an existing organisation is by invite
@@ -103,19 +117,19 @@ router.post('/register', authLimiter, async (req, res) => {
       });
     }
 
-    // One organisation per e-mail domain (companies_domain is unique): say so instead of failing
-    // with a 500 on the insert.
-    const domainTaken = await queryOne<any>('SELECT id FROM companies WHERE LOWER(domain) = LOWER(?)', [emailDomain]);
-    if (domainTaken) {
-      return res.status(409).json({
-        error: `An organisation already uses the e-mail domain ${emailDomain}. Ask its administrator to invite you.`
-      });
+    // One organisation per company domain (index companies_domain_company_unique): say so instead of
+    // failing with a 500 on the insert.
+    if (!publicDomain) {
+      const domainTaken = await queryOne<any>(
+        'SELECT id FROM companies WHERE LOWER(domain) = LOWER(?) AND email_domain_public = FALSE', [emailDomain]
+      );
+      if (domainTaken) return res.status(409).json({ error: domainTakenMessage(emailDomain) });
     }
 
     const companyId = generateCompanyId();
     await query(
-      `INSERT INTO companies (id, name, domain, is_active) VALUES (?, ?, ?, true)`,
-      [companyId, companyName, emailDomain]
+      `INSERT INTO companies (id, name, domain, email_domain_public, is_active) VALUES (?, ?, ?, ?, true)`,
+      [companyId, companyName, emailDomain, publicDomain]
     );
 
     const departmentId = generateUUID();
@@ -174,7 +188,11 @@ router.post('/register', authLimiter, async (req, res) => {
     user.assignments = await assignmentsOf(user);
 
     res.status(201).json({ user });
-  } catch (error) {
+  } catch (error: any) {
+    // Two registrations with the same company domain at the same moment: the index decides.
+    if (error?.code === '23505' && String(error?.constraint ?? error?.message ?? '').includes('companies_domain')) {
+      return res.status(409).json({ error: domainTakenMessage(emailDomainOf(req.body?.email)) });
+    }
     console.error('Register error:', error);
     res.status(500).json({ error: 'Registration failed' });
   }
@@ -184,6 +202,7 @@ router.post('/register', authLimiter, async (req, res) => {
 router.post('/login', authLimiter, async (req, res) => {
   try {
     const { email, password } = req.body;
+    const persistent = wantsPersistentSession(req.body?.rememberMe);
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password required' });
@@ -227,7 +246,8 @@ router.post('/login', authLimiter, async (req, res) => {
     );
     user.assignedTeams = teams.map(t => t.team_id);
 
-    await setSessionCookie(res, user.id);
+    // "Keep me signed in": a persistent cookie; otherwise a browser-session cookie (server/lib/sessions.ts).
+    await setSessionCookie(res, user.id, { persistent });
     user.assignments = await assignmentsOf(user);
 
     res.json({ user });
@@ -288,7 +308,7 @@ router.post('/sessions/sign-out-others', authenticateToken, async (req: AuthRequ
         departmentIds: [u?.department_id], subjectIds: [me.id],
       }, exec);
     });
-    await issueSessionCookie(res, me.id, JWT_SECRET);
+    await issueSessionCookie(res, me.id, JWT_SECRET, { persistent: currentSessionPersistent(req) });
     res.json({ message: 'You were signed out on all other devices. This device stays signed in.' });
   } catch (error) {
     console.error('Sign out other devices error:', (error as any)?.code ?? (error as Error)?.name ?? 'error');

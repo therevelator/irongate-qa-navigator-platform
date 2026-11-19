@@ -83,7 +83,7 @@ describe('Security regressions', () => {
     // Register an isolated attacker company (unique email domain per run).
     const stamp = Date.now();
     const reg = await request(API_URL).post('/api/auth/register').send({
-      email: `attacker@evil${stamp}.test`, password: 'Passw0rd!',
+      email: `attacker@evil${stamp}.test`, password: 'Passw0rd!2024',
       firstName: 'Eve', lastName: 'Evil',
       companyName: `EvilCorp ${stamp}`, departmentName: 'Red', teamName: 'RedTeam',
     });
@@ -129,7 +129,7 @@ describe('Security regressions', () => {
     expect(res.status).toBe(403);
   });
 
-  it('SEC-006: registration rejects passwords shorter than 8 characters', async () => {
+  it('SEC-006: registration rejects weak passwords (short, or the rules of src/lib/passwordPolicy.ts)', async () => {
     if (guard()) return;
     const res = await request(API_URL).post('/api/auth/register').send({
       email: `weak${Date.now()}@evil${Date.now()}.test`, password: 'short',
@@ -142,7 +142,7 @@ describe('Security regressions', () => {
   it('SEC-007: registering with an existing organisation name is refused (409)', async () => {
     if (guard()) return;
     const res = await request(API_URL).post('/api/auth/register').send({
-      email: `joiner${Date.now()}@evil.test`, password: 'Passw0rd!',
+      email: `joiner${Date.now()}@evil.test`, password: 'Passw0rd!2024',
       firstName: 'J', lastName: 'Oiner', companyName: companyName.toUpperCase(), departmentName: 'D', teamName: 'T',
     });
     expect(res.status).toBe(409);

@@ -8,7 +8,8 @@ dotenv.config();
 
 export const API_URL = process.env.API_URL || 'http://localhost:3000';
 export const PW = 'demo123';
-export const NEW_PW = 'Passw0rd!';
+/** Meets the registration, invitation and reset password rules (src/lib/passwordPolicy.ts). */
+export const NEW_PW = 'Passw0rd!2024';
 
 export function cookieFrom(res: Response): string {
   const raw = res.headers['set-cookie'];

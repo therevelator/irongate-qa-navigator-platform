@@ -16,7 +16,7 @@ import request, { Response } from 'supertest';
 
 const API_URL = process.env.API_URL || 'http://localhost:3000';
 const PW = 'demo123';
-const NEW_PW = 'Passw0rd!';
+const NEW_PW = 'Passw0rd!2024';
 
 let backendAvailable = true;
 

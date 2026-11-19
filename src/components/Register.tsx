@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, AlertCircle, ArrowRight } from 'lucide-react';
+import { Eye, EyeOff, AlertCircle, ArrowRight, Check, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import type { UserRole } from '../types/auth';
+import { passwordChecks } from '../lib/passwordPolicy';
+import { emailDomainOf, isPublicEmailDomain } from '../lib/emailDomains';
 
 interface RegisterProps {
   onSwitchToLogin: () => void;
@@ -9,17 +11,7 @@ interface RegisterProps {
 
 const validateName = (name: string) => /^[\p{L}\s'-]+$/u.test(name) && !/\d/.test(name);
 const validateCompanyName = (name: string) => /^[\p{L}\d\s'&.-]+$/u.test(name);
-const passwordScore = (pw: string) =>
-  [pw.length >= 8, /[a-z]/.test(pw), /[A-Z]/.test(pw), /[0-9]/.test(pw), /[^a-zA-Z0-9]/.test(pw)].filter(Boolean).length;
-
-const STRENGTH = [
-  { label: 'Weak', bar: 'bg-red-600' },
-  { label: 'Weak', bar: 'bg-red-600' },
-  { label: 'Weak', bar: 'bg-red-600' },
-  { label: 'Fair', bar: 'bg-amber-500' },
-  { label: 'Good', bar: 'bg-green-600' },
-  { label: 'Strong', bar: 'bg-green-700' },
-];
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const inputClass =
   'w-full h-10 px-3 rounded-md border border-slate-300 bg-white text-sm text-slate-900 placeholder-slate-400 ' +
@@ -35,7 +27,11 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
-  const score = passwordScore(form.password);
+  // The same password rules as accepting an invitation and resetting a password (src/lib/passwordPolicy.ts).
+  const checks = passwordChecks(form.password, form.email);
+  const strong = checks.every((c) => c.ok);
+  const domain = emailDomainOf(form.email);
+  const publicDomain = EMAIL_RE.test(form.email.trim()) && isPublicEmailDomain(domain);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => setForm({ ...form, [k]: e.target.value });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -47,11 +43,12 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
     if (!validateName(form.firstName) || !validateName(form.lastName)) {
       return setError('Names may contain letters, spaces, hyphens and apostrophes only.');
     }
+    if (!EMAIL_RE.test(form.email.trim())) return setError('Enter a valid e-mail address.');
     if (!validateCompanyName(form.companyName)) {
       return setError('Organisation name may contain letters, numbers, spaces and the characters - \' & .');
     }
     if (form.password !== form.confirmPassword) return setError('The passwords do not match.');
-    if (score < 3) return setError('Choose a stronger password: at least 8 characters with upper-case letters, numbers or symbols.');
+    if (!strong) return setError('Choose a stronger password (see the rules below the password).');
 
     try {
       await register({
@@ -104,8 +101,16 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                 </div>
               </div>
               <div>
-                <label htmlFor="email" className={labelClass}>Work email</label>
-                <input id="email" type="email" autoComplete="email" value={form.email} onChange={set('email')} className={inputClass} placeholder="name@company.com" disabled={isLoading} />
+                <label htmlFor="email" className={labelClass}>Email</label>
+                <input
+                  id="email" type="email" autoComplete="email" value={form.email} onChange={set('email')} className={inputClass}
+                  placeholder="name@company.com" disabled={isLoading} aria-describedby="email-hint"
+                />
+                <p id="email-hint" data-testid="email-domain-hint" className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                  {publicDomain
+                    ? `${domain} is a personal e-mail provider, so it is not linked to your organisation. You invite the people who join.`
+                    : 'With a company address, yours is the only organisation for that e-mail domain. Personal addresses (gmail.com, outlook.com, …) work too.'}
+                </p>
               </div>
             </fieldset>
 
@@ -138,6 +143,7 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                     <input
                       id="password" type={showPassword ? 'text' : 'password'} autoComplete="new-password"
                       value={form.password} onChange={set('password')} className={`${inputClass} pr-10`} disabled={isLoading}
+                      aria-describedby="password-rules"
                     />
                     <button
                       type="button" onClick={() => setShowPassword(!showPassword)}
@@ -156,16 +162,14 @@ const Register: React.FC<RegisterProps> = ({ onSwitchToLogin }) => {
                   />
                 </div>
               </div>
-              {form.password && (
-                <div className="flex items-center gap-3">
-                  <div className="flex flex-1 gap-1">
-                    {[1, 2, 3, 4, 5].map((i) => (
-                      <div key={i} className={`h-1 flex-1 rounded-full ${i <= score ? STRENGTH[score].bar : 'bg-slate-200 dark:bg-slate-700'}`} />
-                    ))}
-                  </div>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 w-12 text-right">{STRENGTH[score].label}</span>
-                </div>
-              )}
+              <ul id="password-rules" data-testid="password-rules" className="space-y-1" aria-live="polite">
+                {checks.map((c) => (
+                  <li key={c.key} className={`flex items-center gap-1.5 text-xs ${c.ok ? 'text-green-700 dark:text-green-400' : 'text-slate-500 dark:text-slate-400'}`}>
+                    {c.ok ? <Check size={13} aria-hidden="true" /> : <X size={13} aria-hidden="true" />}
+                    <span>{c.label}</span><span className="sr-only">{c.ok ? '(met)' : '(not met)'}</span>
+                  </li>
+                ))}
+              </ul>
             </fieldset>
 
             <button

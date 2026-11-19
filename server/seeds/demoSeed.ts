@@ -13,6 +13,7 @@
  * POST /api/analytics/seed-data (super_admin, ENABLE_SYNTHETIC_DATA=true).
  */
 import type pg from 'pg';
+import { isPublicEmailDomain } from '../../src/lib/emailDomains';
 import { pool } from '../../src/lib/db';
 import {
   buildDemoDataset, buildFillDataset, renderScript, CLEAR_STATEMENTS, ALL_TABLES, demoRowCondition, demoSummary, todayUtc,
@@ -114,6 +115,18 @@ export async function teamsWithSampleData(db: pg.Pool | pg.PoolClient): Promise<
   const out = new Map<string, string[]>();
   for (const r of rows) out.set(r.company_id, [...(out.get(r.company_id) ?? []), r.id]);
   return out;
+}
+
+/**
+ * The e-mail domain of the sample developers added to an existing company: the company's own domain,
+ * except for a public e-mail domain (gmail.com, …), where addresses such as first.last@gmail.com
+ * could belong to real people (and single sign-on matches an account by its verified address). There
+ * they get an address on a reserved domain that can never receive e-mail.
+ */
+export function sampleEmailDomain(c: { id: string; domain: string | null }): string {
+  const domain = (c.domain ?? '').trim().toLowerCase();
+  if (domain && !isPublicEmailDomain(domain)) return domain;
+  return `sample-${c.id.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.invalid`;
 }
 
 export async function planFillExisting(
@@ -231,7 +244,7 @@ export async function planFillExisting(
       const isDev = (m: Member) => m.role === 'qa_engineer' || m.role === 'team_lead';
       const engineers = existing.filter(m => m.role === 'qa_engineer').length;
       const sharing = existing.filter(m => isDev(m) && m.insights).length;
-      const extra = demoDevelopersFor({ id: t.id, departmentId: t.department_id }, c.domain, engineers, taken, sharing);
+      const extra = demoDevelopersFor({ id: t.id, departmentId: t.department_id }, sampleEmailDomain(c), engineers, taken, sharing);
       const all = [...existing, ...extra];
       const devsWithMetrics = new Set(metricPairs.filter(p => p.team_id === t.id).map(p => p.developer_id));
       if (all.some(m => isDev(m) && (!devsWithSnapshots.has(m.id) || !devsWithMetrics.has(m.id)))) groups.add('dev');
