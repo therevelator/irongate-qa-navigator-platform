@@ -14,7 +14,7 @@
  */
 import { queryOne } from '../../src/lib/db';
 import { KPI_COLUMNS, type KpiColumn } from './kpiIngest';
-import { evaluateLatestSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext } from './kpiEvaluation';
+import { evaluateLatestSnapshot, kpiHistoryFor, loadDataClock, qaConfidenceJson, type EvalContext } from './kpiEvaluation';
 import { loadIntervals } from './staleness';
 import { loadTargetBook, TARGET_METRICS, type TargetMetric } from './targets';
 import { teamLeadNameSql, teamMemberCountSql } from './teamMembership';
@@ -159,6 +159,7 @@ const emptyCell = (): CompareCell => ({
 /** Build the comparison of teams (already checked to be in the caller's scope and company). */
 export async function buildComparison(companyId: string, teamIds: string[], days: number): Promise<Comparison> {
   const ctx: EvalContext = { companyId, intervals: await loadIntervals(companyId), book: await loadTargetBook(companyId) };
+  ctx.dataClock = await loadDataClock(companyId, ctx.intervals);
   const now = Date.now();
   const teams: CompareTeam[] = [];
 

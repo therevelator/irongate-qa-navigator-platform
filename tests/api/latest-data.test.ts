@@ -6,13 +6,14 @@
  * interval, so the QA score left them out and the overview, team detail, TV mode, compare and the
  * team rankings showed "No data" although the snapshots were there.
  *
- *   LD-001  latestReference: now while the newest value is at most a day old; the end of that
- *           value's day once it is older (pure function)
+ *   LD-001  latestReference: now while the company's newest value (its data clock) is at most a
+ *           day old; the end of that value's day once it is older (pure function)
  *   LD-002  data two days old: GET /api/teams, /api/teams/:id, /api/tv/teams/:id,
  *           /api/compare/teams, /api/metrics/analytics/teams and /api/analytics/company-summary
  *           show the latest snapshot's QA score (not "no data"), with lastUpdated and dataOutdated
  *   LD-003  current data: unchanged (dataOutdated false; a daily input recorded three days ago is
- *           still stale and left out of the QA score)
+ *           still stale and left out of the QA score; a team that stopped sending two days ago while
+ *           another team of the company is current keeps its stale values and has no QA score)
  */
 import request from 'supertest';
 import type { Client } from 'pg';
@@ -83,6 +84,11 @@ describe('Latest data shown when nothing new arrived for over a day (FI-22)', ()
       field_sources: { test_coverage: { recorded_at: '2026-11-17T08:00:00Z' }, code_quality_score: { recorded_at: '2026-11-19T10:00:00Z' } },
     }, intervals, now);
     expect(fresh).toEqual({ reference: now, lastUpdated: '2026-11-19T10:00:00.000Z', outdated: false });
+    // The company's data clock decides: another team current → this old snapshot is judged at now.
+    expect(latestReference({ snapshot_date: '2026-11-17', test_coverage: 80, field_sources: {} }, intervals, now, Date.parse('2026-11-19T09:00:00Z')))
+      .toEqual({ reference: now, lastUpdated: '2026-11-17T00:00:00.000Z', outdated: false });
+    expect(latestReference({ snapshot_date: '2026-11-17', test_coverage: 80, field_sources: {} }, intervals, now, Date.parse('2026-11-18T00:05:00Z')))
+      .toEqual({ reference: Date.parse('2026-11-19T00:00:00Z'), lastUpdated: '2026-11-17T00:00:00.000Z', outdated: true });
     const edge = latestReference({ snapshot_date: '2026-11-18', test_coverage: 80, field_sources: {} }, intervals, Date.parse('2026-11-18T00:00:00Z') + OUTDATED_AFTER_MS);
     expect(edge.outdated).toBe(false);
   });
@@ -144,6 +150,9 @@ describe('Latest data shown when nothing new arrived for over a day (FI-22)', ()
       expect(a.dataOutdated).toBe(false);
       expect(a.lastUpdated).toBe(new Date(Date.parse(recent)).toISOString());
       expect(a.qaScoreConfidence).toEqual(expect.objectContaining({ inputsUsed: 3, staleInputs: ['code_quality_score'] }));
+      const b = list.body.teams.find((t: any) => t.id === teamB);
+      expect(b).toEqual(expect.objectContaining({ dataOutdated: false, qaScore: null, status: 'no-data' }));
+      expect(b.qaScoreConfidence.staleInputs).toContain('test_coverage');
       const s = (await get('/api/analytics/company-summary', cookie)).body;
       expect((s.metrics ?? s).dataOutdated).toBe(false); // team A is current
     } finally {

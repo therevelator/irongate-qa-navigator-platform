@@ -4,7 +4,7 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamAnalytics } from '../middleware/access';
 import { TECH_DEBT_OPEN_WEIGHT_SQL, techDebtScoreFromWeight, toNum, qaStatusFromScore } from '../lib/metricFormulas';
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
-import { evaluateLatestSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext } from '../lib/kpiEvaluation';
+import { evaluateLatestSnapshot, kpiHistoryFor, loadDataClock, qaConfidenceJson, type EvalContext } from '../lib/kpiEvaluation';
 import { loadIntervals } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 
@@ -80,6 +80,7 @@ router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
     let latest: any = null;
     if (snapshot) {
       const ctx: EvalContext = { companyId: req.companyId as string, intervals: await loadIntervals(req.companyId as string), book: await loadTargetBook(req.companyId as string) };
+      ctx.dataClock = await loadDataClock(ctx.companyId, ctx.intervals);
       const ev = evaluateLatestSnapshot(snapshot, owned, ctx);
       const kpiData: Record<string, number | null> = {};
       for (const [col, key] of Object.entries(KPI_COLUMNS)) kpiData[key] = toNum(snapshot[col]);

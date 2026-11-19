@@ -48,6 +48,8 @@ export interface EvalContext {
   intervals: IntervalMap;
   book: TargetBook;
   now?: number;
+  /** The company's newest value time (loadDataClock), for evaluateLatestSnapshot. */
+  dataClock?: number | null;
 }
 
 export interface SnapshotEvaluation {
@@ -104,19 +106,43 @@ export function latestRecordedAt(row: Record<string, any>, intervals: IntervalMa
 }
 
 /**
+ * The company's data clock: the newest value time over the latest snapshots of its active teams
+ * (ms), null when it has none.
+ */
+export async function loadDataClock(companyId: string, intervals: IntervalMap): Promise<number | null> {
+  const rows = await query<any>(
+    `SELECT DISTINCT ON (ks.team_id) ks.snapshot_date, ks.field_sources, ${KPI_COLUMN_NAMES.map((c) => `ks.${c}`).join(', ')}
+       FROM kpi_snapshots ks JOIN teams t ON t.id = ks.team_id
+      WHERE t.company_id = ? AND t.is_active = TRUE
+      ORDER BY ks.team_id, ks.snapshot_date DESC`,
+    [companyId]
+  );
+  let best: number | null = null;
+  for (const r of rows) {
+    const at = latestRecordedAt(r, intervals);
+    const t = at ? Date.parse(at) : NaN;
+    if (Number.isFinite(t) && (best === null || t > best)) best = t;
+  }
+  return best;
+}
+
+/**
  * Reference time for a team's LATEST snapshot (FI-22).
  *
- * While the team's newest value is at most a day old the reference is now (unchanged: values
- * older than their interval are stale and left out of the QA score). Once the team has sent
- * nothing for over a day (no data import, the sample data not refreshed overnight), measuring
- * at now would make every daily input stale and the latest data would disappear ("No data"):
- * the snapshot is then read as of the end of the day of its newest value (what was current at
- * the last update, the same rule as the KPI history), and flagged `outdated` with `lastUpdated`
- * so the screens say "Last updated <date>". Nothing is invented: the values are the stored ones.
+ * `clock` is the company's data clock (loadDataClock; the team's own newest value when not
+ * given). While it is at most a day old the reference is now: unchanged, values older than their
+ * interval are stale and left out of the QA score (a team that stopped sending while the others
+ * carry on is still stale). Once the company as a whole has received nothing for over a day (no
+ * data import, the sample data not refreshed overnight), measuring at now would make every daily
+ * input of every team stale and the latest data would disappear ("No data"): the snapshots are
+ * then read as of the end of the clock's day (what was current at the last update; the KPI
+ * history uses the same rule) and flagged `outdated`, with the team's own `lastUpdated`, so the
+ * screens say "Last updated <date>". Nothing is invented: the values are the stored ones.
  */
-export function latestReference(row: Record<string, any>, intervals: IntervalMap, now = Date.now()): { reference: number; lastUpdated: string | null; outdated: boolean } {
+export function latestReference(row: Record<string, any>, intervals: IntervalMap, now = Date.now(), clock?: number | null): { reference: number; lastUpdated: string | null; outdated: boolean } {
   const lastUpdated = latestRecordedAt(row, intervals);
-  const t = lastUpdated ? Date.parse(lastUpdated) : NaN;
+  const own = lastUpdated ? Date.parse(lastUpdated) : NaN;
+  const t = clock === undefined || clock === null ? own : Math.max(clock, Number.isFinite(own) ? own : clock);
   if (!Number.isFinite(t) || now - t <= OUTDATED_AFTER_MS) return { reference: now, lastUpdated, outdated: false };
   return { reference: referenceFor(new Date(t).toISOString().slice(0, 10), now), lastUpdated, outdated: true };
 }
@@ -124,13 +150,13 @@ export function latestReference(row: Record<string, any>, intervals: IntervalMap
 export interface LatestEvaluation extends SnapshotEvaluation {
   /** Newest recorded_at of the snapshot's values (ISO). */
   lastUpdated: string | null;
-  /** The newest value is over a day old: read as of its day (latestReference). */
+  /** The company's newest value is over a day old: read as of that day (latestReference). */
   outdated: boolean;
 }
 
-/** Evaluate a team's latest snapshot for the current screens (latestReference). */
+/** Evaluate a team's latest snapshot for the current screens (latestReference with ctx.dataClock). */
 export function evaluateLatestSnapshot(row: Record<string, any>, team: TeamRef, ctx: EvalContext, now = ctx.now ?? Date.now()): LatestEvaluation {
-  const { reference, lastUpdated, outdated } = latestReference(row, ctx.intervals, now);
+  const { reference, lastUpdated, outdated } = latestReference(row, ctx.intervals, now, ctx.dataClock);
   return { ...evaluateSnapshot(row, team, ctx, reference), lastUpdated, outdated };
 }
 

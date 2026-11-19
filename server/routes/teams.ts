@@ -24,7 +24,7 @@ import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 import { teamMembers } from '../lib/assignments';
 import { SUPPRESSED_TEXT, privacyInfo } from '../lib/privacy';
 import { recordAudit } from '../lib/audit';
-import { evaluateLatestSnapshot, kpiHistoryFor, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { evaluateLatestSnapshot, kpiHistoryFor, loadDataClock, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
 import { loadIntervals } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 
@@ -212,6 +212,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
       intervals: await loadIntervals(req.companyId as string),
       book: await loadTargetBook(req.companyId as string),
     };
+    evalCtx.dataClock = await loadDataClock(evalCtx.companyId, evalCtx.intervals);
     const now = Date.now();
 
     // Transform teams to match frontend format
@@ -392,6 +393,7 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       intervals: await loadIntervals(req.companyId as string),
       book: await loadTargetBook(req.companyId as string),
     };
+    evalCtx.dataClock = await loadDataClock(evalCtx.companyId, evalCtx.intervals);
     const ev = kpiSnapshot ? evaluateLatestSnapshot(kpiSnapshot, { id: team.id, department_id: team.department_id }, evalCtx) : null;
     team.qaScore = ev ? ev.qa.value : null;
     team.status = team.qaScore === null ? 'no-data' : (ev?.qa.status ?? qaStatusFromScore(team.qaScore));

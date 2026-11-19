@@ -15,7 +15,7 @@ import { isSyntheticDataEnabled } from '../lib/syntheticData';
 import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
-import { evaluateLatestSnapshot, evaluateSnapshot, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { evaluateLatestSnapshot, evaluateSnapshot, loadDataClock, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
 import { loadIntervals, referenceFor } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 import { teamMemberCountSql } from '../lib/teamMembership';
@@ -2115,6 +2115,7 @@ async function computeCompanyMetrics(companyId: string) {
   // Current values only: staleness at now (server/lib/staleness.ts) and the targets valid at
   // each value's date (server/lib/targets.ts). A team's QA score leaves its stale inputs out.
   const evalCtx: EvalContext = { companyId, intervals: await loadIntervals(companyId), book: await loadTargetBook(companyId) };
+  evalCtx.dataClock = await loadDataClock(companyId, evalCtx.intervals);
   const now = Date.now();
   const evaluated = latestSnapshots.map((t: any) => ({ t, ev: evaluateLatestSnapshot(t, { id: t.team_id, department_id: t.department_id }, evalCtx, now) }));
   const evalOf = new Map<string, SnapshotEvaluation>(evaluated.map((x: any) => [x.t.team_id as string, x.ev]));

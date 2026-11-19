@@ -25,7 +25,7 @@ import {
   COMPANY_AGGREGATE_TEXT,
   distributionOf,
 } from '../lib/metricFormulas';
-import { evaluateLatestSnapshot, evaluateSnapshot, type EvalContext, type LatestEvaluation, type SnapshotEvaluation } from '../lib/kpiEvaluation';
+import { evaluateLatestSnapshot, evaluateSnapshot, loadDataClock, type EvalContext, type LatestEvaluation, type SnapshotEvaluation } from '../lib/kpiEvaluation';
 import { loadIntervals, referenceFor, STALENESS_RULE_TEXT } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 
@@ -68,6 +68,7 @@ async function latestEvaluated(companyId: string): Promise<Array<{ row: any; ev:
     [companyId]
   );
   const ctx = await evalContext(companyId);
+  ctx.dataClock = await loadDataClock(companyId, ctx.intervals);
   const now = Date.now();
   return rows.map((r: any) => ({
     row: r,
