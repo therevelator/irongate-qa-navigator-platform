@@ -36,10 +36,10 @@ Derived from the code, then checked against the documentation:
 
 | | Count |
 |---|---|
-| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **149** |
+| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **157** |
 | Flows with a happy-path UI test | **131** of the 134 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
 | Flows with at least one negative UI test | **107** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
-| UI tests (Playwright, `chromium` project) | **349** in 39 files: 73 existing (kept, tagged) + 276 new; no `test.fail` left |
+| UI tests (Playwright, `chromium` project) | **366** in 41 files: 73 existing (kept, tagged) + 293 new; no `test.fail` left |
 | …tagged `@smoke` / `@negative` / `@a11y` / `@readonly` | 40 / 121 / 13 / 4 |
 | Other tests (passing) | API 395 and database 29 (Jest); the golden baseline is untouched |
 
@@ -99,12 +99,16 @@ Derived from the code, then checked against the documentation:
 | F4.11 | Phone layout (390 px) without sideways scrolling | All | — | UX-10, UX-11 (18 pages), UX-12, legacy:platform-operator, legacy:revenue-impact | UX-13 very long unicode names |
 | F4.12 | Pending wellbeing-pulse banner (Answer now / Not today) | Members who have not answered | Others | legacy:pulse-reminders | legacy:pulse-reminders ("Not today") |
 | F4.13 | Notifications bell (unread count, latest, mark read, acknowledge) | All | — | legacy:alerts-actions "…bell…" | legacy:alerts-actions (engineer cannot acknowledge) |
+| F4.14 | Top bar: QE Navigator shield and name, company badge, name with job title (role label when empty) | All | — | HDR-01 (each role), HDR-04 (job title) | HDR-04 (only super admins set job titles) |
+| F4.15 | "What you can do here": roles, scope and limits from the access policy; Escape / outside click close it | All | — | HDR-02 (viewer), HDR-03 (super admin) | HDR-02 ("You cannot …" list) |
+| F4.16 | Phone top bar: company initials, account menu (name, title, sign out) | All | — | HDR-05 | — |
+| F4.17 | TV mode entry in the navigation for every role | All | — | HDR-06, NAV-01 | — |
 
 ## 5. Overview (dashboard)
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
-| F5.1 | Company status, KPI tiles, team grid | All | — | DASH-01 (each role), legacy:*-rbac | DASH-08 summary unavailable (teams still shown), DASH-09 team list 500 with request id (FI-07, fixed), DASH-10 offline, RES-05 summary never answers |
+| F5.1 | Company status (super admins) or "Your team(s)" (everyone else), KPI tiles, team grid of the analytics scope only | All | Teams outside the scope | DASH-01 (each role), legacy:*-rbac (cards = scope teams) | DASH-08 summary unavailable (teams still shown), DASH-09 team list 500 with request id (FI-07, fixed), DASH-10 offline, RES-05 summary never answers |
 | F5.2 | QA score "based on n of m" | All | — | legacy:metrics-quality | — |
 | F5.3 | Filters All / High performing / Needs attention | All | — | DASH-02 | DASH-02 (empty filter) |
 | F5.4 | Search, department filter, sort and direction | All | — | DASH-03, DASH-04 | DASH-03 no match, markup typed in |
@@ -116,19 +120,22 @@ Derived from the code, then checked against the documentation:
 | F5.10 | Saved views on the dashboard | All | — | legacy:compare-views-onboarding "Saved view round trip" | VIEW-02, VIEW-04 |
 | F5.11 | "Includes sample data" banner | All | — | DASH-11 | DASH-11 (no banner without sample data) |
 | F5.12 | Data older than a day: the latest snapshot with "Last updated <date>" (overview, team detail, TV) | All | — | LATEST-01 | — |
+| F5.13 | Targets next to every status on cards, hero and gauges; battery colour by value (one scale) | All | — | TDH-05 | — |
 
 ## 6. Team detail and TV mode
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
-| F6.1 | Team detail: KPI sections, sources, stale markers | All (any team) | — | TEAM-01 (each role), legacy:team-lead-rbac, legacy:viewer-rbac | TEAM-04 failing detail requests |
+| F6.1 | Team detail: KPI sections, sources, stale markers | Teams in scope | Other teams (no card; API 403) | TEAM-01 (each role), legacy:team-lead-rbac, legacy:viewer-rbac | TEAM-01 (other team refused), legacy:qa-engineer-rbac (API 403), TEAM-04 failing detail requests |
+| F6.1a | QA score card: horizontal 3D battery with liquid (still with reduced motion), target, 30-day change, 30 / 90 day trend, rank, weakest input, people, Scrum Master / Product Owner | Teams in scope | — | TDH-01, TDH-02, TDH-07 (phone) | TDH-04 (reduced motion) |
+| F6.1b | Every headline KPI shows status and target ("Watch: 70–80% · Target ≥ 80%") | Teams in scope | — | TDH-03 | — |
 | F6.2 | Team members (names, e-mails) | Teams in scope | Others | TEAM-01, legacy:qa-engineer-rbac | TEAM-01 (other team: no members), legacy:qa-engineer-rbac "does NOT see Team Members…" |
 | F6.3 | Team AI recommendations / developer recommendations | A, M (dept), L (own) | E V | legacy:team-lead-rbac "Team Detail (own team)" | legacy:qa-engineer-rbac, legacy:viewer-rbac "cannot see AI insights" |
 | F6.4 | Formula mode ("Show formulas & data sources") and metric explanation | A | M L E V | TEAM-02 | TEAM-02 (manager has no switch) |
-| F6.5 | Open TV mode from the team, Exit back | Teams in scope | — | TV-01 | — |
+| F6.5 | Open TV mode from the team, Exit back | All teams of the company | — | TV-01 | — |
 | F6.6 | E-mail TV link (mailto) and Copy link | Teams in scope | — | TEAM-03 | — |
 | F6.7 | TV keys (1–3, arrows, T, R, Esc) and kiosk options (`theme`, `rotate`) | Teams in scope | — | TV-02, TV-03 | — |
-| F6.8 | TV for a team outside the scope ("Show my team") | — | Out of scope | — | TV-04 |
+| F6.8 | TV mode for any team of the company (team picker lists all teams); unknown or other company's team refused | All | Another company | TV-04 | TV-04 (unknown team) |
 | F6.9 | TV link opened signed out → sign in → TV | Teams in scope | — | TV-05 | — |
 | F6.10 | TV errors and lost connection (keeps last data) | — | — | — | TV-06 server error, TV-07 refresh fails |
 | F6.11 | TV without a team (own team or "no team") | All | — | TV-08 | TV-08 |
@@ -149,6 +156,7 @@ Derived from the code, then checked against the documentation:
 | F7.8 | Developer insights opt-in (Users toggle) | A, M, L (people they manage) | E V; others' people | DEV-02 | DEV-03 API refuses a lead for a person not on their team |
 | F7.9 | Business impact: money summary, what-if, details, "All teams" roll-up | All; roll-up A M | roll-up: L E V | BIZ-01 (each role), legacy:revenue-impact | BIZ-02 empty / huge / negative what-if, legacy:revenue-impact (roll-up API refuses E) |
 | F7.10 | Compare teams (2–4 teams, window, only differences, CSV) | All (scope) | — | CMP-01, legacy:compare-views-onboarding | CMP-02 bad / too many ids and bad window, CMP-03 team outside scope, CMP-04 500, legacy:compare-views-onboarding (engineer scope) |
+| F7.10a | Compare: status and target under every value ("Watch: 70–80% · Target ≥ 80%") | All (scope) | — | TDH-06 | — |
 | F7.11 | Saved views (create, apply, update, delete) on dashboard, modules and compare | All | — | VIEW-03, legacy round trip | VIEW-02 empty name, markup, double click; VIEW-04 failed save |
 | F7.12 | Share a saved view with the company / stop sharing | A | M L E V | VIEW-01 | VIEW-01 (manager: read-only, no share) |
 
