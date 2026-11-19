@@ -262,6 +262,8 @@ describe('Role matrix (regression)', () => {
     }
     await check('reset-password engineerB', 'lead', await post(`/api/admin/users/${id.engineerB}/reset-password`, c.lead, { newPassword: NEW_PW }), 403);
     await check('reset-password engineerB', 'manager', await post(`/api/admin/users/${id.engineerB}/reset-password`, c.manager, { newPassword: NEW_PW }), 403);
+    // A password reset ends the person's sessions (server/lib/sessions.ts): the engineer signs in again.
+    c.engineer = (await login(`matrix-engineer-${stamp}@irongate.test`, NEW_PW)).cookie;
     // A manager cannot manage another manager or a super admin.
     await check('developer-insights manager->self', 'manager', await patch(`/api/admin/users/${id.manager}/developer-insights-toggle`, c.manager, { enabled: false }), 403);
     // Creating users: a lead only on their own team; a manager only in their department.

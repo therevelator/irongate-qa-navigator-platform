@@ -1,6 +1,7 @@
 import type pg from 'pg';
 import { query, queryOne, toPgPlaceholders } from '../../src/lib/db';
 import { ROLE_RANK, ROLE_SCOPE, type Grant, type Role, type ScopeType } from './userPolicy';
+import { lifetimeSettingSql } from './sessions';
 
 /**
  * Role assignments (table role_assignments): the ONE module that reads and writes them.
@@ -116,12 +117,16 @@ export interface AccessContext {
   primary_team_id: string | null;
   is_active: boolean;
   grants: Grant[];
+  /** Session limits (server/lib/sessions.ts). */
+  sessions_valid_after: string | Date | null;
+  session_lifetime: string | null;
 }
 
 /** The caller's live row and active grants (auth middleware, every request). */
 export async function loadAccessContext(userId: string): Promise<AccessContext | null> {
   const row = await queryOne<any>(
     `SELECT u.id, u.role, u.company_id, u.department_id, u.primary_team_id, u.is_active,
+            u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime,
             COALESCE((
               SELECT json_agg(json_build_object('role', ra.role, 'scopeType', ra.scope_type, 'scopeId', ra.scope_id) ORDER BY ra.created_at)
                 FROM role_assignments ra

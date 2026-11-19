@@ -82,6 +82,8 @@ describe('Change history and undo', () => {
     expectOk(await post(`/api/admin/users/${id.viewer}/toggle-status`, c.admin), 'deactivate');
     expectOk(await post(`/api/admin/users/${id.viewer}/toggle-status`, c.admin), 'activate');
     expectOk(await post(`/api/admin/users/${id.eng}/reset-password`, c.admin, { newPassword: NEW_PW }), 'password');
+    // A password reset ends the person's sessions (server/lib/sessions.ts): they sign in again.
+    c.eng = (await login(`audit-eng-${stamp}@irongate.test`, NEW_PW)).cookie;
     expectOk(await patch(`/api/admin/users/${id.eng}/developer-insights-toggle`, c.admin, { enabled: true }), 'insights');
     expectOk(await put(`/api/admin/teams/${T.X2}`, c.admin, { name: `Audit X2 ${stamp}`, description: 'changed' }), 'team.update');
     expectOk(await post(`/api/admin/teams/${T.X2}/toggle-status`, c.admin), 'team.deactivate');

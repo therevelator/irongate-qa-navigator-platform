@@ -6,6 +6,7 @@ import { recordAudit } from './audit';
 import { sendMail, escapeHtml, type MailResult } from './mailer';
 import { appBaseUrl } from './sso';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
+import { endUserSessions } from './sessions';
 
 /**
  * Reset a forgotten password by e-mail (table password_resets).
@@ -22,8 +23,8 @@ import { passwordProblem } from '../../src/lib/passwordPolicy';
  * RESET_TTL_MINUTES, works once, and a newer link (or a completed reset) closes the person's other
  * open links. Tokens never go into the change history, the user activity log or a server log.
  *
- * Sessions: a session is a signed cookie (JWT, 7 days) with no server-side revocation, so a reset
- * does not sign out other browsers. The new password only stops new sign-ins with the old one.
+ * Sessions: a completed reset ends every existing session of the person (users.sessions_valid_after,
+ * server/lib/sessions.ts), so a browser signed in with the old password is signed out.
  */
 
 export const RESET_TTL_MINUTES = 60;
@@ -171,6 +172,8 @@ export async function completePasswordReset(token: unknown, password: unknown, o
     const hash = await bcrypt.hash(password, 10);
     await exec('UPDATE users SET password_hash = ?, failed_login_attempts = 0, locked_until = NULL, updated_at = now() WHERE id = ?', [hash, row.id]);
     await exec('UPDATE password_resets SET used_at = now() WHERE id = ?', [row.reset_id]);
+    // Every existing session of the person ends (and their platform support sessions).
+    await endUserSessions(row.id, exec);
     await exec('UPDATE password_resets SET revoked_at = now() WHERE user_id = ? AND id <> ? AND used_at IS NULL AND revoked_at IS NULL', [row.id, row.reset_id]);
     await recordAudit({
       companyId: row.company_id, actorId: row.id, action: 'user.password_reset_email', entityType: 'user', entityId: row.id,

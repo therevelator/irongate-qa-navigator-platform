@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import { query, queryOne, transaction } from '../../src/lib/db';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, JWT_SECRET } from '../middleware/auth';
 import { policyActor } from '../middleware/access';
 import { generateApiKey } from '../middleware/apiKey';
 import { randomUUID } from 'crypto';
@@ -18,6 +18,10 @@ import {
 import { recordAudit, auditedUserChange } from '../lib/audit';
 import orgAdminRoutes from './orgAdmin';
 import { loadResetTarget, sendResetLinkByAdmin, RESET_TTL_MINUTES } from '../lib/passwordReset';
+import {
+  endUserSessions, issueSessionCookie, isAllowedLifetime, lifetimeHours, lifetimeLabel,
+  DEFAULT_SESSION_HOURS, SESSION_LIFETIME_CHOICES, SESSION_LIFETIME_KEY,
+} from '../lib/sessions';
 import { resolveConfigs, isSecretConfigKey } from '../lib/configResolver';
 import { planTeamDepartmentMove, applyTeamDepartmentMove } from '../lib/teamDepartment';
 import {
@@ -387,6 +391,9 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
     }
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [passwordHash, target.id, companyId]);
+    // Existing sessions of that person end. Changing your own password keeps this browser signed in.
+    await endUserSessions(target.id);
+    if (target.id === req.user.id) await issueSessionCookie(res, req.user.id, JWT_SECRET);
     await recordAudit({
       companyId, actorId: req.user.id, action: 'user.password_reset', entityType: 'user', entityId: target.id,
       summary: target.id === req.user.id ? 'Changed own password' : `Reset the password of ${fullName(target)}`,
@@ -396,6 +403,89 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
   } catch (error) {
     console.error('Error resetting password:', error);
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Sign a user out everywhere: every session of that person ends (same permission as resetting
+// their password). For yourself it is "sign out my other devices": this browser stays signed in.
+router.post('/users/:id/sign-out-everywhere', authenticateToken, async (req: any, res) => {
+  try {
+    const { companyId } = req.user;
+    const target = await loadTarget(req.params.id, companyId);
+    if (!target) return res.status(404).json({ error: 'User not found' });
+    if (!canResetPassword(actorOf(req), target)) {
+      return res.status(403).json({ error: 'You cannot sign out this user' });
+    }
+    const self = target.id === req.user.id;
+    await transaction(async (client) => {
+      const exec = execOn(client);
+      await endUserSessions(target.id, exec);
+      await recordAudit({
+        companyId, actorId: req.user.id, action: 'user.sessions_end', entityType: 'user', entityId: target.id,
+        summary: self ? `${fullName(target)} signed out of all other devices` : `Signed ${fullName(target)} out everywhere`,
+        departmentIds: [target.department_id, ...(target.department_ids ?? [])], subjectIds: [target.id],
+      }, exec);
+    });
+    if (self) await issueSessionCookie(res, req.user.id, JWT_SECRET);
+    res.json({ message: self ? 'You were signed out on all other devices.' : `${fullName(target)} was signed out on every device.` });
+  } catch (error) {
+    console.error('Error signing a user out:', (error as any)?.code ?? (error as Error)?.name ?? 'error');
+    res.status(500).json({ error: 'Failed to sign the user out' });
+  }
+});
+
+// "Sign-in lasts" (company setting, super admins only): GET the current value and the choices,
+// PUT { lifetimeHours } with one of the choices. Applies at once to existing sessions
+// (server/lib/sessions.ts); the generic configs endpoint refuses this key.
+router.get('/session-settings', authenticateToken, async (req: any, res) => {
+  try {
+    if (!isCompanyAdmin(actorOf(req))) return res.status(403).json({ error: 'Only a super admin can change how long sign-ins last' });
+    const row = await queryOne<any>(
+      `SELECT config_value, updated_at FROM configs WHERE company_id = ? AND config_key = ? AND department_id IS NULL AND team_id IS NULL`,
+      [req.user.companyId, SESSION_LIFETIME_KEY]
+    );
+    res.json({ lifetimeHours: lifetimeHours(row?.config_value), choices: SESSION_LIFETIME_CHOICES, defaultHours: DEFAULT_SESSION_HOURS, updatedAt: row?.updated_at ?? null });
+  } catch (error) {
+    console.error('Error reading session settings:', (error as any)?.code ?? 'error');
+    res.status(500).json({ error: 'Failed to read the sign-in settings' });
+  }
+});
+
+router.put('/session-settings', authenticateToken, async (req: any, res) => {
+  try {
+    if (!isCompanyAdmin(actorOf(req))) return res.status(403).json({ error: 'Only a super admin can change how long sign-ins last' });
+    const next = req.body?.lifetimeHours;
+    if (!isAllowedLifetime(next)) {
+      return res.status(400).json({ error: `lifetimeHours must be one of ${SESSION_LIFETIME_CHOICES.join(', ')}` });
+    }
+    const { companyId } = req.user;
+    const before = await transaction(async (client) => {
+      const exec = execOn(client);
+      const [prev] = await exec<any>(
+        `SELECT config_value FROM configs WHERE company_id = ? AND config_key = ? AND department_id IS NULL AND team_id IS NULL FOR UPDATE`,
+        [companyId, SESSION_LIFETIME_KEY]
+      );
+      const from = lifetimeHours(prev?.config_value);
+      if (prev) {
+        await exec(`UPDATE configs SET config_value = ?, updated_at = NOW() WHERE company_id = ? AND config_key = ? AND department_id IS NULL AND team_id IS NULL`,
+          [String(next), companyId, SESSION_LIFETIME_KEY]);
+      } else {
+        await exec(`INSERT INTO configs (id, company_id, department_id, team_id, config_key, config_value) VALUES (gen_random_uuid(), ?, NULL, NULL, ?, ?)`,
+          [companyId, SESSION_LIFETIME_KEY, String(next)]);
+      }
+      if (from !== next) {
+        await recordAudit({
+          companyId, actorId: req.user.id, action: 'config.session_lifetime', entityType: 'config', entityId: SESSION_LIFETIME_KEY,
+          summary: `Sign-in lasts: ${lifetimeLabel(from)} → ${lifetimeLabel(next)}`, before: { lifetimeHours: from }, after: { lifetimeHours: next },
+          departmentIds: [], subjectIds: [companyId],
+        }, exec);
+      }
+      return from;
+    });
+    res.json({ lifetimeHours: next, previousHours: before, choices: SESSION_LIFETIME_CHOICES, defaultHours: DEFAULT_SESSION_HOURS });
+  } catch (error) {
+    console.error('Error saving session settings:', (error as any)?.code ?? 'error');
+    res.status(500).json({ error: 'Failed to save the sign-in settings' });
   }
 });
 
@@ -1111,6 +1201,11 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Only a super admin can apply settings to every department' });
     }
     const changes: Record<string, { from: string | null; to: string | null }> = {};
+
+    // The sign-in lifetime has its own endpoint (super admins only, allowed values only).
+    if (Object.prototype.hasOwnProperty.call(configs, SESSION_LIFETIME_KEY)) {
+      return res.status(400).json({ error: 'Change how long sign-ins last under Parameters → Sign-in (super admins only).' });
+    }
 
     // Upsert each config key. The secret mask means "unchanged" and is never stored.
     for (const [key, value] of Object.entries(configs)) {

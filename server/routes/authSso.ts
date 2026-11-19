@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
 import { inviteLimiter } from '../middleware/rateLimit';
+import { issueSessionCookie } from '../lib/sessions';
 import { recordAudit } from '../lib/audit';
 import {
   providerConfig, enabledProviders, beginSignIn, checkState, completeSignIn, appBaseUrl, SsoError, PROVIDER_LABEL, type ProviderId,
@@ -30,15 +31,10 @@ const router = express.Router();
 const isProduction = () => process.env.NODE_ENV === 'production';
 
 /** The session cookie (same for password, invitation and SSO sign-in). */
-export function setSessionCookie(res: express.Response, userId: string): void {
+/** Lifetime (JWT exp and cookie max age) = the company's "Sign-in lasts" setting (server/lib/sessions.ts). */
+export async function setSessionCookie(res: express.Response, userId: string): Promise<void> {
   noteSignIn(res, userId); // user activity log: a sign-in (password, invitation, SSO)
-  const token = jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' });
-  res.cookie('irongate_token', token, {
-    httpOnly: true,
-    secure: isProduction(),
-    sameSite: isProduction() ? 'strict' : 'lax',
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
+  await issueSessionCookie(res, userId, JWT_SECRET);
 }
 
 /** DEMO_MODE: demo account chips on the login page. Default on for local development only. */
@@ -158,7 +154,7 @@ router.get('/sso/:provider/callback', inviteLimiter, async (req: any, res) => {
       user = { id: created.userId };
     }
     await query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
-    setSessionCookie(res, user.id);
+    await setSessionCookie(res, user.id);
     res.redirect(302, `${appBaseUrl()}/`);
   } catch (e: any) {
     if (e instanceof SsoError || e instanceof InvitationError) {
@@ -204,7 +200,7 @@ router.post('/invitations/accept', inviteLimiter, async (req, res) => {
       return res.status(400).json({ error: 'token, firstName, lastName and password are required' });
     }
     const { userId } = await acceptInvitation({ token, firstName, lastName, password });
-    setSessionCookie(res, userId);
+    await setSessionCookie(res, userId);
     const user = await queryOne<any>(
       `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id, is_active, email_verified, created_at
          FROM users WHERE id = ?`,

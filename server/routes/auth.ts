@@ -12,6 +12,10 @@ import { noteActivityUser, noteFailedSignIn } from '../lib/userActivity';
 import { requestPasswordReset, completePasswordReset, PasswordResetError } from '../lib/passwordReset';
 import { clientIp } from '../lib/requestContext';
 import { recordServerError } from '../lib/opsLog';
+import {
+  clearSessionCookie, endUserSessions, issueSessionCookie, lifetimeHours, lifetimeSettingSql, refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE,
+} from '../lib/sessions';
+import { authenticateToken, type AuthRequest } from '../middleware/auth';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -157,7 +161,7 @@ router.post('/register', authLimiter, async (req, res) => {
       data: user
     });
 
-    setSessionCookie(res, user.id);
+    await setSessionCookie(res, user.id);
     user.assignments = await assignmentsOf(user);
 
     res.status(201).json({ user });
@@ -214,7 +218,7 @@ router.post('/login', authLimiter, async (req, res) => {
     );
     user.assignedTeams = teams.map(t => t.team_id);
 
-    setSessionCookie(res, user.id);
+    await setSessionCookie(res, user.id);
     user.assignments = await assignmentsOf(user);
 
     res.json({ user });
@@ -260,13 +264,32 @@ router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
   }
 });
 
+// "Sign out my other devices": every other session of the caller ends; this browser gets a new
+// session cookie (issued after the cut-off, so it stays valid). Platform support sessions end too.
+router.post('/sessions/sign-out-others', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const me = req.user!;
+    await transaction(async (client) => {
+      const exec = execOn(client);
+      await endUserSessions(me.id, exec);
+      const [u] = await exec<any>(`SELECT first_name, last_name, email, department_id FROM users WHERE id = ?`, [me.id]);
+      await recordAudit({
+        companyId: me.companyId, actorId: me.id, action: 'user.sessions_end', entityType: 'user', entityId: me.id,
+        summary: `${`${u?.first_name ?? ''} ${u?.last_name ?? ''}`.trim() || u?.email} signed out of all other devices`,
+        departmentIds: [u?.department_id], subjectIds: [me.id],
+      }, exec);
+    });
+    await issueSessionCookie(res, me.id, JWT_SECRET);
+    res.json({ message: 'You were signed out on all other devices. This device stays signed in.' });
+  } catch (error) {
+    console.error('Sign out other devices error:', (error as any)?.code ?? (error as Error)?.name ?? 'error');
+    res.status(500).json({ error: 'Could not sign out the other devices. Try again.' });
+  }
+});
+
 // Logout
 router.post('/logout', (req, res) => {
-  res.clearCookie('irongate_token', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: process.env.NODE_ENV === 'production' ? 'strict' : 'lax'
-  });
+  clearSessionCookie(res);
   res.json({ message: 'Logged out successfully' });
 });
 
@@ -288,10 +311,11 @@ router.get('/me', async (req, res) => {
     const decoded = jwt.verify(token, JWT_SECRET) as any;
 
     const user = await queryOne<any>(
-      `SELECT id, email, first_name, last_name, role, 
-              company_id, department_id, primary_team_id, avatar_url,
-              created_at, last_login, is_active, email_verified
-       FROM users WHERE id = ?`,
+      `SELECT u.id, u.email, u.first_name, u.last_name, u.role,
+              u.company_id, u.department_id, u.primary_team_id, u.avatar_url,
+              u.created_at, u.last_login, u.is_active, u.email_verified,
+              u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime
+       FROM users u WHERE u.id = ?`,
       [decoded.userId]
     );
 
@@ -305,6 +329,13 @@ router.get('/me', async (req, res) => {
       });
     }
 
+    // Signed out everywhere, or older than the company's sign-in lifetime.
+    const problem = sessionProblem(decoded, user);
+    if (problem) return refuseSession(res, problem);
+    const sessionHours = lifetimeHours(user.session_lifetime);
+    delete user.sessions_valid_after;
+    delete user.session_lifetime;
+
     // Get assigned teams
     const teams = await query<any[]>(
       "SELECT scope_id AS team_id FROM role_assignments WHERE user_id = ? AND scope_type = 'team' AND revoked_at IS NULL",
@@ -313,10 +344,11 @@ router.get('/me', async (req, res) => {
     user.assignedTeams = teams.map(t => t.team_id);
     user.assignments = await assignmentsOf(user);
 
-    res.json({ user });
+    res.json({ user, session: { issuedAt: new Date(decoded.iat * 1000).toISOString(), lifetimeHours: sessionHours } });
   } catch (error) {
     // Don't log "jwt malformed" or "jwt expired" as errors, just return 401
-    if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+    if (error instanceof jwt.TokenExpiredError) return refuseSession(res, { code: 'session_expired', message: SESSION_EXPIRED_MESSAGE });
+    if (error instanceof jwt.JsonWebTokenError) {
       return res.status(401).json({ error: 'Invalid token' });
     }
     console.error('Get user error:', error);

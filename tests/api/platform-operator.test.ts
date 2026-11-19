@@ -335,8 +335,21 @@ describe('Platform operator', () => {
     await db.query(`UPDATE users SET failed_login_attempts = 4, locked_until = now() + interval '1 hour' WHERE id = $1`, [u.body.id]);
     expect((await post(`${base}/users/${u.body.id}/clear-lockout`, { reason: 'Locked out', confirm: true })).status).toBe(200);
     expect((await db.query('SELECT failed_login_attempts, locked_until FROM users WHERE id = $1', [u.body.id])).rows[0]).toEqual({ failed_login_attempts: 0, locked_until: null });
+    // Sign out everywhere: the user's sessions (issued before now) and platform support sessions end.
+    const oldSession = jwt.sign({ userId: u.body.id, iat: Math.floor(Date.now() / 1000) - 5 }, JWT_SECRET, { expiresIn: 3600 });
+    expect((await request(app).get('/api/auth/me').set('Cookie', `irongate_token=${oldSession}`)).status).toBe(200);
+    const opSid = `op-sid-${stamp}`;
+    await db.query(`INSERT INTO platform_operator_sessions (id, user_id, expires_at, ip) VALUES ($1, $2, now() + interval '30 minutes', '127.0.0.1')`, [opSid, u.body.id]);
+    expect((await post(`${base}/users/${u.body.id}/sign-out-everywhere`, { reason: 'Lost laptop', confirm: true })).status).toBe(200);
+    const ended = await request(app).get('/api/auth/me').set('Cookie', `irongate_token=${oldSession}`);
+    expect(ended.status).toBe(401);
+    expect(ended.body.code).toBe('session_ended');
+    expect((await db.query('SELECT ended_at FROM platform_operator_sessions WHERE id = $1', [opSid])).rows[0].ended_at).not.toBeNull();
+    const signOutAudit = await db.query(`SELECT summary FROM audit_log WHERE company_id = $1 AND action = 'platform_support.action' AND summary LIKE '%out everywhere%'`, [companyId]);
+    expect(signOutAudit.rows[0].summary).toMatch(/^Platform support: Signed Tar Get out everywhere\. Reason: Lost laptop/);
     // Another company's user through this company: 404.
     expect((await post(`${base}/users/${opUserId}/deactivate`, { reason: 'wrong company', confirm: true })).status).toBe(404);
+    expect((await post(`${base}/users/${opUserId}/sign-out-everywhere`, { reason: 'wrong company', confirm: true })).status).toBe(404);
 
     runRefreshDates.mockResolvedValueOnce({ today: '2026-11-19', demoCompany: { refreshed: true, insertedTotal: 3 }, companies: [{ id: companyId, teams: 1, teamsFilled: 1 }], insertedTotal: 3 });
     const dr = await post('/actions/demo-refresh', { reason: 'Demo data is a day behind', confirm: true });
@@ -346,7 +359,7 @@ describe('Platform operator', () => {
     expect(job.rows[0].ok).toBe(true);
 
     const actions = await db.query(`SELECT summary FROM audit_log WHERE company_id = $1 AND action = 'platform_support.action' ORDER BY created_at`, [companyId]);
-    expect(actions.rows.length - actionsBefore).toBe(7); // evaluate, recompute, resend, deactivate, reactivate, clear lockout, demo refresh
+    expect(actions.rows.length - actionsBefore).toBe(8); // evaluate, recompute, resend, deactivate, reactivate, clear lockout, sign out everywhere, demo refresh
     expect(actions.rows.map((r: any) => r.summary).join('\n')).toMatch(/Reason: Customer asked again/);
     const plat = await db.query(`SELECT 1 FROM platform_access_log WHERE action = 'action' AND company_id IS NULL AND section = 'demo_refresh'`);
     expect(plat.rows.length).toBeGreaterThanOrEqual(1);

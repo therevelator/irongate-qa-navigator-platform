@@ -134,7 +134,7 @@ export const REVERSIBLE_ACTIONS: Record<string, 'users' | 'team_move' | 'departm
 };
 
 /** Newer entries of these actions never block an undo (they do not change the undone state). */
-const NON_CONFLICTING = ['user.password_reset', 'user.password_reset_request', 'user.password_reset_email', 'user.developer_insights', 'invitation.create', 'invitation.resend', 'invitation.revoke', 'sso.link', 'user.login'];
+const NON_CONFLICTING = ['user.password_reset', 'user.password_reset_request', 'user.password_reset_email', 'user.sessions_end', 'config.session_lifetime', 'user.developer_insights', 'invitation.create', 'invitation.resend', 'invitation.revoke', 'sso.link', 'user.login'];
 
 export interface AuditEntry {
   id: string; company_id: string; actor_id: string | null; action: string; entity_type: string; entity_id: string | null;

@@ -24,6 +24,7 @@ import { onboardingStatus } from '../lib/onboarding';
 import { reissueInvitation, sendInvitationEmail, statusSql } from '../lib/invitations';
 import { JOB_NAMES, withJobRun } from '../lib/opsLog';
 import { mailChannel } from '../lib/mailer';
+import { endUserSessions, sessionProblem, sessionRowOf } from '../lib/sessions';
 import { filtersFromQuery, listUserActivity, userActivityFacets } from '../lib/userActivityQuery';
 
 /**
@@ -42,7 +43,7 @@ import { filtersFromQuery, listUserActivity, userActivityFacets } from '../lib/u
  *   POST /api/operator/companies/:companyId/actions/recompute-snapshots       { reason, teamId?, from? }
  *   POST /api/operator/companies/:companyId/actions/evaluate-alerts           { reason }
  *   POST /api/operator/companies/:companyId/invitations/:id/resend            { reason }
- *   POST /api/operator/companies/:companyId/users/:userId/deactivate|reactivate|clear-lockout { reason }
+ *   POST /api/operator/companies/:companyId/users/:userId/deactivate|reactivate|clear-lockout|sign-out-everywhere { reason }
  *
  * Every route needs the session (authenticateToken) AND an allowlisted email (re-checked each
  * request); every route except status and the step-up also needs the operator token.
@@ -68,8 +69,9 @@ router.get('/status', async (req: OperatorRequest, res) => {
     if (!token) return res.json({ operator: false });
     let decoded: any;
     try { decoded = jwt.verify(token, JWT_SECRET); } catch { return res.json({ operator: false }); }
-    const u = typeof decoded?.userId === 'string' ? await queryOne<any>('SELECT email, is_active FROM users WHERE id = ?', [decoded.userId]) : null;
-    res.json({ operator: !!u?.is_active && isOperatorEmail(u.email) && ipAllowed(clientIp(req)) });
+    const u = typeof decoded?.userId === 'string' ? await sessionRowOf(decoded.userId) : null;
+    // An ended or expired session is not an operator either (the same check as every other route).
+    res.json({ operator: !!u?.is_active && !sessionProblem(decoded, u) && isOperatorEmail(u.email) && ipAllowed(clientIp(req)) });
   } catch {
     res.json({ operator: false });
   }
@@ -686,6 +688,17 @@ router.post('/companies/:companyId/users/:userId/clear-lockout', ...op, action(a
   await recordCompanyAction(req, company.id, 'clear_lockout', `Cleared the sign-in lockout of ${u.name ?? u.email}`, reason,
     { userId: u.id, before: { failedAttempts: u.failed_login_attempts, lockedUntil: u.locked_until } });
   res.json({ userId: u.id, cleared: true });
+}));
+
+// Sign the user out everywhere (all sessions and platform support sessions end). Recorded in the
+// platform log and the company's Activity log, like the other repair actions.
+router.post('/companies/:companyId/users/:userId/sign-out-everywhere', ...op, action(async (req, res, company, reason) => {
+  const u = await loadCompanyUser(req, res, company.id);
+  if (!u) return;
+  if (u.id === req.user.id) return void res.status(403).json({ error: 'Use "Sign out my other devices" for your own account.' });
+  await endUserSessions(u.id);
+  await recordCompanyAction(req, company.id, 'sign_out_everywhere', `Signed ${u.name ?? u.email} out everywhere`, reason, { userId: u.id });
+  res.json({ userId: u.id, signedOut: true });
 }));
 
 export default router;

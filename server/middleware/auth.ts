@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { loadAccessContext } from '../lib/assignments';
+import { refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE } from '../lib/sessions';
 import type { Grant } from '../lib/userPolicy';
 
 // Resolve the signing secret once. In production a secret MUST be provided;
@@ -48,6 +49,8 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
   try {
     decoded = jwt.verify(token, JWT_SECRET);
   } catch (error: any) {
+    // An expired session is a normal end of the sign-in: the app shows the sign-in screen with a message.
+    if (error instanceof jwt.TokenExpiredError) return refuseSession(res, { code: 'session_expired', message: SESSION_EXPIRED_MESSAGE });
     return res.status(403).json({ error: 'Invalid or expired token' });
   }
 
@@ -64,6 +67,9 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
   if (!row.is_active) {
     return res.status(401).json({ error: 'Your account has been deactivated. Please contact your administrator.' });
   }
+  // Signed out everywhere, or older than the company's sign-in lifetime (server/lib/sessions.ts).
+  const problem = sessionProblem(decoded, row);
+  if (problem) return refuseSession(res, problem);
 
   req.user = {
     id: row.id,
