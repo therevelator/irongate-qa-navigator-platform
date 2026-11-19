@@ -4,9 +4,9 @@ import { createGolden, removeGolden, GOLDEN_ADMIN_EMAIL, GOLDEN_COMPANY } from '
 
 /**
  * GET /api/teams/:id and /api/teams/:id/kpi-history with the shared policy:
- *   - the team and its KPIs: company-visible (the dashboard lists every team);
- *   - member names, emails and roles: canViewTeamMembers (super_admin, the QA manager of the
- *     team's department, people assigned to the team); others get members [] + membersHidden;
+ *   - the team and its KPIs: the analytics scope (canViewTeamAnalytics), 403 outside it, like
+ *     the overview list (GET /api/teams lists only the teams in scope), TV mode and Compare;
+ *   - member names, emails and roles: canViewTeamMembers (the same scope);
  *   - KPI history: the analytics scope (canViewTeamAnalytics), 403 outside it;
  *   - another company: 404 / 403.
  * Also: GET /api/analytics/developer-metrics without teamId degrades to an empty list for a
@@ -63,18 +63,18 @@ describe('GET /api/teams/:id — members only for people allowed to see them', (
     expect(res.body.team.members.map((m: any) => m.email).sort()).toEqual(['small-1@golden.example', 'small-2@golden.example']);
   });
 
-  it('TRP-002: QA manager: members of the teams of their department only; KPIs of every team', async () => {
+  it('TRP-002: QA manager: the teams of their department (with members); another department\'s team 403', async () => {
     if (!up) return;
     const own = await team('golden-team-partial', 'manager');
+    expect(own.status).toBe(200);
     expect(own.body.team.members.length).toBeGreaterThan(0);
     const other = await team('golden-team-small', 'manager');
-    expect(other.status).toBe(200);
-    expect(other.body.team.qaScore).toBe(81);
-    expect(other.body.team.members).toEqual([]);
-    expect(other.body.team.membersHidden).toBe(true);
+    expect(other.status).toBe(403);
+    expect(JSON.stringify(other.body)).not.toContain('@golden.example');
+    expect(other.body.team).toBeUndefined();
   });
 
-  it('TRP-003: lead, engineer and viewer: members of their own team only', async () => {
+  it('TRP-003: lead, engineer and viewer: their own team (with members); any other team 403', async () => {
     if (!up) return;
     for (const who of ['lead', 'engineer', 'viewer']) {
       const own = await team('golden-team-partial', who);
@@ -82,10 +82,8 @@ describe('GET /api/teams/:id — members only for people allowed to see them', (
       expect(own.body.team.membersHidden).toBe(false);
       expect(own.body.team.members.some((m: any) => m.email === 'partial-1@golden.example')).toBe(true);
       const other = await team('golden-team-big', who);
-      expect(other.status).toBe(200);
-      expect(other.body.team.kpiData).toBeTruthy();
-      expect(other.body.team.members).toEqual([]);
-      expect(JSON.stringify(other.body)).not.toContain('@golden.example');
+      expect(other.status).toBe(403);
+      expect(other.body.team).toBeUndefined();
     }
   });
 

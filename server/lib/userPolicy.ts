@@ -298,6 +298,11 @@ export function canUseFormulaMode(actor: PolicyActor): boolean {
   return hasCompany(actor);
 }
 
+/** Setting a person's job title (users.job_title, shown in the top bar): company administrators. */
+export function canSetJobTitle(actor: PolicyActor): boolean {
+  return hasCompany(actor);
+}
+
 /** Loading or refreshing sample data (the demo seed): company administrators. */
 export function canManageSampleData(actor: PolicyActor): boolean {
   return hasCompany(actor);

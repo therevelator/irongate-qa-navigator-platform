@@ -7,7 +7,7 @@ import { policyActor } from '../middleware/access';
 import { generateApiKey } from '../middleware/apiKey';
 import { randomUUID } from 'crypto';
 import {
-  ROLE_HIERARCHY, TEAM_OPTIONAL_ROLES, canAssignRole, canManageUser, canEditUser, canEditAssignment,
+  ROLE_HIERARCHY, TEAM_OPTIONAL_ROLES, canAssignRole, canManageUser, canEditUser, canSetJobTitle, canEditAssignment,
   canResetPassword, canDeleteUser, canGrant, canCreateUsers, canManageTeam, canManageDepartment, canManageCompanyConfig,
   isCompanyAdmin, highestRole, managedDepartmentIds, ledTeamIds, holdsRole, type PolicyActor,
 } from '../lib/userPolicy';
@@ -44,14 +44,14 @@ const actorOf = (req: any): PolicyActor => policyActor(req);
 /** A user of the caller's company as a policy target (display columns + assigned departments / teams). */
 async function loadTarget(userId: string, companyId: string) {
   return queryOne<any>(
-    `SELECT u.id, u.role, u.email, u.first_name, u.last_name, u.department_id, u.primary_team_id, u.is_active,
+    `SELECT u.id, u.role, u.email, u.first_name, u.last_name, u.department_id, u.primary_team_id, u.is_active, u.job_title,
             ${userTeamIdsSql('u')} AS team_ids, ${userDepartmentIdsSql('u')} AS department_ids
        FROM users u WHERE u.id = ? AND u.company_id = ?`,
     [userId, companyId]
   );
 }
 
-const USER_LIST_COLUMNS = `u.id, u.email, u.first_name, u.last_name, u.role, u.company_id,
+const USER_LIST_COLUMNS = `u.id, u.email, u.first_name, u.last_name, u.job_title, u.role, u.company_id,
   u.department_id, u.primary_team_id, u.is_active, u.created_at, u.developer_insights_enabled,
   t.name as team_name, d.name as department_name,
   ${userTeamIdsSql('u')} AS team_ids,
@@ -227,6 +227,15 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
     if (!canEditUser(actor, target)) {
       return res.status(403).json({ error: 'You cannot edit this user' });
     }
+    // Job title (shown in the top bar and on Team detail): super admins only; '' clears it.
+    let jobTitle: string | null | undefined;
+    if (body.jobTitle !== undefined) {
+      if (!canSetJobTitle(actor)) return res.status(403).json({ error: 'Only super admins can set job titles' });
+      if (body.jobTitle !== null && typeof body.jobTitle !== 'string') return res.status(400).json({ error: 'Job title must be text' });
+      jobTitle = typeof body.jobTitle === 'string' && body.jobTitle.trim() ? body.jobTitle.trim() : null;
+      if (jobTitle && jobTitle.length > 120) return res.status(400).json({ error: 'Job title must be at most 120 characters' });
+    }
+    const jobTitleChanged = jobTitle !== undefined && jobTitle !== (target.job_title ?? null);
     let team: { id: string; department_id: string | null } | null = null;
     if (assignmentChanged) {
       if (!canEditAssignment(actor, target)) {
@@ -266,6 +275,7 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
             WHERE id = ? AND company_id = ?`,
           [firstName ?? null, lastName ?? null, email ?? null, target.id, companyId]
         );
+        if (jobTitleChanged) await exec('UPDATE users SET job_title = ? WHERE id = ? AND company_id = ?', [jobTitle, target.id, companyId]);
         if (assignmentChanged) {
           await setPrimaryAssignment(exec, {
             companyId, userId: target.id, actorId: actor.id,
@@ -273,7 +283,7 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
             to: { role, departmentId, teamId: primaryTeamId },
           });
         }
-        const parts = [assignmentChanged ? `role / team changed to ${role}` : null, (firstName || lastName || email) ? 'profile updated' : null].filter(Boolean);
+        const parts = [assignmentChanged ? `role / team changed to ${role}` : null, (firstName || lastName || email) ? 'profile updated' : null, jobTitleChanged ? `job title ${jobTitle ? `set to "${jobTitle}"` : 'cleared'}` : null].filter(Boolean);
         return { summary: `${fullName(target)}: ${parts.join(', ') || 'saved without changes'}`, result: null };
       },
     );
