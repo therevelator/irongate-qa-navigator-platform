@@ -36,6 +36,7 @@ import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
 import { ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin } from '../server/lib/userPolicy';
 import { policyActorOf } from './lib/policyActor';
+import { loadErrorMessage, NETWORK_ERROR } from './lib/loadError';
 
 // Map views to URL paths
 const VIEW_TO_PATH: Record<string, string> = {
@@ -80,6 +81,7 @@ function App() {
   const [teams, setTeams] = useState<Team[]>([]);
   const [gridColumns, setGridColumns] = useState<1 | 2 | 3>(1);
   const [userTeams, setUserTeams] = useState<any[]>([]);
+  const [teamsError, setTeamsError] = useState<string | null>(null);
   const analyticsScope = useAnalyticsScope();
   const [is3DMode, setIs3DMode] = useState(false);
 
@@ -211,9 +213,13 @@ function App() {
           const { teams: teamsData } = await teamsResponse.json();
           setTeams(teamsData);
           setUserTeams(teamsData);
+          setTeamsError(null);
+        } else {
+          setTeamsError(await loadErrorMessage(teamsResponse, 'the teams'));
         }
       } catch (error) {
         console.error('Error fetching teams:', error);
+        setTeamsError(NETWORK_ERROR('the teams'));
       }
     } catch (error) {
       console.error('Error fetching departments and teams:', error);
@@ -412,7 +418,7 @@ function App() {
         on3DModeChange={setIs3DMode}
         onOpenPulse={openPulse}
       >
-        <NewDashboard teams={filteredTeams} onTeamClick={setSelectedTeam} gridColumns={gridColumns} is3DMode={is3DMode} />
+        <NewDashboard teams={filteredTeams} teamsError={teamsError} onTeamClick={setSelectedTeam} gridColumns={gridColumns} is3DMode={is3DMode} />
       </Layout>
     </>
   );

@@ -25,6 +25,8 @@ import type { CsvColumn } from '../lib/csv';
 
 interface NewDashboardProps {
   teams: Team[];
+  /** Why the team list could not be loaded (shown instead of "No teams match"). */
+  teamsError?: string | null;
   onTeamClick?: (team: Team) => void;
   // Accepted for compatibility with App; the dashboard keeps its own grid/list and columns choice.
   gridColumns?: 1 | 2 | 3;
@@ -203,7 +205,7 @@ const GRID_CLASS: Record<Columns, string> = {
   3: 'grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3',
 };
 
-const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
+const NewDashboard: React.FC<NewDashboardProps> = ({ teams, teamsError, onTeamClick }) => {
   const { user } = useAuth();
   const [summary, setSummary] = useState<CompanySummary | null>(null);
   const [summaryState, setSummaryState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -478,7 +480,11 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, onTeamClick }) => {
             </div>
           </div>
 
-          {visible.length === 0 ? (
+          {teamsError ? (
+            <div role="alert" data-testid="load-error" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+              {teamsError}
+            </div>
+          ) : visible.length === 0 ? (
             <Card><EmptyState title="No teams match" description="Adjust the filters or search term." /></Card>
           ) : (
             <div className={view === 'grid' ? GRID_CLASS[columns] : 'flex flex-col gap-3'} data-columns={view === 'grid' ? columns : undefined}>
