@@ -68,11 +68,12 @@ const ACTION_LABEL: Record<string, string> = {
   'alert.acknowledge': 'Alert acknowledged', 'alert_rules.update': 'Alert rules', 'notification_settings.update': 'Slack notifications',
   'notification_prefs.update': 'Notification preferences', 'action.create': 'Action created', 'action.update': 'Action changed',
   'action.status': 'Action status', 'action.delete': 'Action deleted',
+  'platform_support.view': 'Platform support viewed', 'platform_support.action': 'Platform support action',
   undo: 'Undo',
 };
 const actionLabel = (a: string) => ACTION_LABEL[a] ?? a;
 const actionTone = (a: string): Tone =>
-  a === 'undo' ? 'warn' : /deactivate|revoke|remove/.test(a) ? 'bad' : /grant|assign|create|activate|accept/.test(a) ? 'good' : 'neutral';
+  a === 'undo' || a.startsWith('platform_support.') ? 'warn' : /deactivate|revoke|remove/.test(a) ? 'bad' : /grant|assign|create|activate|accept/.test(a) ? 'good' : 'neutral';
 
 const fmt = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 const grantText = (g: Grant) => `${ROLE_LABELS[g.role] ?? g.role} (${g.scopeType})`;
@@ -299,7 +300,7 @@ const ActivityLog: React.FC = () => {
                     </div>
                     <p className={cx('mt-1 text-sm text-slate-900 dark:text-slate-100', e.undone_at && 'line-through decoration-slate-400')}>{e.summary}</p>
                     <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-                      By {e.actor_name || e.actor_email || 'the system'}
+                      By {e.actor_name || e.actor_email || (e.action.startsWith('platform_support.') ? 'IronGate platform support' : 'the system')}
                       {e.undone_at ? ` · undone by ${e.undone_by_name ?? 'someone'} on ${fmt(e.undone_at)}` : ''}
                     </p>
                   </div>

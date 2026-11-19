@@ -2,16 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   LayoutDashboard, BarChart3, LogOut, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
-  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse,
+  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints, Globe,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { Toaster } from 'react-hot-toast';
 import {
-  ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canWriteSomeTeamData, isCompanyAdmin,
+  ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin,
   type PolicyActor,
 } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
+import { fetchOperatorStatus } from '../lib/operatorClient';
 import NotificationsBell from './NotificationsBell';
 import { NOTIFICATIONS_TAB_EVENT, NOTIFICATIONS_TAB_KEY } from './NotificationsCenter';
 
@@ -38,6 +39,8 @@ interface NavItem {
   roles?: Role[]; // undefined = everyone
   /** Shared policy rule (server/lib/userPolicy.ts), the same one the server and App.tsx use; wins over roles. */
   can?: (actor: PolicyActor) => boolean;
+  /** Shown only to a platform operator (GET /api/operator/status). */
+  operatorOnly?: boolean;
 }
 
 // Same list as the server (server/lib/userPolicy.ts): every role may open the team-level
@@ -79,6 +82,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
       { view: 'teams', label: 'Teams', icon: UsersRound, can: canOpenUserAdmin },
       { view: 'departments', label: 'Departments', icon: Building2, can: isCompanyAdmin },
       { view: 'activity', label: 'Activity', icon: History, can: canViewActivity },
+      { view: 'user-activity', label: 'User activity', icon: Footprints, can: canViewUserActivity },
     ],
   },
   {
@@ -89,6 +93,12 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
       { view: 'metric-intervals', label: 'Update frequency', icon: Clock, can: canManageCompanyConfig },
       { view: 'parameters-config', label: 'Parameters', icon: SlidersHorizontal, can: canManageCompanyConfig },
       { view: 'ingestion-log', label: 'Ingestion log', icon: Inbox, can: canViewIngestionLog },
+    ],
+  },
+  {
+    title: 'Platform',
+    items: [
+      { view: 'operator', label: 'Platform', icon: Globe, operatorOnly: true },
     ],
   },
 ];
@@ -112,6 +122,8 @@ const PAGE_META: Record<string, { title: string; parent?: string }> = {
   teams: { title: 'Teams', parent: 'Organisation' },
   departments: { title: 'Departments', parent: 'Organisation' },
   activity: { title: 'Activity', parent: 'Organisation' },
+  'user-activity': { title: 'User activity', parent: 'Organisation' },
+  operator: { title: 'Platform support', parent: 'Platform' },
   'admin-panel': { title: 'Admin console', parent: 'Administration' },
   'manual-metrics': { title: 'Manual metrics', parent: 'Administration' },
   'metric-intervals': { title: 'Expected update frequency', parent: 'Administration' },
@@ -228,7 +240,16 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
 
   const role = (user?.role || 'viewer') as Role;
   const actor = policyActorOf(user);
-  const canSee = (item: NavItem) => (item.can ? !!user && item.can(actor) : !item.roles || item.roles.includes(role));
+  const [operatorFor, setOperatorFor] = useState<string | null>(null);
+  useEffect(() => {
+    if (!user?.id) return;
+    let live = true;
+    const id = String(user.id);
+    fetchOperatorStatus().then((ok) => { if (live) setOperatorFor(ok ? id : null); });
+    return () => { live = false; };
+  }, [user?.id]);
+  const isOperator = !!user?.id && operatorFor === String(user.id);
+  const canSee = (item: NavItem) => (item.operatorOnly ? isOperator : item.can ? !!user && item.can(actor) : !item.roles || item.roles.includes(role));
 
   const go = (view: string) => {
     if (view === 'dashboard') onTabChange?.('all');

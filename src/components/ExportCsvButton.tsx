@@ -3,6 +3,7 @@ import { Download, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { csvFileName, toCsv, type CsvColumn } from '../lib/csv';
 import { buttonClass, cx } from './ui';
+import { trackExport } from '../lib/activityTracker';
 
 /**
  * "Export CSV" for a table or list view (src/lib/csv.ts: formula-injection safe, values as shown
@@ -63,6 +64,7 @@ export function ExportCsvButton<T>(props: Props<T>) {
       return;
     }
     saveCsv(fileName, toCsv(props.columns!, props.rows!));
+    trackExport(what); // user activity log (server-built CSVs are recorded by the server)
     toast.success(`Exported ${props.rows!.length} row${props.rows!.length === 1 ? '' : 's'}`);
   };
 

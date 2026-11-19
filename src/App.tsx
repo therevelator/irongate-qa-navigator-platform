@@ -19,6 +19,9 @@ import UsersView from './components/UsersView';
 import TeamsView from './components/TeamsView';
 import DepartmentsView from './components/DepartmentsView';
 import ActivityLog from './components/ActivityLog';
+import UserActivity from './components/UserActivity';
+import OperatorPanel from './components/operator/OperatorPanel';
+import { trackScreen } from './lib/activityTracker';
 import IngestionLog from './components/IngestionLog';
 import NotificationsCenter from './components/NotificationsCenter';
 import Layout from './components/Layout';
@@ -31,7 +34,7 @@ import CompareTeams from './components/CompareTeams';
 import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
-import { ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canWriteSomeTeamData, isCompanyAdmin } from '../server/lib/userPolicy';
+import { ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin } from '../server/lib/userPolicy';
 import { policyActorOf } from './lib/policyActor';
 
 // Map views to URL paths
@@ -41,6 +44,8 @@ const VIEW_TO_PATH: Record<string, string> = {
   'teams': '/teams',
   'departments': '/departments',
   'activity': '/activity',
+  'user-activity': '/user-activity',
+  'operator': '/operator',
   'ingestion-log': '/ingestion-log',
   'features': '/analytics',
   'admin-panel': '/admin-panel',
@@ -137,6 +142,12 @@ function App() {
       case 'activity':
         // Change history: super_admin (company) and QA managers (their departments), as GET /api/admin/audit.
         return canViewActivity(policyActorOf(user));
+      case 'user-activity':
+        // User activity log: super admins of the company only (GET /api/activity/log).
+        return canViewUserActivity(policyActorOf(user));
+      case 'operator':
+        // Platform operator panel: the server decides (PLATFORM_OPERATOR_EMAILS); the page says so otherwise.
+        return true;
       case 'ingestion-log':
         // Ingestion log: super_admin (company) and QA managers (their departments), as GET /api/ingestion-log.
         return canViewIngestionLog(policyActorOf(user));
@@ -168,6 +179,15 @@ function App() {
         return true;
     }
   };
+
+  // User activity log: one screen-view event per screen (and team) opened. The operator panel is
+  // not recorded there (its access goes to the platform log and the company's Activity log).
+  useEffect(() => {
+    if (!user?.id || isLoading || currentView === 'operator') return;
+    if (selectedTeam) trackScreen('team-detail', selectedTeam.id);
+    else trackScreen(currentView, VIEW_TO_PATH[currentView]?.startsWith('/analytics') ? analyticsScope.teamId : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- one event per screen / team change (the team object itself refreshes)
+  }, [user?.id, isLoading, currentView, selectedTeam?.id, analyticsScope.teamId]);
 
   // Fetch departments and teams based on user role
   useEffect(() => {
@@ -360,6 +380,8 @@ function App() {
 
   if (currentView === 'compare') return renderLayout(<CompareTeams />);
   if (currentView === 'activity') return renderLayout(<ActivityLog />);
+  if (currentView === 'user-activity') return renderLayout(<UserActivity />);
+  if (currentView === 'operator') return renderLayout(<OperatorPanel />);
   if (currentView === 'ingestion-log') return renderLayout(<IngestionLog />);
   if (currentView === 'notifications') return renderLayout(<NotificationsCenter />);
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
