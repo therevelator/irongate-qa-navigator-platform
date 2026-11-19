@@ -186,6 +186,10 @@ describe('Sign-in events and sessions', () => {
     expect(row).toEqual(expect.objectContaining({ last_sign_in_at: expect.any(String), last_sign_in_browser: expect.any(String), last_sign_in_ip: expect.any(String) }));
     const detail = await op('get', `/companies/${companyId}/users/${userId}`);
     expect(detail.status).toBe(200);
+    // The count is this person's own valid sessions (not the company's).
+    expect(row.active_sessions).toBe(detail.body.sessions.filter((s: any) => s.status === 'valid').length);
+    const other = users.body.users.find((u: any) => u.id !== userId && u.active_sessions !== undefined);
+    expect(other.active_sessions).toBeLessThan(row.active_sessions);
     const sa = detail.body.sessions.find((s: any) => s.id === jtiOf(a));
     expect(sa.status).toBe('valid');
     expect(detail.body.signIns.length).toBeGreaterThan(0);

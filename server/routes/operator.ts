@@ -201,12 +201,16 @@ const lifetimeHoursSql = (companyExpr: string) => `COALESCE((SELECT CASE WHEN cf
  * everywhere before it, user deactivated or company suspended), expired (token expiry or the
  * company's current lifetime), valid.
  */
-const sessionStatusSql = `CASE
-    WHEN s.revoked_at IS NOT NULL THEN 'revoked'
-    WHEN s.expires_at <= now() OR s.issued_at <= now() - make_interval(hours => ${lifetimeHoursSql('s.company_id')}) THEN 'expired'
-    WHEN NOT u.is_active OR c.status = 'suspended' OR (u.sessions_valid_after IS NOT NULL AND s.issued_at < date_trunc('second', u.sessions_valid_after)) THEN 'ended'
+const statusSqlOf = (s: string, u: string, c: string) => `CASE
+    WHEN ${s}.revoked_at IS NOT NULL THEN 'revoked'
+    WHEN ${s}.expires_at <= now() OR ${s}.issued_at <= now() - make_interval(hours => ${lifetimeHoursSql(`${s}.company_id`)}) THEN 'expired'
+    WHEN NOT ${u}.is_active OR ${c}.status = 'suspended' OR (${u}.sessions_valid_after IS NOT NULL AND ${s}.issued_at < date_trunc('second', ${u}.sessions_valid_after)) THEN 'ended'
     ELSE 'valid' END`;
-const SESSION_FROM = `FROM user_sessions s JOIN users u ON u.id = s.user_id JOIN companies c ON c.id = s.company_id`;
+const sessionFromOf = (s: string, u: string, c: string) => `FROM user_sessions ${s} JOIN users ${u} ON ${u}.id = ${s}.user_id JOIN companies ${c} ON ${c}.id = ${s}.company_id`;
+const sessionStatusSql = statusSqlOf('s', 'u', 'c');
+const SESSION_FROM = sessionFromOf('s', 'u', 'c');
+/** Count of valid sessions as a correlated subquery (own aliases, so it never shadows the outer query's). */
+const validSessionsSql = (where: string) => `(SELECT COUNT(*)::int ${sessionFromOf('vs', 'vu', 'vc')} WHERE ${where} AND ${statusSqlOf('vs', 'vu', 'vc')} = 'valid')`;
 const SESSION_COLUMNS = `s.id, s.user_id, s.method, s.issued_at, s.expires_at, s.persistent, s.last_seen_at, s.ip, s.country, s.city, s.last_ip, s.last_country,
   s.user_agent, s.browser, s.os, s.device, s.revoked_at, s.revoked_by, s.revoke_reason, ${sessionStatusSql} AS status`;
 
@@ -275,8 +279,7 @@ router.get('/overview', ...op, async (req: OperatorRequest, res) => {
               (SELECT COUNT(*)::int FROM server_errors e WHERE e.company_id = c.id AND e.created_at > now() - interval '24 hours') AS errors_24h,
               GREATEST((SELECT MAX(ua.created_at) FROM user_activity ua WHERE ua.company_id = c.id),
                        (SELECT MAX(u.last_login) FROM users u WHERE u.company_id = c.id)) AS last_activity_at,
-              (SELECT COUNT(*)::int ${SESSION_FROM.replace('JOIN companies c ON c.id = s.company_id', 'JOIN companies c2 ON c2.id = s.company_id')}
-                 WHERE s.company_id = c.id AND ${sessionStatusSql.replace(/c\.status/g, 'c2.status')} = 'valid') AS active_sessions,
+              ${validSessionsSql('vs.company_id = c.id')} AS active_sessions,
               (SELECT COUNT(*)::int FROM auth_events ae WHERE ae.company_id = c.id AND ae.outcome = 'success' AND ae.created_at > now() - interval '7 days') AS sign_ins_7d,
               (SELECT COUNT(*)::int FROM auth_events ae WHERE ae.company_id = c.id AND ae.outcome = 'failure' AND ae.created_at > now() - interval '7 days') AS failed_7d,
               (SELECT COALESCE(array_agg(DISTINCT ae.country ORDER BY ae.country), '{}') FROM auth_events ae
@@ -530,7 +533,7 @@ router.get('/companies/:companyId/users', ...op, view('users', async (_req, res,
             ls.created_at AS last_sign_in_at, ls.ip AS last_sign_in_ip, ls.country AS last_sign_in_country, ls.city AS last_sign_in_city,
             ls.browser AS last_sign_in_browser, ls.os AS last_sign_in_os, ls.device AS last_sign_in_device, ls.method AS last_sign_in_method,
             (SELECT COUNT(*)::int FROM auth_events f WHERE f.user_id = u.id AND f.outcome = 'failure' AND f.created_at > now() - interval '7 days') AS failed_7d,
-            (SELECT COUNT(*)::int ${SESSION_FROM} WHERE s.user_id = u.id AND ${sessionStatusSql} = 'valid') AS active_sessions,
+            ${validSessionsSql('vs.user_id = u.id')} AS active_sessions,
             (SELECT MAX(s.last_seen_at) FROM user_sessions s WHERE s.user_id = u.id) AS last_seen_at
        FROM users u LEFT JOIN departments d ON d.id = u.department_id LEFT JOIN teams t ON t.id = u.primary_team_id
        LEFT JOIN LATERAL (
