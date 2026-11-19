@@ -21,6 +21,7 @@ import { onboardingStatus } from '../lib/onboarding';
 import { reissueInvitation, sendInvitationEmail, statusSql, EMAIL_RE } from '../lib/invitations';
 import { JOB_NAMES, recordJobOutcome, withJobRun } from '../lib/opsLog';
 import { demoRefreshEnabled, runningOnNetlify, startBackgroundDemoRefresh } from '../lib/demoRefreshJob';
+import { DemoDataError, createDemoOrg, getDemoJob, latestDemoJob, parseDemoSize, queuePopulate, startDemoJob } from '../lib/demoGenerate';
 import { mailChannel } from '../lib/mailer';
 import { endUserSessions, revokeSession, SESSION_LIFETIME_KEY, SESSION_LIFETIME_CHOICES, DEFAULT_SESSION_HOURS } from '../lib/sessions';
 import { filtersFromQuery, listUserActivity, userActivityFacets } from '../lib/userActivityQuery';
@@ -45,6 +46,11 @@ import { ACTIVITY_CSV_COLUMNS } from './activity';
  *   GET  /auth-events[.csv]         sign-in events of every company (and of unknown e-mails)
  *   POST /companies                 create a company (department, team, first super admin)
  *   POST /actions/demo-refresh
+ *
+ * Sample data of one company (server/lib/demoGenerate.ts): POST /companies/:companyId/demo-data
+ *   { departments, teamsPerDepartment, membersPerTeam } (202: the people, one login per role level and
+ *   the shared password, shown once; a job adds a year of data), POST /companies/:companyId/populate-metrics
+ *   (202: a job fills every team that lacks data), GET /companies/:companyId/demo-data/jobs/:jobId|latest
  *
  * One company (reads): GET /companies/:companyId/{summary|organisation|users|settings|data|modules|alerts|
  *   pulse|activity|user-activity[.csv]|errors|auth-events[.csv]|views|sessions|app/:what},
@@ -1273,6 +1279,47 @@ router.post('/actions/demo-refresh', ...op, async (req: OperatorRequest, res) =>
     res.status(500).json({ error: 'The action failed' });
   }
 });
+
+/* ---- Sample data: "Demo Data" and "Populate metrics" (server/lib/demoGenerate.ts) ---------- */
+
+/** Errors of the sample-data routes as JSON (DemoDataError carries its status). */
+const demo = (handler: Parameters<typeof write>[0]) => write(async (req, res, company, body) => {
+  try {
+    await handler(req, res, company, body);
+  } catch (e) {
+    if (e instanceof DemoDataError) return void res.status(e.status).json({ error: e.message });
+    throw e;
+  }
+});
+
+// Demo Data: departments, Scrum teams and people now (one transaction), then a year of sample data for
+// the new teams in a job (background function on Netlify). The shared password is in this answer only,
+// so it is 202 even when the job could not be started (the job then says why; Populate metrics retries).
+router.post('/companies/:companyId/demo-data', ...op, demo(async (req, res, company, b) => {
+  const size = parseDemoSize(b);
+  const org = await createDemoOrg(company.id, size);
+  const started = await startDemoJob(org.jobId, { behindNetlify: !!req.app?.locals?.behindNetlify });
+  res.status(202).json({ ...org, mode: started.mode, job: await getDemoJob(company.id, org.jobId) });
+}));
+
+// Populate metrics: a year of sample data for every team of the company that lacks data (nobody is created).
+router.post('/companies/:companyId/populate-metrics', ...op, demo(async (req, res, company) => {
+  const jobId = await queuePopulate(company.id);
+  const started = await startDemoJob(jobId, { behindNetlify: !!req.app?.locals?.behindNetlify });
+  const job = await getDemoJob(company.id, jobId);
+  if (!started.ok) return void res.status(502).json({ error: job?.error ?? 'The background job could not be started.', jobId, job });
+  res.status(202).json({ jobId, mode: started.mode, job });
+}));
+
+router.get('/companies/:companyId/demo-data/jobs/latest', ...op, view('demo_data', async (_req, res, company) => {
+  res.json({ job: await latestDemoJob(company.id) });
+}));
+
+router.get('/companies/:companyId/demo-data/jobs/:jobId', ...op, view('demo_data', async (req, res, company) => {
+  const job = typeof req.params.jobId === 'string' && ID.test(req.params.jobId) ? await getDemoJob(company.id, req.params.jobId) : null;
+  if (!job) return void res.status(404).json(NOT_FOUND);
+  res.json({ job });
+}));
 
 router.post('/companies/:companyId/actions/recompute-snapshots', ...op, write(async (_req, res, company, b) => {
   const teamId = typeof b.teamId === 'string' && b.teamId ? b.teamId : null;
