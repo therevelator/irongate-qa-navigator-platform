@@ -12,7 +12,8 @@ import { ctxOf, installErrorCapture, onRequestEnd } from './requestContext';
  * instance is frozen. Never stored: request bodies, headers, cookies, tokens, query strings.
  */
 
-const pending = new Set<Promise<unknown>>();
+/** Background writes in flight, with the time each started. */
+const pending = new Map<Promise<unknown>, number>();
 
 /** Run a background write; errors are logged (without detail that could hold data) and dropped. */
 export function inBackground(label: string, work: () => Promise<unknown>): void {
@@ -23,14 +24,28 @@ export function inBackground(label: string, work: () => Promise<unknown>): void 
     console.error(`[${label}] write failed (${(e as Error)?.name ?? 'error'})`);
     return;
   }
-  pending.add(p);
+  pending.set(p, Date.now());
   p.finally(() => pending.delete(p));
 }
 
-/** Wait (at most maxMs) for the background writes started so far. Never throws. */
-export async function flushBackgroundWrites(maxMs = 300): Promise<void> {
+/**
+ * Wait (at most maxMs) for the background writes: the buffers are drained first (onFlush), then
+ * every write started at or after `startedSince` (default: all) is awaited. Never throws.
+ *
+ * The Netlify function calls this before it returns (netlify/functions/api.ts): the instance is
+ * frozen as soon as the handler resolves, so a write still in flight then is suspended and lost
+ * when the instance is never thawed or its connection is dropped meanwhile (FI-23). It passes the
+ * start of its invocation, so a write left over from an earlier invocation of a frozen instance
+ * (possibly hanging on a dead connection) never holds a response for the whole cap.
+ */
+export async function flushBackgroundWrites(maxMs = 300, opts: { startedSince?: number } = {}): Promise<void> {
+  // A response's 'finish' listeners (the request hooks that buffer the activity row) may still be
+  // queued: let them run first.
+  await new Promise((r) => setImmediate(r));
   const hooks = [...flushHooks].map((h) => Promise.resolve().then(h).catch(() => undefined));
-  const all = Promise.allSettled([...hooks, ...pending]);
+  const since = opts.startedSince ?? -Infinity;
+  const own = [...pending].filter(([, at]) => at >= since).map(([p]) => p);
+  const all = Promise.allSettled([...hooks, ...own]);
   let timer: ReturnType<typeof setTimeout> | undefined;
   await Promise.race([all, new Promise((r) => { timer = setTimeout(r, maxMs); })]);
   if (timer) clearTimeout(timer);

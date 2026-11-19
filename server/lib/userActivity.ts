@@ -114,19 +114,20 @@ export function enqueueActivity(row: ActivityRow): void {
   }
 }
 
-let inflight: Promise<unknown> = Promise.resolve();
-/** Insert the buffered rows (one statement per batch). Never throws. */
+/**
+ * Insert the buffered rows (one statement per 200 rows). Never throws; resolves when this batch is
+ * written (or failed). Each batch is written on its own: it never waits for an earlier one, which
+ * on Netlify may hang on the connection of an instance that was frozen meanwhile (FI-23).
+ */
 export function flushActivity(): Promise<unknown> {
   if (timer) { clearTimeout(timer); timer = null; }
-  if (!buffer.length) return inflight;
+  if (!buffer.length) return Promise.resolve();
   const rows = buffer.splice(0, buffer.length);
-  const run = async () => {
+  const p = (async () => {
     for (let i = 0; i < rows.length; i += 200) await insertRows(rows.slice(i, i + 200));
-  };
-  const p = inflight.then(run, run);
-  inflight = p.catch(() => undefined);
+  })();
   inBackground('user_activity', () => p);
-  return inflight;
+  return p.catch(() => undefined);
 }
 onFlush(() => flushActivity());
 

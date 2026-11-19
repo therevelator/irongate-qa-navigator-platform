@@ -136,9 +136,14 @@ testConnection().catch(err => {
   console.error('Database connection failed:', err);
 });
 
-// Export as serverless function
-// Before the instance may be frozen, wait briefly (at most 300 ms) for the background log writes
-// of this request (user activity, server errors): server/lib/opsLog.ts.
+// Export as serverless function.
+// The instance is frozen as soon as the handler resolves, so the background log writes of this
+// request (user activity, server errors: server/lib/opsLog.ts) are awaited before the answer is
+// returned (FI-23). Normally one insert (one database round trip); capped so a slow database never
+// holds an answer longer than FLUSH_MAX_MS. Writes left over from an earlier invocation are not awaited.
+export const FLUSH_MAX_MS = 2500;
+let invocationStart = 0;
 export const handler = serverless(app, {
-  response: async () => { await flushBackgroundWrites(300); },
+  request: () => { invocationStart = Date.now(); },
+  response: async () => { await flushBackgroundWrites(FLUSH_MAX_MS, { startedSince: invocationStart }); },
 });
