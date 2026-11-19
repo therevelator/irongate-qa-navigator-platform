@@ -110,7 +110,8 @@ test.describe('Wellbeing pulse: changes on a fixture team', { tag: [TAG.area('pu
 
   test('PUL-18 "Send reminder" reports how many were reminded (delivery stubbed: e-mail is not configured in tests)', { tag: [TAG.role('lead')] }, async ({ signInAs, page }) => {
     await page.route(`${API_URL}/pulse/teams/${team.id}`, async (r) => {
-      const res = await r.fetch();
+      const res = await r.fetch().catch(() => null); // the page may close while a refresh is in flight
+      if (!res) return;
       const body = await res.json();
       if (body.sending) body.sending = { ...body.sending, sent: Math.max(1, body.sending.sent ?? 0), reminderAvailableAt: null, emailConfigured: true };
       await r.fulfill({ response: res, json: body });

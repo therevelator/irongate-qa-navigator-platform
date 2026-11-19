@@ -71,6 +71,7 @@ test.describe('Analytics', { tag: [TAG.area('analytics')] }, () => {
   test('AN-04 the chosen team stays in the address while moving between modules', async ({ signInAs, page, app }) => {
     await signInAs('manager', '/analytics/flaky-tests');
     const select = page.getByTestId('analytics-scope-team');
+    await expect.poll(() => select.locator('option').count()).toBeGreaterThan(1);
     const values = await select.locator('option').evaluateAll((o) => o.map((x) => (x as HTMLOptionElement).value).filter(Boolean));
     const target = values.find((v) => v !== (DEMO.leadTeam.id)) ?? values[0];
     await select.selectOption(target);

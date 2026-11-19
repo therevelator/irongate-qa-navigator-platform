@@ -75,7 +75,8 @@ test.describe('Phone layout (390 px)', { tag: [TAG.area('ux')] }, () => {
     await signInAs('admin');
     const long = `${'Ünïcødé-名前-🚀-'.repeat(12)}VeryLongTeamNameWithoutAnySpacesThatCouldOverflowTheCard`;
     await page.route('http://localhost:3000/api/teams', async (r) => {
-      const res = await r.fetch();
+      const res = await r.fetch().catch(() => null);
+      if (!res) return;
       const body = await res.json();
       body.teams = (body.teams ?? []).map((t: any, i: number) => (i === 0 ? { ...t, name: long } : t));
       await r.fulfill({ response: res, json: body });
