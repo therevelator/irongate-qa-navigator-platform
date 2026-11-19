@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
-import { batteryBand, BATTERY_SHELL } from '../lib/batteryScale';
+import { batteryBand, BATTERY_SHELL_CSS } from '../lib/batteryScale';
 
 /**
  * Battery gauges for 0–100 scores.
@@ -92,7 +92,7 @@ const BatteryIndicator: React.FC<BatteryIndicatorProps> = ({
           className={`relative rounded-[5px] border-2 p-[2px] ${value == null ? 'border-slate-300 border-dashed dark:border-slate-600' : 'border-slate-400 dark:border-slate-500'}`}
           style={{ width: s.w, height: s.h }}
         >
-          <div className="relative h-full w-full overflow-hidden rounded-[2px]" style={{ background: BATTERY_SHELL }}>
+          <div className="relative h-full w-full overflow-hidden rounded-[2px]" style={{ background: BATTERY_SHELL_CSS }}>
             <div
               className="absolute inset-y-0 left-0 rounded-[2px] transition-[width] duration-700 ease-out motion-reduce:transition-none"
               style={{ width: `${fill}%`, background: band?.flat ?? 'transparent' }}

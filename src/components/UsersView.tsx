@@ -332,7 +332,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-950 p-4 sm:p-6 lg:p-8" data-testid="users-page">
+    <div className="ig-page min-h-screen bg-gray-50 dark:bg-slate-950 p-4 sm:p-6 lg:p-8" data-testid="users-page">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">

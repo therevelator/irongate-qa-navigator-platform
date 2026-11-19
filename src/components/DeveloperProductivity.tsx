@@ -75,8 +75,8 @@ const ENGINEER_ROLES = new Set(['engineer', 'qa_engineer', 'team_lead']);
 const fmt = (v: number | null | undefined, d = 1) => (v == null || Number.isNaN(v) ? '—' : v.toFixed(d));
 
 const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId }) => {
-  const { isDark } = useTheme();
-  const ct = chartTheme(isDark);
+  const { isDark, theme } = useTheme();
+  const ct = chartTheme(theme);
   const [sortBy, setSortBy] = useState<'ddps' | 'pr' | 'review'>('ddps');
   const scope = useAnalyticsScope();
   // qa_engineer / viewer: the API returns only their own row (server/lib/userPolicy.ts).

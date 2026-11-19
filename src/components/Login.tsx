@@ -89,9 +89,9 @@ const Login: React.FC<LoginProps> = ({ onSwitchToRegister }) => {
     'dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:disabled:bg-slate-800';
 
   return (
-    <div className="min-h-screen grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] bg-white dark:bg-slate-950">
+    <div className="ig-app-bg min-h-screen grid lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] bg-white dark:bg-slate-950">
       {/* Brand panel */}
-      <aside className="hidden lg:flex flex-col justify-between bg-brand-900 text-white p-12">
+      <aside className="ig-brand-panel hidden lg:flex flex-col justify-between bg-brand-900 text-white p-12">
         <div className="flex items-center gap-3">
           <BrandMark height={36} />
               <div className="leading-tight">

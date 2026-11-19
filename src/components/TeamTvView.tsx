@@ -6,6 +6,7 @@ import { Maximize, Minimize, Moon, Sun, LogOut, Repeat, Loader2, MonitorX } from
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
 import { useAuth, useHideSampleNotice } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
+import { applyTheme, tvTheme as tvThemeFor } from '../lib/appearance';
 import { canRequestTeamInsights } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
 import { generateDetailedKPIs, getThreshold, statusFor } from '../data/detailedKPIs';
@@ -99,7 +100,7 @@ const TeamTvView: React.FC = () => {
   const scope = useAnalyticsScope();
   const { user } = useAuth();
   const hideSampleNotice = useHideSampleNotice();
-  const { isDark: appDark } = useTheme();
+  const { theme: appTheme } = useTheme();
 
   /* ---------------- screen setup: theme, root font size, title, wake lock ---------------- */
 
@@ -109,19 +110,21 @@ const TeamTvView: React.FC = () => {
     return readStored(THEME_KEY) === 'light' ? 'light' : 'dark';
   });
   const isDark = tvTheme === 'dark';
-  const appDarkRef = useRef(appDark);
-  appDarkRef.current = appDark;
+  // TV mode keeps its own light/dark switch; with a glass app theme it shows Graphite / Porcelain.
+  const screenTheme = tvThemeFor(appTheme, isDark);
+  const appThemeRef = useRef(appTheme);
+  appThemeRef.current = appTheme;
 
   useLayoutEffect(() => {
-    document.documentElement.classList.toggle('dark', isDark);
-  }, [isDark]);
+    applyTheme(document.documentElement, screenTheme);
+  }, [screenTheme]);
   useLayoutEffect(() => {
     const html = document.documentElement;
     const prevFont = html.style.fontSize;
     const prevTitle = document.title;
     return () => {
       html.style.fontSize = prevFont;
-      html.classList.toggle('dark', appDarkRef.current); // back to the app theme
+      applyTheme(html, appThemeRef.current); // back to the app theme
       document.title = prevTitle;
     };
   }, []);
@@ -316,9 +319,11 @@ const TeamTvView: React.FC = () => {
       toastOptions={{
         duration: 6000,
         style: {
-          background: isDark ? '#1e293b' : '#ffffff',
-          color: isDark ? '#e2e8f0' : '#0f172a',
-          border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
+          background: 'var(--toast-bg)',
+          color: 'var(--toast-fg)',
+          border: '1px solid var(--toast-border)',
+          boxShadow: 'var(--toast-shadow)',
+          backdropFilter: 'var(--toast-blur)',
           fontSize: '1.4rem',
           maxWidth: '50rem',
           padding: '0.9rem 1.2rem',
@@ -350,7 +355,7 @@ const TeamTvView: React.FC = () => {
   const shell = (children: React.ReactNode) => (
     <div
       className={cx(
-        'fixed inset-0 z-[60] flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white',
+        'ig-app-bg fixed inset-0 z-[60] flex flex-col bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-white',
         wide ? 'overflow-hidden' : 'overflow-y-auto',
         !controlsVisible && 'cursor-none',
       )}
@@ -521,12 +526,12 @@ const TeamTvView: React.FC = () => {
             </div>
           ) : panel === 'kpis' ? (
             <div className={cx('grid gap-[1.25rem]', wide ? 'min-h-0 flex-1 grid-cols-3 grid-rows-2' : 'auto-rows-[22rem] grid-cols-1 sm:grid-cols-2')}>
-              {model.kpis.map((k) => <KpiTile key={k.kpi.id} item={k} isDark={isDark} />)}
+              {model.kpis.map((k) => <KpiTile key={k.kpi.id} item={k} isDark={isDark} theme={screenTheme} />)}
             </div>
           ) : panel === 'trends' ? (
             <div className={cx('grid gap-[1.25rem]', wide ? 'min-h-0 flex-1 grid-cols-2 grid-rows-2' : 'auto-rows-[26rem] grid-cols-1')}>
               {model.trends.map((t) => (
-                <TrendChart key={t.key} title={t.title} history={t.history} unit={t.unit} target={t.target} digits={t.digits} isDark={isDark} rootPx={rootPx} current={t.current} targetPeriods={t.targetPeriods} />
+                <TrendChart key={t.key} title={t.title} history={t.history} unit={t.unit} target={t.target} digits={t.digits} isDark={isDark} theme={screenTheme} rootPx={rootPx} current={t.current} targetPeriods={t.targetPeriods} />
               ))}
             </div>
           ) : (

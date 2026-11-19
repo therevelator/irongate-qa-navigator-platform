@@ -118,8 +118,8 @@ const wellbeingStatus = (score: number) => (score >= WELLBEING_BANDS.good ? 'goo
 
 /** Trend of the closed periods (suppressed periods are gaps). */
 export const PulseTrendChart: React.FC<{ periods: PulsePeriodResult[]; height?: number }> = ({ periods, height = 220 }) => {
-  const { isDark } = useTheme();
-  const ct = chartTheme(isDark);
+  const { isDark, theme } = useTheme();
+  const ct = chartTheme(theme);
   const rows = periods.map((p) => ({ label: formatAsOf(p.start)?.replace(/ \d{4}$/, '') ?? p.start, score: p.score, period: periodLabel(p), responses: p.responses, rate: p.responseRate }));
   return (
     <div style={{ height }} role="img" aria-label={`Wellbeing (survey) trend over ${periods.length} periods`}>

@@ -1,3 +1,4 @@
+import type { ThemeId } from '../lib/appearance';
 // Shared data models for the analytics features, plus the single shared definitions
 // of the developer-level derived metrics (DDPS, burnout risk, workload balance).
 // No mock or random data generators live here: every displayed value must come from the API.
@@ -197,24 +198,40 @@ export const developerStatusMeta = (status: unknown): { label: string; tone: 'go
   return { label: typeof status === 'string' && status ? status.replace(/-/g, ' ') : 'Unrated', tone: 'neutral' };
 };
 
-/** Theme-aware colours for recharts (axis, grid, tooltip, series). */
-export const chartTheme = (isDark: boolean) => ({
-  axis: isDark ? '#94a3b8' : '#64748b',       // slate-400 / slate-500
-  grid: isDark ? '#1e293b' : '#e2e8f0',       // slate-800 / slate-200
-  series: isDark ? '#7aa2d6' : '#2d5b94',     // brand-400 / brand-600 (approx.)
-  series2: isDark ? '#cbd5e1' : '#475569',    // slate-300 / slate-600
-  tooltip: {
-    contentStyle: {
-      backgroundColor: isDark ? '#0f172a' : '#ffffff',
-      border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-      borderRadius: 6,
-      color: isDark ? '#f1f5f9' : '#0f172a',
-      fontSize: 12,
+/**
+ * Theme-aware colours for recharts (axis, grid, tooltip, series). Takes the theme on screen
+ * (src/lib/appearance.ts) or, for older callers, just "is it dark".
+ */
+export const chartTheme = (t: boolean | ThemeId) => {
+  const theme: ThemeId = typeof t === 'boolean' ? (t ? 'dark' : 'light') : t;
+  const isDark = theme === 'dark' || theme === 'graphite';
+  const glass = theme === 'graphite' || theme === 'porcelain';
+  const c = theme === 'graphite'
+    ? { axis: '#a9adb4', grid: 'rgba(255,255,255,0.08)', series: '#9db4d3', series2: '#d4d7dc', tipBg: 'rgba(36,38,43,0.92)', tipBorder: 'rgba(255,255,255,0.14)', tipText: '#f1f2f4', tipLabel: '#b4b8bf' }
+    : theme === 'porcelain'
+      ? { axis: '#6b655d', grid: 'rgba(120,105,85,0.16)', series: '#3d5a85', series2: '#57524b', tipBg: 'rgba(255,254,252,0.94)', tipBorder: 'rgba(160,145,125,0.3)', tipText: '#221f1b', tipLabel: '#5d574f' }
+      : isDark
+        ? { axis: '#94a3b8', grid: '#1e293b', series: '#7aa2d6', series2: '#cbd5e1', tipBg: '#0f172a', tipBorder: '#334155', tipText: '#f1f5f9', tipLabel: '#94a3b8' }
+        : { axis: '#64748b', grid: '#e2e8f0', series: '#2d5b94', series2: '#475569', tipBg: '#ffffff', tipBorder: '#e2e8f0', tipText: '#0f172a', tipLabel: '#64748b' };
+  return {
+    axis: c.axis,
+    grid: c.grid,
+    series: c.series,
+    series2: c.series2,
+    tooltip: {
+      contentStyle: {
+        backgroundColor: c.tipBg,
+        border: `1px solid ${c.tipBorder}`,
+        borderRadius: glass ? 10 : 6,
+        color: c.tipText,
+        fontSize: 12,
+        ...(glass ? { backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', boxShadow: '0 10px 24px -12px rgba(0,0,0,0.45)' } : {}),
+      },
+      labelStyle: { color: c.tipLabel },
+      itemStyle: { color: c.tipText },
     },
-    labelStyle: { color: isDark ? '#94a3b8' : '#64748b' },
-    itemStyle: { color: isDark ? '#f1f5f9' : '#0f172a' },
-  },
-});
+  };
+};
 
 /** "17 Nov 2026" style date, or null when the input is missing/invalid. */
 export const formatAsOf = (d: string | null | undefined): string | null => {

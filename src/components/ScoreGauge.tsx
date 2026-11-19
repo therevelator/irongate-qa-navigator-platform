@@ -1,0 +1,125 @@
+import React, { useId } from 'react';
+import { clampScore } from './BatteryIndicator';
+import { batteryBand } from '../lib/batteryScale';
+import { arcLength, arcPath, gaugeLayout, GAUGE_END, GAUGE_START, polar, valueToAngle } from '../lib/gaugeGeometry';
+
+/**
+ * Radial score gauge: the "Gauge" score display (Appearance menu), an alternative to the 3D
+ * battery with the same props and the same accessible text. A 240° arc: a track, the value arc in
+ * the colour of the value's band (the one battery scale, src/lib/batteryScale.ts), a tick at the
+ * target and the number in the centre. Subtle depth (bevelled track, soft shadow and a gentle
+ * gradient on the value arc); the arc sweeps in on load, not at all with prefers-reduced-motion
+ * (src/styles/themes.css). Colours of the track, tick and text are theme tokens (--gauge-*).
+ */
+export interface ScoreGaugeProps {
+  value: number | string | null | undefined;
+  /** Target (the "good" threshold): drawn as a tick on the arc. */
+  good?: number;
+  warn?: number;
+  size?: 'xs' | 'sm' | 'md' | 'lg';
+  label: string;
+  className?: string;
+}
+
+/** Box width per size (px), chosen to sit where the battery of the same size sits. */
+const GAUGE_SIZES = { xs: 52, sm: 68, md: 100, lg: 152 } as const;
+
+const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', label, className = '' }) => {
+  const id = useId().replace(/:/g, '');
+  const value = clampScore(raw);
+  const band = batteryBand(value);
+  const w = GAUGE_SIZES[size];
+  const { cx, cy, r, stroke, width, height } = gaugeLayout(w);
+  const track = arcPath(cx, cy, r, GAUGE_START, GAUGE_END);
+  const valueArc = value != null && value > 0 ? arcPath(cx, cy, r, GAUGE_START, valueToAngle(value)) : '';
+  const len = value != null ? arcLength(r, value) : 0;
+  const target = good != null && Number.isFinite(good) ? Math.max(0, Math.min(100, good)) : null;
+  const tA = target != null ? valueToAngle(target) : 0;
+  const t0 = polar(cx, cy, r - stroke / 2 - Math.max(1.5, w * 0.02), tA);
+  const t1 = polar(cx, cy, r + stroke / 2 + Math.max(1.5, w * 0.02), tA);
+  const fontSize = Math.round(w * (size === 'xs' ? 0.3 : 0.28));
+  const showUnit = size === 'lg' || size === 'md';
+
+  return (
+    <div
+      className={`flex flex-shrink-0 items-center justify-center ${className}`}
+      role="img"
+      aria-label={`${label}: ${value == null ? 'no data' : `${Math.round(value)} of 100`}`}
+      data-battery-band={band?.key ?? 'none'}
+      data-score-visual="gauge"
+      data-testid="score-gauge"
+    >
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} aria-hidden="true" focusable="false" style={{ overflow: 'visible' }}>
+        <defs>
+          {band && (
+            <linearGradient id={`${id}-v`} x1="0" y1="1" x2="1" y2="0">
+              <stop offset="0%" stopColor={band.stops[1]} />
+              <stop offset="100%" stopColor={band.stops[3]} />
+            </linearGradient>
+          )}
+          <filter id={`${id}-s`} x="-30%" y="-30%" width="160%" height="160%">
+            <feDropShadow dx="0" dy={Math.max(0.6, w * 0.012)} stdDeviation={Math.max(0.8, w * 0.018)} style={{ floodColor: 'var(--gauge-shadow)' }} floodOpacity="1" />
+          </filter>
+        </defs>
+        {/* Track with a soft bevel along its inner edge */}
+        <path d={track} fill="none" strokeLinecap="round" strokeWidth={stroke} style={{ stroke: 'var(--gauge-track)' }} />
+        <path d={arcPath(cx, cy, r - stroke / 2 + 0.5, GAUGE_START, GAUGE_END)} fill="none" strokeWidth={1} style={{ stroke: 'var(--gauge-track-edge)' }} opacity={0.9} />
+        {valueArc && band && (
+          <g filter={`url(#${id}-s)`}>
+            <path
+              key={`${value}`}
+              className="ig-gauge-sweep"
+              d={valueArc}
+              fill="none"
+              stroke={`url(#${id}-v)`}
+              strokeWidth={stroke}
+              strokeLinecap="round"
+              strokeDasharray={`${len + 1} ${len + 1}`}
+              style={{ ['--ig-gauge-len' as string]: `${len + 1}` }}
+              data-testid="score-gauge-value"
+              data-color={band.flat}
+            />
+            {/* Gentle highlight along the outer edge of the value arc */}
+            <path
+              className="ig-gauge-sweep"
+              d={arcPath(cx, cy, r + stroke * 0.22, GAUGE_START, valueToAngle(value!))}
+              fill="none"
+              stroke="#ffffff"
+              strokeOpacity={0.28}
+              strokeWidth={Math.max(1, stroke * 0.2)}
+              strokeLinecap="round"
+              strokeDasharray={`${len * 1.3 + 1} ${len * 1.3 + 1}`}
+              style={{ ['--ig-gauge-len' as string]: `${len * 1.3 + 1}` }}
+            />
+          </g>
+        )}
+        {target != null && (
+          <line
+            x1={t0.x} y1={t0.y} x2={t1.x} y2={t1.y}
+            strokeWidth={Math.max(1.5, w * 0.022)}
+            strokeLinecap="round"
+            style={{ stroke: 'var(--gauge-tick)' }}
+            data-testid="score-gauge-target"
+          />
+        )}
+        <text
+          x={cx}
+          y={cy + fontSize * (showUnit ? 0.2 : 0.36)}
+          textAnchor="middle"
+          fontSize={fontSize}
+          fontWeight={600}
+          style={{ fill: 'var(--gauge-text)', fontVariantNumeric: 'tabular-nums', letterSpacing: '-0.02em' }}
+        >
+          {value == null ? '—' : Math.round(value)}
+        </text>
+        {showUnit && value != null && (
+          <text x={cx} y={cy + fontSize * 0.2 + fontSize * 0.62} textAnchor="middle" fontSize={Math.round(fontSize * 0.36)} style={{ fill: 'var(--gauge-subtext)' }}>
+            / 100
+          </text>
+        )}
+      </svg>
+    </div>
+  );
+};
+
+export default ScoreGauge;

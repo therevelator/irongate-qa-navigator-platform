@@ -20,7 +20,7 @@ import { policyActorOf } from '../lib/policyActor';
 import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay, Mail, Link2, ArrowUpRight, ArrowDownRight, Trophy, Target, UserRound } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { tvMailto, tvShareUrl } from './tv/tvNavigation';
-import HeroBattery from './HeroBattery';
+import ScoreVisual from './ScoreVisual';
 import { AreaChart, Area, Tooltip, ResponsiveContainer, YAxis, ReferenceLine } from 'recharts';
 import { statusWithTarget, targetLabel, watchBand } from '../lib/targetText';
 import { qaScoreInputLosses } from '../../server/lib/metricFormulas';
@@ -339,9 +339,9 @@ const InfoTip: React.FC<{ text: string }> = ({ text }) => (
 
 const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv, onOpenPulse }) => {
   const detailedKPIs = useMemo(() => generateDetailedKPIs(team), [team]);
-  const { isDark } = useTheme();
+  const { isDark, theme } = useTheme();
   const { user } = useAuth();
-  const ct = chartTheme(isDark);
+  const ct = chartTheme(theme);
 
   // "Show formulas & data sources" (super admin demo aid; same preference as Manual metrics).
   const [showFormulasPref, setShowFormulas] = useShowFormulas();
@@ -1087,7 +1087,7 @@ const QaScoreCard: React.FC<{
     <div className="h-full rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900 sm:col-span-2" data-testid="team-qa-card">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
         <div className="flex min-w-0 flex-1 items-center gap-4">
-          <HeroBattery value={qaScore} size="md" orientation="horizontal" liquid label="QA score" />
+          <ScoreVisual value={qaScore} good={threshold?.good} warn={threshold?.warning} size="md" orientation="horizontal" liquid label="QA score" />
           <div className="min-w-0">
             <p className="flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
               QA score <InfoTip text={METRIC_EXPLANATIONS.qaScore.detailed} />

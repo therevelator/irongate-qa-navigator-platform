@@ -13,7 +13,7 @@ import { COMPOSITE_INDEX_BANDS, QA_SCORE_THRESHOLDS, qaStatusFromScore } from '.
 import { WELLBEING_BANDS } from '../../server/lib/pulseRules';
 import { useAuth } from '../contexts/AuthContext';
 import { Page, PageIntro, Card, Badge, SegmentedControl, EmptyState, buttonClass, inputClass, cx, type Tone } from './ui';
-import HeroBattery from './HeroBattery';
+import ScoreVisual from './ScoreVisual';
 import KpiStatusModal, { type KpiStatusTeam, type KpiTab } from './KpiStatusModal';
 import { openTvMode } from './tv/tvNavigation';
 import { ConfidenceNote, type ConfidenceInfo } from './MetricQuality';
@@ -641,7 +641,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
         {/* Global QA score */}
         <div className="flex flex-col gap-5 p-5 sm:p-6 lg:border-r lg:border-slate-200 lg:dark:border-slate-800">
           <div className="flex items-center gap-6">
-            <HeroBattery value={qa} good={QA_GOOD} warn={QA_WARN} label={qaTitle} />
+            <ScoreVisual value={qa} good={QA_GOOD} warn={QA_WARN} label={qaTitle} />
             <div className="min-w-0">
               <p className="text-sm font-medium text-slate-500 dark:text-slate-400" data-testid="hero-qa-title">{qaTitle}</p>
               <p className="mt-1 flex items-baseline gap-1.5">
@@ -697,7 +697,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
               const st = toneFor(g.value, g.good, g.warn);
               return (
                 <div key={g.label} className="flex flex-col items-start gap-3 rounded-md border border-slate-200 p-3.5 dark:border-slate-800" title={g.title || undefined}>
-                  <HeroBattery value={g.value} good={g.good} warn={g.warn} size="sm" label={g.label} />
+                  <ScoreVisual value={g.value} good={g.good} warn={g.warn} size="sm" label={g.label} />
                   <div className="min-w-0">
                     <p className="text-xs font-medium text-slate-600 dark:text-slate-300">{g.label}</p>
                     <p className="mt-1 flex items-baseline gap-1">
@@ -885,7 +885,7 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
           {/* QA score gauge + team size */}
           <div className={cx('flex items-center justify-between gap-3', isList && 'sm:w-48 sm:flex-shrink-0 sm:flex-col sm:items-start sm:justify-center sm:gap-2')}>
             <div className="flex items-center gap-3">
-              <HeroBattery value={r.qa} good={QA_GOOD} warn={QA_WARN} size="xs" label={`${r.name} QA score`} />
+              <ScoreVisual value={r.qa} good={QA_GOOD} warn={QA_WARN} size="xs" label={`${r.name} QA score`} />
               <div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">QA score</p>
                 <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">

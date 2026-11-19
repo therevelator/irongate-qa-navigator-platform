@@ -71,7 +71,7 @@ const OperatorPanel: React.FC = () => {
   const signOut = useCallback(async () => { await operatorSignOut(); setCompany(null); }, []);
 
   const shell = (children: React.ReactNode) => (
-    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div className="ig-app-bg min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
       <header className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 sm:px-8 dark:border-amber-800 dark:bg-amber-950/60 dark:text-amber-100" data-testid="operator-banner">
         <p className="flex items-center gap-2"><ShieldAlert size={16} className="flex-shrink-0" aria-hidden="true" /><strong>IronGate platform support</strong></p>
         {session && (

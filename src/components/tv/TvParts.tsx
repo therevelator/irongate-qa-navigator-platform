@@ -1,7 +1,9 @@
 import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, ReferenceLine, ResponsiveContainer, CartesianGrid } from 'recharts';
-import HeroBattery from '../HeroBattery';
+import ScoreVisual from '../ScoreVisual';
+import { useTheme } from '../../contexts/ThemeContext';
+import type { ThemeId } from '../../lib/appearance';
 import { expectationText } from '../../lib/targetText';
 import { cx, type Tone } from '../ui';
 import type { DetailedKPI, KPIStatus } from '../../data/detailedKPIs';
@@ -87,8 +89,13 @@ export const TrendText: React.FC<{ change: KpiChange | null; unit: string; digit
   );
 };
 
-/** The 3D battery, scaled to fill the height it is given (crisp: it is drawn with CSS gradients). */
+/**
+ * The score visual (3D battery or gauge, as chosen in the Appearance menu), scaled to fill the
+ * height it is given (crisp: CSS gradients / SVG).
+ */
 export const ScaledBattery: React.FC<{ value: number | null; good: number; warn: number; label: string }> = ({ value, good, warn, label }) => {
+  const { scoreDisplay } = useTheme();
+  const baseWidth = scoreDisplay === 'gauge' ? 160 : 84;
   const ref = useRef<HTMLDivElement>(null);
   const [k, setK] = useState(2);
   useLayoutEffect(() => {
@@ -101,9 +108,9 @@ export const ScaledBattery: React.FC<{ value: number | null; good: number; warn:
     return () => ro.disconnect();
   }, []);
   return (
-    <div ref={ref} className="flex h-full flex-shrink-0 items-center justify-center" style={{ width: 84 * k }} data-testid="tv-battery">
+    <div ref={ref} className="flex h-full flex-shrink-0 items-center justify-center" style={{ width: baseWidth * k }} data-testid="tv-battery">
       <div style={{ transform: `scale(${k})`, transformOrigin: 'center' }}>
-        <HeroBattery value={value} good={good} warn={warn} size="lg" label={label} />
+        <ScoreVisual value={value} good={good} warn={warn} size="lg" label={label} />
       </div>
     </div>
   );
@@ -122,8 +129,8 @@ export const useRootPx = () => {
   return px;
 };
 
-export const Sparkline: React.FC<{ history: HistoryPoint[]; isDark: boolean; tone: Tone }> = ({ history, isDark, tone }) => {
-  const ct = chartTheme(isDark);
+export const Sparkline: React.FC<{ history: HistoryPoint[]; isDark: boolean; theme?: ThemeId; tone: Tone }> = ({ history, isDark, theme, tone }) => {
+  const ct = chartTheme(theme ?? isDark);
   const stroke = tone === 'good' ? (isDark ? '#22c55e' : '#16a34a') : tone === 'warn' ? (isDark ? '#fbbf24' : '#d97706') : tone === 'bad' ? (isDark ? '#ef4444' : '#dc2626') : ct.series;
   if (history.length < 2) {
     return <p className="flex h-full items-end text-[1.05rem] text-slate-500 dark:text-slate-400">{history.length === 1 ? 'One snapshot so far' : 'No history yet'}</p>;
@@ -148,7 +155,7 @@ export interface TvKpi {
   stale?: { staleSince: string | null; recordedAt: string | null } | null;
 }
 
-export const KpiTile: React.FC<{ item: TvKpi; isDark: boolean }> = ({ item, isDark }) => {
+export const KpiTile: React.FC<{ item: TvKpi; isDark: boolean; theme?: ThemeId }> = ({ item, isDark, theme }) => {
   const { kpi, label, digits, history, change, stale } = item;
   const meta = stale ? { ...STATUS_META.neutral, label: 'Stale' } : STATUS_META[kpi.status];
   const target = targetText(kpi);
@@ -180,7 +187,7 @@ export const KpiTile: React.FC<{ item: TvKpi; isDark: boolean }> = ({ item, isDa
             : <TrendText change={change} unit={kpi.unit} digits={digits} compact />}
       </p>
       <div className="mt-3 min-h-[2.5rem] flex-1">
-        <Sparkline history={history} isDark={isDark} tone={meta.tone} />
+        <Sparkline history={history} isDark={isDark} theme={theme} tone={meta.tone} />
       </div>
     </article>
   );
@@ -197,8 +204,10 @@ export const TrendChart: React.FC<{
   current: React.ReactNode;
   /** Target history in the window: each day is drawn with the target valid on that day. */
   targetPeriods?: TargetPeriod[];
-}> = ({ title, history, unit, target, digits, isDark, rootPx, current, targetPeriods }) => {
-  const ct = chartTheme(isDark);
+  /** The theme on screen (TV mode's own); defaults from isDark. */
+  theme?: ThemeId;
+}> = ({ title, history, unit, target, digits, isDark, theme, rootPx, current, targetPeriods }) => {
+  const ct = chartTheme(theme ?? isDark);
   // A target that changed inside the window is drawn as a step line (the target of each day).
   const dayTargets = targetPeriods?.length ? history.map((p) => targetOnDay(targetPeriods, p.date)?.good ?? null) : [];
   const changing = new Set(dayTargets.filter((v): v is number => v != null)).size > 1;

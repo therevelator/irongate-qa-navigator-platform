@@ -3,11 +3,10 @@ import BrandMark from './BrandMark';
 import {
   LayoutDashboard, BarChart3, LogOut, MonitorSmartphone, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, MonitorPlay, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
-  CalendarClock, Trophy, FileText, Sun, Moon, ChevronRight, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints,
+  CalendarClock, Trophy, FileText, ChevronRight, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import API_URL from '../config/api';
-import { useTheme } from '../contexts/ThemeContext';
 import toast, { Toaster } from 'react-hot-toast';
 import {
   ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin,
@@ -16,7 +15,7 @@ import {
 import { policyActorOf, ROLE_LABELS } from '../lib/policyActor';
 import PulsePendingBanner from './PulsePendingBanner';
 import NotificationsBell from './NotificationsBell';
-import { AccessHelp, AccountMenu, CompanyBadge } from './HeaderParts';
+import { AccessHelp, AccountMenu, AppearanceMenu, CompanyBadge } from './HeaderParts';
 import { accessSummary } from '../lib/accessSummary';
 import { canOpenView } from '../lib/viewAccess';
 import { NOTIFICATIONS_TAB_EVENT, NOTIFICATIONS_TAB_KEY } from './NotificationsCenter';
@@ -175,7 +174,6 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
       toast.error('The server could not be reached.');
     }
   };
-  const { isDark, toggleMode } = useTheme();
   // Navigation lives in a drawer behind the burger button. On wide screens it can be pinned
   // (docked beside the content); the pin is the only preference remembered.
   const [navOpen, setNavOpen] = useState(false);
@@ -288,7 +286,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
   const initials = `${user?.firstName?.[0] ?? ''}${user?.lastName?.[0] ?? ''}`.toUpperCase() || 'U';
 
   return (
-    <div className="flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
+    <div className="ig-app-bg flex h-screen bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-200">
       {/* Backdrop for the overlay drawer */}
       {!docked && (
         <div
@@ -464,14 +462,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
                 go('notifications');
               }}
             />
-            <button
-              onClick={toggleMode}
-              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-              aria-label="Toggle colour theme"
-              className="h-9 w-9 flex items-center justify-center rounded-md border border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800"
-            >
-              {isDark ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
+            <AppearanceMenu />
             <AccountMenu name={fullName} title={personTitle} companyName={profile?.companyName} onSignOutOthers={signOutOthers} onSignOut={logout} />
           </div>
         </header>
@@ -497,10 +488,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
         toastOptions={{
           duration: 3000,
           style: {
-            background: isDark ? '#1e293b' : '#ffffff',
-            color: isDark ? '#e2e8f0' : '#0f172a',
-            border: `1px solid ${isDark ? '#334155' : '#e2e8f0'}`,
-            boxShadow: '0 6px 16px -4px rgb(15 23 42 / 0.12)',
+            background: 'var(--toast-bg)',
+            color: 'var(--toast-fg)',
+            border: '1px solid var(--toast-border)',
+            boxShadow: 'var(--toast-shadow)',
+            backdropFilter: 'var(--toast-blur)',
             fontSize: '14px',
           },
         }}
