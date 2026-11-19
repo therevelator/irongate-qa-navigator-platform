@@ -126,7 +126,12 @@ jobs:
           start-web: 'true'
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        # The runner image already has Chrome's system libraries; the apt step of --with-deps is
+        # only needed (and only run) when the browser cannot start without it (apt mirrors are slow).
+        run: |
+          npx playwright install chromium
+          node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" \
+            || npx playwright install-deps chromium
 
       - name: E2E smoke tests
         run: npx playwright test --project=chromium --grep @smoke --reporter=list,html

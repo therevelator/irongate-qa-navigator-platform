@@ -80,7 +80,12 @@ jobs:
         run: npx tsc --noEmit -p tsconfig.playwright.json
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        # The runner image already has Chrome's system libraries; the apt step of --with-deps is
+        # only needed (and only run) when the browser cannot start without it (apt mirrors are slow).
+        run: |
+          npx playwright install chromium
+          node -e "require('@playwright/test').chromium.launch().then((b) => b.close())" \
+            || npx playwright install-deps chromium
 
       - name: UI tests
         env:
