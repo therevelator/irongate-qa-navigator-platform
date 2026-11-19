@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { FlaskConical, X } from 'lucide-react';
+import { useHideSampleNotice } from '../contexts/AuthContext';
 
 const KEY = 'irongate_sample_banner_dismissed';
 
@@ -10,11 +11,13 @@ const readDismissed = (): boolean => {
 /**
  * "Includes sample data": shown when any value on the screen comes from generated sample data
  * (field_sources / metric_values source 'synthetic', reported by the API as sampleData), never
- * from the company name. Dismissed for the rest of the browser session.
+ * from the company name. Dismissed for the rest of the browser session. Not shown at all when the
+ * company hides sample-data notices (companies.settings.hideSampleDataNotice, e.g. a demo company).
  */
 const SampleDataBanner: React.FC<{ show: boolean; className?: string }> = ({ show, className }) => {
   const [dismissed, setDismissed] = useState(readDismissed);
-  if (!show || dismissed) return null;
+  const hidden = useHideSampleNotice();
+  if (!show || dismissed || hidden) return null;
   const dismiss = () => {
     setDismissed(true);
     try { sessionStorage.setItem(KEY, '1'); } catch { /* storage unavailable */ }

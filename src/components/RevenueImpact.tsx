@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ChevronRight, Loader2 } from 'lucide-react';
+import { useHideSampleNotice } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
 import ExportCsvButton from './ExportCsvButton';
 import MetricInfoTrigger from './MetricInfoTrigger';
@@ -534,6 +535,7 @@ interface RollupResponse { rollup: RevenueRollup; teams: TeamRevenueFigures[]; s
 
 export const RevenueRollupView: React.FC<{ departments: Array<{ id: string; name: string }>; showFormulas: boolean }> = ({ departments, showFormulas }) => {
   const [dept, setDept] = useState('all');
+  const hideSampleNotice = useHideSampleNotice();
   const [data, setData] = useState<RollupResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -576,7 +578,7 @@ export const RevenueRollupView: React.FC<{ departments: Array<{ id: string; name
               { header: 'Range high $/month', value: (t) => fmtMoney(t.stake.monthlyHigh), raw: (t) => t.stake.monthlyHigh },
               { header: 'Open debt $/month', value: (t) => fmtMoney(t.debt.monthly), raw: (t) => t.debt.monthly },
               { header: 'Note', value: (t) => [t.stake.reason, t.debt.reason].filter(Boolean).join(' ') },
-              { header: 'Sample data', value: (t) => (t.sampleData ? 'yes' : 'no') },
+              ...(hideSampleNotice ? [] : [{ header: 'Sample data', value: (t: TeamRevenueFigures) => (t.sampleData ? 'yes' : 'no') }]),
             ]}
           />
         )}

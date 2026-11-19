@@ -79,10 +79,14 @@ export function mapApiUser(u: any): User {
     lastLogin: u.last_login || u.lastLogin,
     isActive: u.is_active ?? u.isActive ?? true,
     emailVerified: u.email_verified ?? u.emailVerified ?? false,
+    hideSampleNotice: !!(u.hide_sample_notice ?? u.hideSampleNotice),
   };
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+/** True when the signed-in user's company hides the sample-data notices. Safe outside the provider. */
+export const useHideSampleNotice = (): boolean => !!useContext(AuthContext)?.user?.hideSampleNotice;
 
 export const useAuth = () => {
   const context = useContext(AuthContext);

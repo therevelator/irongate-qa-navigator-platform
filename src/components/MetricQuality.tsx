@@ -1,5 +1,6 @@
 import React from 'react';
 import { Badge, cx, type Tone } from './ui';
+import { useHideSampleNotice } from '../contexts/AuthContext';
 import { basedOnText, CONFIDENCE_RULE_TEXT, type Confidence } from '../../server/lib/metricFormulas';
 
 /**
@@ -91,7 +92,7 @@ export const StaleNote: React.FC<{ staleSince: string | null | undefined; record
   );
 };
 
-export const SampleMarker: React.FC<{ className?: string }> = ({ className }) => (
+export const SampleMarker: React.FC<{ className?: string }> = ({ className }) => useHideSampleNotice() ? null : (
   <span
     className={cx('inline-flex items-center rounded px-1 py-px text-[10px] font-semibold uppercase tracking-wide text-slate-600 ring-1 ring-inset ring-slate-300 dark:text-slate-300 dark:ring-slate-600', className)}
     title="Generated sample data (source: synthetic)"

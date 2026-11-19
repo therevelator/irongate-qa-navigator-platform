@@ -346,7 +346,8 @@ router.get('/me', async (req, res) => {
       `SELECT u.id, u.email, u.first_name, u.last_name, u.role,
               u.company_id, u.department_id, u.primary_team_id, u.avatar_url,
               u.created_at, u.last_login, u.is_active, u.email_verified,
-              u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime
+              u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime,
+              (SELECT COALESCE((c.settings->>'hideSampleDataNotice')::boolean, false) FROM companies c WHERE c.id = u.company_id) AS hide_sample_notice
        FROM users u WHERE u.id = ?`,
       [decoded.userId]
     );

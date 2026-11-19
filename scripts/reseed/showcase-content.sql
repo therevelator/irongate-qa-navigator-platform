@@ -155,3 +155,8 @@ SELECT 'mft-act-' || substr(md5(team_id || n), 1, 24), 'mft-meridian', team_id,
        retro_day::timestamptz, NULL, retro_day + interval '15 hours', retro_day + interval '12 days 16 hours', retro_day + interval '12 days 16 hours'
   FROM w
 ON CONFLICT DO NOTHING;
+
+-- Demo company: hide the "Includes sample data" notices (companies.settings.hideSampleDataNotice).
+UPDATE public.companies
+   SET settings = COALESCE(settings, '{}'::jsonb) || '{"hideSampleDataNotice": true}'::jsonb
+ WHERE id = 'mft-meridian';

@@ -471,7 +471,9 @@ current targets; existing snapshot rows are not rewritten).
   `*.confirm`).
 - **Sample data banner**: "Includes sample data" appears (dismissible for the session) when a value on
   the screen comes from source `synthetic` (`field_sources` / `metric_values.source`), never from the
-  company name; with "Show formulas & data sources" on, such values carry a "Sample" marker.
+  company name; with "Show formulas & data sources" on, such values carry a "Sample" marker. A demo
+  company can hide the banner, the markers, the TV label and the PDF / CSV notes with
+  `companies.settings.hideSampleDataNotice = true` (set for the Meridian showcase by `scripts/reseed`).
 - **Team detail access**: the team and its KPIs are company-visible; member names and emails only for
   people who may see that team's people (`canViewTeamMembers`: super admin, the department's QA
   manager, people assigned to the team); KPI history follows the analytics scope.

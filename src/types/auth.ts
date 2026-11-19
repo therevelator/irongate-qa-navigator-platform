@@ -26,6 +26,8 @@ export interface User {
   lastLogin?: string;
   isActive: boolean;
   emailVerified: boolean;
+  /** The company hides the "Includes sample data" notices (companies.settings.hideSampleDataNotice), e.g. for a demo. */
+  hideSampleNotice?: boolean;
 }
 
 export interface UserAssignment {

@@ -3,7 +3,7 @@ import { LastUpdatedNote } from './LastUpdatedNote';
 import { Toaster, toast } from 'react-hot-toast';
 import { Maximize, Minimize, Moon, Sun, LogOut, Repeat, Loader2, MonitorX } from 'lucide-react';
 import { useAnalyticsScope } from '../contexts/AnalyticsScopeContext';
-import { useAuth } from '../contexts/AuthContext';
+import { useAuth, useHideSampleNotice } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
 import { canRequestTeamInsights } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
@@ -96,6 +96,7 @@ const daysSince = (day: string | null | undefined) => {
 const TeamTvView: React.FC = () => {
   const scope = useAnalyticsScope();
   const { user } = useAuth();
+  const hideSampleNotice = useHideSampleNotice();
   const { isDark: appDark } = useTheme();
 
   /* ---------------- screen setup: theme, root font size, title, wake lock ---------------- */
@@ -528,7 +529,7 @@ const TeamTvView: React.FC = () => {
             ? <>Connection lost · showing data loaded at {updatedAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) ?? '—'} · retrying every minute</>
             : <>Live · updated {updatedAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '—'} · refreshes every {Math.round(REFRESH_MS / 1000)} s{rotate ? ' · panels rotate every 20 s' : ''}</>}
         </p>
-        {latest?.sampleData && (
+        {latest?.sampleData && !hideSampleNotice && (
           <p className="rounded-full bg-slate-200 px-[0.8em] py-[0.15em] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200" data-testid="tv-sample-data">
             Includes sample data
           </p>

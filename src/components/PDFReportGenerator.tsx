@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Download, Loader2 } from 'lucide-react';
+import { useHideSampleNotice } from '../contexts/AuthContext';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { basedOnText } from '../../server/lib/metricFormulas';
@@ -74,6 +75,7 @@ const kpiNote = (t: TeamDetail, key: string): string => {
 };
 
 const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
+  const hideSampleNotice = useHideSampleNotice();
   const [team, setTeam] = useState<TeamDetail | null>(null);
   const [flakyCount, setFlakyCount] = useState<number | null>(null);
   const [openDebt, setOpenDebt] = useState<number | null>(null);
@@ -193,7 +195,7 @@ const PDFReportGenerator: React.FC<PDFReportGeneratorProps> = ({ teamId }) => {
           doc.setFontSize(8);
           doc.setTextColor(148, 163, 184);
           doc.text(`Page ${data.pageNumber}`, pageWidth - 14, pageHeight - 8, { align: 'right' });
-          doc.text(`"—" = not recorded. Stale values are left out of the QA score.${team.sampleData ? ' Includes sample data.' : ''} No individual developer data.`, 14, pageHeight - 8);
+          doc.text(`"—" = not recorded. Stale values are left out of the QA score.${team.sampleData && !hideSampleNotice ? ' Includes sample data.' : ''} No individual developer data.`, 14, pageHeight - 8);
         },
       });
 

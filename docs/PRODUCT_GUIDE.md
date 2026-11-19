@@ -956,6 +956,8 @@ value stores nothing of that save. Expected update frequency takes a whole numbe
   row, `seed:demo:check` reports coverage. See the README for all options.
 - Sample KPI values carry source `synthetic`. **"Includes sample data"** appears (dismissible for the session) whenever a value on the
   screen comes from that source, never based on the company name; in formula mode such values carry a "Sample" marker.
+  A demo company can hide all of these notices (banner, markers, TV label, PDF and CSV notes) with the company setting
+  `hideSampleDataNotice: true` in `companies.settings`; `/api/auth/me` reports it as `hide_sample_notice`.
 - The background generators (KPI sync, pipeline seeder, daily analytics drift) only run with `ENABLE_SYNTHETIC_DATA=true`, and skip the
   demo company. A super admin can also load sample data in **Admin console → Sample data** when that flag is on.
 
