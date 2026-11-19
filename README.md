@@ -490,7 +490,7 @@ current targets; existing snapshot rows are not rewritten).
 ## Top bar, targets everywhere, battery colours
 
 - **Top bar** (`src/components/Layout.tsx`, `src/components/HeaderParts.tsx`): the QE Navigator shield
-  (`public/brand/`, cut from the IronGate logo, a few KB each) and name, the page title; on the right the
+  (logo V3, `public/brand/`: master `irongate-logo-v3.png` / `.webp` at 1024 px, header shields `qe-shield-{40,80,120}.{webp,png}` trimmed to the shield, favicon, apple-touch icon on a dark tile, `irongate-logo-pdf.png` for PDF report headers) and name, the page title; on the right the
   company badge, the person with their job title (`users.job_title`, migration
   `20261126000000_users_job_title.sql`, set by super admins on the Users page; the role label when empty),
   **What you can do here** (generated from `server/lib/userPolicy.ts` by `src/lib/accessSummary.ts`), the

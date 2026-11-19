@@ -169,7 +169,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
 
     let logoDataUrl: string | null = null;
     try {
-      const res = await fetch('/irongate-logo.png');
+      const res = await fetch('/brand/irongate-logo-pdf.png');
       if (res.ok) {
         const blob = await res.blob();
         logoDataUrl = await new Promise<string>((resolve) => {
@@ -213,7 +213,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
         doc.setLineWidth(0.5);
         doc.line(10, 20, pageWidth - 10, 20);
         if (logoDataUrl) {
-          try { doc.addImage(logoDataUrl, 'PNG', 10, 5, 12, 12); } catch { /* ignore */ }
+          try { doc.addImage(logoDataUrl, 'PNG', 10, 5, 8.2, 12); } catch { /* ignore */ }
         }
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(12);
