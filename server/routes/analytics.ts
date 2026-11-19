@@ -2098,12 +2098,26 @@ const ENGINEERING_HEALTH_WEIGHTS = {
   wellbeingSurvey: 0.20
 };
 
-async function computeCompanyMetrics(companyId: string) {
-  // Active teams (with their size: active assigned members) and the latest KPI snapshot per active team
+/**
+ * The teams the overview summary covers for this caller: null (every active team of the company)
+ * for a company-wide scope (super admins), else the ids of the active teams of the caller's
+ * analytics scope (canViewTeamAnalytics: a QA manager's departments, everyone else's teams).
+ */
+async function summaryTeamIds(req: AuthRequest): Promise<{ teamIds: string[] | null; level: string; companyTeamCount: number }> {
+  const actor = policyActor(req);
+  const rows = await query<any>('SELECT id, department_id FROM teams WHERE company_id = ? AND is_active = TRUE', [req.companyId]);
+  const level = analyticsScopeLevelOf(actor);
+  if (level === 'company') return { teamIds: null, level, companyTeamCount: rows.length };
+  return { teamIds: analyticsTeamsInScope(actor, rows.map((r: any) => ({ id: String(r.id), department_id: r.department_id }))).map((t) => t.id), level, companyTeamCount: rows.length };
+}
+
+async function computeCompanyMetrics(companyId: string, teamIds: string[] | null = null) {
+  // Active teams (with their size: active assigned members) and the latest KPI snapshot per active
+  // team; with teamIds only those teams (the caller's analytics scope).
   const activeTeams = await query<any>(
     `SELECT t.id, t.name, t.department_id, ${teamMemberCountSql('t')} AS member_count
-       FROM teams t WHERE t.company_id = ? AND t.is_active = TRUE`,
-    [companyId]
+       FROM teams t WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))`,
+    [companyId, teamIds, teamIds]
   );
   const sizeOf = new Map<string, number>(activeTeams.map((t: any) => [t.id as string, Number(t.member_count) || 0]));
   const latestSnapshots = await query<any>(`
@@ -2112,9 +2126,9 @@ async function computeCompanyMetrics(companyId: string) {
       (SELECT d.name FROM departments d WHERE d.id = t.department_id) AS department_name
     FROM kpi_snapshots ks
     JOIN teams t ON t.id = ks.team_id
-    WHERE t.company_id = ? AND t.is_active = TRUE
+    WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))
     ORDER BY ks.team_id, ks.snapshot_date DESC, ks.created_at DESC
-  `, [companyId]);
+  `, [companyId, teamIds, teamIds]);
 
   // Current values only: staleness at now (server/lib/staleness.ts) and the targets valid at
   // each value's date (server/lib/targets.ts). A team's QA score leaves its stale inputs out.
@@ -2152,11 +2166,11 @@ async function computeCompanyMetrics(companyId: string) {
     SELECT DISTINCT ON (ks.team_id) ks.*, t.department_id, to_char(ks.snapshot_date, 'YYYY-MM-DD') AS snapshot_day
     FROM kpi_snapshots ks
     JOIN teams t ON t.id = ks.team_id
-    WHERE t.company_id = ? AND t.is_active = TRUE
+    WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))
       AND ks.snapshot_date >= CURRENT_DATE - 14
       AND ks.snapshot_date < CURRENT_DATE - 7
     ORDER BY ks.team_id, ks.snapshot_date DESC
-  `, [companyId]);
+  `, [companyId, teamIds, teamIds]);
   const prevDist = distributionOf(prevRows.map((r: any) => ({
     value: evaluateSnapshot(r, { id: r.team_id, department_id: r.department_id }, evalCtx, referenceFor(r.snapshot_day, now)).qa.value,
     weight: weightOf(r.team_id),
@@ -2243,8 +2257,8 @@ async function computeCompanyMetrics(companyId: string) {
        COUNT(*) as total_items
      FROM technical_debt td
      JOIN teams t ON td.team_id = t.id
-     WHERE t.company_id = ? AND t.is_active = TRUE`,
-    [companyId]
+     WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))`,
+    [companyId, teamIds, teamIds]
   );
   const techDebtTotalItems = num(techDebtSummary?.total_items) ?? 0;
   const techDebtOpenItems = num(techDebtSummary?.open_items) ?? 0;
@@ -2295,7 +2309,8 @@ async function computeCompanyMetrics(companyId: string) {
     WHERE pr.company_id = ?
       AND pr.started_at >= NOW() - INTERVAL '30 days'
       AND (pr.team_id IS NULL OR t.is_active = TRUE)
-  `, [companyId]);
+      AND (?::text[] IS NULL OR pr.team_id = ANY(?::text[]))
+  `, [companyId, teamIds, teamIds]);
   const pipelineSuccessfulRuns = num(pipe?.successful_runs) ?? 0;
   const pipelineTotalRuns = num(pipe?.total_runs) ?? 0;
   const pipelineHealthScore = pipelineTotalRuns > 0
@@ -2446,8 +2461,11 @@ async function computeCompanyMetrics(companyId: string) {
 router.get('/company-summary', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    const metrics = await computeCompanyMetrics(companyId);
-    res.json(metrics);
+    // Super admins: the whole company. Everyone else: the teams of their analytics scope (the
+    // same teams the overview lists), so no other team's figures reach them through the summary.
+    const scope = await summaryTeamIds(req);
+    const metrics = await computeCompanyMetrics(companyId, scope.teamIds);
+    res.json({ ...metrics, scope: { level: scope.level, teamCount: metrics.teamCount, companyTeamCount: scope.companyTeamCount, companyWide: scope.teamIds === null } });
   } catch (error) {
     console.error('Error fetching company summary:', error);
     res.status(500).json({ error: 'Failed to fetch company summary' });
@@ -2468,11 +2486,13 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
       return res.status(403).json({ error: 'Executive insights are restricted.' });
     }
 
-    // 1. Same numbers as company-summary (shared helper)
-    const m = await computeCompanyMetrics(companyId);
+    // 1. Same numbers as company-summary (shared helper), for the caller's scope
+    const scope = await summaryTeamIds(req);
+    const m = await computeCompanyMetrics(companyId, scope.teamIds);
+    const companyWide = scope.teamIds === null;
 
-    // 2. Store Snapshot (nulls stay null)
-    await query(`
+    // 2. Store Snapshot (nulls stay null): company-wide figures only
+    if (companyWide) await query(`
       INSERT INTO company_kpi_snapshots 
       (company_id, snapshot_date, engineering_health_score, delivery_performance_score, developer_wellness_index, tech_debt_status_score, pipeline_health_score, avg_qa_score, avg_test_coverage, avg_defect_escape_rate, avg_flakiness_rate, automation_coverage)
       VALUES (?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -2493,13 +2513,14 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
       m.globalQaScore, m.avgTestCoverage, m.avgDefectEscapeRate, m.avgFlakinessRate, m.automationCoverage
     ]);
 
-    // 3. History: snapshots from the last 30 days
-    const history = await query<any>(`
+    // 3. History: company snapshots from the last 30 days (company-wide callers only; the stored
+    // snapshots are company aggregates and would show other teams' figures to a scoped caller)
+    const history = companyWide ? await query<any>(`
       SELECT * FROM company_kpi_snapshots 
       WHERE company_id = ? 
         AND snapshot_date >= CURRENT_DATE - 30
       ORDER BY snapshot_date ASC
-    `, [companyId]);
+    `, [companyId]) : [];
 
     // 4. Generate AI Analysis (retries + smaller-model fallback)
     let aiAnalysis = isGroqConfigured()
@@ -2516,7 +2537,7 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
           messages: [
             {
               role: 'system',
-              content: `You are a CTO/VP of Engineering advisor. Analyze these company-wide metrics and trends.
+              content: `You are a CTO/VP of Engineering advisor. Analyze these ${companyWide ? 'company-wide metrics' : `metrics of the ${m.teamCount} team${m.teamCount === 1 ? '' : 's'} in the reader's scope`} and trends.
 
 Current Metrics (team KPI snapshots as of ${m.asOf ?? 'unknown date'}; "no data" means not measured, do not guess a value):
 - Engineering Health: ${fmt(m.engineeringHealthScore)} (components without data are excluded: ${m.engineeringHealthBasis.missing.join(', ') || 'none'})

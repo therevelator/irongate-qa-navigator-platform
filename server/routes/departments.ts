@@ -2,6 +2,8 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
+import { policyActor } from '../middleware/access';
+import { analyticsTeamsInScope } from '../lib/userPolicy';
 
 const router = express.Router();
 
@@ -53,7 +55,8 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
       [req.params.id, req.companyId]
     );
 
-    department.teams = teams;
+    // Only the teams of the caller's analytics scope (as the overview).
+    department.teams = analyticsTeamsInScope(policyActor(req), teams);
 
     res.json({ department });
   } catch (error) {
