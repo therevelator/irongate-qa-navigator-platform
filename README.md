@@ -264,12 +264,36 @@ below them, and everyone for themselves). The direct reset stays.
   hashed), 10 failed resets per 15 minutes per address.
 - The Activity log records "Password reset requested" and "Password changed via e-mail link"; the
   User activity log records the requests by route only. Neither ever holds the token.
-- Sessions are signed cookies (7 days) with no server-side revocation, so a reset does **not**
-  sign out browsers that are already signed in.
+- A completed reset signs the person out on every device (see **Sessions** below).
 
 Migration: `supabase/migrations/20261123400000_password_resets.sql`. Endpoints:
 `POST /api/auth/forgot-password { email }`, `POST /api/auth/reset-password { token, password }`,
 `POST /api/admin/users/:id/send-reset-link`.
+
+**Sessions (sign out everywhere, how long a sign-in lasts).** A sign-in is a signed cookie. The
+server checks two limits on every request, from the user row it loads anyway:
+
+- **Sign out everywhere.** `users.sessions_valid_after`: a session issued before it is refused. It is
+  set by a reset with the e-mail link, an administrator's direct reset, changing your own password,
+  **Sign out my other devices** (the screen icon next to Sign out, in the navigation: this browser gets a
+  new cookie and stays signed in), the administrator's **Sign out everywhere** (Users, key button; same
+  permission as resetting the password) and the platform support repair action of the same name. It
+  also ends that person's platform support sessions. Deactivating a user still blocks at once.
+  The value is truncated to the second, so a session started in that same second stays valid.
+- **Sign-in lasts** (Parameters → Sign-in, super admins only): 1 hour, 8 hours, 1 day, 7 days
+  (default), 14 days or 30 days. A session older than the current value is refused, so shortening it
+  signs out anyone signed in for longer at once. At sign-in the cookie's max age and the token's
+  expiry are set from it, so a longer value applies from the next sign-in. Stored as the company
+  config `session_lifetime_hours`; the generic settings endpoint refuses that key. Changes are in
+  the Activity log.
+
+A refused session answers `401` with `code` `session_ended` or `session_expired` and the header
+`X-Session-Ended`; the app then shows the sign-in screen with "Your session has ended. Please sign
+in again." (or "Your sign-in has expired…") and opens the same address after sign-in.
+Migration: `supabase/migrations/20261123500000_sessions_valid_after.sql`. Endpoints:
+`POST /api/auth/sessions/sign-out-others`, `POST /api/admin/users/:id/sign-out-everywhere`,
+`GET|PUT /api/admin/session-settings { lifetimeHours }`,
+`POST /api/operator/companies/:companyId/users/:userId/sign-out-everywhere { reason }`.
 
 **E-mail.** All e-mail of the app (invitations, password resets, pulse surveys, alerts, the weekly
 digest) goes through one mailer. The first configured channel wins: **Resend** (`RESEND_API_KEY`),

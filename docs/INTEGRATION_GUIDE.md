@@ -173,7 +173,8 @@ The endpoints in section 5 that are marked **Session** authenticate a **user**, 
 # 1. Log in (email + password; SSO-only accounts cannot do this)
 curl -sS -c cookies.txt -X POST "$IRONGATE_URL/auth/login" \
   -H 'Content-Type: application/json' -d "{\"email\":\"$IRONGATE_USER\",\"password\":\"$IRONGATE_PASSWORD\"}"
-# 2. Call an endpoint with the session cookie (httpOnly cookie irongate_token, valid 7 days) ...
+# 2. Call an endpoint with the session cookie (httpOnly cookie irongate_token; valid as long as the company's
+#    "Sign-in lasts" setting, default 7 days) ...
 curl -sS -b cookies.txt "$IRONGATE_URL/teams"
 # ... or with the same token as a bearer header
 curl -sS -H "Authorization: Bearer $SESSION_JWT" "$IRONGATE_URL/teams"
@@ -187,11 +188,13 @@ Caveats, read them before you automate anything this way:
   your secret store, and nothing else on it.
 - Writes through them are **not** recorded in the ingestion log and are **not** idempotent. Developer metrics, debt impact and
   business impact values are range-checked: an out-of-range or non-numeric value is `400` with the field named (since R2 Phase 4).
-- The session token cannot be revoked individually: `POST /api/auth/logout` only clears the cookie. Deactivating the user stops
-  it at once (the server reloads the user on every request).
+- `POST /api/auth/logout` only clears the cookie. To end every session of the account, use "Sign out everywhere" (Users) or
+  reset its password; deactivating the user also stops it at once (the server reloads the user on every request).
+- A session older than the company's "Sign-in lasts" setting (Parameters, default 7 days) is refused. Either case answers
+  `401 {"error": …, "code": "session_ended" | "session_expired"}`: sign in again.
 - A forgotten password of that account is reset by e-mail: `POST /auth/forgot-password {"email": …}` (always `200`, the same
   message whether or not the account exists) e-mails a link valid for 60 minutes; `POST /auth/reset-password {"token", "password"}`
-  sets the new password. A reset does not revoke session tokens already issued.
+  sets the new password. A reset ends every session already issued for the account.
 - Invalid or expired session token: `403 {"error":"Invalid or expired token"}`; none: `401 {"error":"Access token required"}`.
 
 ---

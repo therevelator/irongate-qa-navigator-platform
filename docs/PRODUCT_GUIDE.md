@@ -182,10 +182,37 @@ below them), and everyone for themselves. Setting a password directly still work
 `password_resets` (one row per link: expiry, when it was used or closed, the request's address, which
 administrator sent it). The reset page removes the token from the address bar straight away and sends no
 Referer. The Activity log records "Password reset requested" and "Password changed via e-mail link". The
-User activity log records the requests by route only. Neither ever holds the token. Sessions are signed
-cookies valid for 7 days with no server-side revocation: a reset does **not** sign out a browser that is
-already signed in (deactivating the user does). Code: [`server/lib/passwordReset.ts`](../server/lib/passwordReset.ts),
+User activity log records the requests by route only. Neither ever holds the token. A completed reset
+signs the person out on every device (see **Sessions** below). Code: [`server/lib/passwordReset.ts`](../server/lib/passwordReset.ts),
 [`src/components/PasswordReset.tsx`](../src/components/PasswordReset.tsx).
+
+### Sessions
+
+A sign-in is a signed cookie. The server checks two limits on every request.
+
+**Sign out everywhere.** These end every existing session of a person:
+
+- a reset with the e-mail link, an administrator's direct password reset, changing your own password;
+- **Sign out my other devices** (the screen icon next to Sign out, at the bottom of the navigation). This
+  browser stays signed in; every other one is signed out;
+- **Sign out everywhere** for a user in **Users** (key button). Allowed to whoever may reset that person's
+  password. For yourself it works like "Sign out my other devices";
+- the platform support repair action **Sign out everywhere** (needs a reason; recorded in the platform log
+  and in the company's Activity log).
+
+The person's platform support sessions end too. Deactivating a user still blocks them at once.
+Technically: `users.sessions_valid_after` is set to the current second, and a session issued before it is
+refused. A session started within that same second stays valid.
+
+**Sign-in lasts.** Parameters → **Sign-in**, super admins only: 1 hour, 8 hours, 1 day, 7 days (default),
+14 days or 30 days. The current value applies to every request: shortening it signs out anyone signed in
+for longer than the new limit. A longer value applies from the next sign-in (the cookie and the token are
+issued for the value at sign-in). Every change is in the Activity log ("Sign-in lifetime"). There is no
+idle timeout.
+
+When a session ends this way the app shows the sign-in screen with "Your session has ended. Please sign in
+again." or "Your sign-in has expired. Please sign in again." After signing in, the same page opens.
+Code: [`server/lib/sessions.ts`](../server/lib/sessions.ts).
 
 ### E-mail
 
