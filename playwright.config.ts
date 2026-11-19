@@ -1,115 +1,87 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for E2E tests
- * See https://playwright.dev/docs/test-configuration
+ * Playwright configuration of the UI (end-to-end) suite. How to run it: docs/testing/README.md.
+ *
+ *  - Local:  npm run test:ui:local   (scripts/ui-tests/run-local.mjs prepares a test database and
+ *            starts the API and the web app, then runs this config with PW_EXTERNAL_SERVERS=1)
+ *  - CI:     .github/workflows/ui-tests.yml (sharded, blob reports merged into one HTML report)
+ *            and the @smoke gate in .github/workflows/ci.yml
+ *  - Remote: npm run test:ui:remote -- --base-url https://... --i-understand-this-is-live
+ *            (PW_REMOTE=1: only tests tagged @readonly run, see below)
+ *
+ * Environment: PW_BASE_URL (default http://localhost:5173), PW_WORKERS, PW_TRACE (on, off,
+ * retain-on-failure), PW_CHROMIUM_PATH (an already-installed Chromium).
  */
+const CI = !!process.env.CI;
+const REMOTE = process.env.PW_REMOTE === '1';
+const baseURL = process.env.PW_BASE_URL || 'http://localhost:5173';
+const workers = process.env.PW_WORKERS ? (/%$/.test(process.env.PW_WORKERS) ? process.env.PW_WORKERS : Number(process.env.PW_WORKERS)) : 2;
+const trace = (process.env.PW_TRACE as 'on' | 'off' | 'retain-on-failure' | undefined) ?? (CI ? 'retain-on-failure' : 'off');
+
+const chromiumLaunch = {
+  // Optional: point at an already-installed Chromium (e.g. PW_CHROMIUM_PATH=/opt/pw-browsers/...).
+  executablePath: process.env.PW_CHROMIUM_PATH || undefined,
+  args: [
+    '--disable-web-security',
+    '--disable-features=IsolateOrigins,site-per-process',
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+  ],
+};
+
 export default defineConfig({
   testDir: './tests/e2e',
   tsconfig: './tsconfig.playwright.json',
-  
+
   /* Maximum time one test can run */
-  timeout: 60 * 1000, // 60 seconds per test
-  
-  /* Maximum time to wait for expect() assertions */
-  expect: {
-    timeout: 10 * 1000, // 10 seconds for assertions
-  },
-  
-  /* Run tests in files in parallel */
-  fullyParallel: true, // Run sequentially to avoid resource issues
-  
-  /* Fail the build on CI if you accidentally left test.only in the source code */
-  forbidOnly: !!process.env.CI,
-  
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 1, // Retry once locally too
-  
-  /* Opt out of parallel tests on CI */
-  workers: process.env.CI ? 1 : 1, // Single worker to avoid conflicts
-  
-  /* Reporter to use */
-  reporter: [
-    ['html'],
-    ['list'],
-    ['json', { outputFile: 'test-results/results.json' }]
-  ],
-  
-  /* Shared settings for all the projects below */
+  timeout: 60 * 1000,
+  expect: { timeout: 10 * 1000 },
+
+  /* Every test is independent (own entities, or restores what it changes); files that share state run serially. */
+  fullyParallel: true,
+  forbidOnly: CI,
+  /* One retry in CI only: a test that needs it is reported as flaky in the HTML report. */
+  retries: CI ? 1 : 0,
+  workers,
+
+  /* A deployed site: only non-mutating tests (scripts/ui-tests/run-remote.mjs passes --grep @readonly too). */
+  grep: REMOTE ? /@readonly/ : undefined,
+
+  reporter: CI
+    ? [['blob'], ['list'], ['github']]
+    : [['html', { open: 'never' }], ['list'], ['json', { outputFile: 'test-results/results.json' }]],
+
   use: {
-    /* Base URL to use in actions like `await page.goto('/')` */
-    baseURL: 'http://localhost:5173',
-    
-    /* Maximum time for actions like click, fill, etc. */
-    actionTimeout: 15 * 1000, // 15 seconds
-    
-    /* Maximum time for navigation */
-    navigationTimeout: 30 * 1000, // 30 seconds
-    
-    /* Collect trace when retrying the failed test */
-    trace: 'on-first-retry',
-    
-    /* Screenshot on failure */
+    baseURL,
+    actionTimeout: 15 * 1000,
+    navigationTimeout: 30 * 1000,
+    trace,
     screenshot: 'only-on-failure',
-    
-    /* Video on failure */
-    video: 'retain-on-failure',
+    video: CI ? 'retain-on-failure' : 'off',
   },
 
-  /* Configure projects for major browsers */
   projects: [
+    // Installed Google Chrome (npm run test:e2e:all and friends pass --project explicitly).
     {
       name: 'chrome',
-      use: { 
-        ...devices['Desktop Chrome'],
-        channel: 'chrome', // Use installed Chrome instead of Chromium
-        launchOptions: {
-          args: [
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process',
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-          ],
-          slowMo: 100, // Slow down by 100ms to help with timing
-        },
-      },
+      use: { ...devices['Desktop Chrome'], channel: 'chrome', launchOptions: { ...chromiumLaunch, executablePath: undefined } },
     },
-    
-    // Chromium for CI/CD environments
+    // Playwright's Chromium: CI, npm run test:ui:local and every documented command.
     {
       name: 'chromium',
-      use: { 
-        ...devices['Desktop Chrome'],
-        launchOptions: {
-          // Optional: point at an already-installed Chromium (e.g. PW_CHROMIUM_PATH=/opt/pw-browsers/...).
-          executablePath: process.env.PW_CHROMIUM_PATH || undefined,
-          args: [
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process',
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-          ],
-          slowMo: 100,
-        },
-      },
+      use: { ...devices['Desktop Chrome'], launchOptions: chromiumLaunch },
     },
-
-    // Uncomment to test on more browsers
-    // {
-    //   name: 'firefox',
-    //   use: { ...devices['Desktop Firefox'] },
-    // },
-    // {
-    //   name: 'webkit',
-    //   use: { ...devices['Desktop Safari'] },
-    // },
   ],
 
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npm start',
-    url: 'http://localhost:5173',
-    reuseExistingServer: true, // Use existing server if already running
-    timeout: 180 * 1000, // 3 minutes to start
-  },
+  /* Start the app for a plain `npx playwright test` on a developer machine (uses .env). CI, the
+     local runner and remote mode start or point at the servers themselves. */
+  webServer: CI || REMOTE || process.env.PW_EXTERNAL_SERVERS === '1'
+    ? undefined
+    : {
+      command: 'npm start',
+      url: 'http://localhost:5173',
+      reuseExistingServer: true,
+      timeout: 180 * 1000,
+    },
 });
