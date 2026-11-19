@@ -372,3 +372,15 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--color-slate-300); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
 .dark ::-webkit-scrollbar-thumb { background: var(--color-slate-700); background-clip: content-box; }
+
+/* ---------------------------------------------------------------------
+   Battery liquid (HeroBattery liquid): a gentle wave along the surface.
+   No motion at all with prefers-reduced-motion (not even a fast loop).
+   --------------------------------------------------------------------- */
+@keyframes ig-liquid-y { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, -50%, 0); } }
+@keyframes ig-liquid-x { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-50%, 0, 0); } }
+.ig-liquid-wave-y { animation: ig-liquid-y 3.2s linear infinite; will-change: transform; }
+.ig-liquid-wave-x { animation: ig-liquid-x 3.2s linear infinite; will-change: transform; }
+@media (prefers-reduced-motion: reduce) {
+  .ig-liquid-wave-y, .ig-liquid-wave-x { animation: none !important; }
+}
