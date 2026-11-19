@@ -88,6 +88,13 @@ export interface SessionProblem { code: 'session_ended' | 'session_expired' | 'c
 export const COMPANY_SUSPENDED_MESSAGE = "Your organisation's access is suspended. Contact your administrator.";
 export const COMPANY_SUSPENDED: SessionProblem = { code: 'company_suspended', message: COMPANY_SUSPENDED_MESSAGE, status: 403 };
 
+/**
+ * SQL (scalar): the company hides the sample-data notices (companies.settings.hideSampleDataNotice);
+ * alias = the users row. Every answer that returns the signed-in user carries it (sign-in, /me, ...).
+ */
+export const hideSampleNoticeSql = (alias = 'u') =>
+  `(SELECT COALESCE((c.settings->>'hideSampleDataNotice')::boolean, false) FROM companies c WHERE c.id = ${alias}.company_id)`;
+
 /** SQL (scalar) of a user's company status; alias = the users row. */
 export const companyStatusSql = (alias = 'u') => `(SELECT c.status FROM companies c WHERE c.id = ${alias}.company_id)`;
 

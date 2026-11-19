@@ -5,7 +5,7 @@ import jwt from 'jsonwebtoken';
 import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
 import { inviteLimiter } from '../middleware/rateLimit';
-import { issueSessionCookie, COMPANY_SUSPENDED_MESSAGE, type SessionCookieOptions } from '../lib/sessions';
+import { issueSessionCookie, hideSampleNoticeSql, COMPANY_SUSPENDED_MESSAGE, type SessionCookieOptions } from '../lib/sessions';
 import { recordAuthEvent } from '../lib/authEvents';
 import { recordAudit } from '../lib/audit';
 import {
@@ -227,7 +227,8 @@ router.post('/invitations/accept', inviteLimiter, async (req, res) => {
     const { userId } = await acceptInvitation({ token, firstName, lastName, password });
     await setSessionCookie(res, userId, { method: 'invitation' });
     const user = await queryOne<any>(
-      `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id, is_active, email_verified, created_at
+      `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id, is_active, email_verified, created_at,
+              ${hideSampleNoticeSql('users')} AS hide_sample_notice
          FROM users WHERE id = ?`,
       [userId]
     );

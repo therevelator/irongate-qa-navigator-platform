@@ -108,13 +108,12 @@ test.describe('KPI targets', { tag: [TAG.area('parameters'), TAG.area('targets')
   test('PAR-05 a manager sees company targets read-only, no "apply to all", no sign-in or Slack settings', { tag: [TAG.negative, TAG.role('manager')] }, async ({ signInAs, page }) => {
     await signInAs('manager', '/parameters-config');
     await ready(page);
-    // Saving company-level values never asks to replace other departments' values (the API refuses that
-    // from a manager). The request is answered here, so the demo company is not changed.
-    let body: any = null;
-    await page.route(`${API_URL}/admin/configs`, (r) => { body = r.request().postDataJSON(); return r.fulfill({ json: { ok: true } }); });
-    await page.getByRole('button', { name: 'Save configuration' }).click();
-    await expect(page.getByText('Configuration saved (Company-wide)')).toBeVisible();
-    expect(body?.applyToAll).toBeUndefined();
+    // Company-wide values are the super admin's: at company scope the manager cannot save.
+    await expect(page.getByTestId('config-company-readonly')).toContainText('Company-wide values are set by super admins.');
+    await expect(page.getByTestId('config-save')).toBeDisabled();
+    // The API refuses it too.
+    const res = await page.request.post(`${API_URL}/admin/configs`, { data: { departmentId: 'all', teamId: 'all', configs: { sla_critical_hours: '3' } } });
+    expect(res.status()).toBe(403);
     await expect(page.getByText('Company-wide targets are set by super admins.', { exact: false })).toBeVisible();
     await expect(target(page, COVERAGE).good).toBeDisabled();
     await expect(page.getByTestId('kpi-targets-save')).toHaveCount(0);

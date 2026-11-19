@@ -1188,7 +1188,7 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
     const actor = actorOf(req);
 
     // Only super_admin and QA managers can modify configs; a QA manager only the department /
-    // team levels of departments they manage (company-level defaults: as before, any manager).
+    // team levels of departments they manage (company-level values: super admins only, below).
     if (!canManageCompanyConfig(actor)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
@@ -1222,6 +1222,11 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
     // The sign-in lifetime has its own endpoint (super admins only, allowed values only).
     if (Object.prototype.hasOwnProperty.call(configs, SESSION_LIFETIME_KEY)) {
       return res.status(400).json({ error: 'Change how long sign-ins last under Parameters → Sign-in (super admins only).' });
+    }
+    // Company-level values (no department, no team) are the super admin's; a QA manager writes only
+    // the departments they manage and those departments' teams.
+    if (!deptId && !tmId && !isCompanyAdmin(actor)) {
+      return res.status(403).json({ error: 'Only a super admin can change company-wide settings. Choose one of your departments or teams.' });
     }
     // The same rules as the Parameters page (src/lib/configRules.ts): numbers of 0 or more within
     // their range for the SLA and financial settings; short plain text under a valid key otherwise.

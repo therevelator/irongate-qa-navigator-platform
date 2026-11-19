@@ -15,7 +15,7 @@ import { clientIp } from '../lib/requestContext';
 import { recordServerError } from '../lib/opsLog';
 import {
   clearSessionCookie, currentSessionPersistent, endUserSessions, issueSessionCookie, wantsPersistentSession, lifetimeHours, lifetimeSettingSql, refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE,
-  companyProblem, companyStatusSql, sessionIdOf, COMPANY_SUSPENDED, COMPANY_SUSPENDED_MESSAGE,
+  companyProblem, companyStatusSql, hideSampleNoticeSql, sessionIdOf, COMPANY_SUSPENDED, COMPANY_SUSPENDED_MESSAGE,
 } from '../lib/sessions';
 import { recordAuthEvent } from '../lib/authEvents';
 import { authenticateToken, type AuthRequest } from '../middleware/auth';
@@ -178,7 +178,7 @@ router.post('/register', authLimiter, async (req, res) => {
 
     // Get created user
     const user = await queryOne<any>(
-      `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id
+      `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id, ${hideSampleNoticeSql('users')} AS hide_sample_notice
        FROM users WHERE id = ?`,
       [userId]
     );
@@ -216,7 +216,8 @@ router.post('/login', authLimiter, async (req, res) => {
     // Get user
     const user = await queryOne<any>(
       `SELECT id, email, password_hash, first_name, last_name, role, 
-              company_id, department_id, primary_team_id, is_active, ${companyStatusSql('users')} AS company_status
+              company_id, department_id, primary_team_id, is_active, ${companyStatusSql('users')} AS company_status,
+              ${hideSampleNoticeSql('users')} AS hide_sample_notice
        FROM users WHERE LOWER(email) = LOWER(?)`,
       [email]
     );
@@ -252,8 +253,9 @@ router.post('/login', authLimiter, async (req, res) => {
     // Update last login
     await query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
 
-    // Remove password hash from response
+    // Remove password hash (and the internal company status) from the response
     delete user.password_hash;
+    delete user.company_status;
 
     // Get assigned teams
     const teams = await query<any[]>(
@@ -362,7 +364,7 @@ router.get('/me', async (req, res) => {
               u.created_at, u.last_login, u.is_active, u.email_verified,
               u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime, ${companyStatusSql('u')} AS company_status,
               (SELECT s.revoked_at FROM user_sessions s WHERE s.id = ?::text AND s.user_id = u.id) AS session_revoked_at,
-              (SELECT COALESCE((c.settings->>'hideSampleDataNotice')::boolean, false) FROM companies c WHERE c.id = u.company_id) AS hide_sample_notice
+              ${hideSampleNoticeSql('u')} AS hide_sample_notice
        FROM users u WHERE u.id = ?`,
       [sessionIdOf(decoded), decoded.userId]
     );

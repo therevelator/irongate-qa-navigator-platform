@@ -31,7 +31,8 @@ or a manager of two departments); their access is the union. Data never crosses 
   length, sample data and job titles. Reads the change history, the ingestion log and the user activity log.
 - **Manager.** Sees the teams of the departments they manage (and nothing of other departments): dashboards, trends,
   Compare, TV mode, Analytics, the revenue roll-up of those teams, and individual developer rows of people who opted in.
-  Manages those teams and their people (below manager), sets their targets and alert rules, and reads the change history
+  Manages those teams and their people (below manager), sets their targets, parameters and alert rules (company-wide
+  values stay the super admin's), and reads the change history
   and ingestion log of their departments.
 - **Team lead.** Sees the teams they lead or belong to. Writes those teams' data (manual metrics, alerts, tracked actions,
   sending the wellbeing pulse), sees individual rows of people who opted in, and manages software engineers and viewers of
@@ -129,7 +130,7 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Departments page, move teams, assign managers and leads | yes | — | — | — | — |
 | Admin console (organisation structure) | yes | yes (their departments manageable) | — | — | — |
 | Admin console: API keys (ingestion), Sample data | yes | — | — | — | — |
-| Parameters (financial and pipeline settings) | company, departments, teams; "apply to every department and team" | company-level values and their departments and teams (not "apply to all") | — | — | — |
+| Parameters (financial and pipeline settings) | company, departments, teams; "apply to every department and team" | their departments and teams only (company-level values read-only: the page cannot save them and the API answers 403) | — | — | — |
 | KPI targets (with history) | company, department, team | department and team, in their departments | — | — | — |
 | Expected update frequency | yes | yes | — | — | — |
 | Session settings (how long sign-ins last) | yes | — | — | — | — |

@@ -64,6 +64,8 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
   const [applyToAllChoice, setApplyToAll] = useState(true);
   const applyToAll = canApplyToAll && applyToAllChoice;
   const companyScope = selectedDepartment === 'all';
+  // Company-wide values are the super admin's; a manager edits their departments and teams.
+  const readOnlyScope = companyScope && !canApplyToAll;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -153,7 +155,7 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
         title="System configuration"
         description="Team settings override department settings, which override company-wide settings. Empty fields inherit from the level above."
         actions={
-          <button onClick={handleSave} disabled={saving || loading} className={buttonClass.primary}>
+          <button onClick={handleSave} disabled={saving || loading || readOnlyScope} className={buttonClass.primary} data-testid="config-save">
             <Save size={15} /> {saving ? 'Saving…' : companyScope && applyToAll ? 'Save for all departments' : 'Save configuration'}
           </button>
         }
@@ -162,6 +164,11 @@ const ParametersConfiguration: React.FC<ParametersConfigurationProps> = () => {
       <div className="space-y-4">
         <Card>
           <CardHeader title="Scope" subtitle={`Currently editing: ${scopeLabel}`} />
+          {readOnlyScope && (
+            <p className="mb-3 text-sm text-slate-600 dark:text-slate-300" data-testid="config-company-readonly">
+              Company-wide values are set by super admins. Choose one of your departments or teams to change its values.
+            </p>
+          )}
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className="block">
               <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Department</span>
