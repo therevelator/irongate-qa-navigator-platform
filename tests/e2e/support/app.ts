@@ -50,14 +50,32 @@ export class AppShell {
   }
 }
 
-/** The page has no sideways scrolling (document wider than the viewport). */
+/**
+ * The page has no sideways scrolling: neither the document nor the main column is wider than the
+ * viewport, and no element sticks out to the right (except inside a container that scrolls or clips
+ * on purpose, such as a wide table).
+ */
 export async function expectNoHorizontalScroll(page: Page): Promise<void> {
-  await expect.poll(() => page.evaluate(() => {
-    const doc = document.documentElement;
+  // The configured width: with mobile emulation the layout viewport grows to fit overflowing content.
+  const width = page.viewportSize()?.width ?? 0;
+  await expect.poll(() => page.evaluate((vwConfigured) => {
+    const vw = Math.min(vwConfigured || Infinity, document.documentElement.clientWidth);
     const main = document.getElementById('main-scroll');
     const over = (el: Element | null) => (el ? el.scrollWidth - el.clientWidth : 0);
-    return Math.max(over(doc), over(document.body), over(main));
-  }), { message: 'horizontal overflow in px' }).toBeLessThanOrEqual(1);
+    const clipped = (el: Element) => {
+      for (let e = el.parentElement; e && e !== main && e !== document.body; e = e.parentElement) {
+        if (/(auto|scroll|hidden|clip)/.test(getComputedStyle(e).overflowX)) return true;
+      }
+      return false;
+    };
+    let sticking = 0;
+    (main ?? document.body).querySelectorAll('*').forEach((el) => {
+      const b = el.getBoundingClientRect();
+      if (b.width > 0 && b.right > vw + 1 && !clipped(el)) sticking = Math.max(sticking, Math.round(b.right - vw));
+    });
+    const docWider = Math.max(0, document.documentElement.scrollWidth - vw);
+    return Math.max(over(document.documentElement), over(document.body), over(main), sticking, docWider);
+  }, width), { message: 'horizontal overflow in px' }).toBeLessThanOrEqual(1);
 }
 
 /** Collect uncaught page errors; call the returned function at the end to assert none happened. */
