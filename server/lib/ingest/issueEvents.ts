@@ -468,9 +468,9 @@ function parseJson(body: any, opts: IssueOptions): ParsedIssues {
   const sprintsList: SprintRef[] = (Array.isArray(body?.sprints) ? body.sprints : []).map((s: any, i: number) => sprintOf(s, `sprints[${i}]`)).filter(Boolean) as SprintRef[];
   const byId = new Map(sprintsList.map((s) => [s.id, s]));
   const items: any[] = Array.isArray(body) ? body : Array.isArray(body?.issues) ? body.issues : body && typeof body === 'object' && (body.key || body.id) ? [body] : [];
+  if (body && typeof body === 'object' && !Array.isArray(body)) rejectComputed(body, '');
   if (!items.length && !sprintsList.length) throw new ReportError('Send {"issues": [...]} (and optionally "sprints": [...]), an array of issues, or one issue');
   if (items.length > MAX_ISSUES) throw new ReportError(`Too many issues in one request: at most ${MAX_ISSUES} (send several requests)`);
-  if (body && typeof body === 'object' && !Array.isArray(body)) rejectComputed(body, '');
   const issues = items.map((x, i) => jsonIssue(x, `issues[${i}]`, byId));
   void opts;
   return { issues, sprints: sprintsList, ignored: [] };
