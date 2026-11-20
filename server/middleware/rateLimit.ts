@@ -46,6 +46,16 @@ export const aiLimiter = rateLimit({
   message: { error: 'AI request limit reached, please wait a moment.' },
 });
 
+// On-demand recalculation of a team's forecasts and recommendations (POST /api/improve/teams/:id/refresh).
+export const improveRefreshLimiter = rateLimit({
+  keyGenerator: byClientIp,
+  windowMs: 60 * 1000,
+  max: Number(process.env.IMPROVE_REFRESH_LIMIT) || 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many recalculations; try again in a minute.' },
+});
+
 // KPI ingestion (POST /api/ingest/kpis): counted per API key (the hash of the bearer
 // token, never the token itself), falling back to the client IP when no key is sent.
 export const ingestLimiter = rateLimit({

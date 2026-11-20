@@ -29,7 +29,7 @@ export interface AuditInput {
   companyId: string;
   actorId: string | null;
   action: string;
-  entityType: 'user' | 'team' | 'department' | 'assignment' | 'invitation' | 'config' | 'api_key' | 'company' | 'saved_view' | 'alert' | 'action';
+  entityType: 'user' | 'team' | 'department' | 'assignment' | 'invitation' | 'config' | 'api_key' | 'company' | 'saved_view' | 'alert' | 'action' | 'recommendation';
   entityId?: string | null;
   summary: string;
   before?: unknown;

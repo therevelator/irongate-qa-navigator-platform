@@ -68,6 +68,7 @@ const ACTION_LABEL: Record<string, string> = {
   'alert.acknowledge': 'Alert acknowledged', 'alert_rules.update': 'Alert rules', 'notification_settings.update': 'Slack notifications',
   'notification_prefs.update': 'Notification preferences', 'action.create': 'Action created', 'action.update': 'Action changed',
   'action.status': 'Action status', 'action.delete': 'Action deleted',
+  'recommendation.accept': 'Recommendation added to the Action plan', 'recommendation.dismiss': 'Recommendation dismissed', 'recommendation.reopen': 'Recommendation reopened',
   'platform_support.view': 'Platform support viewed', 'platform_support.action': 'Platform support action',
   undo: 'Undo',
 };
