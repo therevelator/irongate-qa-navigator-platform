@@ -511,7 +511,7 @@ export const slowTestsRule: Rule = (f) => {
   return {
     ruleKey: 'slow_tests', subjectKey: '',
     title: slow.length
-      ? `Speed up the ${slow.length} slowest tests: they take ${share !== null ? `${Math.round(share * 100)}% of` : 'most of'} the ${fmt(m.current as number, m.unit)} test run`
+      ? `Speed up the ${slow.length === 1 ? 'slowest test: it takes' : `${slow.length} slowest tests: they take`} ${share !== null ? `${Math.round(share * 100)}% of` : 'most of'} the ${fmt(m.current as number, m.unit)} test run`
       : `Cut the test run from ${fmt(m.current as number, m.unit)} to ${targetText(m)}`,
     evidence: compact<Evidence>([currentEvidence(m), trendEvidence(m), forecastEvidence(m)]),
     items: slow.map((t) => ({ kind: 'test' as const, name: t.suite ? `${t.suite} › ${t.name}` : t.name, detail: `median ${secs(t.medianMs)} over ${t.runs} runs` })),
