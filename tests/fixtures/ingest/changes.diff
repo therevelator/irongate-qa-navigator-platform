@@ -1,0 +1,24 @@
+diff --git a/src/a.ts b/src/a.ts
+index 1111111..2222222 100644
+--- a/src/a.ts
++++ b/src/a.ts
+@@ -1,2 +1,4 @@
+ export function start() {
++  const x = compute();
++  return x;
+ }
+diff --git a/src/b.ts b/src/b.ts
+index 3333333..4444444 100644
+--- a/src/b.ts
++++ b/src/b.ts
+@@ -8,3 +8,3 @@ function tail() {
+   line8();
+   line9();
+-  oldLine10();
++  newLine10();
+diff --git a/README.md b/README.md
+--- a/README.md
++++ b/README.md
+@@ -1 +1,2 @@
+ # App
++More docs

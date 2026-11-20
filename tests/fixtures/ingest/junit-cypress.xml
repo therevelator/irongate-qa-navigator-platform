@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Mocha Tests" time="7.0200" tests="3" failures="0">
+  <testsuite name="Root Suite" timestamp="2026-11-18T13:00:00" tests="0" file="cypress/e2e/login.cy.ts" time="0.0000" failures="0">
+  </testsuite>
+  <testsuite name="Login" timestamp="2026-11-18T13:00:00" tests="2" time="5.0000" failures="0">
+    <testcase name="Login signs in with valid credentials" time="3.2000" classname="signs in with valid credentials">
+    </testcase>
+    <testsuite name="Login errors" timestamp="2026-11-18T13:00:04" tests="1" time="1.0000" failures="0">
+      <testcase name="Login errors shows an error for a wrong password" time="1.0000" classname="shows an error for a wrong password">
+      </testcase>
+    </testsuite>
+    <testcase name="Login remembers the user" time="0.8000" classname="remembers the user">
+    </testcase>
+  </testsuite>
+</testsuites>

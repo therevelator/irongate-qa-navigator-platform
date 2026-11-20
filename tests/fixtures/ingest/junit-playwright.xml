@@ -1,0 +1,20 @@
+<testsuites id="" name="" tests="3" failures="1" skipped="0" errors="0" time="12.48">
+<testsuite name="checkout.spec.ts" timestamp="2026-11-18T12:00:00.000Z" hostname="chromium" tests="3" failures="1" skipped="0" time="11.2" errors="0">
+<testcase name="Checkout › pays with card" classname="checkout.spec.ts" time="4.1">
+</testcase>
+<testcase name="Checkout › shows the receipt" classname="checkout.spec.ts" time="6.3">
+<failure message="checkout.spec.ts:30:5 shows the receipt" type="FAILURE">
+<![CDATA[  [chromium] › checkout.spec.ts:30:5 › Checkout › shows the receipt
+
+    Error: Timed out 5000ms waiting for expect(locator).toBeVisible()]]>
+</failure>
+<system-out>
+<![CDATA[
+[[ATTACHMENT|test-results/checkout-shows-the-receipt/trace.zip]]
+]]>
+</system-out>
+</testcase>
+<testcase name="Checkout › applies a voucher" classname="checkout.spec.ts" time="0.8">
+</testcase>
+</testsuite>
+</testsuites>

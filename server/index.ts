@@ -36,6 +36,7 @@ import './jobs/pulseCron'; // Automatic wellbeing pulse e-mail per team cadence
 import './jobs/cleanupCron'; // Retention of server_errors / user_activity / job_runs
 import activityRoutes from './routes/activity';
 import operatorRoutes from './routes/operator';
+import { isRawIngestPath } from './lib/ingest/body';
 import { requestContext } from './lib/requestContext';
 import './lib/userActivity'; // user activity log (request hook)
 import { apiErrorHandler } from './middleware/errorHandler';
@@ -104,8 +105,11 @@ app.use((req, res, next) => {
 });
 
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// The raw ingestion endpoints (tests, coverage, pipelines) read their own body (files up to 20 MB, gzip).
+const jsonParser = express.json();
+const formParser = express.urlencoded({ extended: true });
+app.use((req, res, next) => (isRawIngestPath(req.path) ? next() : jsonParser(req, res, next)));
+app.use((req, res, next) => (isRawIngestPath(req.path) ? next() : formParser(req, res, next)));
 
 // Request logging
 app.use((req, res, next) => {
