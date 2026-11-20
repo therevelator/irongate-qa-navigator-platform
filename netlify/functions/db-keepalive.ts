@@ -8,7 +8,7 @@ import { cleanupOperationalLogs, recordJobOutcome, recordServerError, flushBackg
  * free-tier database that pauses when idle stays awake. Also the retention cleanup of the
  * operations logs (server_errors older than 30 days, user_activity older than 90 days, job_runs
  * older than 90 days) and of the raw CI data (server/lib/calc/engine.ts cleanupRawData: payloads and
- * per-test / per-file rows after 35 days, everything raw after 13 months). Logs only ok / failed, counts and the duration; never the connection
+ * per-test / per-file rows after 35 days, everything raw, deployments and incidents included, after 13 months). Logs only ok / failed, counts and the duration; never the connection
  * string or any other secret.
  */
 export default async () => {
@@ -17,7 +17,7 @@ export default async () => {
     await pool.query('SELECT 1');
     const removed = await cleanupOperationalLogs();
     const raw = await cleanupRawData();
-    const summary = `ok in ${Date.now() - started} ms; removed ${removed.serverErrors} errors, ${removed.userActivity} activity rows, ${removed.jobRuns} job runs, ${removed.authEvents} sign-in events, ${removed.sessions} sessions; raw store: ${raw.payloads} payloads, ${raw.testResults} test results, ${raw.coverageFiles} coverage files, ${raw.uploads} uploads`;
+    const summary = `ok in ${Date.now() - started} ms; removed ${removed.serverErrors} errors, ${removed.userActivity} activity rows, ${removed.jobRuns} job runs, ${removed.authEvents} sign-in events, ${removed.sessions} sessions; raw store: ${raw.payloads} payloads, ${raw.testResults} test results, ${raw.coverageFiles} coverage files, ${raw.deployments} deployments, ${raw.incidents} incidents, ${raw.uploads} uploads`;
     console.log(`[db-keepalive] ${summary}`);
     await recordJobOutcome('db-keepalive', true, summary, new Date(started));
     return new Response('ok');

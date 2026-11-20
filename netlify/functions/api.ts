@@ -82,7 +82,7 @@ app.use((req, res, next) => {
 });
 
 app.use(cookieParser());
-// The raw ingestion endpoints (tests, coverage, pipelines) read their own body (files up to 20 MB, gzip).
+// The raw ingestion endpoints (tests, coverage, pipelines, deployments, commits, incidents) read their own body (files up to 20 MB, gzip).
 const jsonParser = express.json();
 const formParser = express.urlencoded({ extended: true });
 app.use((req, res, next) => (isRawIngestPath(req.path) ? next() : jsonParser(req, res, next)));

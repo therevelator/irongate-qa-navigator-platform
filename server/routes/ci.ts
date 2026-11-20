@@ -9,15 +9,23 @@
  *                                             (line_coverage, pass_rate, …) or a KPI column (test_coverage, …)
  *   GET /api/ci/status                        per team and kind: last data received (super admins)
  *   PUT /api/ci/teams/:id/main-branch         the branch coverage and pass rate use (super admins)
+ *   GET /api/ci/teams/:id/delivery            deliveries and incidents (v2 phase 2): DORA values, recent production
+ *                                             deploys with commit count and lead time, failed changes with what made
+ *                                             them failed, incidents with duration and linked deploy
+ *   GET /api/ci/services                      service → team mappings and the services seen (super admins)
+ *   PUT /api/ci/services                      map a service to a team: {service, teamId} (super admins)
+ *   DELETE /api/ci/services/:service          remove a mapping (super admins)
  *
  * Evidence follows the analytics scope (the same rule as the KPI history).
  */
 import express from 'express';
-import { query, queryOne } from '../../src/lib/db';
+import { pool, query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamAnalytics, policyActor } from '../middleware/access';
 import { isCompanyAdmin } from '../lib/userPolicy';
-import { EVIDENCE_FOR_KPI, METRICS } from '../lib/calc/engine';
+import { EVIDENCE_FOR_KPI, METRICS, groupOf } from '../lib/calc/engine';
+import { classifyFailedChanges, isCountedDeploy, loadDeliveryData } from '../lib/calc/delivery';
+import { isOutage } from '../lib/ingest/deliveryEvents';
 import { recordAudit } from '../lib/audit';
 
 const router = express.Router();
@@ -86,9 +94,9 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
         GROUP BY s.name HAVING COUNT(*) FILTER (WHERE s.result = 'failed') > 0
         ORDER BY failed DESC, runs DESC LIMIT 10`, [teamId]);
 
-    const latest = await query<any[]>(
+    const latest = (await query<any[]>(
       `SELECT DISTINCT ON (metric_key) metric_key, day, value::float8 AS value, unit, sample_size, confidence
-         FROM metric_evidence WHERE team_id = ? ORDER BY metric_key, day DESC`, [teamId]);
+         FROM metric_evidence WHERE team_id = ? ORDER BY metric_key, day DESC`, [teamId])).filter((m: any) => groupOf(m.metric_key) === 'ci');
 
     res.json({
       teamId,
@@ -114,16 +122,19 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
 
 const dayStr = (d: any) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
 
-async function lastReceived(teamId: string) {
+async function lastReceived(teamId: string, kinds: string[] = ['tests', 'coverage', 'pipelines']) {
   const rows = await query<any[]>(
     `SELECT kind, MAX(received_at) AS at, COUNT(*)::int AS n FROM raw_uploads WHERE team_id = ? AND status = 'parsed' GROUP BY kind`, [teamId]);
-  // Sample (demo) raw data has no upload rows: its newest run counts.
+  // Sample (demo) raw data has no upload rows: its newest row counts.
   const sample = await query<any[]>(
     `SELECT 'tests' AS kind, MAX(created_at) AS at FROM test_runs WHERE team_id = ? AND is_sample
      UNION ALL SELECT 'coverage', MAX(created_at) FROM coverage_reports WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'pipelines', MAX(created_at) FROM pipeline_runs_raw WHERE team_id = ? AND is_sample`, [teamId, teamId, teamId]);
+     UNION ALL SELECT 'pipelines', MAX(created_at) FROM pipeline_runs_raw WHERE team_id = ? AND is_sample
+     UNION ALL SELECT 'deployments', MAX(created_at) FROM deployments_raw WHERE team_id = ? AND is_sample
+     UNION ALL SELECT 'commits', MAX(created_at) FROM deployment_commits WHERE team_id = ? AND is_sample
+     UNION ALL SELECT 'incidents', MAX(created_at) FROM incidents_raw WHERE team_id = ? AND is_sample`, [teamId, teamId, teamId, teamId, teamId, teamId]);
   const out: Record<string, { at: string | null; uploads: number; sample: boolean }> = {};
-  for (const k of ['tests', 'coverage', 'pipelines']) {
+  for (const k of kinds) {
     const r = rows.find((x: any) => x.kind === k);
     const s = sample.find((x: any) => x.kind === k);
     const at = r?.at ?? s?.at ?? null;
@@ -158,11 +169,22 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
     const coverageReports = ids(s.coverageReports).length
       ? await query<any[]>(`SELECT id, commit_sha, branch, format, created_at, lines_found, lines_hit, branches_found, branches_hit, file_count, changed_lines_found, changed_lines_hit FROM coverage_reports WHERE team_id = ? AND id = ANY(?::text[])`, [team.id, ids(s.coverageReports)])
       : [];
+    const failedDeployments: Array<{ id: string; externalId: string; reasons: Array<{ type: string; ref: string | null; at: string }> }> = Array.isArray(s.failedDeployments) ? s.failedDeployments.slice(0, 50) : [];
+    const deployIds = Array.from(new Set([...ids(s.deployments), ...failedDeployments.map((f) => f.id).filter((x) => typeof x === 'string')]));
+    const deployments = deployIds.length
+      ? await query<any[]>(`SELECT id, external_id, service, environment, commit_sha, started_at, finished_at, result, rollback_of, is_hotfix, url FROM deployments_raw WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY finished_at DESC`, [team.id, deployIds])
+      : [];
+    const incidents = ids(s.incidents).length
+      ? await query<any[]>(`SELECT id, external_id, title, severity, service, outage, status, opened_at, resolved_at, deployment_external_id, url FROM incidents_raw WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY opened_at DESC`, [team.id, ids(s.incidents)])
+      : [];
     const spec = METRICS[key];
+    const delivery = groupOf(key) === 'delivery';
     // Sample (demo) raw data: shown as evidence, never written to the KPI storage.
-    const sample = !!(await queryOne<any>(
-      `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM test_runs WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM coverage_reports WHERE team_id = ? AND is_sample)
-          OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = ? AND is_sample)`, [team.id, team.id, team.id]));
+    const sample = !!(await queryOne<any>(delivery
+      ? `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM deployments_raw WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM incidents_raw WHERE team_id = ? AND is_sample)`
+      : `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM test_runs WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM coverage_reports WHERE team_id = ? AND is_sample)
+          OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = ? AND is_sample)`, delivery ? [team.id, team.id] : [team.id, team.id, team.id]));
+    const reasonsOf = new Map(failedDeployments.map((f) => [f.id, f.reasons]));
     res.json({
       sample,
       teamId: team.id, metric: key, label: spec.label, kpiColumn: ev.kpi_column, day: dayStr(ev.day), value: ev.value, unit: ev.unit,
@@ -173,6 +195,8 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
         testRuns: testRuns.map((r: any) => ({ id: r.id, runId: r.run_id, attempt: r.attempt, commit: r.commit_sha, branch: r.branch, startedAt: r.started_at, passed: r.passed, failed: r.failed, errors: r.errored, skipped: r.skipped, durationMs: Number(r.duration_ms), format: r.format })),
         pipelineRuns: pipelineRuns.map((p: any) => ({ id: p.id, runId: p.external_id, attempt: p.attempt, name: p.name, commit: p.commit_sha, branch: p.branch, startedAt: p.started_at, durationSeconds: p.duration_s, result: p.result, url: p.url })),
         coverageReports: coverageReports.map((c: any) => ({ id: c.id, commit: c.commit_sha, branch: c.branch, format: c.format, createdAt: c.created_at, linesFound: c.lines_found, linesHit: c.lines_hit, branchesFound: c.branches_found, branchesHit: c.branches_hit, files: c.file_count, changedLinesFound: c.changed_lines_found, changedLinesHit: c.changed_lines_hit })),
+        deployments: deployments.map((d: any) => ({ id: d.id, deploymentId: d.external_id, service: d.service, environment: d.environment, commit: d.commit_sha, startedAt: d.started_at, finishedAt: d.finished_at, result: d.result, rollbackOf: d.rollback_of, hotfix: d.is_hotfix, url: d.url, failedBecause: reasonsOf.get(d.id) ?? [] })),
+        incidents: incidents.map((i: any) => ({ id: i.id, incidentId: i.external_id, title: i.title, severity: i.severity, service: i.service, outage: isOutage(i.severity, i.outage), status: i.status, openedAt: i.opened_at, resolvedAt: i.resolved_at, deploymentId: i.deployment_external_id, url: i.url })),
       },
     });
   } catch (error) {
@@ -194,14 +218,17 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
          FROM raw_uploads WHERE company_id = ? AND status = 'parsed' GROUP BY team_id, kind`, [companyId]);
     const rejected = await query<any[]>(
       `SELECT MAX(received_at) AS at, COUNT(*)::int AS n FROM ingestion_log
-        WHERE company_id = ? AND status = 'rejected' AND source ~ '^(tests|coverage|pipelines)' AND received_at >= now() - interval '7 days'`, [companyId]);
+        WHERE company_id = ? AND status = 'rejected' AND source ~ '^(tests|coverage|pipelines|deployments|commits|incidents)' AND received_at >= now() - interval '7 days'`, [companyId]);
     const keys = await query<any[]>(`SELECT COUNT(*)::int AS n FROM api_keys WHERE company_id = ? AND revoked_at IS NULL`, [companyId]);
     // Sample (demo) raw data has no upload rows: its newest run counts, marked as sample.
     const sample = await query<any[]>(
       `SELECT team_id, 'tests' AS kind, MAX(created_at) AS at, COUNT(*)::int AS n FROM test_runs WHERE company_id = ? AND is_sample GROUP BY team_id
        UNION ALL SELECT team_id, 'coverage', MAX(created_at), COUNT(*)::int FROM coverage_reports WHERE company_id = ? AND is_sample GROUP BY team_id
-       UNION ALL SELECT team_id, 'pipelines', MAX(created_at), COUNT(*)::int FROM pipeline_runs_raw WHERE company_id = ? AND is_sample GROUP BY team_id`,
-      [companyId, companyId, companyId]);
+       UNION ALL SELECT team_id, 'pipelines', MAX(created_at), COUNT(*)::int FROM pipeline_runs_raw WHERE company_id = ? AND is_sample GROUP BY team_id
+       UNION ALL SELECT team_id, 'deployments', MAX(created_at), COUNT(*)::int FROM deployments_raw WHERE company_id = ? AND is_sample GROUP BY team_id
+       UNION ALL SELECT team_id, 'commits', MAX(created_at), COUNT(*)::int FROM deployment_commits WHERE company_id = ? AND is_sample GROUP BY team_id
+       UNION ALL SELECT team_id, 'incidents', MAX(created_at), COUNT(*)::int FROM incidents_raw WHERE company_id = ? AND is_sample GROUP BY team_id`,
+      [companyId, companyId, companyId, companyId, companyId, companyId]);
     res.json({
       activeKeys: keys[0]?.n ?? 0,
       rejectedLast7Days: rejected[0]?.n ?? 0,
@@ -212,7 +239,10 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
           const x = sample.find((y: any) => y.team_id === t.id && y.kind === k);
           return x ? { at: x.at, uploads: x.n, format: null, sample: true } : null;
         };
-        return { id: t.id, name: t.name, department: t.department_name, mainBranch: t.main_branch, tests: of('tests'), coverage: of('coverage'), pipelines: of('pipelines') };
+        return {
+          id: t.id, name: t.name, department: t.department_name, mainBranch: t.main_branch, tests: of('tests'), coverage: of('coverage'), pipelines: of('pipelines'),
+          deployments: of('deployments'), commits: of('commits'), incidents: of('incidents'),
+        };
       }),
     });
   } catch (error) {
@@ -237,6 +267,128 @@ router.put('/teams/:id/main-branch', authenticateToken, async (req: AuthRequest,
   } catch (error) {
     console.error('Main branch error:', error);
     res.status(500).json({ error: 'Failed to save the main branch' });
+  }
+});
+
+router.get('/teams/:id/delivery', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const team = await assertTeamAnalytics(req, res, req.params.id as string);
+    if (!team) return;
+    const teamId = team.id;
+    const today = new Date().toISOString().slice(0, 10);
+    const from = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
+    const client = await pool.connect();
+    let data;
+    try { data = await loadDeliveryData(client, teamId, from, today); } finally { client.release(); }
+    const now = Date.now();
+    const since = Date.parse(`${from}T00:00:00Z`);
+    const failures = classifyFailedChanges(data.deploys, data.incidents, now);
+    const byExt = new Map(data.deploys.map((d) => [d.externalId, d]));
+    const iso = (t: number | null) => (t === null ? null : new Date(t).toISOString());
+    const reasons = (id: string) => (failures.get(id) ?? []).map((r) => ({ type: r.type, ref: r.ref, at: iso(r.at) }));
+    const recent = data.deploys.filter((d) => d.finishedAt >= since).sort((a, b) => b.finishedAt - a.finishedAt);
+    const deploy = (d: (typeof recent)[number]) => ({
+      id: d.id, deploymentId: d.externalId, service: d.service, environment: d.environment, commit: d.commit, startedAt: iso(d.startedAt), finishedAt: iso(d.finishedAt),
+      result: d.result, hotfix: d.hotfix, rollbackOf: d.rollbackOf, counted: isCountedDeploy(d), commitCount: d.commitCount,
+      leadTimeHours: d.firstAuthoredAt !== null && d.firstAuthoredAt <= d.finishedAt ? Math.round(((d.finishedAt - d.firstAuthoredAt) / 3_600_000) * 10) / 10 : null,
+      url: d.url, failedBecause: reasons(d.id),
+    });
+    const incidents = data.incidents.filter((i) => i.openedAt >= since || i.resolvedAt === null || i.resolvedAt >= since).sort((a, b) => b.openedAt - a.openedAt).slice(0, 25).map((i) => ({
+      id: i.id, incidentId: i.externalId, title: i.title, severity: i.severity, service: i.service, outage: isOutage(i.severity, i.outage), category: i.category,
+      status: i.resolvedAt !== null ? 'resolved' : i.acknowledgedAt !== null ? 'acknowledged' : 'open', openedAt: iso(i.openedAt), acknowledgedAt: iso(i.acknowledgedAt), resolvedAt: iso(i.resolvedAt),
+      durationHours: Math.round((((i.resolvedAt ?? now) - i.openedAt) / 3_600_000) * 10) / 10,
+      deployment: i.deployment ? { deploymentId: i.deployment, id: byExt.get(i.deployment)?.id ?? null, finishedAt: iso(byExt.get(i.deployment)?.finishedAt ?? null), service: byExt.get(i.deployment)?.service ?? null } : null,
+      url: i.url,
+    }));
+    const latest = (await query<any[]>(
+      `SELECT DISTINCT ON (metric_key) metric_key, day, value::float8 AS value, unit, sample_size, confidence
+         FROM metric_evidence WHERE team_id = ? ORDER BY metric_key, day DESC`, [teamId])).filter((m: any) => groupOf(m.metric_key) === 'delivery');
+    const sample = await queryOne<any>(
+      `SELECT EXISTS (SELECT 1 FROM deployments_raw WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM incidents_raw WHERE team_id = ? AND is_sample) AS s`, [teamId, teamId]);
+    res.json({
+      teamId,
+      sample: !!sample?.s,
+      lastReceived: await lastReceived(teamId, ['deployments', 'commits', 'incidents']),
+      metrics: latest.map((m: any) => ({ key: m.metric_key, label: METRICS[m.metric_key]?.label ?? m.metric_key, day: dayStr(m.day), value: m.value, unit: m.unit, sampleSize: m.sample_size, confidence: m.confidence })),
+      deployments: recent.filter(isCountedDeploy).slice(0, 25).map(deploy),
+      notCounted: recent.filter((d) => !isCountedDeploy(d)).slice(0, 10).map(deploy),
+      failedChanges: recent.filter((d) => failures.has(d.id)).slice(0, 20).map(deploy),
+      incidents,
+      totals: {
+        productionDeploys: recent.filter(isCountedDeploy).length, failedChanges: recent.filter((d) => failures.has(d.id)).length,
+        incidents: data.incidents.filter((i) => i.openedAt >= since).length, openIncidents: data.incidents.filter((i) => i.resolvedAt === null).length, days: 30,
+      },
+    });
+  } catch (error) {
+    console.error('Delivery evidence error:', error);
+    res.status(500).json({ error: 'Failed to load deliveries and incidents' });
+  }
+});
+
+const SERVICE_RE = /^[^\s\u0000-\u001f][^\u0000-\u001f]{0,254}$/;
+
+router.get('/services', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (!isCompanyAdmin(policyActor(req))) return res.status(403).json({ error: 'Super admin access required' });
+    const companyId = req.user!.companyId;
+    const mappings = await query<any[]>(
+      `SELECT m.service, m.team_id, t.name AS team_name, m.updated_at FROM service_teams m JOIN teams t ON t.id = m.team_id WHERE m.company_id = ? ORDER BY m.service`, [companyId]);
+    const seen = await query<any[]>(
+      `SELECT service, team_id, MAX(at) AS last_at, SUM(n)::int AS events FROM (
+         SELECT service, team_id, MAX(finished_at) AS at, COUNT(*) AS n FROM deployments_raw WHERE company_id = ? AND service IS NOT NULL GROUP BY service, team_id
+         UNION ALL SELECT service, team_id, MAX(opened_at), COUNT(*) FROM incidents_raw WHERE company_id = ? AND service IS NOT NULL GROUP BY service, team_id) x
+        GROUP BY service, team_id ORDER BY service LIMIT 500`, [companyId, companyId]);
+    res.json({
+      mappings: mappings.map((m: any) => ({ service: m.service, teamId: m.team_id, teamName: m.team_name, updatedAt: m.updated_at })),
+      seen: seen.map((x: any) => ({ service: x.service, teamId: x.team_id, lastAt: x.last_at, events: x.events })),
+    });
+  } catch (error) {
+    console.error('Service mappings error:', error);
+    res.status(500).json({ error: 'Failed to load the service mappings' });
+  }
+});
+
+router.put('/services', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (!isCompanyAdmin(policyActor(req))) return res.status(403).json({ error: 'Super admin access required' });
+    const service = typeof req.body?.service === 'string' ? req.body.service.trim() : '';
+    const teamId = typeof req.body?.teamId === 'string' ? req.body.teamId.trim() : '';
+    if (!SERVICE_RE.test(service)) return res.status(400).json({ error: 'service must be the service name the events carry (1 to 255 characters)' });
+    if (!teamId) return res.status(400).json({ error: 'teamId is required' });
+    const companyId = req.user!.companyId;
+    const team = await queryOne<any>('SELECT id, name FROM teams WHERE id = ? AND company_id = ?', [teamId, companyId]);
+    if (!team) return res.status(404).json({ error: 'Team not found' });
+    const before = await queryOne<any>('SELECT team_id FROM service_teams WHERE company_id = ? AND service = ?', [companyId, service]);
+    await query(
+      `INSERT INTO service_teams (company_id, service, team_id, updated_by, updated_at) VALUES (?, ?, ?, ?, now())
+       ON CONFLICT (company_id, service) DO UPDATE SET team_id = EXCLUDED.team_id, updated_by = EXCLUDED.updated_by, updated_at = now()`,
+      [companyId, service, team.id, req.user!.id]);
+    await recordAudit({
+      companyId, actorId: req.user!.id, action: 'ci.service_team', entityType: 'team', entityId: team.id,
+      summary: `Service ${service} mapped to ${team.name}`, before: before ? { teamId: before.team_id } : null, after: { service, teamId: team.id }, subjectIds: [team.id],
+    });
+    res.json({ service, teamId: team.id, teamName: team.name });
+  } catch (error) {
+    console.error('Service mapping error:', error);
+    res.status(500).json({ error: 'Failed to save the service mapping' });
+  }
+});
+
+router.delete('/services/:service', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    if (!isCompanyAdmin(policyActor(req))) return res.status(403).json({ error: 'Super admin access required' });
+    const companyId = req.user!.companyId;
+    const service = String(req.params.service);
+    const row = await queryOne<any>('DELETE FROM service_teams WHERE company_id = ? AND service = ? RETURNING team_id', [companyId, service]);
+    if (!row) return res.status(404).json({ error: 'No mapping for this service' });
+    await recordAudit({
+      companyId, actorId: req.user!.id, action: 'ci.service_team', entityType: 'team', entityId: row.team_id,
+      summary: `Mapping of service ${service} removed`, before: { service, teamId: row.team_id }, after: null, subjectIds: [row.team_id],
+    });
+    res.json({ service, removed: true });
+  } catch (error) {
+    console.error('Service mapping error:', error);
+    res.status(500).json({ error: 'Failed to remove the service mapping' });
   }
 });
 
