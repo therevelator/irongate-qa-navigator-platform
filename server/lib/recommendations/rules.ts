@@ -202,6 +202,12 @@ function forecastEvidence(m: MetricFacts): Evidence | null {
   return { label: 'Forecast', value: `about ${fmt(f.endValue, m.unit)} by ${shortDay(f.endDay)} at this rate` };
 }
 
+/** For a metric on target now but forecast to miss it: "Test coverage (84% now) misses ≥ 80% around 6 Jan at this rate". */
+function missTitle(m: MetricFacts): string | null {
+  if (offTarget(m) || m.forecast?.outlook !== 'will_miss' || !m.forecast.crossingDay || m.current === null) return null;
+  return `${m.label} (${fmt(m.current, m.unit)} now) misses ${targetText(m)} around ${shortDay(m.forecast.crossingDay)} at this rate`;
+}
+
 const compact = <T>(xs: Array<T | null | undefined | false>): T[] => xs.filter((x): x is T => !!x);
 
 /** Confidence: evidence from CI data and a confident forecast → high; KPI history only → medium / low. */
@@ -251,7 +257,7 @@ export const flakyTestsRule: Rule = (f) => {
     ? one
       ? `Fix the flaky test “${top[0].name}”: it failed ${fl.failedRunsTotal} run${fl.failedRunsTotal === 1 ? '' : 's'}${window}${hours ? ` and cost about ${hours} hours of reruns` : ''}`
       : `Fix the ${fl.flakyCount} flaky tests: they failed ${fl.failedRunsTotal} runs${window}${hours ? ` and cost about ${hours} hours of reruns` : ''}`
-    : `Bring test flakiness down from ${fmt(m.current, m.unit)} to ${targetText(m)}`;
+    : missTitle(m) ?? `Bring test flakiness down from ${fmt(m.current, m.unit)} to ${targetText(m)}`;
   return {
     ruleKey: 'flaky_tests', subjectKey: '',
     title,
@@ -305,7 +311,7 @@ export const coverageGapRule: Rule = (f) => {
     ruleKey: 'coverage_gap', subjectKey: '',
     title: files.length
       ? `Close the coverage gap in ${files.length} file${files.length === 1 ? '' : 's'}${share !== null ? ` that hold ${share}% of the uncovered lines` : ''}`
-      : `Raise test coverage from ${fmt(m.current as number, m.unit)} to ${targetText(m)}`,
+      : missTitle(m) ?? `Raise test coverage from ${fmt(m.current as number, m.unit)} to ${targetText(m)}`,
     evidence: compact<Evidence>([
       currentEvidence(m),
       trendEvidence(m),
@@ -512,7 +518,7 @@ export const slowTestsRule: Rule = (f) => {
     ruleKey: 'slow_tests', subjectKey: '',
     title: slow.length
       ? `Speed up the ${slow.length === 1 ? 'slowest test: it takes' : `${slow.length} slowest tests: they take`} ${share !== null ? `${Math.round(share * 100)}% of` : 'most of'} the ${fmt(m.current as number, m.unit)} test run`
-      : `Cut the test run from ${fmt(m.current as number, m.unit)} to ${targetText(m)}`,
+      : missTitle(m) ?? `Cut the test run from ${fmt(m.current as number, m.unit)} to ${targetText(m)}`,
     evidence: compact<Evidence>([currentEvidence(m), trendEvidence(m), forecastEvidence(m)]),
     items: slow.map((t) => ({ kind: 'test' as const, name: t.suite ? `${t.suite} › ${t.name}` : t.name, detail: `median ${secs(t.medianMs)} over ${t.runs} runs` })),
     nextStep: slow.length
@@ -531,7 +537,7 @@ export const changeFailureRule: Rule = (f) => {
   const deploys = f.metrics.deployment_frequency_per_week;
   return {
     ruleKey: 'change_failure', subjectKey: '',
-    title: `${fmt(m.current as number, m.unit)} of changes fail in production (target ${targetText(m)}): release smaller and behind flags`,
+    title: missTitle(m) ?? `${fmt(m.current as number, m.unit)} of changes fail in production (target ${targetText(m)}): release smaller and behind flags`,
     evidence: compact<Evidence>([
       currentEvidence(m),
       trendEvidence(m),

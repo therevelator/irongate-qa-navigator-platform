@@ -13,8 +13,13 @@ import { computeTeamRevenueImpact, teamFigures, type TeamRef } from '../lib/reve
 import { REVENUE_CAVEATS, rollUpRevenue } from '../lib/revenueImpact';
 import { computeCompanyMetrics } from './analytics';
 import {
-  movement, rankImproved, rankRisks, statusChanges, SUMMARY_TEXT, weekChange, type SummaryTeamInput,
+  movement, rankImproved, rankRisks, statusChanges, SUMMARY_TEXT, upcomingRisks, weekChange, withForecasts, type SummaryTeamInput,
 } from '../lib/executiveSummary';
+import { loadForecastsForTeams } from '../lib/forecast/store';
+import { improveIsStale, refreshTeamImprove } from '../lib/recommendations/store';
+
+/** Time the summary may spend recalculating forecasts that are due (the hourly job does the rest). */
+const SUMMARY_FORECAST_BUDGET_MS = 2_500;
 
 /**
  * Executive summary (src/components/ExecutiveSummary.tsx, /summary): everything the one-minute
@@ -33,6 +38,9 @@ import {
  *                 null with a reason otherwise
  *   alerts        open alerts the caller may see (canSeeAlert), the same counts as GET /api/alerts,
  *                 plus those opened / resolved in the last 7 days
+ *   forecasts     each risk item carries its metric's forecast ("at this rate …"); upcoming = KPIs on
+ *                 target now but forecast to miss within 8 weeks (server/lib/forecast; stored forecasts,
+ *                 those due recalculated first within SUMMARY_FORECAST_BUDGET_MS)
  * Team aggregates only: no individual data. A caller without a team in scope gets an empty summary.
  */
 const router = express.Router();
@@ -71,7 +79,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     const scope = { level, label: scopeLabel, companyName: company?.name ?? null, teamCount: teams.length, departments };
     const generatedAt = new Date().toISOString();
     if (!teams.length) {
-      return res.json({ scope, empty: true, generatedAt, quality: null, risks: { top: [], total: 0 }, improved: { top: [], total: 0 }, money: null, alerts: null, sinceLastWeek: null, teams: [], text: SUMMARY_TEXT });
+      return res.json({ scope, empty: true, generatedAt, quality: null, risks: { top: [], total: 0 }, upcoming: { top: [], total: 0 }, improved: { top: [], total: 0 }, money: null, alerts: null, sinceLastWeek: null, teams: [], text: SUMMARY_TEXT });
     }
 
     // 1. Quality: the overview's own figures over the scope (one definition).
@@ -170,7 +178,17 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
       money = { available: false, reason: 'Money at risk adds up the Business impact figures of several teams; it is shown to super admins and managers. Open Business impact for your team’s figures.', assumptionsPath: '/analytics/business-impact' };
     }
 
-    const risks = rankRisks(inputs);
+    // 6. Forecasts: recalculate the due ones within a small budget, then read the stored ones.
+    const fcStarted = Date.now();
+    for (const t of teams) {
+      if (Date.now() - fcStarted > SUMMARY_FORECAST_BUDGET_MS) break;
+      if (await improveIsStale(t.id)) await refreshTeamImprove({ id: t.id, company_id: companyId, department_id: t.department_id, name: t.name }).catch((e) => console.error('[summary] forecast refresh failed:', e?.message ?? e));
+    }
+    const forecasts = await loadForecastsForTeams(teamIds);
+
+    const ranked = rankRisks(inputs);
+    const risks = { ...ranked, top: withForecasts(ranked.top, forecasts) };
+    const upcoming = upcomingRisks(inputs, forecasts);
     const improved = rankImproved(inputs);
     const qaScore = metrics.globalQaScore;
     res.json({
@@ -192,6 +210,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
         sampleData: metrics.sampleData,
       },
       risks,
+      upcoming,
       improved,
       money,
       alerts,

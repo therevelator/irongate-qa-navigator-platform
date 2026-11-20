@@ -113,6 +113,7 @@ export type ExtraCatalogKey =
   | 'ddps'
   | 'team_members'
   | 'team_recommendations'
+  | 'improve_recommendations'
   | 'developer_recommendations'
   | 'revenue_sensitivity'
   | 'revenue_at_stake'
@@ -902,7 +903,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
   },
   team_recommendations: {
     kind: 'container',
-    title: 'Team recommendations',
+    title: 'AI insights',
     whyItMatters:
       'Turns the team\'s KPIs into a short list of strengths, areas to improve and a prioritised action plan with an owner and a timebox. ' +
       'It gives leads a starting point for retrospectives and quarterly planning without reading every chart.',
@@ -918,7 +919,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     direction: 'none',
     thresholds: { text: 'The per-metric thresholds of each KPI on this page', source: 'METRICS_CONFIG (src/config/metricsConfig.ts)' },
     storedIn: ['kpi_snapshots (latest row, read only)', 'technical_debt (debt score)', 'teams.ai_enabled'],
-    whereToFindIt: [`${TD} → Team recommendations (super admin, manager, team lead)`, 'Administration → Admin console (AI toggle per team)'],
+    whereToFindIt: [`${TD} → AI insights (super admin, manager, team lead)`, 'Administration → Admin console (AI toggle per team)'],
     productionSources: [
       { system: 'Not sourced directly', detail: 'Built from the stored KPIs above; their production sources apply' },
       { system: 'LLM provider (optional)', detail: 'Groq chat completions API, only when GROQ_API_KEY is set' },
@@ -928,6 +929,38 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
       note: 'Nothing to send: recommendations update when the underlying KPIs are ingested or entered.',
     },
     related: ['qa_score', 'technical_debt_score'],
+  },
+  improve_recommendations: {
+    kind: 'container',
+    title: 'Recommendations',
+    whyItMatters:
+      'Tells the team specifically what to do next and what it should change: each recommendation names the numbers behind it (and, with CI data, the tests, files ' +
+      'or stages), a concrete next step and the expected effect on one metric as a range. One click puts it in the Action plan, which then shows whether the metric moved.',
+    howCalculated:
+      'Deterministic rules (server/lib/recommendations/rules.ts) on the team\'s own data: flaky tests costing failed runs and reruns, the files holding most uncovered lines, ' +
+      'a build-time rise with the stage that grew, defect escapes rising while coverage falls, sizing drift with carryover, low wellbeing with blocked time, MTTR rising, ' +
+      'a failing pipeline stage, high-severity debt, the slowest tests, change failures. A rule fires only when its metric is off target or forecast to miss it, and not when ' +
+      'the forecast says it reaches the target anyway. Expected effect: from the evidence (e.g. lines needed to bring the listed files to the target) or the team\'s own ' +
+      'best level in the last 26 weeks (half-way to it at the low end). Ranked by expected effect in watch bands of the metric × confidence, plus a bonus when the metric ' +
+      'worsens; at most 6 at a time.',
+    calculationNotes: [
+      'Stored in recommendations (open / accepted → linked action / dismissed with a reason); recalculated about once a day by the hourly job, on demand (Recalculate) and when the page finds them out of date.',
+      'Forecasts: Theil–Sen trend of weekly medians (26 weeks), 80 % band from the residuals, 8 weeks ahead; "not enough data" with the reason when the history is short, old or noisy.',
+      'An accepted or dismissed recommendation keeps the evidence it had when it was decided.',
+    ],
+    unit: null,
+    direction: 'none',
+    thresholds: { text: 'The target valid now (and on each future day, for the forecasts) of each metric', source: 'target_history (Administration → Parameters → KPI targets)' },
+    storedIn: ['recommendations', 'forecasts', 'team_actions.recommendation_id', 'metric_values / kpi_snapshots (read)', 'flaky_test_evidence, coverage_files, pipeline_stage_runs (read)'],
+    whereToFindIt: [`${TD} → Recommendations (everyone who sees the team's trends; leads, the department's managers and admins act on them)`, `${TD} → each KPI tile's "Forecast" line`, 'Executive summary → risks ("at this rate …")'],
+    productionSources: [
+      { system: 'Not sourced directly', detail: 'Built from the stored KPI history and the raw CI evidence; their production sources apply' },
+    ],
+    howToSendIt: {
+      kind: 'computed',
+      note: 'Nothing to send. Sending raw test, coverage and pipeline reports (Connect your CI) makes them name the tests, files and stages.',
+    },
+    related: ['qa_score', 'team_recommendations'],
   },
   developer_recommendations: {
     kind: 'container',

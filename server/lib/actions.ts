@@ -22,6 +22,7 @@ import { recordAudit } from './audit';
 import { isTargetMetric, TARGET_METRIC_KEYS, TARGET_METRICS, type TargetMetric } from './targets';
 import { METRICS_CONFIG } from '../../src/config/metricsConfig';
 import { metricLabel, metricUnit } from './alerts';
+import type { Movement } from './recommendations/store';
 
 export type ActionStatus = 'open' | 'in_progress' | 'done' | 'dropped';
 export const ACTION_STATUSES: ActionStatus[] = ['open', 'in_progress', 'done', 'dropped'];
@@ -175,7 +176,7 @@ export async function refreshActionOutcomes(companyId: string, opts: { teamIds?:
  * ---------------------------------------------------------------------------------------- */
 
 const ACTION_SELECT = `
-  SELECT a.*, t.name AS team_name, t.department_id,
+  SELECT a.*, t.name AS team_name, t.department_id, rec.title AS recommendation_title,
          NULLIF(TRIM(COALESCE(o.first_name, '') || ' ' || COALESCE(o.last_name, '')), '') AS owner_name, o.email AS owner_email,
          NULLIF(TRIM(COALESCE(cb.first_name, '') || ' ' || COALESCE(cb.last_name, '')), '') AS created_by_name,
          (SELECT json_build_object('value', mv.value, 'recordedAt', mv.recorded_at) FROM metric_values mv
@@ -183,6 +184,7 @@ const ACTION_SELECT = `
            ORDER BY mv.recorded_at DESC, mv.received_at DESC LIMIT 1) AS current_value
     FROM team_actions a
     JOIN teams t ON t.id = a.team_id
+    LEFT JOIN recommendations rec ON rec.id = a.recommendation_id
     LEFT JOIN users o ON o.id = a.owner_id
     LEFT JOIN users cb ON cb.id = a.created_by`;
 
@@ -194,6 +196,14 @@ export interface ActionJson {
   description: string | null;
   origin: ActionOrigin;
   alertId: string | null;
+  /** The recommendation it was created from (Team detail → Recommendations), if any. */
+  recommendation: { id: string; title: string } | null;
+  /**
+   * Whether the metric moved since the action was created, from the snapshot history: the team's
+   * KPI snapshot on the creation day (or the latest before) and its latest snapshot since
+   * (listTeamActions; null elsewhere or without a linked metric).
+   */
+  movement?: Movement | null;
   owner: { id: string; name: string } | null;
   dueDate: string | null;
   overdue: boolean;
@@ -229,6 +239,7 @@ export function actionJson(r: any, now = Date.now()): ActionJson {
     description: r.description ?? null,
     origin: r.origin,
     alertId: r.alert_id ?? null,
+    recommendation: r.recommendation_id ? { id: r.recommendation_id, title: r.recommendation_title ?? 'Recommendation' } : null,
     owner: r.owner_id ? { id: r.owner_id, name: r.owner_name ?? r.owner_email ?? 'Unknown' } : null,
     dueDate: due,
     overdue: !!due && (r.status === 'open' || r.status === 'in_progress') && due < todayIso(),
@@ -253,7 +264,10 @@ export async function listTeamActions(companyId: string, teamId: string): Promis
       LIMIT 200`,
     [companyId, teamId]
   );
-  return rows.map((r: any) => actionJson(r));
+  const out = rows.map((r: any) => actionJson(r));
+  const { actionMovement } = await import('./recommendations/store');
+  for (const a of out) a.movement = a.metric ? await actionMovement(teamId, a.metric.key, a.createdAt) : null;
+  return out;
 }
 
 /** Actions of several teams (digest): open / in progress, and done in the last `doneDays` days. */

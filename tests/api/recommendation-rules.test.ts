@@ -133,6 +133,9 @@ describe('rules', () => {
     expect(r.evidence.find((e) => e.label === 'Defect escape rate')?.detail).toMatch(/escaped defects point at untested code/);
     expect(r.nextStep).toMatch(/^Add tests for client\.ts and the 2 other files listed/);
     expect(r.confidence).toBe('high');
+    // On target but forecast to miss: says when.
+    const falling = coverage({ series: (w) => 84 + w * 0.6, forecast: { trend: 'worsening', outlook: 'will_miss', crossingDay: '2027-01-06', endValue: 79, endDay: '2027-01-15' } });
+    expect(coverageGapRule(facts([falling]))!.title).toBe('Test coverage (84% now) misses ≥ 80% around 6 Jan at this rate');
     // Without a coverage report: KPI-based with the history effect.
     const k = coverageGapRule(facts([coverage()]))!;
     expect(k.title).toBe('Raise test coverage from 56% to ≥ 80%');

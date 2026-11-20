@@ -1,5 +1,6 @@
 import { QA_SCORE_THRESHOLDS, qaStatusFromScore, type QaStatus } from './metricFormulas';
 import type { KpiTargetCheck } from '../../src/config/metricsConfig';
+import { atThisRateText, type ForecastLike } from '../../src/lib/forecastText';
 
 /**
  * Executive summary (GET /api/summary, src/components/ExecutiveSummary.tsx): the pure rules that
@@ -21,6 +22,7 @@ export const SUMMARY_TEXT = {
   risks: `Teams with the QA score below ${QA_SCORE_THRESHOLDS.good} or a tracked KPI off its target, lowest QA score first.`,
   improved: 'Teams whose QA score rose most since last week.',
   lastWeek: 'Compared with each team’s latest snapshot from 7 to 14 days ago, as the overview’s trend.',
+  upcoming: 'On target now, but forecast to miss the target within 8 weeks at the current rate (Theil–Sen trend of each team’s own history), soonest first.',
   money: 'Revenue at stake: monthly revenue associated with closing each team’s quality gaps to target (a range, from the team’s own history; an association, not a promise). Open debt: cost of delay of open technical-debt items.',
 } as const;
 
@@ -145,4 +147,67 @@ export function movement(teams: SummaryTeamInput[]): { up: number; down: number;
     if (ch > 0) up++; else if (ch < 0) down++; else same++;
   }
   return { up, down, same, compared: up + down + same };
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Forecasts in the summary (v2 phase 4): "at this rate …"
+ * ---------------------------------------------------------------------------------------- */
+
+/** Summary item key → forecast metric (the stored forecasts of server/lib/forecast). */
+export const SUMMARY_FORECAST_METRIC: Record<SummaryRiskItem['key'], string> = {
+  qaScore: 'qa_score',
+  testCoverage: 'test_coverage',
+  automationCoverage: 'automation_coverage',
+  testFlakinessRate: 'test_flakiness_rate',
+  defectEscapeRate: 'defect_escape_rate',
+};
+
+export interface SummaryForecastLine {
+  metric: string;
+  outlook: 'on_track' | 'will_miss' | 'will_reach' | 'stays_off' | 'no_target' | null;
+  crossingDay: string | null;
+  /** "At this rate test coverage misses its target ≥ 80% around 18 Dec". */
+  text: string;
+  confidence: 'high' | 'medium' | 'low' | null;
+}
+
+export interface ForecastForSummary extends ForecastLike {
+  metric: string;
+  label: string;
+  confidence?: 'high' | 'medium' | 'low' | null;
+}
+
+export function forecastLine(f: ForecastForSummary | undefined): SummaryForecastLine | null {
+  if (!f || f.status !== 'ok') return null;
+  const text = atThisRateText(f.label, f);
+  if (!text) return null;
+  return { metric: f.metric, outlook: f.outlook ?? null, crossingDay: f.crossing?.day ?? null, text, confidence: f.confidence ?? null };
+}
+
+/** Each risk item gets the forecast of its metric ("at this rate …"), when there is one. */
+export function withForecasts<T extends { teamId: string; items: SummaryRiskItem[] }>(risks: T[], byTeam: Map<string, ForecastForSummary[]>): Array<T & { items: Array<SummaryRiskItem & { forecast: SummaryForecastLine | null }> }> {
+  return risks.map((r) => {
+    const list = byTeam.get(r.teamId) ?? [];
+    return { ...r, items: r.items.map((i) => ({ ...i, forecast: forecastLine(list.find((f) => f.metric === SUMMARY_FORECAST_METRIC[i.key])) })) };
+  });
+}
+
+export interface UpcomingRisk { teamId: string; teamName: string; departmentName: string | null; metric: string; label: string; crossingDay: string; text: string; confidence: 'high' | 'medium' | 'low' | null }
+
+/**
+ * Coming risks: the QA score or a tracked KPI that is on target now but forecast to miss it within
+ * the horizon, soonest first (teams of the scope only).
+ */
+export function upcomingRisks(teams: Array<{ teamId: string; teamName: string; departmentName: string | null }>, byTeam: Map<string, ForecastForSummary[]>, n = SUMMARY_TOP_N): { top: UpcomingRisk[]; total: number } {
+  const metrics = new Set(Object.values(SUMMARY_FORECAST_METRIC));
+  const all: UpcomingRisk[] = [];
+  for (const t of teams) {
+    for (const f of byTeam.get(t.teamId) ?? []) {
+      if (!metrics.has(f.metric) || f.status !== 'ok' || f.outlook !== 'will_miss' || !f.crossing) continue;
+      const line = forecastLine(f);
+      if (line) all.push({ teamId: t.teamId, teamName: t.teamName, departmentName: t.departmentName, metric: f.metric, label: f.label, crossingDay: f.crossing.day, text: line.text, confidence: line.confidence });
+    }
+  }
+  all.sort((a, b) => a.crossingDay.localeCompare(b.crossingDay) || a.teamName.localeCompare(b.teamName) || a.metric.localeCompare(b.metric));
+  return { top: all.slice(0, n), total: all.length };
 }

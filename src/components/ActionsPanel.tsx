@@ -8,6 +8,7 @@ import Pagination from './Pagination';
 import { useAuth } from '../contexts/AuthContext';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES as PAGE_SIZE_OPTIONS, paginate } from '../lib/pagination';
 import { actionPlanViewKey, groupByStatus, parseActionPlanView, type ActionPlanViewState } from '../lib/actionPlanView';
+import { MovementLine, type Movement } from './Improve';
 
 /**
  * Team detail → "Action plan": the team's tracked actions (GET /api/actions?teamId=), with owner,
@@ -30,6 +31,7 @@ export interface TrackedAction {
   id: string; title: string; description: string | null; origin: string; owner: { id: string; name: string } | null; dueDate: string | null; overdue: boolean;
   status: Status; metric: MetricOption | null; baseline: { value: number; at: string | null } | null; current: { value: number; at: string } | null;
   createdBy: string | null; createdAt: string; completedAt: string | null; canUpdateStatus: boolean; canEdit: boolean;
+  recommendation?: { id: string; title: string } | null; movement?: Movement | null;
   outcomes: Array<{ checkpoint: 'completion' | 'd14' | 'd30'; label: string; dueAt: string | null; value: number | null; valueAt: string | null; outcome: Outcome }>;
 }
 interface ActionsResponse { canManage: boolean; actions: TrackedAction[]; metrics: MetricOption[]; outcomeRule: string }
@@ -62,7 +64,13 @@ export function metricKeyFromKpi(kpi: string | undefined | null, metrics: Metric
   return metrics.find((m) => m.label.toLowerCase().startsWith(name) || name.startsWith(m.label.toLowerCase()))?.key ?? null;
 }
 
-const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionDraft | null; onDraftUsed?: () => void }> = ({ teamId, teamName, draft, onDraftUsed }) => {
+const ActionsPanel: React.FC<{
+  teamId: string; teamName: string; draft?: ActionDraft | null; onDraftUsed?: () => void;
+  /** Changing it reloads the list (e.g. after a recommendation became an action). */
+  reloadKey?: number;
+  /** After a status change or a delete (the Recommendations section shows the action's status). */
+  onChanged?: () => void;
+}> = ({ teamId, teamName, draft, onDraftUsed, reloadKey, onChanged }) => {
   const [data, setData] = useState<ActionsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ action: TrackedAction | null; draft: ActionDraft | null } | null>(null);
@@ -84,7 +92,7 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
     try { setData(await api<ActionsResponse>(`/actions?teamId=${encodeURIComponent(teamId)}`)); setError(null); }
     catch (e: any) { setError(e.status === 403 ? null : e.message); if (e.status === 403) setData(null); }
   }, [teamId]);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); }, [load, reloadKey]);
 
   // "Create action" on a recommendation opens the form pre-filled.
   useEffect(() => {
@@ -100,12 +108,13 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
       await api(`/actions/${a.id}`, { method: 'PATCH', json: { status } });
       toast.success(status === 'done' ? 'Marked done; the outcome is computed from the stored values' : `Status: ${STATUS_META[status].label}`);
       await load();
+      if (a.recommendation) onChanged?.();
     } catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   };
   const remove = async (a: TrackedAction) => {
     if (!window.confirm(`Delete the action "${a.title}"? This cannot be undone.`)) return;
     setBusy(a.id);
-    try { await api(`/actions/${a.id}`, { method: 'DELETE' }); toast.success('Action deleted'); await load(); }
+    try { await api(`/actions/${a.id}`, { method: 'DELETE' }); toast.success('Action deleted'); await load(); if (a.recommendation) onChanged?.(); }
     catch (e: any) { toast.error(e.message); } finally { setBusy(null); }
   };
 
@@ -121,7 +130,7 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
             <p className="text-sm font-medium text-slate-900 dark:text-white">{a.title}</p>
             <Badge tone={STATUS_META[a.status].tone}>{STATUS_META[a.status].label}</Badge>
             {a.overdue && <Badge tone="bad">Overdue</Badge>}
-            {a.origin === 'recommendation' && <span className="text-xs text-slate-500 dark:text-slate-400">from a recommendation</span>}
+            {a.origin === 'recommendation' && <span className="text-xs text-slate-500 dark:text-slate-400" data-testid="action-from-recommendation">{a.recommendation ? 'from the recommendation above' : 'from a recommendation'}</span>}
             {a.origin === 'alert' && <span className="text-xs text-slate-500 dark:text-slate-400">from an alert</span>}
           </div>
           {a.description && <p className="mt-1 text-sm text-slate-600 dark:text-slate-300">{a.description}</p>}
@@ -136,6 +145,7 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
               {' → '}now {fmtValue(a.current?.value, a.metric)}{a.current ? ` (${shortDate(a.current.at)})` : ''}
             </p>
           )}
+          {a.movement && <MovementLine m={a.movement} testId="action-movement" />}
           {a.outcomes.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2" data-testid="action-outcomes">
               {a.outcomes.map((o) => (
@@ -195,7 +205,7 @@ const ActionsPanel: React.FC<{ teamId: string; teamName: string; draft?: ActionD
         <div id={`${sectionId}-body`} hidden={!view.section} data-testid="action-plan-body">
           {error ? <p className="text-sm text-red-700 dark:text-red-400">{error}</p>
             : actions.length === 0 ? (
-              <EmptyState title="No actions yet" description={data?.canManage ? 'Create one, or use “Create action” on a recommendation below.' : 'Actions created by the team lead or a manager appear here.'} />
+              <EmptyState title="No actions yet" description={data?.canManage ? 'Create one, or use “Add to Action plan” on a recommendation above.' : 'Actions created by the team lead or a manager appear here.'} />
             ) : (
               <div className="space-y-2" data-testid="action-list">
                 {groups.map(({ status, items }) => {

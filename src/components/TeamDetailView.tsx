@@ -21,7 +21,6 @@ import { TrendingUp, TrendingDown, Minus, Users, Info, MonitorPlay, Mail, Link2,
 import toast from 'react-hot-toast';
 import { tvMailto, tvShareUrl } from './tv/tvNavigation';
 import ScoreVisual from './ScoreVisual';
-import { AreaChart, Area, Tooltip, ResponsiveContainer, YAxis, ReferenceLine } from 'recharts';
 import { statusWithTarget, targetLabel, watchBand } from '../lib/targetText';
 import { qaScoreInputLosses } from '../../server/lib/metricFormulas';
 import { ROLE_LABELS, ROLE_LABELS_PLURAL } from '../../server/lib/roleLabels';
@@ -39,6 +38,7 @@ import { PulseTeamSummary } from './PulseSurveyResults';
 import ActionsPanel, { type ActionDraft } from './ActionsPanel';
 import { canWriteTeamData } from '../../server/lib/userPolicy';
 import { CiEvidenceSection, EVIDENCE_FOR_KPI, HowCalculatedDialog, useTeamEvidence } from './CiEvidence';
+import { ForecastNote, RecommendationsPanel, TrendWithForecast, useImprove, type Forecast } from './Improve';
 
 // Team as returned by GET /api/teams (NUMERIC columns may arrive as strings; missing values are null)
 interface TeamWithKPI extends Omit<Team, 'qaScore'> {
@@ -393,6 +393,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
   // v2: metrics calculated from raw CI data and their evidence ("How this was calculated").
   const ciEvidence = useTeamEvidence(String(team.id));
   const [explain, setExplain] = useState<{ metric: string; source: string | null } | null>(null);
+  // v2 phase 4: forecasts (KPI tiles, trend charts) and recommendations of the team.
+  const improve = useImprove(String(team.id));
+  const [actionsReloadKey, setActionsReloadKey] = useState(0);
   const computedKeys = new Set((ciEvidence.data?.metrics ?? []).map((m) => m.key));
 
   const intervalLabel = (historyKey: string): string | null => {
@@ -707,6 +710,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
             losses={qaLosses}
             memberCountFallback={toNum(team.memberCount)}
             chart={ct}
+            forecast={improve.forecastOf('qa_score')}
           />, { value: shown(qaScore == null ? null : Math.round(qaScore), '/100'), className: 'sm:col-span-2' })}
           {info('technical_debt_score', <StatTile
             label="Technical debt score"
@@ -747,6 +751,11 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
           })}
         </div>
       </div>
+
+      {/* Improve: what to do next (ranked recommendations) and the tracked actions */}
+      <RecommendationsPanel teamId={String(team.id)} teamName={team.name} improve={improve} onActionCreated={() => setActionsReloadKey((n) => n + 1)} />
+
+      <ActionsPanel teamId={String(team.id)} teamName={team.name} draft={actionDraft} onDraftUsed={clearActionDraft} reloadKey={actionsReloadKey} onChanged={improve.reload} />
 
       {/* Team members */}
       {showMembers && info('team_members', (
@@ -878,20 +887,17 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
                       <span className="text-xs text-slate-500 dark:text-slate-400">{target ?? (k.lowerIsBetter ? 'Lower is better' : 'No target set')}</span>
                     )}
                   </div>
+                  {!historyForbidden && <ForecastNote f={improve.forecastOf(k.historyKey)} className="mt-1" />}
                   {history.length >= 2 ? (
-                    <div className="mt-3 h-20">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={history} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-                          <Tooltip
-                            contentStyle={ct.tooltip.contentStyle}
-                            labelStyle={ct.tooltip.labelStyle}
-                            itemStyle={ct.tooltip.itemStyle}
-                            formatter={(v: any) => [`${Number(v).toFixed(2)}${k.unit ? ` ${k.unit}` : ''}`, k.name]}
-                          />
-                          <Area type="monotone" dataKey="value" stroke={ct.series} fill={ct.series} fillOpacity={0.08} strokeWidth={1.5} />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </div>
+                    <TrendWithForecast
+                      history={history}
+                      forecast={improve.forecastOf(k.historyKey)}
+                      unit={improve.forecastOf(k.historyKey)?.unit ?? k.unit}
+                      name={k.name}
+                      chart={ct}
+                      heightClass="mt-3 h-20"
+                      testId={`trend-${k.historyKey}`}
+                    />
                   ) : (
                     <p className="mt-3 rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
                       {historyForbidden ? 'Trends are shown for teams in your analytics scope.' : history.length === 1 ? `1 snapshot in the last 90 days (${formatAsOf(history[0].date)})` : getIntervalText(k.historyKey)}
@@ -908,14 +914,13 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
       <CiEvidenceSection teamId={String(team.id)} evidence={ciEvidence} onExplain={(metric) => setExplain({ metric, source: null })} canConnect={user?.role === 'super_admin'} />
       <HowCalculatedDialog teamId={String(team.id)} metric={explain?.metric ?? null} cardSource={explain?.source ?? null} onClose={() => setExplain(null)} />
 
-      <ActionsPanel teamId={String(team.id)} teamName={team.name} draft={actionDraft} onDraftUsed={clearActionDraft} />
 
-      {/* Team recommendations */}
+      {/* AI insights (the earlier rule-based / LLM team recommendations) */}
       {canViewDeveloperInsights && info('team_recommendations', (
         <Card>
           <div data-testid="ai-insights-header">
             <CardHeader
-              title="Team recommendations"
+              title="AI insights"
               subtitle={
                 aiLoading ? 'Generating recommendations…' :
                   aiSuggestions?.source === 'groq' ? 'Generated by an AI model from the metrics above. May contain inaccuracies — verify before acting.' :
@@ -1090,7 +1095,8 @@ const QaScoreCard: React.FC<{
   losses: QaLoss[];
   memberCountFallback: number | null;
   chart: ReturnType<typeof chartTheme>;
-}> = ({ qaScore, threshold, status, history, trendDays, onTrendDays, confidence, facts, losses, memberCountFallback, chart }) => {
+  forecast?: Forecast | null;
+}> = ({ qaScore, threshold, status, history, trendDays, onTrendDays, confidence, facts, losses, memberCountFallback, chart, forecast }) => {
   const change = changeOverDays(history, 30, false, true);
   const points = lastDays(history, trendDays);
   const weakest = losses.find((l) => l.pointsLost >= 0.5) ?? null;
@@ -1130,6 +1136,7 @@ const QaScoreCard: React.FC<{
               ) : <span className="text-slate-500 dark:text-slate-400">No snapshot 30 days back to compare</span>}
             </p>
             <ConfidenceNote c={confidence} className="mt-1" testId="team-qa-confidence" />
+            <ForecastNote f={forecast ?? null} className="mt-1" testId="forecast-qa_score" />
           </div>
         </div>
 
@@ -1154,22 +1161,11 @@ const QaScoreCard: React.FC<{
             </div>
           </div>
           {points.length >= 2 ? (
-            <div className="h-14" role="img" aria-label={`QA score over the last ${trendDays} days: from ${Math.round(points[0].value)} to ${Math.round(points[points.length - 1].value)}${threshold ? `, target ${threshold.good}` : ''}`}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={points} margin={{ top: 4, right: 2, bottom: 2, left: 2 }}>
-                  <YAxis hide domain={[(min: number) => Math.max(0, Math.floor(Math.min(min, threshold?.good ?? min) - 5)), (max: number) => Math.min(100, Math.ceil(Math.max(max, threshold?.good ?? max) + 3))]} />
-                  {threshold && <ReferenceLine y={threshold.good} stroke={chart.axis} strokeDasharray="3 3" strokeWidth={1} />}
-                  <Tooltip contentStyle={chart.tooltip.contentStyle} labelStyle={chart.tooltip.labelStyle} itemStyle={chart.tooltip.itemStyle}
-                    labelFormatter={(_l: any, p: any) => formatAsOf(p?.[0]?.payload?.date) ?? ''}
-                    formatter={(v: any) => [`${Math.round(Number(v))}/100`, 'QA score']} />
-                  <Area type="monotone" dataKey="value" stroke={chart.series} fill={chart.series} fillOpacity={0.1} strokeWidth={1.5} isAnimationActive={false} />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            <TrendWithForecast history={points} forecast={forecast ?? null} unit="/100" name="QA score" chart={chart} heightClass="h-14" testId="team-qa-trend-chart" />
           ) : (
             <p className="flex h-14 items-center text-xs text-slate-500 dark:text-slate-400">Not enough snapshots in the last {trendDays} days</p>
           )}
-          {threshold && points.length >= 2 && <p className="text-[11px] text-slate-500 dark:text-slate-400">Dashed line: target {threshold.good}</p>}
+          {threshold && points.length >= 2 && <p className="text-[11px] text-slate-500 dark:text-slate-400">Dashed line: target {threshold.good}{forecast?.status === 'ok' ? ' · shaded: forecast' : ''}</p>}
         </div>
       </div>
 
