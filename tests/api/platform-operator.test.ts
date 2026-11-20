@@ -212,17 +212,15 @@ describe('Platform operator', () => {
     expect((await db.query('SELECT last_login, failed_login_attempts FROM platform_operators WHERE id = $1', [opId])).rows[0]).toEqual(expect.objectContaining({ failed_login_attempts: 0, last_login: expect.any(Date) }));
   });
 
-  test('OP-003b five failed sign-ins in a row lock the account for 15 minutes', async () => {
+  test('OP-003b an operator is never locked out: many wrong passwords, then the right one signs in', async () => {
     if (skip()) return;
+    await db.query("UPDATE platform_operators SET locked_until = now() + interval '1 hour' WHERE id = $1", [op2Id]);
     const statuses: number[] = [];
-    for (let i = 0; i < 5; i++) statuses.push((await signIn(op2Email, `nope-${i}`)).status);
-    expect(statuses).toEqual([401, 401, 401, 401, 401]);
-    const locked = await signIn(op2Email);
-    expect(locked.status).toBe(423);
-    const row = (await db.query('SELECT locked_until FROM platform_operators WHERE id = $1', [op2Id])).rows[0];
-    expect(Date.parse(row.locked_until) - Date.now()).toBeGreaterThan(14 * 60_000);
-    await db.query('UPDATE platform_operators SET locked_until = NULL WHERE id = $1', [op2Id]);
+    for (let i = 0; i < 7; i++) statuses.push((await signIn(op2Email, `nope-${i}`)).status);
+    expect(statuses).toEqual([401, 401, 401, 401, 401, 401, 401]);
     expect((await signIn(op2Email)).status).toBe(200);
+    const row = (await db.query('SELECT locked_until, failed_login_attempts FROM platform_operators WHERE id = $1', [op2Id])).rows[0];
+    expect(row).toEqual(expect.objectContaining({ locked_until: null, failed_login_attempts: 0 }));
   });
 
   test('OP-004 company session JWT and operator token are not interchangeable', async () => {
