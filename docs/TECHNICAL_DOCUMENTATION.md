@@ -1,400 +1,129 @@
-# 📚 IronGate QA Navigator - Technical Documentation
-
-**Version**: 1.0 | **Status**: Production Ready | **Last Updated**: November 19, 2025
-
----
-
-## Quick Links
-
-- [Installation Guide](./technical/INSTALLATION_GUIDE.md)
-- [Database Schema](./technical/DATABASE_SCHEMA.md)
-- [Database Setup](./technical/DATABASE_SETUP_GUIDE.md)
-- [API Documentation](./technical/METRICS_API_INDEX.md)
-- [Authentication Guide](./authentication/AUTH_DEVELOPER_GUIDE.md)
-- [Data Integration](./technical/DATA_INTEGRATION.md)
-
----
-
-## System Overview
-
-IronGate QA Navigator is an enterprise-grade Quality Intelligence Platform providing:
-- 22 KPIs across quality, speed, agility, and reliability
-- 9 advanced features for deep quality intelligence
-- 5-role RBAC system for enterprise security
-- 21-table database for comprehensive data management
-- Real-time dashboards with interactive visualizations
-
----
-
-## Technology Stack
-
-### Frontend
-- React 19.2 + TypeScript 5.9
-- Vite 7.2 (build tool)
-- TailwindCSS 4 (styling)
-- Recharts 3.4 (visualization)
-- Lucide React (icons)
-
-### Backend
-- Node.js 20+ / NestJS
-- PostgreSQL 14+ / Prisma ORM
-- JWT + bcrypt (authentication)
-- Redis (caching, optional)
-
-### DevOps
-- Docker + Docker Compose
-- Kubernetes (optional)
-- Nginx (reverse proxy)
-- GitHub Actions (CI/CD)
-
----
-
-## Quick Start
-
-### Frontend
-```bash
-npm install
-npm run dev          # Development
-npm run build        # Production build
-npm run preview      # Preview build
-```
-
-### Backend
-```bash
-npm install
-npm run db:setup     # Setup database
-npm run db:migrate   # Run migrations
-npm run start:dev    # Development
-npm run build        # Production build
-npm run start:prod   # Production
-```
-
-### Docker
-```bash
-docker-compose up -d              # Start all services
-docker-compose logs -f            # View logs
-docker-compose down               # Stop services
-```
-
----
-
-## Configuration
-
-### Environment Variables
-
-**Frontend (.env)**:
-```bash
-VITE_API_URL=http://localhost:3000/api
-VITE_secrettoken=your-secret-key
-```
-
-**Backend (.env)**:
-```bash
-NODE_ENV=production
-PORT=3000
-DATABASE_URL=postgresql://user:pass@localhost:5432/irongate_qa
-secrettoken=your-jwt-secret
-JWT_EXPIRATION=24h
-
-# Integrations
-JENKINS_URL=https://jenkins.company.com
-JENKINS_TOKEN=your-token
-JIRA_URL=https://company.atlassian.net
-JIRA_TOKEN=your-token
-SONARQUBE_URL=https://sonar.company.com
-SONARQUBE_TOKEN=your-token
-```
-
----
-
-## Architecture
-
-```
-┌─────────────┐
-│   Browser   │ (React + TypeScript)
-└──────┬──────┘
-       │
-┌──────▼──────┐
-│    Nginx    │ (Load Balancer + SSL)
-└──────┬──────┘
-       │
-┌──────▼──────┐
-│  NestJS API │ (Node.js Backend)
-└──────┬──────┘
-       │
-┌──────▼──────┬──────────┬──────────┐
-│ PostgreSQL  │  Redis   │   S3     │
-└─────────────┴──────────┴──────────┘
-       │
-┌──────▼──────────────────────────────┐
-│  Integrations (Jenkins, Jira, etc)  │
-└─────────────────────────────────────┘
-```
-
----
-
-## API Reference
-
-### Authentication
-
-**POST /api/auth/register**
-```json
-{
-  "email": "user@company.com",
-  "password": "SecurePass123!",
-  "firstName": "John",
-  "lastName": "Doe",
-  "role": "QA_ENGINEER"
-}
-```
-
-**POST /api/auth/login**
-```json
-{
-  "email": "user@company.com",
-  "password": "SecurePass123!"
-}
-```
-
-**Response**:
-```json
-{
-  "user": { "id": "uuid", "email": "...", "role": "..." },
-  "token": "jwt-token",
-  "refreshToken": "refresh-token"
-}
-```
-
-### Teams
-
-**GET /api/teams** - Get all teams  
-**GET /api/teams/:id** - Get team by ID  
-**POST /api/teams** - Create team  
-**PUT /api/teams/:id** - Update team  
-**DELETE /api/teams/:id** - Delete team  
-
-### Metrics
-
-**GET /api/metrics/dashboard** - Dashboard metrics  
-**GET /api/metrics/trends** - Historical trends  
-**GET /api/metrics/team/:id** - Team-specific metrics  
-
-### Tests
-
-**GET /api/tests** - Get all test cases  
-**POST /api/tests** - Create test case  
-**GET /api/tests/:id/executions** - Execution history  
-**POST /api/tests/:id/execute** - Execute test  
-
-### Features
-
-**GET /api/flaky-tests** - Flaky test analysis  
-**GET /api/technical-debt** - Technical debt items  
-**GET /api/pipelines/:id/visualize** - Pipeline visualization  
-**GET /api/gamification/leaderboard** - Leaderboard  
-
----
-
-## Database Schema
-
-### Core Tables (21 total)
-
-1. **users** - User accounts
-2. **sessions** - Active sessions
-3. **teams** - Team information
-4. **user_teams** - User-team relationships
-5. **metrics** - Quality metrics
-6. **test_cases** - Test cases
-7. **test_executions** - Test history
-8. **builds** - CI/CD builds
-9. **pipelines** - Pipeline configs
-10. **technical_debt** - Debt tracking
-11. **performance_metrics** - Performance data
-12. **business_metrics** - Business KPIs
-13. **gamification_points** - Points system
-14. **gamification_badges** - Badges
-15. **gamification_leaderboards** - Rankings
-16. **notifications** - User notifications
-17. **notification_preferences** - Preferences
-18. **audit_logs** - Audit trail
-19. **integrations** - External services
-20. **webhooks** - Webhook configs
-21. **settings** - System settings
-
-*See `docs/technical/DATABASE_SCHEMA.md` for complete SQL*
-
----
-
-## Security
-
-### Authentication
-- JWT tokens (24h expiry)
-- Refresh tokens (7d expiry)
-- bcrypt password hashing (10 rounds)
-- Session management
-
-### Authorization (5 Roles)
-1. **Super Admin** - Full access
-2. **QA Manager** - Organization oversight
-3. **Team Lead** - Team management
-4. **QA Engineer** - Testing & execution
-5. **Viewer** - Read-only
-
-### Security Features
-- Rate limiting (100 req/min)
-- Input validation & sanitization
-- SQL injection prevention
-- XSS protection
-- CSRF tokens
-- HTTPS/TLS encryption
-- Audit logging
-
----
-
-## Integrations
-
-### Jenkins
-```typescript
-const jenkins = new JenkinsClient({
-  url: process.env.JENKINS_URL,
-  token: process.env.JENKINS_TOKEN
-});
-const build = await jenkins.getBuild('job-name', 123);
-```
-
-### Jira
-```typescript
-const jira = new JiraClient({
-  url: process.env.JIRA_URL,
-  email: process.env.JIRA_EMAIL,
-  token: process.env.JIRA_TOKEN
-});
-const sprint = await jira.getSprint('sprint-id');
-```
-
-### SonarQube
-```typescript
-const sonar = new SonarQubeClient({
-  url: process.env.SONARQUBE_URL,
-  token: process.env.SONARQUBE_TOKEN
-});
-const metrics = await sonar.getMetrics('project-key');
-```
-
----
-
-## Deployment
-
-### Docker Production
-```bash
-docker build -t irongate:latest .
-docker run -p 3000:3000 irongate:latest
-```
-
-### Kubernetes
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: irongate
-spec:
-  replicas: 3
-  template:
-    spec:
-      containers:
-      - name: irongate
-        image: irongate:latest
-        ports:
-        - containerPort: 3000
-```
-
-### Cloud Options
-- **AWS**: ECS/EKS + RDS + ElastiCache + S3
-- **Azure**: AKS + Azure DB + Redis Cache + Blob
-- **GCP**: GKE + Cloud SQL + Memorystore + Storage
-
----
-
-## Monitoring
-
-### Health Check
-```bash
-GET /api/health
-```
-
-Response:
-```json
-{
-  "status": "ok",
-  "uptime": 86400,
-  "database": "connected",
-  "redis": "connected"
-}
-```
-
-### Metrics
-- Response time, error rate, throughput
-- Active users, feature usage
-- CPU, memory, disk, network
-
-### Logging
-```typescript
-logger.info('Event', { userId, action, timestamp });
-```
-
----
-
-## Performance Optimization
-
-1. **Database**: Indexes, connection pooling, read replicas
-2. **Caching**: Redis for data, CDN for assets
-3. **Frontend**: Code splitting, lazy loading, bundle optimization
-4. **Backend**: Query optimization, async processing
-
----
-
-## Troubleshooting
-
-### Common Issues
-
-**Database connection fails**
-- Check DATABASE_URL
-- Ensure PostgreSQL is running
-- Verify credentials
-
-**JWT token invalid**
-- Check secrettoken matches
-- Verify token not expired
-- Check token format
-
-**Integration fails**
-- Verify API tokens
-- Check network connectivity
-- Review integration logs
-
-### Debug Mode
-```bash
-LOG_LEVEL=debug npm run start:dev
-```
-
----
-
-## Additional Resources
-
-- **Installation**: `docs/technical/INSTALLATION_GUIDE.md`
-- **Database**: `docs/technical/DATABASE_SCHEMA.md`
-- **Authentication**: `docs/authentication/AUTH_DEVELOPER_GUIDE.md`
-- **Features**: `docs/features/ADVANCED_FEATURES_UPDATE.md`
-- **Business**: `docs/business/BUSINESS_PROPOSAL.md`
-
----
-
-## Support
-
-**Documentation**: All guides in `docs/` folder  
-**Email**: support@irongate.com  
-**Website**: irongate.com/docs  
-
----
-
-© 2025 IronGate Software LTD. All rights reserved.
+# Technical documentation
+
+Architecture and code map of QE Navigator, for engineers who work on the code. How to run it is in the
+[README](../README.md#getting-started) and [QUICK_START.md](QUICK_START.md); how to deploy it in
+[DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md); every API route in [METRICS_API_INDEX.md](METRICS_API_INDEX.md).
+
+## 1. Stack
+
+| Layer | Technology |
+|---|---|
+| Front end | React 19, TypeScript, Vite, Tailwind CSS 4, Recharts, lucide-react, react-hot-toast, SweetAlert2 |
+| API | Express 5 on Node 22, TypeScript run with `tsx`, `pg` for PostgreSQL, `jsonwebtoken`, `bcrypt`, `express-rate-limit`, `node-cron`, `nodemailer` |
+| Database | PostgreSQL (Supabase in production, Postgres 16 in CI) |
+| Hosting | Netlify (static site, the `api` function, scheduled and background functions), or one Node service |
+| Tests | Jest (API, database, unit), Playwright with axe-core (UI) |
+
+## 2. Repository layout
+
+| Path | Contents |
+|---|---|
+| `src/` | The React app. `App.tsx` (views and URL paths), `components/` (one file per screen or part; `operator/` is the platform panel; `tv/` TV mode parts), `contexts/` (auth, theme, analytics scope), `lib/` (shared client logic: access, appearance, battery scale, forecast text, pagination, password policy), `config/` (API base URL, `metricsConfig.ts` default targets), `data/` (metric catalog, chart helpers) |
+| `src/lib/db.ts` | The database helper used by the server: `query`, `queryOne`, `transaction`, `?` placeholders translated to `$1, $2, …`; NUMERIC values come back as strings |
+| `server/index.ts` | The Express app for the Node service: CORS, parsers, rate limit, routers, WebSocket, static files in production |
+| `server/routes/` | One router per area (see METRICS_API_INDEX.md) |
+| `server/middleware/` | `auth.ts` (session), `apiKey.ts` (ingestion keys), `access.ts` (permission helpers), `rateLimit.ts`, `errorHandler.ts` |
+| `server/lib/` | Domain logic: `userPolicy.ts` (every access rule), `kpiIngest.ts` and `metricValues.ts` (the one KPI write path), `metricFormulas.ts`, `targets.ts`, `staleness.ts`, `alerts.ts`, `actions.ts`, `pulse*.ts`, `privacy.ts`, `sessions.ts`, `sso.ts`, `invitations.ts`, `passwordReset.ts`, `mailer.ts`, `operator.ts`, `authEvents.ts`, `userActivity.ts`, `executiveSummary.ts`, `revenueImpact.ts`, `demoGenerate.ts` |
+| `server/lib/ingest/` | Raw data parsers and stores: test reports, coverage, pipelines, deployments, incidents, issues, SARIF |
+| `server/lib/calc/` | Calculation engine: `engine.ts` (phase 1 and orchestration), `delivery.ts` (phase 2), `work.ts` and `quality.ts` (phase 3) |
+| `server/lib/forecast/`, `server/lib/recommendations/` | Forecasts and recommendations (phase 4) |
+| `server/jobs/` | `node-cron` jobs of the Node service |
+| `server/seeds/` | Demo seed (`npm run seed:demo`), raw sample data, demo check |
+| `server/scripts/operatorCreate.ts` | `npm run operator:create` |
+| `netlify/functions/` | `api.ts` (the same routers as `server/index.ts`) and the scheduled / background functions |
+| `supabase/migrations/` | The schema, applied in timestamp order |
+| `scripts/ci/` | CI database preparation and service start; `scripts/ui-tests/` the local and remote UI test runners; `scripts/reseed/` the showcase reseed |
+| `tests/api/`, `tests/database/`, `tests/e2e/` | Jest API and database suites, Playwright UI suite |
+| `docs/` | Documentation; index in [DOCUMENTATION_INDEX.md](DOCUMENTATION_INDEX.md) |
+
+Older files in the root (`database/`, `schema_updated.sql`, `local_*.sql`, `setup-aiven.sh`,
+`setup_database.sh`, `migrate-users-to-aiven.sh`, `seed_teams_with_metrics.sql`, `update_quality_cowboys.sql`)
+belong to the earlier MySQL setup and are not used.
+
+## 3. Request flow
+
+1. The browser calls `/api/...` with the session cookie `irongate_token`. On Netlify the redirect sends it to
+   the `api` function; locally Vite's app calls the API on port 3000.
+2. `requestContext` assigns a request id (`X-Request-Id`), the client IP and the route pattern.
+3. CORS (exact origins), JSON and form parsers (skipped for the raw ingestion routes, which read their own
+   body up to 20 MB, gzip allowed), the general rate limit.
+4. The router's `authenticateToken` verifies the JWT, then loads the user's current row and role
+   assignments in one query (`loadAccessContext`), and checks the session row in `user_sessions` and the
+   company's status. Ingestion routes use `authenticateApiKey` instead.
+5. The handler checks the specific permission with the shared policy (`server/lib/userPolicy.ts`, through
+   `server/middleware/access.ts`) and scopes every query to the company.
+6. Errors go to `apiErrorHandler`: 5xx responses return a generic message with the request id and are
+   stored in `server_errors`. User activity rows are written for each request.
+
+## 4. Access control
+
+- Roles: `super_admin` (company), `qa_manager` (department, screen name Manager), `team_lead`,
+  `qa_engineer` (screen name Software engineer), `viewer` (team). A person can hold several assignments
+  (`role_assignments`).
+- One policy module, [`server/lib/userPolicy.ts`](../server/lib/userPolicy.ts), with pure functions used by the
+  API and by the UI ([`src/lib/viewAccess.ts`](../src/lib/viewAccess.ts) for pages and navigation,
+  [`src/lib/accessSummary.ts`](../src/lib/accessSummary.ts) for the Help popover).
+- The full matrix: [ROLE_ACCESS.md](ROLE_ACCESS.md).
+- Platform operators: separate table, cookie (`irongate_operator`) and token audience. When an operator
+  changes something a company user could also change, the operator route forwards to the company app's own
+  handler as a super admin of that company without a user id (`forward()` in `server/routes/operator.ts`).
+  Nothing an operator does is logged.
+
+## 5. Data model (main tables)
+
+Created by the migrations in `supabase/migrations/`:
+
+| Area | Tables | Migration |
+|---|---|---|
+| Organisation | `companies`, `departments`, `teams`, `users`, `team_members`, `role_assignments`, `invitations`, `user_identities` (SSO) | initial, `20261119…` |
+| Sessions and sign-in | `user_sessions`, `auth_events`, `password_resets` | `20261127…`, `20261123400000…` |
+| KPIs | `kpi_snapshots` (one row per team and day, QA score by trigger), `metric_values` (every value with its time and source), `target_history`, `metric_update_intervals`, `company_kpi_snapshots` | initial, `20261117…`, `20261120…` |
+| Ingestion | `api_keys`, `ingestion_log`, `raw_uploads` | `20261117…`, `20261120…`, `20261129…` |
+| Raw CI data (phase 1) | `test_runs`, `test_results`, `coverage_reports`, `coverage_files`, `pipeline_runs_raw`, `pipeline_stage_runs`, `flaky_test_evidence`, `metric_evidence` | `20261129…` |
+| Delivery (phase 2) | `deployments_raw`, `deployment_commits`, `incidents_raw`, `incident_updates`, `service_teams` | `20261130000000…` |
+| Forecasts (phase 4) | `forecasts`, `recommendations` | `20261130100000…` |
+| Work and quality (phase 3) | see the phase 3 migration | `20261201…` |
+| Alerts and actions | `alert_rules`, `alerts`, `notifications`, `notification_deliveries`, `notification_preferences`, `company_notification_settings`, `team_actions` | `20261121000000…` |
+| Wellbeing pulse | `pulse_cadences`, `pulse_participation`, `pulse_responses`, `pulse_links`, `pulse_recipients`, `pulse_sends`, `pulse_settings`, `pulse_nonresponder_days` | `20261121200000…`, `20261122200000…`, `20261123300000…` |
+| Views and onboarding | `saved_views`, `onboarding_state` | `20261121100000…` |
+| Audit and logs | `audit_log` (Activity), `user_activity`, `server_errors`, `job_runs` | `20261119…`, `20261123…` |
+| Platform | `platform_operators`, `platform_operator_sessions`, `demo_data_jobs` (`platform_access_log` exists but is no longer written) | `20261123000000…`, `20261125…`, `20261128…` |
+| Analytics modules | `technical_debt`, `flaky_tests`, `test_cases`, `test_executions`, `performance_metrics`, `pipeline_stages`, `pipeline_runs`, `pipeline_execution_summary`, `pipeline_config`, `developer_metrics`, `sprint_velocity`, `business_impact_*`, `configs` | initial |
+
+Row Level Security is enabled on every table with no policies; the app connects as the owner.
+
+## 6. Calculations
+
+All formulas, the calculation engine, forecasts and recommendations: [metrics_and_calculations.md](metrics_and_calculations.md).
+Key rules:
+
+- Every KPI value goes through `recordKpiValues` ([`server/lib/kpiIngest.ts`](../server/lib/kpiIngest.ts)).
+- The QA score is computed by the database trigger `kpi_snapshots_qa_score` with the same rules as
+  `computeQaScore` in [`server/lib/metricFormulas.ts`](../server/lib/metricFormulas.ts).
+- Raw data is calculated on arrival and recalculated nightly for recent days.
+- Forecasts and recommendations are refreshed per team about once a day (hourly job, with a time budget).
+
+## 7. Front end
+
+- No router library: `src/App.tsx` maps views to paths (`/`, `/summary`, `/tv`, `/compare`,
+  `/analytics/...`, `/users`, `/teams`, `/departments`, `/activity`, `/user-activity`, `/ingestion-log`,
+  `/admin-panel`, `/manual-metrics`, `/metric-intervals`, `/parameters-config`, `/notifications`) and checks
+  each view with `canOpenView`. `/operator` is the platform panel; `/reset-password` and the invitation page
+  are signed-out screens.
+- Themes: Light, Dark, Graphite, Porcelain and Match system, applied on `<html data-theme>` with the `dark`
+  class for the dark-based themes ([`src/lib/appearance.ts`](../src/lib/appearance.ts),
+  `src/styles/themes.css`). The choice is kept in `localStorage` and applied before the first paint by an
+  inline script in `index.html`. Signed-out screens always use the classic Light theme.
+- Score display: 3D battery or gauge (`ScoreVisual.tsx`, `ScoreGauge.tsx`), one colour scale
+  ([`src/lib/batteryScale.ts`](../src/lib/batteryScale.ts)).
+- Live updates: a WebSocket on the Node service (`server/websocket.ts`); not available on Netlify, where
+  pages refresh on load and on timers. `VITE_DISABLE_WEBSOCKET` turns it off.
+
+## 8. Tests and CI
+
+- `npm run test:unit` (Jest), `npm run test:api` (API running on port 3000), `npm run test:db`.
+- `npm run test:ui:local` runs the Playwright suite against a local test database it prepares itself. Guide:
+  [testing/README.md](testing/README.md); flows and tests: [testing/E2E_FLOWS.md](testing/E2E_FLOWS.md).
+- GitHub Actions: `.github/workflows/ci.yml` (typechecks, lint report, build; API and database suites on
+  Postgres 16 prepared by `scripts/ci/prepare-db.sh`; the `@smoke` UI subset) on every push and pull
+  request; `.github/workflows/ui-tests.yml` (the full UI suite in four shards).
