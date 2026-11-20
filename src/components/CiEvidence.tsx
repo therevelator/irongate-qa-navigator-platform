@@ -3,6 +3,7 @@ import { Calculator, FlaskConical, FileCode2, Timer, Workflow } from 'lucide-rea
 import API_URL from '../config/api';
 import { formatAsOf } from '../data/advancedFeatures';
 import Modal from './Modal';
+import { DELIVERY_KEYS, DeliveryEvidenceSection, failureText, fmtDelivery, hasDeliveryData, SEVERITY, type useTeamDelivery } from './DeliveryEvidence';
 import { Badge, Card, CardHeader, EmptyState, cx } from './ui';
 import type { Tone } from './ui';
 
@@ -33,6 +34,14 @@ export const EVIDENCE_FOR_KPI: Record<string, string> = {
   test_execution_time_minutes: 'test_execution_time',
   avg_build_time_minutes: 'build_time',
   parallel_test_efficiency: 'parallel_test_efficiency',
+  // v2 phase 2: delivery and reliability, from deployment, commit and incident events.
+  deployment_frequency_per_week: 'deployment_frequency',
+  lead_time_days: 'lead_time',
+  change_failure_rate: 'change_failure_rate',
+  mttr_hours: 'mttr',
+  mtbf_hours: 'mtbf',
+  system_availability: 'availability',
+  infrastructure_failures: 'infrastructure_failures',
 };
 
 export const CONFIDENCE_TEXT: Record<string, { label: string; tone: Tone; help: string }> = {
@@ -43,7 +52,8 @@ export const CONFIDENCE_TEXT: Record<string, { label: string; tone: Tone; help: 
 
 const short = (sha?: string | null) => (sha ? sha.slice(0, 8) : '—');
 const fmtMs = (ms: number) => (ms >= 60_000 ? `${(ms / 60_000).toFixed(1)} min` : ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
-const fmtValue = (v: number, unit: string | null) => (unit === 'tests' ? `${v}` : `${v.toFixed(unit === 'min' ? 2 : 1)}${unit === '%' ? ' %' : unit ? ` ${unit}` : ''}`);
+const fmtCi = (v: number, unit: string | null) => (unit === 'tests' ? `${v}` : `${v.toFixed(unit === 'min' ? 2 : 1)}${unit === '%' ? ' %' : unit ? ` ${unit}` : ''}`);
+const fmtValue = (v: number, unit: string | null, key?: string) => (key && DELIVERY_KEYS.includes(key) ? fmtDelivery(key, v, unit) : fmtCi(v, unit));
 const covTone = (pct: number): Tone => (pct >= 80 ? 'good' : pct >= 50 ? 'warn' : 'bad');
 
 /** Load the team's evidence once; shared by the section and the KPI cards' "How this was calculated" buttons. */
@@ -76,10 +86,12 @@ const RunChip: React.FC<{ run: EvidenceRun; tone: 'bad' | 'good' }> = ({ run, to
   </span>
 );
 
-export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<typeof useTeamEvidence>; onExplain: (metric: string) => void; canConnect?: boolean }> = ({ evidence, onExplain, canConnect }) => {
+export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<typeof useTeamEvidence>; delivery?: ReturnType<typeof useTeamDelivery>; onExplain: (metric: string) => void; canConnect?: boolean }> = ({ evidence, delivery, onExplain, canConnect }) => {
   const { data, state } = evidence;
   if (state === 'forbidden') return null;
-  const hasAny = !!data && (data.metrics.length > 0 || data.flakyTests.length > 0 || !!data.coverage || data.slowestTests.length > 0 || data.failingStages.length > 0);
+  const hasCi = !!data && (data.metrics.length > 0 || data.flakyTests.length > 0 || !!data.coverage || data.slowestTests.length > 0 || data.failingStages.length > 0);
+  const hasDelivery = hasDeliveryData(delivery?.data);
+  const hasAny = hasCi || hasDelivery;
   const last = data?.lastReceived;
   const lastText = last
     ? (['tests', 'coverage', 'pipelines'] as const).map((k) => `${k === 'tests' ? 'Tests' : k === 'coverage' ? 'Coverage' : 'Pipelines'}: ${last[k].at ? formatAsOf(last[k].at) : 'none yet'}`).join(' · ')
@@ -99,13 +111,13 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
           <EmptyState
             title="No CI data for this team yet"
             description={canConnect
-              ? 'Send test reports, coverage reports and pipeline runs from CI and QE Navigator calculates the metrics and shows the evidence here. Set it up in Admin console → Connect your CI.'
-              : 'When the team’s CI sends test reports, coverage reports and pipeline runs, the calculated metrics and their evidence appear here.'}
+              ? 'Send test reports, coverage reports, pipeline runs, deployments and incidents from your tools and QE Navigator calculates the metrics and shows the evidence here. Set it up in Admin console → Connect your CI.'
+              : 'When the team’s CI sends test reports, coverage reports, pipeline runs, deployments and incidents, the calculated metrics and their evidence appear here.'}
           />
         </Card>
       ) : (
         <div className="space-y-4">
-          {data!.metrics.length > 0 && (
+          {hasCi && data!.metrics.length > 0 && (
             <Card>
               <CardHeader title="Calculated from CI data" subtitle="Each value is calculated by QE Navigator from the raw reports; open one to see the formula, the values used and the source runs." />
               <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4" data-testid="ci-computed-metrics">
@@ -116,7 +128,7 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
                       onClick={() => onExplain(m.key)}
                       className="flex w-full flex-col items-start rounded-md border border-slate-200 px-3 py-2 text-left hover:border-brand-400 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 dark:border-slate-800 dark:hover:bg-slate-800/60"
                       data-testid={`ci-metric-${m.key}`}
-                      aria-label={`${m.label}: ${fmtValue(m.value, m.unit)}. How this was calculated`}
+                      aria-label={`${m.label}: ${fmtValue(m.value, m.unit, m.key)}. How this was calculated`}
                     >
                       <span className="text-xs text-slate-500 dark:text-slate-400">{m.label}</span>
                       <span className="text-lg font-semibold tabular-nums text-slate-900 dark:text-white">{fmtValue(m.value, m.unit)}</span>
@@ -127,6 +139,7 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
               </ul>
             </Card>
           )}
+          {hasCi && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader title="Flaky tests" subtitle="Failed and passed on the same commit within 7 days (last 30 days); the runs prove it." action={<FlaskConical size={16} className="text-slate-400" aria-hidden="true" />} />
@@ -229,6 +242,8 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
               )}
             </Card>
           </div>
+          )}
+          {delivery && (hasDelivery || hasCi) && <DeliveryEvidenceSection delivery={delivery} onExplain={onExplain} canConnect={canConnect} />}
         </div>
       )}
     </section>
@@ -245,6 +260,8 @@ interface Calculation {
     testRuns: Array<{ id: string; runId: string; attempt: number; commit: string; branch: string | null; startedAt: string; passed: number; failed: number; errors: number; skipped: number; durationMs: number; format: string }>;
     pipelineRuns: Array<{ id: string; runId: string; attempt: number; name: string | null; commit: string; branch: string | null; startedAt: string; durationSeconds: number | null; result: string; url: string | null }>;
     coverageReports: Array<{ id: string; commit: string; branch: string | null; format: string; createdAt: string; linesFound: number; linesHit: number; branchesFound: number; branchesHit: number; files: number; changedLinesFound: number | null; changedLinesHit: number | null }>;
+    deployments?: Array<{ id: string; deploymentId: string; service: string | null; environment: string; commit: string; startedAt: string | null; finishedAt: string; result: string; rollbackOf: string | null; hotfix: boolean; url: string | null; failedBecause: Array<{ type: 'rolled_back' | 'rollback' | 'hotfix' | 'incident'; ref: string | null; at: string }> }>;
+    incidents?: Array<{ id: string; incidentId: string; title: string | null; severity: string; service: string | null; outage: boolean; status: string; openedAt: string; resolvedAt: string | null; deploymentId: string | null; url: string | null }>;
   };
 }
 
@@ -256,6 +273,12 @@ const INPUT_LABELS: Record<string, string> = {
   flakyTests: 'Flaky tests', distinctTests: 'Distinct tests run', windowDays: 'Window (days)',
   firstAttemptPassed: 'First attempts that passed', basis: 'Based on', successful: 'Successful runs', cancelled: 'Cancelled (not counted)',
   medianSeconds: 'Median duration (s)', minSeconds: 'Shortest (s)', maxSeconds: 'Longest (s)',
+  productionDeploys: 'Production deploys', periodDays: 'Period (days)', weeks: 'Weeks', notCompleted: 'Deploys that did not complete (not counted)',
+  rollbackDeploys: 'Rollback deploys (not counted)', deploysWithCommits: 'Deploys with commit times', deploysWithoutCommitTimes: 'Deploys without commit times (left out)',
+  medianHours: 'Median (hours)', commits: 'Commits', failedChanges: 'Failed changes', rolledBack: 'Rolled back', followedByHotfix: 'Followed by a hotfix',
+  linkedIncident: 'Linked to an incident', hotfixWindowHours: 'Hotfix window (hours)', incidentsResolved: 'Incidents resolved', shortestHours: 'Shortest (hours)',
+  longestHours: 'Longest (hours)', outageHours: 'Outage time (hours)', periodHours: 'Period (hours)', outages: 'Outages', openOutages: 'Open outages',
+  intervals: 'Intervals between incidents', incidents: 'Incidents', services: 'Services', infrastructureIncidents: 'Infrastructure incidents',
 };
 
 const inputValue = (v: unknown): string => (v && typeof v === 'object' ? Object.entries(v as Record<string, unknown>).map(([k, x]) => `${k}: ${x}`).join(', ') : String(v));
@@ -283,6 +306,9 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
   }, [teamId, metric, date]);
 
   const conf = calc ? CONFIDENCE_TEXT[calc.confidence] : null;
+  const delivery = !!calc && DELIVERY_KEYS.includes(calc.metric);
+  const noun = !calc ? 'run' : !delivery ? 'run' : ['mttr', 'availability', 'infrastructure_failures'].includes(calc.metric) ? 'incident' : calc.metric === 'mtbf' ? 'interval' : 'deploy';
+  const help = conf && delivery ? conf.help.replace('runs', `${noun}s`) : conf?.help;
   return (
     <Modal isOpen={!!metric} onClose={onClose} title={calc ? `How this was calculated: ${calc.label}` : 'How this was calculated'} size="lg" scrollBody
       subtitle={calc ? `Value for ${formatAsOf(calc.day)}, calculated ${formatAsOf(calc.computedAt)}` : undefined}
@@ -297,9 +323,9 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
           <div className="flex items-start gap-3 rounded-md bg-slate-50 p-3 dark:bg-slate-800/60">
             <Calculator size={18} className="mt-0.5 shrink-0 text-slate-500 dark:text-slate-400" aria-hidden="true" />
             <div>
-              <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white" data-testid="how-calculated-value">{fmtValue(calc.value, calc.unit)}</p>
+              <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white" data-testid="how-calculated-value">{fmtValue(calc.value, calc.unit, calc.metric)}</p>
               <p className="mt-1 text-slate-700 dark:text-slate-300" data-testid="how-calculated-formula"><span className="font-medium">Formula:</span> {calc.formula}</p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Based on {calc.sampleSize} run{calc.sampleSize === 1 ? '' : 's'} ({conf?.help}).{calc.sample ? ' Calculated from sample CI data: shown as evidence, not written to the team’s KPIs.' : calc.kpiColumn ? ' Written to the team’s KPI as source “computed”.' : ' Shown here only (no KPI column).'}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Based on {calc.sampleSize} {noun}{calc.sampleSize === 1 ? '' : 's'} ({help}).{calc.sample ? ' Calculated from sample CI data: shown as evidence, not written to the team’s KPIs.' : calc.kpiColumn ? ' Written to the team’s KPI as source “computed”.' : ' Shown here only (no KPI column).'}</p>
               {cardSource && cardSource !== 'computed' && calc.kpiColumn && !calc.sample && (
                 <p className="mt-1 text-xs text-amber-800 dark:text-amber-300" data-testid="how-calculated-other-source">The card shows the latest value from “{cardSource === 'synthetic' ? 'sample data' : cardSource}”; this is the value calculated from CI data.</p>
               )}
@@ -348,6 +374,12 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
                   ))}
                   {calc.sources.testRuns.map((t) => (
                     <tr key={t.id}><td className="py-1 pr-3">Test run {t.runId}{t.attempt > 1 ? ` (attempt ${t.attempt})` : ''} <span className="font-mono text-slate-500 dark:text-slate-400" title={t.id}>{t.id.slice(-8)}</span></td><td className="py-1 pr-3 font-mono">{short(t.commit)}{t.branch ? ` · ${t.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(t.startedAt)}</td><td className="py-1 tabular-nums">{t.passed} passed · {t.failed + t.errors} failed · {t.skipped} skipped · {fmtMs(t.durationMs)}</td></tr>
+                  ))}
+                  {(calc.sources.deployments ?? []).map((d) => (
+                    <tr key={d.id} data-testid="how-calculated-deployment"><td className="py-1 pr-3">{d.url && /^https?:\/\//.test(d.url) ? <a className="text-brand-700 hover:underline dark:text-brand-300" href={d.url} target="_blank" rel="noopener noreferrer">Deploy {d.deploymentId}</a> : <>Deploy {d.deploymentId}</>}{d.hotfix ? ' (hotfix)' : ''}{d.service ? <span className="text-slate-500 dark:text-slate-400"> · {d.service}</span> : null}</td><td className="py-1 pr-3 font-mono">{short(d.commit)} · {d.environment}</td><td className="py-1 pr-3">{formatAsOf(d.finishedAt)}</td><td className="py-1">{d.failedBecause.length ? <span className="text-red-700 dark:text-red-400">Failed change: {d.failedBecause.map((r) => failureText(r, d.finishedAt)).join('; ')}</span> : d.result === 'rolled_back' ? 'rolled back' : 'succeeded'}</td></tr>
+                  ))}
+                  {(calc.sources.incidents ?? []).map((i) => (
+                    <tr key={i.id} data-testid="how-calculated-incident"><td className="py-1 pr-3">Incident {i.incidentId} <span className="text-slate-500 dark:text-slate-400">· {SEVERITY[i.severity]?.label ?? i.severity}{i.outage ? ', outage' : ''}</span></td><td className="py-1 pr-3">{i.service ?? '—'}{i.deploymentId ? <span className="font-mono"> · deploy {i.deploymentId}</span> : null}</td><td className="py-1 pr-3">{formatAsOf(i.openedAt)}</td><td className="py-1">{i.resolvedAt ? `resolved after ${(((new Date(i.resolvedAt).getTime() - new Date(i.openedAt).getTime()) / 3_600_000)).toFixed(1)} h` : 'open'}</td></tr>
                   ))}
                   {calc.sources.pipelineRuns.map((p) => (
                     <tr key={p.id}><td className="py-1 pr-3">{p.url && /^https?:\/\//.test(p.url) ? <a className="text-brand-700 hover:underline dark:text-brand-300" href={p.url} target="_blank" rel="noopener noreferrer">Pipeline run {p.runId}</a> : <>Pipeline run {p.runId}</>}{p.attempt > 1 ? ` (attempt ${p.attempt})` : ''}</td><td className="py-1 pr-3 font-mono">{short(p.commit)}{p.branch ? ` · ${p.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(p.startedAt)}</td><td className="py-1">{p.result}{p.durationSeconds != null ? ` · ${fmtMs(p.durationSeconds * 1000)}` : ''}</td></tr>

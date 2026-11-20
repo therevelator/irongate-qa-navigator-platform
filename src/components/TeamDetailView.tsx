@@ -39,6 +39,7 @@ import { PulseTeamSummary } from './PulseSurveyResults';
 import ActionsPanel, { type ActionDraft } from './ActionsPanel';
 import { canWriteTeamData } from '../../server/lib/userPolicy';
 import { CiEvidenceSection, EVIDENCE_FOR_KPI, HowCalculatedDialog, useTeamEvidence } from './CiEvidence';
+import { useTeamDelivery } from './DeliveryEvidence';
 
 // Team as returned by GET /api/teams (NUMERIC columns may arrive as strings; missing values are null)
 interface TeamWithKPI extends Omit<Team, 'qaScore'> {
@@ -392,8 +393,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
   const [historyForbidden, setHistoryForbidden] = useState(false);
   // v2: metrics calculated from raw CI data and their evidence ("How this was calculated").
   const ciEvidence = useTeamEvidence(String(team.id));
+  const delivery = useTeamDelivery(String(team.id));
   const [explain, setExplain] = useState<{ metric: string; source: string | null } | null>(null);
-  const computedKeys = new Set((ciEvidence.data?.metrics ?? []).map((m) => m.key));
+  const computedKeys = new Set([...(ciEvidence.data?.metrics ?? []), ...(delivery.data?.metrics ?? [])].map((m) => m.key));
 
   const intervalLabel = (historyKey: string): string | null => {
     const interval = metricIntervals[historyKey];
@@ -905,7 +907,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
         </section>
       ))}
 
-      <CiEvidenceSection teamId={String(team.id)} evidence={ciEvidence} onExplain={(metric) => setExplain({ metric, source: null })} canConnect={user?.role === 'super_admin'} />
+      <CiEvidenceSection teamId={String(team.id)} evidence={ciEvidence} delivery={delivery} onExplain={(metric) => setExplain({ metric, source: null })} canConnect={user?.role === 'super_admin'} />
       <HowCalculatedDialog teamId={String(team.id)} metric={explain?.metric ?? null} cardSource={explain?.source ?? null} onClose={() => setExplain(null)} />
 
       <ActionsPanel teamId={String(team.id)} teamName={team.name} draft={actionDraft} onDraftUsed={clearActionDraft} />
