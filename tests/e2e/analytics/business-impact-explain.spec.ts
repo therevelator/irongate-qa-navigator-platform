@@ -94,10 +94,10 @@ test.describe('Business impact: populated and explained', { tag: [TAG.area('busi
 
 test.describe('Business impact accessibility', { tag: [TAG.a11y, TAG.area('business-impact')] }, () => {
   const cases = [
-    { id: 'A11Y-54', theme: 'Light' },
-    { id: 'A11Y-55', theme: 'Dark' },
-    { id: 'A11Y-56', theme: 'Graphite' },
-    { id: 'A11Y-57', theme: 'Porcelain' },
+    { id: 'A11Y-62', theme: 'Light' },
+    { id: 'A11Y-63', theme: 'Dark' },
+    { id: 'A11Y-64', theme: 'Graphite' },
+    { id: 'A11Y-65', theme: 'Porcelain' },
   ] as const;
   for (const c of cases) {
     test(`${c.id} ${c.theme} theme: Business impact with "How this works" and every Details section open has no serious violations`, async ({ signInAs, page, app }, testInfo) => {
