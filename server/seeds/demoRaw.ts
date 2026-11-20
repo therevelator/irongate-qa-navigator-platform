@@ -346,7 +346,13 @@ export async function computeSampleEvidence(client: pg.PoolClient, teamIds: stri
               (EXISTS (SELECT 1 FROM deployments_raw WHERE team_id = $1 AND is_sample) OR EXISTS (SELECT 1 FROM incidents_raw WHERE team_id = $1 AND is_sample))
                 AND NOT EXISTS (SELECT 1 FROM deployments_raw WHERE team_id = $1 AND NOT is_sample) AND NOT EXISTS (SELECT 1 FROM incidents_raw WHERE team_id = $1 AND NOT is_sample) AS delivery`,
       [id])).rows[0];
-    const groups: MetricGroup[] = [...(g?.ci ? ['ci' as const] : []), ...(g?.delivery ? ['delivery' as const] : [])];
+    // Phase 3 (issues, static analysis): only on a database with its tables.
+    const w = (await client.query(`SELECT to_regclass('public.issues') IS NOT NULL AS ok`)).rows[0]?.ok
+      ? (await client.query(
+        `SELECT EXISTS (SELECT 1 FROM issues WHERE team_id = $1 AND is_sample) AND NOT EXISTS (SELECT 1 FROM issues WHERE team_id = $1 AND NOT is_sample) AS work,
+                EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = $1 AND is_sample) AND NOT EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = $1 AND NOT is_sample) AS quality`, [id])).rows[0]
+      : null;
+    const groups: MetricGroup[] = [...(g?.ci ? ['ci' as const] : []), ...(g?.delivery ? ['delivery' as const] : []), ...(w?.work ? ['work' as const] : []), ...(w?.quality ? ['quality' as const] : [])];
     if (!groups.length) continue;
     const res = await recomputeTeamDays(client, id, list, { writeKpis: false, groups });
     n += res.reduce((k, d) => k + d.metrics.length, 0);

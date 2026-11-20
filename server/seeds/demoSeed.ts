@@ -22,6 +22,7 @@ import {
 } from './demoData';
 import { sampleHealthSeries } from './demoData';
 import { RAW_SAMPLE_CLEAR, SAMPLE_HEALTH_DAYS, computeSampleEvidence, rawSampleSqlForTeam } from './demoRaw';
+import { WORK_SAMPLE_CLEAR, workSampleSqlForTeam } from './demoWork';
 
 export interface SeedRunResult {
   /** Demo rows added per table in this run (0 for rows that already existed). */
@@ -129,6 +130,8 @@ export async function addRawSampleData(teamIds: string[], stories?: Record<strin
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`raw-sample:${t.id}`]);
         const sql = rawSampleSqlForTeam({ id: t.id, companyId: t.company_id, name: t.name, health: sampleHealthSeries(t, SAMPLE_HEALTH_DAYS, stories) });
         for (const st of sql) added += (await client.query(st)).rowCount ?? 0;
+        // v2 phase 3: a year of issues and static-analysis reports derived from the team's KPI history (server/seeds/demoWork.ts).
+        for (const st of workSampleSqlForTeam({ id: t.id, companyId: t.company_id, name: t.name })) await client.query(st);
         await computeSampleEvidence(client, [t.id]);
         await client.query('COMMIT');
       } catch (e) {
@@ -405,7 +408,7 @@ export function clearDemoData(): Promise<Record<string, number>> {
     try {
       await client.query('BEGIN');
       await client.query("SELECT pg_advisory_xact_lock(hashtext('irongate-demo-seed'))");
-      for (const s of [...RAW_SAMPLE_CLEAR, ...CLEAR_STATEMENTS]) {
+      for (const s of [...WORK_SAMPLE_CLEAR, ...RAW_SAMPLE_CLEAR, ...CLEAR_STATEMENTS]) {
         const r = await client.query(s.sql);
         deleted[s.table] = r.rowCount ?? 0;
       }

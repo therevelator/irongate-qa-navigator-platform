@@ -230,6 +230,14 @@ export function computeWorkDay(day: string, data: WorkData, now = Date.now()): C
   return out;
 }
 
+let tablesSeen = false;
+/** The phase-3 tables exist (migration 20261201000000; a deploy before the migration calculates nothing for phase 3). */
+export async function phase3Tables(client: pg.PoolClient): Promise<boolean> {
+  if (tablesSeen) return true;
+  tablesSeen = !!(await client.query(`SELECT to_regclass('public.issues') IS NOT NULL AND to_regclass('public.analysis_reports') IS NOT NULL AS ok`)).rows[0]?.ok;
+  return tablesSeen;
+}
+
 const ms = (v: any): number | null => (v === null || v === undefined ? null : new Date(v).getTime());
 
 /** Read the sprints, issues (with their changes) and coverage sizes that the days from `from` to `to` depend on. */
@@ -269,6 +277,7 @@ export async function loadWorkData(client: pg.PoolClient, teamId: string, from: 
 export async function computeWorkDays(client: pg.PoolClient, teamId: string, days: string[], now = Date.now()): Promise<Map<string, ComputedMetric[]>> {
   const out = new Map<string, ComputedMetric[]>();
   if (!days.length) return out;
+  if (!(await phase3Tables(client))) return out;
   const has = (await client.query('SELECT EXISTS (SELECT 1 FROM issues WHERE team_id = $1) OR EXISTS (SELECT 1 FROM issue_sprints WHERE team_id = $1) AS x', [teamId])).rows[0]?.x;
   if (!has) return out;
   const sorted = [...days].sort();

@@ -31,7 +31,7 @@ import type pg from 'pg';
 import { pool } from '../../../src/lib/db';
 import { KPI_COLUMNS, recordKpiValues, withTransaction, type KpiColumn } from '../kpiIngest';
 import { computeDeliveryDays, DELIVERY_METRICS, WINDOW_DAYS } from './delivery';
-import { computeWorkDays, WORK_METRICS, SPRINT_STALE_DAYS } from './work';
+import { computeWorkDays, phase3Tables, WORK_METRICS, SPRINT_STALE_DAYS } from './work';
 import { computeQualityDays, QUALITY_METRICS, REPORT_STALE_DAYS } from './quality';
 
 export interface MetricSpec {
@@ -353,6 +353,7 @@ export async function refreshFlakyEvidence(client: pg.PoolClient, teamId: string
  */
 export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CALC_RECOMPUTE_BUDGET_MS) || 25_000): Promise<{ teams: number; values: number; skipped: number }> {
   const started = Date.now();
+  const phase3 = await (async () => { const c = await pool.connect(); try { return await phase3Tables(c); } finally { c.release(); } })();
   const teams = (await pool.query(
     `SELECT team_id FROM (
        SELECT team_id FROM test_runs WHERE day >= CURRENT_DATE - $1::int AND NOT is_sample
@@ -361,10 +362,10 @@ export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CA
        -- Delivery values look back 28 days: a team whose last deploy or incident is that old still changes today.
        UNION SELECT team_id FROM deployments_raw WHERE day >= CURRENT_DATE - $1::int - ${WINDOW_DAYS} AND NOT is_sample
        UNION SELECT team_id FROM incidents_raw WHERE (day >= CURRENT_DATE - $1::int - ${WINDOW_DAYS} OR resolved_at IS NULL) AND NOT is_sample
-       -- Work values look back up to 42 days (the latest closed sprint), code quality 30 days (the latest report).
+       ${phase3 ? `-- Work values look back up to 42 days (the latest closed sprint), code quality 30 days (the latest report).
        UNION SELECT team_id FROM issues WHERE (opened_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} OR resolved_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} OR resolved_at IS NULL) AND NOT is_sample
        UNION SELECT team_id FROM issue_sprints WHERE completed_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} AND NOT is_sample
-       UNION SELECT team_id FROM analysis_reports WHERE day >= CURRENT_DATE - $1::int - ${REPORT_STALE_DAYS} AND NOT is_sample) x
+       UNION SELECT team_id FROM analysis_reports WHERE day >= CURRENT_DATE - $1::int - ${REPORT_STALE_DAYS} AND NOT is_sample` : ''}) x
       ORDER BY md5(team_id || CURRENT_DATE::text)` /* a different order every day: no team waits behind the budget twice */, [days])).rows;
   let values = 0;
   let done = 0;
@@ -406,11 +407,13 @@ export async function cleanupRawData(): Promise<Record<string, number>> {
     deployments: await n(`DELETE FROM deployments_raw WHERE finished_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     deploymentCommits: await n(`DELETE FROM deployment_commits WHERE created_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     incidents: await n(`DELETE FROM incidents_raw WHERE opened_at < now() - make_interval(days => $1) AND resolved_at IS NOT NULL AND resolved_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    ...(await (async () => { const c = await pool.connect(); try { return await phase3Tables(c); } finally { c.release(); } })() ? {
     analysisFindings: await n(`DELETE FROM analysis_findings f USING analysis_reports r WHERE r.id = f.report_id AND r.analyzed_at < now() - make_interval(days => $1)
                                  AND r.id <> (SELECT r2.id FROM analysis_reports r2 WHERE r2.team_id = r.team_id AND r2.repo = r.repo AND r2.tool = r.tool ORDER BY r2.analyzed_at DESC LIMIT 1)`, [RAW_DETAIL_DAYS]),
     analysisReports: await n(`DELETE FROM analysis_reports WHERE analyzed_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     issues: await n(`DELETE FROM issues WHERE resolved_at IS NOT NULL AND resolved_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     issueSprints: await n(`DELETE FROM issue_sprints WHERE completed_at IS NOT NULL AND completed_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    } : {}),
     flakyEvidence: await n(`DELETE FROM flaky_test_evidence WHERE last_seen < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     metricEvidence: await n(`DELETE FROM metric_evidence WHERE day < CURRENT_DATE - $1::int`, [RAW_RETENTION_DAYS]),
     uploads: await n(`DELETE FROM raw_uploads WHERE received_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),

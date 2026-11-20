@@ -32,12 +32,18 @@ import { EVIDENCE_FOR_KPI, METRICS, groupOf } from '../lib/calc/engine';
 import { classifyFailedChanges, isCountedDeploy, loadDeliveryData, type DeliveryData } from '../lib/calc/delivery';
 import { isOutage } from '../lib/ingest/deliveryEvents';
 import { recordAudit } from '../lib/audit';
-import { loadWorkData, summariseSprint, confirmedBug, WORK_WINDOW_DAYS } from '../lib/calc/work';
+import { loadWorkData, phase3Tables, summariseSprint, confirmedBug, WORK_WINDOW_DAYS } from '../lib/calc/work';
 import { latestReports, loadQualityData, weightedOf } from '../lib/calc/quality';
 
 const router = express.Router();
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The phase-3 tables exist (a deploy before migration 20261201000000 shows no work or code quality data). */
+async function phase3Ready(): Promise<boolean> {
+  const c = await pool.connect();
+  try { return await phase3Tables(c); } finally { c.release(); }
+}
 
 router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, res) => {
   try {
@@ -132,16 +138,14 @@ const dayStr = (d: any) => (d instanceof Date ? d.toISOString().slice(0, 10) : S
 async function lastReceived(teamId: string, kinds: string[] = ['tests', 'coverage', 'pipelines']) {
   const rows = await query<any[]>(
     `SELECT kind, MAX(received_at) AS at, COUNT(*)::int AS n FROM raw_uploads WHERE team_id = ? AND status = 'parsed' GROUP BY kind`, [teamId]);
-  // Sample (demo) raw data has no upload rows: its newest row counts.
-  const sample = await query<any[]>(
-    `SELECT 'tests' AS kind, MAX(created_at) AS at FROM test_runs WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'coverage', MAX(created_at) FROM coverage_reports WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'pipelines', MAX(created_at) FROM pipeline_runs_raw WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'deployments', MAX(created_at) FROM deployments_raw WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'commits', MAX(created_at) FROM deployment_commits WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'incidents', MAX(created_at) FROM incidents_raw WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'issues', MAX(created_at) FROM issues WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'static-analysis', MAX(created_at) FROM analysis_reports WHERE team_id = ? AND is_sample`, [teamId, teamId, teamId, teamId, teamId, teamId, teamId, teamId]);
+  // Sample (demo) raw data has no upload rows: its newest row counts (only the kinds asked for).
+  const SAMPLE_TABLE: Record<string, string> = {
+    tests: 'test_runs', coverage: 'coverage_reports', pipelines: 'pipeline_runs_raw', deployments: 'deployments_raw', commits: 'deployment_commits',
+    incidents: 'incidents_raw', issues: 'issues', 'static-analysis': 'analysis_reports',
+  };
+  const parts = kinds.filter((k) => SAMPLE_TABLE[k]);
+  const sample = parts.length ? await query<any[]>(
+    parts.map((k) => `SELECT '${k}' AS kind, MAX(created_at) AS at FROM ${SAMPLE_TABLE[k]} WHERE team_id = ? AND is_sample`).join(' UNION ALL '), parts.map(() => teamId)) : [];
   const out: Record<string, { at: string | null; uploads: number; sample: boolean }> = {};
   for (const k of kinds) {
     const r = rows.find((x: any) => x.kind === k);
@@ -254,6 +258,7 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT MAX(received_at) AS at, COUNT(*)::int AS n FROM ingestion_log
         WHERE company_id = ? AND status = 'rejected' AND source ~ '^(tests|coverage|pipelines|deployments|commits|incidents|issues|static-analysis)' AND received_at >= now() - interval '7 days'`, [companyId]);
     const keys = await query<any[]>(`SELECT COUNT(*)::int AS n FROM api_keys WHERE company_id = ? AND revoked_at IS NULL`, [companyId]);
+    const p3 = await phase3Ready();
     // Sample (demo) raw data has no upload rows: its newest run counts, marked as sample.
     const sample = await query<any[]>(
       `SELECT team_id, 'tests' AS kind, MAX(created_at) AS at, COUNT(*)::int AS n FROM test_runs WHERE company_id = ? AND is_sample GROUP BY team_id
@@ -262,9 +267,9 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
        UNION ALL SELECT team_id, 'deployments', MAX(created_at), COUNT(*)::int FROM deployments_raw WHERE company_id = ? AND is_sample GROUP BY team_id
        UNION ALL SELECT team_id, 'commits', MAX(created_at), COUNT(*)::int FROM deployment_commits WHERE company_id = ? AND is_sample GROUP BY team_id
        UNION ALL SELECT team_id, 'incidents', MAX(created_at), COUNT(*)::int FROM incidents_raw WHERE company_id = ? AND is_sample GROUP BY team_id
-       UNION ALL SELECT team_id, 'issues', MAX(created_at), COUNT(*)::int FROM issues WHERE company_id = ? AND is_sample GROUP BY team_id
-       UNION ALL SELECT team_id, 'static-analysis', MAX(created_at), COUNT(*)::int FROM analysis_reports WHERE company_id = ? AND is_sample GROUP BY team_id`,
-      [companyId, companyId, companyId, companyId, companyId, companyId, companyId, companyId]);
+       ${p3 ? `UNION ALL SELECT team_id, 'issues', MAX(created_at), COUNT(*)::int FROM issues WHERE company_id = ? AND is_sample GROUP BY team_id
+       UNION ALL SELECT team_id, 'static-analysis', MAX(created_at), COUNT(*)::int FROM analysis_reports WHERE company_id = ? AND is_sample GROUP BY team_id` : ''}`,
+      [companyId, companyId, companyId, companyId, companyId, companyId, ...(p3 ? [companyId, companyId] : [])]);
     res.json({
       activeKeys: keys[0]?.n ?? 0,
       rejectedLast7Days: rejected[0]?.n ?? 0,
@@ -366,6 +371,13 @@ router.get('/teams/:id/work', authenticateToken, async (req: AuthRequest, res) =
     const team = await assertTeamAnalytics(req, res, req.params.id as string);
     if (!team) return;
     const teamId = team.id;
+    if (!(await phase3Ready())) {
+      return res.json({
+        teamId, sample: { work: false, quality: false }, lastReceived: { issues: { at: null, uploads: 0, sample: false }, 'static-analysis': { at: null, uploads: 0, sample: false } }, metrics: [],
+        sprints: [], blocked: [], sizing: [], carriedOver: [], defects: { windowDays: WORK_WINDOW_DAYS, bugs: 0, escaped: 0, preRelease: 0, unknown: 0, escapedList: [], byComponent: [] },
+        quality: { reports: [], rules: [], newFindings: [], fixedFindings: [], history: [] },
+      });
+    }
     const now = Date.now();
     const today = new Date(now).toISOString().slice(0, 10);
     const from = new Date(now - 120 * 86_400_000).toISOString().slice(0, 10);

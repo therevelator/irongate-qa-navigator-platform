@@ -19,6 +19,7 @@
  */
 import type pg from 'pg';
 import type { ComputedMetric, MetricSpec } from './engine';
+import { phase3Tables } from './work';
 
 export const REPORT_STALE_DAYS = 30;
 export const SEVERITY_WEIGHTS = { critical: 10, high: 5, medium: 2, low: 0.5, info: 0 } as const;
@@ -118,6 +119,7 @@ export async function loadQualityData(client: pg.PoolClient, teamId: string, fro
 export async function computeQualityDays(client: pg.PoolClient, teamId: string, days: string[], now = Date.now()): Promise<Map<string, ComputedMetric[]>> {
   const out = new Map<string, ComputedMetric[]>();
   if (!days.length) return out;
+  if (!(await phase3Tables(client))) return out;
   const sorted = [...days].sort();
   const data = await loadQualityData(client, teamId, sorted[0], sorted[sorted.length - 1]);
   if (!data.reports.length) return out;
