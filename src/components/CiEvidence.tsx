@@ -4,6 +4,7 @@ import API_URL from '../config/api';
 import { formatAsOf } from '../data/advancedFeatures';
 import Modal from './Modal';
 import { DELIVERY_KEYS, DeliveryEvidenceSection, failureText, fmtDelivery, hasDeliveryData, SEVERITY, type useTeamDelivery } from './DeliveryEvidence';
+import { WorkEvidenceSection, fmtWork, hasWorkData, PHASE3_KEYS, workNoun, type useTeamWork } from './WorkEvidence';
 import { Badge, Card, CardHeader, EmptyState, cx } from './ui';
 import type { Tone } from './ui';
 
@@ -42,6 +43,15 @@ export const EVIDENCE_FOR_KPI: Record<string, string> = {
   mtbf_hours: 'mtbf',
   system_availability: 'availability',
   infrastructure_failures: 'infrastructure_failures',
+  // v2 phase 3: work (issues) and code quality (static analysis).
+  defect_escape_rate: 'escape_rate',
+  defect_density: 'defect_density',
+  sprint_velocity: 'velocity',
+  sprint_commitment_rate: 'commitment',
+  sprint_carryover: 'carryover',
+  blocked_time_hours: 'blocked_time',
+  sizing_accuracy: 'sizing_accuracy',
+  code_quality_score: 'code_quality',
 };
 
 export const CONFIDENCE_TEXT: Record<string, { label: string; tone: Tone; help: string }> = {
@@ -53,7 +63,7 @@ export const CONFIDENCE_TEXT: Record<string, { label: string; tone: Tone; help: 
 const short = (sha?: string | null) => (sha ? sha.slice(0, 8) : '—');
 const fmtMs = (ms: number) => (ms >= 60_000 ? `${(ms / 60_000).toFixed(1)} min` : ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
 const fmtCi = (v: number, unit: string | null) => (unit === 'tests' ? `${v}` : `${v.toFixed(unit === 'min' ? 2 : 1)}${unit === '%' ? ' %' : unit ? ` ${unit}` : ''}`);
-const fmtValue = (v: number, unit: string | null, key?: string) => (key && DELIVERY_KEYS.includes(key) ? fmtDelivery(key, v, unit) : fmtCi(v, unit));
+const fmtValue = (v: number, unit: string | null, key?: string) => (key && DELIVERY_KEYS.includes(key) ? fmtDelivery(key, v, unit) : key && PHASE3_KEYS.includes(key) ? fmtWork(key, v, unit) : fmtCi(v, unit));
 const covTone = (pct: number): Tone => (pct >= 80 ? 'good' : pct >= 50 ? 'warn' : 'bad');
 
 /** Load the team's evidence once; shared by the section and the KPI cards' "How this was calculated" buttons. */
@@ -86,12 +96,13 @@ const RunChip: React.FC<{ run: EvidenceRun; tone: 'bad' | 'good' }> = ({ run, to
   </span>
 );
 
-export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<typeof useTeamEvidence>; delivery?: ReturnType<typeof useTeamDelivery>; onExplain: (metric: string) => void; canConnect?: boolean }> = ({ evidence, delivery, onExplain, canConnect }) => {
+export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<typeof useTeamEvidence>; delivery?: ReturnType<typeof useTeamDelivery>; work?: ReturnType<typeof useTeamWork>; onExplain: (metric: string) => void; canConnect?: boolean }> = ({ evidence, delivery, work, onExplain, canConnect }) => {
   const { data, state } = evidence;
   if (state === 'forbidden') return null;
   const hasCi = !!data && (data.metrics.length > 0 || data.flakyTests.length > 0 || !!data.coverage || data.slowestTests.length > 0 || data.failingStages.length > 0);
   const hasDelivery = hasDeliveryData(delivery?.data);
-  const hasAny = hasCi || hasDelivery;
+  const hasWork = hasWorkData(work?.data);
+  const hasAny = hasCi || hasDelivery || hasWork;
   const last = data?.lastReceived;
   const lastText = last
     ? (['tests', 'coverage', 'pipelines'] as const).map((k) => `${k === 'tests' ? 'Tests' : k === 'coverage' ? 'Coverage' : 'Pipelines'}: ${last[k].at ? formatAsOf(last[k].at) : 'none yet'}`).join(' · ')
@@ -111,8 +122,8 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
           <EmptyState
             title="No CI data for this team yet"
             description={canConnect
-              ? 'Send test reports, coverage reports, pipeline runs, deployments and incidents from your tools and QE Navigator calculates the metrics and shows the evidence here. Set it up in Admin console → Connect your CI.'
-              : 'When the team’s CI sends test reports, coverage reports, pipeline runs, deployments and incidents, the calculated metrics and their evidence appear here.'}
+              ? 'Send test reports, coverage reports, pipeline runs, deployments, incidents, issues and static-analysis reports from your tools and QE Navigator calculates the metrics and shows the evidence here. Set it up in Admin console → Connect your CI.'
+              : 'When the team’s CI sends test reports, coverage reports, pipeline runs, deployments, incidents, issues and static-analysis reports, the calculated metrics and their evidence appear here.'}
           />
         </Card>
       ) : (
@@ -244,6 +255,7 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
           </div>
           )}
           {delivery && (hasDelivery || hasCi) && <DeliveryEvidenceSection delivery={delivery} onExplain={onExplain} canConnect={canConnect} />}
+          {work && hasAny && <WorkEvidenceSection work={work} onExplain={onExplain} canConnect={canConnect} />}
         </div>
       )}
     </section>
@@ -262,7 +274,10 @@ interface Calculation {
     coverageReports: Array<{ id: string; commit: string; branch: string | null; format: string; createdAt: string; linesFound: number; linesHit: number; branchesFound: number; branchesHit: number; files: number; changedLinesFound: number | null; changedLinesHit: number | null }>;
     deployments?: Array<{ id: string; deploymentId: string; service: string | null; environment: string; commit: string; startedAt: string | null; finishedAt: string; result: string; rollbackOf: string | null; hotfix: boolean; url: string | null; failedBecause: Array<{ type: 'rolled_back' | 'rollback' | 'hotfix' | 'incident'; ref: string | null; at: string }> }>;
     incidents?: Array<{ id: string; incidentId: string; title: string | null; severity: string; service: string | null; outage: boolean; status: string; openedAt: string; resolvedAt: string | null; deploymentId: string | null; url: string | null }>;
+    issues?: Array<{ key: string; title: string | null; type: string; status: string | null; foundIn: string | null; environment: string | null; points: number | null; estimateHours: number | null; loggedHours: number | null; openedAt: string; resolvedAt: string | null; url: string | null; roles: string[] }>;
+    analysisReports?: Array<{ id: string; tool: string; repo: string; branch: string | null; commit: string; analyzedAt: string; linesOfCode: number | null; findings: number; critical: number; high: number; medium: number; low: number; info: number; newFindings: number | null; fixedFindings: number | null }>;
   };
+  sprint?: { id: string; name: string | null; startedAt: string | null; completedAt: string };
 }
 
 const INPUT_LABELS: Record<string, string> = {
@@ -279,6 +294,13 @@ const INPUT_LABELS: Record<string, string> = {
   linkedIncident: 'Linked to an incident', hotfixWindowHours: 'Hotfix window (hours)', incidentsResolved: 'Incidents resolved', shortestHours: 'Shortest (hours)',
   longestHours: 'Longest (hours)', outageHours: 'Outage time (hours)', periodHours: 'Period (hours)', outages: 'Outages', openOutages: 'Open outages',
   intervals: 'Intervals between incidents', incidents: 'Incidents', services: 'Services', infrastructureIncidents: 'Infrastructure incidents',
+  escapedBugs: 'Bugs found in production', bugsWithEnvironment: 'Bugs with a known environment', bugsWithoutEnvironment: 'Bugs without an environment (left out)',
+  linesOfCode: 'Lines of code', kloc: 'Thousands of lines (KLOC)', sprint: 'Sprint', completedPoints: 'Completed story points', completedIssues: 'Completed issues',
+  unestimatedCompleted: 'Completed without story points', committedPoints: 'Committed story points', committedIssues: 'Committed issues', addedIssues: 'Added after the start',
+  addedPoints: 'Points added after the start', notCompletedPoints: 'Story points not completed', notCompletedIssues: 'Issues not completed', blockedHours: 'Blocked hours',
+  blockedIssues: 'Blocked issues', sprintIssues: 'Issues in the sprint', activeIssues: 'Active issues', timeLoggedHours: 'Time logged (hours)', estimateHours: 'Original estimate (hours)',
+  issues: 'Issues', weightedFindings: 'Weighted findings', linesOfCodeFrom: 'Lines of code from', weightedPerKloc: 'Weighted findings per KLOC', critical: 'Critical', high: 'High',
+  medium: 'Medium', low: 'Low', info: 'Info (weight 0)', reports: 'Reports',
 };
 
 const inputValue = (v: unknown): string => (v && typeof v === 'object' ? Object.entries(v as Record<string, unknown>).map(([k, x]) => `${k}: ${x}`).join(', ') : String(v));
@@ -307,8 +329,9 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
 
   const conf = calc ? CONFIDENCE_TEXT[calc.confidence] : null;
   const delivery = !!calc && DELIVERY_KEYS.includes(calc.metric);
-  const noun = !calc ? 'run' : !delivery ? 'run' : ['mttr', 'availability', 'infrastructure_failures'].includes(calc.metric) ? 'incident' : calc.metric === 'mtbf' ? 'interval' : 'deploy';
-  const help = conf && delivery ? conf.help.replace('runs', `${noun}s`) : conf?.help;
+  const phase3 = !!calc && PHASE3_KEYS.includes(calc.metric);
+  const noun = !calc ? 'run' : phase3 ? workNoun(calc.metric) : !delivery ? 'run' : ['mttr', 'availability', 'infrastructure_failures'].includes(calc.metric) ? 'incident' : calc.metric === 'mtbf' ? 'interval' : 'deploy';
+  const help = conf && (delivery || phase3) ? conf.help.replace('runs', `${noun}s`) : conf?.help;
   return (
     <Modal isOpen={!!metric} onClose={onClose} title={calc ? `How this was calculated: ${calc.label}` : 'How this was calculated'} size="lg" scrollBody
       subtitle={calc ? `Value for ${formatAsOf(calc.day)}, calculated ${formatAsOf(calc.computedAt)}` : undefined}
@@ -362,6 +385,11 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
               </ul>
             </div>
           )}
+          {calc.sprint && (
+            <p className="text-xs text-slate-600 dark:text-slate-300" data-testid="how-calculated-sprint">
+              Sprint <span className="font-medium">{calc.sprint.name ?? calc.sprint.id}</span>{calc.sprint.startedAt ? `, started ${formatAsOf(calc.sprint.startedAt)}` : ''}, closed {formatAsOf(calc.sprint.completedAt)}
+            </p>
+          )}
           <div>
             <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Source records</h3>
             <div className="overflow-x-auto">
@@ -380,6 +408,12 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
                   ))}
                   {(calc.sources.incidents ?? []).map((i) => (
                     <tr key={i.id} data-testid="how-calculated-incident"><td className="py-1 pr-3">Incident {i.incidentId} <span className="text-slate-500 dark:text-slate-400">· {SEVERITY[i.severity]?.label ?? i.severity}{i.outage ? ', outage' : ''}</span></td><td className="py-1 pr-3">{i.service ?? '—'}{i.deploymentId ? <span className="font-mono"> · deploy {i.deploymentId}</span> : null}</td><td className="py-1 pr-3">{formatAsOf(i.openedAt)}</td><td className="py-1">{i.resolvedAt ? `resolved after ${(((new Date(i.resolvedAt).getTime() - new Date(i.openedAt).getTime()) / 3_600_000)).toFixed(1)} h` : 'open'}</td></tr>
+                  ))}
+                  {(calc.sources.issues ?? []).map((i) => (
+                    <tr key={i.key} data-testid="how-calculated-issue"><td className="py-1 pr-3">{i.url && /^https?:\/\//.test(i.url) ? <a className="font-mono text-brand-700 hover:underline dark:text-brand-300" href={i.url} target="_blank" rel="noopener noreferrer">{i.key}</a> : <span className="font-mono">{i.key}</span>} <span className="text-slate-500 dark:text-slate-400">· {i.type}{i.points !== null ? `, ${i.points} pts` : ''}</span>{i.title ? <span className="block text-slate-600 dark:text-slate-300">{i.title}</span> : null}</td><td className="py-1 pr-3">{i.status ?? '—'}{i.environment ? ` · found in ${i.environment}` : ''}</td><td className="py-1 pr-3">{formatAsOf(i.openedAt)}{i.resolvedAt ? ` → ${formatAsOf(i.resolvedAt)}` : ''}</td><td className="py-1">{i.roles.join('; ')}</td></tr>
+                  ))}
+                  {(calc.sources.analysisReports ?? []).map((r) => (
+                    <tr key={r.id} data-testid="how-calculated-report"><td className="py-1 pr-3">{r.tool} report <span className="font-mono text-slate-500 dark:text-slate-400" title={r.id}>{r.id.slice(-8)}</span>{r.repo ? <span className="block font-mono text-slate-600 dark:text-slate-300">{r.repo}</span> : null}</td><td className="py-1 pr-3 font-mono">{short(r.commit)}{r.branch ? ` · ${r.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(r.analyzedAt)}</td><td className="py-1 tabular-nums">{r.findings} findings ({r.critical} critical, {r.high} high, {r.medium} medium, {r.low} low){r.linesOfCode ? ` · ${r.linesOfCode.toLocaleString('en-GB')} lines` : ''}{r.newFindings !== null ? ` · +${r.newFindings} / −${r.fixedFindings}` : ''}</td></tr>
                   ))}
                   {calc.sources.pipelineRuns.map((p) => (
                     <tr key={p.id}><td className="py-1 pr-3">{p.url && /^https?:\/\//.test(p.url) ? <a className="text-brand-700 hover:underline dark:text-brand-300" href={p.url} target="_blank" rel="noopener noreferrer">Pipeline run {p.runId}</a> : <>Pipeline run {p.runId}</>}{p.attempt > 1 ? ` (attempt ${p.attempt})` : ''}</td><td className="py-1 pr-3 font-mono">{short(p.commit)}{p.branch ? ` · ${p.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(p.startedAt)}</td><td className="py-1">{p.result}{p.durationSeconds != null ? ` · ${fmtMs(p.durationSeconds * 1000)}` : ''}</td></tr>

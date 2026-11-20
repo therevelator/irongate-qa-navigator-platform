@@ -15,6 +15,11 @@
  *   GET /api/ci/services                      service → team mappings and the services seen (super admins)
  *   PUT /api/ci/services                      map a service to a team: {service, teamId} (super admins)
  *   DELETE /api/ci/services/:service          remove a mapping (super admins)
+ *   GET /api/ci/teams/:id/work                work and code quality (v2 phase 3): sprint and defect values, the
+ *                                             last closed sprints (committed, completed, carried over, blocked,
+ *                                             sizing), escaped defects, the most blocked and the worst-sized
+ *                                             issues; the latest static-analysis reports with findings by
+ *                                             severity and rule, new and fixed findings, the score history
  *
  * Evidence follows the analytics scope (the same rule as the KPI history).
  */
@@ -27,6 +32,8 @@ import { EVIDENCE_FOR_KPI, METRICS, groupOf } from '../lib/calc/engine';
 import { classifyFailedChanges, isCountedDeploy, loadDeliveryData, type DeliveryData } from '../lib/calc/delivery';
 import { isOutage } from '../lib/ingest/deliveryEvents';
 import { recordAudit } from '../lib/audit';
+import { loadWorkData, summariseSprint, confirmedBug, WORK_WINDOW_DAYS } from '../lib/calc/work';
+import { latestReports, loadQualityData, weightedOf } from '../lib/calc/quality';
 
 const router = express.Router();
 
@@ -132,7 +139,9 @@ async function lastReceived(teamId: string, kinds: string[] = ['tests', 'coverag
      UNION ALL SELECT 'pipelines', MAX(created_at) FROM pipeline_runs_raw WHERE team_id = ? AND is_sample
      UNION ALL SELECT 'deployments', MAX(created_at) FROM deployments_raw WHERE team_id = ? AND is_sample
      UNION ALL SELECT 'commits', MAX(created_at) FROM deployment_commits WHERE team_id = ? AND is_sample
-     UNION ALL SELECT 'incidents', MAX(created_at) FROM incidents_raw WHERE team_id = ? AND is_sample`, [teamId, teamId, teamId, teamId, teamId, teamId]);
+     UNION ALL SELECT 'incidents', MAX(created_at) FROM incidents_raw WHERE team_id = ? AND is_sample
+     UNION ALL SELECT 'issues', MAX(created_at) FROM issues WHERE team_id = ? AND is_sample
+     UNION ALL SELECT 'static-analysis', MAX(created_at) FROM analysis_reports WHERE team_id = ? AND is_sample`, [teamId, teamId, teamId, teamId, teamId, teamId, teamId, teamId]);
   const out: Record<string, { at: string | null; uploads: number; sample: boolean }> = {};
   for (const k of kinds) {
     const r = rows.find((x: any) => x.kind === k);
@@ -178,12 +187,34 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
       ? await query<any[]>(`SELECT id, external_id, title, severity, service, outage, status, opened_at, resolved_at, deployment_external_id, url FROM incidents_raw WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY opened_at DESC`, [team.id, ids(s.incidents)])
       : [];
     const spec = METRICS[key];
-    const delivery = groupOf(key) === 'delivery';
+    const group = groupOf(key);
+    const delivery = group === 'delivery';
+    // Phase 3: the issues and static-analysis reports behind a work / quality value, with their part in it.
+    const roles = new Map<string, string[]>();
+    const addRole = (k: unknown, role: string) => { if (typeof k !== 'string') return; const l = roles.get(k) ?? []; if (!l.includes(role)) l.push(role); roles.set(k, l); };
+    for (const k of Array.isArray(s.escaped) ? s.escaped : []) addRole(k, 'found in production');
+    for (const k of Array.isArray(s.completed) ? s.completed : []) addRole(k, 'completed');
+    for (const k of Array.isArray(s.carriedOver) ? s.carriedOver : []) addRole(k, 'not completed');
+    for (const k of Array.isArray(s.added) ? s.added : []) addRole(k, 'added after the start');
+    if (key === 'commitment') for (const k of Array.isArray(s.committed) ? s.committed : []) addRole(k, 'committed');
+    for (const b of Array.isArray(s.blocked) ? s.blocked : []) addRole(b?.key, `blocked ${b?.hours} h`);
+    for (const z of Array.isArray(s.sized) ? s.sized : []) addRole(z?.key, `estimate ${z?.estimateHours} h, logged ${z?.loggedHours} h`);
+    if (key === 'escape_rate') for (const k of Array.isArray(s.issues) ? s.issues : []) addRole(k, 'bug');
+    const issueKeys = Array.from(roles.keys()).slice(0, 80);
+    const issueRows = issueKeys.length
+      ? await query<any[]>(`SELECT external_id, title, issue_type, status, found_in, environment, story_points::float8 AS points, estimate_hours::float8 AS estimate, time_logged_hours::float8 AS logged, opened_at, resolved_at, url FROM issues WHERE team_id = ? AND external_id = ANY(?::text[]) ORDER BY opened_at DESC`, [team.id, issueKeys])
+      : [];
+    const reportRows = ids(s.analysisReports).length
+      ? await query<any[]>(`SELECT id, tool, repo, branch, commit_sha, analyzed_at, lines_of_code, findings, critical, high, medium, low, info, new_findings, fixed_findings FROM analysis_reports WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY analyzed_at DESC`, [team.id, ids(s.analysisReports)])
+      : [];
     // Sample (demo) raw data: shown as evidence, never written to the KPI storage.
-    const sample = !!(await queryOne<any>(delivery
+    const sampleSql = delivery
       ? `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM deployments_raw WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM incidents_raw WHERE team_id = ? AND is_sample)`
+      : group === 'work' ? `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM issues WHERE team_id = ? AND is_sample) AND NOT EXISTS (SELECT 1 FROM issues WHERE team_id = ? AND NOT is_sample)`
+      : group === 'quality' ? `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = ? AND is_sample) AND NOT EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = ? AND NOT is_sample)`
       : `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM test_runs WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM coverage_reports WHERE team_id = ? AND is_sample)
-          OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = ? AND is_sample)`, delivery ? [team.id, team.id] : [team.id, team.id, team.id]));
+          OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = ? AND is_sample)`;
+    const sample = !!(await queryOne<any>(sampleSql, group === 'ci' ? [team.id, team.id, team.id] : [team.id, team.id]));
     const reasonsOf = new Map(failedDeployments.map((f) => [f.id, f.reasons]));
     res.json({
       sample,
@@ -197,7 +228,10 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
         coverageReports: coverageReports.map((c: any) => ({ id: c.id, commit: c.commit_sha, branch: c.branch, format: c.format, createdAt: c.created_at, linesFound: c.lines_found, linesHit: c.lines_hit, branchesFound: c.branches_found, branchesHit: c.branches_hit, files: c.file_count, changedLinesFound: c.changed_lines_found, changedLinesHit: c.changed_lines_hit })),
         deployments: deployments.map((d: any) => ({ id: d.id, deploymentId: d.external_id, service: d.service, environment: d.environment, commit: d.commit_sha, startedAt: d.started_at, finishedAt: d.finished_at, result: d.result, rollbackOf: d.rollback_of, hotfix: d.is_hotfix, url: d.url, failedBecause: reasonsOf.get(d.id) ?? [] })),
         incidents: incidents.map((i: any) => ({ id: i.id, incidentId: i.external_id, title: i.title, severity: i.severity, service: i.service, outage: isOutage(i.severity, i.outage), status: i.status, openedAt: i.opened_at, resolvedAt: i.resolved_at, deploymentId: i.deployment_external_id, url: i.url })),
+        issues: issueRows.map((i: any) => ({ key: i.external_id, title: i.title, type: i.issue_type, status: i.status, foundIn: i.found_in, environment: i.environment, points: i.points, estimateHours: i.estimate, loggedHours: i.logged, openedAt: i.opened_at, resolvedAt: i.resolved_at, url: i.url, roles: roles.get(i.external_id) ?? [] })),
+        analysisReports: reportRows.map((r: any) => ({ id: r.id, tool: r.tool, repo: r.repo, branch: r.branch, commit: r.commit_sha, analyzedAt: r.analyzed_at, linesOfCode: r.lines_of_code, findings: r.findings, critical: r.critical, high: r.high, medium: r.medium, low: r.low, info: r.info, newFindings: r.new_findings, fixedFindings: r.fixed_findings })),
       },
+      sprint: s.sprint && typeof s.sprint === 'object' ? s.sprint : undefined,
     });
   } catch (error) {
     console.error('Metric evidence error:', error);
@@ -227,8 +261,10 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
        UNION ALL SELECT team_id, 'pipelines', MAX(created_at), COUNT(*)::int FROM pipeline_runs_raw WHERE company_id = ? AND is_sample GROUP BY team_id
        UNION ALL SELECT team_id, 'deployments', MAX(created_at), COUNT(*)::int FROM deployments_raw WHERE company_id = ? AND is_sample GROUP BY team_id
        UNION ALL SELECT team_id, 'commits', MAX(created_at), COUNT(*)::int FROM deployment_commits WHERE company_id = ? AND is_sample GROUP BY team_id
-       UNION ALL SELECT team_id, 'incidents', MAX(created_at), COUNT(*)::int FROM incidents_raw WHERE company_id = ? AND is_sample GROUP BY team_id`,
-      [companyId, companyId, companyId, companyId, companyId, companyId]);
+       UNION ALL SELECT team_id, 'incidents', MAX(created_at), COUNT(*)::int FROM incidents_raw WHERE company_id = ? AND is_sample GROUP BY team_id
+       UNION ALL SELECT team_id, 'issues', MAX(created_at), COUNT(*)::int FROM issues WHERE company_id = ? AND is_sample GROUP BY team_id
+       UNION ALL SELECT team_id, 'static-analysis', MAX(created_at), COUNT(*)::int FROM analysis_reports WHERE company_id = ? AND is_sample GROUP BY team_id`,
+      [companyId, companyId, companyId, companyId, companyId, companyId, companyId, companyId]);
     res.json({
       activeKeys: keys[0]?.n ?? 0,
       rejectedLast7Days: rejected[0]?.n ?? 0,
@@ -241,7 +277,7 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
         };
         return {
           id: t.id, name: t.name, department: t.department_name, mainBranch: t.main_branch, tests: of('tests'), coverage: of('coverage'), pipelines: of('pipelines'),
-          deployments: of('deployments'), commits: of('commits'), incidents: of('incidents'),
+          deployments: of('deployments'), commits: of('commits'), incidents: of('incidents'), issues: of('issues'), staticAnalysis: of('static-analysis'),
         };
       }),
     });
@@ -322,6 +358,106 @@ router.get('/teams/:id/delivery', authenticateToken, async (req: AuthRequest, re
   } catch (error) {
     console.error('Delivery evidence error:', error);
     res.status(500).json({ error: 'Failed to load deliveries and incidents' });
+  }
+});
+
+router.get('/teams/:id/work', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const team = await assertTeamAnalytics(req, res, req.params.id as string);
+    if (!team) return;
+    const teamId = team.id;
+    const now = Date.now();
+    const today = new Date(now).toISOString().slice(0, 10);
+    const from = new Date(now - 120 * 86_400_000).toISOString().slice(0, 10);
+    const client = await pool.connect();
+    let work: Awaited<ReturnType<typeof loadWorkData>>;
+    let quality: Awaited<ReturnType<typeof loadQualityData>>;
+    try {
+      work = await loadWorkData(client, teamId, from, today);
+      quality = await loadQualityData(client, teamId, new Date(now - 120 * 86_400_000).toISOString().slice(0, 10), today);
+    } finally { client.release(); }
+    const iso = (t: number | null) => (t === null ? null : new Date(t).toISOString());
+    const r1 = (n: number) => Math.round(n * 10) / 10;
+    const issueOut = (i: (typeof work.issues)[number]) => ({ key: i.key, title: i.title, type: i.type, url: i.url, points: i.points, openedAt: iso(i.openedAt), resolvedAt: iso(i.resolvedAt), environment: i.environment, foundIn: i.foundIn, components: i.components });
+
+    // Sprints: the last 6 closed (newest first).
+    const byId = new Map(work.sprints.map((x) => [x.externalId, x]));
+    const closed = work.sprints.filter((x) => x.completedAt !== null && x.completedAt <= now).sort((a, b) => b.completedAt! - a.completedAt!).slice(0, 6);
+    const sprints = closed.map((sp) => {
+      const x = summariseSprint(sp, work, now);
+      const est = x.sized.reduce((n, i) => n + (i.estimate ?? 0), 0);
+      const log = x.sized.reduce((n, i) => n + (i.logged ?? 0), 0);
+      return {
+        id: sp.externalId, name: sp.name, startedAt: iso(sp.startedAt), completedAt: iso(sp.completedAt),
+        issues: x.issues.length, committedPoints: x.committedPoints, completedPoints: x.completedPoints, notCompletedPoints: x.notDonePoints,
+        addedIssues: x.added.length, commitment: x.committedPoints > 0 ? r1((x.completedPoints / x.committedPoints) * 100) : null,
+        carryover: x.committedPoints > 0 ? r1(Math.min(100, (x.notDonePoints / x.committedPoints) * 100)) : null,
+        blockedHours: r1(x.blocked.reduce((n, b) => n + b.hours, 0)), sizingAccuracy: est > 0 ? Math.round((log / est) * 100) / 100 : null,
+      };
+    });
+    const latest = closed[0] ? summariseSprint(closed[0], work, now) : null;
+    const blocked = latest ? latest.blocked.slice(0, 8).map((b) => ({ ...issueOut(b.issue), hours: r1(b.hours), sprint: latest.sprint.name ?? latest.sprint.externalId })) : [];
+    const sizing = latest ? latest.sized.map((i) => ({ ...issueOut(i), estimateHours: i.estimate, loggedHours: i.logged, ratio: Math.round((i.logged! / i.estimate!) * 100) / 100 }))
+      .sort((a, b) => Math.abs(Math.log(b.ratio)) - Math.abs(Math.log(a.ratio))).slice(0, 8) : [];
+    const carried = latest ? latest.notDone.slice(0, 10).map((i) => ({ ...issueOut(i), inLaterSprint: i.sprintIds.some((x) => { const o = byId.get(x); return !!o && o.startedAt !== null && latest.sprint.startedAt !== null && o.startedAt > latest.sprint.startedAt; }) })) : [];
+
+    // Defects of the last 28 days.
+    const wStart = Date.parse(`${today}T00:00:00Z`) - (WORK_WINDOW_DAYS - 1) * 86_400_000;
+    const bugs = work.issues.filter((i) => confirmedBug(i) && i.openedAt >= wStart && i.openedAt <= now).sort((a, b) => b.openedAt - a.openedAt);
+    const escaped = bugs.filter((i) => i.foundIn === 'production');
+    const byComponent = new Map<string, number>();
+    for (const b of escaped) for (const c of b.components.length ? b.components : ['(no component)']) byComponent.set(c, (byComponent.get(c) ?? 0) + 1);
+
+    // Code quality: the latest main-branch report of each repository and tool, and its findings.
+    const reports = latestReports(quality, now);
+    const ids = reports.map((r) => r.id);
+    const rules = ids.length ? await query<any[]>(
+      `SELECT rule_id, MAX(rule_name) AS rule_name, COUNT(*)::int AS n, MAX(category) AS category,
+              (array_agg(severity ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END))[1] AS severity,
+              COUNT(*) FILTER (WHERE is_new)::int AS new_count, (array_agg(path ORDER BY line NULLS LAST))[1:3] AS paths
+         FROM analysis_findings WHERE report_id = ANY(?::text[]) GROUP BY rule_id
+        ORDER BY MIN(CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END), COUNT(*) DESC LIMIT 12`, [ids]) : [];
+    const newFindings = ids.length ? await query<any[]>(
+      `SELECT f.rule_id, f.rule_name, f.severity, f.message, f.path, f.line, r.repo, r.tool FROM analysis_findings f JOIN analysis_reports r ON r.id = f.report_id
+        WHERE f.report_id = ANY(?::text[]) AND f.is_new
+        ORDER BY CASE f.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, f.path LIMIT 15`, [ids]) : [];
+    const prevIds = (await query<any[]>(`SELECT previous_report_id FROM analysis_reports WHERE id = ANY(?::text[]) AND previous_report_id IS NOT NULL`, [ids.length ? ids : ['']])).map((x: any) => x.previous_report_id);
+    const fixedFindings = prevIds.length ? await query<any[]>(
+      `SELECT p.rule_id, p.rule_name, p.severity, p.message, p.path, p.line, pr.repo, pr.tool FROM analysis_findings p JOIN analysis_reports pr ON pr.id = p.report_id
+        JOIN analysis_reports cur ON cur.previous_report_id = p.report_id AND cur.id = ANY(?::text[])
+        WHERE NOT EXISTS (SELECT 1 FROM analysis_findings f WHERE f.report_id = cur.id AND f.fingerprint = p.fingerprint)
+        ORDER BY CASE p.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, p.path LIMIT 15`, [ids]) : [];
+    const history = (await query<any[]>(
+      `SELECT day, value::float8 AS value FROM metric_evidence WHERE team_id = ? AND metric_key = 'code_quality' AND day >= CURRENT_DATE - 180 ORDER BY day`, [teamId]));
+    const metrics = (await query<any[]>(
+      `SELECT DISTINCT ON (metric_key) metric_key, day, value::float8 AS value, unit, sample_size, confidence
+         FROM metric_evidence WHERE team_id = ? ORDER BY metric_key, day DESC`, [teamId])).filter((m: any) => ['work', 'quality'].includes(groupOf(m.metric_key)));
+    const sample = await queryOne<any>(
+      `SELECT EXISTS (SELECT 1 FROM issues WHERE team_id = ? AND is_sample) AND NOT EXISTS (SELECT 1 FROM issues WHERE team_id = ? AND NOT is_sample) AS w,
+              EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = ? AND is_sample) AND NOT EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = ? AND NOT is_sample) AS q`, [teamId, teamId, teamId, teamId]);
+    const finding = (f: any) => ({ ruleId: f.rule_id, ruleName: f.rule_name, severity: f.severity, message: f.message, path: f.path, line: f.line, repo: f.repo, tool: f.tool });
+    res.json({
+      teamId,
+      sample: { work: !!sample?.w, quality: !!sample?.q },
+      lastReceived: await lastReceived(teamId, ['issues', 'static-analysis']),
+      metrics: metrics.map((m: any) => ({ key: m.metric_key, label: METRICS[m.metric_key]?.label ?? m.metric_key, group: groupOf(m.metric_key), day: dayStr(m.day), value: m.value, unit: m.unit, sampleSize: m.sample_size, confidence: m.confidence })),
+      sprints, blocked, sizing, carriedOver: carried,
+      defects: {
+        windowDays: WORK_WINDOW_DAYS, bugs: bugs.length, escaped: escaped.length, preRelease: bugs.filter((b) => b.foundIn === 'pre_release').length, unknown: bugs.filter((b) => !b.foundIn).length,
+        escapedList: escaped.slice(0, 15).map(issueOut),
+        byComponent: Array.from(byComponent.entries()).map(([component, n]) => ({ component, escaped: n })).sort((a, b) => b.escaped - a.escaped).slice(0, 6),
+      },
+      quality: {
+        reports: reports.map((r) => ({ id: r.id, tool: r.tool, repo: r.repo, branch: r.branch, commit: r.commit, analyzedAt: iso(r.analyzedAt), linesOfCode: r.linesOfCode, findings: r.findings,
+          bySeverity: { critical: r.critical, high: r.high, medium: r.medium, low: r.low, info: r.info }, weighted: weightedOf(r), newFindings: r.newFindings, fixedFindings: r.fixedFindings })),
+        rules: rules.map((x: any) => ({ ruleId: x.rule_id, ruleName: x.rule_name, findings: x.n, newFindings: x.new_count, severity: x.severity, category: x.category, paths: (x.paths ?? []).filter(Boolean) })),
+        newFindings: newFindings.map(finding), fixedFindings: fixedFindings.map(finding),
+        history: history.map((h: any) => ({ day: dayStr(h.day), value: h.value })),
+      },
+    });
+  } catch (error) {
+    console.error('Work evidence error:', error);
+    res.status(500).json({ error: 'Failed to load work and code quality' });
   }
 });
 
