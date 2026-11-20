@@ -7455,7 +7455,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 3 | Enter the title, choose Linked KPI 'Test coverage', Due date 2030-03-01 and click 'Create action'. | A toast 'Action created' appears and the action is listed. |
 | 4 | Look at the action's KPI line. | It reads 'Test coverage (higher is better): baseline …'. |
 | 5 | Change the action's status to 'In progress'. | The action shows the badge 'In progress'. |
-| 6 | Click 'Open TV mode' (or open /tv?team=<The Away Team id>), move the mouse to show the controls and click 'Focus areas'. | An 'Action plan' panel with the tracked actions is shown, including the new action. |
+| 6 | Click 'Open TV mode' (or open /tv?team=<The Away Team id>), move the mouse to show the controls and click 'Alerts & actions'. | An 'Action plan' panel with the tracked actions is shown, including the new action. |
 | 7 | Read the Action plan panel on TV. | No owner names are shown (e.g. no 'Team Lead'). |
 
 **After the test:** Leave TV mode, open The Away Team's Team detail and delete the created action.
