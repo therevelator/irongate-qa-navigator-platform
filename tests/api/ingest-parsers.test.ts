@@ -239,7 +239,7 @@ describe('Upload bodies', () => {
     );
     const mp = parseMultipart(body, `multipart/form-data; boundary=${b}`);
     expect(mp.fields.team).toBe('team-1');
-    expect(mp.files.report.data.toString()).toBe('<testsuite/>');
+    expect(mp.files.report[0].data.toString()).toBe('<testsuite/>');
     expect(() => parseMultipart(body, 'multipart/form-data')).toThrow(/boundary/);
   });
   it('PARSE-051 gzip: a gzipped file is detected by its magic bytes; a gzip bomb stops at the limit', () => {

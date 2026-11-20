@@ -200,6 +200,15 @@ describe('Tests: pass rate, flakiness, first-time pass rate, execution time', ()
     expect(r.body).toMatchObject({ status: 'dry-run', format: 'junit', counts: { total: 4 } });
     expect(await count(`SELECT COUNT(*) AS n FROM test_runs WHERE team_id = $1`, [TEAM])).toBe(before);
   });
+  it('RAW-017 several report files in one multipart upload (one file per test class) are one run', async () => {
+    if (!up) return;
+    const r = await request(API_URL).post('/api/ingest/tests').set('Authorization', `Bearer ${apiKey}`)
+      .field('team', TEAM).field('commit', 'c11').field('run', 'mvn-1').field('startedAt', `${D1}T07:00:00Z`)
+      .attach('report', F('junit-maven-surefire.xml'), 'TEST-LoanServiceTest.xml').attach('report', F('junit-gradle.xml'), 'TEST-LoginViewModelTest.xml');
+    expect(r.status).toBe(201);
+    expect(r.body.counts).toEqual({ total: 7, passed: 5, failed: 1, errored: 0, skipped: 1 });
+    expect(r.body.durationMs).toBe(4_321_500 + 876);
+  });
 });
 
 describe('Coverage', () => {
@@ -293,7 +302,8 @@ describe('Ingestion log, evidence, How this was calculated, Connect your CI', ()
     if (!up) return;
     const r = await get(`/api/ci/teams/${TEAM}/evidence`, adminCookie);
     expect(r.status).toBe(200);
-    expect(r.body.flakyTests.map((f: any) => f.name).sort()).toEqual(['test_ledger_close', 'test_refund_partial']);
+    // rejectsBadCredit: a Surefire flakyFailure (failed, then passed in a rerun inside the run of RAW-017).
+    expect(r.body.flakyTests.map((f: any) => f.name).sort()).toEqual(['rejectsBadCredit', 'test_ledger_close', 'test_refund_partial']);
     const f = r.body.flakyTests.find((x: any) => x.name === 'test_refund_partial');
     expect(f.failedRuns[0]).toMatchObject({ runId: 'r1', attempt: 1, commit: 'c1' });
     expect(f.passedRuns[0]).toMatchObject({ runId: 'r1', attempt: 2 });
@@ -311,7 +321,7 @@ describe('Ingestion log, evidence, How this was calculated, Connect your CI', ()
     expect(cov.body.formula).toMatch(/lines hit ÷ lines found/);
     expect(cov.body.sources.coverageReports[0]).toMatchObject({ format: 'jacoco', linesFound: 23, linesHit: 17 });
     const flaky = await get(`/api/ci/teams/${TEAM}/metrics/test_flakiness_rate?date=${D}`, adminCookie);
-    expect(flaky.body.flakyTests.length).toBe(2);
+    expect(flaky.body.flakyTests.length).toBe(3); // the late Surefire run of RAW-017 (3 days ago) is inside the 7-day window
     expect(flaky.body.sources.testRuns.length).toBeGreaterThanOrEqual(2);
     const build = await get(`/api/ci/teams/${TEAM}/metrics/build_time?date=${D1}`, adminCookie);
     expect(build.body.sources.pipelineRuns.map((p: any) => p.runId).sort()).toEqual(['6612345678', 'p2', 'p2']);

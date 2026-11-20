@@ -341,3 +341,10 @@ export function changedCoverage(cov: ParsedCoverage, changed: ChangedLines): { f
   }
   return { found, hit, perFile };
 }
+
+/** Several coverage files of one run (e.g. one JaCoCo report per module) as one report. */
+export function mergeCoverage(a: ParsedCoverage, b: ParsedCoverage): ParsedCoverage {
+  const files = a.files.concat(b.files);
+  guardCount(files.length);
+  return { format: a.format, files, totals: totalsOf(files) };
+}

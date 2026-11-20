@@ -273,3 +273,11 @@ export function parseTestReport(text: string, format: TestFormat): ParsedTestRep
     throw e;
   }
 }
+
+/** Several report files of one run (e.g. Surefire / Gradle: one file per test class) as one report. */
+export function mergeTestReports(a: ParsedTestReport, b: ParsedTestReport): ParsedTestReport {
+  if (a.cases.length + b.cases.length > MAX_TEST_CASES) throw new ReportError(`More than ${MAX_TEST_CASES} test cases in one upload`);
+  const cases = a.cases.concat(b.cases);
+  const startedAt = a.startedAt && b.startedAt ? (a.startedAt < b.startedAt ? a.startedAt : b.startedAt) : a.startedAt ?? b.startedAt;
+  return finish(a.format, cases, startedAt, a.durationMs + b.durationMs);
+}
