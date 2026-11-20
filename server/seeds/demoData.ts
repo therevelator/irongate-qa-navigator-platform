@@ -2328,6 +2328,12 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
   // Alerts, notifications and tracked actions (also rows the server created for demo teams).
   { table: 'notification_deliveries', sql: `DELETE FROM notification_deliveries WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
   { table: 'notifications', sql: `DELETE FROM notifications WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_} OR user_id LIKE ${D_} OR alert_id LIKE ${D_} OR action_id LIKE ${D_}` },
+  // Forecasts and recommendations (v2 phase 4) computed from sample values: removed with them (the
+  // next read or the hourly job recalculates them from what is left).
+  { table: 'recommendations', sql: `DELETE FROM recommendations WHERE company_id LIKE ${D_} OR team_id LIKE ${D_} OR action_id LIKE ${D_}
+      OR team_id IN (SELECT DISTINCT team_id FROM metric_values WHERE idempotency_key LIKE 'backfill:${DEMO_PREFIX}%')` },
+  { table: 'forecasts', sql: `DELETE FROM forecasts WHERE company_id LIKE ${D_} OR team_id LIKE ${D_}
+      OR team_id IN (SELECT DISTINCT team_id FROM metric_values WHERE idempotency_key LIKE 'backfill:${DEMO_PREFIX}%')` },
   { table: 'team_actions', sql: `DELETE FROM team_actions WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'alerts', sql: `DELETE FROM alerts WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'alert_rules', sql: `DELETE FROM alert_rules WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
