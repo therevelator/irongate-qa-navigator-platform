@@ -124,6 +124,13 @@ post {
     QE_NAVIGATOR_API_KEY: $(QE_NAVIGATOR_API_KEY)`;
 }
 
+const DEPLOY_TOOLS: Array<{ id: Tool; label: string; file: string }> = [
+  { id: 'github', label: 'GitHub Actions', file: '.github/workflows/deploy.yml (a step at the end of the production deploy job)' },
+  { id: 'gitlab', label: 'GitLab CI', file: '.gitlab-ci.yml (the production deploy job), or a deployment webhook' },
+  { id: 'jenkins', label: 'Jenkins', file: 'Jenkinsfile of the production deploy (declarative pipeline)' },
+  { id: 'azure', label: 'Azure DevOps', file: 'azure-pipelines.yml (the production deployment job)' },
+];
+
 type IncidentTool = 'pagerduty' | 'opsgenie' | 'other';
 const INCIDENT_TOOLS: Array<{ id: IncidentTool; label: string; file: string }> = [
   { id: 'pagerduty', label: 'PagerDuty', file: 'PagerDuty → Integrations → Generic Webhooks (v3), and a backfill from the REST API' },
@@ -522,7 +529,7 @@ const ConnectCi: React.FC = () => {
         </div>
         <div>
           <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">1. Deployments and commits, from the deploy job</h5>
-          {toolTabs('deploy', 'Deployment steps', TOOLS, deployTool, setDeployTool, deployCode, 'connect-ci-deploy-snippet')}
+          {toolTabs('deploy', 'Deployment steps', DEPLOY_TOOLS, deployTool, setDeployTool, deployCode, 'connect-ci-deploy-snippet')}
         </div>
         <div>
           <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">2. Incidents, from the incident tool</h5>
