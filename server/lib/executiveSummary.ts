@@ -20,7 +20,7 @@ export const SUMMARY_TOP_N = 3;
 export const SUMMARY_TEXT = {
   risks: `Teams with the QA score below ${QA_SCORE_THRESHOLDS.good} or a tracked KPI off its target, lowest QA score first.`,
   improved: 'Teams whose QA score rose most since last week.',
-  lastWeek: 'Last week = each team’s latest KPI snapshot dated 7 to 14 days ago (the overview’s trend uses the same window).',
+  lastWeek: 'Compared with each team’s latest snapshot from 7 to 14 days ago, as the overview’s trend.',
   money: 'Revenue at stake: monthly revenue associated with closing each team’s quality gaps to target (a range, from the team’s own history; an association, not a promise). Open debt: cost of delay of open technical-debt items.',
 } as const;
 

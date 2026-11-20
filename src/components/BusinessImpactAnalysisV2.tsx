@@ -178,7 +178,12 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
   const showFormulas = canShowFormulas && showFormulasPref;
   // Company / department roll-up: super admins and QA managers (canViewRevenueRollup).
   const canRollup = !!user && canViewRevenueRollup(policyActorOf(user));
-  const [activeTab, setActiveTab] = useState<Tab>('money');
+  // ?tab=all-teams (the executive summary's "Assumptions and team figures" link) opens that tab.
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    let t: string | null = null;
+    try { t = new URLSearchParams(window.location.search).get('tab'); } catch { /* no location */ }
+    return t === 'what-if' || t === 'details' || (t === 'all-teams' && canRollup) ? (t as Tab) : 'money';
+  });
   const tabOptions: { value: Tab; label: string }[] = [
     { value: 'money', label: 'Money' },
     { value: 'what-if', label: 'What-if' },

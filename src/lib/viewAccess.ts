@@ -29,6 +29,10 @@ export function canOpenView(actor: PolicyActor | null | undefined, view: string)
     case 'dashboard':
     case 'notifications':
       return true;
+    case 'summary':
+      // Executive summary: every role with a team in their analytics scope (the summary covers
+      // that scope); the navigation offers it to super admins and managers (showSummaryInNav).
+      return canUseAnalytics(actor);
     case 'tv':
       // TV mode: every role may open it, for the teams of their analytics scope (the API refuses
       // others); without a team in scope it says so.
@@ -53,4 +57,10 @@ export function canOpenView(actor: PolicyActor | null | undefined, view: string)
     default:
       return false;
   }
+}
+
+/** The executive summary is in the navigation for super admins and managers (company or department scope). */
+export function showSummaryInNav(actor: PolicyActor): boolean {
+  const level = analyticsScopeLevelOf(actor);
+  return level === 'company' || level === 'department';
 }
