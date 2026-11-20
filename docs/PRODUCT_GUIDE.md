@@ -127,7 +127,7 @@ What each role may do (from `userPolicy.ts`; the navigation in [`src/components/
 | Capability | super_admin | qa_manager | team_lead | qa_engineer | viewer |
 |---|---|---|---|---|---|
 | Overview (the teams of the analytics scope: company for super admins) | yes | yes | yes | yes | yes |
-| Overview team list, team detail, Analytics modules, Compare teams, TV mode, per-team metric detail (history, velocity) | all teams | their departments' teams | their teams | their teams | their teams |
+| Overview team list, team detail, Analytics modules, Compare teams, TV mode, executive summary, per-team metric detail (history, velocity) | all teams | their departments' teams | their teams | their teams | their teams |
 | Team member names and e-mails (`canViewTeamMembers`) | any team | their departments | assigned teams | assigned teams | assigned teams |
 | Manage users (activate / deactivate, reset password, developer-insights toggle) | anyone in the company except themselves | users of their departments ranked below manager | users of teams they lead ranked below team lead | no | no |
 | Edit another user's profile and assignments; delete (= deactivate) | yes | users they manage | no | no | no |
@@ -1057,11 +1057,12 @@ Escape):
   smoky glass with silver rims and nib).
 - **Score display:** **Battery** (the 3D battery) or **Gauge** (a 240° radial gauge in the same colour scale, number in the centre, a marker
   at the end of the coloured arc (the score; the target is in the text beside it), a short sweep on load, none with reduced motion). It applies everywhere a score is drawn: Overview hero, executive
-  metrics, team cards, the Team detail QA card and TV mode. Both read the same to a screen reader ("QA score: 81 of 100").
+  metrics, team cards, the Team detail QA card, the executive summary and TV mode. Both read the same to a screen reader ("QA score: 81 of 100").
 - **Signed-out screens** (sign-in, registration, invitation and password pages) always use the classic Light look (blue brand panel,
   white form), whatever theme is chosen; the chosen theme returns once the person is signed in.
 - Both choices are kept in the browser (localStorage `irongate_theme_mode`, `irongate_score_display`) and applied before the first
-  paint. TV mode keeps its own light / dark switch; while the app shows Graphite or Porcelain, TV dark is Graphite and TV light Porcelain.
+  paint. TV mode keeps its own theme (any of the four, T cycles through them); a kiosk link with `theme=dark` or `theme=light` shows
+  Graphite or Porcelain while the app shows a glass theme.
 - Implementation: `src/lib/appearance.ts`, `src/contexts/ThemeContext.tsx`, `src/styles/themes.css` (tokens per `<html data-theme>`),
   `src/components/ScoreVisual.tsx` / `ScoreGauge.tsx`.
 
@@ -1117,18 +1118,42 @@ Why: everything about one team in one place, with each number explained
 
 ### Team TV mode
 
-Why: a wall or meeting-room screen that keeps one team's quality visible without anyone logging in each time (`/tv?team=<id>`,
-[`TeamTvView.tsx`](../src/components/TeamTvView.tsx), `GET /api/tv/teams/:id`).
+Why: a wall or meeting-room screen that keeps the teams' quality visible, readable across the room, with no one touching it once
+started (`/tv?team=<id>`, [`TeamTvView.tsx`](../src/components/TeamTvView.tsx), `GET /api/tv/teams/:id`).
 
-- Team name, department, lead, member count; QA score battery with status and change since the previous snapshot; six key KPIs (test
-  coverage, automation coverage, test flakiness, defect escape rate, change failure rate, deployments) with value, target, status,
-  change and a 90-day sparkline; "data as of" and a clock.
-- Two more panels: 90-day trends with the target line of each day, and focus areas (KPIs off target, the team's tracked actions without
-  owner names, plus recommended actions for team leads and above).
+- Team name, department, lead, member count; QA score (battery or gauge) with status and change since the previous snapshot; "data as
+  of" and a clock, always on screen.
+- Four panels: **Key KPIs** (test coverage, automation coverage, test flakiness, defect escape rate, change failure rate, deployments
+  with value, target, status, change and a 90-day sparkline), **Trends** (90 days with the target line of each day), **Alerts & actions**
+  (the team's open alerts by severity, or the KPIs off target when none is open; the tracked actions without owner names, or the
+  recommended actions for team leads and above) and **Wellbeing** (the anonymous pulse's latest closed period: score 0–100 with its
+  band, the five answers, the trend; "Not shown" below 3 responses; never comments).
+- Rotation: every N seconds to the next chosen panel, then to the next chosen team of the scope (Team 2 of 5); the next team is loaded
+  ahead (no loading screen), a thin bar at the top shows the time left. **Set up the screen** (S): interval (10 s to 5 min), panels, teams
+  (this team, every team in scope, or a list), theme, rotation; **Copy screen link** gives the kiosk address with all of it.
 - Team aggregates only: no member list, no individual data. Refreshes every 60 s, on the live "metrics updated" event and when the tab
-  becomes visible; a failed refresh keeps the last data and says so.
-- Keys: F full screen, T light/dark, R auto-rotate every 20 s, arrows or 1–3 to switch panels, Esc exit. Kiosk URL options
-  `?team=<id>&theme=light|dark&rotate=1`. Scales from 1366×768 to 3840×2160.
+  becomes visible; a lost connection keeps the last data, says "Connection lost", retries every 15 s and recovers on its own.
+- Keys: F full screen, T theme (Light, Dark, Graphite, Porcelain), R auto-rotate, S set up, arrows or 1–4 to switch panels, Esc exit.
+  The cursor and the controls hide after 4 s; the screen is kept awake where the browser allows it. Kiosk URL options
+  `?team=<id>&theme=light|dark|graphite|porcelain&rotate=1&interval=<s>&panels=kpis,trends,focus,pulse&teams=all|<ids>`. Scales from
+  1366×768 to 3840×2160 (4K: everything twice the size of 1080p).
+
+### Executive summary
+
+Why: a manager or executive reads the state of quality on a phone in one minute, before a meeting or between two
+(`/summary`, [`ExecutiveSummary.tsx`](../src/components/ExecutiveSummary.tsx), `GET /api/summary`: one call).
+
+- The scope's QA score (Battery / Gauge), status, target and change since last week; teams on track / at risk / off track.
+- The 3 biggest risks (teams with the QA score or a tracked KPI off target, lowest QA score first, each item with value, target and
+  weekly change) and the 3 most improved teams (biggest QA score rise).
+- Money at risk (super admins and managers): the Business impact revenue roll-up as a range per month and per year, the cost of delay of
+  open debt, how it is estimated and a link to the assumptions and team figures (Business impact → All teams).
+- Open alerts (as the Alerts page) and since last week: QA change, teams up / down, status changes, alerts opened / resolved, tracked
+  actions done / new / overdue.
+- Phone first: one column at 390 px, no sideways scrolling, tap targets of at least 44 px; two and three columns on a desktop.
+- Works offline-ish: the last summary stays on screen with the time it was loaded and reloads when the network is back.
+- Share link: `/summary`; whoever opens it signs in and sees the summary of their own scope. Navigation: super admins and managers;
+  every role with a team in scope may open the link (their teams only).
 
 ### Compare teams
 
@@ -1498,7 +1523,7 @@ npm run test:db                            # database tests
 npm run test:ui:local                      # Playwright UI suite with its own local test database and servers
 ```
 
-API suites cover the role matrix, analytics scope, ingestion, targets, audit, invitations, SSO, mailer, privacy and pulse, TV mode, compare /
+API suites cover the role matrix, analytics scope, ingestion, targets, audit, invitations, SSO, mailer, privacy and pulse, TV mode, the executive summary, compare /
 views / onboarding, security and "golden" outputs (`tests/api/golden.test.ts` fails on any unexpected output change). Database suites check
 the schema, the QA score trigger against `computeQaScore` for every stale combination, `metric_values` derivation and the pulse schema.
 
