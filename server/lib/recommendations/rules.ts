@@ -84,10 +84,16 @@ export interface TeamFacts {
   /** Production deploys of the last 30 days and the failed changes among them (raw deployment events). */
   deploys?: { windowDays: number; production: number; failed: number; failedList: Array<{ id: string; service: string | null; day: string }>; services: Array<{ service: string; total: number; failed: number }> } | null;
   debt: Array<{ title: string; severity: string; category: string; costOfDelay: number | null; effortHours: number | null; filePath: string | null }>;
+  /** Raw issues (v2 phase 3): bugs of the last 28 days and where the escaped ones were found. */
+  escapes?: { windowDays: number; bugs: number; escaped: number; list: Array<{ key: string; title: string | null; components: string[]; opened: string }>; byComponent: Array<{ component: string; escaped: number }> } | null;
+  /** The latest closed sprint's most blocked issues and its completed issues furthest from their estimate. */
+  sprintIssues?: { sprint: string; blocked: Array<{ key: string; title: string | null; hours: number }>; sizing: Array<{ key: string; title: string | null; estimateHours: number; loggedHours: number }> } | null;
+  /** Static-analysis findings (SARIF) of the latest reports: by rule, highest severity first. */
+  findings?: { reports: number; total: number; critical: number; high: number; rules: Array<{ ruleId: string; name: string | null; severity: string; count: number; paths: string[] }> } | null;
 }
 
 export interface Evidence { label: string; value: string; detail?: string }
-export interface Item { kind: 'test' | 'file' | 'stage' | 'debt' | 'incident' | 'service' | 'deploy'; name: string; detail: string }
+export interface Item { kind: 'test' | 'file' | 'stage' | 'debt' | 'incident' | 'service' | 'deploy' | 'issue' | 'rule'; name: string; detail: string }
 
 export interface Effect {
   metric: string;
@@ -388,13 +394,14 @@ export const escapeWithFallingCoverageRule: Rule = (f) => {
     evidence: compact<Evidence>([
       { label: 'Defect escape rate, 12 weeks ago → now', value: `${fmt(e0.value, e.unit)} → ${fmt(e.current, e.unit)}`, detail: `target ${targetText(e)}` },
       { label: 'Test coverage, 12 weeks ago → now', value: `${fmt(c0.value, c.unit)} → ${fmt(c.current, c.unit)}`, detail: c.target ? `target ${targetText(c)}` : undefined },
+      f.escapes && f.escapes.escaped > 0 ? { label: `Bugs found in production, last ${f.escapes.windowDays} days`, value: `${f.escapes.escaped} of ${f.escapes.bugs}`, detail: f.escapes.byComponent.length ? `most in ${f.escapes.byComponent.slice(0, 2).map((x) => `${x.component} (${x.escaped})`).join(', ')}` : undefined } : null,
       forecastEvidence(e),
     ]),
-    items: [],
+    items: (f.escapes?.list ?? []).slice(0, 5).map((i) => ({ kind: 'issue' as const, name: `${i.key}${i.title ? ` ${i.title}` : ''}`, detail: `found in production · opened ${shortDay(i.opened)}${i.components.length ? ` · ${i.components.join(', ')}` : ''}` })),
     nextStep: 'For every defect found in production this sprint, merge a regression test with the fix (no fix without a test), and review the last 10 escaped defects in the retro: which test level would have caught each one.',
     metricKey: 'defect_escape_rate',
     effect,
-    confidence: confidenceOf(false, e),
+    confidence: confidenceOf(!!f.escapes?.escaped, e),
   };
 };
 
@@ -419,11 +426,11 @@ export const sizingDriftRule: Rule = (f) => {
       carry && carry.current !== null && { label: 'Sprint carryover', value: fmt(carry.current, carry.unit), detail: carry.target ? `target ${targetText(carry)}` : undefined },
       carry && trendEvidence(carry),
     ]),
-    items: [],
+    items: (f.sprintIssues?.sizing ?? []).slice(0, 5).map((i) => ({ kind: 'issue' as const, name: `${i.key}${i.title ? ` ${i.title}` : ''}`, detail: `estimate ${r1(i.estimateHours)} h, logged ${r1(i.loggedHours)} h (${(i.loggedHours / i.estimateHours).toFixed(2)}×) · ${f.sprintIssues!.sprint}` })),
     nextStep: `Re-estimate the next sprint against 3 reference stories, split anything above 8 points, and compare estimate with actual for every finished item in the retro; plan ${under ? `about ${Math.round((1 - 1 / s.current) * 100)}% less` : 'more'} until the ratio is back within 0.85–1.15.`,
     metricKey: carry && carry.target ? 'sprint_carryover' : null,
     effect: carry ? historyEffect(carry) : null,
-    confidence: confidenceOf(false, carry ?? s),
+    confidence: confidenceOf(!!f.sprintIssues?.sizing.length, carry ?? s),
   };
 };
 
@@ -441,11 +448,11 @@ export const wellbeingBlockedRule: Rule = (f) => {
       trendEvidence(b),
       forecastEvidence(b),
     ]),
-    items: [],
+    items: (f.sprintIssues?.blocked ?? []).slice(0, 5).map((i) => ({ kind: 'issue' as const, name: `${i.key}${i.title ? ` ${i.title}` : ''}`, detail: `blocked ${r1(i.hours)} h in ${f.sprintIssues!.sprint}` })),
     nextStep: 'Hold a 15-minute blocker review twice a week with the Product Owner; give every blocked item an owner outside the team and a date, and stop starting new work while more than two items are blocked.',
     metricKey: 'blocked_time_hours',
     effect: historyEffect(b),
-    confidence: confidenceOf(false, b),
+    confidence: confidenceOf(!!f.sprintIssues?.blocked.length, b),
   };
 };
 
@@ -494,16 +501,34 @@ export const failingStageRule: Rule = (f) => {
   };
 };
 
-/** High-severity technical debt while code quality is low or falling. */
+/** High-severity technical debt (or, from static analysis, high-severity findings) while code quality is low or falling. */
 export const technicalDebtRule: Rule = (f) => {
   const m = f.metrics.code_quality_score;
   const items = f.debt.filter((d) => d.severity === 'critical' || d.severity === 'high').slice(0, 3);
-  if (!items.length || !needsAttention(m)) return null;
+  const rules = (f.findings?.rules ?? []).filter((r) => r.severity === 'critical' || r.severity === 'high').slice(0, 3);
+  if ((!items.length && !rules.length) || !needsAttention(m)) return null;
+  if (!items.length) {
+    const n = rules.reduce((k, r) => k + r.count, 0);
+    return {
+      ruleKey: 'technical_debt', subjectKey: '',
+      title: `Fix the ${n} high-severity static-analysis finding${n === 1 ? '' : 's'} (${rules.length === 1 ? `rule ${rules[0].ruleId}` : `${rules.length} rules`}) while code quality is ${fmt(m.current as number, m.unit)}`,
+      evidence: compact<Evidence>([currentEvidence(m), trendEvidence(m), { label: 'Critical and high findings in the latest reports', value: String(f.findings!.critical + f.findings!.high), detail: `${f.findings!.total} findings in ${f.findings!.reports} report${f.findings!.reports === 1 ? '' : 's'}` }]),
+      items: rules.map((r) => ({ kind: 'rule' as const, name: r.name ?? r.ruleId, detail: `${r.severity} · ${r.count} finding${r.count === 1 ? '' : 's'} · ${r.ruleId}${r.paths.length ? ` · ${r.paths.slice(0, 2).join(', ')}` : ''}` })),
+      nextStep: `Fix the findings of “${rules[0].name ?? rules[0].ruleId}” first (Evidence → Work & code quality → Findings by rule), then make new critical and high findings fail the quality gate so they cannot come back.`,
+      metricKey: 'code_quality_score',
+      effect: historyEffect(m),
+      confidence: confidenceOf(true, m),
+    };
+  }
   return {
     ruleKey: 'technical_debt', subjectKey: '',
     title: `Pay down ${items.length === 1 ? `“${items[0].title}”` : `the ${items.length} high-severity debt items`} while code quality is ${fmt(m.current as number, m.unit)}`,
-    evidence: compact<Evidence>([currentEvidence(m), trendEvidence(m), { label: 'Open high or critical debt items', value: String(items.length) }]),
-    items: items.map((d) => ({ kind: 'debt' as const, name: d.title, detail: `${d.severity}${d.effortHours ? ` · about ${Math.round(d.effortHours)} h of work` : ''}${d.costOfDelay ? ` · cost of delay ${Math.round(d.costOfDelay).toLocaleString('en-GB')} a month (as recorded)` : ''}` })),
+    evidence: compact<Evidence>([currentEvidence(m), trendEvidence(m), { label: 'Open high or critical debt items', value: String(items.length) },
+      f.findings && f.findings.critical + f.findings.high > 0 ? { label: 'Critical and high static-analysis findings', value: String(f.findings.critical + f.findings.high) } : null]),
+    items: [
+      ...items.map((d) => ({ kind: 'debt' as const, name: d.title, detail: `${d.severity}${d.effortHours ? ` · about ${Math.round(d.effortHours)} h of work` : ''}${d.costOfDelay ? ` · cost of delay ${Math.round(d.costOfDelay).toLocaleString('en-GB')} a month (as recorded)` : ''}` })),
+      ...rules.slice(0, 2).map((r) => ({ kind: 'rule' as const, name: r.name ?? r.ruleId, detail: `${r.severity} · ${r.count} finding${r.count === 1 ? '' : 's'} · ${r.ruleId}` })),
+    ],
     nextStep: `Plan “${items[0].title}” into the next sprint${items[0].effortHours ? ` (about ${Math.round(items[0].effortHours)} hours)` : ''} and reserve about 15% of each sprint for the rest of the list.`,
     metricKey: 'code_quality_score',
     effect: historyEffect(m),

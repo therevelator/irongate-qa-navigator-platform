@@ -9,6 +9,9 @@
  *   stages     median duration per pipeline stage, last 7 days vs the 7 before; stages failing in 30 days
  *   wellbeing  the team's latest closed pulse period (k-anonymous, as Team detail shows it)
  *   debt       open technical-debt items (technical_debt), highest cost of delay first
+ *   escapes    raw issues (v2 phase 3): bugs of the last 28 days, the escaped ones and their components
+ *   sprintIssues  the latest closed sprint's most blocked issues and those furthest from their estimate
+ *   findings   static-analysis findings of the latest main-branch reports, by rule
  */
 import { query, queryOne } from '../../../src/lib/db';
 import { judgeInstant } from '../../../src/config/metricsConfig';
@@ -19,6 +22,9 @@ import { QA_SCORE_THRESHOLDS } from '../metricFormulas';
 import { addDays, loadCadences, previousPeriod, wellbeingAcrossTeams } from '../pulse';
 import type { EvalContext } from '../kpiEvaluation';
 import type { MetricFacts, TeamFacts } from './rules';
+import { pool } from '../../../src/lib/db';
+import { confirmedBug, loadWorkData, phase3Tables, summariseSprint, WORK_WINDOW_DAYS } from '../calc/work';
+import { latestReports, loadQualityData } from '../calc/quality';
 
 export const FLAKY_WINDOW_DAYS = 14;
 export const STAGE_WINDOW_DAYS = 7;
@@ -57,11 +63,11 @@ export async function loadTeamFacts(team: TeamRefLite & { name: string }, foreca
     metrics[metric] = metricFacts(metric, obs.get(metric), fcOf.get(metric), target, asOf);
   }
 
-  const [flaky, coverage, stages, wellbeing, debt, slow, incidents, deploys] = await Promise.all([
+  const [flaky, coverage, stages, wellbeing, debt, slow, incidents, deploys, work] = await Promise.all([
     loadFlaky(team.id), loadCoverage(team.id), loadStages(team.id), loadWellbeing(team.id, asOf), loadDebt(team.id), loadSlowTests(team.id),
-    loadIncidents(team.id), loadDeploys(team.id),
+    loadIncidents(team.id), loadDeploys(team.id), loadWork(team.id),
   ]);
-  return { teamId: team.id, teamName: team.name, asOf, metrics, flaky, coverage, stages, wellbeing, debt, slowTests: slow?.tests ?? null, slowTestsTotalMs: slow?.totalMs ?? null, incidents, deploys };
+  return { teamId: team.id, teamName: team.name, asOf, metrics, flaky, coverage, stages, wellbeing, debt, slowTests: slow?.tests ?? null, slowTestsTotalMs: slow?.totalMs ?? null, incidents, deploys, ...work };
 }
 
 async function loadFlaky(teamId: string): Promise<TeamFacts['flaky']> {
@@ -256,4 +262,54 @@ async function loadDeploys(teamId: string): Promise<TeamFacts['deploys']> {
       services: [...bySvc.values()].filter((x) => x.failed > 0).sort((a, b) => b.failed - a.failed || b.total - a.total).slice(0, 3),
     };
   });
+}
+
+/** Phase 3 evidence: escaped defects, the latest sprint's blocked and mis-sized issues, static-analysis findings by rule. */
+export async function loadWork(teamId: string): Promise<Pick<TeamFacts, 'escapes' | 'sprintIssues' | 'findings'>> {
+  const client = await pool.connect();
+  try {
+    if (!(await phase3Tables(client))) return { escapes: null, sprintIssues: null, findings: null };
+    const now = Date.now();
+    const today = new Date(now).toISOString().slice(0, 10);
+    const from = new Date(now - 60 * 86_400_000).toISOString().slice(0, 10);
+    const w = await loadWorkData(client, teamId, from, today);
+    const wStart = Date.parse(`${today}T00:00:00Z`) - (WORK_WINDOW_DAYS - 1) * 86_400_000;
+    const bugs = w.issues.filter((i) => confirmedBug(i) && i.openedAt >= wStart && i.foundIn);
+    const escaped = bugs.filter((i) => i.foundIn === 'production').sort((a, b) => b.openedAt - a.openedAt);
+    const comp = new Map<string, number>();
+    for (const b of escaped) for (const c of b.components) comp.set(c, (comp.get(c) ?? 0) + 1);
+    const escapes = bugs.length ? {
+      windowDays: WORK_WINDOW_DAYS, bugs: bugs.length, escaped: escaped.length,
+      list: escaped.slice(0, 10).map((i) => ({ key: i.key, title: i.title, components: i.components, opened: new Date(i.openedAt).toISOString() })),
+      byComponent: Array.from(comp.entries()).map(([component, n]) => ({ component, escaped: n })).sort((a, b) => b.escaped - a.escaped),
+    } : null;
+    const last = w.sprints.filter((x) => x.completedAt !== null && x.completedAt <= now && x.completedAt >= now - 42 * 86_400_000).sort((a, b) => b.completedAt! - a.completedAt!)[0];
+    let sprintIssues: TeamFacts['sprintIssues'] = null;
+    if (last) {
+      const x = summariseSprint(last, w, now);
+      sprintIssues = {
+        sprint: last.name ?? last.externalId,
+        blocked: x.blocked.slice(0, 5).map((b) => ({ key: b.issue.key, title: b.issue.title, hours: b.hours })),
+        sizing: x.sized.map((i) => ({ key: i.key, title: i.title, estimateHours: i.estimate!, loggedHours: i.logged! }))
+          .sort((a, b) => Math.abs(Math.log(b.loggedHours / b.estimateHours)) - Math.abs(Math.log(a.loggedHours / a.estimateHours))).slice(0, 5),
+      };
+    }
+    const q = await loadQualityData(client, teamId, from, today);
+    const reports = latestReports(q, now);
+    let findings: TeamFacts['findings'] = null;
+    if (reports.length) {
+      const rules = (await client.query(
+        `SELECT rule_id, MAX(rule_name) AS name, COUNT(*)::int AS n, (array_agg(path ORDER BY line NULLS LAST))[1:3] AS paths,
+                (array_agg(severity ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END))[1] AS severity
+           FROM analysis_findings WHERE report_id = ANY($1::text[]) GROUP BY rule_id
+          ORDER BY MIN(CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END), COUNT(*) DESC LIMIT 10`, [reports.map((r) => r.id)])).rows;
+      findings = {
+        reports: reports.length, total: reports.reduce((n, r) => n + r.findings, 0), critical: reports.reduce((n, r) => n + r.critical, 0), high: reports.reduce((n, r) => n + r.high, 0),
+        rules: rules.map((r: any) => ({ ruleId: r.rule_id, name: r.name, severity: r.severity, count: r.n, paths: (r.paths ?? []).filter(Boolean) })),
+      };
+    }
+    return { escapes, sprintIssues, findings };
+  } finally {
+    client.release();
+  }
 }

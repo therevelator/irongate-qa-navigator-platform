@@ -37,11 +37,11 @@ const R = (seed: string) => `((('x' || substr(md5(${seed}), 1, 8))::bit(32)::int
 
 /** PAY, LEND, MOB, … from the team name. */
 export function projectKey(name: string): string {
-  const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter((w) => w && !['THE', 'A', 'AN', 'OF', 'AND'].includes(w));
   if (!words.length) return 'TEAM';
   if (words.length === 1) return words[0].slice(0, 4);
   const first = words[0];
-  return (first.length <= 4 ? first : first.slice(0, 3)) .slice(0, 4);
+  return first.length <= 4 ? first : first.slice(0, 3);
 }
 export const repoSlug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'app';
 
