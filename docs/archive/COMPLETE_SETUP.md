@@ -59,7 +59,7 @@ sudo systemctl start mysql
 
 ```bash
 # Navigate to project directory
-cd "/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard"
+cd "<project folder>"
 
 # Import schema (creates database and all tables)
 mysql -u root -p < schema.sql

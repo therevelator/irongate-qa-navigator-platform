@@ -153,7 +153,7 @@ onError={(e) => { e.currentTarget.style.display = 'none'; }}
 ## Files Modified
 
 ```
-/Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/
+<project folder>/
 ├── index.html                          (Updated title & favicon)
 ├── src/
 │   └── components/

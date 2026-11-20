@@ -103,7 +103,7 @@ start, and `--grep` or file arguments are refused. `--list` shows what would run
 ## In GitHub Actions
 
 - **UI tests** ([`.github/workflows/ui-tests.yml`](../../.github/workflows/ui-tests.yml)): the full
-  suite on pushes to `main` (and `claude/**` branches), pull requests, nightly at 03:17 UTC, and by hand
+  suite on pushes to `main` and the working branches listed in the workflow, pull requests, nightly at 03:17 UTC, and by hand
   (Actions → UI tests → Run workflow) with a subset: `all`, `smoke`, `negative`, `a11y` or `grep` plus a
   grep string. Four shards with three workers each; one retry in CI (a test that needed it shows as
   *flaky* in the report). Target wall time under 20 minutes (about 8 to 10 today).

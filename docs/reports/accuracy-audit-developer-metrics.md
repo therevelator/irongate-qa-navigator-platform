@@ -1,6 +1,6 @@
 ## Developer productivity and people metrics: accuracy audit (read-only, nothing edited)
 
-I reproduced the reported card through the live API. `GET /api/teams/team-1764026220944-y6sngw6ms/developer-ai-suggestions` returns David Lee as `at-risk`, "1 area(s) need attention", strengths [Fast PR turnaround, Quick code reviews, Minimal context switching, High satisfaction], concerns [Low focus time], suggestion "Keep up the good work!". Emma Wilson and Ionut Apostu get the same output. George Apostu gets `status:'healthy'` with summary "1 area(s) need attention".
+I reproduced the reported card through the live API. `GET /api/teams/team-1764026220944-y6sngw6ms/developer-ai-suggestions` returns David Lee as `at-risk`, "1 area(s) need attention", strengths [Fast PR turnaround, Quick code reviews, Minimal context switching, High satisfaction], concerns [Low focus time], suggestion "Keep up the good work!". Emma Wilson and another user get the same output. A further user gets `status:'healthy'` with summary "1 area(s) need attention".
 
 ### Critical findings
 
@@ -50,7 +50,7 @@ Fix: delete the fallback and show "No metrics recorded". Load metrics from a non
 - **The "Team rankings" page is entirely fabricated.** `src/components/TeamGamification.tsx:12` uses `generateGamificationData()` (`src/data/advancedFeatures.ts:283-305`). Team names are hardcoded (Checkout Service, User Auth, Inventory Core, Payment Gateway, Mobile App), points are `Math.floor(Math.random()*5000)+1000`, badges are random, every team has the same "Quality Champion" achievement dated now, and the category counts are hardcoded 3/2/4 (lines 158-170). It is called in the render body, so clicking "View Achievements" reshuffles the leaderboard. It sits in the main nav (`Layout.tsx:59`). Remove it or hide it behind a "demo" flag.
 
 **C6. Test fixtures look the same as real data.** 8 of 11 `developer_metrics` rows are fixtures:
-- David Lee, Emma Wilson, Henry Brown, Ionut Apostu (×2) and two "Test User" rows each have every field equal to 1, 2, 3 or 4.
+- David Lee, Emma Wilson, Henry Brown, two rows of another user and two "Test User" rows each have every field equal to 1, 2, 3 or 4.
 - Team Lead has 0.5/0.5/5/1/1.
 
 Only George, Ionuț (superadmin) and Loredana look real. Nothing flags the fixtures. They produce the "1h PR + 1h focus + 1h meetings" contradictions. Delete them, or add an `is_sample` column and filter or badge those rows.

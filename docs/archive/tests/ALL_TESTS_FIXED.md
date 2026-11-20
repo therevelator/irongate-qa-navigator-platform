@@ -55,7 +55,7 @@ expect(hasAdminPanel || hasSignOut).toBe(true);
 ```typescript
 // ❌ BROKEN - hardcoded password
 const DB_CONFIG = {
-  password: 'l3v75th5n',  // Doesn't work in CI
+  password: '<redacted>',  // Doesn't work in CI
 };
 ```
 
@@ -66,7 +66,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 
 const DB_CONFIG = {
-  password: process.env.DB_PASSWORD || 'l3v75th5n',
+  password: process.env.DB_PASSWORD || '<redacted>',
 };
 ```
 

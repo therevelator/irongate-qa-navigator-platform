@@ -486,9 +486,11 @@ platform support account, hash placeholder). See [`scripts/reseed/README.md`](..
 ### 3.2 Team KPIs
 
 These are the 23 columns of `kpi_snapshots` that can be written (the whitelist `KPI_COLUMNS` in
-[`server/lib/kpiIngest.ts`](../server/lib/kpiIngest.ts)). All are **measured** values: IronGate stores them
-as sent and does not recompute them. The formula column says how the source system should calculate them
-(from [`src/data/metricCatalog.ts`](../src/data/metricCatalog.ts)).
+[`server/lib/kpiIngest.ts`](../server/lib/kpiIngest.ts)). A value sent to the KPI ingestion API or entered in
+Manual metrics is stored as sent; the formula column says how the source system should calculate it (from
+[`src/data/metricCatalog.ts`](../src/data/metricCatalog.ts)). When a team sends raw data (sections 4.2a to 4.2c),
+QE Navigator calculates the metric itself (source `computed`; formulas in
+[metrics_and_calculations.md](metrics_and_calculations.md)).
 
 **Where they come from today:** the KPI ingestion API (`POST /api/ingest/kpis`, any source label) or Manual
 metrics (source `manual`), or generated sample data (source `synthetic`). There are no built-in connectors.
@@ -1599,7 +1601,9 @@ The Slack webhook is entered in **Parameters → Notification channels**, not in
 - Netlify: static site plus `netlify/functions/api.ts`, which mounts the same routers. On Netlify there are no long-running cron jobs and no
   WebSocket (dashboards refresh on load and on their own timers). Netlify Scheduled Functions replace the local schedule:
   `alerts-evaluate` (hourly, `15 * * * *`), `weekly-digest` (Monday 07:00 UTC), `pulse-auto-send` (hourly, `40 * * * *`), `db-keepalive`
-  (06:00 and 18:00 UTC) and `demo-refresh` (02:17 UTC, which starts the background function `demo-refresh-background`).
+  (06:00 and 18:00 UTC), `calc-recompute` (03:41 UTC) and `demo-refresh` (02:17 UTC, which starts the background function
+  `demo-refresh-background`); `demo-data-background` runs the operator's Demo Data jobs. Every function and variable:
+  [DEPLOYMENT_GUIDE.md](DEPLOYMENT_GUIDE.md).
 - On the long-running server, `server/jobs/alertsCron.ts` evaluates alerts hourly (and once 20 s after start), computes due action
   outcomes, sends pending notifications and runs the weekly digest.
 - Schema: apply `supabase/migrations/` in timestamp order. Migrations are additive and idempotent.

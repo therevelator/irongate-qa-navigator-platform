@@ -12,7 +12,7 @@ Your IronGate logo needs to be placed in the correct location for the dashboard 
 
 2. **Place it in the public folder**:
    ```
-   /Users/ionutapostu/Desktop/QA Dashboard/qa-dashboard/public/irongate-logo.png
+   <project folder>/public/irongate-logo.png
    ```
 
 3. **The logo will appear**:

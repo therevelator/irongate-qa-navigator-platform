@@ -237,7 +237,7 @@ mysql://admin:MySecurePass123@qa-dashboard-db.abc123.us-east-1.rds.amazonaws.com
 ### 4.2 Deploy Using Script
 
 ```bash
-cd /Users/ionutapostu/Desktop/QA\ Dashboard/qa-dashboard
+cd <project folder>
 
 # Run deployment script
 ./deploy.sh
