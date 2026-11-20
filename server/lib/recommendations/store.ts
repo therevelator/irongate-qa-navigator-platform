@@ -223,18 +223,18 @@ export async function acceptRecommendation(ctx: DecisionContext, rec: any, input
   ].filter(Boolean).join('\n').slice(0, 2000);
   const title = (input.title && input.title.trim().length >= 3 ? input.title.trim() : rec.title).replace(/\s+/g, ' ').slice(0, 200);
   const metricKey = rec.metric_key && isTargetMetric(rec.metric_key) ? (rec.metric_key as TargetMetric) : null;
-  const actionId = await createAction(ctx, { title, description, ownerId: input.ownerId, dueDate: input.dueDate, metricKey, origin: 'recommendation', alertId: null });
-  await transaction(async (client) => {
+  // One transaction: the action (with its "created" history row) and the decision.
+  return transaction(async (client) => {
     const exec = execOn(client);
-    await exec(`UPDATE team_actions SET recommendation_id = ? WHERE id = ?`, [rec.id, actionId]);
+    const actionId = await createAction(ctx, { title, description, ownerId: input.ownerId, dueDate: input.dueDate, metricKey, origin: 'recommendation', alertId: null, recommendationId: rec.id }, client);
     await exec(`UPDATE recommendations SET status = 'accepted', action_id = ?, dismiss_reason = NULL, decided_by = ?, decided_at = now() WHERE id = ?`, [actionId, ctx.actorId || null, rec.id]);
     await recordAudit({
       companyId: ctx.companyId, actorId: ctx.actorId, action: 'recommendation.accept', entityType: 'recommendation', entityId: rec.id,
       summary: `Added the recommendation "${rec.title}" to the Action plan of team ${ctx.team.name}`, before: { status: rec.status }, after: { status: 'accepted', action_id: actionId },
       departmentIds: [ctx.team.department_id], subjectIds: [rec.id, ctx.team.id, actionId],
     }, exec);
+    return actionId;
   });
-  return actionId;
 }
 
 export function cleanDismissReason(v: unknown): string {

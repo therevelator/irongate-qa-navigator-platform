@@ -9,6 +9,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZES as PAGE_SIZE_OPTIONS, paginate } from '../lib/pagination';
 import { actionPlanViewKey, groupByStatus, parseActionPlanView, type ActionPlanViewState } from '../lib/actionPlanView';
 import { MovementLine, type Movement } from './Improve';
+import { byText, formatChangeTime, statusLine, type ActionHistoryEntry } from '../lib/actionHistory';
 
 /**
  * Team detail → "Action plan": the team's tracked actions (GET /api/actions?teamId=), with owner,
@@ -20,6 +21,11 @@ import { MovementLine, type Movement } from './Improve';
  * its count, paged per group (5 / 10 / 20 per page). Open and In progress start expanded, Done and
  * Dropped collapsed; the whole section can be collapsed too. The expanded state is remembered per
  * person in this browser (src/lib/actionPlanView.ts).
+ *
+ * On the left of each action: who last set its status and when ("Changed to Dropped by Aisha Rahman
+ * on 20th Nov 2026, 10:11 PM", "Created by … on …", "… automatically on …"; nothing when unknown),
+ * and a "History" toggle listing every change newest first (src/lib/actionHistory.ts). On a phone the
+ * line wraps above the title.
  */
 
 export interface ActionDraft { title: string; description?: string; metricKey?: string | null; /** Recommendation KPI text, mapped to a metric. */ kpi?: string; origin?: 'recommendation' | 'alert' | 'manual'; alertId?: string | null }
@@ -32,6 +38,7 @@ export interface TrackedAction {
   status: Status; metric: MetricOption | null; baseline: { value: number; at: string | null } | null; current: { value: number; at: string } | null;
   createdBy: string | null; createdAt: string; completedAt: string | null; canUpdateStatus: boolean; canEdit: boolean;
   recommendation?: { id: string; title: string } | null; movement?: Movement | null;
+  statusChangedBy?: { id: string; name: string } | null; statusChangedAt?: string | null; history?: ActionHistoryEntry[];
   outcomes: Array<{ checkpoint: 'completion' | 'd14' | 'd30'; label: string; dueAt: string | null; value: number | null; valueAt: string | null; outcome: Outcome }>;
 }
 interface ActionsResponse { canManage: boolean; actions: TrackedAction[]; metrics: MetricOption[]; outcomeRule: string }
@@ -42,6 +49,46 @@ export const STATUS_META: Record<Status, { label: string; tone: Tone }> = {
   done: { label: 'Done', tone: 'good' },
   dropped: { label: 'Dropped', tone: 'neutral' },
 };
+/** The status word in the line and the history, in the status colour (contrast checked in all four themes). */
+export const STATUS_TEXT: Record<Status, string> = {
+  open: 'text-slate-700 dark:text-slate-200',
+  in_progress: 'text-brand-700 dark:text-brand-300',
+  done: 'text-green-700 dark:text-green-400',
+  dropped: 'text-amber-800 dark:text-amber-300',
+};
+
+/** <time> with the machine-readable instant and the local, readable text. */
+const When: React.FC<{ iso: string }> = ({ iso }) => <time dateTime={iso} className="whitespace-nowrap">{formatChangeTime(iso)}</time>;
+
+/** "Changed to Done by Aisha Rahman on 20th Nov 2026, 10:11 PM" (or Created / automatically); nothing when unknown. */
+export const StatusChangeLine: React.FC<{ action: Pick<TrackedAction, 'status' | 'history'> }> = ({ action }) => {
+  const line = statusLine(action);
+  if (!line) return null;
+  const status = <span className={cx('font-semibold', STATUS_TEXT[line.status])}>{STATUS_META[line.status].label}</span>;
+  const who = line.automatic ? <> automatically</> : <> by <span className="font-medium text-slate-800 dark:text-slate-100">{line.by ?? 'a removed user'}</span></>;
+  return (
+    <p className="text-xs leading-snug text-slate-600 dark:text-slate-300" data-testid="action-status-line">
+      {line.kind === 'created'
+        ? <>Created{line.automatic ? <> automatically</> : <> by <span className="font-medium text-slate-800 dark:text-slate-100">{line.by ?? 'a removed user'}</span></>} on <When iso={line.at} /></>
+        : <>Changed to {status}{who} on <When iso={line.at} /></>}
+    </p>
+  );
+};
+
+const ActionHistory: React.FC<{ id: string; history: ActionHistoryEntry[]; hidden: boolean }> = ({ id, history, hidden }) => (
+  <ol id={id} hidden={hidden} aria-label="Status history" className="mt-2 space-y-1.5 border-l-2 border-slate-200 pl-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300" data-testid="action-history-list">
+    {history.map((e) => (
+      <li key={e.id} data-testid="action-history-entry">
+        {e.fromStatus === null
+          ? <>Created as <span className={cx('font-semibold', STATUS_TEXT[e.toStatus])}>{STATUS_META[e.toStatus].label}</span></>
+          : <><span className={cx('font-semibold', STATUS_TEXT[e.fromStatus])}>{STATUS_META[e.fromStatus].label}</span><span aria-hidden> → </span><span className="sr-only"> to </span><span className={cx('font-semibold', STATUS_TEXT[e.toStatus])}>{STATUS_META[e.toStatus].label}</span></>}
+        {' '}{e.automatic ? 'automatically' : e.changedBy ? <>by <span className="font-medium text-slate-800 dark:text-slate-100">{e.changedBy.name}</span></> : byText(e)} on <When iso={e.changedAt} />
+        {e.note && <span className="block text-slate-500 dark:text-slate-400">{e.note}</span>}
+      </li>
+    ))}
+  </ol>
+);
+
 export const OUTCOME_META: Record<Outcome, { label: string; tone: Tone }> = {
   improved: { label: 'Improved', tone: 'good' },
   unchanged: { label: 'Unchanged', tone: 'neutral' },
@@ -75,6 +122,7 @@ const ActionsPanel: React.FC<{
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ action: TrackedAction | null; draft: ActionDraft | null } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [historyOpen, setHistoryOpen] = useState<Record<string, boolean>>({});
   const { user } = useAuth();
   const viewKey = actionPlanViewKey(user?.id);
   const [view, setView] = useState<ActionPlanViewState>(() => readView(viewKey));
@@ -123,7 +171,24 @@ const ActionsPanel: React.FC<{
   const groups = groupByStatus(actions);
 
   const renderItem = (a: TrackedAction) => (
-    <li key={a.id} className="py-3" data-testid="action-item">
+    <li key={a.id} className="flex flex-col gap-1.5 py-3 md:flex-row md:gap-4" data-testid="action-item">
+      <div className="md:w-48 md:shrink-0 md:pt-0.5" data-testid="action-change">
+        <StatusChangeLine action={a} />
+        {(a.history?.length ?? 0) > 0 && (
+          <button
+            type="button"
+            className="mt-0.5 inline-flex items-center gap-1 rounded text-xs font-medium text-brand-700 underline-offset-2 hover:underline focus-visible:underline dark:text-brand-300"
+            aria-expanded={!!historyOpen[a.id]}
+            aria-controls={`${sectionId}-hist-${a.id}`}
+            onClick={() => setHistoryOpen((h) => ({ ...h, [a.id]: !h[a.id] }))}
+            data-testid="action-history-toggle"
+          >
+            <ChevronDown size={13} aria-hidden className={cx('transition-transform motion-reduce:transition-none', !historyOpen[a.id] && '-rotate-90')} />
+            History<span className="sr-only"> of {a.title}</span> ({a.history!.length})
+          </button>
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -173,6 +238,8 @@ const ActionsPanel: React.FC<{
             </>
           )}
         </div>
+      </div>
+      {(a.history?.length ?? 0) > 0 && <ActionHistory id={`${sectionId}-hist-${a.id}`} history={a.history!} hidden={!historyOpen[a.id]} />}
       </div>
     </li>
   );

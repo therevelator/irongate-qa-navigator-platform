@@ -2390,6 +2390,7 @@ export const CLEAR_STATEMENTS: Array<{ table: string; sql: string }> = [
       OR team_id IN (SELECT DISTINCT team_id FROM metric_values WHERE idempotency_key LIKE 'backfill:${DEMO_PREFIX}%')` },
   { table: 'forecasts', sql: `DELETE FROM forecasts WHERE company_id LIKE ${D_} OR team_id LIKE ${D_}
       OR team_id IN (SELECT DISTINCT team_id FROM metric_values WHERE idempotency_key LIKE 'backfill:${DEMO_PREFIX}%')` },
+  { table: 'team_action_events', sql: `DELETE FROM team_action_events WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_} OR action_id LIKE ${D_}` },
   { table: 'team_actions', sql: `DELETE FROM team_actions WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'alerts', sql: `DELETE FROM alerts WHERE id LIKE ${D_} OR company_id LIKE ${D_} OR team_id LIKE ${D_}` },
   { table: 'alert_rules', sql: `DELETE FROM alert_rules WHERE id LIKE ${D_} OR company_id LIKE ${D_}` },
@@ -2456,6 +2457,7 @@ export const ALL_TABLES = [
   'test_executions', 'users', 'metric_values', 'target_history', 'ingestion_log', 'saved_views',
   'pulse_cadences', 'pulse_responses', 'pulse_participation', 'pulse_settings', 'pulse_sends', 'pulse_recipients', 'pulse_links',
   'alerts', 'alert_rules', 'notifications', 'notification_preferences', 'company_notification_settings', 'notification_deliveries', 'team_actions',
+  'team_action_events',
 ];
 
 /** SQL condition selecting the demo rows of a table (for counts). */

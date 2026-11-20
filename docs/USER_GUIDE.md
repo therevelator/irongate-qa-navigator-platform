@@ -49,8 +49,9 @@ badge, and your name with your job title (or your role when no job title is set)
 - **Help** (question mark): "What you can do here" lists what your role lets you see and do, generated
   from the same rules the server enforces.
 - **Appearance** (palette icon): the theme (Light, Dark, Graphite, Porcelain, or Match system to follow
-  your device), the score display (Battery or Gauge) and its depth (**3D** with gloss and shadows, or
-  flat **2D** with the same shapes and colours). All are remembered in this browser.
+  your device), the score display (Battery or Gauge), the battery style (**Cell**, the default, or
+  **Liquid**, the original glass tube) and the depth (**3D** with gloss and shadows, or flat **2D** with
+  the same shapes and colours). All are remembered in this browser.
 - **Notifications** (bell): unread alerts and messages.
 - **Account menu**: "Sign out my other devices" and "Sign out".
 
@@ -99,7 +100,12 @@ Open a team from the Overview. You see only teams in your scope.
   **Add to Action plan**, **Dismiss** (with a reason), **Reopen** and **Recalculate**.
 - **Action plan:** the team's tracked actions with owner, due date, status, linked KPI, baseline and the
   measured outcome. Grouped in accordions by status (Open, In progress, Done, Dropped), with 5, 10 or 20
-  per page. Done and Dropped start collapsed. An action's owner can change its status.
+  per page. Done and Dropped start collapsed. An action's owner can change its status. On the left of each
+  action a small line says who last set its status and when, in your own time zone: "Changed to Dropped by
+  Aisha Rahman on 20th Nov 2026, 10:11 PM", "Created by … on …" when the status never changed, or
+  "… automatically on …" when the system changed it (nothing for actions from before this was recorded).
+  **History** under it lists every change (from → to, who, when), newest first. On a phone the line sits
+  above the title.
 - **Evidence:** when the team's CI sends raw data, "Evidence from CI" (flaky tests, lowest-coverage files,
   slowest tests, failing stages), "Deliveries & incidents" and "Work & code quality". **How this was
   calculated** on a value shows the formula, the inputs and the source records.

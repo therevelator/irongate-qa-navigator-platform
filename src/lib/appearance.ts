@@ -1,5 +1,6 @@
 /**
- * Appearance preferences: the colour theme and how scores are drawn (battery or gauge, 3D or flat 2D).
+ * Appearance preferences: the colour theme and how scores are drawn (battery or gauge, the battery's
+ * style, 3D or flat 2D).
  *
  * Themes are applied on <html>: `data-theme="light|dark|graphite|porcelain"` plus the `dark` class
  * for the dark-based themes (Dark, Graphite), so every `dark:` utility keeps working and the glass
@@ -16,15 +17,19 @@ export type ThemePreference = ThemeId | 'system';
 export type ScoreDisplay = 'battery' | 'gauge';
 /** 3D: the battery and gauge with gloss, gradients and shadows; 2D: the same shapes and colours, flat. */
 export type ScoreDepth = '3d' | '2d';
+/** Battery style: Cell (src/components/CellBattery.tsx, the default) or Liquid (the original HeroBattery). */
+export type BatteryStyle = 'cell' | 'liquid';
 
 export const THEME_KEY = 'irongate_theme_mode';
 export const SCORE_DISPLAY_KEY = 'irongate_score_display';
 export const SCORE_DEPTH_KEY = 'irongate_score_depth';
+export const BATTERY_STYLE_KEY = 'irongate_battery_style';
 /** Set while someone is signed in: signed-out screens always use the classic Light theme (AuthWrapper, index.html). */
 export const SIGNED_IN_KEY = 'irongate_signed_in';
 export const DEFAULT_THEME: ThemePreference = 'light';
 export const DEFAULT_SCORE_DISPLAY: ScoreDisplay = 'battery';
 export const DEFAULT_SCORE_DEPTH: ScoreDepth = '3d';
+export const DEFAULT_BATTERY_STYLE: BatteryStyle = 'cell';
 
 export const THEME_OPTIONS: Array<{ id: ThemePreference; label: string; hint: string }> = [
   { id: 'light', label: 'Light', hint: 'Bright and plain' },
@@ -37,6 +42,11 @@ export const THEME_OPTIONS: Array<{ id: ThemePreference; label: string; hint: st
 export const SCORE_DISPLAY_OPTIONS: Array<{ id: ScoreDisplay; label: string; hint: string }> = [
   { id: 'battery', label: 'Battery', hint: '3D battery' },
   { id: 'gauge', label: 'Gauge', hint: 'Radial gauge' },
+];
+
+export const BATTERY_STYLE_OPTIONS: Array<{ id: BatteryStyle; label: string; hint: string }> = [
+  { id: 'liquid', label: 'Liquid', hint: 'Glass tube with a liquid' },
+  { id: 'cell', label: 'Cell', hint: 'Segmented cell' },
 ];
 
 export const SCORE_DEPTH_OPTIONS: Array<{ id: ScoreDepth; label: string; hint: string }> = [
@@ -55,6 +65,10 @@ export function parseThemePreference(v: unknown): ThemePreference {
 
 export function parseScoreDisplay(v: unknown): ScoreDisplay {
   return v === 'gauge' || v === 'battery' ? v : DEFAULT_SCORE_DISPLAY;
+}
+
+export function parseBatteryStyle(v: unknown): BatteryStyle {
+  return v === 'cell' || v === 'liquid' ? v : DEFAULT_BATTERY_STYLE;
 }
 
 export function parseScoreDepth(v: unknown): ScoreDepth {
@@ -100,6 +114,10 @@ export function applyScoreDisplay(el: Pick<ThemeTarget, 'setAttribute'>, display
   el.setAttribute('data-score-display', display);
 }
 
+export function applyBatteryStyle(el: Pick<ThemeTarget, 'setAttribute'>, style: BatteryStyle): void {
+  el.setAttribute('data-battery-style', style);
+}
+
 export function applyScoreDepth(el: Pick<ThemeTarget, 'setAttribute'>, depth: ScoreDepth): void {
   el.setAttribute('data-score-depth', depth);
 }
@@ -113,6 +131,10 @@ export function readThemePreference(storage: PrefStorage | null | undefined): Th
 
 export function readScoreDisplay(storage: PrefStorage | null | undefined): ScoreDisplay {
   try { return parseScoreDisplay(storage?.getItem(SCORE_DISPLAY_KEY)); } catch { return DEFAULT_SCORE_DISPLAY; }
+}
+
+export function readBatteryStyle(storage: PrefStorage | null | undefined): BatteryStyle {
+  try { return parseBatteryStyle(storage?.getItem(BATTERY_STYLE_KEY)); } catch { return DEFAULT_BATTERY_STYLE; }
 }
 
 export function readScoreDepth(storage: PrefStorage | null | undefined): ScoreDepth {
@@ -129,4 +151,8 @@ export function writeScoreDisplay(storage: PrefStorage | null | undefined, displ
 
 export function writeScoreDepth(storage: PrefStorage | null | undefined, depth: ScoreDepth): void {
   try { storage?.setItem(SCORE_DEPTH_KEY, depth); } catch { /* storage unavailable */ }
+}
+
+export function writeBatteryStyle(storage: PrefStorage | null | undefined, style: BatteryStyle): void {
+  try { storage?.setItem(BATTERY_STYLE_KEY, style); } catch { /* storage unavailable */ }
 }

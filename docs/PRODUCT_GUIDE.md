@@ -1123,14 +1123,23 @@ Escape):
 - **Score display:** **Battery** (the 3D battery) or **Gauge** (a 240° radial gauge in the same colour scale, number in the centre, a marker
   at the end of the coloured arc (the score; the target is in the text beside it), a short sweep on load, none with reduced motion). It applies everywhere a score is drawn: Overview hero, executive
   metrics, team cards, the Team detail QA card, the executive summary and TV mode. Both read the same to a screen reader ("QA score: 81 of 100").
-- **Depth:** **3D** (default: the glossy battery with glass highlights, rims, nib gradient and shadow; the gauge with a gradient arc,
+- **Battery style:** **Cell** (default; `src/components/CellBattery.tsx`, adapted from Lynn Fisher's single-div battery,
+  a.singlediv.com: an elliptically rounded body with side edges, a nib, a glass overlay with highlight bands and a dark band before the
+  nib, and a charge in five shades of its band colour with a bright leading edge fading into the dark empty part) or **Liquid** (the
+  original glass tube with a liquid, `HeroBattery.tsx`, kept unchanged). Both use the one colour scale (the five stops of each band
+  follow the reference's shade relationship: tests/api/battery-scale.test.ts BAT-006), the same footprint, orientation (vertical on the
+  overview and the summary, horizontal on Team detail) and text alternative. The Cell charge maps 0–100 onto 11–90 % of the inside of
+  the body (`src/lib/cellBattery.ts`) and grows to the value on load (instant with reduced motion); the empty part is the dark battery
+  shell in every theme, with a thin outline on the light themes (`--cell-outline`). TV mode scales either style from its own box.
+- **Depth:** **3D** (default: the glossy battery with glass highlights, rims, nib gradient and shadow (Cell: glass, highlight bands,
+  edges and the shaded leading edge); the gauge with a gradient arc,
   highlight, bevelled track and drop shadow) or **2D** (the same shapes, sizes and colours, flat: the battery's charge in the band's flat
   colour on the plain shell, a plain nib, no glass, rims, edges or shadow; the gauge's value arc in the band's flat colour, no gradient,
   highlight, bevel or shadow filter). The liquid wave, where shown, is a flat crest in the same colour in 2D; motion still stops with
   reduced motion. It applies everywhere the score display does, TV mode included. `data-score-depth` on `<html>` and on each visual.
 - **Signed-out screens** (sign-in, registration, invitation and password pages) always use the classic Light look (blue brand panel,
   white form), whatever theme is chosen; the chosen theme returns once the person is signed in.
-- The choices are kept in the browser (localStorage `irongate_theme_mode`, `irongate_score_display`, `irongate_score_depth`) and applied before the first
+- The choices are kept in the browser (localStorage `irongate_theme_mode`, `irongate_score_display`, `irongate_battery_style`, `irongate_score_depth`) and applied before the first
   paint. TV mode keeps its own theme (any of the four, T cycles through them); a kiosk link with `theme=dark` or `theme=light` shows
   Graphite or Porcelain while the app shows a glass theme.
 - Implementation: `src/lib/appearance.ts`, `src/contexts/ThemeContext.tsx`, `src/styles/themes.css` (tokens per `<html data-theme>`),
@@ -1200,7 +1209,7 @@ Why: everything about one team in one place, with each number explained
   from a recommendation (section 7). An action from a recommendation says so and shows whether its metric moved: "Since it was added:
   Test coverage 57.6% (6 Nov) → 63% (20 Nov) Improved" (the team's snapshot on the day it was created and its latest snapshot). Grouped by status in accordions with counts (Open, In progress, Done, Dropped; Done and Dropped
   collapsed by default), 5 / 10 / 20 per page in each group; the whole card can be collapsed. What is expanded is remembered per person
-  in the browser.
+  in the browser. Left of each action: who last set its status and when (section 7, "Who changed the status").
 - **Evidence from CI** (when the team's CI sends raw reports, section 4.2a): the metrics calculated from CI data (each opens
   **How this was calculated**: the formula, the values used, the number of runs and confidence, and the source runs and reports
   with their ids and links), **flaky tests** with the failed and passed runs that prove them, the **lowest-coverage files** of the
@@ -1539,6 +1548,16 @@ admins) sends yours immediately.
 - TV mode shows the actions without owner names.
 - On Team detail the list is grouped by status (Open, In progress, Done, Dropped, each with its count) and paged per group; an action
   whose status changes moves to its new group.
+- **Who changed the status:** every status change, and the creation, is recorded with the signed-in person and the time (UTC), in the
+  same transaction as the change: by hand, by the owner, or by accepting a recommendation (which creates the action). A change made by
+  the system is recorded without a person and shown as "automatically". On Team detail, left of each action (above the title on a
+  phone): "Changed to Dropped by Aisha Rahman on 20th Nov 2026, 10:11 PM" (status word in its colour, the person's name, ordinal day,
+  short month, year and 12-hour time in the viewer's time zone), "Created by … on …" when the status never changed; nothing for older
+  actions whose history is unknown. **History** lists every change (from → to, who, when), newest first. Only people who can see the
+  team's actions see it, with names only (no e-mail addresses). TV mode does not show it (a shared screen shows no names).
+- **Existing actions (migration):** the history is filled only where it is known, from the change history (Activity); otherwise only
+  the time is set (completion time of done / dropped actions, else the last update) and no person is shown. Sample data (demo and
+  Meridian) gets a realistic history: people allowed to change actions, on weekdays in working hours.
 
 ### Database keep-alive
 

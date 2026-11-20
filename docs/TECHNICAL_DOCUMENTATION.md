@@ -83,7 +83,7 @@ Created by the migrations in `supabase/migrations/`:
 | Delivery (phase 2) | `deployments_raw`, `deployment_commits`, `incidents_raw`, `incident_updates`, `service_teams` | `20261130000000…` |
 | Forecasts (phase 4) | `forecasts`, `recommendations` | `20261130100000…` |
 | Work and quality (phase 3) | see the phase 3 migration | `20261201…` |
-| Alerts and actions | `alert_rules`, `alerts`, `notifications`, `notification_deliveries`, `notification_preferences`, `company_notification_settings`, `team_actions` | `20261121000000…` |
+| Alerts and actions | `alert_rules`, `alerts`, `notifications`, `notification_deliveries`, `notification_preferences`, `company_notification_settings`, `team_actions`, `team_action_events` | `20261121000000…`, `20261202100000…` |
 | Wellbeing pulse | `pulse_cadences`, `pulse_participation`, `pulse_responses`, `pulse_links`, `pulse_recipients`, `pulse_sends`, `pulse_settings`, `pulse_nonresponder_days` | `20261121200000…`, `20261122200000…`, `20261123300000…` |
 | Views and onboarding | `saved_views`, `onboarding_state` | `20261121100000…` |
 | Audit and logs | `audit_log` (Activity), `user_activity`, `server_errors`, `job_runs` | `20261119…`, `20261123…` |
@@ -91,6 +91,22 @@ Created by the migrations in `supabase/migrations/`:
 | Analytics modules | `technical_debt`, `flaky_tests`, `test_cases`, `test_executions`, `performance_metrics`, `pipeline_stages`, `pipeline_runs`, `pipeline_execution_summary`, `pipeline_config`, `developer_metrics`, `sprint_velocity`, `business_impact_*`, `configs` | initial |
 
 Row Level Security is enabled on every table with no policies; the app connects as the owner.
+
+**Action status history** (`20261202100000_action_status_history.sql`, `server/lib/actions.ts`):
+
+| Column | Meaning |
+|---|---|
+| `team_actions.status_changed_by` | user who last set the status (creation counts); FK `users`, `ON DELETE SET NULL`; NULL for a system change or unknown history |
+| `team_actions.status_changed_at` | when (timestamptz, UTC); backfilled from the known history, else `completed_at` (done / dropped), else `updated_at` |
+| `team_action_events` | one row per change: `id`, `company_id`, `team_id`, `action_id` (FK `team_actions`, cascade), `from_status` (NULL = created), `to_status`, `changed_by` (FK `users`, set null), `source` (`user` / `system`), `changed_at`, `note` (optional); index `(action_id, changed_at)`; RLS on, no policies |
+
+`createAction` (also used by accepting a recommendation, in the same transaction as the decision) and `updateAction` write the
+history row in the transaction that changes the action; `actorId` null means a system change (`source = 'system'`, shown as
+"automatically"). `GET /api/actions?teamId=` returns `statusChangedBy {id, name}`, `statusChangedAt` and `history` (newest first)
+with each action, read for the action ids of that list only (same company and team scope; names, never e-mails). The UI line and
+its date format are in `src/lib/actionHistory.ts`. The migration fills the history only from `audit_log` (`action.create`,
+`action.status`) for actions that have none. Sample history: `server/seeds/actionHistory.ts` (run after every demo seed / fill and
+in `scripts/reseed/showcase-content.sql`).
 
 ## 6. Calculations
 

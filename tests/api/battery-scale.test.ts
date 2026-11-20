@@ -1,4 +1,4 @@
-import { BATTERY_BANDS, BATTERY_SHELL, batteryBand, contrastRatio } from '../../src/lib/batteryScale';
+import { BATTERY_BANDS, BATTERY_SHELL, batteryBand, contrastRatio, relativeLuminance } from '../../src/lib/batteryScale';
 
 /**
  * The battery colour scale (src/lib/batteryScale.ts), used by every battery of the app:
@@ -40,5 +40,14 @@ describe('batteryBand', () => {
   it('BAT-005: neighbouring bands are distinguishable (different body colours)', () => {
     const bodies = BATTERY_BANDS.map((b) => b.stops[2]);
     expect(new Set(bodies).size).toBe(bodies.length);
+  });
+
+  it('BAT-006: each band\'s five shades keep the Cell reference\'s relationship (edge-dark, highlight, body, bright leading edge, dark leading edge)', () => {
+    // Reference green: #316d08, #60b939, #51aa31, #64ce11, #255405.
+    const L = relativeLuminance;
+    const ref = ['#316d08', '#60b939', '#51aa31', '#64ce11', '#255405'];
+    const order = (c: string[]) => [L(c[4]) < L(c[0]), L(c[0]) < L(c[2]), L(c[2]) < L(c[1]), L(c[1]) < L(c[3])];
+    expect(order(ref)).toEqual([true, true, true, true]);
+    for (const b of BATTERY_BANDS) expect([b.key, ...order(b.stops)]).toEqual([b.key, true, true, true, true]);
   });
 });

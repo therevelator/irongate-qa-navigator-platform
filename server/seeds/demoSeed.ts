@@ -23,6 +23,7 @@ import {
 import { sampleHealthSeries } from './demoData';
 import { RAW_SAMPLE_CLEAR, SAMPLE_HEALTH_DAYS, computeSampleEvidence, rawSampleSqlForTeam } from './demoRaw';
 import { WORK_SAMPLE_CLEAR, workSampleSqlForTeam } from './demoWork';
+import { DEMO_ACTION_HISTORY_SQL } from './actionHistory';
 
 export interface SeedRunResult {
   /** Demo rows added per table in this run (0 for rows that already existed). */
@@ -71,7 +72,8 @@ export interface ApplyOptions {
 /** Run a dataset in one transaction (advisory-locked) and report the demo rows it added. */
 async function apply(ds: Dataset, opts: ApplyOptions = {}): Promise<SeedRunResult & { statements: number }> {
   const started = Date.now();
-  const statements = [...renderScript(ds).map(r => r.sql), ...(opts.after ?? [])];
+  // Last: the status history of sample actions that have none yet (server/seeds/actionHistory.ts).
+  const statements = [...renderScript(ds).map(r => r.sql), ...(opts.after ?? []), DEMO_ACTION_HISTORY_SQL];
   const counts = opts.counts !== false;
   const client = await pool.connect();
   try {
