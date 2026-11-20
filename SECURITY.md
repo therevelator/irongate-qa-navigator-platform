@@ -55,8 +55,9 @@ always enforces it. Per-role tests: `tests/api/r2-security-matrix.test.ts`, `tes
 - Password reset links work once and expire after 60 minutes; only a hash of the token is stored; the
   reset page sends no Referer (`netlify.toml`).
 - Platform operators have separate accounts, their own cookie and token audience, an 8-hour session,
-  a per-IP sign-in rate limit and an optional IP allow-list (`PLATFORM_OPERATOR_ALLOWED_IPS`). An operator
-  account is never locked out, by design; the account lockout applies to company users only.
+  and an optional IP allow-list (`PLATFORM_OPERATOR_ALLOWED_IPS`). By the owner's decision an operator
+  account is never locked out and its sign-in is not rate limited; lockout and sign-in rate limits apply
+  to company users only. Set `PLATFORM_OPERATOR_ALLOWED_IPS` and a long, unique password.
 
 **API keys.** Ingestion keys (`igk_…`) are stored as a hash, shown once, scoped to one company, and
 revocable. A suspended company's keys are refused.

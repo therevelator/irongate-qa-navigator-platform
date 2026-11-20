@@ -26,10 +26,8 @@
  *           token, answers 202 "started" at once, records job_runs and the platform access log;
  *           a failed start is 502 and recorded as failed; off (DEMO_REFRESH_ENABLED=false) is 409
  *   OP-012  the modules section returns every analytics module's stored rows for a team
- *   OP-013  sign-ins are rate limited per IP
+ *   OP-013  operator sign-in is not rate limited (owner's rule)
  */
-// Room for the sign-in failures the tests make on purpose before OP-013 checks the limit.
-process.env.OPERATOR_SIGN_IN_MAX = '14';
 const runRefreshDates = jest.fn();
 jest.mock('../../server/seeds/demoSeed', () => ({
   runRefreshDates: (...a: unknown[]) => runRefreshDates(...a),
@@ -487,11 +485,11 @@ describe('Platform operator', () => {
     if (foreign) expect((await call('get', `/api/operator/companies/${companyId}/modules?teamId=${foreign}`, '', token)).body.teamId).not.toBe(foreign);
   });
 
-  // Last: it uses up this instance's sign-in allowance for the test client's IP.
-  test('OP-013 sign-ins are rate limited per IP', async () => {
+  test('OP-013 operator sign-in is not rate limited: many failed attempts from one IP, then the right password works', async () => {
     if (skip()) return;
-    let limited = false;
-    for (let i = 0; i < 16 && !limited; i++) limited = (await signIn(`nobody-${i}-${stamp}@nowhere.test`, 'x')).status === 429;
-    expect(limited).toBe(true);
+    const statuses: number[] = [];
+    for (let i = 0; i < 25; i++) statuses.push((await signIn(`nobody-${i}-${stamp}@nowhere.test`, 'x')).status);
+    expect(statuses.every((st) => st === 401)).toBe(true);
+    expect((await signIn(opEmail)).status).toBe(200);
   });
 });

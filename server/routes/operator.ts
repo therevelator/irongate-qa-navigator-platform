@@ -1,5 +1,4 @@
 import express from 'express';
-import rateLimit from 'express-rate-limit';
 import { query, queryOne, pool, transaction } from '../../src/lib/db';
 import { clientIp } from '../lib/requestContext';
 import {
@@ -140,18 +139,9 @@ router.get('/status', async (req: OperatorRequest, res) => {
   }
 });
 
-// 10 failed sign-ins per IP per 15 minutes (per instance). The operator account itself is never locked.
-const signInLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: Number(process.env.OPERATOR_SIGN_IN_MAX) || 10,
-  standardHeaders: true,
-  legacyHeaders: false,
-  skipSuccessfulRequests: true,
-  keyGenerator: (req: any) => `opsign:${clientIp(req)}`,
-  message: { error: 'Too many attempts. Try again in 15 minutes.' },
-});
-
-router.post('/login', signInLimiter, async (req: OperatorRequest, res) => {
+// Operator sign-in is never locked out or rate limited (owner's rule); PLATFORM_OPERATOR_ALLOWED_IPS
+// can restrict where it is used from.
+router.post('/login', async (req: OperatorRequest, res) => {
   try {
     const { email, password } = req.body ?? {};
     if (typeof email !== 'string' || !email.trim() || typeof password !== 'string' || !password) {

@@ -127,7 +127,6 @@ prefixed `VITE_` ends up in the browser bundle.
 | `WORK_RECOMPUTE_DAYS` | Days of issue history recalculated on arrival (default 190) |
 | `RAW_UPLOAD_MAX_MB`, `RAW_PAYLOAD_MAX_KB`, `RAW_PAYLOAD_DAYS` | Raw upload size limit (20 MB), largest gzipped payload kept (512 KB), days payloads are kept (35) |
 | `PLATFORM_OPERATOR_ALLOWED_IPS` | Client IPs allowed to use `/operator` (comma-separated) |
-| `OPERATOR_SIGN_IN_MAX` | Operator sign-in attempts per IP per window (default 10) |
 | `OPERATOR_PASSWORD` | Read by `npm run operator:create` when `--password` is not given; not used by the running app |
 | `ENABLE_SYNTHETIC_DATA` | `true` enables the sample-data generators; off by default |
 | `DEMO_MODE` | `true` shows demo account chips on the sign-in page; on by default locally only |

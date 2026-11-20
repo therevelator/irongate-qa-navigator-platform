@@ -132,8 +132,8 @@ script writes only to a local database unless `--allow-remote` is given. The pan
 operator exists.
 
 **Sign-in.** At `/operator`, with its own 8-hour session (httpOnly cookie `irongate_operator`). An operator
-account is never locked out, however many wrong passwords; only a rate limit per IP applies
-(`OPERATOR_SIGN_IN_MAX` failed attempts per 15 minutes, default 10).
+account is never locked out and its sign-in is not rate limited, however many wrong passwords.
+`PLATFORM_OPERATOR_ALLOWED_IPS` can restrict where it is used from.
 `PLATFORM_OPERATOR_ALLOWED_IPS` optionally restricts the client IPs.
 
 **What it shows.**

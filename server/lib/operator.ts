@@ -14,8 +14,8 @@ import { clientIp, ctxOf } from './requestContext';
  *             tables: database triggers). No active operator: the feature is off and every
  *             /api/operator route answers 404. Create one with `npm run operator:create`.
  *   Sign-in:  /operator has its own sign-in (e-mail + password, bcrypt). An operator account is
- *             NEVER locked, however many wrong passwords (owner's rule); the route is rate limited
- *             per IP only. A session lasts 8 hours.
+ *             NEVER locked and its sign-in is not rate limited, however many wrong passwords (owner's
+ *             rule). A session lasts 8 hours.
  *   Token:    signed with a key DERIVED from JWT_SECRET (HMAC with a fixed label), with its own
  *             audience and type claim, so a company session JWT can never be used as an operator
  *             token and an operator token never verifies as a company session. It is sent as the
