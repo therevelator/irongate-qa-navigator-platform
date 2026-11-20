@@ -2,13 +2,15 @@
  * Raw CI data store (migration 20261129000000) and the calculation engine's scheduled parts:
  *   RAWDB-001  the nightly recalculation (recomputeRecent) writes the evidence and the KPI value
  *              (source 'computed') of a team with raw data, and writes nothing again when nothing changed;
- *   RAWDB-002  sample (is_sample) raw data refreshes its evidence but never writes KPI values;
+ *   RAWDB-002  sample (is_sample) raw data is left to the sample refresh, which records evidence and
+ *              never writes KPI values;
  *   RAWDB-003  retention (cleanupRawData): payloads and per-test rows after 35 days, raw rows after
  *              13 months; the latest coverage report keeps its files.
  * Runs against DATABASE_URL (local only).
  */
 import { pool } from '../../src/lib/db';
 import { cleanupRawData, recomputeRecent } from '../../server/lib/calc/engine';
+import { computeSampleEvidence } from '../../server/seeds/demoRaw';
 
 const url = new URL(process.env.DATABASE_URL || 'postgres://postgres:postgres@127.0.0.1:5432/irongate_dev');
 const local = ['127.0.0.1', 'localhost'].includes(url.hostname);
@@ -59,10 +61,13 @@ describe('Raw store: nightly recalculation and retention', () => {
     expect(counts.every((r) => r.n === 1)).toBe(true);
   });
 
-  it('RAWDB-002 sample raw data: evidence only, no KPI values', async () => {
+  it('RAWDB-002 sample raw data: left out of the nightly run; the sample refresh records evidence only, no KPI values', async () => {
     if (!local) return;
     await addRun(S, `${S}-r1`, `${today}T00:20:00Z`, true);
     await recomputeRecent(1);
+    expect((await pool.query(`SELECT COUNT(*)::int AS n FROM metric_evidence WHERE team_id = $1`, [S])).rows[0].n).toBe(0);
+    const client = await pool.connect();
+    try { await computeSampleEvidence(client, [S], 1); } finally { client.release(); }
     expect((await pool.query(`SELECT COUNT(*)::int AS n FROM metric_evidence WHERE team_id = $1`, [S])).rows[0].n).toBeGreaterThan(0);
     expect((await pool.query(`SELECT COUNT(*)::int AS n FROM metric_values WHERE team_id = $1`, [S])).rows[0].n).toBe(0);
   });

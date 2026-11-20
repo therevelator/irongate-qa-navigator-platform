@@ -6,8 +6,9 @@
  * real raw CI data gets none. For a SQL console or the Supabase Management API (plain SQL text).
  *
  * The calculated metrics behind "How this was calculated" (metric_evidence) are filled by the
- * nightly calc-recompute job (or Netlify → Functions → calc-recompute → Run now); the evidence
- * views (flaky tests, lowest-coverage files, slowest tests, failing stages) work at once.
+ * nightly sample refresh (demo-refresh; it also adds each new day) or the operator panel's "Refresh
+ * sample data now"; the evidence views (flaky tests, lowest-coverage files, slowest tests, failing
+ * stages) work at once.
  *
  * Usage: npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian \
  *          --stories scripts/reseed/stories.json --names "Payments Core,Lending Journey,Mobile Experience" --out <dir>

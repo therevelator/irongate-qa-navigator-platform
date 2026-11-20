@@ -26,6 +26,6 @@ if (process.env.LOG_CLEANUP_CRON !== 'off' && !process.env.NETLIFY && !process.e
 /** Nightly recalculation of the metrics computed from raw CI data (Netlify: netlify/functions/calc-recompute.ts). CALC_RECOMPUTE_CRON (default '41 3 * * *'); off turns it off. */
 if (process.env.CALC_RECOMPUTE_CRON !== 'off' && !process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
   cron.schedule(process.env.CALC_RECOMPUTE_CRON || '41 3 * * *', async () => {
-    await withJobRun('calc-recompute', () => recomputeRecent(8), (x) => `${x.teams} teams, ${x.values} values written`).catch(() => undefined);
+    await withJobRun('calc-recompute', () => recomputeRecent(8), (x) => `${x.teams} teams, ${x.values} values written${x.skipped ? `, ${x.skipped} left for the next run` : ''}`).catch(() => undefined);
   }, { timezone: 'UTC' });
 }

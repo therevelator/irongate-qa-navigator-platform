@@ -67,4 +67,5 @@ npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories script
 
 Apply migration `20261129000000_raw_ingestion_phase1.sql` first, then run the file in the SQL console or through the
 Management API. The evidence views work at once; the "Calculated from CI data" values and "How this was calculated" appear
-after the nightly `calc-recompute` (03:41 UTC), or at once with Netlify → Functions → calc-recompute → Run now.
+with the nightly sample refresh (demo-refresh, 02:17 UTC; it also adds each new day of sample raw data), or at once with
+the platform operator panel's **Refresh sample data now**.

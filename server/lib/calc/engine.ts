@@ -313,28 +313,33 @@ export async function refreshFlakyEvidence(client: pg.PoolClient, teamId: string
   return r.rowCount ?? 0;
 }
 
-/** Nightly: recompute the last `days` days of every team that has raw data in that period (one transaction per team). */
-export async function recomputeRecent(days = 8): Promise<{ teams: number; values: number }> {
+/**
+ * Nightly: recompute the last `days` days of every team that has real raw data in that period (one
+ * transaction per team). Teams with sample raw data only are left to the sample refresh (demo-refresh:
+ * runRefreshDates → addRawSampleData), which adds their new day and its evidence. `budgetMs` stops
+ * before a scheduled function's time limit (the rest follows the next night; values are idempotent).
+ */
+export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CALC_RECOMPUTE_BUDGET_MS) || 25_000): Promise<{ teams: number; values: number; skipped: number }> {
+  const started = Date.now();
   const teams = (await pool.query(
-    `SELECT DISTINCT team_id FROM (
-       SELECT team_id FROM test_runs WHERE day >= CURRENT_DATE - $1::int
-       UNION SELECT team_id FROM coverage_reports WHERE day >= CURRENT_DATE - $1::int
-       UNION SELECT team_id FROM pipeline_runs_raw WHERE day >= CURRENT_DATE - $1::int) x`, [days])).rows;
+    `SELECT team_id FROM (
+       SELECT team_id FROM test_runs WHERE day >= CURRENT_DATE - $1::int AND NOT is_sample
+       UNION SELECT team_id FROM coverage_reports WHERE day >= CURRENT_DATE - $1::int AND NOT is_sample
+       UNION SELECT team_id FROM pipeline_runs_raw WHERE day >= CURRENT_DATE - $1::int AND NOT is_sample) x
+      ORDER BY md5(team_id || CURRENT_DATE::text)` /* a different order every day: no team waits behind the budget twice */, [days])).rows;
   let values = 0;
+  let done = 0;
   const list: string[] = [];
   for (let i = days; i >= 0; i--) list.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
   for (const { team_id } of teams) {
+    if (Date.now() - started > budgetMs) break;
     values += await withTransaction(async (client) => {
-      // Teams with sample (demo) raw data keep their sample KPI values; only their evidence is refreshed.
-      const sample = await rows(client,
-        `SELECT 1 WHERE EXISTS (SELECT 1 FROM test_runs WHERE team_id = $1 AND is_sample)
-            OR EXISTS (SELECT 1 FROM coverage_reports WHERE team_id = $1 AND is_sample)
-            OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = $1 AND is_sample)`, [team_id]);
-      const res = await recomputeTeamDays(client, team_id, list, { writeKpis: sample.length === 0 });
+      const res = await recomputeTeamDays(client, team_id, list);
       return res.reduce((n, d) => n + d.metrics.filter((m) => m.written).length, 0);
     });
+    done++;
   }
-  return { teams: teams.length, values };
+  return { teams: done, values, skipped: teams.length - done };
 }
 
 /** Days the gzipped payloads are kept (RAW_PAYLOAD_DAYS, default 35); per-test and per-file rows are kept 35 days. */

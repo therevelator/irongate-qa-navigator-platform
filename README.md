@@ -477,7 +477,7 @@ Actions, GitLab CI, Jenkins and Azure DevOps).
   `server/lib/calc/engine.ts` (calculation rules; writes KPI values with source `computed` and `metric_evidence`),
   `server/routes/ci.ts` (evidence, "How this was calculated", Connect your CI status). Migration
   `supabase/migrations/20261129000000_raw_ingestion_phase1.sql`.
-- Jobs: `netlify/functions/calc-recompute.ts` (nightly, last 8 days; locally `CALC_RECOMPUTE_CRON`), raw-store retention in
+- Jobs: `netlify/functions/calc-recompute.ts` (nightly, last 8 days of the teams with real CI data, 25 s budget; locally `CALC_RECOMPUTE_CRON`; sample teams are refreshed by demo-refresh), raw-store retention in
   `db-keepalive` (payloads and per-test / per-file rows 35 days, the rest 13 months).
 - UI: team page → **Evidence from CI** and **How this was calculated**; Admin console → **Connect your CI**.
 - Sample data: demo and filled teams get 14 days of sample raw CI data (`server/seeds/demoRaw.ts`; evidence only, never KPI

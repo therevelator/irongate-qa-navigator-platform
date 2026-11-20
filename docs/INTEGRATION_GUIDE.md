@@ -551,7 +551,7 @@ The body is one run, an array of runs, or `{"team": "…", "runs": [ … ]}` (1�
 Each value carries the number of runs it is based on: **high** confidence from 10 runs, **medium** 3–9, **low** 1–2. Every
 value opens to its formula, the values used and the source runs ("How this was calculated"; `GET
 /api/ci/teams/:id/metrics/:metric`). A late file recalculates the days it affects (for tests, up to 6 days later, the
-flaky window); a nightly job (`calc-recompute`, 03:41 UTC) recalculates the last 8 days of every team.
+flaky window); a nightly job (`calc-recompute`, 03:41 UTC) recalculates the last 8 days of every team with CI data.
 
 ### 4A.4 Errors
 
