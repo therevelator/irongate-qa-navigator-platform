@@ -28,7 +28,8 @@
  * main / master when it is not set.
  */
 import type pg from 'pg';
-import { recordKpiValues, type KpiColumn } from '../kpiIngest';
+import { pool } from '../../../src/lib/db';
+import { recordKpiValues, withTransaction, type KpiColumn } from '../kpiIngest';
 
 export interface MetricSpec {
   key: string;
@@ -312,24 +313,52 @@ export async function refreshFlakyEvidence(client: pg.PoolClient, teamId: string
   return r.rowCount ?? 0;
 }
 
-/** Nightly: recompute the last `days` days of every team that has raw data in that period. */
-export async function recomputeRecent(client: pg.PoolClient, days = 8): Promise<{ teams: number; values: number }> {
-  const teams = await rows(client,
+/** Nightly: recompute the last `days` days of every team that has raw data in that period (one transaction per team). */
+export async function recomputeRecent(days = 8): Promise<{ teams: number; values: number }> {
+  const teams = (await pool.query(
     `SELECT DISTINCT team_id FROM (
        SELECT team_id FROM test_runs WHERE day >= CURRENT_DATE - $1::int
        UNION SELECT team_id FROM coverage_reports WHERE day >= CURRENT_DATE - $1::int
-       UNION SELECT team_id FROM pipeline_runs_raw WHERE day >= CURRENT_DATE - $1::int) x`, [days]);
+       UNION SELECT team_id FROM pipeline_runs_raw WHERE day >= CURRENT_DATE - $1::int) x`, [days])).rows;
   let values = 0;
+  const list: string[] = [];
+  for (let i = days; i >= 0; i--) list.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
   for (const { team_id } of teams) {
-    // Demo (sample) teams keep their sample KPI values; only their evidence is refreshed.
-    const demo = await rows(client,
-      `SELECT 1 WHERE EXISTS (SELECT 1 FROM test_runs WHERE team_id = $1 AND is_sample)
-          OR EXISTS (SELECT 1 FROM coverage_reports WHERE team_id = $1 AND is_sample)
-          OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = $1 AND is_sample)`, [team_id]);
-    const list: string[] = [];
-    for (let i = days; i >= 0; i--) list.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
-    const res = await recomputeTeamDays(client, team_id, list, { writeKpis: demo.length === 0 });
-    values += res.reduce((n, d) => n + d.metrics.filter((m) => m.written).length, 0);
+    values += await withTransaction(async (client) => {
+      // Teams with sample (demo) raw data keep their sample KPI values; only their evidence is refreshed.
+      const sample = await rows(client,
+        `SELECT 1 WHERE EXISTS (SELECT 1 FROM test_runs WHERE team_id = $1 AND is_sample)
+            OR EXISTS (SELECT 1 FROM coverage_reports WHERE team_id = $1 AND is_sample)
+            OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = $1 AND is_sample)`, [team_id]);
+      const res = await recomputeTeamDays(client, team_id, list, { writeKpis: sample.length === 0 });
+      return res.reduce((n, d) => n + d.metrics.filter((m) => m.written).length, 0);
+    });
   }
   return { teams: teams.length, values };
+}
+
+/** Days the gzipped payloads are kept (RAW_PAYLOAD_DAYS, default 35); per-test and per-file rows are kept 35 days. */
+export const RAW_PAYLOAD_DAYS = Number(process.env.RAW_PAYLOAD_DAYS) || 35;
+export const RAW_DETAIL_DAYS = 35;
+export const RAW_RETENTION_DAYS = 396; // 13 months
+
+/**
+ * Retention of the raw store (db-keepalive): payloads after RAW_PAYLOAD_DAYS, per-test results and
+ * per-file coverage after 35 days (the latest coverage report of each team keeps its files), and
+ * everything raw (uploads, runs, reports, evidence) after 13 months.
+ */
+export async function cleanupRawData(): Promise<Record<string, number>> {
+  const n = async (sql: string, params: any[] = []) => (await pool.query(`WITH d AS (${sql} RETURNING 1) SELECT COUNT(*)::int AS n FROM d`, params)).rows[0]?.n ?? 0;
+  return {
+    payloads: await n(`UPDATE raw_uploads SET payload = NULL WHERE payload IS NOT NULL AND received_at < now() - make_interval(days => $1)`, [RAW_PAYLOAD_DAYS]),
+    testResults: await n(`DELETE FROM test_results r USING test_runs tr WHERE tr.id = r.test_run_id AND tr.started_at < now() - make_interval(days => $1)`, [RAW_DETAIL_DAYS]),
+    coverageFiles: await n(`DELETE FROM coverage_files f USING coverage_reports r WHERE r.id = f.report_id AND r.created_at < now() - make_interval(days => $1)
+                              AND r.id <> (SELECT r2.id FROM coverage_reports r2 WHERE r2.team_id = r.team_id ORDER BY r2.created_at DESC LIMIT 1)`, [RAW_DETAIL_DAYS]),
+    testRuns: await n(`DELETE FROM test_runs WHERE started_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    coverageReports: await n(`DELETE FROM coverage_reports WHERE created_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    pipelineRuns: await n(`DELETE FROM pipeline_runs_raw WHERE started_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    flakyEvidence: await n(`DELETE FROM flaky_test_evidence WHERE last_seen < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    metricEvidence: await n(`DELETE FROM metric_evidence WHERE day < CURRENT_DATE - $1::int`, [RAW_RETENTION_DAYS]),
+    uploads: await n(`DELETE FROM raw_uploads WHERE received_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+  };
 }

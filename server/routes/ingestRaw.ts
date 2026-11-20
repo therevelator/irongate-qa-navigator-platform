@@ -116,7 +116,7 @@ function summaryItem(teamId: string | null, source: string | null, recordedAt: s
   return { index: 0, teamId, source, recordedAt, metrics: [], status, ...(errors ? { errors } : {}) };
 }
 
-const computedOut = (days: DayResult[]) => days.map((d) => ({ day: d.day, metrics: d.metrics }));
+const computedOut = (days: DayResult[]) => days.filter((d) => d.metrics.length).map((d) => ({ day: d.day, metrics: d.metrics }));
 
 /** Shared request handling: auth done; reads, validates, logs, stores, computes. */
 function handler(kind: RawKind) {
@@ -190,10 +190,11 @@ function handler(kind: RawKind) {
       const items = [summaryItem(c.teamId, source, at.toISOString(), 'written')];
 
       if (c.dryRun) {
-        const out = await runLogged(caller, { key: null, hash, source: `${source}, test call` }, async () => ({
+        const testSource = `${kind} (${format}, test call)`;
+        const out = await runLogged(caller, { key: null, hash, source: testSource }, async () => ({
           status: 'accepted', httpStatus: 200,
           response: { status: 'dry-run', kind, format, team: c.teamId, parseMs, ...summary, message: 'Key, team and report are valid. Nothing was stored.' },
-          items: [summaryItem(c.teamId, `${source}, test call`, at.toISOString(), 'duplicate')], errors: [], teamIds: [c.teamId], valueCount: 0, source: `${source}, test call`,
+          items: [summaryItem(c.teamId, testSource, at.toISOString(), 'duplicate')], errors: [], teamIds: [c.teamId], valueCount: 0, source: testSource,
         }));
         if ('replay' in out) return sendReplay(res, out.replay, hash);
         return res.status(200).json(out.outcome.response);
@@ -306,7 +307,11 @@ async function handlePipelines(
     const stored = await storePipelineRuns(client, caller.companyId, teamId, up.id, runs);
     const fresh = stored.filter((s) => !s.duplicate);
     const days = fresh.length ? await recomputeTeamDays(client, teamId, Array.from(new Set(fresh.map((s) => s.day))), { ingestionId, actorId: `api_key:${caller.apiKeyId}` }) : [];
-    if (!fresh.length) items[0].status = 'duplicate';
+    if (!fresh.length) {
+      // Every run was already stored: keep no upload row for this request.
+      items[0].status = 'duplicate';
+      await client.query('DELETE FROM raw_uploads WHERE id = $1', [up.id]);
+    }
     items[0].metrics = Array.from(new Set(days.flatMap((d) => d.metrics.filter((m) => m.written).map((m) => m.kpi as string))));
     return {
       status: 'accepted', httpStatus: fresh.length ? 201 : 200,

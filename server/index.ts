@@ -36,6 +36,7 @@ import './jobs/alertsCron'; // Alert evaluation, notification outbox, weekly dig
 import './jobs/pulseCron'; // Automatic wellbeing pulse e-mail per team cadence
 import './jobs/cleanupCron'; // Retention of server_errors / user_activity / job_runs
 import activityRoutes from './routes/activity';
+import ciRoutes from './routes/ci';
 import operatorRoutes from './routes/operator';
 import { isRawIngestPath } from './lib/ingest/body';
 import { requestContext } from './lib/requestContext';
@@ -143,6 +144,7 @@ app.use('/api/notifications', notificationsRoutes);
 app.use('/api/actions', actionsRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/operator', operatorRoutes);
+app.use('/api/ci', ciRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

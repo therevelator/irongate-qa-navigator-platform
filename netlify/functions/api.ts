@@ -28,6 +28,7 @@ import notificationsRoutes from '../../server/routes/notifications';
 import actionsRoutes from '../../server/routes/actions';
 import activityRoutes from '../../server/routes/activity';
 import operatorRoutes from '../../server/routes/operator';
+import ciRoutes from '../../server/routes/ci';
 import { isRawIngestPath } from '../../server/lib/ingest/body';
 import { requestContext } from '../../server/lib/requestContext';
 import '../../server/lib/userActivity'; // user activity log (request hook)
@@ -121,6 +122,7 @@ router.use('/notifications', notificationsRoutes);
 router.use('/actions', actionsRoutes);
 router.use('/activity', activityRoutes);
 router.use('/operator', operatorRoutes);
+router.use('/ci', ciRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix

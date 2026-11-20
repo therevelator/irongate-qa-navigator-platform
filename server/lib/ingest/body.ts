@@ -32,19 +32,25 @@ export async function readBody(req: Request, limit = MAX_UPLOAD_BYTES): Promise<
     if (b.length > limit) throw tooLarge(limit);
     return b;
   }
-  const declared = Number(req.headers['content-length']);
-  if (Number.isFinite(declared) && declared > limit) throw tooLarge(limit);
+  // An over-size body is read to its end (and discarded, up to 4 × the limit) before the 413 is
+  // sent, so the client receives the answer instead of a broken connection.
   return await new Promise<Buffer>((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
     let done = false;
+    let over = false;
     req.on('data', (c: Buffer) => {
       if (done) return;
       size += c.length;
-      if (size > limit) { done = true; reject(tooLarge(limit)); req.resume(); return; }
+      if (size > limit) {
+        over = true;
+        chunks.length = 0;
+        if (size > limit * 4) { done = true; reject(tooLarge(limit)); }
+        return;
+      }
       chunks.push(c);
     });
-    req.on('end', () => { if (!done) { done = true; resolve(Buffer.concat(chunks)); } });
+    req.on('end', () => { if (!done) { done = true; if (over) reject(tooLarge(limit)); else resolve(Buffer.concat(chunks)); } });
     req.on('error', (e) => { if (!done) { done = true; reject(e); } });
   });
 }
