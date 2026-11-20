@@ -30,6 +30,9 @@ The full reference for every screen is [PRODUCT_GUIDE.md, section 5](PRODUCT_GUI
   Tick "Keep me signed in" to stay signed in after closing the browser. How long a sign-in lasts is set by
   your company (default 7 days).
 - **Forgot password.** Use "Forgot password" on the sign-in page. You get a one-time link by e-mail.
+- **Too many wrong passwords.** After 5 wrong passwords in a row your account is locked for 15 minutes.
+  The sign-in page still only says "Invalid credentials", even with the right password, until the lock
+  ends. To get in sooner, use "Forgot password" or ask your administrator to set a new password.
 - **Password rules.** 10 to 128 characters, at least three of lower case, upper case, number and symbol,
   and not containing the part of your e-mail address before the @. The same rules apply when an
   administrator sets a password for you.

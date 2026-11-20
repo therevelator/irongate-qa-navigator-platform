@@ -1,12 +1,12 @@
 # Manual test cases
 
-429 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+431 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
 ## Contents
 
-- [Sign-in and sessions](#sign-in-and-sessions) (29)
+- [Sign-in and sessions](#sign-in-and-sessions) (30)
 - [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
@@ -47,7 +47,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Activity](#activity) (4)
 - [User activity](#user-activity) (4)
 - [Invitations](#invitations) (1)
-- [Platform support](#platform-support) (24)
+- [Platform support](#platform-support) (25)
 - [Navigation and access control](#navigation-and-access-control) (12)
 - [Users and teams](#users-and-teams) (6)
 - [Analytics](#analytics) (4)
@@ -722,6 +722,37 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Sign in as admin@irongate.com / demo123, open Users, find the test person and delete (deactivate) it
 
 *Automated:* `tests/e2e/sessions.spec.ts › Sign-in lifetime and signing out other devices › "Sign out my other devices" keeps this browser and signs the other one out with a message`
+
+### TC-AUTH-132: Five wrong passwords in a row lock the account for 15 minutes; a locked account looks like a wrong password
+
+**Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F1.2
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A test user you may lock (not a shared demo account), e.g. added by a super admin with Add with password: lock-<unique>@irongate.com / Ui-Tests-Passw0rd!
+- Browser signed out (fresh private window)
+
+**Test data**
+
+- E-mail: lock-<unique>@irongate.com
+- Right password: Ui-Tests-Passw0rd!
+- Wrong password: Wrong-Passw0rd-1
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On the sign-in page enter the test e-mail and the wrong password 4 times (click Sign in each time). | Each time "Invalid credentials" appears. |
+| 2 | Sign in with the right password. | The Overview opens (the count of wrong passwords goes back to 0). Sign out. |
+| 3 | Enter the wrong password 5 times in a row. | Each time "Invalid credentials" appears. |
+| 4 | Now enter the right password. | "Invalid credentials" appears, exactly as for a wrong password; you stay on the sign-in page. |
+| 5 | Enter an e-mail that has no account (nobody-<unique>@irongate.com) with any password. | The same "Invalid credentials" message: the page does not tell a locked account from a wrong password or an unknown e-mail. |
+| 6 | Wait 15 minutes (or ask a platform operator to use Clear lockout), then sign in with the right password. | The Overview opens. |
+
+**After the test:** Deactivate or delete the test user.
+
+**Notes:** Attempts while locked are counted but do not extend the lock; the first wrong password after the lock ends locks it again. Forgot password and a password set by an admin also end the lock. Never lock the shared demo accounts.
+
+*Automated:* `tests/api/login-lockout.test.ts › LCK-001, LCK-002, LCK-003, LCK-005 (API)`
 
 ### TC-ADM-026: A super admin changes 'Sign-in lasts' and the current value label follows
 
@@ -10116,6 +10147,34 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** The operator's create person and reset password run through the company app's handlers and the same password rules.
 
 *Automated:* `tests/api/admin-password-policy.test.ts › APW-003 (API)`
+
+### TC-ORG-073: Clear lockout lets a person locked out by wrong passwords sign in again at once
+
+**Type:** Positive · **Priority:** Medium · **Role:** Platform operator · **Flow:** F14.10
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A test user you may lock (not a shared demo account), e.g. added by a super admin with Add with password: lock-<unique>@irongate.com / Ui-Tests-Passw0rd!
+- A platform operator account (npm run operator:create), signed in at /operator in another window
+
+**Test data**
+
+- E-mail: lock-<unique>@irongate.com
+- Right password: Ui-Tests-Passw0rd!
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | In a private window, enter the test e-mail with a wrong password 5 times, then the right password once. | "Invalid credentials" every time (the account is locked). |
+| 2 | In /operator open NovaTech, then the test person's page. | "Failed sign-ins in a row" shows 6 and "Locked until" shows a time about 15 minutes after the fifth wrong password; a "Clear lockout" button is shown. |
+| 3 | Click "Clear lockout". | "Lockout cleared" appears; "Failed sign-ins in a row" shows 0, "Locked until" shows "Not locked" and the Clear lockout button is gone. |
+| 4 | In the private window sign in with the right password. | The Overview opens. |
+
+**After the test:** Deactivate or delete the test user.
+
+**Notes:** Clear lockout on a person with no failed sign-ins answers "This account has no lockout to clear."
+
+*Automated:* `tests/api/login-lockout.test.ts › LCK-004 (API)`
 
 ## Navigation and access control
 

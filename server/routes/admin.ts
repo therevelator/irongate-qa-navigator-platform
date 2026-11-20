@@ -408,7 +408,8 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
     const weak = typeof newPassword === 'string' ? passwordProblem(newPassword, target.email) : 'Enter the new password.';
     if (weak) return res.status(400).json({ error: weak });
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    await query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [passwordHash, target.id, companyId]);
+    // A new password also clears a sign-in lockout (server/lib/loginLockout.ts), as a reset link does.
+    await query('UPDATE users SET password_hash = ?, failed_login_attempts = 0, locked_until = NULL, updated_at = NOW() WHERE id = ? AND company_id = ?', [passwordHash, target.id, companyId]);
     // Existing sessions of that person end. Changing your own password keeps this browser signed in.
     await endUserSessions(target.id);
     if (target.id === req.user.id) await issueSessionCookie(res, req.user.id, JWT_SECRET, { persistent: currentSessionPersistent(req), method: 'reissue' });

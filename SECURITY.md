@@ -41,6 +41,14 @@ always enforces it. Per-role tests: `tests/api/r2-security-matrix.test.ts`, `tes
 - Each session is a row in `user_sessions` (id = the token's `jti`). Sign out everywhere, a password change
   or reset, "sign out my other devices" and a company suspension revoke the rows.
 - The session lifetime is set per company (default 7 days).
+- Sign-in lockout (`server/lib/loginLockout.ts`, columns `users.failed_login_attempts` and
+  `users.locked_until`): 5 wrong passwords in a row lock the account for 15 minutes. While locked, every
+  attempt, even with the right password, gets the same `401 Invalid credentials` as a wrong password or an
+  unknown e-mail (no account enumeration; the password is still compared, so the timing is the same) and
+  still counts, without extending the lock; the first wrong password after the lock ends locks it again.
+  A successful sign-in resets the count; a reset link, a password set by an admin and the platform
+  operator's **Clear lockout** clear both columns. On top of this, `/api/auth/login` allows 20 failed
+  attempts per 15 minutes per client address. Test: `tests/api/login-lockout.test.ts`.
 - The API refuses to start in production without `JWT_SECRET`.
 - Single sign-on (Google, Microsoft) matches the exact verified e-mail or an open invitation, never a
   shared domain.

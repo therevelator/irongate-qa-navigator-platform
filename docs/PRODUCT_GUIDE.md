@@ -192,7 +192,7 @@ The sign-in screen has a **Forgot password?** link. It opens a page that asks fo
 - On the reset page you choose the new password twice. The rules are the invitation rules above.
 - After the change you sign in with the new password. The reset never signs you in. You also get an
   e-mail: "Your password was changed; if this wasn't you, contact your administrator". A lockout from
-  failed sign-ins is cleared.
+  failed sign-ins (5 wrong passwords in a row lock the account for 15 minutes) is cleared.
 - Limits: 5 requests per 15 minutes from one address, 3 per hour for one e-mail address, 10 failed
   resets per 15 minutes from one address.
 

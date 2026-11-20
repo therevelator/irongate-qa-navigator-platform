@@ -17,7 +17,7 @@ import { clientIp, ctxOf } from './requestContext';
  *
  * Methods: password, registration, invitation, sso_google, sso_microsoft, reset (password changed
  * with an e-mail link). Outcomes: success, failure (failure_reason: unknown_email, wrong_password,
- * inactive, company_suspended, no_account, ...). Retention 180 days (cleanupOperationalLogs).
+ * inactive, locked, company_suspended, no_account, ...). Retention 180 days (cleanupOperationalLogs).
  */
 
 export interface Geo { country: string | null; countryCode: string | null; region: string | null; city: string | null }

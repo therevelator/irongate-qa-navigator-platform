@@ -48,7 +48,7 @@ Derived from the code, then checked against the documentation:
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
 | F1.1 | Sign in with e-mail and password, see the overview with the role in the navigation | All | – | AUTH-01 (each role), LIVE-02 | AUTH-02 empty fields (nothing sent), AUTH-03 wrong password (message, e-mail kept), AUTH-04 unknown e-mail (same answer), AUTH-05 deactivated account, AUTH-12 500 with request id / unreachable server, AUTH-13 double click signs in once |
-| F1.2 | Attempt limit (20 failed sign-ins per address per 15 min) | – | – | — | AUTH-06 "Too many attempts" |
+| F1.2 | Attempt limit (20 failed sign-ins per address per 15 min); account lockout (5 wrong passwords in a row lock the account for 15 minutes, same "Invalid credentials" answer while locked) | – | – | API `login-lockout.test.ts` LCK-001…005 | AUTH-06 "Too many attempts"; LCK-002 locked account answers like a wrong password |
 | F1.3 | Show / hide the password | – | – | AUTH-07 | — |
 | F1.4 | Demo account chips fill the form (demo mode) | – | – | AUTH-08 | AUTH-10 no chips when demo mode is off (stubbed providers) |
 | F1.5 | SSO buttons (Google, Microsoft) when configured | – | – | AUTH-10 (stubbed providers, links to the API start URLs) | AUTH-09 no buttons when not configured; AUTH-11 unconfigured provider refused, `sso_error` shown and removed from the address |

@@ -22,6 +22,7 @@ import { authenticateToken, type AuthRequest } from '../middleware/auth';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
 import { emailDomainOf, isPublicEmailDomain } from '../../src/lib/emailDomains';
 import { EMAIL_RE } from '../lib/invitations';
+import { recordFailedPassword, recordLockedAttempt } from '../lib/loginLockout';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -217,7 +218,8 @@ router.post('/login', authLimiter, async (req, res) => {
     const user = await queryOne<any>(
       `SELECT id, email, password_hash, first_name, last_name, role, 
               company_id, department_id, primary_team_id, is_active, ${companyStatusSql('users')} AS company_status,
-              ${hideSampleNoticeSql('users')} AS hide_sample_notice
+              ${hideSampleNoticeSql('users')} AS hide_sample_notice,
+              (locked_until IS NOT NULL AND locked_until > now()) AS locked
        FROM users WHERE LOWER(email) = LOWER(?)`,
       [email]
     );
@@ -238,9 +240,18 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // Verify password
+    // Verify password. The comparison also runs for a locked account, so the answer time does not
+    // tell that it is locked.
     const validPassword = typeof password === 'string' && !!user.password_hash && await bcrypt.compare(password, user.password_hash);
+    // Lockout (server/lib/loginLockout.ts): while locked, even the right password gets the same answer
+    // as a wrong one, and the attempt still counts.
+    if (user.locked) {
+      await recordLockedAttempt(user.id);
+      await failed('locked');
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
     if (!validPassword) {
+      await recordFailedPassword(user.id);
       await failed('wrong_password');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -250,12 +261,13 @@ router.post('/login', authLimiter, async (req, res) => {
       return res.status(403).json({ error: COMPANY_SUSPENDED_MESSAGE, code: COMPANY_SUSPENDED.code });
     }
 
-    // Update last login
-    await query('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
+    // Update last login; a successful sign-in resets the failed-attempt count.
+    await query('UPDATE users SET last_login = NOW(), failed_login_attempts = 0, locked_until = NULL WHERE id = ?', [user.id]);
 
-    // Remove password hash (and the internal company status) from the response
+    // Remove password hash (and the internal company status and lock flag) from the response
     delete user.password_hash;
     delete user.company_status;
+    delete user.locked;
 
     // Get assigned teams
     const teams = await query<any[]>(

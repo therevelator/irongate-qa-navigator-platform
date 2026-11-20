@@ -94,7 +94,7 @@ const OperatorUser: React.FC<{ companyId: string; companyName: string; userId: s
           })}>Set password</SmallButton>
           <SmallButton testId="op-user-reset-link" onClick={() => run({ title: 'Send a reset link', description: '', path: `${ubase}/send-reset-link`, doneMessage: (o) => o.message ?? 'Reset link sent' })}>Send reset link</SmallButton>
           <SmallButton testId="op-user-sign-out" onClick={() => run({ title: 'Sign out everywhere', description: `Ends every session of ${who} on every device. They can sign in again at once.`, path: `${ubase}/sign-out-everywhere`, destructive: true, confirmLabel: 'Sign out everywhere' })}>Sign out everywhere</SmallButton>
-          {(u.failed_login_attempts > 0 || u.locked_until) && <SmallButton onClick={() => run({ title: 'Clear lockout', description: '', path: `${ubase}/clear-lockout` })}>Clear lockout</SmallButton>}
+          {(u.failed_login_attempts > 0 || u.locked_until) && <SmallButton testId="op-user-clear-lockout" onClick={() => run({ title: 'Clear lockout', description: 'Sets the failed sign-ins to 0 and ends the lock (5 wrong passwords in a row lock an account for 15 minutes).', path: `${ubase}/clear-lockout`, doneMessage: () => 'Lockout cleared' })}>Clear lockout</SmallButton>}
           {u.is_active
             ? <SmallButton testId="op-user-deactivate" onClick={() => run({ title: 'Deactivate account', description: `${who} can no longer sign in; every session is refused.`, path: `${ubase}/deactivate`, destructive: true, confirmLabel: 'Deactivate' })}>Deactivate</SmallButton>
             : <SmallButton testId="op-user-reactivate" onClick={() => run({ title: 'Reactivate account', description: '', path: `${ubase}/reactivate` })}>Reactivate</SmallButton>}
@@ -117,6 +117,7 @@ const OperatorUser: React.FC<{ companyId: string; companyName: string; userId: s
             <dt className="text-slate-500">Single sign-on</dt><dd>{u.sso?.length ? u.sso.map((s: any) => s.provider).join(', ') : 'Not linked'}</dd>
             <dt className="text-slate-500">Signed out everywhere</dt><dd>{fmtDate(u.sessions_valid_after)}</dd>
             <dt className="text-slate-500">Failed sign-ins in a row</dt><dd>{u.failed_login_attempts ?? 0}</dd>
+            <dt className="text-slate-500">Locked until</dt><dd data-testid="op-user-locked">{u.locked ? fmtDate(u.locked_until) : 'Not locked'}</dd>
           </dl>
         </Section>
         <Section title="Role assignments and teams" action={<SmallButton testId="op-user-add-assignment" onClick={addAssignment}><Plus size={13} /> Add</SmallButton>}>

@@ -45,7 +45,8 @@ they lead).
   is not configured, the page shows the link to send yourself. Invitations expire after `INVITE_TTL_HOURS`
   (default 168 hours) and can be resent or revoked.
 - **Edit** a person's name, e-mail, primary team and role assignments.
-- **Activate / deactivate**, **reset password** (set one, or send a reset link), **sign out everywhere**,
+- **Activate / deactivate**, **reset password** (set one, or send a reset link; either also ends a sign-in
+  lockout: 5 wrong passwords in a row lock an account for 15 minutes), **sign out everywhere**,
   and the **developer insights** switch (whether their individual developer metrics may be shown).
 - **Passwords you set** (Add with password, Reset password) follow the same rules as everyone else's:
   10 to 128 characters, three of lower case, upper case, number and symbol, and not the part of the
@@ -145,7 +146,8 @@ operator exists.
 **What it changes.** Everything in any company: create a company (first department, team and first person
 with a password or an invitation), rename it, its e-mail domain, sign-in length, hide the sample-data
 notices, **suspend / reactivate**, delete (type its name); departments, teams, people, role assignments,
-passwords and reset links, sign out everywhere, invitations, KPI targets, configuration, update intervals,
+passwords and reset links, sign out everywhere, **Clear lockout** (a person locked out after 5 wrong
+passwords in a row can sign in again at once: both the failed-attempt count and the lock end), invitations, KPI targets, configuration, update intervals,
 alert rules, API keys, saved views and single sessions. Changes the company app also offers run through the
 company app's own handler and rules. Destructive actions are confirmed in the page. A password the operator
 sets (first person of a new company, a new person, a reset) follows the company password rules; Create
