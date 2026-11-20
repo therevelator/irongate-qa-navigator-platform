@@ -1018,7 +1018,7 @@ const EXTRA_ENTRIES: { [K in ExtraCatalogKey]: Omit<MetricCatalogEntry, 'key'> }
     direction: 'none',
     thresholds: null,
     storedIn: ['business_impact_quality_metrics.*', 'business_impact_business_kpis.monthly_revenue', 'business_impact_*.data_source'],
-    whereToFindIt: ['Delivery → Business impact → Money (How is this calculated?), What-if and Details'],
+    whereToFindIt: ['Delivery → Business impact → Money (How this was calculated), What-if and Details'],
     productionSources: [
       { system: 'Finance / BI (ERP, billing, Snowflake, Looker)', detail: 'Monthly recognised revenue attributable to the team\'s product area' },
       { system: 'QE Navigator KPI history', detail: 'Monthly averages of the quality KPIs (coverage, escape rate, MTTR, …)' },

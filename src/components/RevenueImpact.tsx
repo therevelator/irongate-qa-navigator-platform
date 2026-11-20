@@ -7,7 +7,7 @@ import MetricInfoTrigger from './MetricInfoTrigger';
 import SampleDataBanner from './SampleDataBanner';
 import { Badge, Card, CardHeader, EmptyState, SegmentedControl, StatTile, buttonClass, cx, inputClass, type Tone } from './ui';
 import {
-  whatIf, CONFIDENCE_TEXT, REVENUE_CAVEATS, REVENUE_MIN_PAIRED_MONTHS, WHAT_IF_FORMULA, REVENUE_SENSITIVITY_FORMULA, REVENUE_ROLLUP_FORMULA,
+  whatIf, CONFIDENCE_TEXT, REVENUE_CAVEATS, REVENUE_POOLED_FORMULA, REVENUE_MIN_PAIRED_MONTHS, WHAT_IF_FORMULA, REVENUE_SENSITIVITY_FORMULA, REVENUE_ROLLUP_FORMULA,
   type CurrentValue, type DebtAtRisk, type FinancialParamUsed, type GainItem, type MoneyLine, type MoneySummary, type RevenueAtStake,
   type RevenueRollup, type RevenueSensitivity, type SimpleMonthlyFigure, type TargetToday, type TeamRevenueFigures,
 } from '../../server/lib/revenueImpact';
@@ -64,16 +64,16 @@ const fmtMonth = (ym: string | null) => {
   return `${MONTHS[Number(m) - 1] ?? m} ${y}`;
 };
 
-const CONFIDENCE_TONE: Record<GainItem['confidence'], Tone> = { strong: 'good', some: 'brand', estimate: 'neutral' };
-const CONFIDENCE_SHORT: Record<GainItem['confidence'], string> = { strong: 'Strong evidence', some: 'Some evidence', estimate: 'Cost estimate' };
+const CONFIDENCE_TONE: Record<GainItem['confidence'], Tone> = { strong: 'good', some: 'brand', company: 'brand', estimate: 'neutral' };
+const CONFIDENCE_SHORT: Record<GainItem['confidence'], string> = { strong: 'Strong evidence', some: 'Some evidence', company: 'Company-wide evidence', estimate: 'Cost estimate' };
 
 // ---------------------------------------------------------------------------
 // Small building blocks
 // ---------------------------------------------------------------------------
 
-/** "How is this calculated?" disclosure (native details/summary: keyboard and screen-reader friendly). */
-export const HowCalculated: React.FC<{ children: React.ReactNode; label?: string; className?: string }> = ({ children, label = 'How is this calculated?', className }) => (
-  <details className={cx('group mt-1.5', className)}>
+/** "How this was calculated" disclosure (native details/summary: keyboard and screen-reader friendly). */
+export const HowCalculated: React.FC<{ children: React.ReactNode; label?: string; className?: string; testId?: string }> = ({ children, label = 'How this was calculated', className, testId }) => (
+  <details className={cx('group mt-1.5', className)} data-testid={testId}>
     <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded text-xs font-medium text-brand-700 hover:underline focus-visible:outline-2 focus-visible:outline-brand-500 dark:text-brand-300 [&::-webkit-details-marker]:hidden">
       <ChevronRight className="h-3 w-3 transition-transform group-open:rotate-90" aria-hidden="true" />
       {label}
@@ -175,11 +175,28 @@ const Loading: React.FC<{ what: string }> = ({ what }) => (
 
 const sensitivityOf = (d: TeamRevenueData, metric: string) => d.sensitivities.find((s) => s.metric === metric) ?? null;
 
+const pText = (p: number | null) => ((p ?? 1) < 0.001 ? '< 0.001' : `= ${fmtP(p)}`);
+
 const SensitivityFacts: React.FC<{ s: RevenueSensitivity }> = ({ s }) =>
-  s.status === 'fitted' ? (
+  s.status === 'fitted' && s.basis === 'company' && s.pooled ? (
+    <>
+      <p>
+        This team's own months ({s.own?.n ?? s.n}, {fmtMonth(s.firstMonth)} to {fmtMonth(s.lastMonth)}): {s.own?.slope == null
+          ? `the metric did not change (${fmtNum(s.own?.minX)}), so no slope`
+          : `${fmtMoney(s.own.slope)}/month per +1 ${s.unit}, r = ${fmtNum(s.own.r, 3)}, p ${pText(s.own.pValue)} (not significant; the metric moved only between ${fmtNum(s.own.minX)} and ${fmtNum(s.own.maxX)})`}.
+      </p>
+      <p>
+        Company-wide (within each team, {s.pooled.teams} teams, {s.pooled.n} months): monthly revenue changes by{' '}
+        <span className="font-medium tabular-nums">{fmtNum(s.pooled.share * 100, 2)}%</span> per +1 {s.unit} (95% range {fmtNum(s.pooled.shareLow * 100, 2)}% to {fmtNum(s.pooled.shareHigh * 100, 2)}%),
+        r = {fmtNum(s.pooled.r, 3)}, p {pText(s.pooled.pValue)}. For this team: × its average monthly revenue ={' '}
+        <span className="font-medium tabular-nums">{fmtMoney(s.slope)}/month</span> (95% range {fmtMoney(s.ciLow)} to {fmtMoney(s.ciHigh)}).
+      </p>
+      <p>{REVENUE_POOLED_FORMULA}</p>
+    </>
+  ) : s.status === 'fitted' ? (
     <p>
       Revenue per +1 {s.unit}: <span className="font-medium tabular-nums">{fmtMoney(s.slope)}/month</span> (95% range {fmtMoney(s.ciLow)} to {fmtMoney(s.ciHigh)});{' '}
-      n = {s.n} months ({fmtMonth(s.firstMonth)} to {fmtMonth(s.lastMonth)}), r = {fmtNum(s.r, 3)}, R² = {fmtNum(s.r2, 3)}, p {(s.pValue ?? 1) < 0.001 ? '< 0.001' : `= ${fmtP(s.pValue)}`}
+      n = {s.n} months ({fmtMonth(s.firstMonth)} to {fmtMonth(s.lastMonth)}), r = {fmtNum(s.r, 3)}, R² = {fmtNum(s.r2, 3)}, p {pText(s.pValue)}
       {s.significant ? '' : ' (not significant)'}.
     </p>
   ) : (
@@ -211,12 +228,21 @@ const LineDetail: React.FC<{ line: MoneyLine; data: TeamRevenueData }> = ({ line
       {fig && <Params params={fig.parameters} />}
       {line.key === 'quality_gaps' && (
         <>
-          {data.stake.rows.filter((r) => r.included).map((r) => {
+          {data.stake.rows.filter((r) => r.included).length === 0 && (
+            <p>
+              {data.stake.rows.filter((r) => r.targetMet === true).length} of {data.stake.rows.filter((r) => r.target).length} metrics with a target are at or better than it.{' '}
+              {data.stake.rows.filter((r) => r.targetMet === false).map((r) => `${r.label}: ${fmtNum(r.current?.value)} vs target ${fmtNum(r.target?.good)} (${r.reason ?? 'not counted'})`).join('; ')}
+            </p>
+          )}
+          {data.stake.rows.some((r) => r.included && r.gap === 0) && (
+            <p>At or better than target (adds $0): {data.stake.rows.filter((r) => r.included && r.gap === 0).map((r) => `${r.label} ${fmtNum(r.current?.value)} vs ${fmtNum(r.target?.good)}`).join(', ')}.</p>
+          )}
+          {data.stake.rows.filter((r) => r.included && r.gap !== 0).map((r) => {
             const s = sensitivityOf(data, r.metric);
             return (
               <p key={r.metric}>
                 {r.label}: {fmtNum(r.current?.value)} now ({fmtMonth(r.current?.month ?? null)}), target {fmtNum(r.target?.good)} ({r.target?.scope} target valid today) →{' '}
-                {fmtMoney(r.monthly)}/month{s?.pValue !== null && s?.pValue !== undefined ? `, p ${s.pValue < 0.001 ? '< 0.001' : `= ${fmtP(s.pValue)}`}` : ''}.
+                {fmtMoney(r.monthly)}/month{s?.pValue !== null && s?.pValue !== undefined ? `, p ${pText(s.pValue)}` : ''}{s?.basis === 'company' ? ' (company-wide link)' : ''}.
               </p>
             );
           })}
@@ -386,14 +412,14 @@ export const RevenueWhatIf: React.FC<{ data: TeamRevenueData; showFormulas: bool
   return (
     <MetricInfoTrigger enabled={showFormulas} metricKey="revenue_sensitivity" variant="section" teamId={data.teamId}>
       <Card>
-        <CardHeader title="What if a metric changes?" subtitle="Pick a metric and a change; the projection uses the team's own revenue association for that metric." />
+        <CardHeader title="What if a metric changes?" subtitle="Pick a metric and a change; the projection uses the team's own revenue association for that metric, or the company-wide one where the team's own months are inconclusive." />
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <label className="block">
             <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">Metric</span>
             <select value={metric} onChange={(e) => setMetric(e.target.value)} className={cx(inputClass, 'w-full')} data-testid="whatif-metric">
               {data.sensitivities.map((m) => (
                 <option key={m.metric} value={m.metric}>
-                  {m.label}{m.significant ? '' : m.status === 'fitted' ? ' (no reliable link)' : ' (not enough data)'}
+                  {m.label}{m.significant ? (m.basis === 'company' ? ' (company-wide link)' : '') : m.status === 'fitted' ? ' (no reliable link)' : ' (not enough data)'}
                 </option>
               ))}
             </select>
@@ -404,7 +430,7 @@ export const RevenueWhatIf: React.FC<{ data: TeamRevenueData; showFormulas: bool
           </label>
           <div className="text-xs text-slate-500 dark:text-slate-400 sm:pt-5">
             Now {cur ? `${fmtNum(cur.value)} (${fmtMonth(cur.month)})` : '—'}; target {tgt ? fmtNum(tgt.good) : '—'}.
-            {cur && tgt && (
+            {cur && tgt && (tgt.lowerIsBetter ? cur.value > tgt.good : cur.value < tgt.good) && (
               <button type="button" onClick={toTarget} className="ml-1 font-medium text-brand-700 hover:underline dark:text-brand-300">Use the gap to target</button>
             )}
           </div>
@@ -469,6 +495,7 @@ export const RevenueSensitivityTable: React.FC<{ data: TeamRevenueData }> = ({ d
             { header: 'R²', value: (r) => fmtNum(r.r2, 3), raw: (r) => r.r2 },
             { header: 'p', value: (r) => fmtP(r.pValue), raw: (r) => r.pValue },
             { header: 'Significant (p < 0.05)', value: (r) => (r.significant ? 'yes' : 'no') },
+            { header: 'Basis', value: (r) => (r.basis === 'company' ? 'company-wide' : 'team') },
             { header: 'Note', value: (r) => r.reason ?? '' },
           ]}
         />
@@ -504,6 +531,8 @@ export const RevenueSensitivityTable: React.FC<{ data: TeamRevenueData }> = ({ d
                   <td className="px-5 py-2 text-xs">
                     {r.status !== 'fitted' ? (
                       <span className="text-slate-500 dark:text-slate-400">{r.status === 'insufficient_data' ? `Needs ${r.monthsMissing} more months` : 'No variation'}</span>
+                    ) : r.significant && r.basis === 'company' ? (
+                      <Badge tone="brand">Company-wide evidence</Badge>
                     ) : r.significant ? (
                       <Badge tone={(r.pValue ?? 1) < 0.01 ? 'good' : 'brand'}>{(r.pValue ?? 1) < 0.01 ? 'Strong evidence' : 'Some evidence'}</Badge>
                     ) : (
@@ -518,6 +547,7 @@ export const RevenueSensitivityTable: React.FC<{ data: TeamRevenueData }> = ({ d
       )}
       <HowCalculated>
         <p>{REVENUE_SENSITIVITY_FORMULA}</p>
+        {rows.some((r) => r.basis === 'company') && <p>{REVENUE_POOLED_FORMULA}</p>}
         {data.months.excludedOtherSource > 0 && (
           <p>{data.months.excludedOtherSource} earlier months of {data.months.source === 'sample' ? 'recorded' : 'sample'} data are left out (sample and recorded data are not fitted together).</p>
         )}
@@ -592,17 +622,34 @@ export const RevenueRollupView: React.FC<{ departments: Array<{ id: string; name
           <SampleDataBanner show={data.sampleData} />
           <MetricInfoTrigger enabled={showFormulas} metricKey="revenue_rollup" variant="section">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <StatTile
-                label="Revenue associated with quality gaps"
-                value={r.stake.monthly === null ? '—' : `${fmtMoney(r.stake.monthly)}/month`}
-                caption={r.stake.monthly === null ? 'No team has a figure' : `${fmtMoney(r.stake.annual)}/year · range ${fmtRange(r.stake.monthlyLow, r.stake.monthlyHigh)}/month`}
-              />
-              <StatTile
-                label="Open technical debt"
-                value={r.debt.monthly === null ? '—' : `${fmtMoney(r.debt.monthly)}/month`}
-                caption={r.debt.monthly === null ? 'No team has debt with impact data' : `${fmtMoney(r.debt.annual)}/year`}
-              />
-              <StatTile label="Teams with a figure" value={`${r.stake.contributing.length} of ${r.teams}`} caption="Quality gaps; the others are listed below" />
+              <div>
+                <StatTile
+                  label="Revenue associated with quality gaps"
+                  value={r.stake.monthly === null ? '—' : `${fmtMoney(r.stake.monthly)}/month`}
+                  caption={r.stake.monthly === null ? 'No team has a figure' : `${fmtMoney(r.stake.annual)}/year · range ${fmtRange(r.stake.monthlyLow, r.stake.monthlyHigh)}/month`}
+                />
+                <HowCalculated testId="rollup-how-stake">
+                  <p>Sum of each team's "Quality below target" figure: {data.teams.filter((t) => t.stake.monthly !== null).map((t) => `${t.teamName} ${fmtMoney(t.stake.monthly)}`).join(' + ') || 'none'}.</p>
+                  <p>Each team's figure = its revenue slope per metric × the gap to the KPI target valid today, each movement counted once (Money tab).</p>
+                </HowCalculated>
+              </div>
+              <div>
+                <StatTile
+                  label="Open technical debt"
+                  value={r.debt.monthly === null ? '—' : `${fmtMoney(r.debt.monthly)}/month`}
+                  caption={r.debt.monthly === null ? 'No team has debt with impact data' : `${fmtMoney(r.debt.annual)}/year`}
+                />
+                <HowCalculated testId="rollup-how-debt">
+                  <p>Sum of each team's cost of delay of open debt items: {data.teams.filter((t) => t.debt.monthly !== null).map((t) => `${t.teamName} ${fmtMoney(t.debt.monthly)}`).join(' + ') || 'none'}.</p>
+                  <p>Per item: tickets × ticket cost + downtime minutes × cost per minute + affected users × revenue per user × revenue impact % + SLA breaches × penalty (Parameters → Financial and ROI settings).</p>
+                </HowCalculated>
+              </div>
+              <div>
+                <StatTile label="Teams with a figure" value={`${r.stake.contributing.length} of ${r.teams}`} caption="Quality gaps; the others are listed below" />
+                <HowCalculated testId="rollup-how-teams">
+                  <p>Teams in your scope with a "Quality below target" figure, out of all active teams in your scope. A team has none when it has fewer than 6 months of data or no significant revenue link (its own or company-wide).</p>
+                </HowCalculated>
+              </div>
             </div>
           </MetricInfoTrigger>
           <Card padded={false}>

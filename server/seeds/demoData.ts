@@ -752,6 +752,58 @@ export function sampleHealthSeries(t: { id: string; name: string; platform: stri
 /** A team's default health today (as the nightly refresh derives it from the team id, 0..1). */
 export const defaultTeamHealth = (teamId: string) => round(0.32 + 0.62 * rnd('h', teamId), 3);
 
+/** Sample revenue per active user per month of a team ($18 to $48, deterministic per team). */
+const teamArpu = (team: TeamDef) => 18 + rnd('arpu', team.key) * 30;
+
+/** Company-wide cost rates of the sample (Parameters → Financial and ROI settings). */
+export const SAMPLE_COST_RATES = { developer_hourly_rate: 85, support_ticket_cost: 30, sla_breach_penalty: 2500 } as const;
+/** Minutes in a 30-day month: a team's revenue earned per minute = monthly revenue ÷ this. */
+const MINUTES_PER_MONTH = 30 * 1440;
+
+/**
+ * The financial rates a team's sample data assumes. Demo company: its company settings. A filled
+ * company: the company-wide cost rates, plus per team the revenue per user (the team's sample
+ * revenue per active user) and the downtime cost per minute (the team's monthly revenue earned per
+ * minute, the revenue an outage stops), both derived from the team's own sample business KPIs.
+ */
+export function sampleRates(team: TeamDef, isDemo: boolean): { hourly: number; ticket: number; rpu: number; downtime: number; sla: number } {
+  if (isDemo) return { hourly: 85, ticket: 30, rpu: 42, downtime: 180, sla: 2500 };
+  return {
+    hourly: SAMPLE_COST_RATES.developer_hourly_rate, ticket: SAMPLE_COST_RATES.support_ticket_cost, sla: SAMPLE_COST_RATES.sla_breach_penalty,
+    rpu: round(teamArpu(team), 2), downtime: Math.max(1, Math.round(team.revenue / MINUTES_PER_MONTH)),
+  };
+}
+
+/**
+ * Financial and ROI settings of a filled company (the demo company has its own, see emitDemoOrg):
+ * company-wide cost rates and, for each team that gets sample debt or business-impact data, its
+ * revenue per user and downtime cost per minute (sampleRates). A setting is added only where the
+ * company has none of its own for that key (at the team, its department or the company), so real
+ * settings always win.
+ */
+function emitSampleFinancialSettings(ds: Dataset, company: CompanyInput): void {
+  if (company.isDemo) return;
+  const C = literal(company.id);
+  const created = ts(addDays(ds.today, -365), 9);
+  const own = (key: string, scope: string) =>
+    `NOT EXISTS (SELECT 1 FROM configs WHERE company_id = ${C} AND config_key = ${literal(key)} AND id NOT LIKE '${DEMO_PREFIX}%' AND (${scope}))`;
+  for (const [key, value] of Object.entries(SAMPLE_COST_RATES)) {
+    const g = ds.guard(`cfg:${company.id}:${key}`, `EXISTS (SELECT 1 FROM companies WHERE id = ${C}) AND ${own(key, 'team_id IS NULL AND department_id IS NULL')}`);
+    ds.add('configs', { id: did('cfg', sha1(`${company.id}|${key}`).slice(0, 20)), company_id: company.id, department_id: null, team_id: null, config_key: key, config_value: String(value), created_at: created, updated_at: created }, g);
+  }
+  for (const team of company.teams) {
+    if (team.groups && !team.groups.has('bi') && !team.groups.has('debt')) continue;
+    const r = sampleRates(team, false);
+    const T = literal(team.id);
+    const D_ = team.deptId ? literal(team.deptId) : 'NULL';
+    for (const [key, value] of [['revenue_per_user_monthly', r.rpu], ['downtime_cost_per_minute', r.downtime]] as const) {
+      const g = ds.guard(`cfg:${team.id}:${key}`,
+        `EXISTS (SELECT 1 FROM teams WHERE id = ${T} AND is_active) AND ${own(key, `team_id = ${T} OR (team_id IS NULL AND (department_id IS NULL OR department_id = ${D_}))`)}`);
+      ds.add('configs', { id: did('cfg', sha1(`${team.id}|${key}`).slice(0, 20)), company_id: company.id, department_id: team.deptId || null, team_id: team.id, config_key: key, config_value: String(value), created_at: created, updated_at: created }, g);
+    }
+  }
+}
+
 function emitCompany(ds: Dataset, company: CompanyInput): void {
   const today = ds.today;
   // Teams with something to fill (a team whose every group already has real data only
@@ -1633,8 +1685,11 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
     ['No autoscaling for batch workers', 'infrastructure', 'medium', 'Month-end batch jobs queue for hours.'],
   ];
   const debtItems: Array<{ team: string; severity: string; created: string; resolved: string | null; status: string }> = [];
-  const cfg = { hourly: 85, ticket: 30, rpu: 42, downtime: 180, sla: 2500 };
+  // Financial and ROI rates (Parameters → Financial and ROI settings) of the sample: the cost of
+  // delay below and the Business impact / Technical debt pages use the same values.
+  emitSampleFinancialSettings(ds, company);
   for (const team of teams) {
+    const cfg = sampleRates(team, company.isDemo);
     const rng = new Rng('debt', team.key);
     const gDebt = G(ds, team, 'debt');
     const count = 4 + Math.round(5 * (1 - team.h));
@@ -1648,7 +1703,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       const status = rng.chance(doneP) ? (rng.chance(0.85) ? 'resolved' : 'wont_fix') : rng.chance(0.35) ? 'in_progress' : 'open';
       const resolved = status === 'resolved' || status === 'wont_fix' ? D(Math.max(1, Math.floor(age * rng.float()))) : null;
       const sevF = { critical: 1, high: 0.65, medium: 0.35, low: 0.15 }[severity as 'critical' | 'high' | 'medium' | 'low'];
-      const affected = Math.round(team.revenue / 42 * 0.25 * sevF * rng.float());
+      const affected = Math.round(team.revenue / cfg.rpu * 0.25 * sevF * rng.float());
       const tickets = Math.round(60 * sevF * rng.float());
       const downtime = category === 'infrastructure' || category === 'performance' ? Math.round(180 * sevF * rng.float()) : 0;
       const revenuePct = round(3.5 * sevF * rng.float(), 2);
@@ -1692,7 +1747,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
   const CORR_METRICS: Array<[string, string]> = [['Test Coverage', 'test_coverage'], ['Code Quality', 'code_quality_score'], ['Deployment Frequency', 'deployment_frequency'], ['MTTR', 'mttr_hours'], ['Change Failure Rate', 'change_failure_rate']];
   for (const team of teams) {
     const gBi = G(ds, team, 'bi');
-    const arpu = 18 + rnd('arpu', team.key) * 30;
+    const arpu = teamArpu(team);
     // Modest underlying growth; most of the revenue movement follows the team's quality (health h),
     // so the revenue impact analysis has a plausible association to find in the sample data.
     const growth = 0.001 + rnd('growth', team.key) * 0.004;
@@ -1705,7 +1760,8 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       const n = (k: string) => (rnd('bi', team.key, k, ym) - 0.5) * 2;
       const q = {
         test_coverage: round(avg('test_coverage'), 2), defect_density: round(avg('defect_density'), 4), defect_escape_rate: round(avg('defect_escape_rate'), 2),
-        mttr_hours: round(avg('mttr_hours'), 2), deployment_frequency: round(avg('deployment_frequency_per_week'), 2), lead_time_days: round(avg('lead_time_days'), 2),
+        // Deployments per month (the unit of the monthly series): the month's average per week × days ÷ 7.
+        mttr_hours: round(avg('mttr_hours'), 2), deployment_frequency: round(avg('deployment_frequency_per_week') * daysInMonth(ym) / 7, 2), lead_time_days: round(avg('lead_time_days'), 2),
         code_quality_score: round(avg('code_quality_score'), 2), change_failure_rate: round(avg('change_failure_rate'), 2),
       };
       const holiday = ym.endsWith('-11') || ym.endsWith('-12');
@@ -1726,7 +1782,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       ds.add('business_impact_quality_metrics', { id: did('biq', team.key, ym), team_id: team.id, month_year: ym, ...q, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) }, gBi);
       ds.add('business_impact_business_kpis', { id: did('bik', team.key, ym), team_id: team.id, month_year: ym, ...kpis, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) }, gBi);
       const workingDays = [...Array(daysInMonth(ym))].filter((_, i) => isWeekday(`${ym}-${String(i + 1).padStart(2, '0')}`)).length;
-      const deploysPerMonth = q.deployment_frequency * (daysInMonth(ym) / 7);
+      const deploysPerMonth = q.deployment_frequency;
       const resolvedDebt = debtItems.filter(d => d.team === team.key && d.status === 'resolved' && d.resolved && monthOf(d.resolved) === ym).length;
       const availability = avg('system_availability');
       ds.add('business_impact_context', {

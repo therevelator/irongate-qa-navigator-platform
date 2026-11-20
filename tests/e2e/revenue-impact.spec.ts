@@ -14,7 +14,7 @@ test.describe('Business impact: revenue impact', { tag: ['@area:business-impact'
   test.describe.configure({ mode: 'default' });
   test.setTimeout(90000);
 
-  test('super admin: money summary first, explanations behind "How is this calculated?", what-if and all teams', async ({ page }) => {
+  test('super admin: money summary first, explanations behind "How this was calculated", what-if and all teams', async ({ page }) => {
     await setupAuth(page, 'super_admin');
     await page.goto(`${APP}/analytics/business-impact`);
     const money = page.locator('[data-testid="revenue-money"]');
@@ -32,7 +32,7 @@ test.describe('Business impact: revenue impact', { tag: ['@area:business-impact'
     // At most five gains before "Show all".
     expect(await page.locator('[data-testid="money-gains"] > li').count()).toBeLessThanOrEqual(5);
     // The explanation is collapsed, one click away.
-    const how = going.first().getByText('How is this calculated?');
+    const how = going.first().getByText('How this was calculated');
     await how.click();
     await expect(going.first().getByText(/Monthly revenue at stake = /)).toBeVisible();
 

@@ -13,8 +13,9 @@ import { FormulaSwitch } from './FormulaNote';
 import { policyActorOf } from '../lib/policyActor';
 import { canViewRevenueRollup, canUseFormulaMode } from '../../server/lib/userPolicy';
 import {
-  RevenueMoneyView, RevenueWhatIf, RevenueSensitivityTable, RevenueRollupView, RevenueLoadState, Section, useRevenueImpact,
+  RevenueMoneyView, RevenueWhatIf, RevenueSensitivityTable, RevenueRollupView, RevenueLoadState, Section, HowCalculated, useRevenueImpact,
 } from './RevenueImpact';
+import BusinessImpactHowItWorks from './BusinessImpactHowItWorks';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, buttonClass, inputClass, cx } from './ui';
 
 // Renders the AI response (HTML produced by the LLM). Treated as untrusted: sanitized before rendering.
@@ -197,6 +198,8 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
   const [calculating, setCalculating] = useState(false);
   const [aiAnalyzing, setAiAnalyzing] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string>('');
+  const [aiSource, setAiSource] = useState<'ai' | 'rules'>('rules');
+  const [plainSummary, setPlainSummary] = useState<string>('');
 
   const [teams, setTeams] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string>(propTeamId || '');
@@ -242,6 +245,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
         setDataSummary(data.summary || null);
         setMethod(data.correlationMethod || null);
         setLastStoredAt(data.dataStatus?.last_validated_at ?? null);
+        setPlainSummary(data.plainSummary || '');
       } else {
         const err = await response.json().catch(() => null);
         if (response.status !== 404) toast.error(err?.error || 'Failed to load data');
@@ -262,6 +266,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
   useEffect(() => {
     if (!selectedTeamId) return;
     setAiAnalysis('');
+    setAiSource('rules');
     fetchData(selectedTeamId);
   }, [selectedTeamId, fetchData]);
 
@@ -343,6 +348,8 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
       if (response.ok) {
         const data = await response.json();
         setAiAnalysis(data.analysis || '');
+        setAiSource(data.source === 'ai' ? 'ai' : 'rules');
+        if (data.source !== 'ai') toast(data.note || 'The AI provider is not available; showing the rule-based summary.');
       } else {
         const err = await response.json().catch(() => null);
         toast.error(err?.error || 'Failed to analyze correlations');
@@ -445,6 +452,8 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
         }
       />
 
+      <BusinessImpactHowItWorks />
+
       {loading ? (
         <Card>
           <div className="flex items-center justify-center gap-2 py-12 text-sm text-slate-500 dark:text-slate-400">
@@ -481,24 +490,45 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
               </Section>
               <Section title="Monthly trends" subtitle="Test coverage, NPS and churn by month">
                 <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatTile
-                  label="Strongest correlation"
-                  value={strongest ? fmtR(Number(strongest.pearson_correlation)) : '—'}
-                  caption={strongest ? `${labelOf(strongest.quality_metric)} and ${labelOf(strongest.business_kpi)}${strongest.is_significant ? '' : ' (not significant)'}` : 'No correlations calculated'}
-                />
-                <StatTile
-                  label="Significant pairs"
-                  value={correlations.length ? `${significantCount} of ${tested}` : '—'}
-                  caption={hasQ ? 'q < 0.05 after Benjamini–Hochberg correction' : 'p < 0.05, uncorrected (exploratory)'}
-                />
-                <StatTile label="Paired months" value={paired} caption={sampleRange ? `Per-pair sample sizes ${sampleRange}` : undefined} />
-                <StatTile
-                  label="Ready to calculate"
-                  value={paired >= (method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS) ? 'Yes' : 'No'}
-                  tone={paired >= (method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS) ? 'good' : 'neutral'}
-                  caption={paired >= (method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS) ? undefined : `Needs ${(method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS) - paired} more paired months`}
-                />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="details-tiles">
+                <div>
+                  <StatTile
+                    label="Strongest correlation"
+                    value={strongest ? fmtR(Number(strongest.pearson_correlation)) : '—'}
+                    caption={strongest ? `${labelOf(strongest.quality_metric)} and ${labelOf(strongest.business_kpi)}${strongest.is_significant ? '' : ' (not significant)'}` : 'No correlations calculated'}
+                  />
+                  <HowCalculated>
+                    <p>The pair with the largest |r| among the {tested} pairs tested (Pearson r over the months where both values exist).</p>
+                    {strongest && <p>n = {strongest.sample_size} months, p {fmtP(num(strongest.p_value))}, q {fmtP(qOf(strongest))}: {strongest.is_significant ? 'significant (q < 0.05).' : 'not significant after the correction, so it may be chance.'}</p>}
+                  </HowCalculated>
+                </div>
+                <div>
+                  <StatTile
+                    label="Significant pairs"
+                    value={correlations.length ? `${significantCount} of ${tested}` : '—'}
+                    caption={hasQ ? 'q < 0.05 after Benjamini–Hochberg correction' : 'p < 0.05, uncorrected (exploratory)'}
+                  />
+                  <HowCalculated>
+                    <p>Each pair's p-value (two-sided Student t-test, df = n − 2) is adjusted for testing {tested} pairs at once (Benjamini–Hochberg: q = p × pairs ÷ rank, kept monotone). Significant when q &lt; 0.05: on average at most 5% of the pairs called significant are false discoveries.</p>
+                  </HowCalculated>
+                </div>
+                <div>
+                  <StatTile label="Paired months" value={paired} caption={sampleRange ? `Per-pair sample sizes ${sampleRange}` : undefined} />
+                  <HowCalculated>
+                    <p>Months with both a quality-metric row and a business-KPI row{dataSummary?.earliestMonth ? ` (${formatMonth(dataSummary.earliestMonth)} to ${formatMonth(dataSummary.latestMonth ?? dataSummary.earliestMonth)})` : ''}: {dataSummary?.monthsWithQualityData ?? 0} quality months, {dataSummary?.monthsWithKpiData ?? 0} KPI months. A pair uses only the months where both of its values exist.</p>
+                  </HowCalculated>
+                </div>
+                <div>
+                  <StatTile
+                    label="Ready to calculate"
+                    value={paired >= (method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS) ? 'Yes' : 'No'}
+                    tone={paired >= (method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS) ? 'good' : 'neutral'}
+                    caption={paired >= (method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS) ? `${paired} of at least ${method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS} paired months` : `Needs ${(method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS) - paired} more paired months`}
+                  />
+                  <HowCalculated>
+                    <p>Yes when there are at least {method?.minimumPairedMonths ?? MIN_PAIRED_MONTHS} paired months: fewer cannot give a usable test (df = n − 2).</p>
+                  </HowCalculated>
+                </div>
               </div>
 
               <Card>
@@ -522,6 +552,9 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                     </ResponsiveContainer>
                   </div>
                 )}
+                <HowCalculated>
+                  <p>The stored monthly values as entered (or as generated for sample data); nothing is smoothed. Test coverage and NPS use the left axis, churn the right axis (%).</p>
+                </HowCalculated>
               </Card>
 
                 </div>
@@ -542,6 +575,9 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                     ))}
                   </div>
                 )}
+                <HowCalculated>
+                  <p>The 10 pairs with the largest |r|. r = Σ(x − x̄)(y − ȳ) ÷ √(Σ(x − x̄)² · Σ(y − ȳ)²) over the months where both values exist (same month, no lag); p from a two-sided t-test with t = r√(n − 2) ÷ √(1 − r²); q after the Benjamini–Hochberg correction over all {tested} pairs.</p>
+                </HowCalculated>
               </Card>
 
               <Card padded={false}>
@@ -612,9 +648,7 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                 )}
               </Card>
 
-              {correlations.length > 0 && (
-                <AiPanel analyzing={aiAnalyzing} analysis={aiAnalysis} onAnalyze={analyzeCorrelationsWithAI} />
-              )}
+              <AiPanel analyzing={aiAnalyzing} analysis={aiAnalysis || plainSummary} source={aiAnalysis ? aiSource : 'rules'} canGenerate={correlations.length > 0} onAnalyze={analyzeCorrelationsWithAI} />
 
               <Card>
                 <CardHeader title="How to read these results" />
@@ -753,25 +787,30 @@ const CorrelationTile: React.FC<{ c: Correlation }> = ({ c }) => {
   );
 };
 
-const AiPanel: React.FC<{ analyzing: boolean; analysis: string; onAnalyze: () => void }> = ({ analyzing, analysis, onAnalyze }) => (
+const AiPanel: React.FC<{ analyzing: boolean; analysis: string; source: 'ai' | 'rules'; canGenerate: boolean; onAnalyze: () => void }> = ({ analyzing, analysis, source, canGenerate, onAnalyze }) => (
   <Card>
-    <CardHeader
-      title="AI summary"
-      subtitle="Generated by an AI model from the stored correlations. Verify before relying on it; it may overstate relationships."
-      action={
-        <button onClick={onAnalyze} disabled={analyzing} className={cx(buttonClass.secondary, 'disabled:opacity-50')}>
-          {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-          {analyzing ? 'Analyzing…' : 'Generate summary'}
-        </button>
-      }
-    />
-    {analysis ? (
-      <div className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
-        <MarkdownRenderer content={analysis} />
-      </div>
-    ) : (
-      <p className="text-sm text-slate-500 dark:text-slate-400">No summary generated yet.</p>
-    )}
+    <div data-testid="bi-summary">
+      <CardHeader
+        title="Summary"
+        subtitle={source === 'ai'
+          ? 'Written by an AI model from the stored correlations. Verify before relying on it; it may overstate relationships.'
+          : 'Written by fixed rules from the stored correlations (no AI). "Generate AI summary" asks an AI model for a longer reading when one is configured.'}
+        action={canGenerate ? (
+          <button onClick={onAnalyze} disabled={analyzing} className={cx(buttonClass.secondary, 'disabled:opacity-50')}>
+            {analyzing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
+            {analyzing ? 'Analyzing…' : 'Generate AI summary'}
+          </button>
+        ) : undefined}
+      />
+      <div className="mb-2"><Badge tone={source === 'ai' ? 'brand' : 'neutral'}>{source === 'ai' ? 'AI summary' : 'Rule-based summary'}</Badge></div>
+      {analysis ? (
+        <div className="text-sm leading-relaxed text-slate-700 dark:text-slate-300">
+          <MarkdownRenderer content={analysis} />
+        </div>
+      ) : (
+        <p className="text-sm text-slate-500 dark:text-slate-400">No months with both quality and business data yet.</p>
+      )}
+    </div>
   </Card>
 );
 

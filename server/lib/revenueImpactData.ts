@@ -6,7 +6,7 @@ import { query } from '../../src/lib/db';
 import { getFinancialConfig } from './financialConfig';
 import { loadTargetBook, isTargetMetric, type TargetBook } from './targets';
 import {
-  REVENUE_QUALITY_METRICS, allRevenueSensitivities, fitWindow, metricOverlap, latestValues, revenueAtStake, debtRevenueAtRisk,
+  REVENUE_QUALITY_METRICS, allRevenueSensitivities, pooledRevenueFits, type PoolTeamSeries, fitWindow, metricOverlap, latestValues, revenueAtStake, debtRevenueAtRisk,
   incidentDowntimeCost, churnRevenueLoss, financialParams, supportTicketCost, buildMoneySummary,
   type MonthlyRow, type TargetToday, type RevenueSensitivity, type RevenueAtStake, type DebtAtRisk,
   type SimpleMonthlyFigure, type CurrentValue, type MoneySummary, type FinancialParamUsed, type TeamRevenueFigures,
@@ -34,11 +34,35 @@ export interface TeamRevenueImpact {
   latestRevenue: { month: string; value: number } | null;
 }
 
+/**
+ * The monthly series of every active team of the company (the company-wide fallback slope,
+ * pooledRevenueFit). Load once and pass it on when computing several teams (roll-up, summary).
+ */
+export async function loadCompanyPool(companyId: string): Promise<PoolTeamSeries[]> {
+  const [quality, kpis] = await Promise.all([
+    query<MonthlyRow[]>(
+      `SELECT q.* FROM business_impact_quality_metrics q JOIN teams t ON t.id = q.team_id
+        WHERE t.company_id = ? AND t.is_active = TRUE ORDER BY q.team_id, q.month_year`, [companyId]),
+    query<MonthlyRow[]>(
+      `SELECT k.* FROM business_impact_business_kpis k JOIN teams t ON t.id = k.team_id
+        WHERE t.company_id = ? AND t.is_active = TRUE ORDER BY k.team_id, k.month_year`, [companyId]),
+  ]);
+  const byTeam = new Map<string, PoolTeamSeries>();
+  const of = (id: string) => {
+    let t = byTeam.get(id);
+    if (!t) { t = { teamId: id, quality: [], kpis: [] }; byTeam.set(id, t); }
+    return t;
+  };
+  for (const q of quality) of(String(q.team_id)).quality.push(q);
+  for (const k of kpis) of(String(k.team_id)).kpis.push(k);
+  return [...byTeam.values()];
+}
+
 const isSynthetic = (r: Record<string, unknown>) =>
   String(r.data_source ?? r.source ?? '').toLowerCase() === 'synthetic';
 
-export async function computeTeamRevenueImpact(companyId: string, team: TeamRef, book?: TargetBook, now = Date.now()): Promise<TeamRevenueImpact> {
-  const [quality, kpis, context, debtItems, fin, targetBook] = await Promise.all([
+export async function computeTeamRevenueImpact(companyId: string, team: TeamRef, book?: TargetBook, now = Date.now(), companyPool?: PoolTeamSeries[]): Promise<TeamRevenueImpact> {
+  const [quality, kpis, context, debtItems, fin, targetBook, pool] = await Promise.all([
     query<MonthlyRow[]>('SELECT * FROM business_impact_quality_metrics WHERE team_id = ? ORDER BY month_year ASC', [team.id]),
     query<MonthlyRow[]>('SELECT * FROM business_impact_business_kpis WHERE team_id = ? ORDER BY month_year ASC', [team.id]),
     query<MonthlyRow[]>('SELECT month_year, downtime_minutes, major_incident_count FROM business_impact_context WHERE team_id = ? ORDER BY month_year ASC', [team.id]),
@@ -50,16 +74,20 @@ export async function computeTeamRevenueImpact(companyId: string, team: TeamRef,
     ),
     getFinancialConfig(companyId, team.id),
     book ? Promise.resolve(book) : loadTargetBook(companyId),
+    companyPool ? Promise.resolve(companyPool) : loadCompanyPool(companyId),
   ]);
 
   const window = fitWindow(quality, kpis);
-  const sensitivities = allRevenueSensitivities(quality, kpis, window.months);
+  // The team's own rows always (the pool may have been loaded before a change).
+  const poolWithTeam = [...pool.filter(p => p.teamId !== team.id), { teamId: team.id, quality, kpis }];
+  const sensitivities = allRevenueSensitivities(quality, kpis, window.months, pooledRevenueFits(poolWithTeam, window.source));
   const current = latestValues(quality, window.months);
   const targets: Record<string, TargetToday | null> = {};
   for (const m of REVENUE_QUALITY_METRICS) {
     if (!m.targetKey || !isTargetMetric(m.targetKey)) { targets[m.key] = null; continue; }
     const t = targetBook.at({ id: team.id, department_id: team.department_id }, companyId, m.targetKey, now);
-    targets[m.key] = { good: t.good, lowerIsBetter: t.lowerIsBetter, scope: t.scope, validFrom: t.validFrom };
+    const scale = m.targetScale ?? 1;
+    targets[m.key] = { good: scale === 1 ? t.good : Math.round(t.good * scale * 100) / 100, lowerIsBetter: t.lowerIsBetter, scope: t.scope, validFrom: t.validFrom };
   }
 
   const pairedMonths = window.months;

@@ -24,6 +24,7 @@ import { K_ANONYMITY_MIN, privacyInfo } from '../lib/privacy';
 import { wellbeingAcrossTeams } from '../lib/pulse';
 import { benjaminiHochberg, studentTTwoSidedP } from '../lib/stats';
 import { getFinancialConfig } from '../lib/financialConfig';
+import { correlationSummaryHtml } from '../lib/correlationSummary';
 import { BI_CONTEXT_RANGES, BI_KPI_RANGES, BI_QUALITY_RANGES, DEBT_IMPACT_FIELDS, bulkMonthErrors, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 
 const router = express.Router();
@@ -1366,7 +1367,9 @@ router.get('/business-impact-v2/:teamId', authenticateToken, async (req: any, re
         latestMonth: qualityMetrics[qualityMetrics.length - 1]?.month_year ||
           businessKpis[businessKpis.length - 1]?.month_year || null
       },
-      correlationMethod: CORRELATION_METHOD
+      correlationMethod: CORRELATION_METHOD,
+      // Rule-based summary (no AI provider): shown until an AI summary is generated.
+      plainSummary: correlationSummaryHtml({ correlations: matrix.correlations, pairedMonths: matrix.pairedMonths })
     });
   } catch (error) {
     console.error('Error fetching business impact v2:', error);
@@ -1968,9 +1971,11 @@ router.post('/business-impact-v2/:teamId/ai-analysis', aiLimiter, authenticateTo
     const testedCount = aiMatrix.correlations.length;
 
     const groqApiKey = process.env.GROQ_API_KEY;
+    // Without an AI provider (or when it fails, below) the rule-based summary is returned, never an empty box.
+    const rulesSummary = () => correlationSummaryHtml({ correlations: aiMatrix.correlations, pairedMonths: aiMatrix.pairedMonths });
 
     if (!groqApiKey || groqApiKey.length <= 10) {
-      return res.status(400).json({ error: 'Groq API key not configured on server' });
+      return res.json({ success: true, source: 'rules', analysis: rulesSummary(), note: 'No AI provider is configured; this summary is written from fixed rules.' });
     }
 
     // Sanitise the metric labels that go into the prompt to letters/numbers/space
@@ -2048,10 +2053,10 @@ Provide actionable insights that a CTO would understand and use to make investme
       }
 
       console.log('[AI:BIA] Groq responded via', model);
-      res.json({ success: true, analysis: content });
+      res.json({ success: true, source: 'ai', analysis: content });
     } catch (aiError: any) {
       console.error('[AI:BIA] Groq analysis failed after retries:', aiError.message);
-      res.status(502).json({ error: 'AI analysis unavailable — please try again in a moment' });
+      res.json({ success: true, source: 'rules', analysis: rulesSummary(), note: 'The AI provider did not answer; this summary is written from fixed rules.' });
     }
   } catch (error) {
     console.error('[AI][BIA] Error:', error);

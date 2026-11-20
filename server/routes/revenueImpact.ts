@@ -4,10 +4,10 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamAnalytics, policyActor } from '../middleware/access';
 import { analyticsTeamsInScope, canViewRevenueRollup } from '../lib/userPolicy';
 import { loadTargetBook } from '../lib/targets';
-import { computeTeamRevenueImpact, teamFigures, type TeamRef } from '../lib/revenueImpactData';
+import { computeTeamRevenueImpact, loadCompanyPool, teamFigures, type TeamRef } from '../lib/revenueImpactData';
 import {
   REVENUE_QUALITY_METRICS, REVENUE_MIN_PAIRED_MONTHS, REVENUE_ALPHA, REVENUE_CONFIDENCE, MONTHS_PER_YEAR,
-  REVENUE_SENSITIVITY_FORMULA, REVENUE_AT_STAKE_FORMULA, REVENUE_AT_RISK_DEBT_FORMULA, INCIDENT_COST_FORMULA,
+  REVENUE_SENSITIVITY_FORMULA, REVENUE_POOLED_FORMULA, REVENUE_AT_STAKE_FORMULA, REVENUE_AT_RISK_DEBT_FORMULA, INCIDENT_COST_FORMULA,
   CHURN_REVENUE_FORMULA, WHAT_IF_FORMULA, SUPPORT_COST_FORMULA, DOWNTIME_GAP_FORMULA, CONFIDENCE_TEXT, REVENUE_ROLLUP_FORMULA, REVENUE_CAVEATS, rollUpRevenue, whatIf,
 } from '../lib/revenueImpact';
 
@@ -34,6 +34,7 @@ const METHOD = {
   multipleComparison: 'none (exploratory)',
   formulas: {
     sensitivity: REVENUE_SENSITIVITY_FORMULA,
+    companyWide: REVENUE_POOLED_FORMULA,
     revenueAtStake: REVENUE_AT_STAKE_FORMULA,
     debtAtRisk: REVENUE_AT_RISK_DEBT_FORMULA,
     incidents: INCIDENT_COST_FORMULA,
@@ -114,9 +115,9 @@ router.get('/rollup', authenticateToken, async (req: AuthRequest, res) => {
       teams = teams.filter(t => t.department_id === departmentId);
       if (!teams.length) return res.status(403).json({ error: 'Access denied. This department is outside your analytics scope.' });
     }
-    const book = await loadTargetBook(req.companyId as string);
+    const [book, pool] = await Promise.all([loadTargetBook(req.companyId as string), loadCompanyPool(req.companyId as string)]);
     const figures = [];
-    for (const t of teams) figures.push(teamFigures(await computeTeamRevenueImpact(req.companyId as string, t, book), t));
+    for (const t of teams) figures.push(teamFigures(await computeTeamRevenueImpact(req.companyId as string, t, book, Date.now(), pool), t));
     res.json({
       scope: departmentId ? 'department' : 'all-in-scope',
       departmentId,

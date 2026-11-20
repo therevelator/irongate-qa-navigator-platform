@@ -12,7 +12,7 @@
  *
  * Wording rule: results are associations in the team's history ("associated with"), never causes.
  */
-import { olsFit, type OlsFit } from './stats';
+import { olsFit, studentTQuantile, studentTTwoSidedP, type OlsFit } from './stats';
 import {
   FINANCIAL_PARAM_LABELS, techDebtCostOfDelay, toNum,
   type FinancialConfig, type FinancialKey, type TechDebtImpactInputs,
@@ -36,22 +36,27 @@ export interface RevenueQualityMetric {
   label: string;
   /** unit of one step of the metric, used in "+1 <unit>" */
   unit: string;
-  /** target_history metric key whose target applies (same unit), or null when none matches */
+  /** target_history metric key whose target applies, or null when none matches */
   targetKey: string | null;
+  /** factor that converts the KPI target into this metric's unit (default 1) */
+  targetScale?: number;
   lowerIsBetter: boolean;
 }
 
+/** Weeks per month (52 ÷ 12): converts a per-week KPI target into a per-month value. */
+export const WEEKS_PER_MONTH = 52 / 12;
+
 /**
  * The eight monthly quality metrics of the business-impact data (BI_QUALITY_FIELDS) with the KPI
- * target that applies to each. Deployment frequency has no target with the same unit (the KPI
- * target is per week; the monthly series is entered as recorded), so it gets no gap to target.
+ * target that applies to each. Deployment frequency is recorded per month; its KPI target is per
+ * week, so the target is converted with × 52 ÷ 12 (WEEKS_PER_MONTH).
  */
 export const REVENUE_QUALITY_METRICS: RevenueQualityMetric[] = [
   { key: 'test_coverage', label: 'Test coverage', unit: 'percentage point', targetKey: 'test_coverage', lowerIsBetter: false },
   { key: 'defect_density', label: 'Defect density', unit: 'defect per KLOC', targetKey: 'defect_density', lowerIsBetter: true },
   { key: 'defect_escape_rate', label: 'Defect escape rate', unit: 'percentage point', targetKey: 'defect_escape_rate', lowerIsBetter: true },
   { key: 'mttr_hours', label: 'MTTR', unit: 'hour', targetKey: 'mttr_hours', lowerIsBetter: true },
-  { key: 'deployment_frequency', label: 'Deploy frequency', unit: 'deployment', targetKey: null, lowerIsBetter: false },
+  { key: 'deployment_frequency', label: 'Deploy frequency', unit: 'deployment', targetKey: 'deployment_frequency_per_week', targetScale: WEEKS_PER_MONTH, lowerIsBetter: false },
   { key: 'lead_time_days', label: 'Lead time', unit: 'day', targetKey: 'lead_time_days', lowerIsBetter: true },
   { key: 'code_quality_score', label: 'Code quality', unit: 'point', targetKey: 'code_quality_score', lowerIsBetter: false },
   { key: 'change_failure_rate', label: 'Change failure rate', unit: 'percentage point', targetKey: 'change_failure_rate', lowerIsBetter: true },
@@ -63,12 +68,22 @@ export const REVENUE_SENSITIVITY_FORMULA =
   'b = Σ(x − x̄)(y − ȳ) ÷ Σ(x − x̄)²; SE(b) = √(Σ residual² ÷ (n − 2) ÷ Σ(x − x̄)²); t = b ÷ SE(b), df = n − 2, two-sided p; ' +
   `${REVENUE_CONFIDENCE * 100}% interval = b ± t(0.975, n − 2) × SE(b); r = Pearson correlation, R² = r². ` +
   `Significant when p < ${REVENUE_ALPHA} (exploratory, not corrected for multiple comparisons). ` +
-  'Sample data and measured data are never fitted together: when both exist, only the months with the same kind of source as the latest month are used.';
+  'Sample data and measured data are never fitted together: when both exist, only the months with the same kind of source as the latest month are used. ' +
+  'When the team\'s own slope is not significant (or the metric did not change), the company-wide slope is used if it is significant (see below).';
+
+/** Company-wide (pooled) fallback for a team whose own months show no reliable association. */
+export const REVENUE_POOLED_FORMULA =
+  'Company-wide slope (used only when the team\'s own slope is not significant): the company\'s teams with at least ' +
+  `${REVENUE_MIN_PAIRED_MONTHS} paired months of the same kind of source are fitted together, each against its own averages ` +
+  '(within-team fit): x = metric − the team\'s average metric, y = monthly revenue ÷ the team\'s average monthly revenue − 1. ' +
+  'b = Σxy ÷ Σx² (share of revenue per +1 unit); SE(b) = √(Σ residual² ÷ (N − teams − 1) ÷ Σx²); t-test with df = N − teams − 1; ' +
+  `${REVENUE_CONFIDENCE * 100}% interval = b ± t × SE(b). Needs at least 2 teams. $ per +1 unit for this team = b × this team's average monthly revenue.`;
 
 export const REVENUE_AT_STAKE_FORMULA =
-  'Monthly revenue at stake = Σ over metrics with a significant slope of b × (target − current value), ' +
-  'where current value = the latest month of the series and target = the KPI target valid today (team, else department, else company, else default); ' +
-  'a metric already at its target adds 0. Metrics are taken in order of evidence (smallest p first); a metric whose monthly series ' +
+  'Monthly revenue at stake = Σ over metrics with a significant slope (the team\'s own, else the company-wide one) of b × (target − current value), ' +
+  'where current value = the latest month of the series and target = the KPI target valid today (team, else department, else company, else default; ' +
+  'deployment frequency: the weekly target × 52 ÷ 12); ' +
+  'a metric already at its target adds 0. Metrics below target are taken first, in order of evidence (smallest p first); a metric whose monthly series ' +
   `correlates at |r| ≥ ${REVENUE_OVERLAP_R} with one already counted is shown but not added (the same movement would be counted twice). ` +
   'Range = Σ of each counted metric\'s (interval low × gap, interval high × gap). ' +
   `Annualised = monthly × ${MONTHS_PER_YEAR}.`;
@@ -89,7 +104,7 @@ export const CHURN_REVENUE_FORMULA =
 
 export const WHAT_IF_FORMULA =
   'Projected change in monthly revenue = b × change in the metric; range = (interval low × change, interval high × change); ' +
-  `annual = monthly × ${MONTHS_PER_YEAR}. Only for a significant slope.`;
+  `annual = monthly × ${MONTHS_PER_YEAR}. Only for a significant slope (the team's own, else the company-wide one).`;
 
 export const REVENUE_ROLLUP_FORMULA =
   'Roll-up = the sum of the team figures (revenue at stake with its range, cost of open debt) over the teams in scope that have the figure; ' +
@@ -136,6 +151,12 @@ export interface RevenueSensitivity {
   minX: number | null;
   maxX: number | null;
   reason: string | null;
+  /** 'team': fitted on the team's own months; 'company': the company-wide (pooled) slope, used when the team's own is not significant */
+  basis?: 'team' | 'company';
+  /** the team's own fit when the company-wide slope is used (null when the metric did not change) */
+  own?: { slope: number | null; r: number | null; pValue: number | null; n: number; minX: number | null; maxX: number | null; reason: string | null } | null;
+  /** the company-wide fit behind a 'company' slope */
+  pooled?: PooledFit | null;
 }
 
 export interface CurrentValue { value: number; month: string }
@@ -288,17 +309,117 @@ export function metricOverlap(qualityRows: MonthlyRow[], a: string, b: string, m
 }
 
 // ---------------------------------------------------------------------------
-// 1. Revenue sensitivity per quality metric
+// 1a. Company-wide (pooled, within-team) slope: the fallback for a team whose own months are inconclusive
 // ---------------------------------------------------------------------------
 
-export function revenueSensitivity(qualityRows: MonthlyRow[], kpiRows: MonthlyRow[], metric: string, months?: string[]): RevenueSensitivity {
+/** One team's stored monthly series, for the company-wide fit. */
+export interface PoolTeamSeries { teamId: string; quality: MonthlyRow[]; kpis: MonthlyRow[] }
+
+export interface PooledFit {
+  metric: string;
+  /** months used, over all contributing teams */
+  n: number;
+  /** number of contributing teams (at least 2); no team ids, the fit may include teams outside the reader's scope */
+  teams: number;
+  df: number;
+  /** share of monthly revenue per +1 unit of the metric (0.01 = 1 %) */
+  share: number;
+  shareLow: number;
+  shareHigh: number;
+  r: number;
+  pValue: number;
+  significant: boolean;
+  /** range of the metric over the months used (all contributing teams) */
+  minX: number;
+  maxX: number;
+  source: 'measured' | 'sample' | null;
+}
+
+/**
+ * Within-team pooled fit of one metric over the company's teams (REVENUE_POOLED_FORMULA): each team
+ * against its own averages (x − x̄ₜ, y ÷ ȳₜ − 1), so differences in revenue size between teams and
+ * each team's level do not count, only how revenue moved with the metric inside each team.
+ * Only teams whose months used are of `source` (sample or measured, never mixed). null when fewer
+ * than 2 teams contribute or the metric / revenue never changed.
+ */
+export function pooledRevenueFit(pool: PoolTeamSeries[], metric: string, source: 'measured' | 'sample' | null): PooledFit | null {
+  let sxx = 0, sxy = 0, syy = 0, n = 0, minX = Infinity, maxX = -Infinity;
+  let teams = 0;
+  for (const t of pool) {
+    const w = fitWindow(t.quality, t.kpis);
+    if (w.source !== source) continue;
+    const p = pairs(t.quality, t.kpis, metric, w.months);
+    if (p.length < REVENUE_MIN_PAIRED_MONTHS) continue;
+    const mx = p.reduce((a, v) => a + v.x, 0) / p.length;
+    const my = p.reduce((a, v) => a + v.y, 0) / p.length;
+    if (!(my > 0)) continue;
+    let tx = 0;
+    for (const v of p) tx += (v.x - mx) ** 2;
+    if (tx === 0) continue;
+    for (const v of p) {
+      const dx = v.x - mx, dy = v.y / my - 1;
+      sxx += dx * dx; sxy += dx * dy; syy += dy * dy;
+      if (v.x < minX) minX = v.x;
+      if (v.x > maxX) maxX = v.x;
+    }
+    n += p.length;
+    teams++;
+  }
+  const df = n - teams - 1;
+  if (teams < 2 || df < 3 || sxx === 0 || syy === 0) return null;
+  const share = sxy / sxx;
+  const sse = Math.max(0, syy - share * sxy);
+  const se = Math.sqrt(sse / df / sxx);
+  const r = Math.max(-1, Math.min(1, sxy / Math.sqrt(sxx * syy)));
+  const pValue = se === 0 ? 0 : studentTTwoSidedP(share / se, df);
+  const half = studentTQuantile(1 - REVENUE_CONFIDENCE, df) * se;
+  return {
+    metric, n, teams, df, share, shareLow: share - half, shareHigh: share + half, r, pValue,
+    significant: pValue < REVENUE_ALPHA, minX, maxX, source,
+  };
+}
+
+/** Company-wide fits of every metric (null where none is possible). */
+export function pooledRevenueFits(pool: PoolTeamSeries[], source: 'measured' | 'sample' | null): Record<string, PooledFit | null> {
+  return Object.fromEntries(REVENUE_QUALITY_METRICS.map(m => [m.key, pooledRevenueFit(pool, m.key, source)]));
+}
+
+// ---------------------------------------------------------------------------
+// 1b. Revenue sensitivity per quality metric
+// ---------------------------------------------------------------------------
+
+/**
+ * The team's slope for a metric. When the team's own slope is not significant (or the metric did
+ * not change) and `pooled` is a significant company-wide fit, the company-wide slope is used,
+ * scaled to this team's average monthly revenue (basis 'company'); the team's own fit is kept in `own`.
+ */
+export function revenueSensitivity(qualityRows: MonthlyRow[], kpiRows: MonthlyRow[], metric: string, months?: string[], pooled?: PooledFit | null): RevenueSensitivity {
+  const own = ownRevenueSensitivity(qualityRows, kpiRows, metric, months);
+  if (own.status === 'insufficient_data' || own.significant || !pooled || !pooled.significant) return own;
+  const p = pairs(qualityRows, kpiRows, metric, months);
+  const meanRevenue = p.reduce((a, v) => a + v.y, 0) / p.length;
+  if (!(meanRevenue > 0)) return own;
+  const [lo, hi] = ordered(pooled.shareLow * meanRevenue, pooled.shareHigh * meanRevenue);
+  return {
+    ...own,
+    status: 'fitted', basis: 'company', monthsMissing: 0, n: pooled.n,
+    slope: pooled.share * meanRevenue, ciLow: lo, ciHigh: hi, r: pooled.r, r2: pooled.r * pooled.r, pValue: pooled.pValue, significant: true,
+    minX: pooled.minX, maxX: pooled.maxX,
+    own: { slope: own.slope, r: own.r, pValue: own.pValue, n: own.n, minX: own.minX ?? Math.min(...p.map(v => v.x)), maxX: own.maxX ?? Math.max(...p.map(v => v.x)), reason: own.reason },
+    pooled,
+    reason: `This team's own months show no reliable association (${own.status === 'no_variance' ? 'the metric did not change' : `p = ${(own.pValue ?? 1) < 0.001 ? '< 0.001' : (own.pValue ?? 1).toFixed(3)}`}); ` +
+      `the company-wide slope over ${pooled.teams} teams (${pooled.n} months, p ${pooled.pValue < 0.001 ? '< 0.001' : `= ${pooled.pValue.toFixed(3)}`}) is used, scaled to this team's average monthly revenue.`,
+  };
+}
+
+function ownRevenueSensitivity(qualityRows: MonthlyRow[], kpiRows: MonthlyRow[], metric: string, months?: string[]): RevenueSensitivity {
   const def = metricDef(metric);
   const p = pairs(qualityRows, kpiRows, metric, months);
   const base: RevenueSensitivity = {
     metric, label: def?.label ?? metric, unit: def?.unit ?? 'unit', lowerIsBetter: def?.lowerIsBetter ?? false,
     status: 'insufficient_data', n: p.length, monthsMissing: Math.max(0, REVENUE_MIN_PAIRED_MONTHS - p.length),
     firstMonth: p[0]?.month ?? null, lastMonth: p[p.length - 1]?.month ?? null,
-    slope: null, ciLow: null, ciHigh: null, r: null, r2: null, pValue: null, significant: false, minX: null, maxX: null, reason: null,
+    slope: null, ciLow: null, ciHigh: null, r: null, r2: null, pValue: null, significant: false, minX: null, maxX: null, reason: null, basis: 'team',
   };
   if (p.length < REVENUE_MIN_PAIRED_MONTHS) return { ...base, reason: monthsMissingText(p.length) };
   const fit: OlsFit | null = olsFit(p.map(v => v.x), p.map(v => v.y), REVENUE_CONFIDENCE);
@@ -314,9 +435,9 @@ export function revenueSensitivity(qualityRows: MonthlyRow[], kpiRows: MonthlyRo
   };
 }
 
-export function allRevenueSensitivities(qualityRows: MonthlyRow[], kpiRows: MonthlyRow[], months?: string[]): RevenueSensitivity[] {
+export function allRevenueSensitivities(qualityRows: MonthlyRow[], kpiRows: MonthlyRow[], months?: string[], pooled?: Record<string, PooledFit | null>): RevenueSensitivity[] {
   const m = months ?? fitWindow(qualityRows, kpiRows).months;
-  return REVENUE_QUALITY_METRICS.map(d => revenueSensitivity(qualityRows, kpiRows, d.key, m));
+  return REVENUE_QUALITY_METRICS.map(d => revenueSensitivity(qualityRows, kpiRows, d.key, m, pooled?.[d.key] ?? null));
 }
 
 /** The latest month with a value of each quality metric (within `months` when given). */
@@ -360,10 +481,13 @@ export function revenueAtStake(
     return { ...row, included: true, monthly: (s.slope as number) * (gap as number), monthlyLow: lo, monthlyHigh: hi };
   });
 
-  // Count each movement once: strongest evidence first; skip a metric that overlaps a counted one.
+  // Count each movement once: metrics below target first (a metric already at its target adds 0 and
+  // must not hide a gap in a metric that moves with it), strongest evidence first; skip a metric
+  // that overlaps a counted one.
   const pOf = (m: string) => sensitivities.find(s => s.metric === m)?.pValue ?? 1;
+  const met = (r: StakeRow) => (r.gap === 0 ? 1 : 0);
   const counted: StakeRow[] = [];
-  for (const row of rows.filter(r => r.included).sort((a, b) => pOf(a.metric) - pOf(b.metric) || a.metric.localeCompare(b.metric))) {
+  for (const row of rows.filter(r => r.included).sort((a, b) => met(a) - met(b) || pOf(a.metric) - pOf(b.metric) || a.metric.localeCompare(b.metric))) {
     const hit = counted.map(c => ({ c, r: overlap(row.metric, c.metric) })).find(o => o.r !== null && Math.abs(o.r) >= REVENUE_OVERLAP_R);
     if (hit) {
       row.included = false;
@@ -528,12 +652,13 @@ export const MONEY_SUMMARY_TEXT = {
   priorities: 'Fixes ranked by the monthly gain; where a fix has an effort estimate, also by gain per dollar spent (from the technical-debt ROI).',
 };
 
-export type GainConfidence = 'strong' | 'some' | 'estimate';
+export type GainConfidence = 'strong' | 'some' | 'company' | 'estimate';
 
 export const CONFIDENCE_TEXT: Record<GainConfidence, string> = {
-  strong: 'Strong evidence (p < 0.01)',
-  some: 'Some evidence (p < 0.05)',
-  estimate: 'Cost estimate from entered impact',
+  strong: 'Strong evidence (p < 0.01) in this team\'s own months',
+  some: 'Some evidence (p < 0.05) in this team\'s own months',
+  company: 'Company-wide evidence (p < 0.05 across the company\'s teams); this team\'s own months are inconclusive',
+  estimate: 'Cost estimate from entered impact and your financial settings',
 };
 
 export interface MoneyLine {
@@ -629,12 +754,14 @@ export function buildMoneySummary(input: {
 }): MoneySummary {
   const { sensitivities, stake, debt, incidents, support, churn, config, defaultsUsed } = input;
   const usesDefault = (keys: FinancialKey[]) => keys.some(k => defaultsUsed.includes(k));
+  const gapCount = stake.rows.filter(r => r.included && r.gap !== 0).length;
 
   const goingNow: MoneyLine[] = [
     {
       key: 'quality_gaps', label: 'Quality below target',
       sentence: stake.monthly !== null
-        ? `Revenue associated with closing the gaps to target in ${stake.metricsIncluded} metric${stake.metricsIncluded === 1 ? '' : 's'} (each movement counted once).`
+        ? `Revenue associated with closing the gaps to target in ${gapCount} metric${gapCount === 1 ? '' : 's'} (each movement counted once)` +
+          `${sensitivities.some(x => x.basis === 'company' && stake.rows.some(r => r.included && r.metric === x.metric)) ? '; uses the company-wide link where this team\'s own months are inconclusive' : ''}.`
         : 'Revenue associated with quality below target.',
       monthly: stake.monthly, monthlyLow: stake.monthlyLow, monthlyHigh: stake.monthlyHigh, annual: stake.annual, reason: stake.reason, formula: REVENUE_AT_STAKE_FORMULA,
     },
@@ -682,7 +809,7 @@ export function buildMoneySummary(input: {
       sentence: `${lower ? 'Bring' : 'Raise'} ${/^[A-Z]{2,}/.test(row.label) ? row.label : row.label.toLowerCase()} from ${row.current!.value} to ${row.target!.good} (${lower ? 'down' : 'up'} ${unitText(row.metric, row.gap)}).`,
       monthly: row.monthly, monthlyLow: row.monthlyLow, monthlyHigh: row.monthlyHigh,
       annual: row.monthly * MONTHS_PER_YEAR, annualLow: row.monthlyLow === null ? null : row.monthlyLow * MONTHS_PER_YEAR, annualHigh: row.monthlyHigh === null ? null : row.monthlyHigh * MONTHS_PER_YEAR,
-      confidence: (s.pValue ?? 1) < 0.01 ? 'strong' : 'some',
+      confidence: s.basis === 'company' ? 'company' : (s.pValue ?? 1) < 0.01 ? 'strong' : 'some',
       overlapsWith: null,
       movesWith: stake.rows.filter(o => o.overlapsWith === row.metric).map(o => o.label),
       fixCost: null, returnPerDollar: null, paybackMonths: null, usesDefaults: false, formula: REVENUE_AT_STAKE_FORMULA,

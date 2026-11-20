@@ -9,7 +9,7 @@ import { QA_SCORE_THRESHOLDS, qaStatusFromScore, toNum } from '../lib/metricForm
 import { evaluateLatestSnapshot, evaluateSnapshot, loadDataClock, type EvalContext } from '../lib/kpiEvaluation';
 import { loadIntervals, referenceFor } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
-import { computeTeamRevenueImpact, teamFigures, type TeamRef } from '../lib/revenueImpactData';
+import { computeTeamRevenueImpact, loadCompanyPool, teamFigures, type TeamRef } from '../lib/revenueImpactData';
 import { REVENUE_CAVEATS, rollUpRevenue } from '../lib/revenueImpact';
 import { computeCompanyMetrics } from './analytics';
 import {
@@ -161,7 +161,8 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
     // 5. Money at risk: the Business impact roll-up over the scope (super admins and managers).
     let money: any = null;
     if (canViewRevenueRollup(actor)) {
-      const figures = await Promise.all(teams.map(async (t) => teamFigures(await computeTeamRevenueImpact(companyId, t, ctx.book, now), t)));
+      const pool = await loadCompanyPool(companyId);
+      const figures = await Promise.all(teams.map(async (t) => teamFigures(await computeTeamRevenueImpact(companyId, t, ctx.book, now, pool), t)));
       const roll = rollUpRevenue(figures);
       money = {
         available: true,
