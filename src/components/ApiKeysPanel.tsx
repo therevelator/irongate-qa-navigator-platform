@@ -14,7 +14,9 @@ interface ApiKey {
 }
 
 /**
- * Admin console section: per-company API keys for POST /api/ingest/kpis.
+ * Admin console section: per-company API keys for every ingestion route: the raw reports
+ * (POST /api/ingest/tests, coverage, pipelines, deployments, commits, incidents, issues,
+ * static-analysis) and computed KPIs (POST /api/ingest/kpis). See server/middleware/apiKey.ts.
  * The plaintext key is shown once, right after creation.
  */
 const ApiKeysPanel: React.FC = () => {
@@ -95,7 +97,7 @@ const ApiKeysPanel: React.FC = () => {
       <div className="px-5 pt-5">
         <CardHeader
           title="API keys"
-          subtitle={<>Keys let external systems (CI, issue tracker, code analysis) send team KPIs to <code className="font-mono">POST /api/ingest/kpis</code>. A key can write any team in this company. Only a hash is stored; the key is shown once.</>}
+          subtitle={<>Keys let external systems (CI, issue tracker, code analysis) send data to every ingestion route: raw reports (<code className="font-mono">/api/ingest/tests</code>, <code className="font-mono">coverage</code>, <code className="font-mono">pipelines</code>, <code className="font-mono">deployments</code>, <code className="font-mono">commits</code>, <code className="font-mono">incidents</code>, <code className="font-mono">issues</code>, <code className="font-mono">static-analysis</code>) and computed KPIs (<code className="font-mono">POST /api/ingest/kpis</code>). A key can write any team in this company. Only a hash is stored; the key is shown once.</>}
         />
         <form onSubmit={create} className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
           <label htmlFor="api-key-name" className="sr-only">Key name</label>

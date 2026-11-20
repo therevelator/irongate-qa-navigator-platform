@@ -275,9 +275,9 @@ mysql --user=$AIVEN_USER \\
 
 ## Support
 
-- Full deployment guide: \`DEPLOYMENT_GUIDE.md\`
-- Quick start: \`QUICK_DEPLOY.md\`
-- AWS alternative: \`AWS_DEPLOYMENT.md\`
+- Full deployment guide: \`docs/DEPLOYMENT_GUIDE.md\`
+- Quick start (archived): \`docs/archive/QUICK_DEPLOY.md\`
+- AWS alternative (archived): \`docs/archive/AWS_DEPLOYMENT.md\`
 EOF
 fi
 

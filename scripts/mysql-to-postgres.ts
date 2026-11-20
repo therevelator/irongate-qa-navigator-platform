@@ -9,7 +9,7 @@
  * Usage:
  *   MYSQL_URL=mysql://user:pass@127.0.0.1:3306/irongate_qa npx tsx scripts/mysql-to-postgres.ts
  *
- * See docs/SUPABASE_MIGRATION.md for the full procedure.
+ * See docs/archive/SUPABASE_MIGRATION.md for the full procedure (archived).
  */
 import mysql from 'mysql2/promise';
 import fs from 'fs';
