@@ -1,746 +1,168 @@
-# 🚀 QA Dashboard Deployment Guide
+# Deployment guide
 
-Complete step-by-step guide to deploy your QA Dashboard to production using **free** resources.
+How to deploy QE Navigator: the database on Supabase (PostgreSQL), the app and API on Netlify, or the
+same code as one long-running Node service. Also: environment variables (names only), migrations,
+scheduled jobs and checks after a deploy.
 
-## 📋 Architecture Overview
+## Architecture
 
-- **Frontend**: React app hosted on Netlify (Free tier)
-- **Backend API**: Netlify Functions (Serverless)
-- **Database**: Free MySQL hosting options
-- **Cost**: $0/month for small-scale usage
+| Part | Where | Code |
+|---|---|---|
+| Front end (React 19, Vite, Tailwind CSS 4) | Netlify static site (`dist/`) | `src/` |
+| API (Express 5) | Netlify Function `api` (all `/api/*` requests), or a Node process | `server/`, `netlify/functions/api.ts` |
+| Scheduled jobs | Netlify Scheduled Functions, or `node-cron` in the Node process | `netlify/functions/*.ts`, `server/jobs/` |
+| Database | PostgreSQL on Supabase | `supabase/migrations/` |
+| E-mail | Resend (preferred) or SMTP | `server/lib/mailer.ts` |
 
----
+`netlify/functions/api.ts` mounts the same routers as `server/index.ts`, so both deployments behave the
+same. On Netlify there is no WebSocket; pages refresh on load and on their own timers.
 
-## 🗄️ Step 1: Set Up Free MySQL Database
+## 1. Database (Supabase)
 
-### Option A: Aiven (Recommended - Free 1GB, No Credit Card)
+1. Create a Supabase project in a region close to the Netlify functions (Netlify functions run in
+   `us-east-1` by default).
+2. Load the schema. From a machine with `psql`, using the **session pooler** connection string (port 5432),
+   apply the files of `supabase/migrations/` in file-name (timestamp) order:
 
-1. **Create Account**
-   - Go to [aiven.io](https://aiven.io)
-   - Sign up with email (no credit card required)
-   - Free tier: 1GB storage, 1 CPU, 1GB RAM
-
-2. **Create MySQL Service**
    ```bash
-   # After signing in:
-   - Click "Create service"
-   - Select "MySQL"
-   - Choose "Free" plan
-   - Select cloud provider: AWS/Google/Azure
-   - Choose region closest to you
-   - Name: "qa-dashboard-db"
-   - Click "Create service"
+   for f in $(ls supabase/migrations/*.sql | sort); do
+     psql "$SUPABASE_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+   done
    ```
 
-3. **Wait for Service to Start** (2-3 minutes)
-   - Status will change from "Rebuilding" to "Running"
+   Migrations are additive and idempotent; running one again does no harm. For a new empty database,
+   that is all. `scripts/ci/prepare-db.sh` shows the exact order CI uses (initial schema, the data snapshot
+   `db_snapshots/latest_snapshot.postgres.sql`, then the later migrations); it only runs against a local
+   host.
+3. The app uses the **transaction pooler** connection string (port 6543) as `DATABASE_URL`. SSL is turned on
+   automatically for non-local hosts.
 
-4. **Get Connection String**
-   ```bash
-   # In service overview:
-   - Click "Connection information"
-   - Copy "Service URI" or individual credentials
-   
-   # Format:
-   mysql://avnadmin:password@host:port/defaultdb?ssl-mode=REQUIRED
-   ```
+Row Level Security is enabled on every table with no policies; the app connects as the owner. Do not add
+policies unless you start using the Supabase client libraries.
 
-5. **Initialize Database**
-   - Use Aiven web console SQL editor
-   - Or connect via MySQL client
+**New migrations.** Add a file `supabase/migrations/<YYYYMMDDHHMMSS>_<name>.sql`, written so it can run twice
+(`IF NOT EXISTS`, `ON CONFLICT`). Apply it to each environment with `psql` before or together with the deploy
+that needs it. CI applies every migration to a fresh database on each push, so a broken migration fails
+the build.
 
-### Option B: Railway (Free $5 credit/month)
+Free Supabase projects pause after about a week without activity; `db-keepalive` runs twice a day to
+prevent that, or restore the project from the Supabase dashboard.
 
-1. **Create Account**
-   - Go to [railway.app](https://railway.app)
-   - Sign up with GitHub
-   - Free: $5 credit/month (renews monthly)
+## 2. Netlify
 
-2. **Create MySQL Database**
-   ```bash
-   - Click "New Project"
-   - Select "Provision MySQL"
-   - Database is created instantly
-   ```
+1. Connect the repository in Netlify. `netlify.toml` sets the build (`npm run build`, publish `dist`,
+   functions in `netlify/functions`, Node 22), the `/api/*` redirect to the `api` function, the SPA fallback
+   and security headers.
+2. Set the environment variables (section 4) under Site configuration → Environment variables.
+3. Deploy. After changing variables, trigger a new deploy.
 
-3. **Get Connection Details**
-   ```bash
-   - Click on MySQL service
-   - Go to "Variables" tab
-   - Copy MYSQL_URL or individual variables
-   
-   # Format:
-   mysql://root:password@host:port/railway
-   ```
+Netlify functions on Netlify:
 
-### Option C: FreeSQLDatabase.com (Free 5MB)
+| Function | Schedule (UTC) | What it does |
+|---|---|---|
+| `api` | every `/api/*` request | the Express app |
+| `alerts-evaluate` | hourly at :15 | alert evaluation, action outcomes, notifications; then forecasts and recommendations of due teams |
+| `weekly-digest` | Monday 07:00 | weekly digest e-mails |
+| `pulse-auto-send` | hourly at :40 | automatic wellbeing pulse e-mails per team cadence |
+| `calc-recompute` | daily 03:41 | recalculates the last days of metrics from raw data |
+| `db-keepalive` | 06:00 and 18:00 | keeps the database awake; retention cleanup (logs, sessions, sign-in events, raw payloads) |
+| `demo-refresh` | daily 02:17 | starts `demo-refresh-background`, which adds the missing recent days of sample data (never real data) |
+| `demo-data-background` | on demand | the operator's Demo Data and Populate metrics jobs (up to 15 minutes) |
 
-1. **Create Account**
-   - Go to [freesqldatabase.com](https://www.freesqldatabase.com)
-   - Sign up for free
-   - Free tier: 5MB storage (good for testing)
+## 3. Long-running Node service (alternative)
 
-2. **Create Database**
-   - Fill in database name
-   - Get instant credentials
-   - Use phpMyAdmin for management
+`npm run build` then `npm run server:prod` serves the API and the built app from `dist/` on `PORT`.
+`railway.json` has this configuration (health check `/health`). The jobs run in-process with `node-cron`:
 
-3. **Connection Details**
-   ```
-   Host: sql.freedb.tech
-   Port: 3306
-   Database: your_db_name
-   Username: your_username
-   Password: your_password
-   ```
+| Job | Variable (default) | File |
+|---|---|---|
+| Alerts, notifications, forecasts and recommendations | `ALERTS_EVALUATE_CRON` (`15 * * * *`) | `server/jobs/alertsCron.ts` |
+| Weekly digest | `DIGEST_CRON` (`0 7 * * 1`) | `server/jobs/alertsCron.ts` |
+| Pulse e-mails | `PULSE_SEND_CRON` (`40 * * * *`) | `server/jobs/pulseCron.ts` |
+| Retention cleanup | `LOG_CLEANUP_CRON` (`7 3 * * *`) | `server/jobs/cleanupCron.ts` |
+| Recompute from raw data | `CALC_RECOMPUTE_CRON` (`41 3 * * *`) | `server/jobs/cleanupCron.ts` |
 
-### Option D: AWS RDS MySQL (Free Tier - 12 Months)
+`ALERTS_CRON=false` and `PULSE_CRON=false` turn those jobs off (for example on a second instance);
+`LOG_CLEANUP_CRON=off` and `CALC_RECOMPUTE_CRON=off` likewise. The sample-data jobs
+(`server/jobs/intervalSync.ts`, `analyticsSync.ts`) only write when `ENABLE_SYNTHETIC_DATA=true`.
 
-**Best for production use! 20GB storage, 750 hours/month**
+## 4. Environment variables
 
-1. **Sign in to AWS Console**
-   - Go to [console.aws.amazon.com](https://console.aws.amazon.com)
-   - Navigate to **RDS** service
+Names only. Never commit values. `.env.example` is the local template; `.env` is git-ignored. Anything
+prefixed `VITE_` ends up in the browser bundle.
 
-2. **Create Database**
-   ```bash
-   # In RDS Dashboard:
-   - Click "Create database"
-   - Choose "Standard create"
-   - Engine: MySQL (latest version)
-   - Templates: "Free tier" ✅
-   ```
+**Required**
 
-3. **Configure Settings**
-   ```bash
-   DB instance identifier: qa-dashboard-db
-   Master username: admin
-   Master password: [create strong password]
-   
-   DB instance class: db.t3.micro (free tier eligible)
-   Storage: 20 GB (General Purpose SSD)
-   
-   Connectivity:
-   - Public access: Yes ✅
-   - VPC security group: Create new
-   - Database port: 3306
-   ```
+| Variable | Purpose |
+|---|---|
+| `DATABASE_URL` | PostgreSQL connection string (Supabase transaction pooler). `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` are an alternative |
+| `JWT_SECRET` | Signs session tokens; the API will not start in production without it |
 
-4. **Configure Security Group**
-   ```bash
-   # After database is created:
-   - Go to EC2 → Security Groups
-   - Find your RDS security group
-   - Edit inbound rules
-   - Add rule: MySQL/Aurora (3306) from 0.0.0.0/0
-   ```
+**Recommended in production**
 
-5. **Get Connection Details**
-   ```bash
-   # In RDS Dashboard:
-   - Click your database
-   - Copy "Endpoint" (hostname)
-   
-   # Connection string format:
-   mysql://admin:your-password@your-endpoint.rds.amazonaws.com:3306/database_name
-   ```
+| Variable | Purpose |
+|---|---|
+| `APP_URL` | Public URL used in e-mail links, SSO redirects and Slack messages (on Netlify defaults to `URL`) |
+| `RESEND_API_KEY`, `MAIL_FROM` | E-mail through Resend; `MAIL_FROM` on a domain verified in Resend |
+| `SETTINGS_ENCRYPTION_KEY` | Encrypts the Slack webhook (else derived from `JWT_SECRET`) |
+| `FRONTEND_URL` | Allowed browser origin when the app and API are on different origins |
 
-6. **Create Initial Database**
-   ```bash
-   # Connect using MySQL client
-   mysql -h your-endpoint.rds.amazonaws.com -u admin -p
-   
-   # Create database
-   CREATE DATABASE qa_dashboard;
-   USE qa_dashboard;
-   
-   # Run schema
-   source database/schema.sql;
-   ```
+**Optional**
 
-**AWS Free Tier Includes:**
-- ✅ 750 hours/month of db.t3.micro (enough for 24/7)
-- ✅ 20GB storage
-- ✅ 20GB backup storage
-- ✅ Valid for 12 months
-- ✅ Production-ready performance
+| Variable | Purpose |
+|---|---|
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM`, `SMTP_SECURE` | E-mail through SMTP when Resend is not set. Without either, e-mails are only logged and links are shown to copy |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google sign-in (redirect `<APP_URL>/api/auth/sso/google/callback`) |
+| `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_TENANT` | Microsoft sign-in (redirect `<APP_URL>/api/auth/sso/microsoft/callback`) |
+| `GOOGLE_OIDC_DISCOVERY_URL`, `MS_OIDC_DISCOVERY_URL` | Override the OpenID discovery documents (tests) |
+| `API_PUBLIC_URL` | Only when the API has its own origin (local development) |
+| `GROQ_API_KEY` | Enables the written texts of the executive briefing, team and developer suggestions and the business-impact summary; without it the rule-based versions are used |
+| `INVITE_TTL_HOURS` | Invitation lifetime (default 168) |
+| `DB_POOL_MAX` | Connections per instance (default 10, or 3 on Netlify) |
+| `PORT` | API port of the Node service (default 3000) |
+| `API_RATE_LIMIT_MAX` | General API rate limit per minute and client (default 300) |
+| `IMPROVE_REFRESH_LIMIT`, `IMPROVE_REFRESH_BUDGET_MS` | Recalculate rate limit; time budget of the forecast refresh per run |
+| `CALC_RECOMPUTE_BUDGET_MS` | Time budget of the nightly recompute |
+| `CHANGE_FAILURE_WINDOW_HOURS` | Hotfix window that marks a deploy as a failed change (default 72) |
+| `WORK_RECOMPUTE_DAYS` | Days of issue history recalculated on arrival (default 190) |
+| `RAW_UPLOAD_MAX_MB`, `RAW_PAYLOAD_MAX_KB`, `RAW_PAYLOAD_DAYS` | Raw upload size limit (20 MB), largest gzipped payload kept (512 KB), days payloads are kept (35) |
+| `PLATFORM_OPERATOR_ALLOWED_IPS` | Client IPs allowed to use `/operator` (comma-separated) |
+| `OPERATOR_SIGN_IN_MAX` | Operator sign-in attempts per IP per window (default 10) |
+| `OPERATOR_PASSWORD` | Read by `npm run operator:create` when `--password` is not given; not used by the running app |
+| `ENABLE_SYNTHETIC_DATA` | `true` enables the sample-data generators; off by default |
+| `DEMO_MODE` | `true` shows demo account chips on the sign-in page; on by default locally only |
+| `DEMO_REFRESH_ENABLED`, `DEMO_REFRESH_SECRET` | Nightly sample-data refresh on Netlify; the secret signs the background call (else `JWT_SECRET`) |
+| `SAMPLE_RAW_DATA`, `SAMPLE_PULSE_WEEKS`, `SAMPLE_TEAM_STORIES`, `SAMPLE_SPRINT_RELEASES` | Sample data generation options |
+| `ALERTS_CRON`, `ALERTS_EVALUATE_CRON`, `DIGEST_CRON`, `PULSE_CRON`, `PULSE_SEND_CRON`, `LOG_CLEANUP_CRON`, `CALC_RECOMPUTE_CRON` | Node service schedules (section 3) |
+| `VITE_DISABLE_WEBSOCKET` | Front end: turn the live-update socket off |
+| `MAIL_CAPTURE_FILE`, `NOTIFY_SLACK_ALLOW_LOCAL`, `TEST_DATABASE_URL` | Tests only |
 
-### Option E: Clever Cloud (Free 256MB)
+The Slack webhook is entered in the app (Parameters → Notification channels), not in the environment.
 
-1. **Create Account**
-   - Go to [clever-cloud.com](https://www.clever-cloud.com)
-   - Sign up with GitHub
-   - Free tier: 256MB MySQL
+## 5. First platform operator
 
-2. **Create MySQL Add-on**
-   ```bash
-   - Create new application
-   - Add MySQL add-on
-   - Choose "DEV" plan (free)
-   - Get connection string from environment variables
-   ```
-
----
-
-## 🗃️ Step 2: Prepare Database Schema
-
-Create a file `database/schema.sql` with your database structure:
-
-```sql
--- Users table
-CREATE TABLE users (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  email VARCHAR(255) UNIQUE NOT NULL,
-  password_hash VARCHAR(255) NOT NULL,
-  name VARCHAR(255) NOT NULL,
-  role ENUM('admin', 'manager', 'user') DEFAULT 'user',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
--- Teams table
-CREATE TABLE teams (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
--- Departments table
-CREATE TABLE departments (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  team_id INT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE SET NULL
-);
-
--- Test cases table
-CREATE TABLE test_cases (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  status ENUM('active', 'obsolete', 'redundant') DEFAULT 'active',
-  pass_rate DECIMAL(5,2),
-  execution_count INT DEFAULT 0,
-  effectiveness_score DECIMAL(5,2),
-  department_id INT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
-);
-
--- Metrics table
-CREATE TABLE metrics (
-  id INT AUTO_INCREMENT PRIMARY KEY,
-  metric_type VARCHAR(100) NOT NULL,
-  metric_value DECIMAL(10,2),
-  department_id INT,
-  recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE CASCADE
-);
-
--- Add indexes for performance
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_test_cases_status ON test_cases(status);
-CREATE INDEX idx_metrics_type ON metrics(metric_type);
-CREATE INDEX idx_metrics_recorded_at ON metrics(recorded_at);
-```
-
-Run this schema on your chosen database platform.
-
----
-
-## 🔧 Step 3: Set Up Backend API (Netlify Functions)
-
-### 3.1 Install Dependencies
+On a machine that can reach the database:
 
 ```bash
-cd /Users/ionutapostu/Desktop/QA\ Dashboard/qa-dashboard
-
-# Install Netlify CLI
-npm install -g netlify-cli
-
-# Install MySQL client
-npm install mysql2
-
-# Install dotenv for environment variables
-npm install dotenv
+DATABASE_URL=<transaction pooler URL> npm run operator:create -- --email <address> --name "<name>" --allow-remote
 ```
 
-### 3.2 Create Netlify Functions Directory
+The password is asked for (or read from `OPERATOR_PASSWORD`). Then sign in at `/operator`.
+
+## 6. Checks after a deploy
 
 ```bash
-mkdir -p netlify/functions
+curl -s -X POST https://<site>/api/auth/login -H 'Content-Type: application/json' \
+  -d '{"email":"nobody@example.com","password":"x"}'
+# expect 401 "Invalid credentials": the function reached the database. A 500 means it could not.
 ```
 
-### 3.3 Create API Functions
-
-Create `netlify/functions/api-auth.ts`:
-
-```typescript
-import { Handler } from '@netlify/functions';
-import mysql from 'mysql2/promise';
-
-const connection = mysql.createPool({
-  uri: process.env.DATABASE_URL,
-  waitForConnections: true,
-  connectionLimit: 10,
-  queueLimit: 0
-});
-
-export const handler: Handler = async (event) => {
-  const headers = {
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE'
-  };
-
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 200, headers, body: '' };
-  }
-
-  try {
-    const path = event.path.replace('/.netlify/functions/api-auth', '');
-    
-    if (path === '/login' && event.httpMethod === 'POST') {
-      const { email, password } = JSON.parse(event.body || '{}');
-      
-      const [rows] = await connection.query(
-        'SELECT * FROM users WHERE email = ?',
-        [email]
-      );
-      
-      // Add password verification logic here
-      
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({ success: true, user: rows[0] })
-      };
-    }
-
-    return {
-      statusCode: 404,
-      headers,
-      body: JSON.stringify({ error: 'Not found' })
-    };
-  } catch (error) {
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: error.message })
-    };
-  }
-};
-```
-
-Create similar functions for:
-- `netlify/functions/api-teams.ts`
-- `netlify/functions/api-departments.ts`
-- `netlify/functions/api-metrics.ts`
-
----
-
-## 📦 Step 4: Configure Netlify
-
-### 4.1 Create `netlify.toml`
-
-```toml
-[build]
-  command = "npm run build"
-  publish = "dist"
-  functions = "netlify/functions"
-
-[build.environment]
-  NODE_VERSION = "18"
-
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-[dev]
-  command = "npm run dev"
-  port = 5173
-  targetPort = 5173
-  autoLaunch = false
-```
-
-### 4.2 Update `package.json`
-
-Add build scripts:
-
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "netlify:dev": "netlify dev"
-  }
-}
-```
-
----
-
-## 🌐 Step 5: Deploy to Netlify
-
-### Method A: Using Netlify CLI (Recommended)
-
-```bash
-# Login to Netlify
-netlify login
-
-# Initialize site
-netlify init
-
-# Follow prompts:
-# - Create & configure a new site
-# - Team: Your team
-# - Site name: qa-dashboard (or your choice)
-# - Build command: npm run build
-# - Publish directory: dist
-
-# Set environment variables
-netlify env:set DATABASE_URL "your-mysql-connection-string"
-netlify env:set secrettoken "your-secret-key-here"
-
-# Deploy
-netlify deploy --prod
-```
-
-### Method B: Using Netlify Dashboard
-
-1. **Push to GitHub**
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git remote add origin https://github.com/yourusername/qa-dashboard.git
-   git push -u origin main
-   ```
-
-2. **Connect to Netlify**
-   - Go to [app.netlify.com](https://app.netlify.com)
-   - Click "Add new site" → "Import an existing project"
-   - Choose GitHub and select your repository
-   
-3. **Configure Build Settings**
-   - Build command: `npm run build`
-   - Publish directory: `dist`
-   - Click "Show advanced" → "New variable"
-   
-4. **Add Environment Variables**
-   ```
-   DATABASE_URL = your-mysql-connection-string
-   secrettoken = your-secret-key
-   ```
-
-5. **Deploy**
-   - Click "Deploy site"
-   - Wait 2-3 minutes for build to complete
-
----
-
-## 🔐 Step 6: Secure Your Application
-
-### 6.1 Environment Variables
-
-Never commit these to Git! Add to `.env.local`:
-
-```bash
-# .env.local (DO NOT COMMIT)
-DATABASE_URL=mysql://user:pass@host/database
-secrettoken=your-super-secret-key-change-this
-VITE_API_URL=https://your-app.netlify.app/api
-```
-
-Add to `.gitignore`:
-```
-.env.local
-.env.production
-```
-
-### 6.2 Set Up Authentication
-
-Update your API functions to use JWT:
-
-```bash
-npm install jsonwebtoken bcryptjs
-```
-
----
-
-## 🧪 Step 7: Test Your Deployment
-
-### 7.1 Test Database Connection
-
-```bash
-# Create a test function
-netlify functions:create test-db
-
-# Test locally
-netlify dev
-```
-
-### 7.2 Test API Endpoints
-
-```bash
-# Test login
-curl -X POST https://your-app.netlify.app/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@example.com","password":"test123"}'
-
-# Test data fetch
-curl https://your-app.netlify.app/api/teams
-```
-
----
-
-## 📊 Step 8: Monitor Your Application
-
-### Free Monitoring Tools
-
-1. **Netlify Analytics** (Built-in)
-   - Page views
-   - Bandwidth usage
-   - Function invocations
-
-2. **PlanetScale Insights** (Built-in)
-   - Query performance
-   - Connection pool stats
-   - Storage usage
-
-3. **Sentry** (Free tier)
-   ```bash
-   npm install @sentry/react
-   ```
-
----
-
-## 🔄 Step 9: Set Up Continuous Deployment
-
-### Automatic Deploys
-
-With GitHub connected:
-1. Push to `main` branch → Auto-deploy to production
-2. Push to other branches → Deploy preview URLs
-
-```bash
-# Deploy preview
-git checkout -b feature/new-dashboard
-git push origin feature/new-dashboard
-# Netlify creates preview URL automatically
-```
-
----
-
-## 📈 Step 10: Optimize for Production
-
-### 10.1 Enable Caching
-
-Update `netlify.toml`:
-
-```toml
-[[headers]]
-  for = "/assets/*"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*.js"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*.css"
-  [headers.values]
-    Cache-Control = "public, max-age=31536000, immutable"
-```
-
-### 10.2 Enable Compression
-
-Netlify automatically compresses assets, but ensure your build is optimized:
-
-```typescript
-// vite.config.ts
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
-export default defineConfig({
-  plugins: [react()],
-  build: {
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom'],
-          charts: ['recharts'],
-        }
-      }
-    }
-  }
-});
-```
-
----
-
-## 🎯 Quick Deployment Checklist
-
-- [ ] Database created and schema initialized
-- [ ] Environment variables set in Netlify
-- [ ] `netlify.toml` configured
-- [ ] API functions created
-- [ ] GitHub repository connected
-- [ ] First deployment successful
-- [ ] Database connection tested
-- [ ] Authentication working
-- [ ] API endpoints responding
-- [ ] Custom domain configured (optional)
-- [ ] SSL certificate active (automatic)
-- [ ] Monitoring set up
-
----
-
-## 🆘 Troubleshooting
-
-### Build Fails
-
-```bash
-# Check build logs
-netlify logs
-
-# Test build locally
-npm run build
-
-# Clear cache and rebuild
-netlify build --clear-cache
-```
-
-### Database Connection Issues
-
-```bash
-# Test connection string
-mysql -h hostname -u username -p database_name
-
-# Check environment variables
-netlify env:list
-```
-
-### Function Errors
-
-```bash
-# View function logs
-netlify functions:log api-auth
-
-# Test function locally
-netlify dev
-```
-
----
-
-## 💰 Cost Breakdown (Free Tier Limits)
-
-| Service | Free Tier | Duration | Upgrade Cost |
-|---------|-----------|----------|--------------|
-| **Netlify** | 100GB bandwidth/month | Forever | $19/month for 400GB |
-| **AWS RDS MySQL** | 20GB storage, 750hrs/month | 12 months | $15-30/month after |
-| **Aiven MySQL** | 1GB storage, 1GB RAM | Forever | $10/month for 4GB |
-| **Railway** | $5 credit/month | Forever | Pay as you go |
-| **Clever Cloud** | 256MB MySQL | Forever | €2/month for 1GB |
-| **Domain** | Use Netlify subdomain | Forever | $10-15/year |
-
-**Total Monthly Cost**: $0 (within free limits)
-
-### 🎯 Recommended Database by Use Case:
-
-| Use Case | Best Option | Why |
-|----------|-------------|-----|
-| **Production (12 months)** | AWS RDS | 20GB, reliable, scalable |
-| **Long-term free** | Aiven | 1GB forever, no credit card |
-| **Quick testing** | Railway | Instant setup, $5/month credit |
-| **Small projects** | Clever Cloud | 256MB, simple setup |
-| **After AWS free tier** | Aiven or Railway | Continue free or low cost |
-
-### 💡 Pro Tip:
-Start with **AWS RDS** for 12 months of production-grade hosting, then migrate to **Aiven** or upgrade AWS when needed.
-
----
-
-## 🚀 Going Live
-
-Once everything is tested:
-
-1. **Custom Domain** (Optional)
-   ```bash
-   # In Netlify dashboard:
-   - Domain settings → Add custom domain
-   - Follow DNS configuration steps
-   ```
-
-2. **SSL Certificate**
-   - Automatically provisioned by Netlify
-   - No configuration needed
-
-3. **Share Your App**
-   ```
-   Production URL: https://your-app.netlify.app
-   API Base URL: https://your-app.netlify.app/api
-   ```
-
----
-
-## 📚 Additional Resources
-
-- [Netlify Documentation](https://docs.netlify.com)
-- [Aiven MySQL Docs](https://aiven.io/docs/products/mysql)
-- [Railway Documentation](https://docs.railway.app)
-- [Netlify Functions Guide](https://docs.netlify.com/functions/overview/)
-- [React Deployment Best Practices](https://create-react-app.dev/docs/deployment/)
-
-## 🆓 Alternative Free Database Options
-
-If you need more storage or features, consider these alternatives:
-
-### Supabase (Free PostgreSQL - 500MB)
-- Go to [supabase.com](https://supabase.com)
-- Free tier: 500MB database, 1GB file storage
-- Includes authentication, real-time subscriptions
-- Note: PostgreSQL, not MySQL (requires code changes)
-
-### Neon (Free PostgreSQL - 3GB)
-- Go to [neon.tech](https://neon.tech)
-- Free tier: 3GB storage, serverless PostgreSQL
-- Auto-scaling and branching
-- Note: PostgreSQL, not MySQL (requires code changes)
-
-### CockroachDB (Free 5GB)
-- Go to [cockroachlabs.com](https://www.cockroachlabs.com/get-started-cockroachdb/)
-- Free tier: 5GB storage, 250M RUs/month
-- PostgreSQL-compatible
-- Note: Requires PostgreSQL adapter
-
-### MongoDB Atlas (Free 512MB)
-- Go to [mongodb.com/cloud/atlas](https://www.mongodb.com/cloud/atlas)
-- Free tier: 512MB storage
-- NoSQL database
-- Note: Requires complete data model change
-
----
-
-## 🎉 Success!
-
-Your QA Dashboard is now live and accessible worldwide! 🌍
-
-**Next Steps:**
-- Set up monitoring and alerts
-- Configure backup strategy for database
-- Implement CI/CD pipelines
-- Add performance monitoring
-- Set up error tracking with Sentry
-
-Need help? Check the troubleshooting section or open an issue on GitHub.
+Then sign in, open the Overview and a team, and check the operator panel's scheduled jobs list after the
+first hourly run.
+
+## 7. Sample data on a hosted database
+
+`npm run seed:demo` writes only to a local database unless `--allow-remote` is given. For a hosted demo,
+prefer SQL files
+(`npm run seed:demo -- --sql out/demo-seed.sql`) or use `scripts/reseed/` (one showcase company; see
+[scripts/reseed/README.md](../scripts/reseed/README.md)), and load them with `psql`.

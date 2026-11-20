@@ -1,5 +1,10 @@
 # Security Review — IronGate QA Navigator
 
+> Point-in-time review dated 2026-10-20. It records what was found and fixed then. The current security
+> controls are described in [SECURITY.md](../SECURITY.md); later changes (for example the stronger password
+> policy for registration, invitations and resets, sessions in `user_sessions`, platform operators) are not
+> covered here. Paths and roles below are as they were on that date.
+
 Date: 2026-10-20. Scope: the Express + PostgreSQL API (`server/`, `netlify/functions/api.ts`)
 and the React client (`src/`). Method: full authorization/tenancy code review of every
 route handler, plus dynamic exploitation against a local instance loaded with the production

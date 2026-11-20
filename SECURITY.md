@@ -1,175 +1,84 @@
-# 🔒 Security Guidelines
+# Security
 
-## ⚠️ NEVER Commit Secrets to Git
+How QE Navigator protects data, what operators of a deployment must do, and how to report a problem.
+For who may see and do what, see [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md). The dated code review that
+introduced many of these controls is [docs/SECURITY_REVIEW.md](docs/SECURITY_REVIEW.md).
 
-### What NOT to Commit:
-- ❌ Database passwords
-- ❌ JWT secrets
-- ❌ API keys
-- ❌ Connection strings with credentials
-- ❌ `.env` files with real values
+## Reporting a vulnerability
 
-### What IS Safe to Commit:
-- ✅ `.env.example` with placeholder values
-- ✅ Documentation with `YOUR_PASSWORD_HERE` placeholders
-- ✅ Configuration files without secrets
+Report suspected vulnerabilities privately to IronGate Software LTD, not in a public issue. Include the
+steps to reproduce, the affected route or screen and the request id (`X-Request-Id` header) if you have
+one.
 
----
+## Secrets: never in the repository
 
-## 🔑 Managing Secrets
+- Do not commit `.env`, `.env.test` or any file with a database URL, password, API key or token. `.env` is in
+  `.gitignore`. `.env.example` lists the variable names with placeholders only.
+- Set secrets as environment variables of the deployment (Netlify site settings, or the server's
+  environment). The variable names are listed in [docs/DEPLOYMENT_GUIDE.md](docs/DEPLOYMENT_GUIDE.md).
+- Anything prefixed `VITE_` is compiled into the browser bundle and is public. Never put a secret in a
+  `VITE_` variable.
+- If a secret was committed, rotate it at the provider first, then remove it from the code.
 
-### For Local Development
+## Controls in the code
 
-1. **Copy the example file:**
-   ```bash
-   cp .env.example .env
-   ```
+**Tenancy.** The company is the hard boundary. Every query is scoped to the caller's company; ids from the
+URL or body are checked against it. Within a company, access follows role assignments and the scope rule
+in [`server/lib/userPolicy.ts`](server/lib/userPolicy.ts). The UI hides what the API would refuse; the API
+always enforces it. Per-role tests: `tests/api/r2-security-matrix.test.ts`, `tests/api/role-matrix.test.ts`,
+`tests/api/viewer-scope.test.ts`.
 
-2. **Fill in your actual secrets:**
-   ```bash
-   # .env (NEVER commit this!)
-   DATABASE_URL=mysql://user:REAL_PASSWORD@host:port/db
-   secrettoken=your-actual-secret-key
-   ```
+**Authentication.**
 
-3. **Verify .gitignore:**
-   ```bash
-   # .gitignore should contain:
-   .env
-   .env.local
-   .env.*.local
-   ```
+- Passwords are hashed with bcrypt. Registration, accepting an invitation and resetting a password
+  require 10 to 128 characters, three of lower case / upper case / number / symbol, and not the part of the
+  e-mail before the @ (`src/lib/passwordPolicy.ts`).
+- The session is a signed JWT in the httpOnly cookie `irongate_token` (`Secure` and `SameSite=Strict` in
+  production). The token only proves identity: every request reloads the user's current assignments, so a
+  deactivated user or a changed role takes effect on the next request.
+- Each session is a row in `user_sessions` (id = the token's `jti`). Sign out everywhere, a password change
+  or reset, "sign out my other devices" and a company suspension revoke the rows.
+- The session lifetime is set per company (default 7 days).
+- The API refuses to start in production without `JWT_SECRET`.
+- Single sign-on (Google, Microsoft) matches the exact verified e-mail or an open invitation, never a
+  shared domain.
+- Password reset links work once and expire after 60 minutes; only a hash of the token is stored; the
+  reset page sends no Referer (`netlify.toml`).
+- Platform operators have separate accounts, their own cookie and token audience, an 8-hour session,
+  lockout after 5 failures and an optional IP allow-list (`PLATFORM_OPERATOR_ALLOWED_IPS`).
 
-### For Production (Netlify)
+**API keys.** Ingestion keys (`igk_…`) are stored as a hash, shown once, scoped to one company, and
+revocable. A suspended company's keys are refused.
 
-1. **Set via Netlify Dashboard:**
-   - Go to: Site configuration → Environment variables
-   - Add each secret individually
-   - Never paste them in documentation
+**Rate limits** ([`server/middleware/rateLimit.ts`](server/middleware/rateLimit.ts)): general API
+(`API_RATE_LIMIT_MAX` per minute, default 300), sign-in (20 failed attempts per 15 minutes per IP), forgot password (per IP and per
+e-mail), reset password, invitations, ingestion (60 per minute), language-model routes and Recalculate.
+The store is in memory, so on Netlify a limit applies per warm function instance.
 
-2. **Or use Netlify CLI:**
-   ```bash
-   netlify env:set DATABASE_URL "your-secret-value"
-   netlify env:set secrettoken "your-secret-value"
-   ```
+**Headers and CORS.** CORS allows only exact origins (local development and `FRONTEND_URL`). Netlify sets
+`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and a strict referrer policy.
 
----
+**Errors and logs.** 5xx responses return a generic message and a request id. Server errors are stored for
+30 days without bodies, headers, cookies or query strings. The user activity log stores route patterns,
+never bodies, query strings, tokens or passwords.
 
-## 🛡️ Generating Secure Secrets
+**Stored secrets.** The Slack webhook is encrypted at rest (`SETTINGS_ENCRYPTION_KEY`, else `JWT_SECRET`) and
+never returned. Commit author e-mails from deployment events are stored only as a salted hash.
 
-### JWT Secret
-```bash
-# Generate a random 32-byte base64 string
-node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
-```
+**Database.** The app connects as the database owner. Row Level Security is enabled on every table with no
+policies, so Supabase's public Data API cannot read anything.
 
-### Database Password
-```bash
-# Generate a random 20-character password
-node -e "console.log(require('crypto').randomBytes(20).toString('hex'))"
-```
+**Privacy.** Team averages of individual data and wellbeing results are shown only with at least 3
+contributors. Individual developer metrics are shown only for people who opted in. See
+[docs/PRODUCT_GUIDE.md, section 6](docs/PRODUCT_GUIDE.md#6-privacy-and-wellbeing).
 
----
+## Checklist for a deployment
 
-## 📝 Documentation Best Practices
-
-### ✅ Good Examples:
-```markdown
-DATABASE_URL=mysql://user:YOUR_PASSWORD@host:port/db
-secrettoken=your-generated-jwt-secret-here
-```
-
-### ❌ Bad Examples:
-```markdown
-DATABASE_URL=mysql://admin:P@ssw0rd123@prod.db.com:3306/app
-secret key for auth in the db=6hVmrBsWmrOmL6BtYex+hK7RlGda7JguXXhMD1VZzUs=
-```
-
----
-
-## 🚨 If You Accidentally Commit Secrets
-
-### Immediate Actions:
-
-1. **Rotate the compromised secrets:**
-   - Change database password immediately
-   - Generate new JWT secret
-   - Update all services using the old secrets
-
-2. **Remove from Git history:**
-   ```bash
-   # Use git-filter-repo (recommended)
-   git filter-repo --path-glob '*.env' --invert-paths
-   
-   # Or use BFG Repo-Cleaner
-   bfg --delete-files .env
-   ```
-
-3. **Force push (if safe):**
-   ```bash
-   git push --force-with-lease
-   ```
-
-4. **Notify team:**
-   - Alert all team members
-   - Update deployment secrets
-   - Review access logs
-
----
-
-## 🔍 Netlify Secrets Scanning
-
-Netlify automatically scans for secrets in:
-- Build output
-- Repository files
-- Environment variables in code
-
-### Configuration
-
-Our `netlify.toml` excludes documentation:
-```toml
-[build.processing.secrets]
-  omit_paths = [
-    "docs/**/*.md",
-    "*.md",
-    "**/*.sh"
-  ]
-```
-
-### If Build Fails Due to Secrets:
-
-1. **Check the error message** - it shows which files contain secrets
-2. **Replace with placeholders** - use `YOUR_PASSWORD_HERE` format
-3. **Update .env.example** - ensure it only has examples
-4. **Commit and push** - secrets removed
-
----
-
-## 🎯 Checklist Before Committing
-
-- [ ] No real passwords in any files
-- [ ] `.env` is in `.gitignore`
-- [ ] `.env.example` only has placeholders
-- [ ] Documentation uses `YOUR_*` placeholders
-- [ ] Secrets are set in Netlify dashboard
-- [ ] secrettoken is randomly generated
-- [ ] Database credentials are secure
-
----
-
-## 📚 Additional Resources
-
-- [Netlify Secrets Scanning Docs](https://docs.netlify.com/security/secrets-scanning/)
-- [Git Secrets Tool](https://github.com/awslabs/git-secrets)
-- [OWASP Secrets Management](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html)
-
----
-
-## 🆘 Need Help?
-
-If you're unsure about a secret:
-1. **Don't commit it** - when in doubt, leave it out
-2. **Use environment variables** - always
-3. **Ask the team** - better safe than sorry
-
-**Remember**: Once a secret is in Git history, assume it's compromised!
+- [ ] `JWT_SECRET` is a long random value, different per environment.
+- [ ] `DATABASE_URL` uses the Supabase transaction pooler and is set only in the deployment's environment.
+- [ ] `FRONTEND_URL` is set when the API is on a different origin from the app.
+- [ ] E-mail (`RESEND_API_KEY` or `SMTP_*`) is configured with a verified sending domain.
+- [ ] `DEMO_MODE` and `ENABLE_SYNTHETIC_DATA` are off on a customer deployment.
+- [ ] Platform operator accounts exist only for IronGate support; `PLATFORM_OPERATOR_ALLOWED_IPS` is set if
+      support works from fixed addresses.
+- [ ] Database backups are enabled at the provider.
