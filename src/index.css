@@ -385,3 +385,15 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .ig-liquid-wave-y, .ig-liquid-wave-x { animation: none !important; }
 }
+
+/* TV mode: time left on the current panel (TeamTvView.tsx), one sweep per rotation interval. */
+@keyframes tv-rotation-sweep {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+.tv-rotation-bar {
+  transform-origin: left center;
+  animation-name: tv-rotation-sweep;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
