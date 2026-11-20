@@ -180,10 +180,11 @@
 
   --battery-shell: #22262c;
   --battery-shell-top: #30353c;
-  --battery-rim: #a7adb6;
-  --battery-edge: rgb(255 255 255 / 0.7);
-  --battery-nib-a: #eef0f3;
-  --battery-nib-b: #a3a9b2;
+  /* Dark rim, faint edge and slate cap, as on Light: light values read as white caps on this page. */
+  --battery-rim: #000000;
+  --battery-edge: rgb(255 255 255 / 0.2);
+  --battery-nib-a: #64748b;
+  --battery-nib-b: #334155;
   --battery-shadow: 0 8px 18px -6px rgb(90 70 45 / 0.35), 0 1px 2px rgb(90 70 45 / 0.2);
   --cell-outline: rgb(90 70 45 / 0.28);
   --gauge-track: rgb(120 105 85 / 0.12);

@@ -40,7 +40,7 @@ const GLOSS =
 const NIB =
   'linear-gradient(rgba(255,255,255,0.5) 0%, rgba(255,255,255,0) 14%, rgba(255,255,255,0.8) 14%, rgba(255,255,255,0.3) 40%, ' +
   'rgba(255,255,255,0) 41%, rgba(255,255,255,0) 80%, rgba(255,255,255,0.2) 80%, rgba(255,255,255,0.4) 86%, rgba(255,255,255,0.6) 90%, ' +
-  'rgba(255,255,255,0.1) 92%, rgba(255,255,255,0.1) 95%, rgba(255,255,255,0.5) 98%), linear-gradient(var(--battery-nib-a, #64748b), var(--battery-nib-b, #334155))';
+  'rgba(255,255,255,0.1) 92%, rgba(255,255,255,0.1) 95%, rgba(255,255,255,0.5) 98%), linear-gradient(var(--battery-shell-top, #1e293b), var(--battery-shell, #0f172a))';
 
 const GLASS = [
   'linear-gradient(rgba(255,255,255,0.3) 4%, rgba(255,255,255,0.2) 5%, transparent 5%, transparent 14%, rgba(255,255,255,0.3) 14%, ' +
@@ -95,11 +95,13 @@ const CellBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
   const total = len + nibLen;
   const px = (n: number) => `${Math.round(n * 100) / 100}px`;
 
-  // Body: the empty part (shell) from the leading edge on, over the reference's gloss. The charge
-  // itself is its own element (below), so its length is exactly the value.
+  // Body: the empty part (shell) from the leading edge on, over the reference's gloss. The two ends
+  // (0–5 % and 95–100 %) are the dark shell too: in the reference they were see-through over a black
+  // page, so on a light page they showed as white caps. The charge itself is its own element (below),
+  // so its length is exactly the value.
   const shellLayer = empty
-    ? `linear-gradient(to right, transparent 5%, ${BATTERY_SHELL_CSS} 5%, ${BATTERY_SHELL_CSS} 95%, transparent 95%)`
-    : `linear-gradient(to right, transparent ${c}%, ${band!.stops[4]} ${c}%, ${BATTERY_SHELL_CSS} ${c + 5}%, ${BATTERY_SHELL_CSS} 95%, transparent 95%)`;
+    ? `linear-gradient(to right, ${BATTERY_SHELL_CSS} 0%, ${BATTERY_SHELL_CSS} 100%)`
+    : `linear-gradient(to right, ${BATTERY_SHELL_CSS} 0%, ${BATTERY_SHELL_CSS} 5%, transparent 5%, transparent ${c}%, ${band!.stops[4]} ${c}%, ${BATTERY_SHELL_CSS} ${c + 5}%, ${BATTERY_SHELL_CSS} 100%)`;
 
   // The charge, 5% → c% of the body (3D) or 0 → c% (2D): edge, highlight, body, leading edge.
   const fillStart = flat ? 0 : 5;
@@ -123,8 +125,10 @@ const CellBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
             // Same box as 3D (the edges stay, transparent, so the charge lines up the same way).
             ? { backgroundColor: BATTERY_SHELL_CSS, borderLeft: `${px(edge)} solid transparent`, borderRight: `${px(edge)} solid transparent` }
             : {
-                borderLeft: `${px(edge)} solid var(--battery-edge, rgba(255,255,255,0.2))`,
-                borderRight: `${px(edge)} solid var(--battery-edge, rgba(255,255,255,0.2))`,
+                // The reference's faint edge over the dark shell, in every theme (a theme's light
+                // --battery-edge read as a white rim on light pages).
+                borderLeft: `${px(edge)} solid rgba(255,255,255,0.2)`,
+                borderRight: `${px(edge)} solid rgba(255,255,255,0.2)`,
                 backgroundImage: `${shellLayer}, ${GLOSS}`,
               }),
           // A thin outline keeps the shape readable on light backgrounds (theme token, none on dark).
@@ -148,8 +152,8 @@ const CellBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
               position: 'absolute', top: 0, height: '100%', boxSizing: 'border-box',
               left: px((REF.glassLeft / REF.len) * inner), width: px((REF.glassLen / REF.len) * inner),
               borderRadius: `${px(5 * kl)} / ${px(30 * kt)}`,
-              borderLeft: `${px(REF.glassRim * kl)} solid var(--battery-rim, black)`,
-              borderRight: `${px(REF.glassRim * kl)} solid var(--battery-rim, black)`,
+              borderLeft: `${px(REF.glassRim * kl)} solid black`,
+              borderRight: `${px(REF.glassRim * kl)} solid black`,
               backgroundImage: GLASS,
               pointerEvents: 'none',
             }}
@@ -160,7 +164,7 @@ const CellBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
         style={{
           position: 'absolute', left: len, top: (thick - nibThick) / 2, width: nibLen, height: nibThick,
           borderRadius: `0 ${px(6 * kl)} ${px(6 * kl)} 0 / 0 ${px(10 * kt)} ${px(10 * kt)} 0`,
-          ...(flat ? { backgroundColor: 'var(--battery-nib-b, #334155)' } : { backgroundImage: NIB }),
+          ...(flat ? { backgroundColor: BATTERY_SHELL_CSS } : { backgroundImage: NIB }),
           opacity: empty ? 0.55 : 1,
         }}
       />

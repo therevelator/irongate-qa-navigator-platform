@@ -99,12 +99,12 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
   const body = flat
     ? turn(empty ? `linear-gradient(${BATTERY_SHELL_CSS}, ${BATTERY_SHELL_CSS})` : `linear-gradient(to top, ${band!.flat} ${c}%, ${BATTERY_SHELL_CSS} ${c}%)`, horizontal)
     : turn(empty
-    ? `linear-gradient(to top, transparent 5%, var(--battery-shell-top, #1e293b) 5%, ${BATTERY_SHELL_CSS} 95%, transparent 95%), ${GLASS}`
+    ? `linear-gradient(to top, ${BATTERY_SHELL_CSS} 5%, var(--battery-shell-top, #1e293b) 5%, ${BATTERY_SHELL_CSS} 95%, ${BATTERY_SHELL_CSS} 95%), ${GLASS}`
     : (() => {
         const col = band!.stops;
         return (
-          `linear-gradient(to top, transparent 5%, ${col[0]} 5%, ${col[0]} 7%, ${col[1]} 8%, ${col[1]} 10%, ${col[2]} 11%, ` +
-          `${col[2]} ${c - 3}%, ${col[3]} ${c - 2}%, ${col[3]} ${c}%, ${col[4]} ${c}%, ${BATTERY_SHELL_CSS} ${c + 5}%, ${BATTERY_SHELL_CSS} 95%, transparent 95%), ${GLASS}`
+          `linear-gradient(to top, ${BATTERY_SHELL_CSS} 5%, ${col[0]} 5%, ${col[0]} 7%, ${col[1]} 8%, ${col[1]} 10%, ${col[2]} 11%, ` +
+          `${col[2]} ${c - 3}%, ${col[3]} ${c - 2}%, ${col[3]} ${c}%, ${col[4]} ${c}%, ${BATTERY_SHELL_CSS} ${c + 5}%, ${BATTERY_SHELL_CSS} 100%), ${GLASS}`
         );
       })(), horizontal);
 
