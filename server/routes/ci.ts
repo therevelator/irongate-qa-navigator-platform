@@ -33,7 +33,7 @@ import { classifyFailedChanges, isCountedDeploy, loadDeliveryData, type Delivery
 import { isOutage } from '../lib/ingest/deliveryEvents';
 import { recordAudit } from '../lib/audit';
 import { loadWorkData, phase3Tables, summariseSprint, confirmedBug, WORK_WINDOW_DAYS } from '../lib/calc/work';
-import { latestReports, loadQualityData, weightedOf } from '../lib/calc/quality';
+import { computeQualityDay, latestReports, loadQualityData, weightedOf } from '../lib/calc/quality';
 
 const router = express.Router();
 
@@ -386,7 +386,7 @@ router.get('/teams/:id/work', authenticateToken, async (req: AuthRequest, res) =
     let quality: Awaited<ReturnType<typeof loadQualityData>>;
     try {
       work = await loadWorkData(client, teamId, from, today);
-      quality = await loadQualityData(client, teamId, new Date(now - 120 * 86_400_000).toISOString().slice(0, 10), today);
+      quality = await loadQualityData(client, teamId, new Date(now - 180 * 86_400_000).toISOString().slice(0, 10), today);
     } finally { client.release(); }
     const iso = (t: number | null) => (t === null ? null : new Date(t).toISOString());
     const r1 = (n: number) => Math.round(n * 10) / 10;
@@ -439,8 +439,10 @@ router.get('/teams/:id/work', authenticateToken, async (req: AuthRequest, res) =
         JOIN analysis_reports cur ON cur.previous_report_id = p.report_id AND cur.id = ANY(?::text[])
         WHERE NOT EXISTS (SELECT 1 FROM analysis_findings f WHERE f.report_id = cur.id AND f.fingerprint = p.fingerprint)
         ORDER BY CASE p.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 WHEN 'low' THEN 3 ELSE 4 END, p.path LIMIT 15`, [ids]) : [];
-    const history = (await query<any[]>(
-      `SELECT day, value::float8 AS value FROM metric_evidence WHERE team_id = ? AND metric_key = 'code_quality' AND day >= CURRENT_DATE - 180 ORDER BY day`, [teamId]));
+    // Score history: the formula on each day with a main-branch report (last 180 days), from the stored reports.
+    const reportDays = Array.from(new Set(quality.reports.filter((r) => r.main).map((r) => new Date(r.analyzedAt).toISOString().slice(0, 10)))).sort();
+    const history = reportDays.map((day) => ({ day, value: computeQualityDay(day, quality, now).find((m) => m.key === 'code_quality')?.value ?? null }))
+      .filter((h): h is { day: string; value: number } => h.value !== null);
     const metrics = (await query<any[]>(
       `SELECT DISTINCT ON (metric_key) metric_key, day, value::float8 AS value, unit, sample_size, confidence
          FROM metric_evidence WHERE team_id = ? ORDER BY metric_key, day DESC`, [teamId])).filter((m: any) => ['work', 'quality'].includes(groupOf(m.metric_key)));
@@ -464,7 +466,7 @@ router.get('/teams/:id/work', authenticateToken, async (req: AuthRequest, res) =
           bySeverity: { critical: r.critical, high: r.high, medium: r.medium, low: r.low, info: r.info }, weighted: weightedOf(r), newFindings: r.newFindings, fixedFindings: r.fixedFindings })),
         rules: rules.map((x: any) => ({ ruleId: x.rule_id, ruleName: x.rule_name, findings: x.n, newFindings: x.new_count, severity: x.severity, category: x.category, paths: (x.paths ?? []).filter(Boolean) })),
         newFindings: newFindings.map(finding), fixedFindings: fixedFindings.map(finding),
-        history: history.map((h: any) => ({ day: dayStr(h.day), value: h.value })),
+        history,
       },
     });
   } catch (error) {
