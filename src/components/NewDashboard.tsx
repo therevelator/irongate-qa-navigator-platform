@@ -860,7 +860,7 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onOpen(); } }}
       aria-label={`${r.name}, QA score ${r.qa == null ? 'no data' : Math.round(r.qa)}, ${meta.label}. Open team detail`}
       className={cx(
-        'group relative flex cursor-pointer overflow-hidden rounded-lg border border-slate-200 bg-white text-left transition-[box-shadow,border-color] duration-150',
+        'group relative flex cursor-pointer overflow-hidden rounded-xl border border-slate-200 bg-white text-left transition-[box-shadow,border-color] duration-150',
         'hover:border-slate-300 hover:shadow-md dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700',
         'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-500',
         isList ? 'flex-row' : 'flex-col',

@@ -34,10 +34,11 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', 
   const valueArc = value != null && value > 0 ? arcPath(cx, cy, r, GAUGE_START, valueToAngle(value)) : '';
   const len = value != null ? arcLength(r, value) : 0;
   void good; // the target is shown in the text beside the gauge
-  // The marker sits at the end of the coloured arc: where the value is.
-  const mA = value != null ? valueToAngle(value) : 0;
-  const t0 = polar(cx, cy, r - stroke / 2 - Math.max(1.5, w * 0.02), mA);
-  const t1 = polar(cx, cy, r + stroke / 2 + Math.max(1.5, w * 0.02), mA);
+  // The needle starts where the arc starts and travels with the sweep to the end of the coloured
+  // arc (the value): drawn at the start angle and rotated about the centre by the value's angle.
+  const needleTurn = value != null ? valueToAngle(value) - GAUGE_START : 0;
+  const t0 = polar(cx, cy, r - stroke / 2 - Math.max(1.5, w * 0.02), GAUGE_START);
+  const t1 = polar(cx, cy, r + stroke / 2 + Math.max(1.5, w * 0.02), GAUGE_START);
   const fontSize = Math.round(w * (size === 'xs' ? 0.3 : 0.28));
   const showUnit = size === 'lg' || size === 'md';
 
@@ -95,14 +96,25 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', 
           </g>
         )}
         {value != null && (
-          <line
-            className="ig-gauge-marker"
-            x1={t0.x} y1={t0.y} x2={t1.x} y2={t1.y}
-            strokeWidth={Math.max(1.5, w * 0.022)}
-            strokeLinecap="round"
-            style={{ stroke: 'var(--gauge-tick)' }}
+          <g
+            key={`n${value}`}
+            className="ig-gauge-needle"
             data-testid="score-gauge-marker"
-          />
+            data-angle={Math.round(valueToAngle(value) * 10) / 10}
+            style={{
+              transform: `rotate(${needleTurn}deg)`,
+              transformOrigin: `${cx}px ${cy}px`,
+              transformBox: 'view-box',
+              ['--ig-needle-turn' as string]: `${needleTurn}deg`,
+            }}
+          >
+            <line
+              x1={t0.x} y1={t0.y} x2={t1.x} y2={t1.y}
+              strokeWidth={Math.max(1.5, w * 0.022)}
+              strokeLinecap="round"
+              style={{ stroke: 'var(--gauge-tick)' }}
+            />
+          </g>
         )}
         <text
           x={cx}
