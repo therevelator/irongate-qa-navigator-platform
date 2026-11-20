@@ -20,6 +20,8 @@ import {
   teamDefFor, demoDevelopersFor, TEAM_GROUPS, realDataExists, recentSnapshotSql, KPI_COLUMNS,
   DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, TeamGroup, Member, DEMO_LOGIN_EMAILS, type SampleShape,
 } from './demoData';
+import { sampleHealthSeries } from './demoData';
+import { RAW_SAMPLE_CLEAR, RAW_SAMPLE_DAYS, computeSampleEvidence, rawSampleSqlForTeam } from './demoRaw';
 
 export interface SeedRunResult {
   /** Demo rows added per table in this run (0 for rows that already existed). */
@@ -103,8 +105,40 @@ export function runDemoSeed(opts: { today?: string } = {}): Promise<DemoSeedResu
   return exclusive(async () => {
     const today = opts.today ?? todayUtc();
     const r = await apply(buildDemoDataset({ today }));
-    return { ...demoSummary(today), ...r };
+    const raw = await addRawSampleData((await pool.query(`SELECT id FROM teams WHERE company_id = $1 AND is_active IS NOT FALSE`, [DEMO_COMPANY_ID])).rows.map((x) => x.id));
+    return { ...demoSummary(today), ...r, insertedTotal: r.insertedTotal + raw };
   });
+}
+
+/**
+ * Sample raw CI data (v2: test runs, coverage reports, pipeline runs; server/seeds/demoRaw.ts) for
+ * teams with sample data, the last RAW_SAMPLE_DAYS days (only the missing days are added), and the
+ * evidence calculated from it (never KPI values). A team with real raw data gets none. Returns the
+ * rows added. Off with SAMPLE_RAW_DATA=false.
+ */
+export async function addRawSampleData(teamIds: string[], stories?: Record<string, Array<[number, number]>>): Promise<number> {
+  if (process.env.SAMPLE_RAW_DATA === 'false' || !teamIds.length) return 0;
+  const teams = (await pool.query(`SELECT id, company_id, name, platform FROM teams WHERE id = ANY($1::text[]) AND is_active IS NOT FALSE ORDER BY id`, [teamIds])).rows;
+  const client = await pool.connect();
+  let added = 0;
+  try {
+    for (const t of teams) {
+      await client.query('BEGIN');
+      try {
+        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`raw-sample:${t.id}`]);
+        const sql = rawSampleSqlForTeam({ id: t.id, companyId: t.company_id, name: t.name, health: sampleHealthSeries(t, RAW_SAMPLE_DAYS, stories) });
+        for (const st of sql) added += (await client.query(st)).rowCount ?? 0;
+        await computeSampleEvidence(client, [t.id]);
+        await client.query('COMMIT');
+      } catch (e) {
+        await client.query('ROLLBACK').catch(() => undefined);
+        throw e;
+      }
+    }
+  } finally {
+    client.release();
+  }
+  return added;
 }
 
 // ============================================================================
@@ -319,7 +353,12 @@ export function runFillExisting(opts: FillOptions & ApplyOptions & { afterPlan?:
   return exclusive(async () => {
     const { today, plan, ds } = await buildFill(pool, opts);
     const r = await apply(ds, { counts: opts.counts, onProgress: opts.onProgress, after: opts.afterPlan?.(plan) ?? opts.after });
-    return { today, companies: planSummary(plan), plan, ...r };
+    // Sample raw CI data for the teams that hold sample data now (filled teams of these companies).
+    const sample = await teamsWithSampleData(pool);
+    const only = opts.onlyTeamIds ? new Set(opts.onlyTeamIds) : null;
+    const teamIds = plan.flatMap((c) => sample.get(c.id) ?? []).filter((id) => !only || only.has(id));
+    const raw = await addRawSampleData(teamIds, opts.shape?.stories);
+    return { today, companies: planSummary(plan), plan, ...r, insertedTotal: r.insertedTotal + raw };
   });
 }
 
@@ -365,7 +404,7 @@ export function clearDemoData(): Promise<Record<string, number>> {
     try {
       await client.query('BEGIN');
       await client.query("SELECT pg_advisory_xact_lock(hashtext('irongate-demo-seed'))");
-      for (const s of CLEAR_STATEMENTS) {
+      for (const s of [...RAW_SAMPLE_CLEAR, ...CLEAR_STATEMENTS]) {
         const r = await client.query(s.sql);
         deleted[s.table] = r.rowCount ?? 0;
       }
