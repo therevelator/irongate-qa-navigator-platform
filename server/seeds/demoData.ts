@@ -737,6 +737,18 @@ export function buildFillDataset(companies: CompanyInput[], opts: BuildOptions =
   });
 }
 
+/**
+ * A team's sample health for the last `days` days (index 0 = today), as the sample model uses it:
+ * the Northwind team definitions, a story (SampleShape.stories or SAMPLE_TEAM_STORIES), else the
+ * default derived from the team id. Used by the sample raw CI data (demoRaw.ts).
+ */
+export function sampleHealthSeries(t: { id: string; name: string; platform: string | null }, days: number, stories?: Record<string, Array<[number, number]>>): number[] {
+  const def: TeamDef = { ...(TEAMS.find((x) => x.id === t.id) ?? teamDefFor(t)) };
+  const story = stories?.[t.id];
+  if (story) { def.story = story; def.h = round(storyAt(story, 0), 3); }
+  return Array.from({ length: days }, (_, d) => round(teamHealth(def, d), 3));
+}
+
 /** A team's default health today (as the nightly refresh derives it from the team id, 0..1). */
 export const defaultTeamHealth = (teamId: string) => round(0.32 + 0.62 * rnd('h', teamId), 3);
 
