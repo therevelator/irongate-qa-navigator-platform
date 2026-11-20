@@ -2103,7 +2103,7 @@ const ENGINEERING_HEALTH_WEIGHTS = {
  * for a company-wide scope (super admins), else the ids of the active teams of the caller's
  * analytics scope (canViewTeamAnalytics: a QA manager's departments, everyone else's teams).
  */
-async function summaryTeamIds(req: AuthRequest): Promise<{ teamIds: string[] | null; level: string; companyTeamCount: number }> {
+export async function summaryTeamIds(req: AuthRequest): Promise<{ teamIds: string[] | null; level: string; companyTeamCount: number }> {
   const actor = policyActor(req);
   const rows = await query<any>('SELECT id, department_id FROM teams WHERE company_id = ? AND is_active = TRUE', [req.companyId]);
   const level = analyticsScopeLevelOf(actor);
@@ -2111,7 +2111,7 @@ async function summaryTeamIds(req: AuthRequest): Promise<{ teamIds: string[] | n
   return { teamIds: analyticsTeamsInScope(actor, rows.map((r: any) => ({ id: String(r.id), department_id: r.department_id }))).map((t) => t.id), level, companyTeamCount: rows.length };
 }
 
-async function computeCompanyMetrics(companyId: string, teamIds: string[] | null = null) {
+export async function computeCompanyMetrics(companyId: string, teamIds: string[] | null = null) {
   // Active teams (with their size: active assigned members) and the latest KPI snapshot per active
   // team; with teamIds only those teams (the caller's analytics scope).
   const activeTeams = await query<any>(

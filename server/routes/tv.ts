@@ -8,13 +8,18 @@ import { teamMemberCountSql, teamLeadNameSql } from '../lib/teamMembership';
 import { evaluateLatestSnapshot, kpiHistoryFor, loadDataClock, qaConfidenceJson, type EvalContext } from '../lib/kpiEvaluation';
 import { loadIntervals } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
+import { metricLabel, RULE_DEFS, SEVERITY_RANK, type AlertRule } from '../lib/alerts';
+import { teamPulse, WELLBEING_BANDS } from '../lib/pulse';
+import { K_ANONYMITY_MIN } from '../lib/privacy';
 
 /**
  * Team TV / meeting mode (src/components/TeamTvView.tsx).
  *
  * GET /api/tv/teams/:id — everything the TV screen shows for ONE team, team aggregates only:
  * name, department, lead, member count, the latest KPI snapshot, 90 days of KPI history and
- * the technical debt score. No member list and no individual developer data.
+ * the technical debt score, the team's open alerts (count by severity and the most urgent ones) and
+ * its wellbeing pulse (the anonymous survey's latest closed period and trend, with the minimum of
+ * K_ANONYMITY_MIN responses applied; never comments). No member list and no individual developer data.
  *
  * GET /api/tv/teams — the teams TV mode may show (the team picker): the active teams of the
  * caller's analytics scope, with their department.
@@ -131,6 +136,24 @@ router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
       };
     }
 
+    // Open alerts of the team (unresolved), most urgent first; no names (shared screen).
+    const alertRows = await query<any[]>(
+      `SELECT id, rule, metric_key, severity, message, created_at, acknowledged_at FROM alerts
+        WHERE team_id = ? AND company_id = ? AND resolved_at IS NULL ORDER BY created_at DESC LIMIT 500`,
+      [owned.id, req.companyId]
+    );
+    alertRows.sort((a: any, b: any) => SEVERITY_RANK[b.severity as keyof typeof SEVERITY_RANK] - SEVERITY_RANK[a.severity as keyof typeof SEVERITY_RANK]
+      || Number(!!a.acknowledged_at) - Number(!!b.acknowledged_at) || Date.parse(b.created_at) - Date.parse(a.created_at));
+    const alertCounts = { open: 0, acknowledged: 0, critical: 0, warning: 0, info: 0 };
+    for (const a of alertRows) {
+      if (a.acknowledged_at) alertCounts.acknowledged++; else alertCounts.open++;
+      alertCounts[a.severity as 'critical' | 'warning' | 'info']++;
+    }
+
+    // Wellbeing pulse: the latest closed period and the trend, suppressed below the minimum group.
+    const pulse = await teamPulse(owned.id, req.user!.id, { withComments: false });
+    const periodJson = (p: typeof pulse.latest) => ({ start: p.start, lastDay: p.lastDay, suppressed: p.suppressed, responses: p.responses, score: p.score });
+
     res.json({
       team: {
         id: team.id,
@@ -148,6 +171,27 @@ router.get('/teams/:id', authenticateToken, async (req: AuthRequest, res) => {
       // Target periods per metric in the history window and the QA score basis per day.
       targets: hist.targets,
       qaConfidence: hist.qaConfidence,
+      alerts: {
+        counts: alertCounts,
+        items: alertRows.slice(0, 6).map((a: any) => ({
+          id: a.id,
+          rule: a.rule,
+          ruleLabel: RULE_DEFS[a.rule as AlertRule]?.label ?? a.rule,
+          metricLabel: a.metric_key ? metricLabel(a.metric_key) : null,
+          severity: a.severity,
+          message: a.message,
+          createdAt: new Date(a.created_at).toISOString(),
+          acknowledged: !!a.acknowledged_at,
+        })),
+      },
+      pulse: {
+        cadence: pulse.cadence,
+        latest: { ...periodJson(pulse.latest), questions: pulse.latest.questions },
+        periods: pulse.periods.slice(-8).map(periodJson),
+        currentPeriod: { start: pulse.currentPeriod.start, lastDay: pulse.currentPeriod.lastDay, responsesSoFarText: pulse.currentPeriod.responsesSoFarText },
+        minResponses: K_ANONYMITY_MIN,
+        bands: WELLBEING_BANDS,
+      },
       generatedAt: new Date().toISOString(),
     });
   } catch (error) {
