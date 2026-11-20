@@ -573,8 +573,11 @@ test calls `tests (junit, test call)`).
 - **Netlify**: a synchronous function receives at most about **6 MB** of request body (the platform limit, before the
   20 MB of the API) and runs at most 10 s by default (26 s when configured). Send gzip and it fits: measured parse times
   (Node 22): JUnit 20 MB / 174,260 cases **0.28 s**, lcov 20 MB / 11,983 files **0.73 s**, Cobertura 20 MB / 4,854 classes
-  **0.53 s**; storing 5,000 test results takes about 0.1 s. Background functions are not needed for reports of this size;
-  very large suites can be sent as several uploads (one per shard, with `run` = the shard's job id).
+  **0.53 s**. End to end (parse, store every test result, flaky detection, recalculation; local database): 17,920 test cases
+  (2 MB, 68 kB gzipped) **0.58 s**; 176,000 test cases (20 MB, 0.66 MB gzipped) **4.7 s**. With a remote database
+  (Supabase) expect two to three times that, so on Netlify keep one upload under about **50,000 test cases** (send a large
+  suite as several uploads, one per shard, `run` = the shard's job id, which also keeps flaky detection per commit); coverage
+  and pipeline uploads are far below the limit. No background function is needed below that size.
 - **Storage** (Supabase size): the gzipped file is kept for 35 days when at most 512 KB (`RAW_PAYLOAD_MAX_KB`, `0` keeps
   none; `RAW_PAYLOAD_DAYS`); per-test results and per-file coverage for 35 days (the latest coverage report of each team
   keeps its files); runs, reports, pipeline runs, flaky-test and metric evidence for **13 months**. Cleaned up twice a day
