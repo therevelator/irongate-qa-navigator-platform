@@ -13,8 +13,9 @@ import { clientIp, ctxOf } from './requestContext';
  *             any company and a company user can never be one (the same e-mail cannot be in both
  *             tables: database triggers). No active operator: the feature is off and every
  *             /api/operator route answers 404. Create one with `npm run operator:create`.
- *   Sign-in:  /operator has its own sign-in (e-mail + password, bcrypt). 5 failed attempts lock the
- *             account for 15 minutes; the route is also rate limited per IP. A session lasts 8 hours.
+ *   Sign-in:  /operator has its own sign-in (e-mail + password, bcrypt). An operator account is
+ *             NEVER locked, however many wrong passwords (owner's rule); the route is rate limited
+ *             per IP only. A session lasts 8 hours.
  *   Token:    signed with a key DERIVED from JWT_SECRET (HMAC with a fixed label), with its own
  *             audience and type claim, so a company session JWT can never be used as an operator
  *             token and an operator token never verifies as a company session. It is sent as the
@@ -33,8 +34,6 @@ export const OPERATOR_COOKIE = 'irongate_operator';
 export const OPERATOR_AUDIENCE = 'irongate-platform-operator';
 export const OPERATOR_TOKEN_TYPE = 'platform_operator';
 export const OPERATOR_SESSION_MINUTES = 8 * 60;
-export const OPERATOR_MAX_FAILURES = 5;
-export const OPERATOR_LOCK_MINUTES = 15;
 /** bcrypt cost of operator passwords (the hash is $2b$12$…; $2a$ hashes verify too). */
 export const OPERATOR_BCRYPT_COST = 12;
 
@@ -78,16 +77,16 @@ export interface OperatorRow { id: string; email: string; name: string; is_activ
 
 export type SignInResult =
   | { ok: true; operator: OperatorRow }
-  | { ok: false; why: 'unknown' | 'inactive' | 'locked' | 'wrong_password'; operator?: OperatorRow; lockedUntil?: string };
+  | { ok: false; why: 'unknown' | 'inactive' | 'wrong_password'; operator?: OperatorRow };
 
 /**
- * Check an operator's e-mail and password. A wrong password counts a failure; the fifth in a row
- * locks the account for 15 minutes. A success clears the counter and records last_login.
- * An unknown e-mail still runs a bcrypt comparison (same timing).
+ * Check an operator's e-mail and password. An operator is never locked out: a wrong password is
+ * only counted (failed_login_attempts, for the record) and a success clears the counter and
+ * records last_login. An unknown e-mail still runs a bcrypt comparison (same timing).
  */
 export async function checkOperatorPassword(email: string, password: string): Promise<SignInResult> {
   const row = await queryOne<any>(
-    'SELECT id, email, name, password_hash, is_active, failed_login_attempts, locked_until FROM platform_operators WHERE LOWER(email) = LOWER(?)',
+    'SELECT id, email, name, password_hash, is_active, failed_login_attempts FROM platform_operators WHERE LOWER(email) = LOWER(?)',
     [email.trim()],
   );
   if (!row) {
@@ -95,15 +94,9 @@ export async function checkOperatorPassword(email: string, password: string): Pr
     return { ok: false, why: 'unknown' };
   }
   const op: OperatorRow = { id: row.id, email: row.email, name: row.name, is_active: row.is_active };
-  if (row.locked_until && Date.parse(row.locked_until) > Date.now()) return { ok: false, why: 'locked', operator: op, lockedUntil: new Date(row.locked_until).toISOString() };
   const good = await bcrypt.compare(password, row.password_hash).catch(() => false);
   if (!good) {
-    const failures = (Number(row.failed_login_attempts) || 0) + 1;
-    const lock = failures >= OPERATOR_MAX_FAILURES;
-    await query(
-      `UPDATE platform_operators SET failed_login_attempts = ?, locked_until = CASE WHEN ? THEN now() + make_interval(mins => ?) ELSE locked_until END WHERE id = ?`,
-      [lock ? 0 : failures, lock, OPERATOR_LOCK_MINUTES, row.id],
-    );
+    await query('UPDATE platform_operators SET failed_login_attempts = failed_login_attempts + 1, locked_until = NULL WHERE id = ?', [row.id]);
     return { ok: false, why: 'wrong_password', operator: op };
   }
   if (!row.is_active) return { ok: false, why: 'inactive', operator: op };

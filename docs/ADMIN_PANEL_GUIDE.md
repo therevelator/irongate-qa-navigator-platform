@@ -131,8 +131,9 @@ users of a company.
 script writes only to a local database unless `--allow-remote` is given. The panel is off while no active
 operator exists.
 
-**Sign-in.** At `/operator`, with its own 8-hour session (httpOnly cookie `irongate_operator`), lockout for
-15 minutes after 5 failures, and a rate limit per IP (`OPERATOR_SIGN_IN_MAX`, default 10).
+**Sign-in.** At `/operator`, with its own 8-hour session (httpOnly cookie `irongate_operator`). An operator
+account is never locked out, however many wrong passwords; only a rate limit per IP applies
+(`OPERATOR_SIGN_IN_MAX` failed attempts per 15 minutes, default 10).
 `PLATFORM_OPERATOR_ALLOWED_IPS` optionally restricts the client IPs.
 
 **What it shows.**

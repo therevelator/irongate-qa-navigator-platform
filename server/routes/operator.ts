@@ -140,7 +140,7 @@ router.get('/status', async (req: OperatorRequest, res) => {
   }
 });
 
-// 10 failed sign-ins per IP per 15 minutes (per instance); the account itself locks after 5 in a row.
+// 10 failed sign-ins per IP per 15 minutes (per instance). The operator account itself is never locked.
 const signInLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: Number(process.env.OPERATOR_SIGN_IN_MAX) || 10,
@@ -162,9 +162,7 @@ router.post('/login', signInLimiter, async (req: OperatorRequest, res) => {
     }
     const r = await checkOperatorPassword(email, password);
     if (r.ok === false) {
-      const f = r as Extract<SignInResult, { ok: false }>;
       console.warn('[operator] failed sign-in');
-      if (f.why === 'locked') return res.status(423).json({ error: 'Too many failed attempts. This account is locked for 15 minutes.' });
       return res.status(401).json({ error: 'Wrong e-mail address or password.' });
     }
     const okr = r as Extract<SignInResult, { ok: true }>;
