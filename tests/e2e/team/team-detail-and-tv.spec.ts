@@ -97,7 +97,7 @@ test.describe('Team TV mode', { tag: [TAG.area('tv')] }, () => {
     await expect(page.getByTestId('team-detail')).toBeVisible();
   });
 
-  test('TV-02 keyboard: panels with 1-3 and arrows, T theme, R rotation, Esc exit', { tag: [TAG.role('manager')] }, async ({ signInAs, page }) => {
+  test('TV-02 keyboard: panels with 1-4 and arrows, T theme, R rotation, Esc exit', { tag: [TAG.role('manager')] }, async ({ signInAs, page }) => {
     await signInAs('manager', `/tv?team=${DEMO.leadTeam.id}`);
     await expect(page.getByTestId('tv-team-name')).toHaveText(DEMO.leadTeam.name);
     await expect(page.getByTestId('tv-panel-kpis')).toBeVisible();
@@ -106,7 +106,12 @@ test.describe('Team TV mode', { tag: [TAG.area('tv')] }, () => {
     await page.keyboard.press('ArrowRight');
     await expect(page.getByTestId('tv-panel-focus')).toBeVisible();
     await page.keyboard.press('ArrowRight');
+    await expect(page.getByTestId('tv-panel-pulse')).toBeVisible(); // fourth panel: Wellbeing
+    await page.keyboard.press('ArrowRight');
     await expect(page.getByTestId('tv-panel-kpis')).toBeVisible();
+    await page.keyboard.press('4');
+    await expect(page.getByTestId('tv-panel-pulse')).toBeVisible();
+    await page.keyboard.press('1');
     const theme = await page.getByTestId('tv-mode').getAttribute('data-theme');
     await page.keyboard.press('t');
     await expect(page.getByTestId('tv-mode')).not.toHaveAttribute('data-theme', theme ?? '');

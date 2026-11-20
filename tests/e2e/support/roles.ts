@@ -30,10 +30,12 @@ export const DEMO = {
 const ANALYTICS = ['nav-dashboard', 'nav-analytics', 'nav-compare', 'nav-tv', 'nav-flaky-test-intelligence', 'nav-test-execution-timeline',
   'nav-technical-debt', 'nav-performance-metrics', 'nav-pipeline-visualization', 'nav-developer-productivity', 'nav-team-pulse',
   'nav-business-impact', 'nav-team-gamification', 'nav-pdf-report-generator'];
+/** The executive summary is in the navigation of super admins and managers (after the overview). */
+const WITH_SUMMARY = ['nav-dashboard', 'nav-summary', ...ANALYTICS.slice(1)];
 export const NAV_BY_ROLE: Record<Role, string[]> = {
-  admin: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-departments', 'nav-activity', 'nav-user-activity', 'nav-admin',
+  admin: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-departments', 'nav-activity', 'nav-user-activity', 'nav-admin',
     'nav-manual-metrics', 'nav-metric-intervals', 'nav-parameters-config', 'nav-ingestion-log'],
-  manager: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-activity', 'nav-admin', 'nav-manual-metrics', 'nav-metric-intervals',
+  manager: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-activity', 'nav-admin', 'nav-manual-metrics', 'nav-metric-intervals',
     'nav-parameters-config', 'nav-ingestion-log'],
   lead: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-manual-metrics'],
   engineer: [...ANALYTICS],
@@ -71,4 +73,5 @@ export const OPEN_PAGES: Array<{ path: string; title: string }> = [
   { path: '/analytics/gamification', title: 'Team rankings' },
   { path: '/analytics/reports', title: 'Reports' },
   { path: '/notifications', title: 'Notifications' },
+  { path: '/summary', title: 'Summary' },
 ];
