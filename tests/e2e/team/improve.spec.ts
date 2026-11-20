@@ -215,10 +215,10 @@ test.describe('Improve on a phone', { tag: [TAG.area('improve')] }, () => {
 
 test.describe('Improve accessibility', { tag: [TAG.a11y, TAG.area('improve')] }, () => {
   const cases = [
-    { id: 'A11Y-38', theme: 'Light' },
-    { id: 'A11Y-39', theme: 'Dark' },
-    { id: 'A11Y-40', theme: 'Graphite' },
-    { id: 'A11Y-41', theme: 'Porcelain' },
+    { id: 'A11Y-42', theme: 'Light' },
+    { id: 'A11Y-43', theme: 'Dark' },
+    { id: 'A11Y-44', theme: 'Graphite' },
+    { id: 'A11Y-45', theme: 'Porcelain' },
   ] as const;
   for (const c of cases) {
     test(`${c.id} ${c.theme} theme: recommendations and forecast tiles have no serious violations`, async ({ signInAs, page, app }, testInfo) => {

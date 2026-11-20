@@ -118,7 +118,7 @@ time limit, so production backfills itself; `scripts/reseed/improve-refresh.ts` 
 the KPI tiles and the QA score, trend charts with the projected band, target and crossing, Recommendations section above the Action
 plan; actions show their recommendation and the metric before / after from the snapshot history. Executive summary: "at this rate …"
 under each risk and the KPIs on target now but forecast to miss. Tests: `tests/api/forecast-math.test.ts`,
-`recommendation-rules.test.ts`, `improve.test.ts`, UI `team/improve.spec.ts` (IMP-01 … 09, A11Y-38 … 41), manual cases in
+`recommendation-rules.test.ts`, `improve.test.ts`, UI `team/improve.spec.ts` (IMP-01 … 09, A11Y-42 … 45), manual cases in
 "Team improve".
 
 ### Phase 5 — Invest (for the business)

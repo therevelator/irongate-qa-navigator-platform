@@ -6404,7 +6404,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as Team lead (lead@irongate.com / demo123). On the Overview type "The Away Team" in "Search teams" and click its team card. | Team detail of "The Away Team" opens; below the KPI tiles the section "Recommendations" is shown, followed by "Action plan". |
 | 2 | With Appearance set to Light, Dark, Graphite and Porcelain in turn, read the Recommendations section and a KPI tile's Forecast line. | All text is readable (sufficient contrast), badges and buttons are visible, the shaded forecast band is visible but lighter than the history. |
 
-*Automated:* `tests/e2e/team/improve.spec.ts › A11Y-38 … A11Y-41`
+*Automated:* `tests/e2e/team/improve.spec.ts › A11Y-42 … A11Y-45`
 
 ## Administration: manual metrics
 
