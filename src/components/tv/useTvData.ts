@@ -25,12 +25,28 @@ export interface TvSummary {
     kpiThresholds?: Record<string, { good: number; warning: number; lowerIsBetter: boolean }>;
   } | null;
   technicalDebtScore: number | null;
+  /** The team's open alerts (unresolved): counts and the most urgent ones (no names). */
+  alerts?: {
+    counts: { open: number; acknowledged: number; critical: number; warning: number; info: number };
+    items: { id: string; rule: string; ruleLabel: string; metricLabel: string | null; severity: 'critical' | 'warning' | 'info'; message: string; createdAt: string; acknowledged: boolean }[];
+  };
+  /** Wellbeing pulse: latest closed period and trend; suppressed below the minimum number of responses. */
+  pulse?: {
+    cadence: string;
+    latest: TvPulsePeriod & { questions: { key: string; text: string; mean: number }[] | null };
+    periods: TvPulsePeriod[];
+    currentPeriod: { start: string; lastDay: string; responsesSoFarText: string };
+    minResponses: number;
+    bands: { good: number; warning: number };
+  };
   history: Record<string, HistoryPoint[]>;
   historyDays: number;
   /** Target periods per KPI column in the history window (each day judged with its own target). */
   targets?: Record<string, TargetPeriod[]>;
   generatedAt: string;
 }
+
+export interface TvPulsePeriod { start: string; lastDay: string; suppressed: boolean; responses: number | null; score: number | null }
 
 /** GET /api/teams/:id/ai-suggestions — only the parts TV mode shows. */
 export interface TvRecommendations {
@@ -42,13 +58,37 @@ export interface TvRecommendations {
 export type TvLoadState = 'loading' | 'ready' | 'forbidden' | 'signed-out' | 'error';
 
 export const REFRESH_MS = 60_000;
+/** While the connection is lost, retry this often (and at once when the browser says it is back online). */
+export const OFFLINE_RETRY_MS = 15_000;
 const RECOMMENDATIONS_MS = 15 * 60_000;
+
+/**
+ * Summaries already loaded, per team: rotating between teams shows the next team at once (and
+ * refreshes it in the background) instead of a loading screen. Kept for this page only.
+ */
+const cache = new Map<string, { data: TvSummary; at: number }>();
+
+async function fetchSummary(id: string): Promise<Response> {
+  return fetch(`${API_URL}/tv/teams/${encodeURIComponent(id)}`, { credentials: 'include', cache: 'no-store' });
+}
+
+/** Load a team ahead of showing it (the next team of the rotation); failures are ignored. */
+export async function prefetchTvSummary(id: string | null | undefined): Promise<void> {
+  if (!id) return;
+  const hit = cache.get(id);
+  if (hit && Date.now() - hit.at < REFRESH_MS / 2) return;
+  try {
+    const res = await fetchSummary(id);
+    if (res.ok) cache.set(id, { data: await res.json(), at: Date.now() });
+  } catch { /* shown (and retried) when the team comes up */ }
+}
 
 /**
  * Loads the TV summary for one team and keeps it fresh: every 60 s, when the server
  * reports new KPIs (METRICS_UPDATED_EVENT from App's live channel) and when the tab
  * becomes visible again. A failed refresh keeps the last data on screen and flags it
- * as offline; the next tick retries.
+ * as offline and retries every OFFLINE_RETRY_MS (and on the browser's "online" event) until the
+ * connection is back.
  */
 export function useTvSummary(teamId: string | null) {
   const [data, setData] = useState<TvSummary | null>(null);
@@ -65,13 +105,14 @@ export function useTvSummary(teamId: string | null) {
     if (!id) return;
     lastFetch.current = Date.now();
     try {
-      const res = await fetch(`${API_URL}/tv/teams/${encodeURIComponent(id)}`, { credentials: 'include', cache: 'no-store' });
+      const res = await fetchSummary(id);
       if (current.current !== id) return; // team changed while loading
       if (res.status === 401) { setState('signed-out'); return; }
       if (res.status === 403 || res.status === 404) { setData(null); setState('forbidden'); return; }
       if (!res.ok) throw new Error(String(res.status));
       const body: TvSummary = await res.json();
       if (current.current !== id) return;
+      cache.set(id, { data: body, at: Date.now() });
       setData(body);
       setState('ready');
       setOffline(false);
@@ -85,11 +126,11 @@ export function useTvSummary(teamId: string | null) {
   }, []);
 
   useEffect(() => {
-    setData(null);
-    setState('loading');
-    setOffline(false);
+    const hit = teamId ? cache.get(teamId) : undefined;
+    setData(hit?.data ?? null);
+    setState(hit ? 'ready' : 'loading');
     if (!teamId) return;
-    load();
+    if (!hit || Date.now() - hit.at > 5_000) load();
     const timer = window.setInterval(load, REFRESH_MS);
     let debounce: number | undefined;
     const onMetrics = () => { window.clearTimeout(debounce); debounce = window.setTimeout(load, 800); };
@@ -105,6 +146,13 @@ export function useTvSummary(teamId: string | null) {
       window.removeEventListener('online', load);
     };
   }, [teamId, load]);
+
+  // Connection lost: retry sooner than the normal refresh, until a load succeeds.
+  useEffect(() => {
+    if (!offline || !teamId) return;
+    const t = window.setInterval(load, OFFLINE_RETRY_MS);
+    return () => window.clearInterval(t);
+  }, [offline, teamId, load]);
 
   return { data, state, offline, updatedAt, fetchCount, reload: load };
 }
