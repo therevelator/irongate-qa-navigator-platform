@@ -310,7 +310,7 @@ router.get('/teams/:id/delivery', authenticateToken, async (req: AuthRequest, re
       sample: !!sample?.s,
       lastReceived: await lastReceived(teamId, ['deployments', 'commits', 'incidents']),
       metrics: latest.map((m: any) => ({ key: m.metric_key, label: METRICS[m.metric_key]?.label ?? m.metric_key, day: dayStr(m.day), value: m.value, unit: m.unit, sampleSize: m.sample_size, confidence: m.confidence })),
-      deployments: recent.filter(isCountedDeploy).slice(0, 25).map(deploy),
+      deployments: recent.filter(isCountedDeploy).slice(0, 60).map(deploy),
       notCounted: recent.filter((d) => !isCountedDeploy(d)).slice(0, 10).map(deploy),
       failedChanges: recent.filter((d) => failures.has(d.id)).slice(0, 20).map(deploy),
       incidents,
