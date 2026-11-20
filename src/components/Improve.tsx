@@ -192,10 +192,10 @@ const STATUS_LABEL: Record<string, string> = { open: 'Open', in_progress: 'In pr
 /** "Test coverage 55.7% (12 Nov) → 61.2% (3 Dec): improved" */
 export const MovementLine: React.FC<{ m: Movement; testId?: string }> = ({ m, testId }) => (
   <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-600 dark:text-slate-300" data-testid={testId ?? 'movement'}>
-    <span className="font-medium">Since it was added:</span>
-    {m.before ? <span className="tabular-nums">{m.label} {forecastValue(m.before.value, m.unit)} ({shortDay(m.before.day)})</span> : <span>no value before</span>}
-    <span aria-hidden>→</span>
-    {m.after ? <span className="tabular-nums">{forecastValue(m.after.value, m.unit)} ({shortDay(m.after.day)})</span> : <span>no newer snapshot</span>}
+    <span className="font-medium">Since it was added:</span>{' '}
+    {m.before ? <span className="tabular-nums">{m.label} {forecastValue(m.before.value, m.unit)} ({shortDay(m.before.day)})</span> : <span>no value before</span>}{' '}
+    <span aria-hidden>→</span>{' '}
+    {m.after ? <span className="tabular-nums">{forecastValue(m.after.value, m.unit)} ({shortDay(m.after.day)})</span> : <span>no newer snapshot</span>}{' '}
     <Badge tone={VERDICT[m.verdict].tone}>{VERDICT[m.verdict].label}</Badge>
   </p>
 );

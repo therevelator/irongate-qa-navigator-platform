@@ -83,7 +83,10 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Overview: summary, gauges, team cards | company | scope (department) | scope | scope | scope |
 | Team detail (KPIs, targets, trends, QA score card) | any team | scope | scope | scope | scope |
 | Team detail: members table | all members, metrics of opted-in people | same, in scope | same, in scope | own row | own row |
-| Team detail: team and developer recommendations | scope | scope | scope | — | — |
+| Team detail: AI insights and developer recommendations | scope | scope | scope | — | — |
+| Team detail: forecasts and Recommendations (read; `GET /api/improve/teams/:id`) | any team | their departments' teams | their teams | their teams | their teams |
+| Recommendations: Add to Action plan, Dismiss (with a reason), Reopen, Recalculate | any team | their departments | teams they lead | — | — |
+| Executive summary: "at this rate" under risks and the KPIs forecast to miss | company | their departments' teams | their teams | their teams | their teams |
 | Team detail: Evidence from CI, How this was calculated (`GET /api/ci/teams/:id/evidence`, `…/metrics/:metric`) | any team | scope | scope | scope | scope |
 | TV mode (`/tv?team=`, team picker, rotation through the teams of the scope; team figures, open alerts, wellbeing pulse with the 3-response minimum) | any team | scope | scope | scope | scope |
 | Executive summary (`/summary`, `GET /api/summary`: QA score, risks, most improved, alerts, last week's changes) | company | their departments | their teams | their teams | their teams |

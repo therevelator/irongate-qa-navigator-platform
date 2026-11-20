@@ -1124,9 +1124,32 @@ Why: everything about one team in one place, with each number explained
   its date, status, "source · as of date", stale marker and history chart.
 - Wellbeing (survey) result with its response rate and a link to the pulse survey; for the lead, managers and admins the **Send the
   survey** panel (send, remind, sent N of M, automatic sending); Team members with their latest workload metrics (only for people who may see
-  the team's people, and with metrics only for those who opted in to developer insights); Team recommendations (rule-based or AI); Developer recommendations.
+  the team's people, and with metrics only for those who opted in to developer insights); AI insights (the earlier rule-based or AI
+  strengths / areas to improve, for leads, managers and admins); Developer recommendations.
+- **Forecast** (v2 phase 4): every KPI tile and the QA score card have a "Forecast:" line (for example "Misses target ≥ 80% around
+  18 Dec", "Reaches target ≤ 10 min around 3 Jan", "On track: stays ≥ 80% (about 86% by 15 Jan)", "Stays off target ≥ 80%: about 49%
+  by 15 Jan", or "not enough data (the reason)"), and the trend charts continue with the projection as a dashed line, an 80 % band,
+  the target and a mark on the crossing day. Method: Theil–Sen trend through the weekly medians of the last 26 weeks, the band from
+  how far the weeks lie from the line, 8 weeks ahead; the crossing uses the target valid on each future day (so a target already
+  set to rise is taken into account). No forecast with fewer than 6 weeks of values, a history under 5 weeks, a latest value older
+  than 21 days or a series too noisy to project: the line says which.
+- **Recommendations** (above the Action plan; everyone who sees the team's trends reads them, its leads, the department's managers
+  and admins act on them): what to do next, ranked by expected effect, at most 6. Each has a title with the numbers it is based on,
+  a confidence (High when the evidence comes from CI data and the forecast is confident), the **expected effect** on one metric as a
+  range with what it is based on (the evidence, e.g. "raising these 5 files to 80% adds about 11 points", or the team's own best
+  level of the last 26 weeks; half-way at the low end), a concrete **next step**, and **Evidence** (the numbers, and when the team
+  sends raw data the flaky tests with their failed runs, the files with the most uncovered lines, the stage that grew, the longest
+  incidents, the services with failed deploys). Rules: flaky tests, coverage gap, build-time regression, defect escape rising while
+  coverage falls, sizing drift with carryover, low wellbeing with high blocked time, MTTR rising, a failing stage, high-severity
+  technical debt, the slowest tests, change failures, availability. A rule fires only when its metric is off target or forecast to
+  miss it, and not when the forecast says it reaches the target anyway. The top 3 are open, the rest under **More
+  recommendations**, accepted and dismissed ones under **Added to the Action plan or dismissed**. **Add to Action plan** creates the
+  tracked action in one click (title, next step and expected effect in its description, linked to the metric, baseline = the value
+  now); **Dismiss** asks for a reason (shown with who and when; **Reopen** brings it back); **Recalculate** recalculates now
+  (otherwise about once a day and whenever the page finds them out of date). A decided recommendation keeps the evidence it had.
 - **Action plan**: the team's tracked actions with owner, due date, status, linked KPI, baseline and computed outcome; **Create action**
-  from a recommendation (section 7). Grouped by status in accordions with counts (Open, In progress, Done, Dropped; Done and Dropped
+  from a recommendation (section 7). An action from a recommendation says so and shows whether its metric moved: "Since it was added:
+  Test coverage 57.6% (6 Nov) → 63% (20 Nov) Improved" (the team's snapshot on the day it was created and its latest snapshot). Grouped by status in accordions with counts (Open, In progress, Done, Dropped; Done and Dropped
   collapsed by default), 5 / 10 / 20 per page in each group; the whole card can be collapsed. What is expanded is remembered per person
   in the browser.
 - **Evidence from CI** (when the team's CI sends raw reports, section 4.2a): the metrics calculated from CI data (each opens
@@ -1172,7 +1195,9 @@ Why: a manager or executive reads the state of quality on a phone in one minute,
 
 - The scope's QA score (Battery / Gauge), status, target and change since last week; teams on track / at risk / off track.
 - The 3 biggest risks (teams with the QA score or a tracked KPI off target, lowest QA score first, each item with value, target and
-  weekly change) and the 3 most improved teams (biggest QA score rise).
+  weekly change, and "At this rate …" from the team's forecast of that metric) and the 3 most improved teams (biggest QA score rise).
+- **At this rate**: KPIs (QA score, coverage, automation, flakiness, defect escape) that are on target now but forecast to miss it
+  within 8 weeks, soonest first ("At this rate test coverage misses its target ≥ 80% around 18 Dec"); shown only when there are any.
 - Money at risk (super admins and managers): the Business impact revenue roll-up as a range per month and per year, the cost of delay of
   open debt, how it is estimated and a link to the assumptions and team figures (Business impact → All teams).
 - Open alerts (as the Alerts page) and since last week: QA change, teams up / down, status changes, alerts opened / resolved, tracked

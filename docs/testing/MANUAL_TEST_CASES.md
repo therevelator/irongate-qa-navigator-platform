@@ -1,6 +1,6 @@
 # Manual test cases
 
-406 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+415 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -25,6 +25,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Onboarding](#onboarding) (4)
 - [KPI targets and ingestion log](#kpi-targets-and-ingestion-log) (4)
 - [Executive summary](#executive-summary) (5)
+- [Team improve (forecasts and recommendations)](#team-improve-forecasts-and-recommendations) (9)
 - [Administration: manual metrics](#administration-manual-metrics) (7)
 - [API keys and ingestion](#api-keys-and-ingestion) (3)
 - [Sample (demo) data](#sample-demo-data) (4)
@@ -6203,6 +6204,207 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 2 | In Appearance choose Light, Dark, Graphite and Porcelain in turn, each with Battery and Gauge. | Every text is readable in every theme; the score is drawn as the chosen battery or gauge. |
 
 *Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-11, A11Y-30 … 33`
+
+## Team improve (forecasts and recommendations)
+
+### TC-DASH-105: Each KPI tile shows a Forecast line and its trend chart the projected band
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.21
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: lead@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123). On the Overview type "The Away Team" in "Search teams" and click its team card. | Team detail of "The Away Team" opens; below the KPI tiles the section "Recommendations" is shown, followed by "Action plan". |
+| 2 | Scroll to "Quality & testing" and read the tile "Test coverage". | Under the change line it reads "Forecast: …" with one of: "Misses target ≥ 80% around <day month>", "Reaches target …", "On track: stays ≥ 80% (about … by …)", "Stays off target ≥ 80%: about …% by …", or "not enough data (<reason>)". |
+| 3 | Look at the chart of the same tile. | After the history the chart continues as a dashed line with a shaded band for 8 weeks; the target is a dashed horizontal line; when the forecast crosses the target a dotted vertical line marks the day. |
+| 4 | Hover over a point of the dashed part. | The tooltip shows the date and "Forecast" with a value, and "Forecast band" with a range. |
+| 5 | Read the QA score card at the top. | It also has a "Forecast:" line, and the small trend says "Dashed line: target 85 · shaded: forecast". |
+
+*Automated:* `tests/e2e/team/improve.spec.ts › IMP-01`
+
+### TC-DASH-106: Recommendations are ranked, top 3 visible, the rest collapsed, each with evidence, next step, expected effect and confidence
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.22
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: lead@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123). On the Overview type "The Away Team" in "Search teams" and click its team card. | Team detail of "The Away Team" opens; below the KPI tiles the section "Recommendations" is shown, followed by "Action plan". |
+| 2 | Read the heading of the Recommendations section. | "Recommendations (N)" with N between 1 and 6; the three highest ranked show numbers 1, 2, 3. |
+| 3 | Read recommendation 1. | It shows a title with the numbers it is based on, a confidence badge (High / Medium / Low), "Metric: …", "Expected effect: <metric> <range> (to <range>) in <weeks>" with "Based on …" below it, and "Next step: …". |
+| 4 | Click "Evidence (n)" of recommendation 1. | A list of the numbers behind it opens (e.g. the metric now and 12 weeks ago, the forecast); for flaky tests, coverage or stages the tests, files or stages are named with their counts. |
+| 5 | If N is more than 3, click "More recommendations". | The remaining recommendations open below, numbered 4 onwards. |
+
+*Automated:* `tests/e2e/team/improve.spec.ts › IMP-02`
+
+### TC-DASH-107: Add to Action plan creates a tracked action linked to the recommendation and its metric
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.23
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: lead@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123). On the Overview type "The Away Team" in "Search teams" and click its team card. | Team detail of "The Away Team" opens; below the KPI tiles the section "Recommendations" is shown, followed by "Action plan". |
+| 2 | Note the title of recommendation 1 and click its "Add to Action plan". | A message "Added to the Action plan; its outcome is measured on …" appears; the recommendation leaves the top list and "Added to the Action plan or dismissed (1)" appears. |
+| 3 | Open "Added to the Action plan or dismissed". | The recommendation shows "In the Action plan: <title> · Open · unassigned" and "Since it was added: <metric> <value> (<day>) → no newer snapshot" with "No new data yet". |
+| 4 | In the Action plan, find the action with the same title. | It is Open, says "from the recommendation above", its linked KPI line shows the baseline (the value when it was added), and its description starts with "Next step:". |
+| 5 | Change the action's status to "In progress". | The recommendation now shows "· In progress". |
+
+**Notes:** Clean up: delete the action (Action plan → bin icon); the recommendation can then be reopened.
+
+*Automated:* `tests/e2e/team/improve.spec.ts › IMP-03`
+
+### TC-DASH-108: A recommended action later shows whether its metric moved, with the dates
+
+**Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F6.23
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: lead@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123). On the Overview type "The Away Team" in "Search teams" and click its team card. | Team detail of "The Away Team" opens; below the KPI tiles the section "Recommendations" is shown, followed by "Action plan". |
+| 2 | Take an action created from a recommendation at least one day ago (or create one and come back the next day after new values arrived). | Under its KPI line it reads "Since it was added: <metric> <before> (<day>) → <after> (<day>)" with Improved, Unchanged or Worse. |
+| 3 | Compare the two values with the KPI history of that metric on the same days. | Before is the team's snapshot on the day the action was created, after is the latest snapshot; the verdict follows the metric's direction (2 % of the baseline counts as unchanged). |
+
+*Automated:* `tests/e2e/team/improve.spec.ts › IMP-04`
+
+### TC-DASH-109: Dismiss needs a reason, shows who and why, and can be reopened
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.24
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: lead@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123). On the Overview type "The Away Team" in "Search teams" and click its team card. | Team detail of "The Away Team" opens; below the KPI tiles the section "Recommendations" is shown, followed by "Action plan". |
+| 2 | Click "Dismiss" on recommendation 1. | A dialog "Dismiss recommendation" shows its title and reasons: Not relevant for this team, Already being handled, The data is wrong, Not now (later), Other. |
+| 3 | Choose "Other", leave the text empty and click "Dismiss". | The dialog stays open: a reason is required for Other. |
+| 4 | Choose "Already being handled", type "platform team" in Note and click "Dismiss". | "Recommendation dismissed"; it leaves the top list. |
+| 5 | Open "Added to the Action plan or dismissed". | It reads "Dismissed by <your name> on <day month>: Already being handled: platform team" and has a "Reopen" button. |
+| 6 | Click "Reopen". | "Recommendation reopened"; it is back in the list. |
+
+*Automated:* `tests/e2e/team/improve.spec.ts › IMP-05`
+
+### TC-DASH-110: A software engineer sees the recommendations but cannot act on them; another team's are refused
+
+**Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F6.22, F15.1
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: engineer@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as engineer@irongate.com / demo123 and open your team "Mavericks" from the Overview. | The Recommendations section is shown with the forecasts on the KPI tiles. |
+| 2 | Look for buttons on the recommendations. | There is no "Add to Action plan", "Dismiss" or "Recalculate"; "Evidence" still opens. |
+| 3 | In the browser open http://localhost:3000/api/improve/teams/team-1764026236967-uphpblii4 (QualityCowboys, not your team). | 403 with "Access denied. This team is outside your analytics scope." |
+
+*Automated:* `tests/e2e/team/improve.spec.ts › IMP-06`
+
+### TC-DASH-111: Recalculate keeps the decisions and the recommendations fit a phone
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F6.22, F4.10
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as admin@irongate.com / demo123 and open "The Away Team". | Team detail opens with Recommendations. |
+| 2 | Click "Recalculate". | "Forecasts and recommendations recalculated"; the footnote shows the new calculation time; accepted and dismissed ones stay as they were. |
+| 3 | In DevTools set the size to 390 x 844 and scroll to Recommendations; open Evidence of the first one. | Everything fits the width (no sideways scrolling); the buttons are full size and below the text. |
+
+*Automated:* `tests/e2e/team/improve.spec.ts › IMP-07, IMP-08`
+
+### TC-DASH-112: Executive summary: risks say what happens at this rate; KPIs forecast to miss are listed
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6.25
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as admin@irongate.com / demo123 and open http://localhost:5173/summary. | The executive summary opens. |
+| 2 | Read the cards under "Biggest risks". | Where a forecast exists, a line under the KPI reads "At this rate <metric> stays off target: about … by … (target …)", "… misses its target … around …" or "… reaches its target … around …". |
+| 3 | Look for the section "At this rate". | When a team's KPI is on target now but forecast to miss it within 8 weeks, it is listed with the team and "At this rate … misses its target … around <day>", soonest first. Without such KPIs the section is not shown. |
+
+*Automated:* `tests/e2e/team/improve.spec.ts › IMP-09`
+
+### TC-DASH-113: Recommendations and forecasts are readable in all four themes
+
+**Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F15.1, F6.22
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: lead@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123). On the Overview type "The Away Team" in "Search teams" and click its team card. | Team detail of "The Away Team" opens; below the KPI tiles the section "Recommendations" is shown, followed by "Action plan". |
+| 2 | With Appearance set to Light, Dark, Graphite and Porcelain in turn, read the Recommendations section and a KPI tile's Forecast line. | All text is readable (sufficient contrast), badges and buttons are visible, the shaded forecast band is visible but lighter than the history. |
+
+*Automated:* `tests/e2e/team/improve.spec.ts › A11Y-38 … A11Y-41`
 
 ## Administration: manual metrics
 

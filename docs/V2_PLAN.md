@@ -100,6 +100,27 @@ of the new data (phase 4).
   - "Build time doubled since 3 Nov; the `integration-tests` stage went from 4 to 11 minutes."
 - One click turns a recommendation into an Action plan item; the action then shows whether the metric moved.
 
+Status: **done**. Forecasts (`server/lib/forecast/math.ts`): per team, every KPI with history and the QA score, Theil–Sen trend
+through the weekly medians of 26 weeks, 80 % band from the residuals (1.4826 × MAD), 8 weeks ahead, the target crossing day by day
+with the target valid on each future day (earliest / latest from the band's edges), or "not enough data" with the reason (fewer
+than 6 weeks with values, history under 5 weeks, latest value older than 21 days, too noisy). Recommendations
+(`server/lib/recommendations/rules.ts`, deterministic): flaky tests (the tests, failed runs, rerun time), coverage gap (the files
+holding most uncovered lines and the points raising them adds), build-time regression (the stage that grew), defect escape rising
+while coverage falls, sizing drift with carryover, low wellbeing with blocked time, MTTR rising (the longest incidents, time to
+acknowledge), a failing stage, high-severity debt, the slowest tests, change failures (failed deploys per service), availability;
+each with evidence, next step, expected effect as a range (from the evidence or the team's own best level of 26 weeks) and
+confidence; ranked by expected effect in watch bands × confidence, at most 6. Stored in `forecasts` and `recommendations` (open /
+accepted → linked action / dismissed with a reason; reopen), migration `20261130100000_forecasts_recommendations.sql` (also
+`team_actions.recommendation_id`). API `GET /api/improve/teams/:id` (analytics scope; recalculated when due), `POST …/refresh`,
+`POST /api/improve/recommendations/:id/accept | dismiss | reopen` (who may create actions). Recalculated by the hourly
+`alerts-evaluate` job for the teams that are due (none yet, older than 20 h or older than their newest value) within the function's
+time limit, so production backfills itself; `scripts/reseed/improve-refresh.ts` does a company at once. Team detail: Forecast line on
+the KPI tiles and the QA score, trend charts with the projected band, target and crossing, Recommendations section above the Action
+plan; actions show their recommendation and the metric before / after from the snapshot history. Executive summary: "at this rate …"
+under each risk and the KPIs on target now but forecast to miss. Tests: `tests/api/forecast-math.test.ts`,
+`recommendation-rules.test.ts`, `improve.test.ts`, UI `team/improve.spec.ts` (IMP-01 … 09, A11Y-38 … 41), manual cases in
+"Team improve".
+
 ### Phase 5 — Invest (for the business)
 
 - **Cost model** set once by a super admin: revenue per product / service per hour, average engineering cost per hour,

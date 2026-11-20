@@ -386,7 +386,8 @@ role with a team in scope may open the link, and sees their own scope (a manager
 - The scope's QA score (Battery or Gauge, as chosen in Appearance) with status, target and the change since last week (the
   overview's own figure over the same teams), and the teams vs KPI targets (on track / at risk / off track).
 - **Biggest risks** (3): teams with the QA score below its target or a tracked KPI off target, lowest QA score first, each item with
-  its value, target and the change since last week. **Most improved** (3): the biggest QA score rises since last week.
+  its value, target and the change since last week, and "At this rate …" from the team's forecast of that metric. **At this rate**:
+  KPIs on target now but forecast to miss it within 8 weeks, soonest first. **Most improved** (3): the biggest QA score rises since last week.
 - **Money at risk**: the Business impact revenue roll-up over the scope as a range per month and per year, the cost of delay of open
   technical debt, how it is estimated and a link to the assumptions (Business impact → All teams). Super admins and managers only.
 - **Open alerts** (the Alerts page counts) and **since last week**: QA score change, teams up / down, status changes, alerts opened /
@@ -459,6 +460,40 @@ curl -X POST "https://<host>/api/ingest/kpis?partial=true" \
 #     "qaScore":<0–100 or null>,"status":"good|warning|critical|null","updated":["code_quality_score","test_coverage"],
 #     "carriedForward":["defect_escape_rate", …],"duplicate":false},"items":[…]}
 ```
+
+## Improve: forecasts and recommendations (v2 phase 4)
+
+What the team should do next and what it will change, from the team's own data. Migration
+`supabase/migrations/20261130100000_forecasts_recommendations.sql` (tables `forecasts`, `recommendations`,
+`team_actions.recommendation_id`).
+
+- **Forecasts** ([`server/lib/forecast/math.ts`](server/lib/forecast/math.ts), stored by
+  [`server/lib/forecast/store.ts`](server/lib/forecast/store.ts)): for every KPI with history and the QA score, a Theil–Sen trend
+  through the weekly medians of the last 26 weeks, an 80 % band from the residuals (σ = 1.4826 × MAD), projected 8 weeks ahead,
+  clamped to the metric's range; the day it crosses its target (the target valid on each future day; earliest / latest from the band)
+  or "on track" / "stays off target"; or "not enough data" with the reason (fewer than 6 weeks with values, under 5 weeks of history,
+  latest value older than 21 days, too noisy). Wording shared by the app and the summary: `src/lib/forecastText.ts`.
+- **Recommendations** ([`server/lib/recommendations/rules.ts`](server/lib/recommendations/rules.ts), deterministic, unit-tested;
+  facts from [`load.ts`](server/lib/recommendations/load.ts), storage and decisions in [`store.ts`](server/lib/recommendations/store.ts)):
+  flaky tests, coverage gap by file, build-time regression with the stage that grew, defect escape rising while coverage falls, sizing
+  drift, low wellbeing with blocked time, MTTR rising (with incidents), a failing stage, high-severity debt, slowest tests, change
+  failures (with failed deploys), availability. Each: evidence, next step, expected effect (a range) and confidence; ranked by expected
+  effect in watch bands × confidence (+ urgency when the forecast worsens), at most 6. Status open / accepted (→ a tracked action) /
+  dismissed (reason); an accepted or dismissed one keeps its evidence; a rule that no longer fires hides its open recommendation.
+- **API** ([`server/routes/improve.ts`](server/routes/improve.ts)): `GET /api/improve/teams/:id` (analytics scope, like the KPI
+  history; recalculated first when due), `POST /api/improve/teams/:id/refresh`, `POST /api/improve/recommendations/:id/accept`
+  (`{ ownerId?, dueDate?, title? }`), `…/dismiss` (`{ reason }`), `…/reopen` (who may create actions: super admins, the department's
+  managers, the team's leads). Actions (`GET /api/actions`) carry `recommendation` and `movement` (the metric before / after from
+  the snapshot history). `GET /api/summary` adds `forecast` to each risk item and `upcoming`.
+- **Recalculation**: the hourly `alerts-evaluate` job (Netlify function and the server's cron) recalculates, with the time left of a
+  25 s budget, the teams that are due (no forecasts yet, older than 20 hours, or older than their newest value), oldest first; the team
+  page and the summary recalculate a due team when read; **Recalculate** on the page does it now. After the migration, production
+  backfills itself this way; `npx tsx scripts/reseed/improve-refresh.ts --company <id>` does one company at once (the reseed build
+  runs it before the export).
+- **UI**: Team detail → Forecast line on every KPI tile and the QA score card, trend charts with the projected band, target and
+  crossing; Recommendations above the Action plan (top 3, more and decided ones in accordions, Add to Action plan, Dismiss, Reopen,
+  Recalculate). Tests: `tests/api/forecast-math.test.ts`, `recommendation-rules.test.ts`, `improve.test.ts`;
+  `tests/e2e/team/improve.spec.ts`.
 
 ## Raw CI ingestion and the calculation engine (v2 phase 1)
 

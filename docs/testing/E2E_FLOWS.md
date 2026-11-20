@@ -36,7 +36,7 @@ Derived from the code, then checked against the documentation:
 
 | | Count |
 |---|---|
-| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **160** |
+| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **165** |
 | Flows with a happy-path UI test | **134** of the 137 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
 | Flows with at least one negative UI test | **109** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
 | UI tests (Playwright, `chromium` project) | **366** in 41 files: 73 existing (kept, tagged) + 293 new; no `test.fail` left |
@@ -148,6 +148,11 @@ Derived from the code, then checked against the documentation:
 | F6.18 | TV recovers from a lost connection (keeps data, retries every 15 s, back on "online"); idle cursor and controls hidden; 4K layout | — | — | TVW-09, TVW-10 | TVW-08 |
 | F6.19 | Executive summary on a phone (390 × 844): scope QA score, risks, most improved, money at risk, alerts, last week; no sideways scroll; tap targets ≥ 44 px | All (scope) | Money at risk for L E V | SUMUI-01, SUMUI-02, SUMUI-10, SUMUI-11, SUMUI-12 | SUMUI-03 |
 | F6.20 | Executive summary offline copy, server error, share link; accessibility in four themes | All (scope) | — | SUMUI-04, SUMUI-06, A11Y-30 … 33 | SUMUI-04, SUMUI-05 |
+| F6.21 | Forecasts on Team detail: a Forecast line on every KPI tile and the QA score ("Misses target ≥ 80% around …", "On track", "not enough data (reason)"), trend charts with the projected band, target and crossing | Teams in scope | — | IMP-01 | — |
+| F6.22 | Recommendations: ranked, top 3 visible, the rest and the decided ones in accordions, evidence (tests, files, stages named), expected effect, next step, confidence; Recalculate; phone layout; four themes | Teams in scope (read); A, M (dept), L (own) act | E V act; other teams (API 403) | IMP-02, IMP-07, IMP-08, A11Y-38 … 41 | IMP-06 |
+| F6.23 | Add to Action plan: a tracked action linked to the recommendation and its metric; the action shows the metric before / after with the dates | A, M (dept), L (own) | E V | IMP-03, IMP-04 | IMP-06 (API 403) |
+| F6.24 | Dismiss a recommendation with a reason (who, when, why shown); Reopen | A, M (dept), L (own) | E V | IMP-05 | IMP-05 (Other without a reason) |
+| F6.25 | Executive summary: "at this rate …" under each risk; KPIs forecast to miss within 8 weeks | All (scope) | — | IMP-09 | — |
 | F6.13 | Team AI toggle | A, M, L (own) | E V | legacy:team-lead-rbac "Toggle AI" | legacy:team-lead-rbac |
 
 ## 7. Analytics, compare, saved views
