@@ -24,7 +24,7 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamAnalytics, policyActor } from '../middleware/access';
 import { isCompanyAdmin } from '../lib/userPolicy';
 import { EVIDENCE_FOR_KPI, METRICS, groupOf } from '../lib/calc/engine';
-import { classifyFailedChanges, isCountedDeploy, loadDeliveryData } from '../lib/calc/delivery';
+import { classifyFailedChanges, isCountedDeploy, loadDeliveryData, type DeliveryData } from '../lib/calc/delivery';
 import { isOutage } from '../lib/ingest/deliveryEvents';
 import { recordAudit } from '../lib/audit';
 
@@ -278,7 +278,7 @@ router.get('/teams/:id/delivery', authenticateToken, async (req: AuthRequest, re
     const today = new Date().toISOString().slice(0, 10);
     const from = new Date(Date.now() - 29 * 86_400_000).toISOString().slice(0, 10);
     const client = await pool.connect();
-    let data;
+    let data: DeliveryData;
     try { data = await loadDeliveryData(client, teamId, from, today); } finally { client.release(); }
     const now = Date.now();
     const since = Date.parse(`${from}T00:00:00Z`);
