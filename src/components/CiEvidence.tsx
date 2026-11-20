@@ -387,7 +387,7 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
           )}
           {calc.sprint && (
             <p className="text-xs text-slate-600 dark:text-slate-300" data-testid="how-calculated-sprint">
-              Sprint <span className="font-medium">{calc.sprint.name ?? calc.sprint.id}</span>{calc.sprint.startedAt ? `, started ${formatAsOf(calc.sprint.startedAt)}` : ''}, closed {formatAsOf(calc.sprint.completedAt)}
+              {/^sprint\b/i.test(calc.sprint.name ?? '') ? '' : 'Sprint '}<span className="font-medium">{calc.sprint.name ?? calc.sprint.id}</span>{calc.sprint.startedAt ? `, started ${formatAsOf(calc.sprint.startedAt)}` : ''}, closed {formatAsOf(calc.sprint.completedAt)}
             </p>
           )}
           <div>
