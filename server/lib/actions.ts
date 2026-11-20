@@ -15,7 +15,14 @@
  * improved / worse when it moved by more than OUTCOME_TOLERANCE of the baseline, else unchanged;
  * no_data when no new value was recorded in that window. A computed checkpoint is kept.
  * Reopening a done action clears its completion and outcomes.
+ *
+ * Status history (table team_action_events): every status change (and the creation) is recorded in
+ * the same transaction as the change, with who made it (the signed-in user; NULL and source
+ * 'system' for an automatic change) and when (UTC). team_actions.status_changed_by / _at hold the
+ * latest one. The list endpoint returns them with each action (statusChangedBy, statusChangedAt,
+ * history newest first), scoped like the actions themselves; people are named, never e-mailed.
  */
+import type { PoolClient } from 'pg';
 import { query, queryOne, transaction } from '../../src/lib/db';
 import { execOn, type Exec } from './assignments';
 import { recordAudit } from './audit';
@@ -175,8 +182,11 @@ export async function refreshActionOutcomes(companyId: string, opts: { teamIds?:
  * Reads
  * ---------------------------------------------------------------------------------------- */
 
+const fullName = (alias: string) => `NULLIF(TRIM(COALESCE(${alias}.first_name, '') || ' ' || COALESCE(${alias}.last_name, '')), '')`;
+
 const ACTION_SELECT = `
   SELECT a.*, t.name AS team_name, t.department_id, rec.title AS recommendation_title,
+         ${fullName('sc')} AS status_changed_by_name,
          NULLIF(TRIM(COALESCE(o.first_name, '') || ' ' || COALESCE(o.last_name, '')), '') AS owner_name, o.email AS owner_email,
          NULLIF(TRIM(COALESCE(cb.first_name, '') || ' ' || COALESCE(cb.last_name, '')), '') AS created_by_name,
          (SELECT json_build_object('value', mv.value, 'recordedAt', mv.recorded_at) FROM metric_values mv
@@ -186,7 +196,60 @@ const ACTION_SELECT = `
     JOIN teams t ON t.id = a.team_id
     LEFT JOIN recommendations rec ON rec.id = a.recommendation_id
     LEFT JOIN users o ON o.id = a.owner_id
-    LEFT JOIN users cb ON cb.id = a.created_by`;
+    LEFT JOIN users cb ON cb.id = a.created_by
+    LEFT JOIN users sc ON sc.id = a.status_changed_by`;
+
+/** A person as shown next to a status change: id and name only (never the e-mail). */
+export interface PersonRef { id: string; name: string }
+const UNNAMED = 'Unnamed user';
+
+/** One status change of an action (from null = created). */
+export interface ActionEventJson {
+  id: string;
+  fromStatus: ActionStatus | null;
+  toStatus: ActionStatus;
+  /** The person who made the change; null for an automatic change or when that user was deleted. */
+  changedBy: PersonRef | null;
+  /** True for a change made by the system (no person). */
+  automatic: boolean;
+  changedAt: string;
+  note: string | null;
+}
+
+/** Status history of the given actions (of one company), newest first per action. */
+export async function actionHistories(companyId: string, actionIds: string[], exec: Exec = execOn()): Promise<Map<string, ActionEventJson[]>> {
+  const out = new Map<string, ActionEventJson[]>();
+  if (!actionIds.length) return out;
+  const rows = await exec<any>(
+    `SELECT e.id, e.action_id, e.from_status, e.to_status, e.changed_by, e.source, e.changed_at, e.note, ${fullName('u')} AS changed_by_name
+       FROM team_action_events e LEFT JOIN users u ON u.id = e.changed_by
+      WHERE e.company_id = ? AND e.action_id = ANY(?::text[])
+      ORDER BY e.action_id, e.changed_at DESC, (e.from_status IS NULL), e.id`,
+    [companyId, actionIds]
+  );
+  for (const r of rows) {
+    const list = out.get(r.action_id) ?? [];
+    list.push({
+      id: r.id, fromStatus: r.from_status ?? null, toStatus: r.to_status,
+      changedBy: r.changed_by ? { id: r.changed_by, name: r.changed_by_name ?? UNNAMED } : null,
+      automatic: r.source === 'system', changedAt: new Date(r.changed_at).toISOString(), note: r.note ?? null,
+    });
+    out.set(r.action_id, list);
+  }
+  return out;
+}
+
+/**
+ * Record a status change (or the creation: from = null) of an action, in the caller's transaction.
+ * actorId null / empty = an automatic change by the system.
+ */
+export async function recordStatusEvent(exec: Exec, e: { companyId: string; teamId: string; actionId: string; from: ActionStatus | null; to: ActionStatus; actorId: string | null; at: string; note?: string | null }): Promise<void> {
+  await exec(
+    `INSERT INTO team_action_events (company_id, team_id, action_id, from_status, to_status, changed_by, source, changed_at, note)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?::timestamptz, ?)`,
+    [e.companyId, e.teamId, e.actionId, e.from, e.to, e.actorId || null, e.actorId ? 'user' : 'system', e.at, e.note ?? null]
+  );
+}
 
 export interface ActionJson {
   id: string;
@@ -215,6 +278,12 @@ export interface ActionJson {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
+  /** Who last set the status (creation counts); null for an automatic change or when unknown. */
+  statusChangedBy: PersonRef | null;
+  /** When the status was last set (UTC); null when unknown. */
+  statusChangedAt: string | null;
+  /** The status history, newest first (listTeamActions; empty elsewhere and for old rows). */
+  history: ActionEventJson[];
   outcomes: Array<{ checkpoint: 'completion' | 'd14' | 'd30'; label: string; dueAt: string | null; value: number | null; valueAt: string | null; outcome: Outcome | 'pending' }>;
 }
 
@@ -251,6 +320,9 @@ export function actionJson(r: any, now = Date.now()): ActionJson {
     createdAt: new Date(r.created_at).toISOString(),
     updatedAt: new Date(r.updated_at).toISOString(),
     completedAt,
+    statusChangedBy: r.status_changed_by ? { id: r.status_changed_by, name: r.status_changed_by_name ?? UNNAMED } : null,
+    statusChangedAt: iso(r.status_changed_at),
+    history: [],
     outcomes: r.status === 'done' && m ? [checkpoint('completion', 'At completion'), checkpoint('d14', 'After 14 days'), checkpoint('d30', 'After 30 days')] : [],
   };
 }
@@ -264,7 +336,9 @@ export async function listTeamActions(companyId: string, teamId: string): Promis
       LIMIT 200`,
     [companyId, teamId]
   );
-  const out = rows.map((r: any) => actionJson(r));
+  const out: ActionJson[] = rows.map((r: any) => actionJson(r));
+  const histories = await actionHistories(companyId, out.map((a) => a.id));
+  for (const a of out) a.history = histories.get(a.id) ?? [];
   const { actionMovement } = await import('./recommendations/store');
   for (const a of out) a.movement = a.metric ? await actionMovement(teamId, a.metric.key, a.createdAt) : null;
   return out;
@@ -296,26 +370,38 @@ const auditState = (r: any) => r && ({
   status: r.status, metric_key: r.metric_key ?? null, baseline_value: num(r.baseline_value), completed_at: iso(r.completed_at),
 });
 
-export interface ActionContext { companyId: string; actorId: string; team: { id: string; name: string; department_id: string | null } }
+/** actorId: the signed-in user; null / empty for a change made by the system (recorded as automatic). */
+export interface ActionContext { companyId: string; actorId: string | null; team: { id: string; name: string; department_id: string | null } }
 
-export async function createAction(ctx: ActionContext, input: { title: string; description: string | null; ownerId: string | null; dueDate: string | null; metricKey: TargetMetric | null; origin: ActionOrigin; alertId: string | null }): Promise<string> {
-  return transaction(async (client) => {
+export interface NewAction { title: string; description: string | null; ownerId: string | null; dueDate: string | null; metricKey: TargetMetric | null; origin: ActionOrigin; alertId: string | null; recommendationId?: string | null }
+
+/**
+ * Create an action (status open) with its "created" history row. Runs in its own transaction, or in
+ * the caller's when `client` is given (accepting a recommendation creates the action and records the
+ * decision in one transaction).
+ */
+export async function createAction(ctx: ActionContext, input: NewAction, client?: PoolClient): Promise<string> {
+  if (!client) return transaction((c) => createAction(ctx, input, c));
+  {
     const exec = execOn(client);
     const nowIso = new Date().toISOString();
+    const actorId = ctx.actorId || null;
     const baseline = input.metricKey ? await valueBetween(ctx.team.id, input.metricKey, null, nowIso, exec) : null;
     const [row] = await exec<any>(
-      `INSERT INTO team_actions (company_id, team_id, title, description, origin, alert_id, owner_id, due_date, status, metric_key, baseline_value, baseline_at, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?::date, 'open', ?, ?, ?::timestamptz, ?) RETURNING *`,
-      [ctx.companyId, ctx.team.id, input.title, input.description, input.origin, input.alertId, input.ownerId, input.dueDate,
-        input.metricKey, baseline?.value ?? null, baseline?.recordedAt ?? null, ctx.actorId]
+      `INSERT INTO team_actions (company_id, team_id, title, description, origin, alert_id, recommendation_id, owner_id, due_date, status, metric_key, baseline_value, baseline_at,
+                                 created_by, created_at, updated_at, status_changed_by, status_changed_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?::date, 'open', ?, ?, ?::timestamptz, ?, ?::timestamptz, ?::timestamptz, ?, ?::timestamptz) RETURNING *`,
+      [ctx.companyId, ctx.team.id, input.title, input.description, input.origin, input.alertId, input.recommendationId ?? null, input.ownerId, input.dueDate,
+        input.metricKey, baseline?.value ?? null, baseline?.recordedAt ?? null, actorId, nowIso, nowIso, actorId, nowIso]
     );
+    await recordStatusEvent(exec, { companyId: ctx.companyId, teamId: ctx.team.id, actionId: row.id, from: null, to: 'open', actorId, at: nowIso });
     await recordAudit({
       companyId: ctx.companyId, actorId: ctx.actorId, action: 'action.create', entityType: 'action', entityId: row.id,
       summary: `Created action "${input.title}" for team ${ctx.team.name}`, before: null, after: auditState(row),
       departmentIds: [ctx.team.department_id], subjectIds: [row.id, ctx.team.id, input.ownerId],
     }, exec);
     return row.id as string;
-  });
+  }
 }
 
 export interface ActionPatch { title?: string; description?: string | null; ownerId?: string | null; dueDate?: string | null; status?: ActionStatus; metricKey?: TargetMetric | null }
@@ -341,6 +427,7 @@ export async function updateAction(ctx: ActionContext, id: string, patch: Action
     const metricChanged = 'metric_key' in set;
     if (patch.status !== undefined && patch.status !== before.status) {
       set.status = patch.status;
+      Object.assign(set, { status_changed_by: ctx.actorId || null, status_changed_at: nowIso });
       if (patch.status === 'done') {
         const c = await completionCheckpoint({ ...before, ...set }, nowIso, exec);
         Object.assign(set, clearOutcomes, { completed_at: nowIso, completion_value: c.value, completion_value_at: c.at, completion_outcome: c.outcome });
@@ -355,10 +442,13 @@ export async function updateAction(ctx: ActionContext, id: string, patch: Action
     const keys = Object.keys(set);
     if (!keys.length) return { changed: [] };
     const [after] = await exec<any>(
-      `UPDATE team_actions SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = NOW() WHERE id = ? RETURNING *`,
-      [...keys.map((k) => set[k]), id]
+      `UPDATE team_actions SET ${keys.map((k) => `${k} = ?`).join(', ')}, updated_at = ?::timestamptz WHERE id = ? RETURNING *`,
+      [...keys.map((k) => set[k]), nowIso, id]
     );
-    const changed = keys.filter((k) => !k.startsWith('completion_') && !k.startsWith('d14_') && !k.startsWith('d30_') && k !== 'baseline_at' && k !== 'completed_at');
+    if (set.status) {
+      await recordStatusEvent(exec, { companyId: ctx.companyId, teamId: before.team_id, actionId: id, from: before.status, to: set.status, actorId: ctx.actorId || null, at: nowIso });
+    }
+    const changed = keys.filter((k) => !k.startsWith('completion_') && !k.startsWith('d14_') && !k.startsWith('d30_') && !k.startsWith('status_changed_') && k !== 'baseline_at' && k !== 'completed_at');
     await recordAudit({
       companyId: ctx.companyId, actorId: ctx.actorId, action: patch.status && patch.status !== before.status ? 'action.status' : 'action.update', entityType: 'action', entityId: id,
       summary: `Updated action "${after.title}" (team ${ctx.team.name}): ${changed.join(', ')}${set.status ? ` → ${set.status}` : ''}`,
