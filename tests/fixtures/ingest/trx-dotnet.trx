@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TestRun id="5f1a9c1e-0000-4000-8000-000000000001" name="runner@ci 2026-11-18 14:00:00" xmlns="http://microsoft.com/schemas/VisualStudio/TeamTest/2010">
+  <Times creation="2026-11-18T14:00:00.0000000+00:00" queuing="2026-11-18T14:00:00.0000000+00:00" start="2026-11-18T14:00:00.0000000+00:00" finish="2026-11-18T14:00:05.5000000+00:00" />
+  <TestSettings name="default" id="00000000-0000-0000-0000-000000000000" />
+  <Results>
+    <UnitTestResult executionId="e1" testId="t1" testName="Transfers_Succeed_WhenBalanceIsEnough" computerName="ci" duration="00:00:00.2500000" startTime="2026-11-18T14:00:01.0000000+00:00" endTime="2026-11-18T14:00:01.2500000+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="l1" relativeResultsDirectory="e1" />
+    <UnitTestResult executionId="e2" testId="t2" testName="Transfers_Fail_WhenAccountFrozen" computerName="ci" duration="00:00:01.0000000" startTime="2026-11-18T14:00:02.0000000+00:00" endTime="2026-11-18T14:00:03.0000000+00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Failed" testListId="l1" relativeResultsDirectory="e2">
+      <Output>
+        <ErrorInfo>
+          <Message>Assert.AreEqual failed. Expected:&lt;Frozen&gt;. Actual:&lt;Active&gt;.</Message>
+          <StackTrace>   at Bank.Tests.TransferTests.Transfers_Fail_WhenAccountFrozen() in /src/TransferTests.cs:line 31</StackTrace>
+        </ErrorInfo>
+      </Output>
+    </UnitTestResult>
+    <UnitTestResult executionId="e3" testId="t3" testName="Statement_IsGenerated" computerName="ci" duration="00:00:00" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="NotExecuted" testListId="l1" relativeResultsDirectory="e3" />
+    <UnitTestResult executionId="e4" testId="t4" testName="Fees (1 rows)" computerName="ci" duration="00:00:00.5000000" testType="13cdc9d9-ddb5-4fa4-a97d-d965ccfc6d4b" outcome="Passed" testListId="l1" resultType="DataDrivenTest">
+      <InnerResults>
+        <UnitTestResult executionId="e4a" parentExecutionId="e4" testId="t4" testName="Fees (Row 0)" computerName="ci" duration="00:00:00.5000000" outcome="Passed" testListId="l1" resultType="DataDrivenDataRow" />
+      </InnerResults>
+    </UnitTestResult>
+  </Results>
+  <TestDefinitions>
+    <UnitTest name="Transfers_Succeed_WhenBalanceIsEnough" storage="/src/bin/bank.tests.dll" id="t1"><Execution id="e1" /><TestMethod codeBase="/src/bin/bank.tests.dll" adapterTypeName="executor://mstestadapter/v2" className="Bank.Tests.TransferTests" name="Transfers_Succeed_WhenBalanceIsEnough" /></UnitTest>
+    <UnitTest name="Transfers_Fail_WhenAccountFrozen" storage="/src/bin/bank.tests.dll" id="t2"><Execution id="e2" /><TestMethod codeBase="/src/bin/bank.tests.dll" adapterTypeName="executor://mstestadapter/v2" className="Bank.Tests.TransferTests" name="Transfers_Fail_WhenAccountFrozen" /></UnitTest>
+    <UnitTest name="Statement_IsGenerated" storage="/src/bin/bank.tests.dll" id="t3"><Execution id="e3" /><TestMethod codeBase="/src/bin/bank.tests.dll" adapterTypeName="executor://mstestadapter/v2" className="Bank.Tests.StatementTests" name="Statement_IsGenerated" /></UnitTest>
+    <UnitTest name="Fees" storage="/src/bin/bank.tests.dll" id="t4"><Execution id="e4" /><TestMethod codeBase="/src/bin/bank.tests.dll" adapterTypeName="executor://mstestadapter/v2" className="Bank.Tests.FeeTests" name="Fees" /></UnitTest>
+  </TestDefinitions>
+  <ResultSummary outcome="Failed">
+    <Counters total="4" executed="3" passed="2" failed="1" error="0" timeout="0" aborted="0" inconclusive="0" passedButRunAborted="0" notRunnable="0" notExecuted="1" disconnected="0" warning="0" completed="0" inProgress="0" pending="0" />
+  </ResultSummary>
+</TestRun>

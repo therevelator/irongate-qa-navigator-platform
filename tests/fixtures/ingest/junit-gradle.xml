@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.bank.mobile.LoginViewModelTest" tests="3" skipped="1" failures="0" errors="0" timestamp="2026-11-18T11:22:33" hostname="ci" time="0.876">
+  <properties/>
+  <testcase name="emptyPasswordShowsError()" classname="com.bank.mobile.LoginViewModelTest" time="0.412"/>
+  <testcase name="biometricLogin()" classname="com.bank.mobile.LoginViewModelTest" time="0.0">
+    <skipped/>
+  </testcase>
+  <testcase name="successfulLoginNavigates()" classname="com.bank.mobile.LoginViewModelTest" time="0.464"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

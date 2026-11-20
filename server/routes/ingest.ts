@@ -14,6 +14,7 @@ import {
   validateKpiValues,
 } from '../lib/kpiIngest';
 import { afterIngestionRejected, afterKpiWrite } from '../lib/alerts';
+import rawIngestRoutes from './ingestRaw';
 import { logRejected, requestHash, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 
 const router = express.Router();
@@ -205,5 +206,8 @@ function sourcesOf(items: ItemSummary[]): string | null {
   const s = Array.from(new Set(items.map((i) => i.source).filter((x): x is string => !!x)));
   return s.length ? s.join(', ').slice(0, 200) : null;
 }
+
+// v2 raw ingestion: POST /tests, /coverage, /pipelines (server/routes/ingestRaw.ts).
+router.use(rawIngestRoutes);
 
 export default router;

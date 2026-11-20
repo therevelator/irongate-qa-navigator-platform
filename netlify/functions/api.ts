@@ -28,6 +28,7 @@ import notificationsRoutes from '../../server/routes/notifications';
 import actionsRoutes from '../../server/routes/actions';
 import activityRoutes from '../../server/routes/activity';
 import operatorRoutes from '../../server/routes/operator';
+import { isRawIngestPath } from '../../server/lib/ingest/body';
 import { requestContext } from '../../server/lib/requestContext';
 import '../../server/lib/userActivity'; // user activity log (request hook)
 import { apiErrorHandler } from '../../server/middleware/errorHandler';
@@ -80,8 +81,11 @@ app.use((req, res, next) => {
 });
 
 app.use(cookieParser());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+// The raw ingestion endpoints (tests, coverage, pipelines) read their own body (files up to 20 MB, gzip).
+const jsonParser = express.json();
+const formParser = express.urlencoded({ extended: true });
+app.use((req, res, next) => (isRawIngestPath(req.path) ? next() : jsonParser(req, res, next)));
+app.use((req, res, next) => (isRawIngestPath(req.path) ? next() : formParser(req, res, next)));
 
 // Request logging
 app.use((req, res, next) => {

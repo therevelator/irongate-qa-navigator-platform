@@ -1,0 +1,12 @@
+{
+  "id": "6612345678", "attempt": 1, "name": "CI", "commit": "a1b2c3d4e5f6", "branch": "refs/heads/main",
+  "startedAt": "2026-11-18T08:00:00Z", "finishedAt": "2026-11-18T08:12:00Z", "result": "success",
+  "url": "https://github.com/acme/payments/actions/runs/6612345678",
+  "stages": [
+    { "name": "build", "startedAt": "2026-11-18T08:00:00Z", "finishedAt": "2026-11-18T08:03:00Z", "result": "success" },
+    { "name": "unit tests (shard 1/3)", "parallelGroup": "unit", "startedAt": "2026-11-18T08:03:00Z", "finishedAt": "2026-11-18T08:09:00Z", "result": "success" },
+    { "name": "unit tests (shard 2/3)", "parallelGroup": "unit", "startedAt": "2026-11-18T08:03:00Z", "finishedAt": "2026-11-18T08:07:00Z", "result": "success" },
+    { "name": "unit tests (shard 3/3)", "parallelGroup": "unit", "startedAt": "2026-11-18T08:03:00Z", "finishedAt": "2026-11-18T08:08:00Z", "result": "success" },
+    { "name": "deploy", "startedAt": "2026-11-18T08:09:00Z", "finishedAt": "2026-11-18T08:12:00Z", "result": "success" }
+  ]
+}

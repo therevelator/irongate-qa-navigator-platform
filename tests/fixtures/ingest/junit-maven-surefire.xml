@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="https://maven.apache.org/surefire/maven-surefire-plugin/xsd/surefire-test-report-3.0.xsd" version="3.0" name="com.bank.loans.LoanServiceTest" time="4,321.5" tests="4" errors="0" skipped="0" failures="1">
+  <properties>
+    <property name="java.version" value="21.0.2"/>
+    <property name="os.name" value="Linux"/>
+  </properties>
+  <testcase name="approvesSmallLoan" classname="com.bank.loans.LoanServiceTest" time="0.051"/>
+  <testcase name="rejectsBadCredit" classname="com.bank.loans.LoanServiceTest" time="0.102">
+    <flakyFailure message="expected: &lt;REJECTED&gt; but was: &lt;PENDING&gt;" type="org.opentest4j.AssertionFailedError">
+      <stackTrace>org.opentest4j.AssertionFailedError: expected: &lt;REJECTED&gt; but was: &lt;PENDING&gt;</stackTrace>
+    </flakyFailure>
+  </testcase>
+  <testcase name="computesInterest" classname="com.bank.loans.LoanServiceTest" time="0.330">
+    <failure message="expected: &lt;4.5&gt; but was: &lt;4.25&gt;" type="org.opentest4j.AssertionFailedError"><![CDATA[org.opentest4j.AssertionFailedError: expected: <4.5> but was: <4.25>
+	at com.bank.loans.LoanServiceTest.computesInterest(LoanServiceTest.java:44)]]></failure>
+    <rerunFailure message="expected: &lt;4.5&gt; but was: &lt;4.25&gt;" type="org.opentest4j.AssertionFailedError"/>
+  </testcase>
+  <testcase name="schedulesRepayments" classname="com.bank.loans.LoanServiceTest" time="1.2">
+    <system-out><![CDATA[INFO schedule created]]></system-out>
+  </testcase>
+</testsuite>

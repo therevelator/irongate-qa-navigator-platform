@@ -1,0 +1,2 @@
+<?xml version="1.0"?>
+<testsuites><testsuite name="cut"><testcase name="a" classname="x" time="0.1"/><testcase name="b"

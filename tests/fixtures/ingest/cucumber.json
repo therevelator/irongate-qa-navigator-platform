@@ -1,0 +1,19 @@
+[
+  {
+    "uri": "features/transfer.feature", "id": "transfer", "keyword": "Feature", "name": "Transfer money", "line": 1,
+    "elements": [
+      { "keyword": "Background", "type": "background", "name": "", "line": 3,
+        "steps": [ { "keyword": "Given ", "name": "I am signed in", "line": 4, "result": { "status": "passed", "duration": 100000000 } } ] },
+      { "id": "transfer;between-own-accounts", "keyword": "Scenario", "type": "scenario", "name": "Between own accounts", "line": 6,
+        "steps": [
+          { "keyword": "When ", "name": "I transfer 10 EUR", "line": 7, "result": { "status": "passed", "duration": 200000000 } },
+          { "keyword": "Then ", "name": "both balances change", "line": 8, "result": { "status": "passed", "duration": 300000000 } } ] },
+      { "id": "transfer;to-a-frozen-account", "keyword": "Scenario", "type": "scenario", "name": "To a frozen account", "line": 10,
+        "steps": [
+          { "keyword": "When ", "name": "I transfer to a frozen account", "line": 11, "result": { "status": "failed", "duration": 500000000, "error_message": "Expected an error banner\n  at steps.js:12" } },
+          { "keyword": "Then ", "name": "I see an error", "line": 12, "result": { "status": "skipped" } } ] },
+      { "id": "transfer;scheduled", "keyword": "Scenario", "type": "scenario", "name": "Scheduled transfer", "line": 14,
+        "steps": [ { "keyword": "When ", "name": "I schedule a transfer", "line": 15, "result": { "status": "undefined" } } ] }
+    ]
+  }
+]
