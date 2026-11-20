@@ -1,6 +1,6 @@
 # Manual test cases
 
-421 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+427 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -10,7 +10,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
-- [Accessibility](#accessibility) (19)
+- [Accessibility](#accessibility) (20)
 - [Theme and phone layout](#theme-and-phone-layout) (28)
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
@@ -35,8 +35,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Alerts and notifications](#alerts-and-notifications) (11)
 - [Tracked actions](#tracked-actions) (10)
 - [CI evidence](#ci-evidence) (4)
-- [Connect your CI](#connect-your-ci) (3)
+- [Connect your CI](#connect-your-ci) (4)
 - [Deliveries & incidents](#deliveries--incidents) (4)
+- [Work & code quality](#work--code-quality) (4)
 - [Wellbeing pulse](#wellbeing-pulse) (24)
 - [Developer productivity](#developer-productivity) (1)
 - [Overview](#overview) (4)
@@ -2727,6 +2728,28 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Set the theme back to the one you use.
 
 *Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Deliveries & incidents accessibility › A11Y-38 … A11Y-41`
+
+### TC-ADM-066: Work & code quality and the Connect your CI issue steps are accessible in the four themes
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.16
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data, deployments and incidents, and a year of sample issues and weekly SARIF reports derived from each team's KPI history).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | For each theme (Light, Dark, Graphite, Porcelain; Appearance menu): open The Away Team and Tab through Work & code quality. | Every tile and the Show all button are reachable with Tab and show a focus ring; text and badges are readable in the theme; tables have column headers and captions. |
+| 2 | Open Admin console → Connect your CI and Tab through Issues and code quality. | The tool tabs move with the arrow keys; the code blocks can be focused and scrolled with the keyboard; an axe check reports no serious violations. |
+
+**After the test:** Set the theme back to the one you use.
+
+*Automated:* `tests/e2e/team/work-evidence.spec.ts › Work & code quality accessibility › A11Y-46 … A11Y-49`
 
 ## Theme and phone layout
 
@@ -7861,6 +7884,32 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Connect your CI: deployments and incidents › CI-03`
 
+### TC-ADM-065: Connect your CI → Issues and code quality: steps per tool, test calls, real issues and a SARIF report calculated on the team page
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.15
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team.
+- A terminal with curl.
+
+**Test data**
+
+- The team id shown in Connect your CI
+- A new API key
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open Admin console → Connect your CI. | The endpoint list includes POST …/ingest/issues (Jira, Linear, JSON) and POST …/ingest/static-analysis (SARIF 2.1.0). |
+| 2 | In Issues and code quality look at the Jira, Linear and Other tracker (JSON) tabs (also with the arrow keys). | Jira: the automation rule and a search backfill with expand=changelog,names to …/ingest/issues?team=<team id>&format=jira; Linear: webhook and GraphQL export; JSON: a curl with sprints, a story with transitions and a production bug. The team id is filled in; Copy copies the block. |
+| 3 | Look at the SARIF tabs GitHub Actions, GitLab CI, Jenkins, Azure DevOps. | Each uploads the SARIF file to …/ingest/static-analysis?team=<team id> with commit, branch and run on the default branch. |
+| 4 | Create an API key, paste it in Send a test call, choose Issues and send; then Static analysis. | "Connected … the sample issue was read (1 issue). Nothing was stored." and "… the sample SARIF report was read (1 finding)". |
+| 5 | Send the JSON example of the Other tracker tab (a closed sprint, a 5-point story done in it, a 3-point story carried over, a production and a staging bug) and an ESLint SARIF with one warning and loc=2000, then open the team. | Work & code quality shows velocity 5 points, commitment 62.5 %, defect escape rate 50.0 %, the escaped bug, the carried-over story, code quality 95 / 100 and the rule no-unused-vars; the KPI cards show source computed. Connect your CI's last data received shows Issues and Static analysis for the team. |
+
+**After the test:** Revoke the API key.
+
+*Automated:* `tests/e2e/team/work-evidence.spec.ts › Connect your CI: issues and static analysis › CI-04`
+
 ## Deliveries & incidents
 
 ### TC-ADM-055: The team page shows Deliveries & incidents: DORA values, recent production deploys, failed changes and incidents
@@ -7951,6 +8000,102 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 2 | (With CI test reports but no deployments) open the team page. | Deliveries & incidents says 'No deployments or incidents for this team yet' and how to send them. |
 
 *Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Deliveries & incidents › DLV-04`
+
+## Work & code quality
+
+### TC-ADM-061: The team page shows Work & code quality: sprint and defect values, the last sprints, escaped defects, blocked and mis-sized issues
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.13
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data, deployments and incidents, and a year of sample issues and weekly SARIF reports derived from each team's KPI history).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in, search for The Away Team and open it; scroll to Evidence from CI → Work & code quality. | The section shows "Sprints and defects" with tiles for Defect escape rate (%), Defect density (per KLOC), Sprint velocity (points), Sprint commitment rate, Sprint carryover, Blocked time (h) and Sizing accuracy (× estimate); each tile shows its day, the number of bugs / sprint issues and a confidence; the subtitle says sample data (shown as evidence, not written to the team’s KPIs). |
+| 2 | Compare the Sprint velocity, commitment and carryover tiles with the team's Agile KPI cards. | They agree: the sample issues were made from the team's own sprints and KPI history (sprint values match; escape rate and density within a few points). |
+| 3 | Look at Last closed sprints. | At most six sprints (newest first) with closed date, issues, committed and completed points, commitment %, carryover %, blocked hours and a sizing badge (green within 1.00 ± 0.15). |
+| 4 | Look at Escaped defects, Blocked and carried over, and Sizing. | Escaped defects lists bugs found in Production with key, title, opened date and component, and how many bugs had no environment (not counted); Blocked and carried over lists the latest sprint's blocked issues with hours and the issues carried over with their points; Sizing lists completed issues with estimate, logged time and ratio, furthest from 1.0 first. |
+| 5 | Check the line Last data received at the top right of the section. | It shows Issues and Static analysis with a date (sample data). |
+
+*Automated:* `tests/e2e/team/work-evidence.spec.ts › Work & code quality › WRK-01`
+
+### TC-ADM-062: Code quality on the team page: the score, the latest report, findings by rule, new and fixed findings
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.13
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data, deployments and incidents, and a year of sample issues and weekly SARIF reports derived from each team's KPI history).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open The Away Team and scroll to Code quality (static analysis) in Work & code quality. | Tiles for Code quality score ("NN / 100"), Static-analysis findings, New findings and Fixed findings; the subtitle states the formula (100 × e^(−weighted findings per 1,000 lines ÷ 20); weights critical 10, high 5, medium 2, low 0.5). |
+| 2 | Compare the score tile with the team's Code quality KPI card. | Same value (the sample reports were made from the team's KPI history with the formula). |
+| 3 | Look at the score history line and the reports table. | "Score <date>: NN → now NN"; the table shows the repository, SonarQube, main, the commit, the analysis date, +new / −fixed and severity badges. |
+| 4 | Look at Findings by rule; if there are more than six rules press Show all. | Rules ordered by highest severity then count (e.g. typescript:S3776 Cognitive complexity), with the number of findings, how many are new, the category and up to three files; Show all expands the list (aria-expanded true) and Show fewer collapses it. |
+| 5 | Look at New findings and Fixed findings. | Each lists findings with rule, severity, message, file:line and repository, or says there were none since the previous report. |
+
+*Automated:* `tests/e2e/team/work-evidence.spec.ts › Work & code quality › WRK-02`
+
+### TC-ADM-063: How this was calculated of a work or code-quality metric: from a tile and from the KPI card
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.14
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data, deployments and incidents, and a year of sample issues and weekly SARIF reports derived from each team's KPI history).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | In Work & code quality press the Sprint velocity tile. | A dialog "How this was calculated: Sprint velocity" opens with the value, the formula (story points of the issues completed in the latest closed sprint …), the confidence badge, "Based on N sprint issues", that it was calculated from sample CI data, the values used (completed points, completed issues, sprint), the sprint line (name, started, closed) and the source issues with their part (completed). |
+| 2 | Press Escape, then open Defect escape rate. | The dialog lists the bugs with their environment and part (found in production / bug) and the values used (bugs found in production, bugs with a known environment, bugs without an environment left out). |
+| 3 | Close, then open Code quality score. | The formula with the weights; values used: weighted findings, lines of code and where they came from, weighted per KLOC, the counts per severity; the source SonarQube report with commit, date, findings and +new / −fixed. |
+| 4 | Close, then on the Agile or Quality KPI cards press How this was calculated under Defect escape rate (when shown). | The same dialog opens for that metric. |
+| 5 | Use only the keyboard: Tab to a tile, Enter, Tab through the dialog, Escape. | The dialog opens and closes with the keyboard; focus returns to the tile. |
+
+*Automated:* `tests/e2e/team/work-evidence.spec.ts › Work & code quality › WRK-03`
+
+### TC-ADM-064: Work & code quality follows the team's analytics scope; a team without issues shows none
+
+**Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F9.13
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data, deployments and incidents, and a year of sample issues and weekly SARIF reports derived from each team's KPI history).
+
+**Test data**
+
+- E-mail: the engineer demo account (Mavericks)
+- Password: demo123
+- Another team: QualityCowboys (team-1764026236967-uphpblii4)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the engineer and open Mavericks. | Work & code quality is shown for the engineer's own team. |
+| 2 | In the browser open <API>/api/ci/teams/team-1764026236967-uphpblii4/work and …/metrics/velocity. | Both answer 403 (the same rule as the team's KPI history). |
+| 3 | Sign in as the super admin of a newly registered company and open its team. | Evidence from CI says there is no CI data yet and names issues and static-analysis reports; the Work & code quality part is not shown. |
+
+*Automated:* `tests/e2e/team/work-evidence.spec.ts › Work & code quality › WRK-04, WRK-05`
 
 ## Wellbeing pulse
 
