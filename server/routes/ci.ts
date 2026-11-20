@@ -159,7 +159,12 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
       ? await query<any[]>(`SELECT id, commit_sha, branch, format, created_at, lines_found, lines_hit, branches_found, branches_hit, file_count, changed_lines_found, changed_lines_hit FROM coverage_reports WHERE team_id = ? AND id = ANY(?::text[])`, [team.id, ids(s.coverageReports)])
       : [];
     const spec = METRICS[key];
+    // Sample (demo) raw data: shown as evidence, never written to the KPI storage.
+    const sample = !!(await queryOne<any>(
+      `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM test_runs WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM coverage_reports WHERE team_id = ? AND is_sample)
+          OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = ? AND is_sample)`, [team.id, team.id, team.id]));
     res.json({
+      sample,
       teamId: team.id, metric: key, label: spec.label, kpiColumn: ev.kpi_column, day: dayStr(ev.day), value: ev.value, unit: ev.unit,
       formula: ev.formula, inputs: ev.inputs, sampleSize: ev.sample_size, confidence: ev.confidence, recordedAt: ev.recorded_at, computedAt: ev.computed_at,
       flakyTests: Array.isArray(s.flakyTests) ? s.flakyTests : undefined,
@@ -191,13 +196,21 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
       `SELECT MAX(received_at) AS at, COUNT(*)::int AS n FROM ingestion_log
         WHERE company_id = ? AND status = 'rejected' AND source ~ '^(tests|coverage|pipelines)' AND received_at >= now() - interval '7 days'`, [companyId]);
     const keys = await query<any[]>(`SELECT COUNT(*)::int AS n FROM api_keys WHERE company_id = ? AND revoked_at IS NULL`, [companyId]);
+    // Sample (demo) raw data has no upload rows: its newest run counts, marked as sample.
+    const sample = await query<any[]>(
+      `SELECT team_id, 'tests' AS kind, MAX(created_at) AS at, COUNT(*)::int AS n FROM test_runs WHERE company_id = ? AND is_sample GROUP BY team_id
+       UNION ALL SELECT team_id, 'coverage', MAX(created_at), COUNT(*)::int FROM coverage_reports WHERE company_id = ? AND is_sample GROUP BY team_id
+       UNION ALL SELECT team_id, 'pipelines', MAX(created_at), COUNT(*)::int FROM pipeline_runs_raw WHERE company_id = ? AND is_sample GROUP BY team_id`,
+      [companyId, companyId, companyId]);
     res.json({
       activeKeys: keys[0]?.n ?? 0,
       rejectedLast7Days: rejected[0]?.n ?? 0,
       teams: teams.map((t: any) => {
         const of = (k: string) => {
           const u = uploads.find((x: any) => x.team_id === t.id && x.kind === k);
-          return u ? { at: u.at, uploads: u.n, format: u.format } : null;
+          if (u) return { at: u.at, uploads: u.n, format: u.format, sample: false };
+          const x = sample.find((y: any) => y.team_id === t.id && y.kind === k);
+          return x ? { at: x.at, uploads: x.n, format: null, sample: true } : null;
         };
         return { id: t.id, name: t.name, department: t.department_name, mainBranch: t.main_branch, tests: of('tests'), coverage: of('coverage'), pipelines: of('pipelines') };
       }),

@@ -17,7 +17,7 @@ interface TeamStatus {
   id: string; name: string; department: string | null; mainBranch: string | null;
   tests: Received; coverage: Received; pipelines: Received;
 }
-type Received = { at: string; uploads: number; format: string | null } | null;
+type Received = { at: string; uploads: number; format: string | null; sample?: boolean } | null;
 
 type Tool = 'github' | 'gitlab' | 'jenkins' | 'azure';
 const TOOLS: Array<{ id: Tool; label: string; file: string }> = [
@@ -198,12 +198,13 @@ const ConnectCi: React.FC = () => {
   };
 
   const cell = (r: Received) => r
-    ? <span title={`${r.uploads} upload${r.uploads === 1 ? '' : 's'}`}>{formatAsOf(r.at)}{r.format ? <span className="text-slate-500 dark:text-slate-400"> · {r.format}</span> : null}</span>
+    ? <span title={`${r.uploads} upload${r.uploads === 1 ? '' : 's'}`}>{formatAsOf(r.at)}{r.format ? <span className="text-slate-500 dark:text-slate-400"> · {r.format}</span> : null}{r.sample ? <span className="text-slate-500 dark:text-slate-400"> · sample data</span> : null}</span>
     : <span className="text-slate-400 dark:text-slate-500">none yet</span>;
 
   return (
+    <div data-testid="connect-ci">
     <Card padded={false} className="overflow-hidden">
-      <div className="p-5" data-testid="connect-ci">
+      <div className="p-5">
         <CardHeader
           title="Connect your CI"
           subtitle={<>Send the raw output your tools already produce — test reports, coverage reports and pipeline runs. QE Navigator calculates the metrics itself and shows the evidence on each team page. Use an API key from <span className="font-medium">API keys</span>{activeKeys === 0 ? ' (create one first)' : ''}.</>}
@@ -306,6 +307,7 @@ const ConnectCi: React.FC = () => {
         </div>
       </div>
     </Card>
+    </div>
   );
 };
 

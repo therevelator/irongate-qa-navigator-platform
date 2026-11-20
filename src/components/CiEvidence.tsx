@@ -160,13 +160,13 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
               {!data!.coverage || data!.coverage.lowestFiles.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">No coverage report yet.</p>
               ) : (
-                <table className="w-full text-sm" data-testid="ci-lowest-files">
+                <table className="w-full table-fixed text-sm" data-testid="ci-lowest-files">
                   <caption className="sr-only">Files with the lowest line coverage</caption>
-                  <thead><tr className="text-left text-xs text-slate-500 dark:text-slate-400"><th scope="col" className="pb-1 font-medium">File</th><th scope="col" className="pb-1 text-right font-medium">Lines hit</th><th scope="col" className="pb-1 text-right font-medium">Coverage</th></tr></thead>
+                  <thead><tr className="text-left text-xs text-slate-500 dark:text-slate-400"><th scope="col" className="pb-1 font-medium">File</th><th scope="col" className="w-24 pb-1 text-right font-medium">Lines hit</th><th scope="col" className="w-24 pb-1 text-right font-medium">Coverage</th></tr></thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {data!.coverage.lowestFiles.map((f) => (
                       <tr key={f.path}>
-                        <td className="max-w-0 truncate py-1.5 pr-2 font-mono text-xs text-slate-700 dark:text-slate-300" title={f.path}>{f.path}</td>
+                        <td className="truncate py-1.5 pr-2 font-mono text-xs text-slate-700 dark:text-slate-300" title={f.path}>{f.path}</td>
                         <td className="py-1.5 text-right tabular-nums text-xs text-slate-600 dark:text-slate-300">{f.linesHit} / {f.linesFound}</td>
                         <td className="py-1.5 text-right"><Badge tone={covTone(f.coverage)}>{f.coverage.toFixed(1)} %</Badge></td>
                       </tr>
@@ -180,13 +180,13 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
               {data!.slowestTests.length === 0 ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">No test results in the last 7 days.</p>
               ) : (
-                <table className="w-full text-sm" data-testid="ci-slowest-tests">
+                <table className="w-full table-fixed text-sm" data-testid="ci-slowest-tests">
                   <caption className="sr-only">Slowest tests</caption>
-                  <thead><tr className="text-left text-xs text-slate-500 dark:text-slate-400"><th scope="col" className="pb-1 font-medium">Test</th><th scope="col" className="pb-1 text-right font-medium">Median</th><th scope="col" className="pb-1 text-right font-medium">Runs</th></tr></thead>
+                  <thead><tr className="text-left text-xs text-slate-500 dark:text-slate-400"><th scope="col" className="pb-1 font-medium">Test</th><th scope="col" className="w-20 pb-1 text-right font-medium">Median</th><th scope="col" className="w-14 pb-1 text-right font-medium">Runs</th></tr></thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {data!.slowestTests.map((t) => (
                       <tr key={t.testKey}>
-                        <td className="max-w-0 py-1.5 pr-2"><p className="truncate text-xs text-slate-800 dark:text-slate-200" title={t.name}>{t.name}</p>{t.suite && <p className="truncate text-[11px] text-slate-500 dark:text-slate-400" title={t.suite}>{t.suite}</p>}</td>
+                        <td className="py-1.5 pr-2"><p className="truncate text-xs text-slate-800 dark:text-slate-200" title={t.name}>{t.name}</p>{t.suite && <p className="truncate text-[11px] text-slate-500 dark:text-slate-400" title={t.suite}>{t.suite}</p>}</td>
                         <td className="py-1.5 text-right tabular-nums text-xs text-slate-700 dark:text-slate-300" title={`Longest: ${fmtMs(t.maxMs)}`}>{fmtMs(t.medianMs)}</td>
                         <td className="py-1.5 text-right tabular-nums text-xs text-slate-500 dark:text-slate-400">{t.runs}</td>
                       </tr>
@@ -236,6 +236,7 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
 };
 
 interface Calculation {
+  sample?: boolean;
   metric: string; label: string; kpiColumn: string | null; day: string; value: number; unit: string | null; formula: string;
   inputs: Record<string, unknown>; sampleSize: number; confidence: 'high' | 'medium' | 'low'; recordedAt: string | null; computedAt: string;
   flakyTests?: Array<{ name: string; suite: string | null; commit: string; failedRuns: string[]; passedRuns: string[] }>;
@@ -298,8 +299,8 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
             <div>
               <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white" data-testid="how-calculated-value">{fmtValue(calc.value, calc.unit)}</p>
               <p className="mt-1 text-slate-700 dark:text-slate-300" data-testid="how-calculated-formula"><span className="font-medium">Formula:</span> {calc.formula}</p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Based on {calc.sampleSize} run{calc.sampleSize === 1 ? '' : 's'} ({conf?.help}).{calc.kpiColumn ? ' Written to the team’s KPI as source “computed”.' : ' Shown here only (no KPI column).'}</p>
-              {cardSource && cardSource !== 'computed' && calc.kpiColumn && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Based on {calc.sampleSize} run{calc.sampleSize === 1 ? '' : 's'} ({conf?.help}).{calc.sample ? ' Calculated from sample CI data: shown as evidence, not written to the team’s KPIs.' : calc.kpiColumn ? ' Written to the team’s KPI as source “computed”.' : ' Shown here only (no KPI column).'}</p>
+              {cardSource && cardSource !== 'computed' && calc.kpiColumn && !calc.sample && (
                 <p className="mt-1 text-xs text-amber-800 dark:text-amber-300" data-testid="how-calculated-other-source">The card shows the latest value from “{cardSource === 'synthetic' ? 'sample data' : cardSource}”; this is the value calculated from CI data.</p>
               )}
             </div>
@@ -343,10 +344,10 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
                 <thead><tr className="text-left text-slate-500 dark:text-slate-400"><th scope="col" className="pb-1 pr-3 font-medium">Record</th><th scope="col" className="pb-1 pr-3 font-medium">Commit / branch</th><th scope="col" className="pb-1 pr-3 font-medium">When</th><th scope="col" className="pb-1 font-medium">Result</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {calc.sources.coverageReports.map((c) => (
-                    <tr key={c.id}><td className="py-1 pr-3">Coverage report ({c.format}) <span className="font-mono text-slate-500">{c.id.slice(0, 8)}</span></td><td className="py-1 pr-3 font-mono">{short(c.commit)}{c.branch ? ` · ${c.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(c.createdAt)}</td><td className="py-1 tabular-nums">{c.linesHit} / {c.linesFound} lines · {c.files} files</td></tr>
+                    <tr key={c.id}><td className="py-1 pr-3">Coverage report ({c.format}) <span className="font-mono text-slate-500 dark:text-slate-400" title={c.id}>{c.id.slice(-8)}</span></td><td className="py-1 pr-3 font-mono">{short(c.commit)}{c.branch ? ` · ${c.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(c.createdAt)}</td><td className="py-1 tabular-nums">{c.linesHit} / {c.linesFound} lines · {c.files} files</td></tr>
                   ))}
                   {calc.sources.testRuns.map((t) => (
-                    <tr key={t.id}><td className="py-1 pr-3">Test run {t.runId}{t.attempt > 1 ? ` (attempt ${t.attempt})` : ''} <span className="font-mono text-slate-500">{t.id.slice(0, 8)}</span></td><td className="py-1 pr-3 font-mono">{short(t.commit)}{t.branch ? ` · ${t.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(t.startedAt)}</td><td className="py-1 tabular-nums">{t.passed} passed · {t.failed + t.errors} failed · {t.skipped} skipped · {fmtMs(t.durationMs)}</td></tr>
+                    <tr key={t.id}><td className="py-1 pr-3">Test run {t.runId}{t.attempt > 1 ? ` (attempt ${t.attempt})` : ''} <span className="font-mono text-slate-500 dark:text-slate-400" title={t.id}>{t.id.slice(-8)}</span></td><td className="py-1 pr-3 font-mono">{short(t.commit)}{t.branch ? ` · ${t.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(t.startedAt)}</td><td className="py-1 tabular-nums">{t.passed} passed · {t.failed + t.errors} failed · {t.skipped} skipped · {fmtMs(t.durationMs)}</td></tr>
                   ))}
                   {calc.sources.pipelineRuns.map((p) => (
                     <tr key={p.id}><td className="py-1 pr-3">{p.url && /^https?:\/\//.test(p.url) ? <a className="text-brand-700 hover:underline dark:text-brand-300" href={p.url} target="_blank" rel="noopener noreferrer">Pipeline run {p.runId}</a> : <>Pipeline run {p.runId}</>}{p.attempt > 1 ? ` (attempt ${p.attempt})` : ''}</td><td className="py-1 pr-3 font-mono">{short(p.commit)}{p.branch ? ` · ${p.branch}` : ''}</td><td className="py-1 pr-3">{formatAsOf(p.startedAt)}</td><td className="py-1">{p.result}{p.durationSeconds != null ? ` · ${fmtMs(p.durationSeconds * 1000)}` : ''}</td></tr>
