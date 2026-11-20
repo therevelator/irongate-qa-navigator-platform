@@ -17,10 +17,9 @@ unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 | [docs/INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) | For developers: sending data to the platform (API keys, the KPI ingestion API, every metric's unit and range, backfill, retries) with curl / Node / Python / CI examples, runnable scripts in [docs/integration-examples/](docs/integration-examples/), and what cannot be sent via API yet |
 | [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) | Direct and adjacent competitors, gaps and positioning (sources checked 18 Nov 2026) |
 | [docs/pitch/](docs/pitch/) | Source of the 11-slide pitch deck, with speaker notes and the placeholders to fill |
-| [docs/release-r2/](docs/release-r2/) | The R2 release plan and its working rules |
+| [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) | Every current document, what it is for and who reads it; old documents are in [docs/archive/](docs/archive/) |
 | [docs/reports/](docs/reports/) | The accuracy audits and the consistency report that led to the "no invented numbers" fixes |
 | [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md) | **Who can see and do what**: a plain-English summary per role and the matrix per page and module (scope rules), derived from the code |
-| [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md) | Who may do what, per role, written from `server/lib/userPolicy.ts` (R2) |
 | [docs/reports/r2-final-review.md](docs/reports/r2-final-review.md) | Release R2 final review: findings, fixes, deferred items; per-role security matrix in `tests/api/r2-security-matrix.test.ts` |
 
 ## Stack
@@ -193,7 +192,7 @@ One definition per metric, shared by server and UI:
   and `server/lib/pulse.ts`; privacy threshold for aggregates of individual data: `server/lib/privacy.ts`.
 - Config inheritance (team, then department, then company): `server/lib/configResolver.ts`
 - Team membership (primary team or `team_members`): `server/lib/teamMembership.ts`
-- Who may do what: `server/lib/userPolicy.ts` (see [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md) and [ROLE_PERMISSIONS.md](ROLE_PERMISSIONS.md))
+- Who may do what: `server/lib/userPolicy.ts` (see [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md))
 
 ## Dashboard
 

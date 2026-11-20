@@ -2,7 +2,7 @@
 
 **Data change I made:** I ran `POST calculate-correlations` on team Mavericks (`team-1764026202608-vcbic0w8g`). It had no correlation rows before; it now has 56, 6 of them flagged significant. No other data was changed.
 
-**How I checked:** I wrote an independent recomputation in `/tmp/claude-0/-home-user/3061e665-38e0-537b-ac16-1bf45adbbcb9/scratchpad/recompute.js`. It uses Pearson r and an exact two-sided Student-t p-value (regularized incomplete beta), and I compared it with the stored `business_impact_correlations` rows and the live API output.
+**How I checked:** I wrote an independent recomputation in a separate script (not kept in the repository). It uses Pearson r and an exact two-sided Student-t p-value (regularized incomplete beta), and I compared it with the stored `business_impact_correlations` rows and the live API output.
 
 ### CRITICAL
 
