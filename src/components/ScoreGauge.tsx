@@ -6,14 +6,14 @@ import { arcLength, arcPath, gaugeLayout, GAUGE_END, GAUGE_START, polar, valueTo
 /**
  * Radial score gauge: the "Gauge" score display (Appearance menu), an alternative to the 3D
  * battery with the same props and the same accessible text. A 240° arc: a track, the value arc in
- * the colour of the value's band (the one battery scale, src/lib/batteryScale.ts), a tick at the
- * target and the number in the centre. Subtle depth (bevelled track, soft shadow and a gentle
+ * the colour of the value's band (the one battery scale, src/lib/batteryScale.ts), a marker at the
+ * end of the coloured arc (the value) and the number in the centre; the target is in the text beside it. Subtle depth (bevelled track, soft shadow and a gentle
  * gradient on the value arc); the arc sweeps in on load, not at all with prefers-reduced-motion
  * (src/styles/themes.css). Colours of the track, tick and text are theme tokens (--gauge-*).
  */
 export interface ScoreGaugeProps {
   value: number | string | null | undefined;
-  /** Target (the "good" threshold): drawn as a tick on the arc. */
+  /** Target (the "good" threshold): shown in the text next to the gauge, not on the arc. */
   good?: number;
   warn?: number;
   size?: 'xs' | 'sm' | 'md' | 'lg';
@@ -33,10 +33,11 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', 
   const track = arcPath(cx, cy, r, GAUGE_START, GAUGE_END);
   const valueArc = value != null && value > 0 ? arcPath(cx, cy, r, GAUGE_START, valueToAngle(value)) : '';
   const len = value != null ? arcLength(r, value) : 0;
-  const target = good != null && Number.isFinite(good) ? Math.max(0, Math.min(100, good)) : null;
-  const tA = target != null ? valueToAngle(target) : 0;
-  const t0 = polar(cx, cy, r - stroke / 2 - Math.max(1.5, w * 0.02), tA);
-  const t1 = polar(cx, cy, r + stroke / 2 + Math.max(1.5, w * 0.02), tA);
+  void good; // the target is shown in the text beside the gauge
+  // The marker sits at the end of the coloured arc: where the value is.
+  const mA = value != null ? valueToAngle(value) : 0;
+  const t0 = polar(cx, cy, r - stroke / 2 - Math.max(1.5, w * 0.02), mA);
+  const t1 = polar(cx, cy, r + stroke / 2 + Math.max(1.5, w * 0.02), mA);
   const fontSize = Math.round(w * (size === 'xs' ? 0.3 : 0.28));
   const showUnit = size === 'lg' || size === 'md';
 
@@ -93,13 +94,14 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', 
             />
           </g>
         )}
-        {target != null && (
+        {value != null && (
           <line
+            className="ig-gauge-marker"
             x1={t0.x} y1={t0.y} x2={t1.x} y2={t1.y}
             strokeWidth={Math.max(1.5, w * 0.022)}
             strokeLinecap="round"
             style={{ stroke: 'var(--gauge-tick)' }}
-            data-testid="score-gauge-target"
+            data-testid="score-gauge-marker"
           />
         )}
         <text

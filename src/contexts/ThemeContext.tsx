@@ -11,6 +11,7 @@ import {
   type ScoreDisplay,
   type ThemeId,
   type ThemePreference,
+  SIGNED_IN_KEY,
 } from '../lib/appearance';
 
 /**
@@ -41,6 +42,14 @@ const storage = (): Storage | null => {
 };
 const systemPrefersDark = () => typeof window !== 'undefined' && !!window.matchMedia?.(SYSTEM_DARK).matches;
 
+/** Company app, nobody signed in: keep the classic Light look (see AuthWrapper and index.html). */
+function signedOutClassic(): boolean {
+  if (typeof window === 'undefined') return false;
+  const p = window.location.pathname;
+  if (p === '/operator' || p.startsWith('/operator/')) return false;
+  try { return window.localStorage.getItem(SIGNED_IN_KEY) !== '1'; } catch { return true; }
+}
+
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [preference, setPreference] = useState<ThemePreference>(() => readThemePreference(storage()));
   const [systemDark, setSystemDark] = useState<boolean>(systemPrefersDark);
@@ -58,7 +67,9 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   const theme = resolveTheme(preference, systemDark);
 
-  useLayoutEffect(() => { applyTheme(document.documentElement, theme); }, [theme]);
+  // Until someone is signed in, the company app shows the classic Light look (AuthWrapper applies
+  // the chosen theme after sign-in); the operator panel always follows the choice.
+  useLayoutEffect(() => { applyTheme(document.documentElement, signedOutClassic() ? 'light' : theme); }, [theme]);
   useLayoutEffect(() => { applyScoreDisplay(document.documentElement, scoreDisplay); }, [scoreDisplay]);
 
   const setTheme = useCallback((pref: ThemePreference) => {

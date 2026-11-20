@@ -17,6 +17,9 @@
           if (p === 'system') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           else if (p === 'dark' || p === 'graphite' || p === 'porcelain' || p === 'light') t = p;
           if (localStorage.getItem('irongate_score_display') === 'gauge') s = 'gauge';
+          // Signed-out screens keep the classic Light look (see AuthWrapper); the operator panel follows the choice.
+          var op = location.pathname === '/operator' || location.pathname.indexOf('/operator/') === 0;
+          if (!op && localStorage.getItem('irongate_signed_in') !== '1') t = 'light';
         } catch (e) { /* storage unavailable: defaults */ }
         var dark = t === 'dark' || t === 'graphite';
         d.setAttribute('data-theme', t);

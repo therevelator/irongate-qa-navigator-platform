@@ -260,6 +260,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     } finally {
       localStorage.removeItem('irongate_user');
       localStorage.removeItem('irongate_remember');
+      localStorage.removeItem('irongate_signed_in'); // the sign-in screen is classic Light again (AuthWrapper)
       dropNotice();
       setSessionNotice(null);
       

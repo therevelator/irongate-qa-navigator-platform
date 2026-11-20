@@ -8,7 +8,7 @@ import { DEMO } from '../support/roles';
  */
 
 test.describe('Theme', { tag: [TAG.area('ux')] }, () => {
-  test('UX-01 the theme switch toggles dark mode and the choice survives a reload and signing out', { tag: [TAG.smoke] }, async ({ signInAs, page, app }) => {
+  test('UX-01 the theme switch toggles dark mode and the choice survives a reload; the sign-in screen stays Light', { tag: [TAG.smoke] }, async ({ signInAs, page, app }) => {
     await signInAs('viewer');
     const start = await app.isDark();
     await app.toggleTheme();
@@ -17,7 +17,8 @@ test.describe('Theme', { tag: [TAG.area('ux')] }, () => {
     await expect(page.getByTestId('dashboard')).toBeVisible();
     expect(await app.isDark()).toBe(!start);
     await app.signOut();
-    expect(await app.isDark()).toBe(!start);
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect.poll(() => app.isDark()).toBe(false);
     await page.evaluate(() => localStorage.removeItem('irongate_theme_mode'));
   });
 

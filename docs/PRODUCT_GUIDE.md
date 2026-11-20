@@ -1055,9 +1055,11 @@ Escape):
   (menus, dialogs, drawers, toasts) where the browser supports it and solid surfaces otherwise (and with "reduce transparency"). Text
   meets WCAG AA in every theme; status colours and the battery liquid colours are the same in every theme (only the battery shell turns
   smoky glass with silver rims and nib).
-- **Score display:** **Battery** (the 3D battery) or **Gauge** (a 240° radial gauge in the same colour scale, number in the centre, a tick
-  at the target, a short sweep on load, none with reduced motion). It applies everywhere a score is drawn: Overview hero, executive
+- **Score display:** **Battery** (the 3D battery) or **Gauge** (a 240° radial gauge in the same colour scale, number in the centre, a marker
+  at the end of the coloured arc (the score; the target is in the text beside it), a short sweep on load, none with reduced motion). It applies everywhere a score is drawn: Overview hero, executive
   metrics, team cards, the Team detail QA card and TV mode. Both read the same to a screen reader ("QA score: 81 of 100").
+- **Signed-out screens** (sign-in, registration, invitation and password pages) always use the classic Light look (blue brand panel,
+  white form), whatever theme is chosen; the chosen theme returns once the person is signed in.
 - Both choices are kept in the browser (localStorage `irongate_theme_mode`, `irongate_score_display`) and applied before the first
   paint. TV mode keeps its own light / dark switch; while the app shows Graphite or Porcelain, TV dark is Graphite and TV light Porcelain.
 - Implementation: `src/lib/appearance.ts`, `src/contexts/ThemeContext.tsx`, `src/styles/themes.css` (tokens per `<html data-theme>`),

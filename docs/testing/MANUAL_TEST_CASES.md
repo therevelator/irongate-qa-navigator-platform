@@ -3248,7 +3248,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens in the Light theme; the QA scores are drawn as 3D batteries. |
 | 2 | Press Tab until the Appearance button (palette icon) in the top bar has the focus ring, then press Enter. | A menu opens with two groups: Theme (Light, Dark, Graphite, Porcelain, Match system) and Score display (Battery, Gauge). The focus is on 'Light', which has a check mark. |
 | 3 | Press the Down arrow twice, then Enter. | 'Graphite' has the focus and is chosen: the app turns deep graphite with translucent dark-glass cards, light hairline borders and a soft diagonal light sheen; text is white / silver. |
-| 4 | Press End, then Space. | The focus moves to 'Gauge' and it is chosen: every QA score (company hero, executive metrics, team cards) is now a radial gauge with the number in the centre, a coloured arc and a small tick at the target. |
+| 4 | Press End, then Space. | The focus moves to 'Gauge' and it is chosen: every QA score (company hero, executive metrics, team cards) is now a radial gauge with the number in the centre, a coloured arc with a marker at its end (the score). |
 | 5 | Press Escape. | The menu closes and the focus returns to the Appearance button. |
 | 6 | Reload the page. | The overview opens directly in Graphite with gauges, without a flash of the light theme. |
 | 7 | Open the navigation and click Sign out. | The sign-in screen is shown in Graphite (dark glass, graphite brand panel on wide screens). |
@@ -3323,7 +3323,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens with 3D batteries. |
 | 2 | Click Appearance and choose Score display 'Gauge'. | The team cards show a small gauge next to 'QA score'. A screen reader reads it as '<team> QA score: <n> of 100', as for the battery. |
-| 3 | Click the team card 'The Away Team'. | Team detail opens; the QA score card shows a gauge with the target tick at the team's QA target. |
+| 3 | Click the team card 'The Away Team'. | Team detail opens; the QA score card shows a gauge whose marker sits at the end of the coloured arc, at the team's QA score. |
 | 4 | Choose Score display 'Battery'. | The QA score card shows the horizontal 3D battery again. |
 
 **After the test:** Choose Theme 'Light' and Score display 'Battery' in the Appearance menu (or clear the irongate_theme_mode and irongate_score_display entries in DevTools > Application > Local storage).

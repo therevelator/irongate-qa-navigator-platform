@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { useTheme } from '../contexts/ThemeContext';
+import { applyTheme, SIGNED_IN_KEY } from '../lib/appearance';
 import Login from './Login';
 import Register from './Register';
 import AcceptInvite from './AcceptInvite';
@@ -20,6 +22,18 @@ interface AuthWrapperProps {
 
 const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
   const { isAuthenticated, isInitializing } = useAuth();
+  const { theme } = useTheme();
+  // Signed-out screens (sign-in, registration, invitation, password pages) always use the classic
+  // light look, whatever theme the person picked; their theme returns once they are signed in.
+  // The flag lets the pre-paint script in index.html do the same before the first paint.
+  useLayoutEffect(() => {
+    if (isInitializing) return;
+    applyTheme(document.documentElement, isAuthenticated ? theme : 'light');
+    try {
+      if (isAuthenticated) localStorage.setItem(SIGNED_IN_KEY, '1');
+      else localStorage.removeItem(SIGNED_IN_KEY);
+    } catch { /* storage unavailable */ }
+  }, [isAuthenticated, isInitializing, theme]);
   const [showRegister, setShowRegister] = useState(false);
   // /accept-invite is public (the invited person has no account yet).
   const [acceptInvite, setAcceptInvite] = useState(isAcceptInvitePath);

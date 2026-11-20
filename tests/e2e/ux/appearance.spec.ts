@@ -23,7 +23,7 @@ async function openTeam(page: Page) {
 }
 
 test.describe('Appearance', { tag: [TAG.area('ux')] }, () => {
-  test('APR-01 keyboard: open the menu, choose Graphite and Gauge; the choice survives a reload and signing out', { tag: [TAG.smoke] }, async ({ signInAs, page, app }) => {
+  test('APR-01 keyboard: open the menu, choose Graphite and Gauge; the choice survives a reload; the sign-in screen stays classic and the choice returns after signing in again', { tag: [TAG.smoke] }, async ({ signInAs, page, app }) => {
     await signInAs('viewer');
     expect(await htmlState(page)).toEqual({ theme: 'light', dark: false, display: 'battery' });
 
@@ -59,8 +59,16 @@ test.describe('Appearance', { tag: [TAG.area('ux')] }, () => {
     await expect(page.getByTestId('dashboard')).toBeVisible();
     await expect(page.getByTestId('score-gauge').first()).toBeVisible();
 
+    // Signed out: the sign-in screen keeps the classic Light look (the choice is kept, not lost).
     await app.signOut();
-    expect(await htmlState(page)).toEqual({ theme: 'graphite', dark: true, display: 'gauge' });
+    await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+    await expect.poll(() => htmlState(page)).toMatchObject({ theme: 'light', dark: false });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(await htmlState(page)).toMatchObject({ theme: 'light', dark: false });
+    expect(await page.evaluate(() => localStorage.getItem('irongate_theme_mode'))).toBe('graphite');
+    // Signed in again: Graphite is back.
+    await signInAs('viewer');
+    await expect.poll(() => htmlState(page)).toEqual({ theme: 'graphite', dark: true, display: 'gauge' });
     await page.evaluate(() => { localStorage.removeItem('irongate_theme_mode'); localStorage.removeItem('irongate_score_display'); });
   });
 
@@ -75,16 +83,21 @@ test.describe('Appearance', { tag: [TAG.area('ux')] }, () => {
     await expect(app.appearanceMenu).toHaveCount(0);
   });
 
-  test('APR-03 "Match system" follows the device setting; with no choice the app stays Light', async ({ browser }) => {
+  test('APR-03 "Match system" follows the device setting once signed in; the sign-in screen stays Light', async ({ browser, signInAs, page }) => {
     for (const scheme of ['dark', 'light'] as const) {
       const ctx = await browser.newContext({ colorScheme: scheme });
       await ctx.addInitScript(() => localStorage.setItem('irongate_theme_mode', 'system'));
-      const page = await ctx.newPage();
-      await page.goto('/');
-      await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
-      expect(await htmlState(page)).toMatchObject({ theme: scheme, dark: scheme === 'dark' });
+      const p = await ctx.newPage();
+      await p.goto('/');
+      await expect(p.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+      expect(await htmlState(p)).toMatchObject({ theme: 'light', dark: false });
       await ctx.close();
     }
+    await page.emulateMedia({ colorScheme: 'dark' });
+    await page.addInitScript(() => { try { if (!sessionStorage.getItem('apr03')) { localStorage.setItem('irongate_theme_mode', 'system'); sessionStorage.setItem('apr03', '1'); } } catch { /* ignore */ } });
+    await signInAs('viewer');
+    await expect.poll(() => htmlState(page)).toMatchObject({ theme: 'dark', dark: true });
+    await page.evaluate(() => localStorage.removeItem('irongate_theme_mode'));
   });
 
   test('APR-04 the score display applies to team cards and Team detail too (Battery back again)', async ({ signInAs, page, app }) => {
@@ -136,13 +149,14 @@ test.describe('Appearance accessibility', { tag: [TAG.a11y, TAG.area('ux')] }, (
     });
   }
 
-  test('A11Y-24 sign-in screen in Graphite and Porcelain', async ({ browser }, testInfo) => {
+  test('A11Y-24 with Graphite or Porcelain chosen, the sign-in screen keeps the classic Light look and passes', async ({ browser }, testInfo) => {
     for (const theme of ['graphite', 'porcelain']) {
       const ctx = await browser.newContext();
       await ctx.addInitScript((t) => localStorage.setItem('irongate_theme_mode', t), theme);
       const page = await ctx.newPage();
       await page.goto('/');
       await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
+      expect(await htmlState(page)).toMatchObject({ theme: 'light', dark: false });
       await checkA11y(page, testInfo, { known: [] });
       await ctx.close();
     }

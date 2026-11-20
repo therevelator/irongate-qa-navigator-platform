@@ -17,6 +17,8 @@ export type ScoreDisplay = 'battery' | 'gauge';
 
 export const THEME_KEY = 'irongate_theme_mode';
 export const SCORE_DISPLAY_KEY = 'irongate_score_display';
+/** Set while someone is signed in: signed-out screens always use the classic Light theme (AuthWrapper, index.html). */
+export const SIGNED_IN_KEY = 'irongate_signed_in';
 export const DEFAULT_THEME: ThemePreference = 'light';
 export const DEFAULT_SCORE_DISPLAY: ScoreDisplay = 'battery';
 

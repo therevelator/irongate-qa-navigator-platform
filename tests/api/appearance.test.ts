@@ -3,7 +3,7 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   applyScoreDisplay, applyTheme, isDarkTheme, isGlassTheme, parseScoreDisplay, parseThemePreference, readScoreDisplay,
-  readThemePreference, resolveTheme, tvTheme, writeScoreDisplay, writeThemePreference, SCORE_DISPLAY_KEY, THEME_KEY,
+  readThemePreference, resolveTheme, tvTheme, writeScoreDisplay, writeThemePreference, SCORE_DISPLAY_KEY, SIGNED_IN_KEY, THEME_KEY,
   THEME_OPTIONS, type ThemeId,
 } from '../../src/lib/appearance';
 import { BATTERY_BANDS, BATTERY_SHELLS, contrastRatio } from '../../src/lib/batteryScale';
@@ -92,15 +92,21 @@ describe('appearance: theme preference', () => {
     for (const stored of [null, 'light', 'dark', 'graphite', 'porcelain', 'system', 'bogus']) {
       for (const systemDark of [false, true]) {
         for (const display of [null, 'gauge', 'battery']) {
-          const s = new FakeStorage();
-          if (stored) s.setItem(THEME_KEY, stored);
-          if (display) s.setItem(SCORE_DISPLAY_KEY, display);
-          const pre = new FakeEl();
-          vm.runInNewContext(script!, { document: { documentElement: pre }, localStorage: s, window: { matchMedia: () => ({ matches: systemDark }) } });
-          const ref = new FakeEl();
-          applyTheme(ref, resolveTheme(readThemePreference(s), systemDark));
-          applyScoreDisplay(ref, readScoreDisplay(s));
-          expect([stored, systemDark, display, pre.attrs, [...pre.classes], pre.style]).toEqual([stored, systemDark, display, ref.attrs, [...ref.classes], ref.style]);
+          // Signed-out screens keep the classic Light theme (AuthWrapper); the operator panel follows the choice.
+          for (const [signedIn, pathname] of [[true, '/'], [false, '/'], [false, '/operator']] as const) {
+            const s = new FakeStorage();
+            if (stored) s.setItem(THEME_KEY, stored);
+            if (display) s.setItem(SCORE_DISPLAY_KEY, display);
+            if (signedIn) s.setItem(SIGNED_IN_KEY, '1');
+            const pre = new FakeEl();
+            vm.runInNewContext(script!, { document: { documentElement: pre }, localStorage: s, location: { pathname }, window: { matchMedia: () => ({ matches: systemDark }) } });
+            const ref = new FakeEl();
+            const followsChoice = signedIn || pathname === '/operator';
+            applyTheme(ref, followsChoice ? resolveTheme(readThemePreference(s), systemDark) : 'light');
+            applyScoreDisplay(ref, readScoreDisplay(s));
+            expect([stored, systemDark, display, signedIn, pathname, pre.attrs, [...pre.classes], pre.style])
+              .toEqual([stored, systemDark, display, signedIn, pathname, ref.attrs, [...ref.classes], ref.style]);
+          }
         }
       }
     }
