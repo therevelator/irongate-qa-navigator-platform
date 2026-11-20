@@ -148,6 +148,8 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Team page: Work & code quality (`GET /api/ci/teams/:id/work`) and How this was calculated of the work and code-quality metrics | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope |
 | Connect your CI: issue and SARIF steps, test calls for issues and static analysis; a Jira / Linear project key mapped like a service | yes | — | — | — | — |
 | Parameters (financial and pipeline settings) | company, departments, teams; "apply to every department and team" | their departments and teams only (company-level values read-only: the page cannot save them and the API answers 403) | — | — | — |
+| Manual metrics: pipeline configuration (`PUT /api/analytics/pipeline-config`, one company-wide row) and company default pipeline stages (`PUT /api/analytics/pipeline-stages/:id`, `team_id` empty) | yes | read-only (the page hides Save; the API answers 403) | — | — | — |
+| Manual metrics: a team's own pipeline stages (`PUT /api/analytics/pipeline-stages/:id`) | any team | teams of their departments | — | — | — |
 | KPI targets (with history) | company, department, team | department and team, in their departments | — | — | — |
 | Expected update frequency | yes | yes | — | — | — |
 | Session settings (how long sign-ins last) | yes | — | — | — | — |

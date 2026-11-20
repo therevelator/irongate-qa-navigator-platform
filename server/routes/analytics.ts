@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor, type OwnedTeam } from '../middleware/access';
-import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageSampleData, canManageTeam, canRequestExecutiveBriefing, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
+import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageSampleData, canManageTeam, isCompanyAdmin, canRequestExecutiveBriefing, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
 import { runDemoSeed, runFillExisting, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
@@ -710,12 +710,13 @@ router.get('/pipeline-config', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Update pipeline configuration
+// Update pipeline configuration. One row per company (a company-wide value): super admin only
+// (docs/ROLE_ACCESS.md: company-wide values belong to the super admin).
 router.put('/pipeline-config', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    if (!canManageCompanyData(req)) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+    if (!isCompanyAdmin(policyActor(req))) {
+      return res.status(403).json({ error: 'Only a super admin can change the company-wide pipeline settings' });
     }
     const { time_savings_percent, cost_savings_percent, cost_per_minute } = req.body;
 
@@ -947,6 +948,10 @@ router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
 
     if (!stage) {
       return res.status(404).json({ error: 'Pipeline stage not found' });
+    }
+    // Company default stages (team_id empty) are company-wide values: super admin only.
+    if (!stage.team_id && !isCompanyAdmin(policyActor(req))) {
+      return res.status(403).json({ error: 'Only a super admin can change the company default pipeline stages' });
     }
     // A qa_manager may only edit stages of teams in their department (canManageTeam).
     if (stage.team_id && !canManageTeam(policyActor(req), { department_id: stage.department_id })) {

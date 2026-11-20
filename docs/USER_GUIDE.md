@@ -156,7 +156,9 @@ For super admins, managers and team leads, within their scope. Details: [ADMIN_P
 - **Parameters:** KPI targets (company, department, team, with history), alert rules, financial and
   pipeline settings, and how long sign-ins last.
 - **Update frequency:** how often each metric is expected to update (drives the stale marker).
-- **Manual metrics:** enter team KPIs and developer metrics by hand.
+- **Manual metrics:** enter team KPIs and developer metrics by hand. The company-wide pipeline
+  configuration and the company default pipeline stages are changed by super admins only; managers edit
+  the pipeline stages of their own departments' teams.
 - **Activity:** the change history with undo. **Ingestion log:** every data import. **User activity**
   (super admins): sign-ins, requests and screens of the company's users for 90 days.
 

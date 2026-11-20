@@ -100,7 +100,13 @@ older than its interval is marked stale and not judged.
 
 Super admins (any team), managers (their departments) and team leads (teams they lead) can enter team KPI
 values, developer metrics and technical-debt ROI inputs by hand. A manual value goes through the same write
-path as the ingestion API, with the source `manual`. Prefer sending raw data from CI where possible
+path as the ingestion API, with the source `manual`.
+
+**CI/CD pipeline stages** (super admins and managers). The **Pipeline Metrics Configuration** (time and cost
+savings %, cost per minute) is one company-wide value: only a super admin can save it; managers see it
+read-only. A team's own stages can be edited by a super admin or by a manager of the team's department.
+When a team has no stages of its own, the page shows the **company default stages**; only a super admin can
+change those (managers see them read-only, the API answers 403). Prefer sending raw data from CI where possible
 ([INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md)).
 
 ## 7. Logs: Activity, Ingestion log, User activity

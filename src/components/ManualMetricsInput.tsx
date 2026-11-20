@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { policyActorOf } from '../lib/policyActor';
-import { canManageCompanyConfig, canUseFormulaMode, canWriteSomeTeamData, canWriteTeamData } from '../../server/lib/userPolicy';
+import { canManageCompanyConfig, canUseFormulaMode, canWriteSomeTeamData, canWriteTeamData, isCompanyAdmin } from '../../server/lib/userPolicy';
 import { Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, History, Calendar, ArrowUp, Users, UserCircle, Zap, Wrench, DollarSign, TrendingUp, Headphones, GitBranch, Code, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
@@ -906,7 +906,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       if (response.ok) {
         toast.success('Pipeline configuration saved!');
       } else {
-        toast.error('Failed to save pipeline configuration');
+        const body = await response.json().catch(() => ({}));
+        toast.error(body.error || 'Failed to save pipeline configuration');
       }
     } catch (error) {
       console.error('Error saving pipeline config:', error);
@@ -952,8 +953,14 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         })
       );
 
-      await Promise.all(promises);
-      toast.success('Pipeline stages saved successfully!');
+      const responses = await Promise.all(promises);
+      const refused = responses.find((r) => !r.ok);
+      if (refused) {
+        const body = await refused.json().catch(() => ({}));
+        toast.error(body.error || 'Failed to save pipeline stages');
+      } else {
+        toast.success('Pipeline stages saved successfully!');
+      }
       
       // Refresh to get recalculated bottleneck scores
       fetchPipelineStages(selectedTeamId);
@@ -1552,6 +1559,10 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   // (own department) and team_lead (own team); debt impact and pipeline settings are
   // company data, edited by super_admin and qa_manager only.
   const canEditCompanyData = !!user && canManageCompanyConfig(policyActorOf(user));
+  // Company-wide values (the pipeline configuration and the company default stages) belong to the
+  // super admin (docs/ROLE_ACCESS.md); a manager sees them read-only.
+  const canEditCompanyWide = !!user && isCompanyAdmin(policyActorOf(user));
+  const stagesReadOnly = stagesSource !== 'team' && !canEditCompanyWide;
   if (!user || !canWriteSomeTeamData(policyActorOf(user))) {
     return (
       <Page>
@@ -2381,6 +2392,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         max={100}
                         step={1}
                         value={pipelineConfig.time_savings_percent || ''}
+                        disabled={!canEditCompanyWide}
                         onChange={(e) => setPipelineConfig(prev => ({ ...prev, time_savings_percent: parseFloat(e.target.value) || 0 }))}
                         className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                       />
@@ -2395,6 +2407,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         max={100}
                         step={1}
                         value={pipelineConfig.cost_savings_percent || ''}
+                        disabled={!canEditCompanyWide}
                         onChange={(e) => setPipelineConfig(prev => ({ ...prev, cost_savings_percent: parseFloat(e.target.value) || 0 }))}
                         className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                       />
@@ -2408,22 +2421,29 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                         min={0}
                         step={0.01}
                         value={pipelineConfig.cost_per_minute || ''}
+                        disabled={!canEditCompanyWide}
                         onChange={(e) => setPipelineConfig(prev => ({ ...prev, cost_per_minute: parseFloat(e.target.value) || 0 }))}
                         className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                       />
                       <p className="text-xs text-slate-500 mt-1">Pipeline execution cost per minute</p>
                     </div>
                   </div>
-                  <div className="flex justify-end mt-4">
+                  {!canEditCompanyWide && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-3" data-testid="pipeline-config-readonly">
+                      Company-wide setting: only a super admin can change it.
+                    </p>
+                  )}
+                  {canEditCompanyWide && <div className="flex justify-end mt-4">
                     <button
                       onClick={handleSavePipelineConfig}
+                      data-testid="save-pipeline-config"
                       disabled={savingPipelineConfig}
                       className="flex items-center gap-2 px-3 py-1.5 bg-brand-700 text-white text-sm rounded-lg hover:bg-brand-800 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       <Save className="w-3 h-3" />
                       {savingPipelineConfig ? 'Saving...' : 'Save Config'}
                     </button>
-                  </div>
+                  </div>}
                   {showFormulas && (
                     <FormulaNote
                       className="mt-3"
@@ -2484,6 +2504,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={1}
                           value={stage.duration || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'duration', e.target.value)}
+                          disabled={stagesReadOnly}
                           className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
@@ -2497,6 +2518,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={0.1}
                           value={stage.success_rate || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'success_rate', e.target.value)}
+                          disabled={stagesReadOnly}
                           className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
@@ -2510,6 +2532,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={1}
                           value={stage.cpu_usage || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'cpu_usage', e.target.value)}
+                          disabled={stagesReadOnly}
                           className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
@@ -2523,6 +2546,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={1}
                           value={stage.memory_usage || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'memory_usage', e.target.value)}
+                          disabled={stagesReadOnly}
                           className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
@@ -2535,6 +2559,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                           step={0.01}
                           value={stage.cost_per_run || ''}
                           onChange={(e) => handlePipelineChange(stage.id, 'cost_per_run', e.target.value)}
+                          disabled={stagesReadOnly}
                           className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-brand-500/30 focus:border-brand-600 text-sm"
                         />
                       </div>
@@ -2557,17 +2582,22 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                   </div>
                 ))}
 
-                {/* Save Pipeline Button */}
-                <div className="flex justify-end mt-4">
+                {/* Save Pipeline Button (hidden for company default stages unless super admin) */}
+                {stagesReadOnly ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="pipeline-stages-readonly">
+                    These are the company default stages (this team has none of its own): only a super admin can change them.
+                  </p>
+                ) : <div className="flex justify-end mt-4">
                   <button
                     onClick={handleSavePipeline}
+                    data-testid="save-pipeline-stages"
                     disabled={savingPipeline}
                     className="bg-brand-700 hover:bg-brand-800 flex items-center gap-2 px-4 py-2 text-white rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <Save className="w-4 h-4" />
                     {savingPipeline ? 'Saving...' : 'Save Pipeline Stages'}
                   </button>
-                </div>
+                </div>}
               </div>
             )}
           </div>

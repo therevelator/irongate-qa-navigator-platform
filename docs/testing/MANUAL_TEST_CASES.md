@@ -1,6 +1,6 @@
 # Manual test cases
 
-431 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+432 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -26,7 +26,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [KPI targets and ingestion log](#kpi-targets-and-ingestion-log) (4)
 - [Executive summary](#executive-summary) (5)
 - [Team improve (forecasts and recommendations)](#team-improve-forecasts-and-recommendations) (9)
-- [Administration: manual metrics](#administration-manual-metrics) (7)
+- [Administration: manual metrics](#administration-manual-metrics) (8)
 - [API keys and ingestion](#api-keys-and-ingestion) (3)
 - [Sample (demo) data](#sample-demo-data) (4)
 - [Administration: KPI targets](#administration-kpi-targets) (5)
@@ -6687,6 +6687,34 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** Requires DevTools Console or an HTTP client; API-level access check.
 
 *Automated:* `tests/e2e/admin/manual-metrics.spec.ts › Manual metrics › MM-07 a lead cannot write another team's metrics through the API`
+
+### TC-ADM-067: Company-wide pipeline settings and company default stages: read-only for a manager, editable by the super admin
+
+**Type:** Negative · **Priority:** High · **Role:** Manager · **Flow:** F8.3
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A team in the manager's department (Decision Management) that has no pipeline stages of its own, so the page shows the company default stages; and one that has its own stages (most demo teams do).
+
+**Test data**
+
+- Manager: manager@irongate.com / demo123
+- Super admin: admin@irongate.com / demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the manager and open Manual metrics. Choose a team of Decision Management that has its own stages and expand "CI/CD Pipeline Stages". | The Pipeline Metrics Configuration fields (time savings %, cost savings %, cost per minute) are disabled, there is no Save Config button, and the note "Company-wide setting: only a super admin can change it." is shown. |
+| 2 | Change a stage's Duration and click "Save Pipeline Stages". | "Pipeline stages saved successfully!" (a team's own stages stay editable for a manager of its department). |
+| 3 | Choose a team without stages of its own (the company default stages are shown). | The stage fields are disabled, there is no Save Pipeline Stages button, and the note says these are the company default stages and only a super admin can change them. |
+| 4 | Optional (API client, signed in as the manager): PUT <API>/analytics/pipeline-config with {"time_savings_percent":50}. | Status 403: "Only a super admin can change the company-wide pipeline settings"; nothing changes. |
+| 5 | Sign out, sign in as the super admin, open the same page and team. | The configuration fields and the company default stages are editable and both Save buttons are shown; saving works. |
+
+**After the test:** Put back any values you changed.
+
+**Notes:** docs/ROLE_ACCESS.md: company-wide values belong to the super admin.
+
+*Automated:* `tests/api/pipeline-config-scope.test.ts › PCS-001, PCS-002, PCS-003 (API)`
 
 ## API keys and ingestion
 
