@@ -145,6 +145,8 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Admin console: Connect your CI (steps, test call, last data received, main branch; `GET /api/ci/status`, `PUT /api/ci/teams/:id/main-branch`) | yes | — (managers have no API keys either) | — | — | — |
 | Connect your CI: service → team mapping (`GET / PUT /api/ci/services`, `DELETE /api/ci/services/:service`) | yes | — | — | — | — |
 | Team page: Deliveries & incidents (`GET /api/ci/teams/:id/delivery`) and How this was calculated of the DORA metrics | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope |
+| Team page: Work & code quality (`GET /api/ci/teams/:id/work`) and How this was calculated of the work and code-quality metrics | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope |
+| Connect your CI: issue and SARIF steps, test calls for issues and static analysis; a Jira / Linear project key mapped like a service | yes | — | — | — | — |
 | Parameters (financial and pipeline settings) | company, departments, teams; "apply to every department and team" | their departments and teams only (company-level values read-only: the page cannot save them and the API answers 403) | — | — | — |
 | KPI targets (with history) | company, department, team | department and team, in their departments | — | — | — |
 | Expected update frequency | yes | yes | — | — | — |

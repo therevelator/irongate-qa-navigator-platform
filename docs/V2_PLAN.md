@@ -104,6 +104,25 @@ TC-ADM-055 … TC-ADM-060.
 | `POST /api/ingest/issues` | Jira / Linear issue JSON: type, status changes, environment found in, story points, sprint, estimate and time logged | defect escape rate, defect density (with code size from coverage), velocity, commitment, carryover, blocked time, sizing accuracy |
 | `POST /api/ingest/static-analysis` | SARIF (SonarQube, CodeQL, ESLint and others export it) | code quality score, findings by severity and rule, new vs fixed findings |
 
+Status: **done**. Endpoints `POST /api/ingest/issues` (Jira REST search results with changelog and names, single issues and
+`jira:issue_*` webhooks; Linear GraphQL exports and Issue webhooks; QE Navigator JSON with sprints; at most 1,000 issues and 10 MB,
+gzip, 400 / 413 / 415 as before, idempotent by issue key + change time with updates and out-of-order protection, dry run; the
+team from the issue, the query or the project key mapped like a service; computed values refused) and
+`POST /api/ingest/static-analysis` (SARIF 2.1.0 as the body or multipart, one report per tool, severity from SonarQube severity /
+impacts, CodeQL security-severity or the SARIF level, suppressed and absent results left out, fingerprints for new vs fixed,
+idempotent per team + commit + run + attempt), migration `20261201000000_raw_ingestion_phase3_work_quality.sql` (`issue_sprints`,
+`issues`, `issue_transitions`, `analysis_reports`, `analysis_findings`; `raw_uploads.kind` extended), calculation
+`server/lib/calc/work.ts` and `server/lib/calc/quality.ts` (on arrival for the affected days, nightly in `calc-recompute`; KPI
+values with source `computed` and `metric_evidence` with the issues and reports), team page Evidence → **Work & code quality**
+(tiles with How this was calculated, last closed sprints, escaped defects, blocked / carried-over and mis-sized issues, latest
+reports, findings by rule, new and fixed findings, score history), Connect your CI → **Issues and code quality** (Jira, Linear,
+JSON steps, SARIF per CI tool, test calls), recommendations wired to the new evidence (escaped defects with their components,
+mis-sized and blocked issues of the latest sprint, high-severity findings by rule), a year of sample issues and weekly SonarQube
+reports derived from each team's KPI history (`server/seeds/demoWork.ts`) and a live-company SQL (`raw-sample-sql.ts
+--work-only`). Retention: findings 35 days (the latest report keeps them), reports, closed sprints and resolved issues 13 months.
+Tests: `tests/api/work-parsers.test.ts`, `work-ingestion.test.ts`, `tests/database/workStore.test.ts`, UI
+`team/work-evidence.spec.ts` (WRK-01 … 05, CI-04, A11Y-46 … 49), manual cases TC-ADM-061 … TC-ADM-066.
+
 ### Phase 4 — Improve (for teams)
 
 - **Forecasts**: each metric projected 4–8 weeks ahead with a confidence band; "at this rate coverage misses its target
@@ -202,6 +221,26 @@ No database change. Slack / Teams digests remain for later.
 - Confidence from the number of deploys / incidents (high ≥ 10, medium 3–9, low < 3). Reliability values need incident data
   (a team that never sent incidents shows them as missing, not as 100 %).
 
+## Calculation rules (phase 3)
+
+- **Defects**, over the 28 days ending D (bugs opened in the window; resolved as won't do, duplicate, cannot reproduce, not a bug,
+  … are not confirmed defects): **defect escape rate** = bugs found in production ÷ bugs with a known environment × 100 (bugs
+  without an environment are left out and counted as such); **defect density** = bugs found in production ÷ (lines found of the
+  latest main-branch coverage report ÷ 1,000); no coverage report, no density.
+- **Sprints**: the latest sprint closed on or before D (at most 42 days before). **Velocity** = story points of the issues
+  completed in it (done before it closed + 1 h, not in a later sprint that started first; epics and sub-tasks not counted).
+  **Commitment rate** = completed points ÷ committed points × 100, committed = in the sprint at its start (from the Sprint
+  changes when sent, else created before the start). **Carryover** = points of its issues not completed ÷ committed × 100 (at
+  most 100). **Blocked time** = hours its issues spent in a blocked status (Blocked, On hold, Waiting, Impeded) or flagged,
+  within the sprint, overlaps once. **Sizing accuracy** = time logged ÷ original estimate over its completed issues with both.
+  Without sprints (Kanban): blocked time and sizing accuracy over the 14 days ending D.
+- **Code quality score** = round(100 × e^(−w ÷ 20)), w = weighted findings per 1,000 lines of code (critical 10, high 5, medium 2,
+  low 0.5, info 0) over the latest main-branch report of each repository and tool (at most 30 days old); lines of code sent with
+  the report, else the latest coverage report's lines found; neither, no score. Findings, new findings (not in the previous
+  report of the same repository, branch and tool) and fixed findings are summed over those reports.
+- Confidence from the number of bugs / sprint issues / reports (high ≥ 10, medium 3–9, low < 3). On arrival: issues recalculate
+  each change day and the 41 after it within 190 days; reports their day and the 30 after it.
+
 ## Success criteria
 
 - A new customer connects CI in under 15 minutes and sees calculated coverage, flakiness and build metrics from their
@@ -222,6 +261,6 @@ No database change. Slack / Teams digests remain for later.
 
 1. Phase 1 — done (raw tests, coverage and pipelines, calculation engine, evidence, Connect your CI).
 2. Phase 2 — done (deployments, commits, incidents, DORA and reliability metrics, deliveries evidence, service mapping).
-3. Phase 3.
+3. Phase 3 — done (issues and SARIF, work and code-quality metrics, work evidence, recommendations wired).
 4. Phases 4 and 5 (they need phases 1–3 data to be credible; forecasts can start after phase 1).
 5. Phase 6 — done (executive phone summary and wall-screen TV mode); Slack / Teams digests later.

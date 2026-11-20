@@ -564,6 +564,47 @@ curl -sS --fail-with-body -X POST "https://<host>/api/ingest/incidents?team=<tea
   -d '{"id":"INC-7","severity":"SEV2","service":"payments-api","openedAt":"2026-11-18T11:00:00Z","resolvedAt":"2026-11-18T11:40:00Z","deploymentId":"rel-42"}'
 ```
 
+## Work and code quality from raw issues and SARIF (v2 phase 3)
+
+Issues and static-analysis reports are sent **raw**; QE Navigator calculates defect escape rate, defect density, sprint
+velocity, commitment rate, carryover, blocked time, sizing accuracy and the code quality score with findings by severity and
+rule and new vs fixed findings (computed values are refused). Full reference: docs/INTEGRATION_GUIDE.md section 4C (8.6 for
+the steps per tool).
+
+- `POST /api/ingest/issues`: Jira (REST search result with `expand=changelog,names`, one issue, `jira:issue_*` webhooks), Linear
+  (GraphQL export, Issue webhooks) or QE Navigator JSON (`issues`, `sprints`); JSON, gzip, at most 1,000 issues and 10 MB.
+  Idempotent by issue key + change time (a changed issue updates; every status, sprint and flag change kept once). Team: the
+  issue's own, the query `team`, or the project key mapped like a service (Connect your CI).
+- `POST /api/ingest/static-analysis`: SARIF 2.1.0 (SonarQube, CodeQL, ESLint, Semgrep, …) as the body or multipart `report`,
+  with `team`, `repo`, `branch`, `commit`, `run`, `attempt`, `loc`; idempotent per team + commit + run + attempt.
+- **Code quality score** = round(100 × e^(−weighted findings per 1,000 lines ÷ 20)), weights critical 10, high 5, medium 2,
+  low 0.5, info 0, over the latest main-branch report of each repository and tool; lines of code sent with the report, else
+  the latest coverage report's lines found. Defect density = production bugs of 28 days ÷ KLOC (coverage lines found).
+- Code: `server/lib/ingest/issueEvents.ts` (Jira / Linear / JSON mapping), `server/lib/ingest/sarif.ts`,
+  `server/lib/ingest/workStore.ts`, `server/routes/ingestWork.ts`, `server/lib/calc/work.ts`, `server/lib/calc/quality.ts`,
+  `server/routes/ci.ts` (`GET /api/ci/teams/:id/work`). Migration
+  `supabase/migrations/20261201000000_raw_ingestion_phase3_work_quality.sql` (`issue_sprints`, `issues`, `issue_transitions`,
+  `analysis_reports`, `analysis_findings`; `raw_uploads.kind` extended).
+- Values go to the KPI columns `defect_escape_rate`, `defect_density`, `sprint_velocity`, `sprint_commitment_rate`,
+  `sprint_carryover`, `blocked_time_hours`, `sizing_accuracy`, `code_quality_score` (source `computed`) with `metric_evidence`;
+  the nightly `calc-recompute` includes teams with issues or reports. Retention: findings 35 days (the latest report keeps
+  them), reports, sprints and resolved issues 13 months.
+- UI: team page → Evidence → **Work & code quality** (sprint and defect tiles, last closed sprints, escaped defects, blocked
+  and carried-over issues, sizing, code quality tiles, latest reports, findings by rule, new and fixed findings; every tile
+  opens How this was calculated); Admin console → Connect your CI → **Issues and code quality**. Recommendations use the
+  escaped defects, the mis-sized and blocked issues and the high-severity findings.
+- Sample data: a year of issues and weekly SonarQube reports per demo / filled team **derived from the team's own KPI history**
+  (sprints of `sprint_velocity`, blocked time, sizing, escape rate, density and score of the snapshots;
+  `server/seeds/demoWork.ts`); for a live company `npx tsx scripts/reseed/raw-sample-sql.ts … --work-only`.
+
+```bash
+curl -sS --fail-with-body -X POST "https://<host>/api/ingest/issues?team=<team id>" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" \
+  -d '{"issues":[{"key":"PAY-102","type":"bug","status":"Open","environment":"production","createdAt":"2026-11-19T08:30:00Z"}]}'
+curl -sS --fail-with-body -X POST "https://<host>/api/ingest/static-analysis?team=<team id>&commit=$SHA&branch=main&run=$RUN" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -F report=@results/javascript.sarif
+```
+
 ## Staleness, confidence, company aggregates and KPI targets
 
 Migration: `supabase/migrations/20261120000000_metric_values_targets_ingestion_log.sql` (tables

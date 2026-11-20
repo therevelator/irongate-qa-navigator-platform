@@ -202,6 +202,10 @@ Derived from the code, then checked against the documentation:
 | F9.10 | How this was calculated of a DORA metric: from a tile and from the KPI card; formula, values used, the deploys / incidents counted (failed ones first) | A M L E V (scope) | — | DLV-02 (with a11y check), CI-03 | — |
 | F9.11 | Connect your CI → Deployments and incidents: steps per CI tool and per incident tool (tabs, arrow keys), service → team mapping (add, remove), test call for deployments, real events without a team routed by the mapping and calculated on the team page as source "computed" | A | M L E V | CI-03 (tests/e2e/team/delivery-evidence.spec.ts) | DLV-03 engineer refused the service mappings (403) |
 | F9.12 | Accessibility of Deliveries & incidents and Connect your CI in Light, Dark, Graphite and Porcelain | A | — | A11Y-38 … A11Y-41 | — |
+| F9.13 | Work & code quality on the team page: sprint and defect tiles, last closed sprints, escaped defects, blocked / carried-over issues, sizing; code quality tiles, latest reports with new / fixed, findings by rule (show all), score history; not shown without issues or reports | A M L E V (scope) | outside the scope | WRK-01, WRK-02, WRK-05 | WRK-04 another team's work evidence refused (403) |
+| F9.14 | How this was calculated of a work or code-quality metric: from a tile and from the KPI card; formula, sprint, the issues (with their part) or reports counted | A M L E V (scope) | — | WRK-03 (with a11y check), CI-04 | — |
+| F9.15 | Connect your CI → Issues and code quality: issue steps for Jira, Linear, JSON and SARIF steps per CI tool (tabs, arrow keys), test calls for issues and static analysis, real issues and a SARIF report calculated on the team page | A | M L E V | CI-04 (tests/e2e/team/work-evidence.spec.ts) | — |
+| F9.16 | Accessibility of Work & code quality and the Connect your CI issue steps in Light, Dark, Graphite and Porcelain | A | — | A11Y-46 … A11Y-49 | — |
 
 ## 10. Alerts, notifications, digest, Slack, tracked actions
 

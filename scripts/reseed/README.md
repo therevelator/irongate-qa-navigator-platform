@@ -86,3 +86,25 @@ npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories script
 
 Apply migration `20261130000000_raw_ingestion_phase2_delivery.sql` first. The deploy and incident lists work at once; the DORA
 values ("How this was calculated") appear with the nightly sample refresh or the operator panel's **Refresh sample data now**.
+
+## v2 issues and static analysis (phase 3)
+
+The sample refresh and `--fill-existing` also add **a year of sample issues and weekly SARIF reports** per team, derived **in the
+database from the team's own KPI history** (`server/seeds/demoWork.ts`): the sprints of `sprint_velocity` with stories and tasks
+adding up to their committed and delivered points (the rest carried over and completed in the next sprint), time logged in the
+ratio of the snapshot's sizing accuracy and blocked periods adding up to its blocked time, bugs found in production and before
+release at the snapshot's defect escape rate and defect density (code size from the team's latest coverage report), and a weekly
+SonarQube report whose findings give the snapshot's code quality score with the scoring formula. So the calculated values match
+the KPIs already shown (sprint values exactly, the defect values within the noise of whole bugs). Evidence only. For a **live**
+company that already has the phase-1 sample:
+
+```bash
+npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories scripts/reseed/stories.json \
+  --names "Payments Core,Lending Journey,Mobile Experience" --out /path/to/out --work-only
+# → work-sample-mft-meridian.sql (≈ 70 kB of PL/pgSQL blocks, re-runnable: existing rows are skipped) and
+#   work-sample-mft-meridian-remove.sql (the sample issues, sprints and reports of these teams only)
+```
+
+Apply migration `20261201000000_raw_ingestion_phase3_work_quality.sql` first. The sprint, escaped-defect and report lists work at
+once; the calculated values ("How this was calculated") appear with the nightly sample refresh or the operator panel's **Refresh
+sample data now**.

@@ -1039,6 +1039,28 @@ failure rate opens to the very deploys that failed and why (docs/V2_PLAN.md, pha
   day on.
 - Events that carry no team go to the team their service is mapped to (Connect your CI → Service → team mapping).
 
+### 4.2c Issues and static analysis (v2)
+
+Why: defect escape, sprint predictability and code quality are calculated from the issues and findings themselves, so a high
+escape rate opens to the very bugs customers found, and a low code quality score to the rules and files behind it
+(docs/V2_PLAN.md, phase 3).
+
+- `POST /api/ingest/issues` takes Jira (a search export with changelog, or the automation / webhook payload), Linear (an export or
+  the webhook) or a simple JSON list; `POST /api/ingest/static-analysis` takes SARIF 2.1.0 from SonarQube, CodeQL, ESLint and
+  other tools. Same API keys, rate limit and ingestion log; reference: docs/INTEGRATION_GUIDE.md section 4C.
+- The calculation ([`server/lib/calc/work.ts`](../server/lib/calc/work.ts), [`quality.ts`](../server/lib/calc/quality.ts)):
+  **defect escape rate** (bugs found in production ÷ bugs with a known environment, 28 days), **defect density** (production bugs ÷
+  thousand lines of code from the coverage reports), from the latest closed sprint **velocity** (points completed before it
+  closed), **commitment rate** (completed ÷ committed at the start), **carryover** (not completed ÷ committed), **blocked time**
+  (hours in a blocked status or flagged) and **sizing accuracy** (time logged ÷ original estimate), and the **code quality score**
+  = round(100 × e^(−weighted findings per 1,000 lines ÷ 20)) with weights critical 10, high 5, medium 2, low 0.5, plus findings by
+  severity and rule and the findings new or fixed since the previous report.
+- Values are written to the existing KPI columns with source `computed`, so dashboards, targets, alerts, forecasts and the QA
+  score use them; each value keeps its evidence. Bugs without an environment, and bugs closed as won't do or cannot reproduce, are
+  left out (and shown as left out); a team without coverage reports gets no density, and a report without a code size no score.
+- Sample data: every demo and filled team has a year of sample issues and weekly SonarQube reports made from its own KPI history,
+  so the calculated values agree with what its pages show. Evidence only: never written as KPI values.
+
 ### 4.3 Manual metrics
 
 **Administration → Manual metrics** (super admin, manager, team lead; team scope enforced by the server). Sections: current
@@ -1184,6 +1206,14 @@ Why: everything about one team in one place, with each number explained
   changes** with what made them failed (rolled back, the hotfix that followed and how much later, the linked incident) and the
   **incidents** with severity, outage, duration (or open for) and the linked deploy. The KPI cards of these metrics offer How this
   was calculated too. Without deployments or incidents the part says so.
+- **Work & code quality** in the same Evidence section (section 4.2c): tiles for defect escape rate, defect density, velocity,
+  commitment, carryover, blocked time and sizing accuracy (each opens How this was calculated with the sprint and the issues it
+  counted, and their part: completed, not completed, added after the start, found in production, blocked hours, estimate and
+  logged time), the **last closed sprints** (committed, completed, commitment, carryover, blocked, sizing), the **escaped defects**
+  of the last 28 days with where they were found, the latest sprint's **blocked and carried-over** issues and its issues
+  furthest from their **estimate**; then the **code quality** tiles (score, findings, new, fixed), the score history, the latest
+  report per repository and tool with findings by severity, **findings by rule** and the **new** and **fixed** findings. The KPI
+  cards of these metrics offer How this was calculated too. Without issues or reports the part is not shown.
 - **Open TV mode** and, for super admins, the **Show formulas & data sources** switch (formula mode) that opens the metric explanation
   for any value.
 - Team detail opens for the teams of the analytics scope only (as the overview list, TV mode and Compare); another team answers 403.

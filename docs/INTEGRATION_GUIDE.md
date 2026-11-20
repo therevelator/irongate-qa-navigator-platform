@@ -19,10 +19,11 @@ with real data.
 4. [The KPI ingestion API (reference)](#4-the-kpi-ingestion-api-reference)
    - 4A. [Raw ingestion: tests, coverage, pipelines (v2)](#4a-raw-ingestion-tests-coverage-pipelines-v2)
    - 4B. [Raw ingestion: deployments, commits, incidents (v2)](#4b-raw-ingestion-deployments-commits-incidents-v2)
+   - 4C. [Raw ingestion: issues and static analysis (v2)](#4c-raw-ingestion-issues-and-static-analysis-v2)
 5. [All other data: how it can be sent today](#5-all-other-data-how-it-can-be-sent-today)
 6. [Code: curl, Node.js, Python, retries, batching, backfill](#6-code-curl-nodejs-python-retries-batching-backfill)
 7. [Recipes per source system](#7-recipes-per-source-system)
-8. [CI examples: GitHub Actions, Jenkins, GitLab CI](#8-ci-examples-github-actions-jenkins-gitlab-ci) (8.4: raw reports per CI tool, also Azure DevOps; 8.5: deployments and commits per CI tool)
+8. [CI examples: GitHub Actions, Jenkins, GitLab CI](#8-ci-examples-github-actions-jenkins-gitlab-ci) (8.4: raw reports per CI tool, also Azure DevOps; 8.5: deployments and commits per CI tool; 8.6: issues and SARIF per tool)
 9. ["Populate everything" checklist and end-to-end script](#9-populate-everything-checklist-and-end-to-end-script)
 10. [Verifying and troubleshooting](#10-verifying-and-troubleshooting)
 11. [Security and data protection](#11-security-and-data-protection)
@@ -729,6 +730,154 @@ curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/incidents?team=$TEAM
 Ingestion log sources: `deployments (json)`, `deployments (github)`, `commits (gitlab)`, `incidents (pagerduty)`, …; test calls
 `deployments (json, test call)`. Deployments, commits and incidents (with their status updates) are kept **13 months**
 (`db-keepalive`); an incident that is still open is kept.
+
+## 4C. Raw ingestion: issues and static analysis (v2)
+
+Send your **issues** as the tracker has them (Jira, Linear, or QE Navigator JSON) and the **SARIF** report of your static
+analysis; QE Navigator calculates the work and code-quality metrics itself (docs/V2_PLAN.md, "Calculation rules (phase 3)").
+Computed values are refused: a body with `velocity`, `sprint_commitment_rate`, `defect_escape_rate`, `sizing_accuracy`,
+`code_quality_score` and the like answers `400`. Same API keys, rate limit, ingestion log, `Idempotency-Key` header and
+`dryRun=true` as sections 4A and 4B.
+
+| Endpoint | Accepts | Calculates (per team and UTC day) |
+|---|---|---|
+| `POST /api/ingest/issues` | Jira REST search results (`GET /rest/api/3/search/jql?expand=changelog,names`), a Jira issue, Jira webhooks; Linear GraphQL exports and webhooks; QE Navigator JSON | defect escape rate, defect density, sprint velocity, commitment rate, carryover, blocked time, sizing accuracy |
+| `POST /api/ingest/static-analysis` | SARIF 2.1.0 (SonarQube / SonarCloud, GitHub CodeQL, ESLint with `@microsoft/eslint-formatter-sarif`, Semgrep, Snyk Code, …) | code quality score, findings by severity and rule, new and fixed findings |
+
+### 4C.1 Issues
+
+**Body**: a Jira search result `{"issues": [...]}` (with `names` when `expand=names`), one Jira issue, a Jira webhook
+(`jira:issue_created`, `jira:issue_updated`; `jira:issue_deleted` answers `200 {"status":"ignored"}`), a Linear export
+`{"data": {"issues": {"nodes": [...]}}}` or webhook (`type: "Issue"`), or QE Navigator JSON `{"issues": [...], "sprints": [...]}`.
+At most **1,000 issues** per request (send one search page at a time), JSON, gzip accepted, at most **10 MB**.
+**Query**: `team`, `format` (`jira`, `linear`, `json`; detected when not given), `storyPointsField`, `sprintField`,
+`environmentField` (Jira custom field ids, e.g. `customfield_10016`), `dryRun=true`.
+
+**Team of an issue**: its own `team` (JSON), else the request's `team`, else the team its **project key** (Jira project,
+Linear team key; for JSON the part of the key before the dash) is mapped to in Admin console → Connect your CI → *Service →
+team mapping* (`PUT /api/ci/services {"service": "PAY", "teamId": "..."}`).
+
+**Idempotency**: issue key + change time. The same issue again is a `duplicate` (nothing written, `200`); a changed issue
+updates it (`updated`) unless it is older than the stored one (webhooks out of order: only its new changes are added); every
+status, sprint and flag change is kept once (issue + field + time + value).
+
+**Mapping** (the fields QE Navigator reads):
+
+| Internal | Jira | Linear | JSON |
+|---|---|---|---|
+| key | `key` | `identifier` | `key` |
+| type | `fields.issuetype.name`: Bug / Defect → bug, Story → story, Task → task, Sub-task → subtask, Epic, Spike, else other | labels Bug / Defect → bug, Feature / Story → story, else task (sub-issues: subtask) | `type` |
+| status | `fields.status.name` and `statusCategory.key` (new → to do, indeterminate → in progress, done → done) | `state.name` and `state.type` (backlog / unstarted / triage → to do, started → in progress, completed / canceled → done) | `status`, `statusCategory` |
+| blocked | a status named Blocked, Impeded, On hold, Waiting…; the *Flagged* field (Impediment) set and cleared | a state named Blocked / On hold / Waiting | a `Blocked` status in `transitions`, or `blocked: [{from, to}]` |
+| resolution | `fields.resolution.name` (Won't Do, Duplicate, Cannot Reproduce, … are not completed and not confirmed defects) | canceled → Canceled | `resolution` |
+| environment found in | `fields.environment` (text or document), a custom field (`environmentField`), or labels `production`, `prod`, `escaped`, `customer-reported`, `found-in-production`, `env:staging`, … | labels `env:production`, `env:staging`, … | `environment` |
+| story points | `storyPointsField`, else the field named "Story Points" / "Story point estimate" in `names`, else `customfield_10016` / `10026` / `10028` / `10002` / `10004` | `estimate` | `storyPoints` |
+| sprint(s) | `sprintField`, else the field named "Sprint", else `customfield_10020` / `10010` / `10007` (objects or legacy strings; every sprint the issue has been in) | `cycle` (and `history` cycle changes) | `sprint` / `sprints` (ids, or objects), with `sprints: [{id, name, startedAt, endsAt, completedAt}]` |
+| original estimate / time logged | `timeoriginalestimate` / `timespent` (seconds) | — (Linear has no time tracking: sizing accuracy is missing) | `estimateHours` / `timeLoggedHours` (or `…Seconds`) |
+| created / resolved | `created` / `resolutiondate` | `createdAt` / `completedAt`, `canceledAt` | `createdAt` / `resolvedAt` |
+| changes | `changelog.histories` (status, Sprint, Flagged); a webhook's `changelog.items` at its `timestamp` | `history.nodes` (state, cycle); a webhook's state change | `transitions: [{at, from, to, field}]` |
+
+```bash
+# Jira: one page of the search (repeat with startAt / nextPageToken)
+curl -sS -u "$JIRA_EMAIL:$JIRA_API_TOKEN" -G "https://your-site.atlassian.net/rest/api/3/search/jql" \
+  --data-urlencode "jql=project = PAY AND updated >= -365d ORDER BY updated" \
+  --data-urlencode "fields=*all" --data-urlencode "expand=changelog,names" --data-urlencode "maxResults=100" |
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/issues?team=$TEAM&format=jira" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" --data-binary @-
+# → 201 {"status":"accepted","kind":"issues","format":"jira","issues":[{"key":"PAY-101","team":"…","status":"written"},…],"sprints":4,
+#        "computed":[{"team":"…","days":[{"day":"2026-11-20","metrics":[{"key":"velocity","value":42,…},…]}],"daysRecalculated":190}]}
+# The same page again → 200 {"status":"duplicate",…}
+
+# Jira live: Project settings → Automation → rule "Issue created / transitioned / field changed" → Send web request,
+# URL …/api/ingest/issues?team=<team id>&format=jira, header Authorization: Bearer <key>, body "Issue data (Jira format)".
+
+# Linear: the issues of a team with their state history and cycles
+curl -sS https://api.linear.app/graphql -H "Authorization: $LINEAR_API_KEY" -H "Content-Type: application/json" \
+  -d '{"query":"{ issues(first: 250, filter: { team: { key: { eq: \"PAY\" } } }) { nodes { identifier title url createdAt updatedAt completedAt canceledAt estimate state { name type } labels { nodes { name } } cycle { id number startsAt endsAt completedAt } history(first: 50) { nodes { createdAt fromState { name type } toState { name type } } } } } }"}' |
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/issues?team=$TEAM&format=linear" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" --data-binary @-
+
+# Any tracker: QE Navigator JSON
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/issues?team=$TEAM" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" -d '{
+  "sprints": [{"id":"S-47","name":"Sprint 47","startedAt":"2026-11-09T09:00:00Z","completedAt":"2026-11-20T15:00:00Z"}],
+  "issues": [
+    {"key":"PAY-101","type":"story","title":"Refund to card","status":"Done","createdAt":"2026-11-03T10:00:00Z","resolvedAt":"2026-11-18T14:00:00Z",
+     "storyPoints":5,"estimateHours":16,"timeLoggedHours":19,"sprint":"S-47",
+     "transitions":[{"at":"2026-11-10T09:00:00Z","to":"In Progress"},{"at":"2026-11-12T09:00:00Z","to":"Blocked"},{"at":"2026-11-12T15:00:00Z","to":"In Progress"}]},
+    {"key":"PAY-102","type":"bug","title":"Wrong fee on refunds","status":"Open","environment":"production","createdAt":"2026-11-19T08:30:00Z"}]}'
+```
+
+### 4C.2 Static analysis (SARIF)
+
+The SARIF file as the body or the multipart field `report` (gzip accepted, at most 20 MB, the size limits of section 4A).
+**Query / fields**: `team` (required), `repo` (default: the run's `versionControlProvenance.repositoryUri`, e.g.
+`acme/payments`), `branch`, `commit` (default: the run's), `run`, `attempt`, `startedAt` (default: the run's
+`invocations[0].endTimeUtc`), `loc` (lines of code of the repository; optional, see the score), `dryRun=true`.
+**Idempotency**: team + commit + run + attempt; the same upload again is a `duplicate`. Each tool in the file is one report.
+
+- **Findings**: results of kind `fail` (or without a kind); suppressed results (`suppressions`, not rejected) are counted as
+  suppressed, results with `baselineState: "absent"` are fixed findings of a baseline run and not counted.
+- **Severity**: SonarQube `severity` / `impacts` (BLOCKER → critical, CRITICAL / HIGH → high, MAJOR / MEDIUM → medium, MINOR /
+  LOW → low, INFO → info), else CodeQL `security-severity` (≥ 9 critical, ≥ 7 high, ≥ 4 medium, > 0 low), else the SARIF
+  `level` (error → high, warning → medium, note → low, none → info).
+- **New and fixed**: a finding's identity is its `partialFingerprints` / `fingerprints` (CodeQL, Semgrep and others send them),
+  else rule + file + message. New = not in the previous report of the same repository, branch and tool; fixed = in the
+  previous report, not in this one. A late upload re-links the report after it.
+
+```bash
+# CodeQL (GitHub Actions writes results/<language>.sarif), multipart:
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/static-analysis?team=$TEAM&commit=$GITHUB_SHA&branch=main&run=$GITHUB_RUN_ID" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -F report=@results/javascript.sarif
+# → 201 {"status":"accepted","kind":"static-analysis","format":"sarif","repo":"acme/payments","reports":[{"tool":"CodeQL","findings":14,
+#        "bySeverity":{"critical":0,"high":2,"medium":5,"low":7,"info":0},"suppressed":1,"newFindings":3,"fixedFindings":1}],"computed":[…]}
+
+# ESLint, the file as the body with the lines of code of the repository:
+npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint.sarif
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/static-analysis?team=$TEAM&repo=acme/web&commit=$SHA&branch=main&run=$RUN&loc=48000" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" --data-binary @eslint.sarif
+
+# SonarQube / SonarCloud: export the project's issues as SARIF (e.g. the SARIF export of SonarCloud, or a SARIF converter of
+# GET /api/issues/search) and send it the same way; ncloc from GET /api/measures/component?metricKeys=ncloc can go in loc.
+```
+
+### 4C.3 Calculation rules
+
+- **Defects** (28 days ending the day; bugs opened in the window; bugs resolved as won't do, duplicate, cannot reproduce, not a
+  bug, … are not confirmed defects): **defect escape rate** = bugs found in production ÷ bugs with a known environment × 100
+  (bugs without an environment are left out and shown as such); **defect density** = bugs found in production ÷ (lines of
+  code ÷ 1,000), lines of code = lines found of the team's latest main-branch coverage report (no coverage report: no density).
+- **Sprints** (the latest sprint closed on or before the day, closed at most 42 days before): **velocity** = story points of
+  the issues completed in it (done before the sprint closed + 1 h; epics and sub-tasks not counted); **commitment rate** =
+  completed points ÷ points committed at the start × 100 (committed = in the sprint when it started, from the Sprint changes
+  when sent, else created before the start; issues added later count when completed); **carryover** = points of the sprint's
+  issues not completed ÷ committed points × 100 (at most 100); **blocked time** = hours the sprint's issues spent in a blocked
+  status or flagged, within the sprint, overlaps once; **sizing accuracy** = time logged ÷ original estimate over the completed
+  issues that have both (1.0 = as estimated). A team without sprints: blocked time and sizing accuracy over the 14 days ending
+  the day; velocity, commitment and carryover need sprints.
+- **Code quality score** = round(100 × e^(−w ÷ 20)), w = weighted findings per 1,000 lines of code, weights **critical 10,
+  high 5, medium 2, low 0.5, info 0**, over the latest main-branch report of each repository and tool (at most 30 days old).
+  Lines of code: `loc` sent with the repository's report, else lines found of the latest main-branch coverage report; neither:
+  no score (the findings are still shown). Examples: no findings → 100; 2.8 weighted per KLOC → 87; 10 → 61; 20 → 37.
+  **Findings** = open findings of those reports; **new / fixed findings** = their sum against each previous report.
+- On arrival the affected days are recalculated (issues: each change day and the 41 days after it, within the last 190 days,
+  `WORK_RECOMPUTE_DAYS`; reports: the report's day and the 30 after it), the nightly `calc-recompute` moves the windows on.
+  Confidence from the number of bugs / sprint issues / reports (high from 10, medium 3–9, low below 3). KPI columns, source
+  `computed`: `defect_escape_rate`, `defect_density`, `sprint_velocity`, `sprint_commitment_rate`, `sprint_carryover`,
+  `blocked_time_hours`, `sizing_accuracy`, `code_quality_score`.
+
+### 4C.4 Errors, limits, storage
+
+| Status | When |
+|---|---|
+| `400` | Named: `team is required … (project "PAY" is not mapped to a team)`, `issues[3].key is required`, `issues[0].createdAt must be an ISO 8601 timestamp`, `PAY-7: a time … is in the future`, `velocity: QE Navigator calculates this from the raw issues`, `Issue PAY-7 appears more than once`, `Too many issues in one request: at most 1000`, `SARIF version 1.0.0 is not supported: send SARIF 2.1.0`, `runs[0].tool.driver.name is required`, `loc must be a whole number of lines of code` |
+| `401` / `403` | Missing or revoked key / a team of another company |
+| `413` | Issues over 10 MB; a SARIF file over 20 MB |
+| `415` | Issues: a non-JSON `Content-Type`, an unknown `format`; static analysis: not SARIF 2.1.0 JSON, an unknown `format` (the answer lists `sarif`) |
+
+Ingestion log sources: `issues (jira)`, `issues (linear)`, `issues (json)`, `static-analysis (sarif)`; test calls `… test call`.
+Issues are kept until 13 months after they were resolved (open issues are kept), sprints and reports 13 months, the findings
+of a report 35 days (the latest report of each repository and tool keeps them).
 
 ## 5. All other data: how it can be sent today
 
@@ -1452,6 +1601,47 @@ post {
   env:
     QE_NAVIGATOR_API_KEY: $(QE_NAVIGATOR_API_KEY)
 ```
+
+### 8.6 Issues and static analysis (v2) per tool
+
+Section 4C explains the fields and the mapping. Admin console → **Connect your CI** → *Issues and code quality* shows these
+steps with your endpoint and team id filled in, and a test call for each endpoint.
+
+**Jira** (live and backfill): an automation rule (*Issue created*, *Issue transitioned*, *Field value changed* for Sprint,
+Story points and Flagged) with the action *Send web request* to `…/api/ingest/issues?team=<team id>&format=jira`, header
+`Authorization: Bearer <key>`, body *Issue data (Jira format)*; once, the search export of section 4C.1 page by page.
+
+**Linear**: Settings → API → Webhooks, resource *Issues*, URL `…/api/ingest/issues?team=<team id>&format=linear` (the
+`Authorization` header through a small relay where the plan cannot set headers); once, the GraphQL export of section 4C.1.
+
+**GitHub Actions** (after CodeQL or ESLint, on the default branch):
+
+```yaml
+      - name: Send static analysis to QE Navigator
+        if: always() && github.ref_name == github.event.repository.default_branch
+        env:
+          QE_NAVIGATOR_API_KEY: ${{ secrets.QE_NAVIGATOR_API_KEY }}
+        run: |
+          for f in results/*.sarif eslint.sarif; do [ -f "$f" ] || continue
+            curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/static-analysis?team=$TEAM&commit=${{ github.sha }}&branch=${{ github.ref_name }}&run=${{ github.run_id }}-$(basename $f)" \
+              -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -F report=@"$f"
+          done
+```
+
+**GitLab CI**:
+
+```yaml
+qe-navigator-static-analysis:
+  stage: .post
+  rules: [{ if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH' }]
+  script:
+    - curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/static-analysis?team=$TEAM&commit=$CI_COMMIT_SHA&branch=$CI_COMMIT_BRANCH&run=$CI_PIPELINE_ID"
+        -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -F report=@sonar.sarif
+```
+
+**Jenkins** (declarative `post { always { … } }`) and **Azure DevOps** (`- script:` with `condition: always()`) run the same
+`curl` with `$GIT_COMMIT` / `$BRANCH_NAME` / `$BUILD_NUMBER` and `$(Build.SourceVersion)` / `$(Build.SourceBranchName)` /
+`$(Build.BuildId)`; Azure's CodeQL task writes `$(Build.ArtifactStagingDirectory)/CodeAnalysisLogs/*.sarif`.
 
 ## 9. "Populate everything" checklist and end-to-end script
 
