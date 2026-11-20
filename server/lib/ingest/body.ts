@@ -81,7 +81,8 @@ export function maybeGunzip(b: Buffer, contentEncoding?: string | null): Buffer 
 
 export interface Multipart {
   fields: Record<string, string>;
-  files: Record<string, { filename: string; contentType: string | null; data: Buffer }>;
+  /** Every file part per field name (a field can repeat: -F report=@a.xml -F report=@b.xml). */
+  files: Record<string, Array<{ filename: string; contentType: string | null; data: Buffer }>>;
 }
 
 /** Parse a buffered multipart/form-data body. */
@@ -111,11 +112,12 @@ export function parseMultipart(body: Buffer, contentType: string): Multipart {
       const filename = /\bfilename="([^"]*)"/i.exec(disp[1])?.[1];
       const ct = /content-type:\s*([^\r\n]+)/i.exec(headers)?.[1]?.trim() ?? null;
       if (name) {
-        if (filename !== undefined) out.files[name] = { filename, contentType: ct, data };
-        else out.fields[name] = data.toString('utf8');
+        const key = name.replace(/\[\]$/, '');
+        if (filename !== undefined) (out.files[key] ??= []).push({ filename, contentType: ct, data });
+        else out.fields[key] = data.toString('utf8');
       }
     }
-    if (++parts > 50) throw new BodyError(400, 'Too many multipart parts');
+    if (++parts > 1000) throw new BodyError(400, 'Too many multipart parts (at most 1000)');
     pos = next;
   }
   return out;

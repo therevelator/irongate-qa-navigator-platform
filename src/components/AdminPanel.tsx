@@ -41,6 +41,7 @@ interface Department {
 
 import API_URL from '../config/api';
 import ApiKeysPanel from './ApiKeysPanel';
+import ConnectCi from './ConnectCi';
 import SampleDataPanel from './SampleDataPanel';
 import { policyActorOf } from '../lib/policyActor';
 
@@ -1080,6 +1081,9 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
 
       {/* API keys for KPI ingestion (super admin only) */}
       {user?.role === 'super_admin' && <ApiKeysPanel />}
+
+      {/* Connect your CI: raw test / coverage / pipeline ingestion (super admin only, like the keys) */}
+      {user?.role === 'super_admin' && <ConnectCi />}
 
       {/* Sample (demo) data loader (super admin only; server must allow it) */}
       {user?.role === 'super_admin' && <SampleDataPanel />}

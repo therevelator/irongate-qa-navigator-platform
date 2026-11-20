@@ -22,10 +22,10 @@ import { ingestLimiter } from '../middleware/rateLimit';
 import { KpiValidationError, normaliseIdempotencyKey, notifyKpisUpdated } from '../lib/kpiIngest';
 import { afterIngestionRejected, afterKpiWrite } from '../lib/alerts';
 import { logRejected, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
-import { BodyError, maybeGunzip, parseMultipart, readBody, MAX_UPLOAD_BYTES } from '../lib/ingest/body';
-import { detectTestFormat, parseTestReport, ReportError, TEST_FORMATS, type TestFormat, type ParsedTestReport } from '../lib/ingest/testReports';
+import { BodyError, maybeGunzip, parseMultipart, readBody, MAX_UPLOAD_BYTES, MAX_UNCOMPRESSED_BYTES } from '../lib/ingest/body';
+import { detectTestFormat, mergeTestReports, parseTestReport, ReportError, TEST_FORMATS, type TestFormat, type ParsedTestReport } from '../lib/ingest/testReports';
 import {
-  COVERAGE_FORMATS, detectCoverageFormat, parseChangedLinesList, parseCoverageReport, parseUnifiedDiff,
+  COVERAGE_FORMATS, detectCoverageFormat, mergeCoverage, parseChangedLinesList, parseCoverageReport, parseUnifiedDiff,
   type ChangedLines, type CoverageFormat, type ParsedCoverage,
 } from '../lib/ingest/coverageReports';
 import { parsePipelineBody, type PipelineRunEvent } from '../lib/ingest/pipelineEvents';
@@ -40,6 +40,8 @@ const MAX_AGE_DAYS = 365;
 
 interface Input {
   payload: Buffer;
+  /** Several report files in one multipart request (e.g. one JUnit file per test class): merged into one run. */
+  extra: Buffer[];
   fields: Record<string, string>;
   diff: string | null;
   changedLines: string | null;
@@ -57,22 +59,29 @@ async function readInput(req: ApiKeyRequest, limit: number): Promise<Input> {
   for (const [k, v] of Object.entries(req.query)) if (typeof v === 'string') q[k] = v;
   if (/^multipart\/form-data/i.test(ct)) {
     const mp = parseMultipart(raw, ct);
-    const file = mp.files.report ?? mp.files.file ?? null;
+    const files = mp.files.report ?? mp.files.file ?? [];
     const fields = { ...q, ...mp.fields };
     let payload: Buffer;
-    if (file) payload = maybeGunzip(file.data);
+    if (files.length) payload = maybeGunzip(files[0].data);
     else if (typeof mp.fields.report === 'string') payload = Buffer.from(mp.fields.report);
     else throw new HttpError(400, 'Multipart upload without a "report" file (curl -F report=@results.xml)');
-    const diffFile = mp.files.diff;
-    const clFile = mp.files.changedLines;
+    let total = payload.length;
+    const extra = files.slice(1).map((f) => {
+      const b = maybeGunzip(f.data);
+      total += b.length;
+      if (total > MAX_UNCOMPRESSED_BYTES) throw new BodyError(413, `Reports too large after decompression: at most ${MAX_UNCOMPRESSED_BYTES / 1024 / 1024} MB in total`);
+      return b;
+    });
+    const diffFile = mp.files.diff?.[0];
+    const clFile = mp.files.changedLines?.[0];
     return {
-      payload, fields, filename: file?.filename ?? null,
+      payload, extra, fields, filename: files[0]?.filename ?? null,
       diff: diffFile ? maybeGunzip(diffFile.data).toString('utf8') : mp.fields.diff ?? null,
       changedLines: clFile ? clFile.data.toString('utf8') : mp.fields.changedLines ?? null,
     };
   }
   const payload = maybeGunzip(raw, req.headers['content-encoding'] as string | undefined);
-  return { payload, fields: q, filename: null, diff: null, changedLines: null };
+  return { payload, extra: [], fields: q, filename: null, diff: null, changedLines: null };
 }
 
 const text = (b: Buffer) => {
@@ -133,9 +142,9 @@ function handler(kind: RawKind) {
         throw new HttpError(400, (e as KpiValidationError).message);
       }
       const input = kind === 'pipelines'
-        ? { payload: maybeGunzip(await readBody(req, PIPELINE_BODY_LIMIT), req.headers['content-encoding'] as string | undefined), fields: Object.fromEntries(Object.entries(req.query).filter(([, v]) => typeof v === 'string')) as Record<string, string>, diff: null, changedLines: null, filename: null }
+        ? { payload: maybeGunzip(await readBody(req, PIPELINE_BODY_LIMIT), req.headers['content-encoding'] as string | undefined), extra: [] as Buffer[], fields: Object.fromEntries(Object.entries(req.query).filter(([, v]) => typeof v === 'string')) as Record<string, string>, diff: null, changedLines: null, filename: null }
         : await readInput(req, MAX_UPLOAD_BYTES);
-      hash = sha256(input.payload);
+      hash = sha256(input.extra.length ? Buffer.concat([input.payload, ...input.extra]) : input.payload);
       if (key) {
         const replay = await findReplay(caller, key);
         if (replay) return sendReplay(res, replay, hash);
@@ -167,9 +176,12 @@ function handler(kind: RawKind) {
       let parsedCov: ParsedCoverage | null = null;
       let changed: ChangedLines | null = null;
       try {
-        if (kind === 'tests') parsedTests = parseTestReport(content, format as TestFormat);
-        else {
+        if (kind === 'tests') {
+          parsedTests = parseTestReport(content, format as TestFormat);
+          for (const b of input.extra) parsedTests = mergeTestReports(parsedTests, parseTestReport(text(b), format as TestFormat));
+        } else {
           parsedCov = parseCoverageReport(content, format as CoverageFormat);
+          for (const b of input.extra) parsedCov = mergeCoverage(parsedCov, parseCoverageReport(text(b), format as CoverageFormat));
           if (input.diff) changed = parseUnifiedDiff(input.diff);
           else if (input.changedLines) changed = parseChangedLinesList(input.changedLines);
         }
