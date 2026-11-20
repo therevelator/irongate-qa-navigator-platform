@@ -552,9 +552,7 @@ export const changeFailureRule: Rule = (f) => {
   const svc = dep?.services[0] ?? null;
   return {
     ruleKey: 'change_failure', subjectKey: '',
-    title: missTitle(m) ?? (dep
-      ? `${dep.failed} of ${dep.production} production deploys failed in ${dep.windowDays} days${svc && svc.failed > 1 ? ` (${svc.failed} in ${svc.service})` : ''}: release smaller and behind flags`
-      : `${fmt(m.current as number, m.unit)} of changes fail in production (target ${targetText(m)}): release smaller and behind flags`),
+    title: missTitle(m) ?? `${fmt(m.current as number, m.unit)} of changes fail in production (target ${targetText(m)})${svc && svc.failed > 1 ? `, most in ${svc.service}` : ''}: release smaller and behind flags`,
     evidence: compact<Evidence>([
       currentEvidence(m),
       trendEvidence(m),

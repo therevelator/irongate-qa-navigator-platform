@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AlertTriangle, ArrowDownRight, ArrowUpRight, BellRing, ChevronDown, CircleDollarSign, Minus, RefreshCw, Share2, TrendingUp, WifiOff,
+  AlertTriangle, ArrowDownRight, ArrowUpRight, BellRing, ChevronDown, CircleDollarSign, Minus, RefreshCw, Share2, TrendingDown, TrendingUp, WifiOff,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import API_URL from '../config/api';
@@ -26,9 +26,12 @@ import { formatAsOf } from '../data/advancedFeatures';
  * - Share: the link (/summary) opens the summary for whoever signs in, for their own scope.
  */
 
+export interface SummaryForecast { metric: string; outlook: string | null; crossingDay: string | null; text: string; confidence: 'high' | 'medium' | 'low' | null }
 export interface SummaryRiskItem {
   key: string; label: string; value: number; target: number; lowerIsBetter: boolean; unit: string;
   weekChange: number | null; trend: 'better' | 'worse' | 'same' | null;
+  /** "At this rate …" from the team's forecast of this metric (v2 phase 4), when there is one. */
+  forecast?: SummaryForecast | null;
 }
 export interface ExecutiveSummaryData {
   scope: { level: string; label: string; companyName: string | null; teamCount: number; departments: string[] };
@@ -42,6 +45,8 @@ export interface ExecutiveSummaryData {
   } | null;
   risks: { top: Array<{ teamId: string; teamName: string; departmentName: string | null; qaScore: number | null; status: 'good' | 'warning' | 'critical' | null; weekChange: number | null; items: SummaryRiskItem[] }>; total: number };
   improved: { top: Array<{ teamId: string; teamName: string; departmentName: string | null; qaScore: number; prevQaScore: number; weekChange: number }>; total: number };
+  /** On target now, forecast to miss within 8 weeks (soonest first). */
+  upcoming?: { top: Array<{ teamId: string; teamName: string; departmentName: string | null; metric: string; label: string; crossingDay: string; text: string; confidence: 'high' | 'medium' | 'low' | null }>; total: number };
   money: null | { available: false; reason: string; assumptionsPath: string } | {
     available: true;
     stake: { monthly: number | null; monthlyLow: number | null; monthlyHigh: number | null; annual: number | null; annualLow: number | null; annualHigh: number | null };
@@ -56,7 +61,7 @@ export interface ExecutiveSummaryData {
     alertsOpened: number; alertsResolved: number; actionsDone: number; actionsCreated: number; actionsOverdue: number;
   } | null;
   teams: Array<{ teamId: string; teamName: string; departmentName: string | null; qaScore: number | null; status: 'good' | 'warning' | 'critical' | null; weekChange: number | null; snapshotDate: string | null }>;
-  text: { risks: string; improved: string; lastWeek: string; money: string };
+  text: { risks: string; improved: string; lastWeek: string; money: string; upcoming?: string };
 }
 
 const CACHE_PREFIX = 'irongate_summary_cache:';
@@ -418,6 +423,26 @@ const ExecutiveSummary: React.FC = () => {
         )}
       </Section>
 
+      {/* Coming risks: on target now, forecast to miss */}
+      {data.upcoming && data.upcoming.total > 0 && (
+        <Section
+          title="At this rate"
+          subtitle={data.text.upcoming}
+          testId="summary-upcoming"
+          icon={<TrendingDown size={17} className="text-amber-600 dark:text-amber-400" aria-hidden />}
+          count={data.upcoming.total > data.upcoming.top.length ? <span className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{data.upcoming.top.length} of {data.upcoming.total}</span> : undefined}
+        >
+          <ul className="divide-y divide-slate-200 dark:divide-slate-800">
+            {data.upcoming.top.map((u) => (
+              <li key={`${u.teamId}-${u.metric}`} className="py-2" data-testid="summary-upcoming-item">
+                <p className="break-words font-medium leading-snug text-slate-900 dark:text-white">{u.teamName}</p>
+                <p className="text-sm text-slate-600 dark:text-slate-300">{u.text}</p>
+              </li>
+            ))}
+          </ul>
+        </Section>
+      )}
+
       {/* Most improved */}
       <Section title="Most improved" subtitle={data.text.improved} testId="summary-improved" icon={<TrendingUp size={17} className="text-green-600 dark:text-green-400" aria-hidden />}>
         {data.improved.top.length === 0 ? (
@@ -521,6 +546,14 @@ const ExecutiveSummary: React.FC = () => {
   );
 };
 
+/** "At this rate test coverage misses its target ≥ 80% around 18 Dec" under a risk item. */
+const ForecastLine: React.FC<{ f: SummaryForecast; className?: string }> = ({ f, className }) => (
+  <p className={cx('mt-1 flex items-start gap-1 text-xs', f.outlook === 'will_reach' ? 'text-green-700 dark:text-green-400' : 'text-slate-600 dark:text-slate-300', className)} data-testid="summary-risk-forecast" data-outlook={f.outlook ?? undefined}>
+    <TrendingDown size={13} aria-hidden className={cx('mt-px flex-shrink-0', f.outlook === 'will_reach' && 'rotate-180')} />
+    <span>{f.text}</span>
+  </p>
+);
+
 const RiskCard: React.FC<{ risk: ExecutiveSummaryData['risks']['top'][number]; rank: number }> = ({ risk, rank }) => {
   const [open, setOpen] = useState(false);
   const qa = risk.items.find((i) => i.key === 'qaScore');
@@ -549,6 +582,7 @@ const RiskCard: React.FC<{ risk: ExecutiveSummaryData['risks']['top'][number]; r
           <WeekChange change={qa.weekChange} trend={qa.trend} />
         </p>
       )}
+      {qa?.forecast && <ForecastLine f={qa.forecast} className="pl-[2.375rem]" />}
       {shown.length > 0 && <ul className="mt-2 space-y-1.5">
         {shown.map((i) => (
           <li key={i.key} className="rounded-md bg-slate-50 px-2.5 py-2 text-sm dark:bg-slate-800/50" data-testid="summary-risk-item">
@@ -560,6 +594,7 @@ const RiskCard: React.FC<{ risk: ExecutiveSummaryData['risks']['top'][number]; r
               <span className="text-slate-600 dark:text-slate-300">{targetText(i)}</span>
               <WeekChange change={i.weekChange} trend={i.trend} unit={i.unit} lowerIsBetter={i.lowerIsBetter} />
             </div>
+            {i.forecast && <ForecastLine f={i.forecast} />}
           </li>
         ))}
       </ul>}

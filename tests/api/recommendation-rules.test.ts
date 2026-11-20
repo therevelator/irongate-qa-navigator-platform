@@ -211,7 +211,8 @@ describe('rules', () => {
   test('change failures with the failed deploys and services from the delivery data', () => {
     const m = metric('change_failure_rate', { label: 'Change failure rate', lowerIsBetter: true, target: { good: 5, warning: 15 }, series: (w) => 25 - w * 0.5 });
     const r = changeFailureRule(facts([m], { deploys: { windowDays: 30, production: 12, failed: 3, failedList: [{ id: 'dep-41', service: 'offers-api', day: '2026-11-12' }], services: [{ service: 'offers-api', total: 5, failed: 2 }, { service: 'web', total: 7, failed: 1 }] } }))!;
-    expect(r.title).toBe('3 of 12 production deploys failed in 30 days (2 in offers-api): release smaller and behind flags');
+    expect(r.title).toBe('25% of changes fail in production (target ≤ 5%), most in offers-api: release smaller and behind flags');
+    expect(r.evidence.find((e) => e.label === 'Production deploys, last 30 days')?.value).toBe('3 failed of 12');
     expect(r.items.map((i) => `${i.kind}:${i.name}`)).toEqual(['service:offers-api', 'service:web', 'deploy:dep-41']);
     expect(r.nextStep).toMatch(/starting with offers-api/);
   });

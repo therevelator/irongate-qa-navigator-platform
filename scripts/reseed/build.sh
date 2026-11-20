@@ -26,6 +26,8 @@ DATABASE_URL=$URL SAMPLE_HISTORY_DAYS=365 SAMPLE_EVENT_DAYS=365 SAMPLE_PERF_DAYS
   SAMPLE_TEAM_STORIES=scripts/reseed/stories.json SAMPLE_SPRINT_RELEASES=2026-11-09 \
   npm run --silent seed:demo -- --fill-existing --company mft-meridian --today "$TODAY" > /dev/null
 psql "$URL" -v ON_ERROR_STOP=1 -qX -f scripts/reseed/showcase-content.sql
+# Forecasts and recommendations of the three teams (v2 phase 4), so the export carries them.
+DATABASE_URL=$URL npx tsx scripts/reseed/improve-refresh.ts --company mft-meridian
 
 # 000_wipe.sql: every public table except platform_operators, listed explicitly.
 {
