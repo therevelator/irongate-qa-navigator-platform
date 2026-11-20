@@ -31,6 +31,7 @@ import MetricIntervalsConfig from './components/MetricIntervalsConfig';
 import ParametersConfiguration from './components/ParametersConfiguration';
 import TeamTvView from './components/TeamTvView';
 import CompareTeams from './components/CompareTeams';
+import ExecutiveSummary from './components/ExecutiveSummary';
 import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
@@ -64,6 +65,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'pdf-report-generator': '/analytics/reports',
   'notifications': '/notifications',
   'tv': '/tv',
+  'summary': '/summary',
   'compare': '/compare'
 };
 
@@ -354,6 +356,7 @@ function App() {
   if (currentView === 'pdf-report-generator') return analytics((id) => <PDFReportGenerator onBack={toHub} teamId={id} />, 'The report covers the selected team.');
 
   if (currentView === 'compare') return renderLayout(<CompareTeams />);
+  if (currentView === 'summary') return renderLayout(<ExecutiveSummary />);
   if (currentView === 'activity') return renderLayout(<ActivityLog />);
   if (currentView === 'user-activity') return renderLayout(<UserActivity />);
   if (currentView === 'ingestion-log') return renderLayout(<IngestionLog />);

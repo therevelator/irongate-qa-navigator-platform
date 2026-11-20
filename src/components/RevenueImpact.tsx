@@ -42,7 +42,7 @@ export interface TeamRevenueData {
 // ---------------------------------------------------------------------------
 
 /** $850, $12.4k, $149k, $1.24M; null → "—". */
-function fmtMoney(v: number | null | undefined): string {
+export function fmtMoney(v: number | null | undefined): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return '—';
   const a = Math.abs(v);
   let s: string;

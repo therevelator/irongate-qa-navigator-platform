@@ -3,7 +3,7 @@ import BrandMark from './BrandMark';
 import {
   LayoutDashboard, BarChart3, LogOut, MonitorSmartphone, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, MonitorPlay, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
-  CalendarClock, Trophy, FileText, ChevronRight, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints,
+  CalendarClock, Trophy, FileText, ChevronRight, Smartphone, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import API_URL from '../config/api';
@@ -17,7 +17,7 @@ import PulsePendingBanner from './PulsePendingBanner';
 import NotificationsBell from './NotificationsBell';
 import { AccessHelp, AccountMenu, AppearanceMenu, CompanyBadge } from './HeaderParts';
 import { accessSummary } from '../lib/accessSummary';
-import { canOpenView } from '../lib/viewAccess';
+import { canOpenView, showSummaryInNav } from '../lib/viewAccess';
 import { NOTIFICATIONS_TAB_EVENT, NOTIFICATIONS_TAB_KEY } from './NotificationsCenter';
 
 interface LayoutProps {
@@ -55,6 +55,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
   {
     items: [
       { view: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+      { view: 'summary', label: 'Executive summary', icon: Smartphone, can: showSummaryInNav },
       { view: 'features', label: 'Analytics', icon: BarChart3, roles: ANALYTICS_ROLES },
       { view: 'compare', label: 'Compare teams', icon: GitCompareArrows, roles: ANALYTICS_ROLES },
       { view: 'tv', label: 'TV mode', icon: MonitorPlay },
@@ -113,6 +114,7 @@ export const PAGE_META: Record<string, { title: string; parent?: string }> = {
   features: { title: 'Analytics' },
   compare: { title: 'Compare teams' },
   tv: { title: 'TV mode' },
+  summary: { title: 'Summary' }, // short: the phone top bar has little room
   'flaky-test-intelligence': { title: 'Flaky tests', parent: 'Quality' },
   'test-execution-timeline': { title: 'Test execution', parent: 'Quality' },
   'technical-debt': { title: 'Technical debt', parent: 'Quality' },

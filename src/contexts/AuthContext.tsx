@@ -261,6 +261,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       localStorage.removeItem('irongate_user');
       localStorage.removeItem('irongate_remember');
       localStorage.removeItem('irongate_signed_in'); // the sign-in screen is classic Light again (AuthWrapper)
+      // The executive summary's offline copies (ExecutiveSummary.tsx) do not outlive the session.
+      for (const k of Object.keys(localStorage)) if (k.startsWith('irongate_summary_cache:')) localStorage.removeItem(k);
       dropNotice();
       setSessionNotice(null);
       
