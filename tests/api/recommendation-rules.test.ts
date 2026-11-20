@@ -198,6 +198,24 @@ describe('rules', () => {
     expect(mttrRule(facts([metric('mttr_hours', { unit: 'h', lowerIsBetter: true, target: { good: 2, warning: 8 }, series: () => 5 })]))).toBeNull();
   });
 
+  test('MTTR with incidents from the delivery data: the longest incidents and the time before acknowledgement', () => {
+    const m = metric('mttr_hours', { label: 'Mean time to recovery', unit: 'h', lowerIsBetter: true, target: { good: 2, warning: 8 }, series: (w) => 5.5 - w * 0.2 });
+    const r = mttrRule(facts([m], { incidents: { windowDays: 30, count: 4, medianHours: 6, medianAckHours: 2.4, longest: [{ title: 'Offers API down', service: 'offers', severity: 'high', hours: 11.5, opened: '2026-11-03T10:00:00Z' }] } }))!;
+    expect(r.title).toBe('Recovery takes longer: MTTR rose from 3.1 h to 5.5 h in 12 weeks; 40% of it passes before anyone acknowledges');
+    expect(r.items).toEqual([{ kind: 'incident', name: 'Offers API down', detail: 'high · offers · 12 h · opened 3 Nov' }]);
+    expect(r.nextStep).toMatch(/^Page the on-call engineer directly/);
+    expect(r.evidence.find((e) => e.label === 'Incidents resolved in the last 30 days')).toEqual({ label: 'Incidents resolved in the last 30 days', value: '4', detail: 'median 6 h to recover, 2.4 h to acknowledge' });
+    expect(r.confidence).toBe('high');
+  });
+
+  test('change failures with the failed deploys and services from the delivery data', () => {
+    const m = metric('change_failure_rate', { label: 'Change failure rate', lowerIsBetter: true, target: { good: 5, warning: 15 }, series: (w) => 25 - w * 0.5 });
+    const r = changeFailureRule(facts([m], { deploys: { windowDays: 30, production: 12, failed: 3, failedList: [{ id: 'dep-41', service: 'offers-api', day: '2026-11-12' }], services: [{ service: 'offers-api', total: 5, failed: 2 }, { service: 'web', total: 7, failed: 1 }] } }))!;
+    expect(r.title).toBe('3 of 12 production deploys failed in 30 days (2 in offers-api): release smaller and behind flags');
+    expect(r.items.map((i) => `${i.kind}:${i.name}`)).toEqual(['service:offers-api', 'service:web', 'deploy:dep-41']);
+    expect(r.nextStep).toMatch(/starting with offers-api/);
+  });
+
   test('failing stage with a low first-time pass rate', () => {
     const m = metric('first_time_pass_rate', { label: 'First-time pass rate', target: { good: 85, warning: 70 }, series: (w) => 74 + w * 0.5 });
     const r = failingStageRule(facts([m], { stages: { windowDays: 7, stages: [], failing: [{ name: 'e2e', runs: 60, failed: 20 }, { name: 'lint', runs: 60, failed: 2 }] } }))!;

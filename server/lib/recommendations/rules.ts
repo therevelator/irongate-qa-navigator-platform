@@ -79,11 +79,15 @@ export interface TeamFacts {
   /** Slowest tests of the last 7 days (CI data) and the median total test time per run. */
   slowTests?: Array<{ name: string; suite: string | null; medianMs: number; runs: number }> | null;
   slowTestsTotalMs?: number | null;
+  /** Incidents resolved in the last 30 days (raw incident events, v2 phase 2). */
+  incidents?: { windowDays: number; count: number; medianHours: number; medianAckHours: number | null; longest: Array<{ title: string; service: string | null; severity: string; hours: number; opened: string }> } | null;
+  /** Production deploys of the last 30 days and the failed changes among them (raw deployment events). */
+  deploys?: { windowDays: number; production: number; failed: number; failedList: Array<{ id: string; service: string | null; day: string }>; services: Array<{ service: string; total: number; failed: number }> } | null;
   debt: Array<{ title: string; severity: string; category: string; costOfDelay: number | null; effortHours: number | null; filePath: string | null }>;
 }
 
 export interface Evidence { label: string; value: string; detail?: string }
-export interface Item { kind: 'test' | 'file' | 'stage' | 'debt'; name: string; detail: string }
+export interface Item { kind: 'test' | 'file' | 'stage' | 'debt' | 'incident' | 'service' | 'deploy'; name: string; detail: string }
 
 export interface Effect {
   metric: string;
@@ -445,22 +449,31 @@ export const wellbeingBlockedRule: Rule = (f) => {
   };
 };
 
-/** Mean time to recovery rising. */
+/** Mean time to recovery rising (with the incidents behind it when sent). */
 export const mttrRule: Rule = (f) => {
   const m = f.metrics.mttr_hours;
   if (!m || m.current === null) return null;
   const ago = valueWeeksAgo(m, 12);
   const rose = ago && ago.value > 0 && (m.current - ago.value) / ago.value >= 0.25;
   if (!rose || !(offTarget(m) || worsening(m))) return null;
+  const inc = f.incidents;
+  const h = (x: number) => (x >= 10 ? `${Math.round(x)} h` : `${r1(x)} h`);
+  const ackShare = inc && inc.medianAckHours !== null && inc.medianHours > 0 ? inc.medianAckHours / inc.medianHours : null;
   return {
     ruleKey: 'mttr_rising', subjectKey: '',
-    title: `Recovery takes longer: MTTR rose from ${fmt(ago!.value, m.unit)} to ${fmt(m.current, m.unit)} in 12 weeks`,
-    evidence: compact<Evidence>([currentEvidence(m), trendEvidence(m), forecastEvidence(m)]),
-    items: [],
-    nextStep: 'Write a one-page runbook for the three most frequent incident types, make rollback one command, and run a 30-minute recovery drill this sprint.',
+    title: `Recovery takes longer: MTTR rose from ${fmt(ago!.value, m.unit)} to ${fmt(m.current, m.unit)} in 12 weeks${ackShare !== null && ackShare >= 0.3 ? `; ${Math.round(ackShare * 100)}% of it passes before anyone acknowledges` : ''}`,
+    evidence: compact<Evidence>([
+      currentEvidence(m), trendEvidence(m),
+      inc && { label: `Incidents resolved in the last ${inc.windowDays} days`, value: String(inc.count), detail: `median ${h(inc.medianHours)} to recover${inc.medianAckHours !== null ? `, ${h(inc.medianAckHours)} to acknowledge` : ''}` },
+      forecastEvidence(m),
+    ]),
+    items: (inc?.longest ?? []).map((i) => ({ kind: 'incident' as const, name: i.title, detail: `${i.severity}${i.service ? ` · ${i.service}` : ''} · ${h(i.hours)} · opened ${shortDay(i.opened)}` })),
+    nextStep: ackShare !== null && ackShare >= 0.3
+      ? 'Page the on-call engineer directly from the alert (no e-mail hop) and set a 15-minute acknowledgement target; then write a one-page runbook for the incident types listed and make rollback one command.'
+      : 'Write a one-page runbook for the three most frequent incident types, make rollback one command, and run a 30-minute recovery drill this sprint.',
     metricKey: 'mttr_hours',
     effect: historyEffect(m),
-    confidence: confidenceOf(false, m),
+    confidence: confidenceOf(!!inc, m),
   };
 };
 
@@ -530,25 +543,33 @@ export const slowTestsRule: Rule = (f) => {
   };
 };
 
-/** Changes that fail in production. */
+/** Changes that fail in production (with the failed deploys and services when sent). */
 export const changeFailureRule: Rule = (f) => {
   const m = f.metrics.change_failure_rate;
   if (!needsAttention(m)) return null;
   const deploys = f.metrics.deployment_frequency_per_week;
+  const dep = f.deploys && f.deploys.failed > 0 ? f.deploys : null;
+  const svc = dep?.services[0] ?? null;
   return {
     ruleKey: 'change_failure', subjectKey: '',
-    title: missTitle(m) ?? `${fmt(m.current as number, m.unit)} of changes fail in production (target ${targetText(m)}): release smaller and behind flags`,
+    title: missTitle(m) ?? (dep
+      ? `${dep.failed} of ${dep.production} production deploys failed in ${dep.windowDays} days${svc && svc.failed > 1 ? ` (${svc.failed} in ${svc.service})` : ''}: release smaller and behind flags`
+      : `${fmt(m.current as number, m.unit)} of changes fail in production (target ${targetText(m)}): release smaller and behind flags`),
     evidence: compact<Evidence>([
       currentEvidence(m),
       trendEvidence(m),
+      dep && { label: `Production deploys, last ${dep.windowDays} days`, value: `${dep.failed} failed of ${dep.production}`, detail: 'rolled back, or with a linked incident' },
       deploys && deploys.current !== null ? { label: 'Deployment frequency', value: fmt(deploys.current, deploys.unit) } : null,
       forecastEvidence(m),
     ]),
-    items: [],
-    nextStep: 'Ship behind feature flags with a canary step (5% of traffic for 30 minutes), add a smoke test of the top three user journeys to the deploy, and write a short note for every failed change in the retro.',
+    items: [
+      ...(dep?.services ?? []).map((x) => ({ kind: 'service' as const, name: x.service, detail: `${x.failed} failed of ${x.total} deploys` })),
+      ...(dep?.failedList ?? []).map((x) => ({ kind: 'deploy' as const, name: x.id, detail: `${x.service ? `${x.service} · ` : ''}${shortDay(x.day)}` })),
+    ],
+    nextStep: `Ship behind feature flags with a canary step (5% of traffic for 30 minutes), add a smoke test of the top three user journeys to the deploy${svc ? `, starting with ${svc.service}` : ''}, and write a short note for every failed change in the retro.`,
     metricKey: 'change_failure_rate',
     effect: historyEffect(m),
-    confidence: confidenceOf(false, m),
+    confidence: confidenceOf(!!dep, m),
   };
 };
 

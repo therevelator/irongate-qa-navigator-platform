@@ -57,10 +57,11 @@ export async function loadTeamFacts(team: TeamRefLite & { name: string }, foreca
     metrics[metric] = metricFacts(metric, obs.get(metric), fcOf.get(metric), target, asOf);
   }
 
-  const [flaky, coverage, stages, wellbeing, debt, slow] = await Promise.all([
+  const [flaky, coverage, stages, wellbeing, debt, slow, incidents, deploys] = await Promise.all([
     loadFlaky(team.id), loadCoverage(team.id), loadStages(team.id), loadWellbeing(team.id, asOf), loadDebt(team.id), loadSlowTests(team.id),
+    loadIncidents(team.id), loadDeploys(team.id),
   ]);
-  return { teamId: team.id, teamName: team.name, asOf, metrics, flaky, coverage, stages, wellbeing, debt, slowTests: slow?.tests ?? null, slowTestsTotalMs: slow?.totalMs ?? null };
+  return { teamId: team.id, teamName: team.name, asOf, metrics, flaky, coverage, stages, wellbeing, debt, slowTests: slow?.tests ?? null, slowTestsTotalMs: slow?.totalMs ?? null, incidents, deploys };
 }
 
 async function loadFlaky(teamId: string): Promise<TeamFacts['flaky']> {
@@ -195,4 +196,64 @@ async function loadSlowTests(teamId: string): Promise<{ tests: NonNullable<TeamF
     tests: rows.map((r: any) => ({ name: r.name, suite: r.suite ?? null, medianMs: Math.round(Number(r.median_ms)), runs: Number(r.runs) })),
     totalMs: total?.ms ? Number(total.ms) : null,
   };
+}
+
+export const DELIVERY_WINDOW_DAYS = 30;
+
+/** Raw delivery tables (v2 phase 2) may be missing on a database without that migration: no evidence then. */
+async function optional<T>(work: () => Promise<T>): Promise<T | null> {
+  try { return await work(); } catch (e: any) { if (e?.code === '42P01') return null; throw e; }
+}
+
+/** Incidents resolved in the last 30 days: median time to recover and to acknowledge, the longest ones. */
+async function loadIncidents(teamId: string): Promise<TeamFacts['incidents']> {
+  return optional(async () => {
+    const rows = await query<any[]>(
+      `SELECT title, service, severity, opened_at, acknowledged_at, resolved_at,
+              extract(epoch FROM resolved_at - opened_at)::float8 / 3600 AS hours,
+              CASE WHEN acknowledged_at IS NULL THEN NULL ELSE extract(epoch FROM acknowledged_at - opened_at)::float8 / 3600 END AS ack_hours
+         FROM incidents_raw WHERE team_id = ? AND resolved_at IS NOT NULL AND resolved_at >= now() - make_interval(days => ?)
+        ORDER BY hours DESC`,
+      [teamId, DELIVERY_WINDOW_DAYS]
+    );
+    if (!rows.length) return null;
+    const med = (xs: number[]) => { const a = [...xs].sort((x, y) => x - y); const m = a.length >> 1; return a.length ? (a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2) : null; };
+    const acks = rows.map((r: any) => r.ack_hours).filter((x: any) => x !== null).map(Number);
+    return {
+      windowDays: DELIVERY_WINDOW_DAYS, count: rows.length,
+      medianHours: med(rows.map((r: any) => Number(r.hours))) as number,
+      medianAckHours: med(acks),
+      longest: rows.slice(0, 3).map((r: any) => ({ title: r.title ?? 'Untitled incident', service: r.service ?? null, severity: r.severity, hours: Number(r.hours), opened: new Date(r.opened_at).toISOString() })),
+    };
+  });
+}
+
+/** Production deploys of the last 30 days and the failed changes among them (rolled back, or with a linked incident). */
+async function loadDeploys(teamId: string): Promise<TeamFacts['deploys']> {
+  return optional(async () => {
+    const rows = await query<any[]>(
+      `WITH d AS (
+         SELECT * FROM deployments_raw WHERE team_id = ? AND is_production AND finished_at >= now() - make_interval(days => ?))
+       SELECT d.external_id, d.service, d.day, d.result, d.rollback_of,
+              (d.result = 'rolled_back'
+               OR EXISTS (SELECT 1 FROM deployments_raw r WHERE r.team_id = d.team_id AND r.rollback_of = d.external_id)
+               OR EXISTS (SELECT 1 FROM incidents_raw i WHERE i.team_id = d.team_id AND i.deployment_external_id = d.external_id)) AS failed
+         FROM d WHERE d.result <> 'failure' AND d.rollback_of IS NULL ORDER BY d.finished_at DESC`,
+      [teamId, DELIVERY_WINDOW_DAYS]
+    );
+    if (!rows.length) return null;
+    const failed = rows.filter((r: any) => r.failed);
+    const bySvc = new Map<string, { service: string; total: number; failed: number }>();
+    for (const r of rows) {
+      const k = r.service ?? '(no service)';
+      const x = bySvc.get(k) ?? { service: k, total: 0, failed: 0 };
+      x.total++; if (r.failed) x.failed++;
+      bySvc.set(k, x);
+    }
+    return {
+      windowDays: DELIVERY_WINDOW_DAYS, production: rows.length, failed: failed.length,
+      failedList: failed.slice(0, 3).map((r: any) => ({ id: r.external_id, service: r.service ?? null, day: dayStr(r.day) })),
+      services: [...bySvc.values()].filter((x) => x.failed > 0).sort((a, b) => b.failed - a.failed || b.total - a.total).slice(0, 3),
+    };
+  });
 }
