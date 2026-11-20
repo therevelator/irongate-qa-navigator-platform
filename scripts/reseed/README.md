@@ -47,3 +47,24 @@ scripts/reseed/build.sh /path/to/out 2026-11-19
 Order on the target database: apply every migration (at least
 `20261125000000_platform_operators.sql`), then `000_wipe.sql`, `001.sql` … in order, then
 `operator.sql`.
+
+## v2 raw CI data (phase 1)
+
+`npm run seed:demo -- --fill-existing` (step 2) now also adds 14 days of **sample raw CI data** to every filled team (test runs
+with per-test results, coverage reports with per-file coverage, pipeline runs with stages; `server/seeds/demoRaw.ts`),
+following the teams' stories, and calculates its evidence (`metric_evidence`, `flaky_test_evidence`); the export includes
+these tables. Sample raw data is never written as KPI values. Off with `SAMPLE_RAW_DATA=false`.
+
+To add it to a **live** company without a reseed (nothing is wiped; existing rows are skipped; re-running adds only the
+missing days):
+
+```bash
+npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories scripts/reseed/stories.json \
+  --names "Payments Core,Lending Journey,Mobile Experience" --out /path/to/out
+# → raw-sample-mft-meridian.sql (≈ 47 kB of plain SQL: generate_series, no psql meta-commands) and
+#   raw-sample-mft-meridian-remove.sql (removes the sample raw rows of these teams only)
+```
+
+Apply migration `20261129000000_raw_ingestion_phase1.sql` first, then run the file in the SQL console or through the
+Management API. The evidence views work at once; the "Calculated from CI data" values and "How this was calculated" appear
+after the nightly `calc-recompute` (03:41 UTC), or at once with Netlify → Functions → calc-recompute → Run now.
