@@ -161,7 +161,7 @@ describe('Admin API Endpoints', () => {
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send({
           email: 'test@example.com',
-          password: 'Pass123!',
+          password: 'Pass1234!x',
           // Missing: firstName, lastName, role, teamId
         });
 
@@ -176,7 +176,7 @@ describe('Admin API Endpoints', () => {
         .set('Authorization', `Bearer ${superAdminToken}`)
         .send({
           email: 'admin@irongate.com', // Already exists
-          password: 'Pass123!',
+          password: 'Pass1234!x',
           firstName: 'Test',
           lastName: 'Duplicate',
           role: 'qa_engineer',
@@ -194,7 +194,7 @@ describe('Admin API Endpoints', () => {
         .set('Authorization', `Bearer ${qaManagerToken}`)
         .send({
           email: 'test@example.com',
-          password: 'Pass123!',
+          password: 'Pass1234!x',
           firstName: 'Test',
           lastName: 'User',
           role: 'super_admin', // Not allowed
@@ -211,7 +211,7 @@ describe('Admin API Endpoints', () => {
         .post('/api/admin/users')
         .send({
           email: 'test@example.com',
-          password: 'Pass123!',
+          password: 'Pass1234!x',
           firstName: 'Test',
           lastName: 'User',
           role: 'qa_engineer',

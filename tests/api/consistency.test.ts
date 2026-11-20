@@ -110,7 +110,7 @@ describe('Consistency regressions', () => {
     if (!deptTeam) return;
     const email = `reset-${Date.now()}@irongate.test`;
     const created = await request(API_URL).post('/api/admin/users').set('Cookie', c.admin)
-      .send({ email, password: 'Passw0rd!', firstName: 'Reset', lastName: 'Target', role: 'qa_engineer', teamId: deptTeam.id });
+      .send({ email, password: 'Passw0rd!2024', firstName: 'Reset', lastName: 'Target', role: 'qa_engineer', teamId: deptTeam.id });
     expect(created.status).toBe(201);
     const reset = await request(API_URL).post(`/api/admin/users/${created.body.id}/reset-password`).set('Cookie', c.manager).send({ newPassword: 'NewPassw0rd!' });
     expect(reset.status).toBe(200);
@@ -124,11 +124,11 @@ describe('Consistency regressions', () => {
     if (skip()) return;
     const stamp = Date.now();
     const viewer = await request(API_URL).post('/api/admin/users').set('Cookie', c.admin)
-      .send({ email: `noteam-v-${stamp}@irongate.test`, password: 'Passw0rd!', firstName: 'No', lastName: 'Team', role: 'viewer', departmentId: u.admin.department_id });
+      .send({ email: `noteam-v-${stamp}@irongate.test`, password: 'Passw0rd!2024', firstName: 'No', lastName: 'Team', role: 'viewer', departmentId: u.admin.department_id });
     expect(viewer.status).toBe(201);
     expect(viewer.body.primary_team_id).toBeNull();
     const eng = await request(API_URL).post('/api/admin/users').set('Cookie', c.admin)
-      .send({ email: `noteam-e-${stamp}@irongate.test`, password: 'Passw0rd!', firstName: 'No', lastName: 'Team', role: 'qa_engineer', departmentId: u.admin.department_id });
+      .send({ email: `noteam-e-${stamp}@irongate.test`, password: 'Passw0rd!2024', firstName: 'No', lastName: 'Team', role: 'qa_engineer', departmentId: u.admin.department_id });
     expect(eng.status).toBe(400);
     await request(API_URL).delete(`/api/admin/users/${viewer.body.id}`).set('Cookie', c.admin);
   });
@@ -138,7 +138,7 @@ describe('Consistency regressions', () => {
     const other = teams.find((t) => t.id !== u.lead.primary_team_id);
     if (!other) return;
     const res = await request(API_URL).post('/api/admin/users').set('Cookie', c.lead)
-      .send({ email: `lead-other-${Date.now()}@irongate.test`, password: 'Passw0rd!', firstName: 'A', lastName: 'B', role: 'qa_engineer', teamId: other.id });
+      .send({ email: `lead-other-${Date.now()}@irongate.test`, password: 'Passw0rd!2024', firstName: 'A', lastName: 'B', role: 'qa_engineer', teamId: other.id });
     expect(res.status).toBe(403);
   });
 
@@ -148,7 +148,7 @@ describe('Consistency regressions', () => {
     if (!team) return;
     const before = Number(team.member_count);
     const created = await request(API_URL).post('/api/admin/users').set('Cookie', c.admin)
-      .send({ email: `member-${Date.now()}@irongate.test`, password: 'Passw0rd!', firstName: 'Mem', lastName: 'Ber', role: 'qa_engineer', teamId: team.id });
+      .send({ email: `member-${Date.now()}@irongate.test`, password: 'Passw0rd!2024', firstName: 'Mem', lastName: 'Ber', role: 'qa_engineer', teamId: team.id });
     expect(created.status).toBe(201);
     expect(created.body.team_ids).toContain(team.id);
     const after = (await request(API_URL).get('/api/admin/teams').set('Cookie', c.admin)).body.find((t: any) => t.id === team.id);

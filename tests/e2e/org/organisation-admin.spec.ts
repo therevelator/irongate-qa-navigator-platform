@@ -164,8 +164,9 @@ test.describe('Users and assignments', { tag: [TAG.area('org')] }, () => {
     await addUser(page, { first: 'Dup', last: 'Licate', email: ROLES.viewer.email, password: STRONG_PASSWORD, team: freshCompany.teamName });
     await expect(page.getByText(/^Failed: /)).toBeVisible();
     await page.getByRole('dialog').getByRole('button', { name: 'Cancel' }).click();
-    await addUser(page, { first: 'Weak', last: 'Password', email: `${uid('weak')}@${freshCompany.email.split('@')[1]}`, password: 'abc', team: freshCompany.teamName });
-    await expect(page.getByText(/^Failed: /).last()).toBeVisible();
+    // Long enough for the field, but one character class only: the server's password rules refuse it.
+    await addUser(page, { first: 'Weak', last: 'Password', email: `${uid('weak')}@${freshCompany.email.split('@')[1]}`, password: 'onlylowercaseletters', team: freshCompany.teamName });
+    await expect(page.getByText(/^Failed: The password must contain three of/)).toBeVisible();
     await expect(page.getByTestId('user-card').filter({ hasText: 'Weak Password' })).toHaveCount(0);
   });
 

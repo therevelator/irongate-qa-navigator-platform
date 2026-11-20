@@ -1,6 +1,7 @@
 /**
- * Password strength rules: the ONE definition used by the server (accepting an invitation)
- * and by the UI (live checklist on the Accept invitation page). Pure, no dependencies.
+ * Password strength rules: the ONE definition used by the server (registration, accepting an
+ * invitation, reset links, and passwords set by an admin or a platform operator) and by the UI
+ * (live checklists, help text). Pure, no dependencies.
  *
  *   at least 10 characters (at most 128)
  *   at least three of: lower-case letter, upper-case letter, digit, symbol
@@ -25,6 +26,9 @@ export function passwordChecks(password: string, email?: string | null): Passwor
     { key: 'email', label: 'Does not contain your email name', ok: local.length < 4 || !p.toLowerCase().includes(local) },
   ];
 }
+
+/** The rules in one line, for help text under a password field (admin and operator forms). */
+export const PASSWORD_RULES_TEXT = `${PASSWORD_MIN_LENGTH} to ${PASSWORD_MAX_LENGTH} characters, with three of: lower case, upper case, number, symbol; not the email name.`;
 
 /** The first rule the password breaks, as a sentence; null when it is strong enough. */
 export function passwordProblem(password: string, email?: string | null): string | null {

@@ -14,6 +14,7 @@ import AuthEventsList from './OperatorAuthEvents';
 import OperatorUser from './OperatorUser';
 import { DemoDataDialog, type DemoMode } from './OperatorDemoData';
 import { fmtDate, fmtDay } from './format';
+import { PASSWORD_RULES_TEXT } from '../../lib/passwordPolicy';
 
 /**
  * One company in the platform operator panel: everything in it, readable and changeable. Changes
@@ -310,7 +311,7 @@ const UsersTab: React.FC<TabProps & { onOpenUser: (id: string) => void }> = ({ c
             { name: 'role', label: 'Role', type: 'select', options: ROLE_OPTIONS, required: true },
             { name: 'teamId', label: 'Primary team', type: 'select', options: teamOptions(org), help: 'Required for team lead, engineer and viewer; super admins and managers may have none.' },
             { name: 'departmentId', label: 'Department', type: 'select', options: deptOptions(org), help: 'Needed when no team is chosen.' },
-            { name: 'password', label: 'Password', type: 'password', required: true, help: 'At least 8 characters.' },
+            { name: 'password', label: 'Password', type: 'password', required: true, help: PASSWORD_RULES_TEXT },
           ],
           submit: (v) => opFetch(`${base}/users`, { method: 'POST', body: v }),
         })}><Plus size={14} /> Add person</button>

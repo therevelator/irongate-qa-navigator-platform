@@ -30,9 +30,11 @@ always enforces it. Per-role tests: `tests/api/r2-security-matrix.test.ts`, `tes
 
 **Authentication.**
 
-- Passwords are hashed with bcrypt. Registration, accepting an invitation and resetting a password
-  require 10 to 128 characters, three of lower case / upper case / number / symbol, and not the part of the
-  e-mail before the @ (`src/lib/passwordPolicy.ts`).
+- Passwords are hashed with bcrypt. Registration, accepting an invitation, resetting a password with a
+  link, and every password an admin or a platform operator sets (`POST /api/admin/users`,
+  `POST /api/admin/users/:id/reset-password`, the operator's create company / create person / reset
+  password) require 10 to 128 characters, three of lower case / upper case / number / symbol, and not the
+  part of the e-mail before the @ (`src/lib/passwordPolicy.ts`). Test: `tests/api/admin-password-policy.test.ts`.
 - The session is a signed JWT in the httpOnly cookie `irongate_token` (`Secure` and `SameSite=Strict` in
   production). The token only proves identity: every request reloads the user's current assignments, so a
   deactivated user or a changed role takes effect on the next request.

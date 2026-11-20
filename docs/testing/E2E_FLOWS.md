@@ -248,7 +248,7 @@ Derived from the code, then checked against the documentation:
 | F12.3 | Assign / remove department managers and team leads | A | M L E V | API tests (`team-department-move.test.ts`, `role-assignment.test.ts`) | — |
 | F12.4 | Teams: create, edit, delete | A, M (their departments) | L E V | ORG-10, ORG-04 (Admin console), legacy:qa-manager-rbac | ORG-11 required fields, long unicode name; legacy:comprehensive-rbac "Team Lead cannot delete other teams" |
 | F12.5 | Users: list per scope, search | A, M (dept), L (team) | E V | ORG-20, legacy:team-lead-rbac "Admin Users", legacy:qa-manager-rbac | RES-03 HTML 502, RES-04 offline (FI-04, fixed) |
-| F12.6 | Add a user with a password | A, M, L | E V | ORG-20, legacy:super-admin-rbac | ORG-21 e-mail in use, weak password; ORG-22 markup in names |
+| F12.6 | Add a user with a password | A, M, L | E V | ORG-20, legacy:super-admin-rbac | ORG-21 e-mail in use, weak password (the server's reason); ORG-22 markup in names; API `admin-password-policy.test.ts` APW-001/002 (create and reset use the registration password rules) |
 | F12.7 | Edit a user (name, e-mail; role / department per rules) | A, M | L E V; self: name and e-mail only | ORG-20 | ORG-24 |
 | F12.8 | Deactivate / activate a user | A, M, L (people they manage) | E V; self | ORG-20, legacy:team-lead-rbac "Toggle User Status" | ORG-24 not oneself, ORG-25 manager cannot touch the super admin (API 403), NAV-05 |
 | F12.9 | Delete (= deactivate) a user (with confirmation) | A, M | L E V | ORG-20 | ORG-24 |
@@ -278,7 +278,7 @@ Derived from the code, then checked against the documentation:
 | F14.6 | Phone layout | P | — | legacy:platform-operator "works at 390 px…" | — |
 | F14.7 | Refresh sample data now (started in the background on Netlify, run directly elsewhere) | P | — | OPS-07 | OPS-05 failed action; API `platform-operator.test.ts` OP-011 (failed start, off) |
 | F14.8 | Every module of a company in detail (all developer rows, single pulse answers and who answered, module rows); secrets never shown | P | — | OPS-08 | API `platform-operator.test.ts` OP-007 (no hash, token, webhook or credential) |
-| F14.9 | Create a company (first person by password, Super admin by default, or another role: OPC-01b), add a department, a team and a person | P | — | OPC-01, OPC-01b; API `operator-crud.test.ts` OPC-003c | OPC-01 duplicate e-mail refused with the company app's message; API `operator-crud.test.ts` |
+| F14.9 | Create a company (first person by password, Super admin by default, or another role: OPC-01b), add a department, a team and a person | P | — | OPC-01, OPC-01b; API `operator-crud.test.ts` OPC-003c | OPC-01 duplicate e-mail refused with the company app's message; API `operator-crud.test.ts`; API `admin-password-policy.test.ts` APW-003 (a weak first-person password is refused before anything is created) |
 | F14.10 | A person's page: sign-in history, sessions with status, Revoke one session | P | — | OPC-02 | API `auth-events-sessions.test.ts` AE-005 (other sessions stay; another company's session 404) |
 | F14.11 | Suspend a company: Suspended badge; its people see "access is suspended" at sign-in and on their open session; reactivate | P | — | OPC-03 | API `auth-events-sessions.test.ts` SU-001 (API keys, invitations), SU-002 (jobs skip) |
 | F14.12 | Delete a team / a company only with the typed name | P | — | OPC-04 | OPC-04 wrong name keeps the button disabled |

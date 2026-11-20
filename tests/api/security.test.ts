@@ -214,10 +214,10 @@ describe('Security regressions', () => {
     if (guard() || !companyATeamId) return;
     const email = `h2-${Date.now()}@irongate.test`;
     const created = await request(API_URL).post('/api/admin/users').set('Cookie', adminCookie).send({
-      email, password: 'Passw0rd!', firstName: 'Token', lastName: 'Check', role: 'qa_engineer', teamId: companyATeamId,
+      email, password: 'Passw0rd!2024', firstName: 'Token', lastName: 'Check', role: 'qa_engineer', teamId: companyATeamId,
     });
     expect(created.status).toBe(201);
-    const user = await login({ email, password: 'Passw0rd!' });
+    const user = await login({ email, password: 'Passw0rd!2024' });
     expect(user.status).toBe(200);
     const before = await request(API_URL).get('/api/teams').set('Cookie', user.cookie!);
     expect(before.status).toBe(200);
@@ -238,10 +238,10 @@ describe('Security regressions', () => {
     if (guard() || !companyATeamId) return;
     const email = `h2r-${Date.now()}@irongate.test`;
     const created = await request(API_URL).post('/api/admin/users').set('Cookie', adminCookie).send({
-      email, password: 'Passw0rd!', firstName: 'Role', lastName: 'Check', role: 'team_lead', teamId: companyATeamId,
+      email, password: 'Passw0rd!2024', firstName: 'Role', lastName: 'Check', role: 'team_lead', teamId: companyATeamId,
     });
     expect(created.status).toBe(201);
-    const user = await login({ email, password: 'Passw0rd!' });
+    const user = await login({ email, password: 'Passw0rd!2024' });
     const asLead = await request(API_URL).get('/api/analytics/technical-debt').set('Cookie', user.cookie!);
     expect(asLead.status).toBe(200);
     const leadRows = await request(API_URL).get(`/api/analytics/developer-metrics?teamId=${companyATeamId}`).set('Cookie', user.cookie!);

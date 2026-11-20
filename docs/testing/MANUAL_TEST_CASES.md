@@ -1,6 +1,6 @@
 # Manual test cases
 
-427 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+429 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -43,11 +43,11 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Overview](#overview) (4)
 - [Organisation: departments](#organisation-departments) (3)
 - [Organisation: teams](#organisation-teams) (3)
-- [Organisation: users](#organisation-users) (6)
+- [Organisation: users](#organisation-users) (7)
 - [Activity](#activity) (4)
 - [User activity](#user-activity) (4)
 - [Invitations](#invitations) (1)
-- [Platform support](#platform-support) (23)
+- [Platform support](#platform-support) (24)
 - [Navigation and access control](#navigation-and-access-control) (12)
 - [Users and teams](#users-and-teams) (6)
 - [Analytics](#analytics) (4)
@@ -9098,7 +9098,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - Owner e-mail: owner@<unique>.uitest.example
 - Owner password: Ui-Tests-Passw0rd!
 - E-mail in use: viewer@irongate.com
-- Weak password: abc
+- Weak password: onlylowercaseletters (long enough, but one kind of character)
 
 | Step | Action | Expected result |
 |---|---|---|
@@ -9106,7 +9106,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 2 | Open /users. | The "Users" page opens. |
 | 3 | Click "Add with password" (Demo). In the dialog "Add a user with a password" enter First Name "Dup", Last Name "Licate", Email "viewer@irongate.com", Password "Ui-Tests-Passw0rd!", Role "Software engineer", Department "Engineering", Primary Team "Core Team", then click "Create User". | An error message starting "Failed: " appears (the e-mail is already in use). No user is created. |
 | 4 | Click "Cancel" in the dialog. | The dialog closes. |
-| 5 | Click "Add with password" (Demo). In the dialog "Add a user with a password" enter First Name "Weak", Last Name "Password", Email "weak-<unique>@<organisation domain>", Password "abc", Role "Software engineer", Department "Engineering", Primary Team "Core Team", then click "Create User". | An error message starting "Failed: " appears (password too weak). |
+| 5 | Click "Add with password" (Demo). In the dialog "Add a user with a password" enter First Name "Weak", Last Name "Password", Email "weak-<unique>@<organisation domain>", Password "onlylowercaseletters", Role "Software engineer", Department "Engineering", Primary Team "Core Team", then click "Create User". | Below the Password field the rules read "10 to 128 characters, with three of: lower case, upper case, number, symbol; not the email name." After Create User, the error "Failed: The password must contain three of: a lower-case letter, an upper-case letter, a number, a symbol." appears (the server's reason). |
 | 6 | Look at the user cards. | There is no card for "Weak Password". |
 
 **After the test:** The test organisation cannot be removed in the app: ask a developer to delete it from the test database, or leave it (it is isolated from the demo data).
@@ -9228,6 +9228,38 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** Requires DevTools (request sent from the Console).
 
 *Automated:* `tests/e2e/org/organisation-admin.spec.ts › Users and assignments › ORG-25 a manager cannot edit or remove the super admin`
+
+### TC-ORG-071: An admin's Reset password refuses a password that breaks the password rules and keeps the old one
+
+**Type:** Negative · **Priority:** High · **Role:** Super admin · **Flow:** F12.8
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000) with the NovaTech demo data loaded
+- A new, empty organisation registered through "Create an account" on the sign-in page: first name Uitest, last name Owner, e-mail owner@<unique>.uitest.example, password Ui-Tests-Passw0rd!, organisation name "UI Test <unique>", department "Engineering", team "Core Team". Its registrant is its super admin (referred to below as "the owner").
+- A user in the test organisation added with a password (e.g. Pat Person, person-<unique>@<organisation domain>, password Ui-Tests-Passw0rd!).
+
+**Test data**
+
+- Owner e-mail: owner@<unique>.uitest.example
+- Owner password: Ui-Tests-Passw0rd!
+- Weak password: abcdefgh (8 characters, accepted before this fix)
+- Strong password: Another-Str0ng-Pass
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the owner (super admin) and open /users. | The "Users" page opens with Pat Person's card. |
+| 2 | On Pat Person's card open Reset password. | The dialog shows "Send reset link", "Sign out everywhere" and a New Password field with the rules below it: "10 to 128 characters, with three of: lower case, upper case, number, symbol; not the email name." |
+| 3 | Type abcdefgh and click Reset Password. | The form does not submit: the browser asks for at least 10 characters. |
+| 4 | Type onlylowercaseletters and click Reset Password. | The error "Failed: The password must contain three of: a lower-case letter, an upper-case letter, a number, a symbol." appears. The password is not changed. |
+| 5 | In a private window, sign in as Pat Person with Ui-Tests-Passw0rd!. | The sign-in works (the old password is kept). |
+| 6 | Back in the owner's window, type Another-Str0ng-Pass and click Reset Password. | "Password reset successfully!" appears; Pat Person can now sign in only with Another-Str0ng-Pass. |
+
+**After the test:** The test organisation is isolated from the demo data; leave it or ask a developer to delete it from the test database.
+
+**Notes:** The same rules apply to Add with password and to the old Admin panel. API: POST /api/admin/users/:id/reset-password answers 400 with the rule that is broken.
+
+*Automated:* `tests/api/admin-password-policy.test.ts › APW-001, APW-002 (API)`
 
 ## Activity
 
@@ -10054,6 +10086,36 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** Only one sample-data job runs per company at a time: a second start while one runs says "Sample data is already being generated for this company. Wait until it has finished."
 
 *Automated:* `tests/e2e/platform/operator-demo-data.spec.ts › OPD-01 (Populate metrics part); API tests/api/demo-data.test.ts DD-008`
+
+### TC-ORG-072: Create company with a first person's password that breaks the password rules is refused and creates nothing
+
+**Type:** Negative · **Priority:** High · **Role:** Platform operator · **Flow:** F14.9
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000)
+- A platform operator account (npm run operator:create) and signed in at /operator
+
+**Test data**
+
+- Company name: Weak PW <unique>
+- First person: first-<unique>@weakpw<unique>.example, mode "Password set now"
+- Weak password: abcdefgh
+- Strong password: Ui-Tests-Passw0rd!
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On the operator Overview click "Create company". Enter the company name, the first person's e-mail, How they get access "Password set now", first and last name. | A Password field appears with the help "10 to 128 characters, with three of: lower case, upper case, number, symbol; not the email name." |
+| 2 | Enter the password abcdefgh and click "Create company". | The form shows "The password must be 10 to 128 characters long." and stays open. |
+| 3 | Close the form and look at the Companies list. | No company "Weak PW <unique>" was created. |
+| 4 | Create it again with the password Ui-Tests-Passw0rd!. | "Weak PW <unique> created"; the first person can sign in with that password. |
+| 5 | Open the company, then a person, and use Reset password with alllowercase. | The error "The password must contain three of: ..." is shown; the password is not changed. |
+
+**After the test:** Delete the test company from the operator panel (type its name).
+
+**Notes:** The operator's create person and reset password run through the company app's handlers and the same password rules.
+
+*Automated:* `tests/api/admin-password-policy.test.ts › APW-003 (API)`
 
 ## Navigation and access control
 

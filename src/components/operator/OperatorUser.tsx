@@ -7,6 +7,7 @@ import { DataTable, ErrorText, FormDialog, Section, SmallButton, useOpActions, t
 import AuthEventsList from './OperatorAuthEvents';
 import { ROLE_OPTIONS, SessionsTable, deptOptions, scopeOptions, teamOptions, type Org } from './OperatorCompany';
 import { fmtDate } from './format';
+import { PASSWORD_RULES_TEXT } from '../../lib/passwordPolicy';
 
 /**
  * One person of a company (platform operator panel): profile, role assignments, teams, every
@@ -88,7 +89,7 @@ const OperatorUser: React.FC<{ companyId: string; companyName: string; userId: s
           <SmallButton testId="op-user-role" onClick={editRole}>Role / team</SmallButton>
           <SmallButton testId="op-user-reset-password" onClick={() => setForm({
             title: `Set a new password for ${who}`, description: 'Every session of this person ends.', destructive: true,
-            fields: [{ name: 'newPassword', label: 'New password', type: 'password', required: true, help: 'At least 8 characters.' }],
+            fields: [{ name: 'newPassword', label: 'New password', type: 'password', required: true, help: PASSWORD_RULES_TEXT }],
             submit: (v) => opFetch(`${ubase}/reset-password`, { method: 'POST', body: { ...v, confirm: true } }),
           })}>Set password</SmallButton>
           <SmallButton testId="op-user-reset-link" onClick={() => run({ title: 'Send a reset link', description: '', path: `${ubase}/send-reset-link`, doneMessage: (o) => o.message ?? 'Reset link sent' })}>Send reset link</SmallButton>

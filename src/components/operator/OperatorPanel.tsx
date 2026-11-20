@@ -8,6 +8,7 @@ import { CompanyStatusBadge, DataTable, ErrorText, FormDialog, OkBadge, Section,
 import { fmtBytes, fmtDate } from './format';
 import OperatorCompany, { ErrorRows } from './OperatorCompany';
 import AuthEventsList from './OperatorAuthEvents';
+import { PASSWORD_RULES_TEXT } from '../../lib/passwordPolicy';
 
 /**
  * Platform support (/operator): IronGate's own operators (platform_operators), not users of any
@@ -131,7 +132,7 @@ const createCompanySpec = (onCreated: (c: { id: string; name: string }) => void)
     { name: 'adminMode', label: 'How they get access', type: 'select', options: [{ value: 'invite', label: 'Invitation e-mail' }, { value: 'password', label: 'Password set now' }], when: (v) => !!v.adminEmail },
     { name: 'adminFirstName', label: 'First name', when: (v) => !!v.adminEmail && v.adminMode === 'password' },
     { name: 'adminLastName', label: 'Last name', when: (v) => !!v.adminEmail && v.adminMode === 'password' },
-    { name: 'adminPassword', label: 'Password', type: 'password', when: (v) => !!v.adminEmail && v.adminMode === 'password', help: 'At least 8 characters.' },
+    { name: 'adminPassword', label: 'Password', type: 'password', when: (v) => !!v.adminEmail && v.adminMode === 'password', help: PASSWORD_RULES_TEXT },
   ],
   submit: async (v) => {
     const out = await opFetch<any>('/companies', {

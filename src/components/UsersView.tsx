@@ -83,6 +83,7 @@ import { buttonClass } from './ui';
 import ExportCsvButton from './ExportCsvButton';
 import { ROLE_LABELS } from '../lib/policyActor';
 import { loadErrorMessage, NETWORK_ERROR } from '../lib/loadError';
+import { PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_RULES_TEXT } from '../lib/passwordPolicy';
 
 interface UsersViewProps {
   is3DMode?: boolean;
@@ -914,7 +915,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             </div>
             <div>
               <label htmlFor="create-user-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Password</label>
-              <input id="create-user-password" type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required minLength={6} data-testid="password-input" />
+              <input id="create-user-password" type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} data-testid="password-input" aria-describedby="create-user-password-rules" />
+              <p id="create-user-password-rules" className="mt-1 text-xs text-gray-500 dark:text-slate-400">{PASSWORD_RULES_TEXT}</p>
             </div>
             <div>
               <label htmlFor="create-user-role" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>
@@ -1181,7 +1183,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             <p className="text-xs text-gray-500 dark:text-slate-400">Or set a new password yourself and tell them (this also signs them out everywhere):</p>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">New Password</label>
-              <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required minLength={6} placeholder="Enter new password" />
+              <input type="password" value={userForm.password} onChange={(e) => setUserForm({ ...userForm, password: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required minLength={PASSWORD_MIN_LENGTH} maxLength={PASSWORD_MAX_LENGTH} placeholder="Enter new password" aria-describedby="reset-password-rules" data-testid="reset-password-input" />
+              <p id="reset-password-rules" className="mt-1 text-xs text-gray-500 dark:text-slate-400">{PASSWORD_RULES_TEXT}</p>
             </div>
           </div>
           <div className="flex justify-end gap-3 mt-6">

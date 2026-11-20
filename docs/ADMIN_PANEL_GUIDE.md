@@ -47,6 +47,9 @@ they lead).
 - **Edit** a person's name, e-mail, primary team and role assignments.
 - **Activate / deactivate**, **reset password** (set one, or send a reset link), **sign out everywhere**,
   and the **developer insights** switch (whether their individual developer metrics may be shown).
+- **Passwords you set** (Add with password, Reset password) follow the same rules as everyone else's:
+  10 to 128 characters, three of lower case, upper case, number and symbol, and not the part of the
+  e-mail before the @. A password that breaks a rule is refused with the reason.
 - **Job titles** (super admins). The job title is shown in the top bar next to the person's name.
 - **Delete** deactivates the person.
 
@@ -144,7 +147,9 @@ with a password or an invitation), rename it, its e-mail domain, sign-in length,
 notices, **suspend / reactivate**, delete (type its name); departments, teams, people, role assignments,
 passwords and reset links, sign out everywhere, invitations, KPI targets, configuration, update intervals,
 alert rules, API keys, saved views and single sessions. Changes the company app also offers run through the
-company app's own handler and rules. Destructive actions are confirmed in the page.
+company app's own handler and rules. Destructive actions are confirmed in the page. A password the operator
+sets (first person of a new company, a new person, a reset) follows the company password rules; Create
+company checks it before anything is created.
 
 **Suspending a company** blocks its people from signing in (after the right password they see that access
 is suspended), ends every open session on its next request, refuses its API keys and invitations, and makes

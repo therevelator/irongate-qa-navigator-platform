@@ -31,7 +31,8 @@ The full reference for every screen is [PRODUCT_GUIDE.md, section 5](PRODUCT_GUI
   your company (default 7 days).
 - **Forgot password.** Use "Forgot password" on the sign-in page. You get a one-time link by e-mail.
 - **Password rules.** 10 to 128 characters, at least three of lower case, upper case, number and symbol,
-  and not containing the part of your e-mail address before the @.
+  and not containing the part of your e-mail address before the @. The same rules apply when an
+  administrator sets a password for you.
 - **Suspended organisation.** If your organisation's access is suspended, the sign-in page says so. Contact
   your administrator.
 

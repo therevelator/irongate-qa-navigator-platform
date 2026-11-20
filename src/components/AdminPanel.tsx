@@ -44,6 +44,7 @@ import ApiKeysPanel from './ApiKeysPanel';
 import ConnectCi from './ConnectCi';
 import SampleDataPanel from './SampleDataPanel';
 import { policyActorOf } from '../lib/policyActor';
+import { passwordProblem, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_RULES_TEXT } from '../lib/passwordPolicy';
 
 interface AdminPanelProps {}
 
@@ -185,7 +186,12 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+    const weak = passwordProblem(newUser.password, newUser.email);
+    if (weak) {
+      toast.error(weak);
+      return;
+    }
+
     try {
       // Get department from selected team
       const selectedTeamObj = teams.find(t => t.id === newUser.teamId);
@@ -251,8 +257,10 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
       return;
     }
 
-    if (resetPasswordData.newPassword.length < 6) {
-      toast.error('Password must be at least 6 characters');
+    // The app's password rules (src/lib/passwordPolicy.ts); the server checks them too.
+    const weak = passwordProblem(resetPasswordData.newPassword, selectedUser?.email);
+    if (weak) {
+      toast.error(weak);
       return;
     }
 
@@ -1115,12 +1123,14 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   data-testid="create-user-password"
                   value={newUser.password}
                   onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{PASSWORD_RULES_TEXT}</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -1308,19 +1318,22 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   data-testid="reset-password-new"
                   value={resetPasswordData.newPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{PASSWORD_RULES_TEXT}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Confirm Password</label>
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   data-testid="reset-password-confirm"
                   value={resetPasswordData.confirmPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
@@ -1371,19 +1384,22 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   data-testid="reset-password-new"
                   value={resetPasswordData.newPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">{PASSWORD_RULES_TEXT}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-200 dark:text-slate-200 mb-1">Confirm Password</label>
                 <input
                   type="password"
                   required
-                  minLength={6}
+                  minLength={PASSWORD_MIN_LENGTH}
+                  maxLength={PASSWORD_MAX_LENGTH}
                   data-testid="reset-password-confirm"
                   value={resetPasswordData.confirmPassword}
                   onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}

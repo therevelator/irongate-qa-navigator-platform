@@ -28,6 +28,7 @@ import { filtersFromQuery, listUserActivity, userActivityFacets } from '../lib/u
 import { runAsPlatformSupport, PLATFORM_SUPPORT_REQUEST } from '../lib/platformContext';
 import { validateName as validateViewName, SavedViewError } from '../lib/savedViews';
 import { emailDomainOf, isPublicEmailDomain } from '../../src/lib/emailDomains';
+import { passwordProblem } from '../../src/lib/passwordPolicy';
 import { toCsv, csvFileName, type CsvColumn } from '../../src/lib/csv';
 import adminRoutes from './admin';
 import targetsRoutes from './targets';
@@ -1039,6 +1040,12 @@ router.post('/companies', ...op, async (req: OperatorRequest, res) => {
     // software engineer / viewer of the first team.
     const firstRole: string = admin?.role ?? 'super_admin';
     if (admin && !FIRST_PERSON_ROLES.includes(firstRole)) return void res.status(400).json({ error: `Role: one of ${FIRST_PERSON_ROLES.join(', ')}.` });
+    // A password for the first person follows the company's password rules (src/lib/passwordPolicy.ts);
+    // checked before anything is created, so a weak password does not leave a company without its admin.
+    if (admin && admin.mode !== 'invite') {
+      const weak = typeof admin.password === 'string' ? passwordProblem(admin.password, adminEmail) : 'Enter a password for the first person.';
+      if (weak) return void res.status(400).json({ error: weak });
+    }
     const { domain, isPublic } = await checkDomain(text(b.domain, 255) ?? (adminEmail ? emailDomainOf(adminEmail) : ''), null);
     const departmentName = text(b.departmentName, 255) ?? 'General';
     const teamName = text(b.teamName, 255) ?? 'Team 1';

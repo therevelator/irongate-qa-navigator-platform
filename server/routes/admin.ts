@@ -19,6 +19,7 @@ import {
 import { recordAudit, auditedUserChange } from '../lib/audit';
 import orgAdminRoutes from './orgAdmin';
 import { loadResetTarget, sendResetLinkByAdmin, RESET_TTL_MINUTES } from '../lib/passwordReset';
+import { passwordProblem } from '../../src/lib/passwordPolicy';
 import {
   currentSessionPersistent, endUserSessions, issueSessionCookie, isAllowedLifetime, lifetimeHours, lifetimeLabel,
   DEFAULT_SESSION_HOURS, SESSION_LIFETIME_CHOICES, SESSION_LIFETIME_KEY,
@@ -116,9 +117,9 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     if (!email || !password || !firstName || !lastName || !role) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
-    if (typeof password !== 'string' || password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
+    // The same password rules as registration, invitations and reset links (src/lib/passwordPolicy.ts).
+    const weak = typeof password === 'string' ? passwordProblem(password, String(email)) : 'The password is required.';
+    if (weak) return res.status(400).json({ error: weak });
     if (!canAssignRole(actorRole, role)) {
       return res.status(403).json({ error: `${actorRole} cannot create ${role} users` });
     }
@@ -403,9 +404,9 @@ router.post('/users/:id/reset-password', authenticateToken, async (req: any, res
     if (!canResetPassword(actorOf(req), target)) {
       return res.status(403).json({ error: 'You cannot reset this user\'s password' });
     }
-    if (typeof newPassword !== 'string' || newPassword.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
+    // The same password rules as registration, invitations and reset links (src/lib/passwordPolicy.ts).
+    const weak = typeof newPassword === 'string' ? passwordProblem(newPassword, target.email) : 'Enter the new password.';
+    if (weak) return res.status(400).json({ error: weak });
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await query('UPDATE users SET password_hash = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [passwordHash, target.id, companyId]);
     // Existing sessions of that person end. Changing your own password keeps this browser signed in.

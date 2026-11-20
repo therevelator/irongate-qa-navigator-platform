@@ -66,7 +66,7 @@ test.describe('Super Admin Role-Based Access Control', { tag: ['@area:navigation
     await page.fill('[data-testid="last-name-input"]', 'User');
     const email = `e2e-${Date.now()}@example.com`;
     await page.fill('[data-testid="email-input"]', email);
-    await page.fill('[data-testid="password-input"]', 'password123');
+    await page.fill('[data-testid="password-input"]', 'Passw0rd!2024');
 
     // Select role - Super Admin should be able to create any role
     await page.selectOption('[data-testid="role-select"]', 'qa_engineer');
