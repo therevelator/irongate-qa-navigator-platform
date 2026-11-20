@@ -48,7 +48,7 @@ interface Input {
   filename: string | null;
 }
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(public status: number, message: string, public extra: Record<string, unknown> = {}) { super(message); }
 }
 
@@ -84,7 +84,7 @@ async function readInput(req: ApiKeyRequest, limit: number): Promise<Input> {
   return { payload, extra: [], fields: q, filename: null, diff: null, changedLines: null };
 }
 
-const text = (b: Buffer) => {
+export const text = (b: Buffer) => {
   const s = b.toString('utf8');
   return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
 };
@@ -110,22 +110,22 @@ function commonFields(f: Record<string, string>): Common {
   return { teamId, commit, branch, run, attempt, startedAt, dryRun: f.dryRun === 'true' || f.dryRun === '1' };
 }
 
-function checkTime(at: Date): void {
+export function checkTime(at: Date): void {
   const now = Date.now();
   if (at.getTime() > now + 5 * 60_000) throw new HttpError(400, 'The run time (startedAt or the report timestamp) is in the future');
   if (at.getTime() < now - MAX_AGE_DAYS * 86_400_000) throw new HttpError(400, `The run time is more than ${MAX_AGE_DAYS} days in the past`);
 }
 
-async function teamOwned(companyId: string, teamId: string): Promise<boolean> {
+export async function teamOwned(companyId: string, teamId: string): Promise<boolean> {
   const rows = await query<any[]>('SELECT 1 FROM teams WHERE id = ? AND company_id = ?', [teamId, companyId]);
   return rows.length > 0;
 }
 
-function summaryItem(teamId: string | null, source: string | null, recordedAt: string | null, status: ItemSummary['status'], errors?: string[]): ItemSummary {
+export function summaryItem(teamId: string | null, source: string | null, recordedAt: string | null, status: ItemSummary['status'], errors?: string[]): ItemSummary {
   return { index: 0, teamId, source, recordedAt, metrics: [], status, ...(errors ? { errors } : {}) };
 }
 
-const computedOut = (days: DayResult[]) => days.filter((d) => d.metrics.length).map((d) => ({ day: d.day, metrics: d.metrics }));
+export const computedOut = (days: DayResult[]) => days.filter((d) => d.metrics.length).map((d) => ({ day: d.day, metrics: d.metrics }));
 
 /** Shared request handling: auth done; reads, validates, logs, stores, computes. */
 function handler(kind: RawKind) {
@@ -232,12 +232,12 @@ function handler(kind: RawKind) {
         if (parsedTests) {
           const { runId: testRunId, day } = await storeTestRun(client, meta, up.id, parsedTests, at);
           await refreshFlakyEvidence(client, c.teamId, [c.commit]);
-          days = await recomputeTeamDays(client, c.teamId, affectedDays('tests', day), { ingestionId, actorId: `api_key:${caller.apiKeyId}` });
+          days = await recomputeTeamDays(client, c.teamId, affectedDays('tests', day), { groups: ['ci'], ingestionId, actorId: `api_key:${caller.apiKeyId}` });
           extra = { testRunId, counts: parsedTests.counts, durationMs: parsedTests.durationMs };
           valueCount = parsedTests.cases.length;
         } else {
           const r = await storeCoverage(client, meta, up.id, parsedCov!, at, changed);
-          days = await recomputeTeamDays(client, c.teamId, affectedDays('coverage', r.day), { ingestionId, actorId: `api_key:${caller.apiKeyId}` });
+          days = await recomputeTeamDays(client, c.teamId, affectedDays('coverage', r.day), { groups: ['ci'], ingestionId, actorId: `api_key:${caller.apiKeyId}` });
           extra = { coverageReportId: r.reportId, totals: parsedCov!.totals, files: parsedCov!.files.length, changedLines: r.changed };
           valueCount = parsedCov!.files.length;
         }
@@ -257,7 +257,7 @@ function handler(kind: RawKind) {
   };
 }
 
-async function after(companyId: string, teamId: string, items: ItemSummary[]) {
+export async function after(companyId: string, teamId: string, items: ItemSummary[]) {
   const cols = Array.from(new Set(items.flatMap((i) => i.metrics)));
   if (cols.length) {
     notifyKpisUpdated(cols, 'computed');
@@ -265,7 +265,7 @@ async function after(companyId: string, teamId: string, items: ItemSummary[]) {
   }
 }
 
-async function fail(res: express.Response, caller: IngestCaller, key: string | null, hash: string | null, teamId: string | null, source: string | null, e: unknown) {
+export async function fail(res: express.Response, caller: IngestCaller, key: string | null, hash: string | null, teamId: string | null, source: string | null, e: unknown) {
   const status = e instanceof HttpError || e instanceof BodyError ? e.status : e instanceof ReportError ? 400 : 500;
   const message = status === 500 ? 'Failed to ingest the upload; nothing was written' : (e as Error).message;
   if (status === 500) console.error('Raw ingest error:', e);
@@ -318,7 +318,7 @@ async function handlePipelines(
     }
     const stored = await storePipelineRuns(client, caller.companyId, teamId, up.id, runs);
     const fresh = stored.filter((s) => !s.duplicate);
-    const days = fresh.length ? await recomputeTeamDays(client, teamId, Array.from(new Set(fresh.map((s) => s.day))), { ingestionId, actorId: `api_key:${caller.apiKeyId}` }) : [];
+    const days = fresh.length ? await recomputeTeamDays(client, teamId, Array.from(new Set(fresh.map((s) => s.day))), { groups: ['ci'], ingestionId, actorId: `api_key:${caller.apiKeyId}` }) : [];
     if (!fresh.length) {
       // Every run was already stored: keep no upload row for this request.
       items[0].status = 'duplicate';
