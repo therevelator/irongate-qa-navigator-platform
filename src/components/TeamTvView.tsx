@@ -542,7 +542,7 @@ const TeamTvView: React.FC = () => {
       {/* Header: team identity + clock */}
       <header className={cx('flex justify-between gap-8', wide ? 'items-start' : 'flex-col')}>
         <div className="min-w-0">
-          <p className="text-[1.35rem] font-semibold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">QE Navigator · Team view</p>
+          <p className="text-[1.35rem] font-semibold uppercase tracking-[0.14em] text-slate-600 dark:text-slate-400">QE Navigator · Team view</p>
           <h1 className="mt-2 truncate text-[4.5rem] font-semibold leading-[1.05] tracking-tight" data-testid="tv-team-name" title={team.name}>{team.name}</h1>
           <p className="mt-3 flex flex-wrap items-center gap-x-[1.25em] gap-y-1 text-[1.75rem] text-slate-600 dark:text-slate-300">
             <span>{team.departmentName ?? 'No department'}</span>
@@ -631,10 +631,10 @@ const TeamTvView: React.FC = () => {
             <h2 id="tv-panel-title" className="flex items-baseline gap-[0.6em] text-[2rem] font-semibold tracking-tight">
               {panel === 'trends' ? `Trends · last ${data.historyDays} days` : PANELS.find((p) => p.id === panel)!.label}
               {panel === 'focus' && data.alerts && (
-                <span className="text-[1.3rem] font-normal text-slate-500 dark:text-slate-400">{data.alerts.counts.open + data.alerts.counts.acknowledged} open {data.alerts.counts.open + data.alerts.counts.acknowledged === 1 ? 'alert' : 'alerts'}</span>
+                <span className="text-[1.3rem] font-normal text-slate-600 dark:text-slate-400">{data.alerts.counts.open + data.alerts.counts.acknowledged} open {data.alerts.counts.open + data.alerts.counts.acknowledged === 1 ? 'alert' : 'alerts'}</span>
               )}
               {panel === 'kpis' && wide && model.prevDate && (
-                <span className="text-[1.3rem] font-normal text-slate-500 dark:text-slate-400">change vs previous snapshot ({shortDate(model.prevDate)})</span>
+                <span className="text-[1.3rem] font-normal text-slate-600 dark:text-slate-400">change vs previous snapshot ({shortDate(model.prevDate)})</span>
               )}
             </h2>
             <ol className="flex items-center gap-[0.6rem]" aria-label="Panels">
