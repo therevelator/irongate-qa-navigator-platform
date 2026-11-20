@@ -83,12 +83,12 @@ test.describe('Connect your CI', { tag: [TAG.area('admin'), TAG.area('ci-evidenc
     const code = ci.getByTestId('connect-ci-snippet');
     await expect(code).toContainText('secrets.QE_NAVIGATOR_API_KEY');
     await expect(code).toContainText(`team=${freshCompany.teamId}`);
-    await ci.getByRole('tab', { name: 'GitLab CI' }).click();
+    await ci.getByRole('tablist', { name: 'CI tool' }).getByRole('tab', { name: 'GitLab CI' }).click();
     await expect(code).toContainText('stage: .post');
-    await ci.getByRole('tab', { name: 'GitLab CI' }).press('ArrowRight');
-    await expect(ci.getByRole('tab', { name: 'Jenkins' })).toHaveAttribute('aria-selected', 'true');
+    await ci.getByRole('tablist', { name: 'CI tool' }).getByRole('tab', { name: 'GitLab CI' }).press('ArrowRight');
+    await expect(ci.getByRole('tablist', { name: 'CI tool' }).getByRole('tab', { name: 'Jenkins' })).toHaveAttribute('aria-selected', 'true');
     await expect(code).toContainText("credentialsId: 'qe-navigator-api-key'");
-    await ci.getByRole('tab', { name: 'Azure DevOps' }).click();
+    await ci.getByRole('tablist', { name: 'CI tool' }).getByRole('tab', { name: 'Azure DevOps' }).click();
     await expect(code).toContainText('$(System.JobAttempt)');
 
     const row = ci.getByTestId('connect-ci-row').filter({ hasText: freshCompany.teamName });

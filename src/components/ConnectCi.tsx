@@ -430,7 +430,7 @@ const ConnectCi: React.FC = () => {
             {copiedBlock === prefix ? <CheckCircle2 size={14} aria-hidden="true" /> : <Copy size={14} aria-hidden="true" />}{copiedBlock === prefix ? 'Copied' : 'Copy'}
           </button>
         </div>
-        <pre className="max-h-80 overflow-auto bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 dark:bg-slate-950 dark:text-slate-200" data-testid={testId}><code>{text}</code></pre>
+        <pre tabIndex={0} aria-label={`${label}: ${list.find((t) => t.id === current)!.label}`} className="max-h-80 overflow-auto bg-slate-50 p-3 text-xs leading-relaxed text-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500 dark:bg-slate-950 dark:text-slate-200" data-testid={testId}><code>{text}</code></pre>
       </div>
     </div>
   );

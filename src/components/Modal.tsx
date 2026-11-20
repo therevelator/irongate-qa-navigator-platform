@@ -128,7 +128,8 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, title, children, size = 
           </div>
 
           {/* Content */}
-          <div className={scrollBody ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4' : 'px-6 py-4'}>{children}</div>
+          {/* A scrolling body is focusable, so it can be scrolled with the keyboard (WCAG 2.1.1). */}
+          <div className={scrollBody ? 'min-h-0 flex-1 overflow-y-auto px-5 py-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-500' : 'px-6 py-4'} {...(scrollBody ? { tabIndex: 0, role: 'region', 'aria-label': typeof title === 'string' ? title : 'Dialog content' } : {})}>{children}</div>
         </div>
       </div>
     </div>,

@@ -143,6 +143,8 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Admin console (organisation structure) | yes | yes (their departments manageable) | — | — | — |
 | Admin console: API keys (ingestion), Sample data | yes | — | — | — | — |
 | Admin console: Connect your CI (steps, test call, last data received, main branch; `GET /api/ci/status`, `PUT /api/ci/teams/:id/main-branch`) | yes | — (managers have no API keys either) | — | — | — |
+| Connect your CI: service → team mapping (`GET / PUT /api/ci/services`, `DELETE /api/ci/services/:service`) | yes | — | — | — | — |
+| Team page: Deliveries & incidents (`GET /api/ci/teams/:id/delivery`) and How this was calculated of the DORA metrics | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope |
 | Parameters (financial and pipeline settings) | company, departments, teams; "apply to every department and team" | their departments and teams only (company-level values read-only: the page cannot save them and the API answers 403) | — | — | — |
 | KPI targets (with history) | company, department, team | department and team, in their departments | — | — | — |
 | Expected update frequency | yes | yes | — | — | — |

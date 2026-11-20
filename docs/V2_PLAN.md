@@ -83,6 +83,20 @@ of the new data (phase 4).
 | `POST /api/ingest/commits` | commit list for a deploy (sha, authored and committed time) | lead time detail |
 | `POST /api/ingest/incidents` | opened, acknowledged, resolved, severity, service, linked deployment | MTTR, MTBF, availability, incidents per deploy |
 
+Status: **done**. Endpoints `POST /api/ingest/deployments | commits | incidents` (JSON, batches of up to 500 events, gzip, 5 MB,
+400 / 413 / 415 as phase 1, idempotent by event id with updates, dry run; GitHub `deployment_status` / push and GitLab
+deployment / push webhooks, PagerDuty v3 webhooks and REST exports, Opsgenie webhooks and exports mapped as they are; computed
+values refused; authors stored as a salted hash only), migration `20261130000000_raw_ingestion_phase2_delivery.sql`
+(`deployments_raw`, `deployment_commits`, `incidents_raw`, `incident_updates`, `service_teams`; `raw_uploads.kind` extended),
+calculation `server/lib/calc/delivery.ts` (on arrival for the affected days, nightly in `calc-recompute`; KPI values with source
+`computed` and `metric_evidence` with the deploys and incidents), team page Evidence → **Deliveries & incidents** (DORA tiles with
+How this was calculated, recent production deploys, failed changes with reasons, incidents with duration and linked deploy),
+Connect your CI → **Deployments and incidents** (steps per CI tool and per incident tool, service → team mapping, test call per
+endpoint), sample deployments / commits / incidents (35 days) for demo and filled teams and a live-company SQL
+(`raw-sample-sql.ts --delivery-only`). Retention 13 months. Tests: `tests/api/delivery-parsers.test.ts`,
+`delivery-ingestion.test.ts`, `tests/database/deliveryStore.test.ts`, UI `team/delivery-evidence.spec.ts`, manual cases
+TC-ADM-055 … TC-ADM-060.
+
 ### Phase 3 — Work and code quality
 
 | Endpoint | Accepts | Calculates |
@@ -153,7 +167,8 @@ No database change. Slack / Teams digests remain for later.
   `flaky_test_evidence`.
 - `coverage_reports`, `coverage_files` (per file: lines found / hit, branches found / hit).
 - `pipeline_runs_raw`, `pipeline_stage_runs` (extends the existing pipeline tables where they fit).
-- Phases 2–3: `deployments`, `deployment_commits`, `incidents`, `issues`, `issue_transitions`, `analysis_findings`.
+- Phase 2 (done): `deployments_raw`, `deployment_commits`, `incidents_raw`, `incident_updates`, `service_teams`.
+- Phase 3: `issues`, `issue_transitions`, `analysis_findings`.
 - `metric_evidence`: for each computed metric value, the source records it was calculated from.
 - Phases 4–5: `forecasts`, `recommendations`, `cost_model`, `investment_options`.
 
@@ -168,6 +183,24 @@ No database change. Slack / Teams digests remain for later.
   flakiness rate = flaky tests ÷ distinct tests run.
 - **Test execution time** = median total test duration per run; **average build time** = median pipeline duration.
 - Each value carries the number of runs it is based on; too few runs lowers the confidence shown.
+
+## Calculation rules (phase 2)
+
+- Per team and UTC day D, over the **28 days ending D**, "as of" the end of D (an event counts from the moment it happened, so
+  a rollback or incident that arrives later changes the values from its own day on). The period starts at the team's first
+  production deploy when that is later (at least 7 days).
+- **Production deploy** = a deploy to a production environment (`production`, `prod`, `prd`, `live`, or `production: true`) that
+  reached it (`success` or `rolled_back`); rollback deploys and deploys that did not complete are not counted.
+- **Deployment frequency** = production deploys ÷ weeks in the period. **Lead time for changes** = median of (deploy finished −
+  first commit authored) over the production deploys with commit times.
+- **Change failure rate** = failed changes ÷ production deploys × 100; a **failed change** was rolled back (its result, or a
+  rollback deploy names it), was followed within 72 h by a hotfix deploy of the same service, or has a linked incident.
+- **MTTR** = median (resolved − opened) of the incidents resolved in the window. **MTBF** = mean time between consecutive
+  incident starts of the same service. **Availability** = (1 − outage time ÷ period) × 100, outages = incidents marked as
+  outage, else severity critical or high; overlaps counted once; open outages until now. **Incidents per deploy** = incidents
+  opened ÷ production deploys. **Infrastructure failures** = incidents of category infrastructure (when categories are sent).
+- Confidence from the number of deploys / incidents (high ≥ 10, medium 3–9, low < 3). Reliability values need incident data
+  (a team that never sent incidents shows them as missing, not as 100 %).
 
 ## Success criteria
 
@@ -188,7 +221,7 @@ No database change. Slack / Teams digests remain for later.
 ## Order and status
 
 1. Phase 1 — done (raw tests, coverage and pipelines, calculation engine, evidence, Connect your CI).
-2. Phase 2 — in progress.
+2. Phase 2 — done (deployments, commits, incidents, DORA and reliability metrics, deliveries evidence, service mapping).
 3. Phase 3.
 4. Phases 4 and 5 (they need phases 1–3 data to be credible; forecasts can start after phase 1).
 5. Phase 6 — done (executive phone summary and wall-screen TV mode); Slack / Teams digests later.

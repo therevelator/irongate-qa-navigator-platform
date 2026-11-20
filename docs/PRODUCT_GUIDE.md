@@ -1019,6 +1019,26 @@ number is traceable to the runs it came from (docs/V2_PLAN.md, phase 1).
 - Sample data: demo and filled teams get 14 days of sample raw CI data that follows their story (healthier teams: higher
   coverage, fewer flaky tests, greener and faster pipelines). Its evidence is shown; it is never written as KPI values.
 
+
+### 4.2b Deployments, commits and incidents (v2)
+
+Why: delivery speed and stability (the DORA metrics) are calculated from what actually happened, not typed in, so a change
+failure rate opens to the very deploys that failed and why (docs/V2_PLAN.md, phase 2).
+
+- `POST /api/ingest/deployments` (deploy events, or the GitHub / GitLab deployment webhook), `POST /api/ingest/commits` (the
+  commits of a deploy or a push, from `git log` or a push webhook; authors kept only as a hash) and `POST /api/ingest/incidents`
+  (incidents created and updated by id, or the PagerDuty / Opsgenie webhook). Same API keys, rate limit and ingestion log;
+  batches of up to 500 events; reference: docs/INTEGRATION_GUIDE.md section 4B.
+- The calculation ([`server/lib/calc/delivery.ts`](../server/lib/calc/delivery.ts)) works per team and day over the 28 days ending
+  the day: **deployment frequency** (production deploys per week), **lead time for changes** (median first commit authored →
+  deploy finished), **change failure rate** (deploys rolled back, followed within 72 h by a hotfix of the same service, or
+  linked to an incident ÷ production deploys), **MTTR** (median opened → resolved), **MTBF** (mean time between incident starts
+  per service), **availability** (1 − outage time ÷ period; critical and high incidents are outages unless marked otherwise),
+  **incidents per deploy** and **infrastructure failures**. Each value is written to the existing KPI with source `computed`
+  and keeps its deploys and incidents as evidence; a rollback or incident that arrives later changes the values from its own
+  day on.
+- Events that carry no team go to the team their service is mapped to (Connect your CI → Service → team mapping).
+
 ### 4.3 Manual metrics
 
 **Administration → Manual metrics** (super admin, manager, team lead; team scope enforced by the server). Sections: current
@@ -1158,6 +1178,12 @@ Why: everything about one team in one place, with each number explained
   latest report, the **slowest tests** (median, last 7 days) and the **failing pipeline stages** (last 30 days, with the latest
   failing runs). A KPI card whose metric was calculated from CI data has a **How this was calculated** link too. Without CI data
   the section says so (and points super admins to Connect your CI).
+- **Deliveries & incidents** in the same Evidence section (section 4.2b): the DORA tiles (deployment frequency, lead time, change
+  failure rate, MTTR, availability, MTBF, incidents per deploy, infrastructure failures; each opens How this was calculated with
+  the deploys or incidents it counted), the **recent production deploys** (commit count, lead time, result), the **failed
+  changes** with what made them failed (rolled back, the hotfix that followed and how much later, the linked incident) and the
+  **incidents** with severity, outage, duration (or open for) and the linked deploy. The KPI cards of these metrics offer How this
+  was calculated too. Without deployments or incidents the part says so.
 - **Open TV mode** and, for super admins, the **Show formulas & data sources** switch (formula mode) that opens the metric explanation
   for any value.
 - Team detail opens for the teams of the analytics scope only (as the overview list, TV mode and Compare); another team answers 403.
@@ -1266,7 +1292,7 @@ opted in to developer insights (off by default; an unset value counts as off). T
 
 | Page | Who | What |
 |---|---|---|
-| Admin console | super admin, manager | Organisation structure, team members, create users / teams; **API keys**, **Connect your CI** (copy-paste steps for GitHub Actions, GitLab CI, Jenkins and Azure DevOps with the endpoint and team id filled in, a **Send test call** check that validates a pasted key, the team and a sample report without storing anything, the **last data received** per team and kind, and each team's main branch) and **Sample data** (super admin) |
+| Admin console | super admin, manager | Organisation structure, team members, create users / teams; **API keys**, **Connect your CI** (copy-paste steps for GitHub Actions, GitLab CI, Jenkins and Azure DevOps with the endpoint and team id filled in, a **Send test call** check that validates a pasted key, the team and a sample report, deployment or incident without storing anything, the **last data received** per team and kind, each team's main branch, and **Deployments and incidents**: steps per CI tool that send the deploy and its commits, PagerDuty / Opsgenie / JSON steps for incidents, and the **service → team mapping**) and **Sample data** (super admin) |
 | Manual metrics | super admin, manager, team lead | Section 4.3 |
 | Update frequency | super admin, manager | Expected interval per metric (staleness) |
 | Parameters | super admin, manager | **KPI targets** (with history), **Alert rules**, **Notification channels** (Slack, test digest, evaluate now; super admin), **Performance SLA** (p95 response time, error-rate threshold), **Financial and ROI settings**; each field says which page reads it |

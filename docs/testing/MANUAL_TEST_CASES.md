@@ -1,6 +1,6 @@
 # Manual test cases
 
-415 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+421 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -10,7 +10,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
-- [Accessibility](#accessibility) (18)
+- [Accessibility](#accessibility) (19)
 - [Theme and phone layout](#theme-and-phone-layout) (28)
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
@@ -35,7 +35,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Alerts and notifications](#alerts-and-notifications) (11)
 - [Tracked actions](#tracked-actions) (10)
 - [CI evidence](#ci-evidence) (4)
-- [Connect your CI](#connect-your-ci) (2)
+- [Connect your CI](#connect-your-ci) (3)
+- [Deliveries & incidents](#deliveries--incidents) (4)
 - [Wellbeing pulse](#wellbeing-pulse) (24)
 - [Developer productivity](#developer-productivity) (1)
 - [Overview](#overview) (4)
@@ -2704,6 +2705,28 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Remove the irongate_theme_mode entry.
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-24 sign-in screen in Graphite and Porcelain`
+
+### TC-ADM-060: Deliveries & incidents and Connect your CI are accessible in the four themes
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.12
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data and 35 days of sample deployments, commits and incidents).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | For each theme (Light, Dark, Graphite, Porcelain; Appearance menu): open The Away Team and Tab through Deliveries & incidents. | Every tile is reachable with Tab and shows a focus ring; text and badges are readable (contrast) in the theme; tables have column headers. |
+| 2 | Open Admin console → Connect your CI and Tab through Deployments and incidents. | The tool tabs move with the arrow keys; the code blocks can be focused and scrolled with the keyboard; the mapping form fields have labels; an axe check reports no serious violations. |
+
+**After the test:** Set the theme back to the one you use.
+
+*Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Deliveries & incidents accessibility › A11Y-38 … A11Y-41`
 
 ## Theme and phone layout
 
@@ -7810,6 +7833,124 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as manager and open Admin console (/admin-panel). | The Admin console opens without the sections 'API keys' and 'Connect your CI'. |
 
 *Automated:* `tests/e2e/team/ci-evidence.spec.ts › Connect your CI › CI-02`
+
+### TC-ADM-059: Connect your CI: deployment and incident steps per tool, service mapping, test call, and real events calculated on the team page
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.11
+
+**Preconditions**
+
+- A newly registered organisation with one team (Register an organisation); curl available.
+
+**Test data**
+
+- The new organisation's super admin
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open Admin console → Connect your CI. | The endpoints list includes Deployments, Commits and Incidents (/api/ingest/deployments, /commits, /incidents). |
+| 2 | In 'Deployments and incidents' → '1. Deployments and commits', look at the GitHub Actions tab; then click GitLab CI, press the right arrow, then click Azure DevOps. | The steps send the commits (git log \| jq) and the deployment with the team id filled in; GitLab uses CI_JOB_STATUS, Jenkins (reached with the arrow key) GIT_PREVIOUS_SUCCESSFUL_COMMIT, Azure DevOps Agent.JobStatus. Copy copies the steps. |
+| 3 | In '2. Incidents', look at PagerDuty, Opsgenie and Other tool (JSON). | PagerDuty explains the Generic Webhook (v3) with the URL and the Authorization header plus a backfill; Opsgenie the webhook integration and a backfill with GenieKey; Other shows an incident and its resolve update. |
+| 4 | In '3. Service → team mapping', type 'checkout-api', keep the team, click 'Map service'. | 'Events of service “checkout-api” without a team now go to <team>' and a row checkout-api → team. |
+| 5 | Create an API key, choose 'Deployments' in 'Send a test call', paste the key and click 'Send test call'. | 'Connected. … the sample deployment was read (1 event). Nothing was stored.'; the Deployments column of the team still says 'none yet'. |
+| 6 | Send two deployments without a team (service checkout-api; the second a hotfix 2 h after the first) and an SEV2 incident linked to the first, resolved after 30 min (INTEGRATION_GUIDE section 4B curl examples). | Each answers 201 with the events 'written' for the team. |
+| 7 | Reload Connect your CI; remove the checkout-api mapping. | The team's Deployments and Incidents columns show when data arrived (json); after Remove, 'No services mapped yet'. |
+| 8 | Open the team page. | Deliveries & incidents shows Change failure rate 50.0 %, the failed change with 'Hotfix rel-2 followed 2.0 h later' and 'Incident INC-1 linked to it', the incident 'resolved after 30 min' with its linked deploy. The KPI card Change failure rate shows source 'computed' and its How this was calculated says 'Written to the team’s KPI as source “computed”'. |
+
+**After the test:** Delete the test organisation if it is not needed any more.
+
+*Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Connect your CI: deployments and incidents › CI-03`
+
+## Deliveries & incidents
+
+### TC-ADM-055: The team page shows Deliveries & incidents: DORA values, recent production deploys, failed changes and incidents
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.9
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data and 35 days of sample deployments, commits and incidents).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as admin, search 'The Away Team' on the Overview and open the team. | Team detail opens. |
+| 2 | Scroll to 'Evidence from CI' and find 'Deliveries & incidents'. | A card 'Delivery and reliability (DORA)' shows tiles: Deployment frequency (… per week), Lead time for changes, Change failure rate (%), Mean time to recovery, System availability (%), Mean time between failures, Incidents per deploy and, when categories exist, Infrastructure failures; each with its day, the number of deploys or incidents and a confidence. The subtitle says these come from sample data and are not written to the team's KPIs. |
+| 3 | Look at 'Recent production deploys'. | At most 8 rows: the deploy id (rel-YYYYMMDD.n), service and commit, when it finished, the number of commits, the lead time and a result badge (Succeeded, Failed change or Rolled back). The subtitle counts the deploys of the last 30 days and those not counted. |
+| 4 | Click 'Show all N' under the table. | All recent deploys are listed and the button reads 'Show fewer'. |
+| 5 | Look at 'Failed changes' and 'Incidents'. | Each failed change names its deploy and why it failed: 'Rolled back (deploy result)', 'Rolled back by deploy …', 'Hotfix … followed 2.3 h later' or 'Incident … linked to it'. Each incident shows its title, severity badge (and Outage for critical / high), id, service, when it opened, 'resolved after …' or 'open for …', and the linked deploy when there is one. |
+
+*Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Deliveries & incidents › DLV-01`
+
+### TC-ADM-056: How this was calculated for a DORA metric: from a tile and from the KPI card, with the deploys and incidents counted
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data and 35 days of sample deployments, commits and incidents).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On The Away Team's page, click the 'Change failure rate' tile in Deliveries & incidents. | A dialog 'How this was calculated: Change failure rate' opens with the value, the formula (rolled back, followed within 72 h by a hotfix of the same service, or linked to an incident ÷ production deploys), 'Based on N deploys', the values used (production deploys, failed changes, rolled back, followed by a hotfix, linked to an incident, hotfix window 72) and the source deploys, the failed ones first in red with their reason. |
+| 2 | Press Escape, then click the 'Mean time to recovery' tile. | The dialog lists the incidents it counted (Incident INC-…, severity, service, when, resolved after … h). |
+| 3 | Close the dialog. In the 'Speed' KPI cards, click 'How this was calculated' under Deployment frequency. | The same kind of dialog opens for Deployment frequency with the value in 'per week'. |
+
+**Notes:** Keyboard: the dialog body can be scrolled with the keyboard (Tab to it, then arrow keys).
+
+*Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Deliveries & incidents › DLV-02`
+
+### TC-ADM-057: An engineer sees the deliveries of their own team; another team and the service mappings are refused
+
+**Type:** Negative · **Priority:** Medium · **Role:** Software engineer · **Flow:** F9.9
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds sample raw CI data and 35 days of sample deployments, commits and incidents).
+
+**Test data**
+
+- E-mail: engineer@irongate.com
+- Password: demo123
+- Team: Mavericks
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as engineer and open the team Mavericks. | The Evidence section with Deliveries & incidents is shown. |
+| 2 | Open /api/ci/teams/team-1764026236967-uphpblii4/delivery in a new tab (QualityCowboys, another team). | The API answers 403. |
+| 3 | Open /api/ci/services. | The API answers 403 (super admins only). |
+
+*Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Deliveries & incidents › DLV-03`
+
+### TC-ADM-058: A team without deployments or incidents shows no Deliveries & incidents data
+
+**Type:** Negative · **Priority:** Low · **Role:** Super admin · **Flow:** F9.9
+
+**Preconditions**
+
+- A newly registered organisation with one team and no data (Register an organisation).
+
+**Test data**
+
+- The new organisation's super admin
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the new organisation's super admin and open its team. | Evidence from CI says 'No CI data for this team yet' and points to Admin console → Connect your CI; there is no Deliveries & incidents part. |
+| 2 | (With CI test reports but no deployments) open the team page. | Deliveries & incidents says 'No deployments or incidents for this team yet' and how to send them. |
+
+*Automated:* `tests/e2e/team/delivery-evidence.spec.ts › Deliveries & incidents › DLV-04`
 
 ## Wellbeing pulse
 

@@ -18,10 +18,11 @@ with real data.
 3. [Authentication](#3-authentication)
 4. [The KPI ingestion API (reference)](#4-the-kpi-ingestion-api-reference)
    - 4A. [Raw ingestion: tests, coverage, pipelines (v2)](#4a-raw-ingestion-tests-coverage-pipelines-v2)
+   - 4B. [Raw ingestion: deployments, commits, incidents (v2)](#4b-raw-ingestion-deployments-commits-incidents-v2)
 5. [All other data: how it can be sent today](#5-all-other-data-how-it-can-be-sent-today)
 6. [Code: curl, Node.js, Python, retries, batching, backfill](#6-code-curl-nodejs-python-retries-batching-backfill)
 7. [Recipes per source system](#7-recipes-per-source-system)
-8. [CI examples: GitHub Actions, Jenkins, GitLab CI](#8-ci-examples-github-actions-jenkins-gitlab-ci) (8.4: raw reports per CI tool, also Azure DevOps)
+8. [CI examples: GitHub Actions, Jenkins, GitLab CI](#8-ci-examples-github-actions-jenkins-gitlab-ci) (8.4: raw reports per CI tool, also Azure DevOps; 8.5: deployments and commits per CI tool)
 9. ["Populate everything" checklist and end-to-end script](#9-populate-everything-checklist-and-end-to-end-script)
 10. [Verifying and troubleshooting](#10-verifying-and-troubleshooting)
 11. [Security and data protection](#11-security-and-data-protection)
@@ -585,6 +586,150 @@ test calls `tests (junit, test call)`).
 - **Safe XML**: entity declarations are refused (no external entities, no entity expansion), a DTD is never fetched,
   nesting depth and attribute counts are limited.
 
+## 4B. Raw ingestion: deployments, commits, incidents (v2)
+
+Send each **deployment** with its **commits**, and your **incidents** as they open and close; QE Navigator calculates the
+delivery and reliability metrics itself (docs/V2_PLAN.md, "Calculation rules (phase 2)"). Computed values are refused: a
+body with `changeFailureRate`, `mttr`, `deploymentFrequency`, `availability`, `leadTime` and the like answers `400`. Same API
+keys, rate limit (60 requests per minute per key), ingestion log, `Idempotency-Key` header and `dryRun=true` as section 4A.
+
+| Endpoint | Accepts | Calculates (per team and UTC day, over the 28 days ending the day) |
+|---|---|---|
+| `POST /api/ingest/deployments` | deploy events (QE Navigator JSON); GitHub `deployment_status` and GitLab deployment webhooks as they are | deployment frequency, lead time for changes, change failure rate |
+| `POST /api/ingest/commits` | the commits of a deployment or a push (JSON from `git log`); GitHub and GitLab push webhooks as they are | lead time detail (first commit authored → deploy finished) |
+| `POST /api/ingest/incidents` | incidents, created and updated by id (QE Navigator JSON); PagerDuty v3 webhooks and REST exports, Opsgenie alert webhooks and exports as they are | MTTR, MTBF, availability, incidents per deploy, infrastructure failures |
+
+**Body**: one event, an array, or `{"deployments" | "commits" | "incidents": [...]}`; at most **500 events** per request
+(commits: 500 commits; send several requests with the same `deployment`), JSON, gzip accepted, at most **5 MB**. **Query**:
+`team` (default team of the events), `service`, `environment` (deployments), `deployment` (commits), `format`
+(`json`, `github`, `gitlab`, `pagerduty`, `opsgenie`; detected when not given), `dryRun=true`.
+
+**Team of an event**: its own `team`, else the request's `team`, else the team its **service** is mapped to (Admin console →
+Connect your CI → *Service → team mapping*, or `PUT /api/ci/services {"service": "...", "teamId": "..."}`); commits also take
+the team of the deployment they name. An event without a team answers `400` naming the event and its unmapped service.
+
+### 4B.1 Deployments
+
+| Field | Required | Meaning |
+|---|---|---|
+| `id` | yes | The deployment's id in your tool (idempotency: team + id). The same event again is a duplicate; a changed one (e.g. the result became `rolled_back`) updates the deployment and recalculates. |
+| `environment` | yes | `production`, `prod`, `prd`, `live` (also `production-eu`, …) count as production; or set `production: true / false`. Only production deploys are counted. |
+| `finishedAt` | yes | ISO 8601 (or epoch ms). `startedAt` optional. |
+| `result` | yes | `success`, `failure` (did not complete: not counted), `rolled_back`; also `succeeded`, `failed`, `cancelled`, `UNSTABLE`, `SucceededWithIssues`, `reverted`. |
+| `commit` | yes, or `commits` | The deployed commit. `commits`: shas or `{sha, authoredAt, committedAt, author}`; `commitRange`: `"from..to"` or `{from, to}`. |
+| `service` | recommended | The service or application (hotfixes are matched per service; the service → team mapping). |
+| `hotfix` | no | `true` for a hotfix deploy: the previous production deploy of the same service, if it finished at most **72 h** before, is a failed change. |
+| `rollbackOf` | no | The `id` of the deployment this one undoes: that deployment is a failed change; the rollback itself is not counted. |
+| `url`, `team` | no | A link to the run; the team (see above). |
+
+```bash
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/deployments?team=$TEAM" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" \
+  -d '{"id":"rel-2026-11-18.3","environment":"production","service":"payments-api","commit":"9f8e7d6c",
+       "commitRange":"1a2b3c4d..9f8e7d6c","startedAt":"2026-11-18T10:02:00Z","finishedAt":"2026-11-18T10:09:00Z","result":"success"}'
+# → 201 {"status":"accepted","kind":"deployments","format":"json","events":[{"id":"rel-2026-11-18.3","team":"…","status":"written"}],
+#        "computed":[{"team":"…","days":[{"day":"2026-11-18","metrics":[{"key":"deployment_frequency","value":5.25,…},…]}]}]}
+
+# A hotfix, and a rollback of an earlier deploy (both in one batch):
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/deployments?team=$TEAM" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" \
+  -d '[{"id":"rel-2026-11-18.4","environment":"production","service":"payments-api","commit":"aa11bb22","finishedAt":"2026-11-18T13:40:00Z","result":"success","hotfix":true},
+       {"id":"rb-77","environment":"production","service":"ledger","commit":"cc33dd44","finishedAt":"2026-11-18T14:00:00Z","result":"success","rollbackOf":"rel-2026-11-17.2"}]'
+```
+
+**Webhooks**: GitHub (Settings → Webhooks, event *Deployment statuses*; `success`, `failure` and `error` are recorded, other
+states answer `200 {"status":"ignored"}`; `hotfix/…` refs count as hotfixes; the repository name is the service) and GitLab
+(Settings → Webhooks → *Deployment events*, with the custom header `Authorization: Bearer <key>`). Both carry no team: add
+`?team=` to the URL or map the repository name to a team. Jenkins and Azure DevOps send the JSON above from the pipeline
+(Admin console → Connect your CI shows the steps for all four tools, with your endpoint and team id filled in).
+
+### 4B.2 Commits (lead time)
+
+```bash
+# The commits of a deploy, from git log (author e-mails are stored only as a salted hash, never as such):
+git log --format='%H%x09%aI%x09%cI%x09%ae' "$PREV..$SHA" | jq -R -s -c --arg id "rel-2026-11-18.3" \
+  '{deployment: $id, commits: (split("\n") | map(select(length > 0) | split("\t") | {sha: .[0], authoredAt: .[1], committedAt: .[2], author: .[3]}))}' |
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/commits?team=$TEAM" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" --data-binary @-
+# → 201 {"status":"accepted","kind":"commits","events":[{"id":"rel-2026-11-18.3","status":"written","commits":4}],…}
+```
+
+- The lead time of a deploy = deploy finished − the **earliest authored** time of its commits: those sent with the deploy
+  (`commits`), those sent to `/commits` with its `deployment` id, and pushed commits whose sha the deploy names. Commits may
+  arrive before or after the deploy; a late list recalculates the days from the deploy's day on.
+- `authorHash` (hex) may be sent instead of `author`; nothing that names a person is stored.
+- Push webhooks (GitHub *Pushes*, GitLab *Push events*) store the pushed commits with their times; a deploy that names one of
+  them by sha gets its lead time.
+
+### 4B.3 Incidents
+
+| Field | Meaning |
+|---|---|
+| `id` | The incident's id in your tool. The first event creates the incident (with `openedAt`); later events with the same id update it. |
+| `openedAt`, `acknowledgedAt`, `resolvedAt` | ISO 8601. Or a status update: `status` (`open` / `triggered` / `reopened`, `acknowledged`, `resolved` / `closed`) and `at` (default: the time received), or `updates: [{status, at}, …]`. |
+| `severity` | `critical`, `high`, `medium`, `low`, `info`, or SEV1–SEV5 / P1–P5 (default `medium`). |
+| `outage` | `true` / `false`. Not given: critical and high are outages (downtime in the availability). |
+| `service`, `title`, `url`, `team` | As for deployments. |
+| `deploymentId` | The deploy that caused it: that deploy is a failed change from the incident's opening on. |
+| `category` | e.g. `infrastructure`, `application`: incidents of category infrastructure are counted as infrastructure failures. |
+
+```bash
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/incidents?team=$TEAM" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" \
+  -d '{"id":"INC-1042","title":"Card payments failing","severity":"SEV2","service":"payments-api","openedAt":"2026-11-18T09:12:00Z","deploymentId":"rel-2026-11-18.3"}'
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/incidents?team=$TEAM" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" \
+  -d '{"id":"INC-1042","status":"resolved","at":"2026-11-18T10:05:00Z"}'
+# → 201 {"status":"accepted","kind":"incidents","events":[{"id":"INC-1042","status":"updated"}],…}; the same update again: 200 "duplicate"
+```
+
+- **PagerDuty**: Integrations → Generic Webhooks (v3), events `incident.triggered`, `incident.acknowledged`,
+  `incident.resolved`, `incident.reopened`, `incident.priority_updated`, custom header `Authorization: Bearer <key>`, URL
+  `…/api/ingest/incidents?team=<team id>` (or one account-wide webhook plus service → team mappings: the PagerDuty service
+  name is the service). Priority P1–P5 becomes the severity, else urgency high / low. Backfill: pipe
+  `GET https://api.pagerduty.com/incidents?since=…&statuses[]=resolved` into the endpoint with `format=pagerduty`.
+- **Opsgenie**: Settings → Integrations → Webhook (actions Create, Acknowledge, Close; "Add alert details to payload"), the
+  same header and URL. The service is the alert detail `service`, a tag `service:<name>` or the entity. Backfill: pipe
+  `GET https://api.opsgenie.com/v2/alerts?query=status:closed` with `format=opsgenie` (`report.ackTime` / `closeTime` give
+  the times).
+
+### 4B.4 Calculation rules
+
+- **Production deploys** = deploys to production that reached it (result `success` or `rolled_back`); rollback deploys and
+  deploys that did not complete are not counted. **Period** = the 28 days ending the day, starting at the team's first
+  production deploy when that is later (at least 7 days).
+- **Deployment frequency** = production deploys ÷ weeks in the period. **Lead time for changes** = median over the period's
+  production deploys of (finished − first commit authored), in days; deploys without commit times are left out (shown as
+  "without commit times").
+- **Change failure rate** = failed changes ÷ production deploys × 100; a failed change was rolled back (its result, or a
+  rollback deploy names it), was followed within 72 h by a hotfix deploy of the same service (`CHANGE_FAILURE_WINDOW_HOURS`),
+  or has a linked incident.
+- **MTTR** = median (resolved − opened) of the incidents resolved in the 28 days, in hours. **MTBF** = mean time between the
+  starts of consecutive incidents of the same service (the last earlier incident counts as the previous start), in hours.
+  **Availability** = (1 − outage time ÷ time in the period) × 100, overlapping outages counted once, an open outage until now.
+  **Incidents per deploy** = incidents opened in the period ÷ production deploys. **Infrastructure failures** = incidents of
+  category `infrastructure` in the 28 days (when the team sends categories).
+- **As of the day**: an event counts from the moment it happened; a rollback, hotfix or incident that arrives later changes
+  the values from its own day on (earlier days keep theirs). On arrival QE Navigator recalculates the affected days (the
+  event's day and the 27 after it); the nightly `calc-recompute` also moves the window on.
+- Each value carries its number of deploys / incidents (confidence high from 10, medium 3–9, low below 3) and the deploys and
+  incidents it counted ("How this was calculated"). KPI columns: `deployment_frequency_per_week`, `lead_time_days` (at most
+  99.99 in the column; the exact value is in the evidence), `change_failure_rate`, `mttr_hours`, `mtbf_hours` (whole hours),
+  `system_availability`, `infrastructure_failures`, written with source `computed`.
+
+### 4B.5 Errors, limits, storage
+
+| Status | When |
+|---|---|
+| `400` | Named: `team is required … (service "x" is not mapped to a team)`, `deployments[3].environment is required`, `result must be success, failure or rolled_back`, `An event time … is in the future`, `changeFailureRate: QE Navigator calculates this from the raw events`, `Too many deployments in one request: at most 500`, `incidents[0].openedAt is required: incident INC-9 is new`, `The body must be JSON` |
+| `401` / `403` | Missing or revoked key / a team (of any event) of another company |
+| `413` | More than 5 MB (gzip it, or split the batch) |
+| `415` | XML, multipart or another non-JSON `Content-Type`; an unknown `format` (the answer lists the supported ones) |
+
+Ingestion log sources: `deployments (json)`, `deployments (github)`, `commits (gitlab)`, `incidents (pagerduty)`, …; test calls
+`deployments (json, test call)`. Deployments, commits and incidents (with their status updates) are kept **13 months**
+(`db-keepalive`); an incident that is still open is kept.
+
 ## 5. All other data: how it can be sent today
 
 None of the following goes through the ingestion API. Each subsection says plainly what is possible.
@@ -696,7 +841,8 @@ results exists only as a commented-out sketch in `server/routes/analytics.ts`). 
 
 ### 5.7 Incidents
 
-There is **no incidents table**. Incident data enters IronGate only as numbers you compute upstream:
+Raw incidents (PagerDuty, Opsgenie or JSON) go to `POST /api/ingest/incidents` (section 4B): MTTR, MTBF, availability and the
+change failure rate are then calculated. Without that, incident data enters IronGate only as numbers you compute upstream:
 `mttr_hours`, `change_failure_rate`, `mtbf_hours`, `system_availability` (KPIs, API; section 7.3) and, for business impact, the
 monthly `downtime_minutes` and `major_incident_count` (context, Session).
 
@@ -1210,6 +1356,102 @@ post {
 
 These pipeline definitions were not run in the real CI systems; each `curl` call they make was run against a local API
 (tests/api/raw-ingestion.test.ts covers the same requests).
+
+### 8.5 Deployments and commits (v2) per CI tool
+
+Section 4B explains the fields. Admin console → **Connect your CI** shows these steps with your endpoint and team id filled in
+(and the PagerDuty / Opsgenie set-up for incidents). `deployed-production` is a tag the step moves after each successful
+production deploy, so the next deploy knows its commit range.
+
+**GitHub Actions**
+
+```yaml
+      # In the production deploy job, after the deploy step (actions/checkout with fetch-depth: 0).
+      # The tag "deployed-production" marks the last commit deployed; the commits since then are this deploy's.
+      - name: Send the deployment to QE Navigator
+        if: always()
+        env:
+          QE_NAVIGATOR_API_KEY: ${{ secrets.QE_NAVIGATOR_API_KEY }}
+          RESULT: ${{ job.status }}
+        run: |
+          PREV=$(git rev-parse -q --verify refs/tags/deployed-production || git rev-list --max-parents=0 HEAD | tail -1)
+          DEPLOY_ID="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          git log --format='%H%x09%aI%x09%cI%x09%ae' "$PREV..$GITHUB_SHA" | jq -R -s -c --arg id "$DEPLOY_ID" \
+            '{deployment: $id, commits: (split("\n") | map(select(length > 0) | split("\t") | {sha: .[0], authoredAt: .[1], committedAt: .[2], author: .[3]}))}' > qe-commits.json
+          curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/commits?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" --data-binary @qe-commits.json
+          curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/deployments?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" \
+            -d "{\"id\":\"$DEPLOY_ID\",\"environment\":\"production\",\"service\":\"${{ github.event.repository.name }}\",\"commit\":\"$GITHUB_SHA\",\"commitRange\":\"$PREV..$GITHUB_SHA\",\"finishedAt\":\"$(date -u +%FT%TZ)\",\"result\":\"$RESULT\",\"url\":\"${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}\"}"
+          if [ "$RESULT" = "success" ]; then git tag -f deployed-production "$GITHUB_SHA" && git push -f origin deployed-production; fi
+      # Moving the tag needs "permissions: contents: write" for the job.
+      # A hotfix deploy: add "hotfix": true to the JSON. A rollback: "rollbackOf": "<the id of the deploy it undoes>".
+```
+
+**GitLab CI**
+
+```yaml
+# Add the key as a masked CI/CD variable named QE_NAVIGATOR_API_KEY. In the production deploy job:
+deploy-production:
+  stage: deploy
+  environment: production
+  script:
+    - ./deploy.sh
+  after_script:
+    - PREV=$(git rev-parse -q --verify refs/tags/deployed-production || git rev-list --max-parents=0 HEAD | tail -1)
+    - git log --format='%H%x09%aI%x09%cI%x09%ae' "$PREV..$CI_COMMIT_SHA" | jq -R -s -c --arg id "$CI_JOB_ID"  '{deployment: $id, commits: (split("\n") | map(select(length > 0) | split("\t") | {sha: .[0], authoredAt: .[1], committedAt: .[2], author: .[3]}))}' > qe-commits.json
+    - curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/commits?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" --data-binary @qe-commits.json
+    - >-
+      curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/deployments?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json"
+      -d "{\"id\":\"$CI_JOB_ID\",\"environment\":\"$CI_ENVIRONMENT_NAME\",\"service\":\"$CI_PROJECT_NAME\",\"commit\":\"$CI_COMMIT_SHA\",\"commitRange\":\"$PREV..$CI_COMMIT_SHA\",\"startedAt\":\"$CI_JOB_STARTED_AT\",\"finishedAt\":\"$(date -u +%FT%TZ)\",\"result\":\"$CI_JOB_STATUS\",\"url\":\"$CI_JOB_URL\"}"
+    # Move the "deployed-production" tag (QE_TAG_TOKEN: a project access token with write_repository).
+    - if [ "$CI_JOB_STATUS" = "success" ]; then git tag -f deployed-production "$CI_COMMIT_SHA" && git push -f "https://oauth2:$QE_TAG_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git" refs/tags/deployed-production; fi
+
+# Or, without a CI step: Settings → Webhooks → Deployment events, URL $IRONGATE_URL/api/ingest/deployments?team=$TEAM
+# with the custom header Authorization: Bearer <key> (the GitLab deployment payload is understood as it is).
+```
+
+**Jenkins**
+
+```groovy
+// In the production deploy pipeline. The git plugin sets GIT_PREVIOUS_SUCCESSFUL_COMMIT (the last commit built successfully).
+post {
+  always {
+    withCredentials([string(credentialsId: 'qe-navigator-api-key', variable: 'QE_NAVIGATOR_API_KEY')]) {
+      sh '''
+        PREV=${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-$(git rev-list --max-parents=0 HEAD | tail -1)}
+        git log --format='%H%x09%aI%x09%cI%x09%ae' "$PREV..$GIT_COMMIT" | jq -R -s -c --arg id "$BUILD_TAG" \
+          '{deployment: $id, commits: (split("\n") | map(select(length > 0) | split("\t") | {sha: .[0], authoredAt: .[1], committedAt: .[2], author: .[3]}))}' > qe-commits.json
+        curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/commits?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" --data-binary @qe-commits.json
+      '''
+      script {
+        def body = groovy.json.JsonOutput.toJson([id: env.BUILD_TAG, environment: 'production', service: env.JOB_BASE_NAME, commit: env.GIT_COMMIT,
+          startedAt: new Date(currentBuild.startTimeInMillis).format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC')),
+          finishedAt: new Date().format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC')), result: currentBuild.currentResult, url: env.BUILD_URL])
+        writeFile file: 'qe-deployment.json', text: body
+      }
+      sh 'curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/deployments?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" --data-binary @qe-deployment.json'
+    }
+  }
+}
+```
+
+**Azure DevOps**
+
+```yaml
+# Add the key as a secret pipeline variable named QE_NAVIGATOR_API_KEY. In the production deployment job:
+- script: |
+    PREV=$(git rev-parse -q --verify refs/tags/deployed-production || git rev-list --max-parents=0 HEAD | tail -1)
+    git log --format='%H%x09%aI%x09%cI%x09%ae' "$PREV..$(Build.SourceVersion)" | jq -R -s -c --arg id "$(Build.BuildId)-$(System.JobAttempt)" \
+      '{deployment: $id, commits: (split("\n") | map(select(length > 0) | split("\t") | {sha: .[0], authoredAt: .[1], committedAt: .[2], author: .[3]}))}' > qe-commits.json
+    curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/commits?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" --data-binary @qe-commits.json
+    curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/deployments?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" \
+      -d "{\"id\":\"$(Build.BuildId)-$(System.JobAttempt)\",\"environment\":\"production\",\"service\":\"$(Build.Repository.Name)\",\"commit\":\"$(Build.SourceVersion)\",\"commitRange\":\"$PREV..$(Build.SourceVersion)\",\"startedAt\":\"$(System.PipelineStartTime)\",\"finishedAt\":\"$(date -u +%FT%TZ)\",\"result\":\"$(Agent.JobStatus)\"}"
+    # Move the "deployed-production" tag (the job needs "Allow scripts to access the OAuth token" and Contribute permission).
+    if [ "$(Agent.JobStatus)" = "Succeeded" ]; then git tag -f deployed-production "$(Build.SourceVersion)" && git -c http.extraheader="AUTHORIZATION: bearer $(System.AccessToken)" push -f origin refs/tags/deployed-production; fi
+  displayName: Send the deployment to QE Navigator
+  condition: always()
+  env:
+    QE_NAVIGATOR_API_KEY: $(QE_NAVIGATOR_API_KEY)
+```
 
 ## 9. "Populate everything" checklist and end-to-end script
 

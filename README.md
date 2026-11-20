@@ -525,6 +525,45 @@ gzip -c junit.xml | curl -sS --fail-with-body -X POST \
 # → 201 {"status":"accepted","format":"junit","counts":{…},"computed":[{"day":"…","metrics":[{"key":"pass_rate","value":…}]}]}
 ```
 
+
+## Delivery and reliability from raw events (v2 phase 2)
+
+Deployments, commits and incidents are sent **raw**; QE Navigator calculates deployment frequency, lead time for changes,
+change failure rate, MTTR, MTBF, availability, incidents per deploy and infrastructure failures (computed values are refused).
+Full reference: docs/INTEGRATION_GUIDE.md section 4B (8.5 for the steps per CI tool).
+
+- `POST /api/ingest/deployments`: deploy events (id, environment, service, commit / commits / commit range, start, finish,
+  result `success` / `failure` / `rolled_back`, `rollbackOf`, `hotfix`); GitHub `deployment_status` and GitLab deployment
+  webhooks are understood as they are.
+- `POST /api/ingest/commits`: the commits of a deploy or a push (sha, authored / committed time; authors kept only as a salted
+  hash); GitHub and GitLab push webhooks as they are.
+- `POST /api/ingest/incidents`: incidents created and updated by id (opened / acknowledged / resolved, severity, service,
+  outage, category, linked deployment); PagerDuty v3 webhooks and REST exports, Opsgenie webhooks and exports as they are.
+- JSON (gzip accepted), at most 500 events and 5 MB per request; same API keys, rate limit, ingestion log, `Idempotency-Key`
+  and `dryRun=true` as phase 1; idempotent by event id (a changed event updates); `400` / `413` / `415` name the problem.
+  An event's team: its own `team`, the query `team`, or the **service → team mapping** (Connect your CI, `PUT /api/ci/services`).
+- Code: `server/lib/ingest/deliveryEvents.ts` (parsers and webhook mappings), `server/lib/ingest/deliveryStore.ts`,
+  `server/routes/ingestDelivery.ts`, `server/lib/calc/delivery.ts` (rules: 28-day window "as of" each day, failed change =
+  rolled back, hotfix of the same service within 72 h, or a linked incident), `server/routes/ci.ts`
+  (`GET /api/ci/teams/:id/delivery`, service mappings). Migration `supabase/migrations/20261130000000_raw_ingestion_phase2_delivery.sql`
+  (`deployments_raw`, `deployment_commits`, `incidents_raw`, `incident_updates`, `service_teams`).
+- Values go to the KPI columns `deployment_frequency_per_week`, `lead_time_days`, `change_failure_rate`, `mttr_hours`,
+  `mtbf_hours`, `system_availability`, `infrastructure_failures` (source `computed`) with `metric_evidence`; late events
+  recalculate the affected days; the nightly `calc-recompute` includes teams with deployments or incidents; retention 13 months.
+- UI: team page → Evidence → **Deliveries & incidents** (DORA tiles with How this was calculated, recent production deploys,
+  failed changes, incidents); Admin console → Connect your CI → **Deployments and incidents** (steps per tool, service mapping).
+- Sample data: 35 days of sample deployments, commits and incidents per demo / filled team, following the team stories
+  (`server/seeds/demoRaw.ts`); for a live company `npx tsx scripts/reseed/raw-sample-sql.ts … --delivery-only`.
+
+```bash
+curl -sS --fail-with-body -X POST "https://<host>/api/ingest/deployments?team=<team id>" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" \
+  -d '{"id":"rel-42","environment":"production","service":"payments-api","commit":"9f8e7d6c","finishedAt":"2026-11-18T10:09:00Z","result":"success"}'
+curl -sS --fail-with-body -X POST "https://<host>/api/ingest/incidents?team=<team id>" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" \
+  -d '{"id":"INC-7","severity":"SEV2","service":"payments-api","openedAt":"2026-11-18T11:00:00Z","resolvedAt":"2026-11-18T11:40:00Z","deploymentId":"rel-42"}'
+```
+
 ## Staleness, confidence, company aggregates and KPI targets
 
 Migration: `supabase/migrations/20261120000000_metric_values_targets_ingestion_log.sql` (tables

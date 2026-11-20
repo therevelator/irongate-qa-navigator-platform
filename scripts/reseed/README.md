@@ -69,3 +69,20 @@ Apply migration `20261129000000_raw_ingestion_phase1.sql` first, then run the fi
 Management API. The evidence views work at once; the "Calculated from CI data" values and "How this was calculated" appear
 with the nightly sample refresh (demo-refresh, 02:17 UTC; it also adds each new day of sample raw data), or at once with
 the platform operator panel's **Refresh sample data now**.
+
+## v2 deployments, commits and incidents (phase 2)
+
+The sample refresh and `--fill-existing` also add **35 days** of sample deployments (with their commits) and incidents (with
+their status updates) per team, following the stories (Payments Core deploys often in small batches with few failed changes;
+Lending Journey deploys less, with longer lead times, more rollbacks, hotfixes and incidents; Mobile Experience in between),
+and calculate their evidence (DORA tiles, never KPI values). For a **live** company that already has the phase-1 sample:
+
+```bash
+npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories scripts/reseed/stories.json \
+  --names "Payments Core,Lending Journey,Mobile Experience" --out /path/to/out --delivery-only
+# → delivery-sample-mft-meridian.sql (≈ 41 kB, re-runnable: existing rows are skipped, open sample incidents are closed once
+#   their time has passed) and delivery-sample-mft-meridian-remove.sql (sample rows of these teams only)
+```
+
+Apply migration `20261130000000_raw_ingestion_phase2_delivery.sql` first. The deploy and incident lists work at once; the DORA
+values ("How this was calculated") appear with the nightly sample refresh or the operator panel's **Refresh sample data now**.
