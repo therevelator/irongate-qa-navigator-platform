@@ -69,6 +69,13 @@ export class AppShell {
     await this.closeAppearance();
   }
 
+  /** Depth of the battery and gauge: 3D (gloss and shadows) or flat 2D. */
+  async setScoreDepth(label: '3D' | '2D'): Promise<void> {
+    await this.openAppearance();
+    await this.appearanceMenu.getByRole('menuitemradio', { name: new RegExp(`^${label}`) }).click();
+    await this.closeAppearance();
+  }
+
   /** Light <-> Dark (the old one-click switch, now through the Appearance menu). */
   async toggleTheme(): Promise<void> {
     await this.setTheme((await this.isDark()) ? 'Light' : 'Dark');

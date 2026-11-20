@@ -8,15 +8,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>QE Navigator</title>
     <meta name="color-scheme" content="light dark" />
-    <!-- Appearance before the first paint (no flash): mirrors applyTheme() in src/lib/appearance.ts. -->
+    <!-- Appearance before the first paint (no flash): mirrors applyTheme(), applyScoreDisplay() and applyScoreDepth() in src/lib/appearance.ts. -->
     <script>
       (function () {
-        var d = document.documentElement, t = 'light', s = 'battery';
+        var d = document.documentElement, t = 'light', s = 'battery', z = '3d';
         try {
           var p = localStorage.getItem('irongate_theme_mode');
           if (p === 'system') t = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
           else if (p === 'dark' || p === 'graphite' || p === 'porcelain' || p === 'light') t = p;
           if (localStorage.getItem('irongate_score_display') === 'gauge') s = 'gauge';
+          if (localStorage.getItem('irongate_score_depth') === '2d') z = '2d';
           // Signed-out screens keep the classic Light look (see AuthWrapper); the operator panel follows the choice.
           var op = location.pathname === '/operator' || location.pathname.indexOf('/operator/') === 0;
           if (!op && localStorage.getItem('irongate_signed_in') !== '1') t = 'light';
@@ -26,6 +27,7 @@
         d.classList.toggle('dark', dark);
         d.style.colorScheme = dark ? 'dark' : 'light';
         d.setAttribute('data-score-display', s);
+        d.setAttribute('data-score-depth', z);
       })();
     </script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />

@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { clampScore } from './BatteryIndicator';
 import { batteryBand, BATTERY_SHELL_CSS } from '../lib/batteryScale';
+import { useScoreDepth } from '../contexts/ThemeContext';
+import type { ScoreDepth } from '../lib/appearance';
 
 /**
  * The original glossy 3D battery: a glass body with metallic highlights, a nib and a charge level
@@ -9,6 +11,10 @@ import { batteryBand, BATTERY_SHELL_CSS } from '../lib/batteryScale';
  * left). With `liquid` the surface of the charge moves in a gentle wave; there is no motion at all
  * with prefers-reduced-motion, and the wave never changes the battery's size (no layout shift).
  * Null renders an empty (dark) battery; the caller shows "—" as the value.
+ *
+ * 2D (Appearance menu, Depth): the same shape, size and colours, flat: the charge in the band's flat
+ * colour on the plain shell, a plain nib, no glass highlights, rims, edges or shadow (the wave, if
+ * any, is a flat crest in the same colour).
  */
 export interface HeroBatteryProps {
   value: number | string | null | undefined;
@@ -20,6 +26,8 @@ export interface HeroBatteryProps {
   orientation?: 'vertical' | 'horizontal';
   /** Animated liquid surface (gentle wave). Off for prefers-reduced-motion. */
   liquid?: boolean;
+  /** 3D or flat 2D; defaults to the Appearance choice (ThemeContext). */
+  depth?: ScoreDepth;
   label: string;
   className?: string;
 }
@@ -74,7 +82,9 @@ const useAnimatedCharge = (target: number) => {
 const turn = (g: string, horizontal: boolean) =>
   horizontal ? g.replace(/to right/g, 'to bottom').replace(/to top/g, 'to right').replace(/linear-gradient\(var\(/g, 'linear-gradient(to right, var(') : g;
 
-const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orientation = 'vertical', liquid = false, label, className = '' }) => {
+const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orientation = 'vertical', liquid = false, depth, label, className = '' }) => {
+  const chosenDepth = useScoreDepth();
+  const flat = (depth ?? chosenDepth) === '2d';
   const value = clampScore(raw);
   const band = batteryBand(value);
   const s = SIZES[size];
@@ -85,7 +95,10 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
   const target = empty ? 12 : 12 + (value / 100) * 77;
   const c = useAnimatedCharge(target);
 
-  const body = turn(empty
+  // 2D: hard stops only (charge, then shell), no glass layer.
+  const body = flat
+    ? turn(empty ? `linear-gradient(${BATTERY_SHELL_CSS}, ${BATTERY_SHELL_CSS})` : `linear-gradient(to top, ${band!.flat} ${c}%, ${BATTERY_SHELL_CSS} ${c}%)`, horizontal)
+    : turn(empty
     ? `linear-gradient(to top, transparent 5%, var(--battery-shell-top, #1e293b) 5%, ${BATTERY_SHELL_CSS} 95%, transparent 95%), ${GLASS}`
     : (() => {
         const col = band!.stops;
@@ -107,14 +120,14 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
         height: s.nibW,
         borderTopRightRadius: s.nibH * 0.6,
         borderBottomRightRadius: s.nibH * 0.6,
-        backgroundImage: turn(NIB, true),
+        ...(flat ? { backgroundColor: 'var(--battery-nib-b, #334155)' } : { backgroundImage: turn(NIB, true) }),
         marginLeft: -1,
       } : {
         width: s.nibW,
         height: s.nibH,
         borderTopLeftRadius: s.nibH * 0.6,
         borderTopRightRadius: s.nibH * 0.6,
-        backgroundImage: NIB,
+        ...(flat ? { backgroundColor: 'var(--battery-nib-b, #334155)' } : { backgroundImage: NIB }),
         marginBottom: -1,
       }}
     />
@@ -141,8 +154,8 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
           d={horizontal
             ? 'M0 0 H5 C8 2.5 8 7.5 5 10 C2 12.5 2 17.5 5 20 C8 22.5 8 27.5 5 30 C2 32.5 2 37.5 5 40 H0 Z'
             : 'M0 10 V5 C2.5 2 7.5 2 10 5 C12.5 8 17.5 8 20 5 C22.5 2 27.5 2 30 5 C32.5 8 37.5 8 40 5 V10 Z'}
-          fill={band.stops[3]}
-          opacity={0.9}
+          fill={flat ? band.flat : band.stops[3]}
+          opacity={flat ? 1 : 0.9}
         />
       </svg>
     </div>
@@ -154,6 +167,7 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
       role="img"
       aria-label={`${label}: ${empty ? 'no data' : `${Math.round(value)} of 100`}`}
       data-battery-band={band?.key ?? 'none'}
+      data-score-depth={flat ? '2d' : '3d'}
     >
       {!horizontal && nib}
       <div
@@ -164,16 +178,16 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
           width: bodyW,
           height: bodyH,
           borderRadius: horizontal ? `${r / 2}px ${r}px ${r}px ${r / 2}px` : `${r}px ${r}px ${r / 2}px ${r / 2}px`,
-          ...(horizontal
+          ...(flat ? {} : horizontal
             ? { borderLeft: '2px solid var(--battery-edge, rgba(255,255,255,0.2))', borderRight: '2px solid var(--battery-edge, rgba(255,255,255,0.2))' }
             : { borderTop: '2px solid var(--battery-edge, rgba(255,255,255,0.2))', borderBottom: '2px solid var(--battery-edge, rgba(255,255,255,0.2))' }),
           backgroundImage: body,
-          boxShadow: 'var(--battery-shadow, 0 4px 10px rgba(15,23,42,0.18))',
+          boxShadow: flat ? 'none' : 'var(--battery-shadow, 0 4px 10px rgba(15,23,42,0.18))',
           opacity: empty ? 0.55 : 1,
         }}
       >
         {wave}
-        <div
+        {!flat && <div
           style={horizontal ? {
             position: 'absolute',
             height: bodyH,
@@ -197,7 +211,7 @@ const HeroBattery: React.FC<HeroBatteryProps> = ({ value: raw, size = 'lg', orie
             backgroundImage: OVERLAY,
             pointerEvents: 'none',
           }}
-        />
+        />}
       </div>
       {horizontal && nib}
     </div>

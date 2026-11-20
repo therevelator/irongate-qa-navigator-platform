@@ -1,5 +1,5 @@
 /**
- * Appearance preferences: the colour theme and how scores are drawn (battery or gauge).
+ * Appearance preferences: the colour theme and how scores are drawn (battery or gauge, 3D or flat 2D).
  *
  * Themes are applied on <html>: `data-theme="light|dark|graphite|porcelain"` plus the `dark` class
  * for the dark-based themes (Dark, Graphite), so every `dark:` utility keeps working and the glass
@@ -14,13 +14,17 @@
 export type ThemeId = 'light' | 'dark' | 'graphite' | 'porcelain';
 export type ThemePreference = ThemeId | 'system';
 export type ScoreDisplay = 'battery' | 'gauge';
+/** 3D: the battery and gauge with gloss, gradients and shadows; 2D: the same shapes and colours, flat. */
+export type ScoreDepth = '3d' | '2d';
 
 export const THEME_KEY = 'irongate_theme_mode';
 export const SCORE_DISPLAY_KEY = 'irongate_score_display';
+export const SCORE_DEPTH_KEY = 'irongate_score_depth';
 /** Set while someone is signed in: signed-out screens always use the classic Light theme (AuthWrapper, index.html). */
 export const SIGNED_IN_KEY = 'irongate_signed_in';
 export const DEFAULT_THEME: ThemePreference = 'light';
 export const DEFAULT_SCORE_DISPLAY: ScoreDisplay = 'battery';
+export const DEFAULT_SCORE_DEPTH: ScoreDepth = '3d';
 
 export const THEME_OPTIONS: Array<{ id: ThemePreference; label: string; hint: string }> = [
   { id: 'light', label: 'Light', hint: 'Bright and plain' },
@@ -35,6 +39,11 @@ export const SCORE_DISPLAY_OPTIONS: Array<{ id: ScoreDisplay; label: string; hin
   { id: 'gauge', label: 'Gauge', hint: 'Radial gauge' },
 ];
 
+export const SCORE_DEPTH_OPTIONS: Array<{ id: ScoreDepth; label: string; hint: string }> = [
+  { id: '3d', label: '3D', hint: 'Gloss, gradients and shadows' },
+  { id: '2d', label: '2D', hint: 'Flat, same colours' },
+];
+
 const THEME_IDS: ThemeId[] = ['light', 'dark', 'graphite', 'porcelain'];
 
 export const isThemeId = (v: unknown): v is ThemeId => typeof v === 'string' && (THEME_IDS as string[]).includes(v);
@@ -46,6 +55,10 @@ export function parseThemePreference(v: unknown): ThemePreference {
 
 export function parseScoreDisplay(v: unknown): ScoreDisplay {
   return v === 'gauge' || v === 'battery' ? v : DEFAULT_SCORE_DISPLAY;
+}
+
+export function parseScoreDepth(v: unknown): ScoreDepth {
+  return v === '2d' || v === '3d' ? v : DEFAULT_SCORE_DEPTH;
 }
 
 /** The theme a preference shows: "Match system" is Light or Dark by the device setting. */
@@ -87,6 +100,10 @@ export function applyScoreDisplay(el: Pick<ThemeTarget, 'setAttribute'>, display
   el.setAttribute('data-score-display', display);
 }
 
+export function applyScoreDepth(el: Pick<ThemeTarget, 'setAttribute'>, depth: ScoreDepth): void {
+  el.setAttribute('data-score-depth', depth);
+}
+
 /** localStorage access that never throws (private mode, blocked storage). */
 export interface PrefStorage { getItem(k: string): string | null; setItem(k: string, v: string): void }
 
@@ -98,10 +115,18 @@ export function readScoreDisplay(storage: PrefStorage | null | undefined): Score
   try { return parseScoreDisplay(storage?.getItem(SCORE_DISPLAY_KEY)); } catch { return DEFAULT_SCORE_DISPLAY; }
 }
 
+export function readScoreDepth(storage: PrefStorage | null | undefined): ScoreDepth {
+  try { return parseScoreDepth(storage?.getItem(SCORE_DEPTH_KEY)); } catch { return DEFAULT_SCORE_DEPTH; }
+}
+
 export function writeThemePreference(storage: PrefStorage | null | undefined, pref: ThemePreference): void {
   try { storage?.setItem(THEME_KEY, pref); } catch { /* storage unavailable: the choice lasts for this page only */ }
 }
 
 export function writeScoreDisplay(storage: PrefStorage | null | undefined, display: ScoreDisplay): void {
   try { storage?.setItem(SCORE_DISPLAY_KEY, display); } catch { /* storage unavailable */ }
+}
+
+export function writeScoreDepth(storage: PrefStorage | null | undefined, depth: ScoreDepth): void {
+  try { storage?.setItem(SCORE_DEPTH_KEY, depth); } catch { /* storage unavailable */ }
 }

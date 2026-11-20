@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import {
-  applyScoreDisplay, applyTheme, isDarkTheme, isGlassTheme, parseScoreDisplay, parseThemePreference, readScoreDisplay,
+  applyScoreDepth, applyScoreDisplay, applyTheme, parseScoreDepth, readScoreDepth, writeScoreDepth, SCORE_DEPTH_KEY, SCORE_DEPTH_OPTIONS,
+  DEFAULT_SCORE_DEPTH, isDarkTheme, isGlassTheme, parseScoreDisplay, parseThemePreference, readScoreDisplay,
   readThemePreference, resolveTheme, tvTheme, writeScoreDisplay, writeThemePreference, SCORE_DISPLAY_KEY, SIGNED_IN_KEY, THEME_KEY,
   THEME_OPTIONS, type ThemeId,
 } from '../../src/lib/appearance';
@@ -10,7 +11,7 @@ import { BATTERY_BANDS, BATTERY_SHELLS, contrastRatio } from '../../src/lib/batt
 import { chartTheme } from '../../src/data/advancedFeatures';
 
 /**
- * Appearance preferences (src/lib/appearance.ts): theme and score display, how they are stored
+ * Appearance preferences (src/lib/appearance.ts): theme, score display and depth, how they are stored
  * and put on <html>, and the pre-paint script in index.html that must do the same thing.
  * Pure functions: no backend needed.
  */
@@ -91,12 +92,13 @@ describe('appearance: theme preference', () => {
     expect(script).toBeTruthy();
     for (const stored of [null, 'light', 'dark', 'graphite', 'porcelain', 'system', 'bogus']) {
       for (const systemDark of [false, true]) {
-        for (const display of [null, 'gauge', 'battery']) {
+        for (const display of [null, 'gauge', 'battery']) for (const depth of [null, '2d', '3d', 'flat']) {
           // Signed-out screens keep the classic Light theme (AuthWrapper); the operator panel follows the choice.
           for (const [signedIn, pathname] of [[true, '/'], [false, '/'], [false, '/operator']] as const) {
             const s = new FakeStorage();
             if (stored) s.setItem(THEME_KEY, stored);
             if (display) s.setItem(SCORE_DISPLAY_KEY, display);
+            if (depth) s.setItem(SCORE_DEPTH_KEY, depth);
             if (signedIn) s.setItem(SIGNED_IN_KEY, '1');
             const pre = new FakeEl();
             vm.runInNewContext(script!, { document: { documentElement: pre }, localStorage: s, location: { pathname }, window: { matchMedia: () => ({ matches: systemDark }) } });
@@ -104,12 +106,43 @@ describe('appearance: theme preference', () => {
             const followsChoice = signedIn || pathname === '/operator';
             applyTheme(ref, followsChoice ? resolveTheme(readThemePreference(s), systemDark) : 'light');
             applyScoreDisplay(ref, readScoreDisplay(s));
-            expect([stored, systemDark, display, signedIn, pathname, pre.attrs, [...pre.classes], pre.style])
-              .toEqual([stored, systemDark, display, signedIn, pathname, ref.attrs, [...ref.classes], ref.style]);
+            applyScoreDepth(ref, readScoreDepth(s));
+            expect([stored, systemDark, display, depth, signedIn, pathname, pre.attrs, [...pre.classes], pre.style])
+              .toEqual([stored, systemDark, display, depth, signedIn, pathname, ref.attrs, [...ref.classes], ref.style]);
           }
         }
       }
     }
+  });
+});
+
+describe('appearance: score depth (3D / 2D)', () => {
+  it('APP-012: the menu offers 3D then 2D; 3D is the default and anything unknown is 3D', () => {
+    expect(SCORE_DEPTH_OPTIONS.map((o) => o.label)).toEqual(['3D', '2D']);
+    expect(DEFAULT_SCORE_DEPTH).toBe('3d');
+    expect(parseScoreDepth(null)).toBe('3d');
+    expect(parseScoreDepth(undefined)).toBe('3d');
+    expect(parseScoreDepth('flat')).toBe('3d');
+    expect(parseScoreDepth('2D')).toBe('3d');
+    expect(parseScoreDepth('2d')).toBe('2d');
+    expect(parseScoreDepth('3d')).toBe('3d');
+  });
+
+  it('APP-013: depth round-trips through storage on its own key, is put on <html>, and a throwing storage falls back to 3D', () => {
+    const s = new FakeStorage();
+    expect(readScoreDepth(s)).toBe('3d');
+    writeScoreDepth(s, '2d');
+    expect(s.getItem(SCORE_DEPTH_KEY)).toBe('2d');
+    expect([s.getItem(THEME_KEY), s.getItem(SCORE_DISPLAY_KEY)]).toEqual([null, null]);
+    expect(readScoreDepth(s)).toBe('2d');
+    writeScoreDepth(s, '3d');
+    expect(readScoreDepth(s)).toBe('3d');
+    const el = new FakeEl();
+    applyScoreDepth(el, '2d');
+    expect(el.attrs['data-score-depth']).toBe('2d');
+    const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+    expect(readScoreDepth(broken)).toBe('3d');
+    expect(() => writeScoreDepth(broken, '2d')).not.toThrow();
   });
 });
 

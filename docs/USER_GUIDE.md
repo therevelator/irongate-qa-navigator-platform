@@ -49,7 +49,8 @@ badge, and your name with your job title (or your role when no job title is set)
 - **Help** (question mark): "What you can do here" lists what your role lets you see and do, generated
   from the same rules the server enforces.
 - **Appearance** (palette icon): the theme (Light, Dark, Graphite, Porcelain, or Match system to follow
-  your device) and the score display (3D Battery or Gauge). Both are remembered in this browser.
+  your device), the score display (Battery or Gauge) and its depth (**3D** with gloss and shadows, or
+  flat **2D** with the same shapes and colours). All are remembered in this browser.
 - **Notifications** (bell): unread alerts and messages.
 - **Account menu**: "Sign out my other devices" and "Sign out".
 

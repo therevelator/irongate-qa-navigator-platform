@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { HelpCircle, LogOut, MonitorSmartphone, X, Check, Minus, Palette, BatteryMedium, Gauge } from 'lucide-react';
+import { HelpCircle, LogOut, MonitorSmartphone, X, Check, Minus, Palette, BatteryMedium, Gauge, Box, Square } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { SCORE_DISPLAY_OPTIONS, THEME_OPTIONS, type ThemePreference } from '../lib/appearance';
+import { SCORE_DEPTH_OPTIONS, SCORE_DISPLAY_OPTIONS, THEME_OPTIONS, type ThemePreference } from '../lib/appearance';
 
 import type { AccessSummary } from '../lib/accessSummary';
 
@@ -161,7 +161,7 @@ export const AccountMenu: React.FC<{
         {initialsOf(name)}
       </button>
       {open && (
-        <div ref={menuRef} role="menu" aria-label="Account" onKeyDown={onMenuKey} className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900" data-testid="account-menu">
+        <div ref={menuRef} role="menu" aria-label="Account" onKeyDown={onMenuKey} className="absolute right-0 top-11 z-50 max-h-[calc(100dvh-4rem)] w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900" data-testid="account-menu">
           <div className="px-2.5 py-2">
             <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{name}</p>
             <p className="truncate text-xs text-slate-500 dark:text-slate-400" data-testid="account-menu-title">{title}</p>
@@ -207,12 +207,13 @@ const THEME_SWATCH: Record<ThemePreference, string> = {
 
 /**
  * "Appearance" in the top bar: the colour theme (Light, Dark, Graphite, Porcelain, Match system)
- * and the score display (Battery or Gauge). A menu of two radio groups: arrow keys move, Home/End
+ * the score display (Battery or Gauge) and its depth (3D or flat 2D). A menu of three radio groups:
+ * arrow keys move, Home/End
  * jump, Enter/Space choose (the menu stays open to compare), Escape or Tab closes it and focus
  * returns to the button. The choice is kept in this browser (src/contexts/ThemeContext.tsx).
  */
 export const AppearanceMenu: React.FC = () => {
-  const { preference, setTheme, scoreDisplay, setScoreDisplay } = useTheme();
+  const { preference, setTheme, scoreDisplay, setScoreDisplay, scoreDepth, setScoreDepth } = useTheme();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -261,7 +262,7 @@ export const AppearanceMenu: React.FC = () => {
           role="menu"
           aria-label="Appearance"
           onKeyDown={onMenuKey}
-          className="absolute right-0 top-11 z-50 w-64 rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
+          className="absolute right-0 top-11 z-50 max-h-[calc(100dvh-4rem)] w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900"
           data-testid="appearance-menu"
         >
           <div role="group" aria-labelledby="appearance-theme-label">
@@ -279,7 +280,7 @@ export const AppearanceMenu: React.FC = () => {
                 <span className="h-4 w-4 flex-shrink-0 rounded-full border border-slate-300 dark:border-slate-600" style={{ background: THEME_SWATCH[o.id] }} aria-hidden />
                 <span className="flex-1">
                   {o.label}
-                  <span className="block text-[11px] leading-tight text-slate-500 dark:text-slate-400">{o.hint}</span>
+                  <span className="block text-[11px] leading-tight text-slate-600 dark:text-slate-400">{o.hint}</span>
                 </span>
                 {preference === o.id && <Check size={15} className="flex-shrink-0 text-brand-700 dark:text-brand-300" aria-hidden />}
               </button>
@@ -301,6 +302,28 @@ export const AppearanceMenu: React.FC = () => {
                 {o.id === 'battery' ? <BatteryMedium size={16} className="flex-shrink-0 -rotate-90 text-slate-500 dark:text-slate-400" aria-hidden /> : <Gauge size={16} className="flex-shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />}
                 <span className="flex-1">{o.label}</span>
                 {scoreDisplay === o.id && <Check size={15} className="flex-shrink-0 text-brand-700 dark:text-brand-300" aria-hidden />}
+              </button>
+            ))}
+          </div>
+          <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
+          <div role="group" aria-labelledby="appearance-depth-label">
+            <p id="appearance-depth-label" className={groupLabel}>Depth</p>
+            {SCORE_DEPTH_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={scoreDepth === o.id}
+                className={item}
+                onClick={() => setScoreDepth(o.id)}
+                data-testid={`score-depth-option-${o.id}`}
+              >
+                {o.id === '3d' ? <Box size={16} className="flex-shrink-0 text-slate-500 dark:text-slate-400" aria-hidden /> : <Square size={16} className="flex-shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />}
+                <span className="flex-1">
+                  {o.label}
+                  <span className="block text-[11px] leading-tight text-slate-600 dark:text-slate-400">{o.hint}</span>
+                </span>
+                {scoreDepth === o.id && <Check size={15} className="flex-shrink-0 text-brand-700 dark:text-brand-300" aria-hidden />}
               </button>
             ))}
           </div>

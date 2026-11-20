@@ -6,8 +6,8 @@ import type { Page } from '@playwright/test';
 /**
  * Appearance menu in the top bar (src/components/HeaderParts.tsx AppearanceMenu,
  * src/contexts/ThemeContext.tsx, src/lib/appearance.ts): the theme (Light, Dark, Graphite,
- * Porcelain, Match system) and the score display (Battery or Gauge, src/components/ScoreVisual.tsx).
- * Both are kept in the browser and applied before the first paint (index.html).
+ * Porcelain, Match system), the score display (Battery or Gauge, src/components/ScoreVisual.tsx) and
+ * its depth (3D or flat 2D). All are kept in the browser and applied before the first paint (index.html).
  */
 
 const htmlState = (page: Page) => page.evaluate(() => ({
@@ -15,6 +15,36 @@ const htmlState = (page: Page) => page.evaluate(() => ({
   dark: document.documentElement.classList.contains('dark'),
   display: document.documentElement.getAttribute('data-score-display'),
 }));
+const depthOnHtml = (page: Page) => page.evaluate(() => document.documentElement.getAttribute('data-score-depth'));
+
+/**
+ * Depth effects drawn by a score visual (battery or gauge) and everything inside it: CSS gradients
+ * other than hard two-colour stops, box shadows, drop-shadow / SVG filters, SVG gradients, highlight
+ * strokes in white. Empty for a flat (2D) visual.
+ */
+const depthEffects = (page: Page, selector: string) => page.locator(selector).first().evaluate((root) => {
+  const found: string[] = [];
+  for (const el of [root, ...Array.from(root.querySelectorAll('*'))]) {
+    const cs = getComputedStyle(el);
+    if (cs.boxShadow && cs.boxShadow !== 'none') found.push(`box-shadow on ${el.tagName}`);
+    if (cs.filter && cs.filter !== 'none') found.push(`filter on ${el.tagName}`);
+    const bg = cs.backgroundImage;
+    if (bg && bg !== 'none') {
+      // A flat fill is drawn as a gradient with hard stops between at most two colours.
+      const colours = new Set((bg.match(/rgba?\([^)]*\)/g) ?? []).map((c) => c.replace(/\s/g, '')));
+      if (colours.size > 2 || (bg.match(/linear-gradient/g) ?? []).length > 1) found.push(`gradient on ${el.tagName}`);
+    }
+    if (el.tagName.toLowerCase() === 'filter' || el.tagName.toLowerCase() === 'lineargradient' || el.tagName.toLowerCase() === 'radialgradient') found.push(el.tagName);
+    if (el.getAttribute('filter')) found.push(`filter attr on ${el.tagName}`);
+    if ((el.getAttribute('stroke') ?? '').toLowerCase() === '#ffffff') found.push('white highlight stroke');
+    const st = el.getAttribute('stroke') ?? '';
+    if (st.startsWith('url(')) found.push('gradient stroke');
+  }
+  return found;
+});
+
+/** The colour of the charge / value arc, so 3D and 2D can be compared (same band, same colour). */
+const bandOf = (page: Page, selector: string) => page.locator(selector).first().getAttribute('data-battery-band');
 
 async function openTeam(page: Page) {
   await page.getByLabel('Search teams').fill(DEMO.leadTeam.name);
@@ -39,7 +69,11 @@ test.describe('Appearance', { tag: [TAG.area('ux')] }, () => {
     await page.keyboard.press('Enter');
     await expect.poll(() => htmlState(page)).toEqual({ theme: 'graphite', dark: true, display: 'battery' });
     await expect(app.appearanceMenu.getByRole('menuitemradio', { name: /^Graphite/ })).toHaveAttribute('aria-checked', 'true');
+    // End jumps to the last item (2D, in the Depth group); two up is Gauge.
     await page.keyboard.press('End');
+    await expect(app.appearanceMenu.getByRole('menuitemradio', { name: /^2D/ })).toBeFocused();
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
     await expect(app.appearanceMenu.getByRole('menuitemradio', { name: 'Gauge' })).toBeFocused();
     await page.keyboard.press('Space');
     await expect.poll(() => htmlState(page)).toEqual({ theme: 'graphite', dark: true, display: 'gauge' });
@@ -129,6 +163,72 @@ test.describe('Appearance', { tag: [TAG.area('ux')] }, () => {
   });
 });
 
+test.describe('Appearance: 3D / 2D', { tag: [TAG.area('ux')] }, () => {
+  test('APR-06 keyboard: the Depth group (3D / 2D) flattens the battery and the gauge everywhere, keeps the colours, and the choice survives a reload', { tag: [TAG.smoke] }, async ({ signInAs, page, app }) => {
+    await signInAs('viewer');
+    expect(await depthOnHtml(page)).toBe('3d');
+    const hero = '[data-testid="dashboard"] [role="img"][data-score-depth]';
+    await expect(page.locator(hero).first()).toHaveAttribute('data-score-depth', '3d');
+    expect((await depthEffects(page, hero)).length).toBeGreaterThan(0);
+    const band3d = await bandOf(page, hero);
+
+    // The menu: a labelled group of two radios, 3D chosen; arrows and Space choose 2D.
+    await app.openAppearance();
+    const group = app.appearanceMenu.getByRole('group', { name: 'Depth' });
+    await expect(group.getByRole('menuitemradio')).toHaveCount(2);
+    await expect(group.getByRole('menuitemradio', { name: /^3D/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(group.getByRole('menuitemradio', { name: /^2D/ })).toHaveAttribute('aria-checked', 'false');
+    await page.keyboard.press('End');
+    await expect(group.getByRole('menuitemradio', { name: /^2D/ })).toBeFocused();
+    await page.keyboard.press('Space');
+    await expect(group.getByRole('menuitemradio', { name: /^2D/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(group.getByRole('menuitemradio', { name: /^3D/ })).toHaveAttribute('aria-checked', 'false');
+    await page.keyboard.press('Escape');
+    await expect(app.appearanceButton).toBeFocused();
+    expect(await depthOnHtml(page)).toBe('2d');
+    expect(await page.evaluate(() => localStorage.getItem('irongate_score_depth'))).toBe('2d');
+
+    // Battery on the overview: flat, same band (colour) as in 3D; every score visual on the page is flat.
+    await expect(page.locator(hero).first()).toHaveAttribute('data-score-depth', '2d');
+    expect(await depthEffects(page, hero)).toEqual([]);
+    expect(await bandOf(page, hero)).toBe(band3d);
+    await expect(page.locator('[data-score-depth="3d"]')).toHaveCount(0);
+
+    // Gauge: flat too (no gradient, highlight, bevel or shadow filter), the value arc in the band's flat colour.
+    await app.setScoreDisplay('Gauge');
+    const gauge = page.getByTestId('score-gauge').first();
+    await expect(gauge).toHaveAttribute('data-score-depth', '2d');
+    expect(await depthEffects(page, '[data-testid="score-gauge"]')).toEqual([]);
+    const arc = gauge.getByTestId('score-gauge-value');
+    if (await arc.count()) expect(await arc.getAttribute('stroke')).toBe(await arc.getAttribute('data-color'));
+
+    // Applied before the first paint, and on Team detail.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(await depthOnHtml(page)).toBe('2d');
+    await openTeam(page);
+    await expect(page.getByTestId('team-qa-card').getByRole('img', { name: /^QA score:/ })).toHaveAttribute('data-score-depth', '2d');
+    await app.setScoreDisplay('Battery');
+    await expect(page.getByTestId('team-qa-card').getByRole('img', { name: /^QA score:/ })).toHaveAttribute('data-score-depth', '2d');
+    expect(await depthEffects(page, '[data-testid="team-qa-card"] [role="img"][data-score-depth]')).toEqual([]);
+
+    // Executive summary and TV mode follow it too.
+    await page.goto('/summary');
+    await expect(page.locator('[role="img"][data-score-depth]').first()).toHaveAttribute('data-score-depth', '2d');
+    await page.goto(`/tv?team=${encodeURIComponent(DEMO.leadTeam.id)}&theme=light`);
+    await expect(page.getByTestId('tv-battery').getByRole('img')).toHaveAttribute('data-score-depth', '2d');
+    await page.keyboard.press('Escape');
+
+    // Back to 3D: the effects return.
+    await page.goto('/');
+    await expect(page.getByTestId('dashboard')).toBeVisible();
+    await app.setScoreDepth('3D');
+    expect(await depthOnHtml(page)).toBe('3d');
+    await expect(page.locator(hero).first()).toHaveAttribute('data-score-depth', '3d');
+    expect((await depthEffects(page, hero)).length).toBeGreaterThan(0);
+    await page.evaluate(() => { localStorage.removeItem('irongate_score_depth'); localStorage.removeItem('irongate_score_display'); });
+  });
+});
+
 test.describe('Appearance accessibility', { tag: [TAG.a11y, TAG.area('ux')] }, () => {
   const cases = [
     { id: 'A11Y-20', theme: 'Light', display: 'Gauge' },
@@ -146,6 +246,30 @@ test.describe('Appearance accessibility', { tag: [TAG.a11y, TAG.area('ux')] }, (
       await openTeam(page);
       await page.waitForLoadState('networkidle').catch(() => undefined);
       await checkA11y(page, testInfo, { known: [] });
+    });
+  }
+
+  const flatCases = [
+    { id: 'A11Y-50', theme: 'Light', display: 'Battery' },
+    { id: 'A11Y-51', theme: 'Dark', display: 'Gauge' },
+    { id: 'A11Y-52', theme: 'Graphite', display: 'Gauge' },
+    { id: 'A11Y-53', theme: 'Porcelain', display: 'Battery' },
+  ] as const;
+  for (const c of flatCases) {
+    test(`${c.id} ${c.theme} theme, 2D ${c.display}: the Appearance menu, overview and team detail have no serious violations`, async ({ signInAs, page, app }, testInfo) => {
+      await signInAs('admin');
+      await app.setTheme(c.theme);
+      await app.setScoreDisplay(c.display);
+      await app.setScoreDepth('2D');
+      await app.openAppearance();
+      await checkA11y(page, testInfo, { known: [], include: '[data-testid="appearance-menu"]' });
+      await app.closeAppearance();
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await checkA11y(page, testInfo, { known: [] });
+      await openTeam(page);
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await checkA11y(page, testInfo, { known: [] });
+      await page.evaluate(() => { localStorage.removeItem('irongate_score_depth'); localStorage.removeItem('irongate_score_display'); localStorage.removeItem('irongate_theme_mode'); });
     });
   }
 
