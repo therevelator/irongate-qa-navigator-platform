@@ -2,6 +2,10 @@
 """
 Send test coverage and the code quality score of a SonarQube / SonarCloud project to IronGate.
 
+Note: raw ingestion lets QE Navigator calculate these values itself: coverage reports to
+POST /api/ingest/coverage (section 4A) and SARIF reports to POST /api/ingest/static-analysis (section 4C
+of docs/INTEGRATION_GUIDE.md). This script sends computed values to POST /api/ingest/kpis and still works.
+
     export SONAR_URL=https://sonar.example.com        # or https://sonarcloud.io
     export SONAR_TOKEN=squ_...                         # a user token with Browse permission on the project
     export IRONGATE_URL=https://qe.example.com/api IRONGATE_API_KEY=igk_...

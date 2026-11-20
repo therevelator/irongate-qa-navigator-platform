@@ -2,6 +2,10 @@
 """
 Send defect metrics computed from Jira JQL counts to IronGate.
 
+Note: raw issue ingestion (POST /api/ingest/issues, docs/INTEGRATION_GUIDE.md section 4C) lets QE
+Navigator calculate these metrics from the issues themselves. This script sends computed values to
+POST /api/ingest/kpis and still works.
+
     export JIRA_URL=https://your-site.atlassian.net
     export JIRA_USER=integration.bot@example.com JIRA_TOKEN=...       # Jira Cloud: e-mail + API token
     export IRONGATE_URL=https://qe.example.com/api IRONGATE_API_KEY=igk_...

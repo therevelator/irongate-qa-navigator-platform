@@ -2,6 +2,13 @@
 r"""
 Send test coverage, test execution time and build time from a CI job to IronGate.
 
+SUPERSEDED: this script computes the values itself and sends them to POST /api/ingest/kpis. Prefer raw
+ingestion ("raw data in, we calculate"): send the report files themselves to POST /api/ingest/tests
+(JUnit XML, TRX, Cucumber JSON) and POST /api/ingest/coverage (LCOV, Cobertura, JaCoCo, Istanbul), and each
+pipeline run to POST /api/ingest/pipelines. QE Navigator then calculates coverage, pass rate, flakiness,
+test execution time, build time and parallel efficiency, and keeps the evidence. See
+docs/INTEGRATION_GUIDE.md, section 4A, and Admin console -> Connect your CI. This script still works.
+
     python3 ci_report_to_irongate.py --team <team id> --source github-actions \
         --coverage coverage/coverage-summary.json \   # or cobertura.xml, jacoco.xml, lcov.info
         --junit "reports/junit/*.xml" \               # -> test_execution_time_minutes

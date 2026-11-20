@@ -14,6 +14,10 @@ What it does for you
     (honours the RateLimit-Reset / Retry-After headers); never retries 4xx validation errors
   * splits more than 100 items into several requests (the API accepts 1-100 items per request)
 
+Use it for metrics that have no raw source. Where your tools produce raw output (test and coverage
+reports, pipeline runs, deployments, commits, incidents, issues, SARIF), send that to the raw endpoints
+under /api/ingest/ instead and let QE Navigator calculate (docs/INTEGRATION_GUIDE.md, sections 4A to 4C).
+
 Requirements: Python 3.8+, `pip install requests`.
 """
 from __future__ import annotations

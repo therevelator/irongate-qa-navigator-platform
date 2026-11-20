@@ -3,6 +3,12 @@
 Compute the DORA / reliability KPIs from deployment and incident events and send them to IronGate,
 for several teams in one request, optionally backfilling one value per day for the last N days.
 
+SUPERSEDED: this script computes the values itself and sends them to POST /api/ingest/kpis. Prefer raw
+ingestion ("raw data in, we calculate"): send each deployment to POST /api/ingest/deployments, its commits
+to POST /api/ingest/commits and incidents to POST /api/ingest/incidents. QE Navigator then calculates
+deployment frequency, lead time, change failure rate, MTTR, MTBF and availability with their evidence.
+See docs/INTEGRATION_GUIDE.md, section 4B. This script still works.
+
     python3 dora_to_irongate.py events.json                    # today's values, all teams in the file
     python3 dora_to_irongate.py events.json --backfill-days 30 # plus one value per day for 30 days back
     python3 dora_to_irongate.py events.json --dry-run          # print the request instead of sending
