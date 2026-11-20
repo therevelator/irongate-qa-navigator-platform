@@ -1,303 +1,141 @@
-# 📊 Metrics & API Documentation Index
+# Metrics and API index
 
-## Overview
+Where to find each metric's definition and every API route, by area. Routes are mounted in
+[`server/index.ts`](../server/index.ts); on Netlify the same Express app runs in
+[`netlify/functions/api.ts`](../netlify/functions/api.ts) behind the `/api/*` redirect in `netlify.toml`.
 
-This index provides quick access to the complete metrics and data source documentation for IronGate QA Navigator.
+## Metric definitions
 
----
+| Topic | Document |
+|---|---|
+| Every formula, with the code that computes it | [metrics_and_calculations.md](metrics_and_calculations.md) |
+| Every metric: meaning, target, update interval, production source | [PRODUCT_GUIDE.md, section 3](PRODUCT_GUIDE.md#3-the-metrics) |
+| Units, ranges and keys accepted by the ingestion APIs | [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) |
+| CI/CD pipeline page and pipeline metrics | [CI_CD_PIPELINE_METRICS.md](CI_CD_PIPELINE_METRICS.md) |
+| Flaky tests | [flaky_test_intelligence.md](flaky_test_intelligence.md) |
+| Business impact correlations and revenue impact | [business_impact_correlation.md](business_impact_correlation.md) |
 
-## 📁 Documentation Files
+Code that defines metrics: `KPI_COLUMNS` in [`server/lib/kpiIngest.ts`](../server/lib/kpiIngest.ts) (writable
+KPI columns), `METRICS_CONFIG` in [`src/config/metricsConfig.ts`](../src/config/metricsConfig.ts) (default
+targets), [`server/lib/metricFormulas.ts`](../server/lib/metricFormulas.ts) (shared formulas),
+[`src/data/metricCatalog.ts`](../src/data/metricCatalog.ts) (labels and descriptions),
+[`server/lib/calc/`](../server/lib/calc/) (calculation engine).
 
-### **METRICS_DATA_SOURCES_PART1.md**
-Covers metrics for:
-- ✅ Core Dashboard (all 22 KPIs)
-- ✅ Feature #1: Flaky Test Intelligence
-- ✅ Feature #2: Technical Debt Tracker
-- ✅ Feature #3: CI/CD Pipeline Visualization
-- ✅ Feature #4: Business Impact Correlation
-- ✅ Feature #5: Performance Testing Metrics
+## Authentication
 
-### **METRICS_DATA_SOURCES_PART2.md**
-Covers metrics for:
-- ✅ Feature #6: Developer Productivity
-- ✅ Feature #7: Test Case Management
-- ✅ Feature #8: Test Execution Timeline
-- ✅ Feature #9: Team Gamification
-- ✅ Complete data source matrix
-- ✅ Implementation notes
+- **Ingestion routes** (`/api/ingest/*`) take an API key: `Authorization: Bearer igk_…`. Keys are created by a
+  super admin in the Admin console (API keys) and are stored only as a hash.
+- **All other routes** take the session: the httpOnly cookie `irongate_token`, or the same token as a
+  bearer header. Access follows the caller's role assignments ([ROLE_ACCESS.md](ROLE_ACCESS.md)).
+- **Platform operator routes** (`/api/operator/*`) take the operator session cookie `irongate_operator`.
 
----
+## Routes
 
-## 🎯 Quick Reference: Data Sources
+### Ingestion (API key)
 
-### Primary APIs Used
+| Route | Purpose |
+|---|---|
+| `POST /api/ingest/tests` | Test reports: JUnit XML, TRX, Cucumber JSON; v2 phase 1 |
+| `POST /api/ingest/coverage` | Coverage reports: LCOV, Cobertura, JaCoCo, Istanbul (final and summary); v2 phase 1 |
+| `POST /api/ingest/pipelines` | Pipeline runs with stages; v2 phase 1 |
+| `POST /api/ingest/deployments` | Deployments; v2 phase 2 |
+| `POST /api/ingest/commits` | Commits of a deploy (lead time); v2 phase 2 |
+| `POST /api/ingest/incidents` | Incidents (MTTR, MTBF, availability); v2 phase 2 |
+| `POST /api/ingest/issues` | Issues from Jira, Linear or JSON; v2 phase 3 |
+| `POST /api/ingest/static-analysis` | SARIF 2.1.0 reports; v2 phase 3 |
+| `POST /api/ingest/kpis` | Finished KPI values, for metrics with no raw source yet |
 
-| Tool | Purpose | Metrics Provided |
-|------|---------|------------------|
-| **Jenkins** | CI/CD, Test Execution | Build time, test results, deployment frequency, pipeline stages |
-| **Jira** | Issue Tracking, Agile | Sprint metrics, bugs, MTTR, blocked time, requirements |
-| **SonarQube** | Code Quality | Coverage, code smells, technical debt, quality ratings |
-| **GitHub/GitLab** | Version Control | PR metrics, commit history, code review time, lead time |
-| **TestRail** | Test Management | Test cases, execution history, traceability |
-| **Datadog/New Relic** | APM | Response times, throughput, error rates, availability |
-| **Google Calendar** | Scheduling | Meeting time, focus time, work-life balance |
+### Raw data evidence and CI setup (`server/routes/ci.ts`)
 
----
+| Route | Purpose |
+|---|---|
+| `GET /api/ci/teams/:id/evidence` | Flaky tests with the runs that prove them, lowest-coverage files, slow stages |
+| `GET /api/ci/teams/:id/metrics/:metric` | How this was calculated: formula, inputs, source records |
+| `GET /api/ci/teams/:id/delivery` | Deliveries and incidents behind the DORA metrics |
+| `GET /api/ci/teams/:id/work` | Work and code quality evidence |
+| `GET /api/ci/status` | Connect your CI: last data received per team and kind |
+| `PUT /api/ci/teams/:id/main-branch` | Set a team's main branch |
+| `GET`, `PUT /api/ci/services`, `DELETE /api/ci/services/:service` | Service (or project key) → team mapping |
 
-## 📋 Metrics by Feature
+### Forecasts and recommendations (`server/routes/improve.ts`)
 
-### Core Dashboard (22 KPIs)
+| Route | Purpose |
+|---|---|
+| `GET /api/improve/teams/:id` | Forecasts and recommendations of a team |
+| `POST /api/improve/teams/:id/refresh` | Recalculate now (rate limited) |
+| `POST /api/improve/recommendations/:id/accept` | Add to Action plan |
+| `POST /api/improve/recommendations/:id/dismiss` | Dismiss with a reason |
+| `POST /api/improve/recommendations/:id/reopen` | Reopen a dismissed recommendation |
 
-**Quality & Testing (5)**
-1. Test Coverage → SonarQube
-2. Flakiness Rate → Jenkins
-3. Defect Density → Jira + SonarQube
-4. Defect Escape Rate → Jira
-5. Code Quality Score → SonarQube
+### Summary and TV mode
 
-**Speed & Efficiency (6)**
-6. Build Time → Jenkins
-7. Test Execution Time → Jenkins
-8. Deployment Frequency → Jenkins
-9. Lead Time for Changes → GitHub + Jenkins
-10. MTTR → Jira
-11. Parallel Test Efficiency → Jenkins
+| Route | Purpose |
+|---|---|
+| `GET /api/summary` | Executive summary of the caller's scope |
+| `GET /api/tv/teams`, `GET /api/tv/teams/:id` | TV mode team picker and team view |
 
-**Agile & Process (7)**
-12. Sprint Velocity → Jira Agile
-13. Sprint Commitment Rate → Jira
-14. Sprint Carryover → Jira
-15. First-Time Pass Rate → Jenkins
-16. Blocked Time → Jira
-17. Test Automation Coverage → TestRail or similar
-18. Automation ROI → Jenkins + Time Tracking
+### Teams, metrics and analytics
 
-**Reliability & Stability (4)**
-19. Change Failure Rate → Jenkins
-20. MTBF → Datadog/New Relic //explain  
-21. System Availability → Monitoring Tools
-22. Infrastructure Failures → Jenkins + Logs
+| Route | Purpose |
+|---|---|
+| `GET /api/teams`, `GET /api/teams/:id`, `GET /api/teams/:id/kpi-history` | Teams in scope, team detail, KPI history |
+| `GET /api/teams/:id/ai-suggestions`, `…/developer-ai-suggestions` | Team and developer suggestions (rule-based fallback, language model when configured) |
+| `POST /api/teams`, `PUT /api/teams/:id`, `PATCH /api/teams/:id/ai-toggle` | Create and edit teams |
+| `GET /api/metrics/teams/:teamId`, `…/history`, `…/velocity`, `GET /api/metrics/dashboard` | KPI reads |
+| `POST /api/metrics/manual`, `POST /api/metrics/developer` | Manual metrics (session, not API key) |
+| `GET /api/analytics/company-summary` | Overview summary of the caller's scope |
+| `POST /api/analytics/company-insights` | Executive briefing (needs `GROQ_API_KEY`) |
+| `GET /api/analytics/scope` | Teams the caller may pick in Analytics |
+| `GET /api/analytics/flaky-tests`, `/test-executions`, `/performance-metrics`, `/developer-metrics`, `/technical-debt` | Analytics modules |
+| `GET`, `PUT /api/analytics/pipeline-config`, `GET /api/analytics/pipeline-history`, `GET /api/analytics/pipeline-stages`, `PUT /api/analytics/pipeline-stages/:id` | CI/CD pipeline page |
+| `GET /api/analytics/business-impact-v2/:teamId` and its `POST` sub-routes | Business impact data and correlations |
+| `GET /api/revenue-impact/teams/:teamId`, `…/what-if`, `GET /api/revenue-impact/rollup` | Revenue impact |
+| `GET /api/compare/teams`, `GET /api/compare/teams.csv` | Compare teams |
+| `GET`, `PUT /api/targets` | KPI targets with history |
 
----
+### Alerts, notifications, actions, pulse
 
-### Advanced Features
+| Route | Purpose |
+|---|---|
+| `GET /api/alerts`, `POST /api/alerts/:id/acknowledge`, `GET`, `PUT /api/alerts/rules`, `POST /api/alerts/evaluate` | Alerts and alert rules |
+| `GET /api/notifications`, `…/unread-count`, `…/preferences`, `…/settings`, `…/digest/preview` | Notifications, Slack and weekly digest settings |
+| `GET`, `POST /api/actions`, `PATCH`, `DELETE /api/actions/:id`, `GET /api/actions/owners` | Tracked actions (Action plan) |
+| `GET /api/pulse/pending`, `GET /api/pulse/teams/:teamId`, `POST …/responses`, `…/send`, `…/remind`, `PUT …/cadence`, `…/auto-send`, `…/settings` | Wellbeing pulse |
 
-**Feature #1: Flaky Test Intelligence**
-- Test execution history → Jenkins
-- Flakiness score → Calculated from Jenkins
-- Failure patterns → Log analysis
-- Historical data → Jenkins builds
+### Organisation and administration
 
-**Feature #2: Technical Debt Tracker**
-- Debt items → SonarQube issues
-- Estimated effort → SonarQube sqale_index
-- Cost of delay → Calculated
-- Priority score → Calculated
+| Route | Purpose |
+|---|---|
+| `/api/admin/users`, `/api/admin/teams`, `/api/admin/departments` | Users, teams, departments (create, edit, delete) |
+| `/api/admin/users/:id/assignments` | Role assignments |
+| `/api/admin/invitations` | Invitations (create, resend, revoke) |
+| `/api/admin/audit`, `POST /api/admin/audit/:id/undo` | Change history (Activity) and undo |
+| `/api/admin/api-keys` | API keys (create, revoke) |
+| `/api/admin/configs`, `GET`, `PUT /api/admin/session-settings` | Parameters and sign-in length |
+| `/api/settings/metric-intervals` | Expected update frequency |
+| `GET /api/ingestion-log`, `…/sources`, `…/:id` | Ingestion log |
+| `GET /api/activity/log`, `…/log.csv`, `POST /api/activity/screen` | User activity log |
+| `/api/saved-views`, `/api/onboarding` | Saved views and the onboarding checklist |
+| `GET /api/users/:id`, `PUT /api/users/:id` | Own profile |
 
-**Feature #3: CI/CD Pipeline Visualization**
-- Pipeline stages → Jenkins wfapi
-- Stage duration → Jenkins
-- Success rate → Jenkins history
-- Resource usage → Datadog
-- Bottleneck score → Calculated
+### Sign-in
 
-**Feature #4: Business Impact Correlation**
-- Quality score → Aggregated metrics
-- Revenue impact → Jira + Business analytics
-- Customer satisfaction → Zendesk/Salesforce
-- Feature adoption → Google Analytics/Mixpanel
-- Correlation strength → Statistical calculation
+| Route | Purpose |
+|---|---|
+| `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me` | Registration and sessions |
+| `POST /api/auth/forgot-password`, `POST /api/auth/reset-password` | Password reset by e-mail |
+| `POST /api/auth/sessions/sign-out-others` | Sign out other devices |
+| `GET /api/auth/providers`, `GET /api/auth/sso/:provider/start`, `…/callback` | Single sign-on (Google, Microsoft) |
+| `GET /api/auth/invitations/:token`, `POST /api/auth/invitations/accept` | Accept an invitation |
 
-**Feature #5: Performance Testing Metrics**
-- Response time percentiles → New Relic/Datadog
-- Throughput → Datadog/CloudWatch
-- Error rate → New Relic
-- Load test results → JMeter/k6/Gatling
-- Endpoint metrics → New Relic transactions
+### Platform operator (`server/routes/operator.ts`)
 
-**Feature #6: Developer Productivity**
-- PR merge time → GitHub/GitLab
-- Code review time → GitHub reviews
-- Happiness score → Custom survey
-- Context switches → Git + Jira
-- Focus vs meeting time → Google Calendar
+Sign-in (`/api/operator/login`, `/session`, `/logout`), overview, errors, sign-in events, and per company
+(`/api/operator/companies/:companyId/…`): summary, organisation, users and a person's page, sessions,
+sign-ins, last views, settings, data, modules, alerts, pulse, the company's change history and user
+activity, errors; create, edit, suspend, reactivate and delete companies; everything the company app
+offers, through its own handlers; demo data and Populate metrics. Details: [ADMIN_PANEL_GUIDE.md](ADMIN_PANEL_GUIDE.md).
 
-**Feature #7: Test Case Management**
-- Test case repository → TestRail
-- Execution history → TestRail results
-- Requirement traceability → TestRail + Jira
-- Effectiveness score → Calculated
-- Redundancy detection → Text analysis
+### Health
 
-**Feature #8: Test Execution Timeline**
-- Test suite executions → Jenkins/TestRail
-- Timeline data → Jenkins builds
-- Resource allocation → Jenkins agents
-- Dependencies → Jenkins pipeline
-- Bottleneck detection → Calculated
-
-**Feature #9: Team Gamification**
-- Team points → Aggregated from all sources
-- Badges & achievements → Rules engine
-- Leaderboard rankings → Points database
-- Real-time updates → Webhooks
-
----
-
-## 🔑 API Authentication Requirements
-
-### Jenkins
-```
-Method: API Token or Basic Auth
-Header: Authorization: Basic {base64(username:token)}
-```
-
-### Jira
-```
-Method: API Token or OAuth
-Header: Authorization: Basic {base64(email:token)}
-```
-
-### GitHub
-```
-Method: Personal Access Token
-Header: Authorization: token {token}
-```
-
-### SonarQube
-```
-Method: User Token
-Header: Authorization: Basic {base64(token:)}
-```
-
-### TestRail
-```
-Method: API Key
-Header: Authorization: Basic {base64(email:api_key)}
-```
-
-### Datadog
-```
-Method: API Key + Application Key
-Headers: 
-  DD-API-KEY: {api_key}
-  DD-APPLICATION-KEY: {app_key}
-```
-
-### New Relic
-```
-Method: API Key
-Header: X-Api-Key: {api_key}
-```
-
----
-
-## 📊 Example API Calls
-
-### Get Test Coverage from SonarQube
-```bash
-curl -u {token}: \
-  "https://sonarqube.example.com/api/measures/component?component=my-project&metricKeys=coverage"
-```
-
-### Get Jenkins Build Results
-```bash
-curl -u {username}:{token} \
-  "https://jenkins.example.com/job/my-job/lastBuild/api/json"
-```
-
-### Get Jira Sprint Issues
-```bash
-curl -u {email}:{token} \
-  "https://company.atlassian.net/rest/agile/1.0/sprint/123/issue"
-```
-
-### Get GitHub Pull Requests
-```bash
-curl -H "Authorization: token {token}" \
-  "https://api.github.com/repos/owner/repo/pulls?state=closed"
-```
-
----
-
-## 🔄 Data Refresh Recommendations
-
-### Real-time (1-5 minutes)
-- Jenkins build status
-- Test execution results
-- Pipeline stages
-- System availability
-
-### Hourly
-- Performance metrics (response times, throughput)
-- Error rates
-- Resource usage
-
-### Daily
-- Code quality scores
-- Technical debt
-- Test coverage
-- Defect metrics
-
-### Weekly
-- Sprint metrics
-- Developer happiness
-- Team productivity
-- Gamification points
-
----
-
-## 🎯 Implementation Checklist
-
-### Phase 1: Core Metrics
-- [ ] Set up Jenkins API access
-- [ ] Configure Jira API credentials
-- [ ] Connect SonarQube
-- [ ] Test data retrieval for 22 KPIs
-
-### Phase 2: Advanced Features (1-5)
-- [ ] Implement flaky test detection
-- [ ] Connect technical debt tracking
-- [ ] Set up pipeline visualization
-- [ ] Configure business analytics
-- [ ] Integrate APM tools
-
-### Phase 3: Advanced Features (6-9)
-- [ ] Connect GitHub/GitLab
-- [ ] Set up TestRail integration
-- [ ] Configure calendar access
-- [ ] Implement gamification engine
-
-### Phase 4: Optimization
-- [ ] Set up caching layer
-- [ ] Implement rate limiting
-- [ ] Add error handling
-- [ ] Configure webhooks for real-time updates
-
----
-
-## 📞 Support & Resources
-
-### API Documentation Links
-- **Jenkins**: https://www.jenkins.io/doc/book/using/remote-access-api/
-- **Jira**: https://developer.atlassian.com/cloud/jira/platform/rest/v3/
-- **SonarQube**: https://docs.sonarqube.org/latest/extend/web-api/
-- **GitHub**: https://docs.github.com/en/rest
-- **TestRail**: https://www.gurock.com/testrail/docs/api
-- **Datadog**: https://docs.datadoghq.com/api/
-- **New Relic**: https://docs.newrelic.com/docs/apis/
-
----
-
-## ✅ Validation
-
-All metrics documented are:
-- ✅ **Obtainable** through documented APIs
-- ✅ **Production-ready** (used by real organizations)
-- ✅ **Well-supported** (active API maintenance)
-- ✅ **Scalable** (handle enterprise workloads)
-- ✅ **Secure** (support authentication & authorization)
-
----
-
-*For detailed API calls and response formats, see METRICS_DATA_SOURCES_PART1.md and METRICS_DATA_SOURCES_PART2.md*
+`GET /health`: status of the API (no authentication).
