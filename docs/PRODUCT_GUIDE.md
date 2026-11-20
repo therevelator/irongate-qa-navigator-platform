@@ -1209,7 +1209,7 @@ Why: everything about one team in one place, with each number explained
   from a recommendation (section 7). An action from a recommendation says so and shows whether its metric moved: "Since it was added:
   Test coverage 57.6% (6 Nov) → 63% (20 Nov) Improved" (the team's snapshot on the day it was created and its latest snapshot). Grouped by status in accordions with counts (Open, In progress, Done, Dropped; Done and Dropped
   collapsed by default), 5 / 10 / 20 per page in each group; the whole card can be collapsed. What is expanded is remembered per person
-  in the browser.
+  in the browser. Left of each action: who last set its status and when (section 7, "Who changed the status").
 - **Evidence from CI** (when the team's CI sends raw reports, section 4.2a): the metrics calculated from CI data (each opens
   **How this was calculated**: the formula, the values used, the number of runs and confidence, and the source runs and reports
   with their ids and links), **flaky tests** with the failed and passed runs that prove them, the **lowest-coverage files** of the
@@ -1548,6 +1548,16 @@ admins) sends yours immediately.
 - TV mode shows the actions without owner names.
 - On Team detail the list is grouped by status (Open, In progress, Done, Dropped, each with its count) and paged per group; an action
   whose status changes moves to its new group.
+- **Who changed the status:** every status change, and the creation, is recorded with the signed-in person and the time (UTC), in the
+  same transaction as the change: by hand, by the owner, or by accepting a recommendation (which creates the action). A change made by
+  the system is recorded without a person and shown as "automatically". On Team detail, left of each action (above the title on a
+  phone): "Changed to Dropped by Aisha Rahman on 20th Nov 2026, 10:11 PM" (status word in its colour, the person's name, ordinal day,
+  short month, year and 12-hour time in the viewer's time zone), "Created by … on …" when the status never changed; nothing for older
+  actions whose history is unknown. **History** lists every change (from → to, who, when), newest first. Only people who can see the
+  team's actions see it, with names only (no e-mail addresses). TV mode does not show it (a shared screen shows no names).
+- **Existing actions (migration):** the history is filled only where it is known, from the change history (Activity); otherwise only
+  the time is set (completion time of done / dropped actions, else the last update) and no person is shown. Sample data (demo and
+  Meridian) gets a realistic history: people allowed to change actions, on weekdays in working hours.
 
 ### Database keep-alive
 

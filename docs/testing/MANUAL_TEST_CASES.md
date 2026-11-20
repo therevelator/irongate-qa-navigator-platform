@@ -1,6 +1,6 @@
 # Manual test cases
 
-438 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+447 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -10,7 +10,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
-- [Accessibility](#accessibility) (22)
+- [Accessibility](#accessibility) (26)
 - [Theme and phone layout](#theme-and-phone-layout) (31)
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
@@ -33,7 +33,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Administration: parameters](#administration-parameters) (4)
 - [Administration: update frequency](#administration-update-frequency) (1)
 - [Alerts and notifications](#alerts-and-notifications) (11)
-- [Tracked actions](#tracked-actions) (10)
+- [Tracked actions](#tracked-actions) (15)
 - [CI evidence](#ci-evidence) (4)
 - [Connect your CI](#connect-your-ci) (4)
 - [Deliveries & incidents](#deliveries--incidents) (4)
@@ -2833,6 +2833,114 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Set the theme back to the one you use.
 
 *Automated:* `tests/e2e/team/work-evidence.spec.ts › Work & code quality accessibility › A11Y-46 … A11Y-49`
+
+### TC-ADM-073: Light theme: the Action plan with the status lines and an open history has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | Open the Appearance menu in the top bar and choose 'Light'. | The Light theme is applied. |
+| 4 | Open 'History' on 'AHU retro: …' and on 'AHU closed by the system'. | Both histories are shown. |
+| 5 | Run axe (WCAG 2.1 AA) on the Action plan card. | No serious or critical violations; status words, names and dates have enough contrast. |
+
+**After the test:** Set the theme back to the one used before.
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history accessibility › A11Y-58 Light theme: the Action plan with the status lines and an open history has no serious violations`
+
+### TC-ADM-074: Dark theme: the Action plan with the status lines and an open history has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | Open the Appearance menu in the top bar and choose 'Dark'. | The Dark theme is applied. |
+| 4 | Open 'History' on 'AHU retro: …' and on 'AHU closed by the system'. | Both histories are shown. |
+| 5 | Run axe (WCAG 2.1 AA) on the Action plan card. | No serious or critical violations; status words, names and dates have enough contrast. |
+
+**After the test:** Set the theme back to the one used before.
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history accessibility › A11Y-59 Dark theme: the Action plan with the status lines and an open history has no serious violations`
+
+### TC-ADM-075: Graphite theme: the Action plan with the status lines and an open history has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | Open the Appearance menu in the top bar and choose 'Graphite'. | The Graphite theme is applied. |
+| 4 | Open 'History' on 'AHU retro: …' and on 'AHU closed by the system'. | Both histories are shown. |
+| 5 | Run axe (WCAG 2.1 AA) on the Action plan card. | No serious or critical violations; status words, names and dates have enough contrast. |
+
+**After the test:** Set the theme back to the one used before.
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history accessibility › A11Y-60 Graphite theme: the Action plan with the status lines and an open history has no serious violations`
+
+### TC-ADM-076: Porcelain theme: the Action plan with the status lines and an open history has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | Open the Appearance menu in the top bar and choose 'Porcelain'. | The Porcelain theme is applied. |
+| 4 | Open 'History' on 'AHU retro: …' and on 'AHU closed by the system'. | Both histories are shown. |
+| 5 | Run axe (WCAG 2.1 AA) on the Action plan card. | No serious or critical violations; status words, names and dates have enough contrast. |
+
+**After the test:** Set the theme back to the one used before.
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history accessibility › A11Y-61 Porcelain theme: the Action plan with the status lines and an open history has no serious violations`
 
 ## Theme and phone layout
 
@@ -7930,6 +8038,139 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Leave TV mode, open The Away Team's Team detail and delete the created action.
 
 *Automated:* `tests/e2e/alerts-actions.spec.ts › Alerts, notifications and tracked actions › A team lead creates a tracked action on Team detail, moves it to in progress, and TV mode shows it`
+
+### TC-ADM-068: Left of each action: who changed the status and when; 'Created by' when never changed; 'automatically' for system changes; nothing for old rows
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | Read the small line on the left of 'AHU retro: alert on the weakest dependencies before they fail'. | It reads 'Changed to Dropped by Fixture Lead on 20th Nov 2026, 10:11 PM'; the word 'Dropped' is in the status colour (amber) and the line is left of the title. |
+| 4 | Read the line of 'AHU only created'. | 'Created by Fixture Lead on 3rd Nov 2026, 8:00 AM'. |
+| 5 | Read the line of 'AHU closed by the system'. | 'Changed to Done automatically on 12th Nov 2026, 3:00 AM'. |
+| 6 | Look at 'AHU old row without history'. | No line and no 'History' link are shown on its left. |
+| 7 | With a screen reader (or the browser's inspector), check the date of the first line. | It is a <time> element whose dateTime is 2026-11-20T22:11:00.000Z; the screen reader reads the whole sentence. |
+
+**After the test:** None (the test data is removed with the test team).
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history › AHU-01 the line on the left: changed / created / automatically, nothing for an old row; <time> carries the instant`
+
+### TC-ADM-069: History lists every status change newest first (from → to, who, when) and opens with the keyboard
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | On 'AHU retro: …' find the link 'History (3)' below the line; press Tab until it is focused and press Enter. | The history opens (the link is announced as expanded). |
+| 4 | Read the entries. | Newest first: 'In progress → Dropped by Fixture Lead on 20th Nov 2026, 10:11 PM', 'Open → In progress by Fixture Member1 on 4th Nov 2026, 2:05 PM', 'Created as Open by Fixture Lead on 2nd Nov 2026, 9:30 AM'. |
+| 5 | Click 'History' again. | The history closes. |
+
+**After the test:** None (the test data is removed with the test team).
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history › AHU-02 History lists every change newest first (from → to, who, when); keyboard toggles it`
+
+### TC-ADM-070: The change time is shown in the viewer's time zone
+
+**Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | Set the computer's time zone to Asia/Tokyo, reload and read the line of 'AHU retro: …'. | 'Changed to Dropped by Fixture Lead on 21st Nov 2026, 7:11 AM'. |
+
+**After the test:** Set the computer's time zone back.
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history in the viewer time zone › AHU-03 the time is shown in the viewer time zone (Tokyo: next morning)`
+
+### TC-ADM-071: A status change in the app shows the signed-in person and adds a history entry
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | Change the status of 'AHU only created' to 'In progress'. | A toast 'Status: In progress' appears. |
+| 4 | Read its line. | 'Changed to In progress by Fixture Lead on <today's date and time>' (ordinal day, short month, year, 12-hour time). |
+| 5 | Click 'History'. | Two entries: 'Open → In progress by Fixture Lead on …' first, then 'Created as Open by Fixture Lead on …'. |
+
+**After the test:** None (the test data is removed with the test team).
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history › AHU-04 a status change in the UI shows the signed-in person and adds a history entry`
+
+### TC-ADM-072: Phone width: the status line wraps above the title and the page does not scroll sideways
+
+**Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F10.9
+
+**Preconditions**
+
+- App running at the test URL with the NovaTech demo data.
+- A dedicated test team with a team lead 'Fixture Lead' and a software engineer 'Fixture Member1' (password demo123), and four actions prepared in the database (the automated test inserts them): 'AHU retro: alert on the weakest dependencies before they fail' (Dropped; created by Fixture Lead on 2 Nov 2026 09:30 UTC, In progress by Fixture Member1 on 4 Nov 14:05 UTC, Dropped by Fixture Lead on 20 Nov 22:11 UTC), 'AHU only created' (Open, created by Fixture Lead on 3 Nov 08:00 UTC), 'AHU closed by the system' (Done automatically on 12 Nov 03:00 UTC) and 'AHU old row without history' (In progress, no history).
+- The computer's time zone set to UTC unless the case says otherwise.
+
+**Test data**
+
+- E-mail: <test team lead e-mail>
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the test team lead, type the test team's name in 'Search teams' on the Overview and click its card. | Team detail opens with the 'Action plan' card. |
+| 2 | Expand the 'Done' and 'Dropped' groups of the Action plan if they are collapsed. | All four test actions are listed. |
+| 3 | Set the browser window to 390 × 844 (phone) and look at 'AHU retro: …'. | The line 'Changed to Dropped by Fixture Lead on …' is above the title, fully readable; the page does not scroll sideways. |
+
+**After the test:** None (the test data is removed with the test team).
+
+*Automated:* `tests/e2e/team/action-history.spec.ts › Action status history › AHU-05 phone width: the line wraps above the title and nothing scrolls sideways`
 
 ## CI evidence
 
