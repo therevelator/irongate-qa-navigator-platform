@@ -306,19 +306,19 @@ http://localhost:5173
 ## 📚 Documentation
 
 ### User Documentation
-- **[QUICK_START.md](QUICK_START.md)** - 5-minute getting started
-- **[USER_GUIDE.md](USER_GUIDE.md)** - Complete usage guide
+- **[QUICK_START.md](../QUICK_START.md)** - 5-minute getting started
+- **[USER_GUIDE.md](../USER_GUIDE.md)** - Complete usage guide
 - **[IMPLEMENTATION_SUMMARY.md](IMPLEMENTATION_SUMMARY.md)** - What's built
 
 ### Technical Documentation
-- **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - Setup instructions
-- **[DATA_INTEGRATION.md](DATA_INTEGRATION.md)** - API connections
+- **[INSTALLATION_GUIDE.md](technical/INSTALLATION_GUIDE.md)** - Setup instructions
+- **[DATA_INTEGRATION.md](technical/DATA_INTEGRATION.md)** - API connections
 - **[FEATURES_ROADMAP.md](FEATURES_ROADMAP.md)** - Feature specifications
 
 ### Business Documentation
-- **[BUSINESS_PROPOSAL.md](BUSINESS_PROPOSAL.md)** - ROI analysis
+- **[BUSINESS_PROPOSAL.md](business/BUSINESS_PROPOSAL.md)** - ROI analysis
 - **[README.md](README.md)** - Project overview
-- **[ADVANCED_FEATURES_UPDATE.md](ADVANCED_FEATURES_UPDATE.md)** - Progress report
+- **[ADVANCED_FEATURES_UPDATE.md](features/ADVANCED_FEATURES_UPDATE.md)** - Progress report
 
 ---
 

@@ -372,5 +372,5 @@ This table shows where to get each metric from real systems (if simple) or how t
 ## Related Documentation
 
 - [Pipeline Data Sources](./technical/METRICS_DATA_SOURCES_PART1.md)
-- [KPI Formulas](./QUICK_START.md)
+- [KPI Formulas](../QUICK_START.md)
 - [Manual Metrics Input](./FRONTEND_INTEGRATION_COMPLETE.md)

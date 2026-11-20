@@ -2,7 +2,7 @@
 
 # Role permissions
 
-What the server enforces, written from [`server/lib/userPolicy.ts`](server/lib/userPolicy.ts) (release R2).
+What the server enforces, written from [`server/lib/userPolicy.ts`](../../../server/lib/userPolicy.ts) (release R2).
 Every rule there is a pure function used by the API (through `server/middleware/access.ts` and the
 routes) and by the UI (`src/App.tsx` routes, `src/components/Layout.tsx` navigation, page buttons), so
 the app offers exactly what the API allows. Every rule is also limited to the caller's own company: a
@@ -33,7 +33,7 @@ the server; access never depends on them alone.
 
 | Capability (helper) | super_admin | qa_manager | team_lead | qa_engineer | viewer |
 |---|---|---|---|---|---|
-| Overview dashboard and team detail: the teams of the analytics scope (full matrix: [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md)) | all teams | their departments' teams | their teams | their teams | their teams |
+| Overview dashboard and team detail: the teams of the analytics scope (full matrix: [docs/ROLE_ACCESS.md](../../ROLE_ACCESS.md)) | all teams | their departments' teams | their teams | their teams | their teams |
 | Analytics modules, Compare teams (`canCompareTeams`), TV mode, team KPI history | all teams | their departments' teams | their teams | their teams | their teams |
 | Per-team metric detail: history, velocity, metric bundles (`canReadTeamDetail` = analytics scope) | all teams | their departments' teams | their teams | their teams | their teams |
 | Team member names and e-mails (`canViewTeamMembers`) | all teams | their departments' teams | their teams | their teams | their teams |
