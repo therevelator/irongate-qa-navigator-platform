@@ -18,6 +18,13 @@ dist-ssr
 .env.local
 .env.example
 
+# Backups of environment files (may contain real credentials)
+*.env.bak
+.env.bak
+.env.*.bak
+.env.backup*
+.env.*.backup
+
 # Test results
 test-results/
 playwright-report/

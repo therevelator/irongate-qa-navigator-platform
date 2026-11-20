@@ -13,14 +13,24 @@ echo ""
 LOCAL_HOST="localhost"
 LOCAL_PORT="3306"
 LOCAL_USER="root"
-LOCAL_PASSWORD="l3v75th5n"
+# Passwords are read from the environment; they are never stored in this script.
+if [ -z "${LOCAL_MYSQL_PASSWORD:-}" ]; then
+  echo "❌ LOCAL_MYSQL_PASSWORD is not set. Export the local MySQL root password first, e.g.:" >&2
+  echo "   LOCAL_MYSQL_PASSWORD=... AIVEN_MYSQL_PASSWORD=... ./migrate-users-to-aiven.sh" >&2
+  exit 1
+fi
+LOCAL_PASSWORD="$LOCAL_MYSQL_PASSWORD"
 LOCAL_DATABASE="irongate_qa"
 
-# Aiven MySQL Configuration (from .env.local)
+# Aiven MySQL Configuration
 AIVEN_HOST="mysql-11d3e650-ionut-817b.b.aivencloud.com"
 AIVEN_PORT="16234"
 AIVEN_USER="avnadmin"
-AIVEN_PASSWORD="AVNS_jfRJN8oWbmU8xXWDX3u"
+if [ -z "${AIVEN_MYSQL_PASSWORD:-}" ]; then
+  echo "❌ AIVEN_MYSQL_PASSWORD is not set. Export the Aiven avnadmin password first." >&2
+  exit 1
+fi
+AIVEN_PASSWORD="$AIVEN_MYSQL_PASSWORD"
 AIVEN_DATABASE="defaultdb"
 
 # Temporary files
@@ -167,7 +177,7 @@ echo "✅ Migration complete!"
 echo ""
 echo "🔍 To verify users in Aiven, run:"
 echo "mysql --user=$AIVEN_USER \\"
-echo "      --password=$AIVEN_PASSWORD \\"
+echo "      --password=\"\$AIVEN_MYSQL_PASSWORD\" \\"
 echo "      --host=$AIVEN_HOST \\"
 echo "      --port=$AIVEN_PORT \\"
 echo "      --ssl-mode=REQUIRED \\"
