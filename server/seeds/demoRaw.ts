@@ -13,9 +13,16 @@
  */
 import type pg from 'pg';
 import { createHash } from 'crypto';
-import { recomputeTeamDays } from '../lib/calc/engine';
+import { recomputeTeamDays, type MetricGroup } from '../lib/calc/engine';
+import { DELIVERY_METRICS } from '../lib/calc/delivery';
+
+const DELIVERY_KEYS = Object.keys(DELIVERY_METRICS);
 
 export const RAW_SAMPLE_DAYS = 14;
+/** Sample deployments, commits and incidents (phase 2) cover more days: the 28-day DORA window is full. */
+export const DELIVERY_SAMPLE_DAYS = 35;
+/** Health values a team's sample raw data needs (index 0 = today). */
+export const SAMPLE_HEALTH_DAYS = Math.max(RAW_SAMPLE_DAYS, DELIVERY_SAMPLE_DAYS);
 export const RAW_SAMPLE_PREFIX = 'demo-raw-';
 
 export interface RawSampleTeam {
@@ -32,25 +39,25 @@ const arr = (xs: string[]) => `ARRAY[${xs.map(lit).join(', ')}]`;
 const R = (seed: string) => `((('x' || substr(md5(${seed}), 1, 8))::bit(32)::int::bigint & 2147483647)::float8 / 2147483647.0)`;
 const short = (id: string) => createHash('md5').update(id).digest('hex').slice(0, 8);
 
-interface Vocabulary { suites: string[]; areas: string[]; verbs: string[]; objects: string[] }
+interface Vocabulary { suites: string[]; areas: string[]; verbs: string[]; objects: string[]; services: string[] }
 
 /** Test and file names that fit the team (payments, lending, mobile, …). */
 export function vocabularyFor(name: string): Vocabulary {
   const n = name.toLowerCase();
   const verbs = ['creates', 'rejects', 'updates', 'cancels', 'retries', 'validates', 'lists', 'exports', 'locks', 'refunds', 'schedules', 'notifies'];
   if (/pay|ledger|settle|card|billing/.test(n)) {
-    return { suites: ['payments', 'ledger', 'settlement', 'fx-rates', 'card-auth'], areas: ['payments', 'ledger', 'settlement', 'fx', 'cards', 'webhooks'], verbs,
+    return { suites: ['payments', 'ledger', 'settlement', 'fx-rates', 'card-auth'], areas: ['payments', 'ledger', 'settlement', 'fx', 'cards', 'webhooks'], verbs, services: ['payments-api', 'ledger-service', 'settlement-worker'],
       objects: ['a card payment', 'a SEPA transfer', 'a refund', 'a ledger entry', 'a settlement batch', 'an FX quote', 'a chargeback', 'a payout', 'a payment intent', 'an authorisation hold', 'a merchant fee', 'a daily statement', 'a duplicate payment', 'a currency conversion'] };
   }
   if (/lend|loan|credit|mortgage/.test(n)) {
-    return { suites: ['loan-application', 'credit-check', 'underwriting', 'offers', 'repayments'], areas: ['application', 'credit', 'underwriting', 'offers', 'repayments', 'documents'], verbs,
+    return { suites: ['loan-application', 'credit-check', 'underwriting', 'offers', 'repayments'], areas: ['application', 'credit', 'underwriting', 'offers', 'repayments', 'documents'], verbs, services: ['loan-application-api', 'credit-check-service', 'offers-service'],
       objects: ['a loan application', 'a credit score request', 'an affordability check', 'a loan offer', 'a repayment plan', 'an early repayment', 'a document upload', 'a co-applicant', 'an income proof', 'a rate quote', 'a decision letter', 'a direct debit', 'a missed payment', 'a top-up loan'] };
   }
   if (/mobile|app|ios|android/.test(n)) {
-    return { suites: ['login', 'biometrics', 'push-notifications', 'statements', 'cards-screen'], areas: ['login', 'biometrics', 'notifications', 'statements', 'cards', 'navigation'], verbs,
+    return { suites: ['login', 'biometrics', 'push-notifications', 'statements', 'cards-screen'], areas: ['login', 'biometrics', 'notifications', 'statements', 'cards', 'navigation'], verbs, services: ['mobile-bff', 'ios-app', 'android-app'],
       objects: ['a biometric login', 'a PIN reset', 'a push notification', 'a statement download', 'a card freeze', 'a dark-mode screen', 'an offline banner', 'a deep link', 'a session timeout', 'a contact payment', 'an app update prompt', 'a spending chart', 'a QR payment', 'a device binding'] };
   }
-  return { suites: ['api', 'auth', 'accounts', 'search', 'notifications'], areas: ['api', 'auth', 'accounts', 'search', 'notifications', 'reports'], verbs,
+  return { suites: ['api', 'auth', 'accounts', 'search', 'notifications'], areas: ['api', 'auth', 'accounts', 'search', 'notifications', 'reports'], verbs, services: ['web-api', 'auth-service', 'notifications-worker'],
     objects: ['a user session', 'an account', 'a search query', 'a notification', 'a report export', 'a password reset', 'an audit entry', 'a webhook', 'a file upload', 'a permission change', 'a settings update', 'an invitation', 'a scheduled job', 'a rate limit'] };
 }
 
@@ -180,6 +187,117 @@ export function rawSampleSqlForTeam(team: RawSampleTeam, days = RAW_SAMPLE_DAYS)
 
     // 9. Flaky-test evidence (the same rule as server/lib/calc/engine.ts refreshFlakyEvidence).
     flakyEvidenceSql(T, `SELECT DISTINCT commit_sha FROM test_runs WHERE team_id = ${T} AND is_sample`),
+
+    ...deliverySampleSqlForTeam(team),
+  ];
+}
+
+/**
+ * Sample deployments, commits and incidents (v2 phase 2) of one team for the last DELIVERY_SAMPLE_DAYS
+ * days, following its story: a healthier team deploys more often (production deploys on weekdays),
+ * with smaller batches and shorter lead times, fewer failed changes (rolled back, followed by a hotfix
+ * or linked to an incident), fewer and shorter incidents. Plain SQL like the phase-1 sample; ids start
+ * with "demo-raw-", is_sample = true; rows that exist are skipped (an open sample incident is closed
+ * by a later run once its resolve time has passed). A team with real deployments or incidents gets none.
+ */
+export function deliverySampleSqlForTeam(team: RawSampleTeam, days = DELIVERY_SAMPLE_DAYS): string[] {
+  const T = lit(team.id);
+  const CO = lit(team.companyId);
+  const K = short(team.id);
+  const v = vocabularyFor(team.name);
+  const healths = Array.from({ length: days }, (_, d) => Math.max(0.04, Math.min(0.98, team.health[d] ?? team.health[team.health.length - 1] ?? 0.6)));
+  const P = `p(d, h) AS (VALUES ${healths.map((h, d) => `(${d}, ${h.toFixed(3)}::float8)`).join(', ')})`;
+  const TODAY = `(now() AT TIME ZONE 'UTC')::date`;
+  const AT = (dateExpr: string, minutes: string) => `((${dateExpr})::timestamp + make_interval(mins => ${minutes})) AT TIME ZONE 'UTC'`;
+  const noReal = (table: string) => `NOT EXISTS (SELECT 1 FROM ${table} WHERE team_id = ${T} AND NOT is_sample)`;
+  const PFX = `${RAW_SAMPLE_PREFIX}dep-${K}-`;
+  // Per deploy: failed change when f < 0.03 + 0.45 (1 − h)^1.5; its kind by g: rolled back (< 0.35), a hotfix follows (< 0.7), else a linked incident.
+  // A deploy that does not complete (result failure, not counted) when c < 0.03 + 0.08 (1 − h).
+  const FAILP = `(0.03 + 0.45 * power(1 - p.h, 1.5))`;
+  const NOTDONE = `(0.03 + 0.08 * (1 - p.h))`;
+  const dayOfId = (col: string) => `to_date(substr(${col}, ${PFX.length + 1}, 8), 'YYYYMMDD')`;
+  const SEV = (r: string) => `CASE WHEN ${r} < 0.12 THEN 'critical' WHEN ${r} < 0.45 THEN 'high' WHEN ${r} < 0.85 THEN 'medium' ELSE 'low' END`;
+  const LABEL = (sev: string) => `CASE ${sev} WHEN 'critical' THEN 'P1' WHEN 'high' THEN 'P2' WHEN 'medium' THEN 'P3' ELSE 'P4' END`;
+  const TITLES = arr(['Elevated error rate on %s', 'Latency above SLO on %s', 'Timeouts calling %s', 'Failed background jobs in %s', 'Partial outage of %s', 'Memory pressure on %s pods']);
+  return [
+    // 1. Production deploys on weekdays (more and smaller for a healthier team), and the hotfix deploys that follow some of them.
+    `WITH ${P}, s AS (SELECT ${arr(v.services)} AS sv),
+          cand AS (
+            SELECT p.d, p.h, dd.day, k, '${PFX}' || to_char(dd.day, 'YYYYMMDD') || '-' || k AS id,
+                   ${AT('dd.day', `(8 * 60 + 30 + k * 105 + floor(${R(`${T} || dd.day::text || k::text || 't'`)} * 75))::int`)} AS ts,
+                   s.sv[1 + ((k + (dd.day - DATE '2000-01-01')) % 3)] AS service
+              FROM p CROSS JOIN LATERAL (SELECT ${TODAY} - p.d AS day) dd, s, generate_series(0, 4) AS k
+             WHERE extract(isodow FROM dd.day) < 6 AND ${R(`${T} || dd.day::text || 'skip'`)} >= 0.5 * (1 - p.h) AND k < 1 + floor(4.2 * p.h * p.h * ${R(`${T} || dd.day::text || 'n'`)})),
+          x AS (SELECT cand.*, ${R(`id || 'f'`)} AS f, ${R(`id || 'g'`)} AS g, ${R(`id || 'c'`)} AS c FROM cand),
+          rows AS (
+            SELECT id, 'rel-' || to_char(day, 'YYYYMMDD') || '.' || (k + 1) AS ext, service, substr(md5(id || 'sha'), 1, 12) AS sha,
+                   ts - make_interval(mins => (4 + floor(${R(`id || 'dur'`)} * 9))::int) AS started, ts AS finished, FALSE AS hotfix,
+                   CASE WHEN c < ${NOTDONE} THEN 'failure' WHEN f < ${FAILP} AND g < 0.35 THEN 'rolled_back' ELSE 'success' END AS result
+              FROM x p
+            UNION ALL
+            SELECT id || '-hf', 'rel-' || to_char(day, 'YYYYMMDD') || '.' || (k + 1) || '-hotfix', service, substr(md5(id || 'hf'), 1, 12),
+                   ts + make_interval(mins => (90 + floor(${R(`id || 'hf'`)} * 960))::int) - interval '6 minutes', ts + make_interval(mins => (90 + floor(${R(`id || 'hf'`)} * 960))::int), TRUE, 'success'
+              FROM x p WHERE p.c >= ${NOTDONE} AND p.f < ${FAILP} AND p.g >= 0.35 AND p.g < 0.7)
+     INSERT INTO deployments_raw (id, company_id, team_id, external_id, environment, is_production, service, commit_sha, commit_shas, started_at, finished_at, day, result, is_hotfix, url, event_hash, is_sample, created_at)
+     SELECT id, ${CO}, ${T}, ext, 'production', TRUE, service, sha, ARRAY[sha]::varchar[], started, finished, (finished AT TIME ZONE 'UTC')::date, result, hotfix, NULL, NULL, TRUE, finished
+       FROM rows WHERE finished <= now() - interval '5 minutes' AND ${noReal('deployments_raw')}
+     ON CONFLICT DO NOTHING`,
+
+    // 2. The commits of each sample deploy: a weaker team ships bigger batches that waited longer (lead time); authors as hashes only.
+    `WITH ${P}
+     INSERT INTO deployment_commits (id, company_id, team_id, deployment_external_id, sha, authored_at, committed_at, author_hash, branch, is_sample, created_at)
+     SELECT '${RAW_SAMPLE_PREFIX}dc-' || substr(md5(d.id || i::text), 1, 24), ${CO}, ${T}, d.external_id,
+            CASE WHEN i = 1 THEN d.commit_sha ELSE substr(md5(d.id || i::text || 's'), 1, 12) END,
+            d.finished_at - make_interval(mins => round(20 + z.lead * 60 * i / z.n)::int),
+            d.finished_at - make_interval(mins => round(15 + z.lead * 60 * i / z.n * 0.8)::int),
+            substr(md5(${T} || 'author' || floor(${R(`d.id || i::text || 'a'`)} * 6)::text), 1, 32), CASE WHEN d.is_hotfix THEN 'hotfix/' || d.external_id ELSE 'main' END, TRUE, d.finished_at
+       FROM deployments_raw d
+       JOIN p ON p.d = least(${days - 1}, ${TODAY} - ${dayOfId('d.id')})
+       CROSS JOIN LATERAL (SELECT CASE WHEN d.is_hotfix THEN 1 ELSE 1 + floor((1.5 + 5 * (1 - p.h)) * ${R(`d.id || 'nc'`)})::int END AS n,
+                                  CASE WHEN d.is_hotfix THEN 1 + 2 * ${R(`d.id || 'hl'`)} ELSE (2 + 100 * power(1 - p.h, 1.5)) * (0.4 + 1.2 * ${R(`d.id || 'lt'`)}) END AS lead) z
+       CROSS JOIN LATERAL generate_series(1, z.n) AS i
+      WHERE d.team_id = ${T} AND d.id LIKE '${PFX}%' AND d.is_sample
+        AND NOT EXISTS (SELECT 1 FROM deployment_commits c WHERE c.team_id = d.team_id AND c.deployment_external_id = d.external_id)
+     ON CONFLICT DO NOTHING`,
+
+    // 3. Incidents: one linked to each deploy whose failure is an incident, and unlinked ones (more for a weaker team); severity P1–P4, outages are P1 / P2.
+    `WITH ${P}, s AS (SELECT ${arr(v.services)} AS sv, ${TITLES} AS titles),
+          linked AS (
+            SELECT d.id AS src, 'INC-' || to_char(d.day, 'MMDD') || '-D' || substr(d.id, ${PFX.length + 10}) AS ext, d.service, d.external_id AS dep, p.h,
+                   d.finished_at + make_interval(mins => (20 + floor(${R(`d.id || 'io'`)} * 280))::int) AS opened
+              FROM deployments_raw d JOIN p ON p.d = least(${days - 1}, ${TODAY} - d.day)
+             WHERE d.team_id = ${T} AND d.id LIKE '${PFX}%' AND d.id NOT LIKE '%-hf' AND d.is_sample AND d.result = 'success'
+               AND ${R(`d.id || 'f'`)} < ${FAILP} AND ${R(`d.id || 'g'`)} >= 0.7 AND ${R(`d.id || 'c'`)} >= ${NOTDONE}),
+          loose AS (
+            SELECT '${RAW_SAMPLE_PREFIX}inc-${K}-' || to_char(dd.day, 'YYYYMMDD') || '-' || j AS src, 'INC-' || to_char(dd.day, 'MMDD') || '-' || (j + 1) AS ext,
+                   s.sv[1 + floor(${R(`${T} || dd.day::text || j::text || 'sv'`)} * 3)::int] AS service, NULL::text AS dep, p.h,
+                   ${AT('dd.day', `(60 + floor(${R(`${T} || dd.day::text || j::text || 'ot'`)} * 1320))::int`)} AS opened
+              FROM p CROSS JOIN LATERAL (SELECT ${TODAY} - p.d AS day) dd, s, generate_series(0, 1) AS j
+             -- (every team has at least one incident in the period: a quiet team still shows that it reports incidents)
+             WHERE ${R(`${T} || dd.day::text || j::text || 'inc'`)} < (0.04 + 0.3 * (1 - p.h)) * CASE WHEN j = 0 THEN 1 ELSE 0.35 END OR (p.d = ${Math.min(30, days - 1)} AND j = 0)),
+          a AS (SELECT * FROM linked UNION ALL SELECT * FROM loose),
+          b AS (SELECT a.*, ${SEV(R(`a.src || 'sev'`))} AS sev,
+                       a.opened + make_interval(mins => (4 + floor(${R(`a.src || 'ack'`)} * 26))::int) AS ack,
+                       a.opened + make_interval(mins => round(60 * (0.3 + 9 * power(1 - a.h, 1.3)) * (0.3 + 1.4 * ${R(`a.src || 'dur'`)}))::int) AS res,
+                       CASE WHEN ${R(`a.src || 'cat'`)} < 0.35 THEN 'infrastructure' ELSE 'application' END AS cat
+                  FROM a)
+     INSERT INTO incidents_raw (id, company_id, team_id, external_id, title, severity, severity_label, service, status, opened_at, acknowledged_at, resolved_at, day,
+                                outage, category, deployment_external_id, source, url, is_sample, created_at)
+     SELECT CASE WHEN dep IS NULL THEN src ELSE '${RAW_SAMPLE_PREFIX}inc-${K}-' || substr(md5(src), 1, 14) END, ${CO}, ${T}, ext,
+            replace((SELECT titles[1 + floor(${R(`b.src || 'title'`)} * 6)::int] FROM s), '%s', b.service), sev, ${LABEL('sev')}, service,
+            CASE WHEN res <= now() THEN 'resolved' WHEN ack <= now() THEN 'acknowledged' ELSE 'open' END,
+            opened, CASE WHEN ack <= now() THEN ack END, CASE WHEN res <= now() THEN res END, (opened AT TIME ZONE 'UTC')::date,
+            NULL, cat, dep, 'pagerduty', NULL, TRUE, opened
+       FROM b WHERE opened <= now() - interval '5 minutes' AND ${noReal('incidents_raw')}
+     ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, acknowledged_at = EXCLUDED.acknowledged_at, resolved_at = EXCLUDED.resolved_at
+       WHERE incidents_raw.is_sample AND (incidents_raw.resolved_at IS DISTINCT FROM EXCLUDED.resolved_at OR incidents_raw.acknowledged_at IS DISTINCT FROM EXCLUDED.acknowledged_at)`,
+
+    // 4. The status stream of the sample incidents.
+    `INSERT INTO incident_updates (id, incident_id, team_id, status, at, severity)
+     SELECT '${RAW_SAMPLE_PREFIX}iu-' || substr(md5(i.id || u.s), 1, 24), i.id, ${T}, u.s, u.t, i.severity
+       FROM incidents_raw i CROSS JOIN LATERAL (VALUES ('open', i.opened_at), ('acknowledged', i.acknowledged_at), ('resolved', i.resolved_at)) AS u(s, t)
+      WHERE i.team_id = ${T} AND i.is_sample AND u.t IS NOT NULL
+     ON CONFLICT DO NOTHING`,
   ];
 }
 
@@ -205,8 +323,12 @@ export function rawSampleSql(teams: RawSampleTeam[], days = RAW_SAMPLE_DAYS): st
 
 /** Clear statements (with the other sample data). */
 export const RAW_SAMPLE_CLEAR: Array<{ table: string; sql: string }> = [
+  { table: 'incidents_raw', sql: `DELETE FROM incidents_raw WHERE id LIKE '${RAW_SAMPLE_PREFIX}%'` },
+  { table: 'deployment_commits', sql: `DELETE FROM deployment_commits WHERE id LIKE '${RAW_SAMPLE_PREFIX}%'` },
+  { table: 'deployments_raw', sql: `DELETE FROM deployments_raw WHERE id LIKE '${RAW_SAMPLE_PREFIX}%'` },
   { table: 'flaky_test_evidence', sql: `DELETE FROM flaky_test_evidence f WHERE EXISTS (SELECT 1 FROM test_runs tr WHERE tr.team_id = f.team_id AND tr.is_sample AND tr.id LIKE '${RAW_SAMPLE_PREFIX}%' AND tr.id = ANY(f.failed_run_ids))` },
-  { table: 'metric_evidence', sql: `DELETE FROM metric_evidence e WHERE EXISTS (SELECT 1 FROM test_runs tr WHERE tr.team_id = e.team_id AND tr.is_sample) AND NOT EXISTS (SELECT 1 FROM test_runs tr WHERE tr.team_id = e.team_id AND NOT tr.is_sample) AND NOT EXISTS (SELECT 1 FROM coverage_reports c WHERE c.team_id = e.team_id AND NOT c.is_sample) AND NOT EXISTS (SELECT 1 FROM pipeline_runs_raw p WHERE p.team_id = e.team_id AND NOT p.is_sample)` },
+  { table: 'metric_evidence', sql: `DELETE FROM metric_evidence e WHERE EXISTS (SELECT 1 FROM test_runs tr WHERE tr.team_id = e.team_id AND tr.is_sample) AND NOT EXISTS (SELECT 1 FROM test_runs tr WHERE tr.team_id = e.team_id AND NOT tr.is_sample) AND NOT EXISTS (SELECT 1 FROM coverage_reports c WHERE c.team_id = e.team_id AND NOT c.is_sample) AND NOT EXISTS (SELECT 1 FROM pipeline_runs_raw p WHERE p.team_id = e.team_id AND NOT p.is_sample) AND e.metric_key <> ALL (${arr(DELIVERY_KEYS)})` },
+  { table: 'metric_evidence', sql: `DELETE FROM metric_evidence e WHERE e.metric_key = ANY (${arr(DELIVERY_KEYS)}) AND (EXISTS (SELECT 1 FROM deployments_raw d WHERE d.team_id = e.team_id AND d.is_sample) OR EXISTS (SELECT 1 FROM incidents_raw i WHERE i.team_id = e.team_id AND i.is_sample)) AND NOT EXISTS (SELECT 1 FROM deployments_raw d WHERE d.team_id = e.team_id AND NOT d.is_sample) AND NOT EXISTS (SELECT 1 FROM incidents_raw i WHERE i.team_id = e.team_id AND NOT i.is_sample)` },
   { table: 'pipeline_runs_raw', sql: `DELETE FROM pipeline_runs_raw WHERE id LIKE '${RAW_SAMPLE_PREFIX}%'` },
   { table: 'coverage_reports', sql: `DELETE FROM coverage_reports WHERE id LIKE '${RAW_SAMPLE_PREFIX}%'` },
   { table: 'test_runs', sql: `DELETE FROM test_runs WHERE id LIKE '${RAW_SAMPLE_PREFIX}%'` },
@@ -218,9 +340,15 @@ export async function computeSampleEvidence(client: pg.PoolClient, teamIds: stri
   for (let i = days - 1; i >= 0; i--) list.push(new Date(Date.now() - i * 86_400_000).toISOString().slice(0, 10));
   let n = 0;
   for (const id of teamIds) {
-    const has = await client.query(`SELECT 1 FROM test_runs WHERE team_id = $1 AND is_sample LIMIT 1`, [id]);
-    if (!has.rows.length) continue;
-    const res = await recomputeTeamDays(client, id, list, { writeKpis: false });
+    // Only the groups whose raw data is sample data (a team with real CI data keeps its own values).
+    const g = (await client.query(
+      `SELECT EXISTS (SELECT 1 FROM test_runs WHERE team_id = $1 AND is_sample) AND NOT EXISTS (SELECT 1 FROM test_runs WHERE team_id = $1 AND NOT is_sample) AS ci,
+              (EXISTS (SELECT 1 FROM deployments_raw WHERE team_id = $1 AND is_sample) OR EXISTS (SELECT 1 FROM incidents_raw WHERE team_id = $1 AND is_sample))
+                AND NOT EXISTS (SELECT 1 FROM deployments_raw WHERE team_id = $1 AND NOT is_sample) AND NOT EXISTS (SELECT 1 FROM incidents_raw WHERE team_id = $1 AND NOT is_sample) AS delivery`,
+      [id])).rows[0];
+    const groups: MetricGroup[] = [...(g?.ci ? ['ci' as const] : []), ...(g?.delivery ? ['delivery' as const] : [])];
+    if (!groups.length) continue;
+    const res = await recomputeTeamDays(client, id, list, { writeKpis: false, groups });
     n += res.reduce((k, d) => k + d.metrics.length, 0);
   }
   return n;
