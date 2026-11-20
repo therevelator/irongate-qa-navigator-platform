@@ -218,7 +218,7 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
          FROM raw_uploads WHERE company_id = ? AND status = 'parsed' GROUP BY team_id, kind`, [companyId]);
     const rejected = await query<any[]>(
       `SELECT MAX(received_at) AS at, COUNT(*)::int AS n FROM ingestion_log
-        WHERE company_id = ? AND status = 'rejected' AND source ~ '^(tests|coverage|pipelines|deployments|commits|incidents)' AND received_at >= now() - interval '7 days'`, [companyId]);
+        WHERE company_id = ? AND status = 'rejected' AND source ~ '^(tests|coverage|pipelines|deployments|commits|incidents|issues|static-analysis)' AND received_at >= now() - interval '7 days'`, [companyId]);
     const keys = await query<any[]>(`SELECT COUNT(*)::int AS n FROM api_keys WHERE company_id = ? AND revoked_at IS NULL`, [companyId]);
     // Sample (demo) raw data has no upload rows: its newest run counts, marked as sample.
     const sample = await query<any[]>(

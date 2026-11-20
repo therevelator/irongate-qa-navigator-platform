@@ -31,6 +31,8 @@ import type pg from 'pg';
 import { pool } from '../../../src/lib/db';
 import { KPI_COLUMNS, recordKpiValues, withTransaction, type KpiColumn } from '../kpiIngest';
 import { computeDeliveryDays, DELIVERY_METRICS, WINDOW_DAYS } from './delivery';
+import { computeWorkDays, WORK_METRICS, SPRINT_STALE_DAYS } from './work';
+import { computeQualityDays, QUALITY_METRICS, REPORT_STALE_DAYS } from './quality';
 
 export interface MetricSpec {
   key: string;
@@ -38,11 +40,12 @@ export interface MetricSpec {
   unit: string;
   kpi: KpiColumn | null;
   formula: string;
-  /** 'ci' (phase 1: tests, coverage, pipelines; default) or 'delivery' (phase 2: deployments, incidents). */
+  /** 'ci' (phase 1: tests, coverage, pipelines; default), 'delivery' (phase 2: deployments, incidents), 'work' (phase 3: issues) or 'quality' (phase 3: static analysis). */
   group?: MetricGroup;
 }
 
-export type MetricGroup = 'ci' | 'delivery';
+export type MetricGroup = 'ci' | 'delivery' | 'work' | 'quality';
+export const ALL_GROUPS: MetricGroup[] = ['ci', 'delivery', 'work', 'quality'];
 
 const CI_METRICS: Record<string, MetricSpec> = {
   line_coverage: { key: 'line_coverage', label: 'Line coverage', unit: '%', kpi: 'test_coverage', formula: 'lines hit ÷ lines found × 100 (latest report of the latest main-branch commit of the day)' },
@@ -58,8 +61,8 @@ const CI_METRICS: Record<string, MetricSpec> = {
   parallel_test_efficiency: { key: 'parallel_test_efficiency', label: 'Parallel test efficiency', unit: '%', kpi: 'parallel_test_efficiency', formula: 'Σ shard durations ÷ (shards × longest shard) × 100, median over runs with parallel test stages' },
 };
 
-/** Every computed metric: phase 1 (CI) and phase 2 (delivery and reliability, ./delivery.ts). */
-export const METRICS: Record<string, MetricSpec> = { ...CI_METRICS, ...DELIVERY_METRICS };
+/** Every computed metric: phase 1 (CI), phase 2 (delivery and reliability, ./delivery.ts), phase 3 (work, ./work.ts; code quality, ./quality.ts). */
+export const METRICS: Record<string, MetricSpec> = { ...CI_METRICS, ...DELIVERY_METRICS, ...WORK_METRICS, ...QUALITY_METRICS };
 export const groupOf = (key: string): MetricGroup => METRICS[key]?.group ?? 'ci';
 
 /** The metric_evidence key behind a KPI column (for "How this was calculated"). */
@@ -236,7 +239,7 @@ export async function computeTeamDay(client: pg.PoolClient, teamId: string, day:
 export interface RecomputeOptions {
   /** Write values with a KPI column into the KPI storage (default true; demo data: false). */
   writeKpis?: boolean;
-  /** The metric groups to recompute (default both): 'ci' after test / coverage / pipeline data, 'delivery' after deployments / incidents. */
+  /** The metric groups to recompute (default all): 'ci' after test / coverage / pipeline data, 'delivery' after deployments / incidents, 'work' after issues, 'quality' after static-analysis reports. */
   groups?: MetricGroup[];
   actorId?: string | null;
   ingestionId?: string | null;
@@ -264,12 +267,24 @@ export async function recomputeTeamDays(client: pg.PoolClient, teamId: string, d
   const [team] = await rows(client, 'SELECT company_id FROM teams WHERE id = $1', [teamId]);
   if (!team) return [];
   const results: DayResult[] = [];
-  const groups: MetricGroup[] = opts.groups ?? ['ci', 'delivery'];
+  const groups: MetricGroup[] = opts.groups ?? ALL_GROUPS;
   const list = Array.from(new Set(days)).sort();
-  const delivery = groups.includes('delivery') ? await computeDeliveryDays(client, teamId, list) : new Map<string, ComputedMetric[]>();
+  const none = new Map<string, ComputedMetric[]>();
+  const delivery = groups.includes('delivery') ? await computeDeliveryDays(client, teamId, list) : none;
+  const work = groups.includes('work') ? await computeWorkDays(client, teamId, list) : none;
+  const quality = groups.includes('quality') ? await computeQualityDays(client, teamId, list) : none;
   const groupKeys = Object.keys(METRICS).filter((k) => groups.includes(groupOf(k)));
+  // Sample (demo) issues and static-analysis reports are evidence only: never written as KPI values.
+  const sampleOnly = new Set<MetricGroup>();
+  if (opts.writeKpis !== false && (work.size || quality.size)) {
+    const so = (await rows(client,
+      `SELECT EXISTS (SELECT 1 FROM issues WHERE team_id = $1 AND is_sample) AND NOT EXISTS (SELECT 1 FROM issues WHERE team_id = $1 AND NOT is_sample) AS work,
+              EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = $1 AND is_sample) AND NOT EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = $1 AND NOT is_sample) AS quality`, [teamId]))[0];
+    if (so?.work) sampleOnly.add('work');
+    if (so?.quality) sampleOnly.add('quality');
+  }
   for (const day of list) {
-    const computed = [...(groups.includes('ci') ? await computeTeamDay(client, teamId, day) : []), ...(delivery.get(day) ?? [])];
+    const computed = [...(groups.includes('ci') ? await computeTeamDay(client, teamId, day) : []), ...(delivery.get(day) ?? []), ...(work.get(day) ?? []), ...(quality.get(day) ?? [])];
     const prev = new Map((await rows(client, 'SELECT metric_key, value::float8 AS value, recorded_at FROM metric_evidence WHERE team_id = $1 AND day = $2::date', [teamId, day])).map((r) => [r.metric_key, r]));
     const kpiValues: Record<string, number> = {};
     let recordedAt = '';
@@ -287,7 +302,7 @@ export async function recomputeTeamDays(client: pg.PoolClient, teamId: string, d
       );
       const old = prev.get(m.key);
       const changed = !old || Number(old.value) !== m.value || iso(old.recorded_at) !== m.recordedAt;
-      const write = opts.writeKpis !== false && !!spec.kpi && changed;
+      const write = opts.writeKpis !== false && !!spec.kpi && changed && !sampleOnly.has(groupOf(m.key));
       if (write) {
         // The evidence keeps the exact value; the KPI column holds what its type can (e.g. lead time ≤ 99.99 days).
         const range = KPI_COLUMNS[spec.kpi as KpiColumn];
@@ -345,7 +360,11 @@ export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CA
        UNION SELECT team_id FROM pipeline_runs_raw WHERE day >= CURRENT_DATE - $1::int AND NOT is_sample
        -- Delivery values look back 28 days: a team whose last deploy or incident is that old still changes today.
        UNION SELECT team_id FROM deployments_raw WHERE day >= CURRENT_DATE - $1::int - ${WINDOW_DAYS} AND NOT is_sample
-       UNION SELECT team_id FROM incidents_raw WHERE (day >= CURRENT_DATE - $1::int - ${WINDOW_DAYS} OR resolved_at IS NULL) AND NOT is_sample) x
+       UNION SELECT team_id FROM incidents_raw WHERE (day >= CURRENT_DATE - $1::int - ${WINDOW_DAYS} OR resolved_at IS NULL) AND NOT is_sample
+       -- Work values look back up to 42 days (the latest closed sprint), code quality 30 days (the latest report).
+       UNION SELECT team_id FROM issues WHERE (opened_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} OR resolved_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} OR resolved_at IS NULL) AND NOT is_sample
+       UNION SELECT team_id FROM issue_sprints WHERE completed_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} AND NOT is_sample
+       UNION SELECT team_id FROM analysis_reports WHERE day >= CURRENT_DATE - $1::int - ${REPORT_STALE_DAYS} AND NOT is_sample) x
       ORDER BY md5(team_id || CURRENT_DATE::text)` /* a different order every day: no team waits behind the budget twice */, [days])).rows;
   let values = 0;
   let done = 0;
@@ -371,7 +390,8 @@ export const RAW_RETENTION_DAYS = 396; // 13 months
  * Retention of the raw store (db-keepalive): payloads after RAW_PAYLOAD_DAYS, per-test results and
  * per-file coverage after 35 days (the latest coverage report of each team keeps its files), and
  * everything raw (uploads, runs, reports, deployments, commits, incidents with their updates,
- * evidence) after 13 months.
+ * evidence) after 13 months. Phase 3: static-analysis findings after 35 days (the latest report of each
+ * repository and tool keeps them), reports, closed sprints and resolved issues after 13 months.
  */
 export async function cleanupRawData(): Promise<Record<string, number>> {
   const n = async (sql: string, params: any[] = []) => (await pool.query(`WITH d AS (${sql} RETURNING 1) SELECT COUNT(*)::int AS n FROM d`, params)).rows[0]?.n ?? 0;
@@ -386,6 +406,11 @@ export async function cleanupRawData(): Promise<Record<string, number>> {
     deployments: await n(`DELETE FROM deployments_raw WHERE finished_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     deploymentCommits: await n(`DELETE FROM deployment_commits WHERE created_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     incidents: await n(`DELETE FROM incidents_raw WHERE opened_at < now() - make_interval(days => $1) AND resolved_at IS NOT NULL AND resolved_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    analysisFindings: await n(`DELETE FROM analysis_findings f USING analysis_reports r WHERE r.id = f.report_id AND r.analyzed_at < now() - make_interval(days => $1)
+                                 AND r.id <> (SELECT r2.id FROM analysis_reports r2 WHERE r2.team_id = r.team_id AND r2.repo = r.repo AND r2.tool = r.tool ORDER BY r2.analyzed_at DESC LIMIT 1)`, [RAW_DETAIL_DAYS]),
+    analysisReports: await n(`DELETE FROM analysis_reports WHERE analyzed_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    issues: await n(`DELETE FROM issues WHERE resolved_at IS NOT NULL AND resolved_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    issueSprints: await n(`DELETE FROM issue_sprints WHERE completed_at IS NOT NULL AND completed_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     flakyEvidence: await n(`DELETE FROM flaky_test_evidence WHERE last_seen < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     metricEvidence: await n(`DELETE FROM metric_evidence WHERE day < CURRENT_DATE - $1::int`, [RAW_RETENTION_DAYS]),
     uploads: await n(`DELETE FROM raw_uploads WHERE received_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),

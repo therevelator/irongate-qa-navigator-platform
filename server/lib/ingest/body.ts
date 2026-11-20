@@ -17,7 +17,7 @@ export const MAX_UPLOAD_BYTES = (Number(process.env.RAW_UPLOAD_MAX_MB) || 20) * 
 export const MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
 
 /** The raw ingestion paths (the app-wide JSON / form parsers skip them; they read the body here). */
-export const RAW_INGEST_PATH = /\/ingest\/(tests|coverage|pipelines|deployments|commits|incidents)\/?$/;
+export const RAW_INGEST_PATH = /\/ingest\/(tests|coverage|pipelines|deployments|commits|incidents|issues|static-analysis)\/?$/;
 export const isRawIngestPath = (path: string) => RAW_INGEST_PATH.test(path);
 
 /** Read the whole body (or take the one serverless-http already holds), at most MAX_UPLOAD_BYTES. */

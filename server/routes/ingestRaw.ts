@@ -52,7 +52,7 @@ export class HttpError extends Error {
   constructor(public status: number, message: string, public extra: Record<string, unknown> = {}) { super(message); }
 }
 
-async function readInput(req: ApiKeyRequest, limit: number): Promise<Input> {
+export async function readInput(req: ApiKeyRequest, limit: number): Promise<Input> {
   const raw = await readBody(req, limit);
   const ct = String(req.headers['content-type'] ?? '');
   const q: Record<string, string> = {};
@@ -89,9 +89,9 @@ export const text = (b: Buffer) => {
   return s.charCodeAt(0) === 0xfeff ? s.slice(1) : s;
 };
 
-interface Common { teamId: string; commit: string; branch: string | null; run: string | null; attempt: number; startedAt: Date | null; dryRun: boolean }
+export interface Common { teamId: string; commit: string; branch: string | null; run: string | null; attempt: number; startedAt: Date | null; dryRun: boolean }
 
-function commonFields(f: Record<string, string>): Common {
+export function commonFields(f: Record<string, string>): Common {
   const teamId = (f.team ?? f.teamId ?? '').trim();
   if (!teamId) throw new HttpError(400, 'team is required (the team id, from Admin console → Connect your CI)');
   const commit = (f.commit ?? f.sha ?? '').trim();

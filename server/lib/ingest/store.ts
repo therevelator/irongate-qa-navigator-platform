@@ -11,7 +11,7 @@ import type { ChangedLines, ParsedCoverage } from './coverageReports';
 import { changedCoverage } from './coverageReports';
 import type { PipelineRunEvent } from './pipelineEvents';
 
-export type RawKind = 'tests' | 'coverage' | 'pipelines' | 'deployments' | 'commits' | 'incidents';
+export type RawKind = 'tests' | 'coverage' | 'pipelines' | 'deployments' | 'commits' | 'incidents' | 'issues' | 'static-analysis';
 
 /** Gzipped payloads are kept when at most this size (RAW_PAYLOAD_MAX_KB, default 512 KB); 0 keeps none. */
 export const RAW_PAYLOAD_MAX_BYTES = (process.env.RAW_PAYLOAD_MAX_KB !== undefined ? Number(process.env.RAW_PAYLOAD_MAX_KB) : 512) * 1024;
