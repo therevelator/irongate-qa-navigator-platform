@@ -2,6 +2,7 @@ import type { Client } from 'pg';
 import { hash } from 'bcrypt';
 import request from 'supertest';
 import { API_URL, backendUp, get, localDb, login } from './helpers/http';
+import { previousPeriod, todayUtc } from '../../server/lib/pulseRules';
 
 /**
  * Executive summary API (GET /api/summary: server/routes/summary.ts, server/lib/executiveSummary.ts).
@@ -31,6 +32,7 @@ let db: Client;
 const c: Record<string, string> = {};
 
 async function cleanup(db: Client) {
+  await db.query(`DELETE FROM pulse_responses WHERE company_id = $1`, [CO]);
   await db.query(`DELETE FROM team_actions WHERE company_id = $1`, [CO]);
   await db.query(`DELETE FROM alerts WHERE company_id = $1`, [CO]);
   await db.query(`DELETE FROM technical_debt WHERE team_id LIKE 'sum-team-%'`);
@@ -101,6 +103,17 @@ beforeAll(async () => {
      VALUES ('sum-td-1', $1, $2, 'Open item', 'high', 'open', 40, 1000, 10, 30, 2, 1)`,
     [A, CO]
   );
+  // Wellbeing pulse of the latest closed period (default cadence): C 3 answers (shown), B 2 (hidden).
+  const prev = previousPeriod([], todayUtc());
+  for (const [team, values] of [[C, [4, 5, 3]], [B, [2, 2]]] as const) {
+    for (const v of values) {
+      await db.query(
+        `INSERT INTO pulse_responses (company_id, team_id, period_start, period_end, q_workload, q_focus, q_support, q_energy, q_outlook, comment)
+         VALUES ($1, $2, $3, $4, $5, $5, $5, $5, $5, 'tv must not show this comment')`,
+        [CO, team, prev.start, prev.end, v]
+      );
+    }
+  }
   await addUser('sum-admin', 'super_admin', ['company', CO]);
   await addUser('sum-mgr', 'qa_manager', ['department', D1]);
   await addUser('sum-lead', 'team_lead', ['team', A], D1, A);
@@ -259,5 +272,35 @@ describe('Executive summary: numbers', () => {
       expect(s.money.debt.monthly).toBeGreaterThan(0);
       expect(s.money.assumptionsPath).toMatch(/business-impact/);
     }
+  });
+});
+
+describe('TV mode payload: alerts and wellbeing pulse', () => {
+  const tv = (team: string, who = 'sum-admin') => get(`/api/tv/teams/${team}`, c[who]);
+
+  it('TVP-001: open alerts of the team (count by severity, most urgent first), no names', async () => {
+    if (!up) return;
+    const a = (await tv(A)).body.alerts;
+    expect(a.counts).toEqual({ open: 1, acknowledged: 0, critical: 1, warning: 0, info: 0 });
+    expect(a.items).toEqual([expect.objectContaining({ severity: 'critical', message: 'Coverage below target', metricLabel: 'Test coverage', acknowledged: false })]);
+    expect((await tv(B)).body.alerts.counts).toMatchObject({ open: 0, acknowledged: 1 });
+    expect((await tv(C)).body.alerts.counts).toMatchObject({ open: 0, acknowledged: 0 }); // resolved alerts are not shown
+  });
+
+  it('TVP-002: wellbeing pulse: the latest closed period, shown from 3 responses; never comments', async () => {
+    if (!up) return;
+    const pc = (await tv(C, 'sum-viewer')).body.pulse;
+    expect(pc.latest).toMatchObject({ suppressed: false, responses: 3, score: 75 });
+    expect(pc.latest.questions).toHaveLength(5);
+    expect(pc.minResponses).toBe(3);
+    const pb = (await tv(B)).body.pulse;
+    expect(pb.latest).toMatchObject({ suppressed: true, responses: null, score: null, questions: null });
+    expect(JSON.stringify((await tv(C)).body)).not.toContain('tv must not show this comment');
+  });
+
+  it('TVP-003: a team outside the scope is refused (403), with its alerts and pulse', async () => {
+    if (!up) return;
+    expect((await tv(A, 'sum-viewer')).status).toBe(403);
+    expect((await tv(C, 'sum-mgr')).status).toBe(403);
   });
 });
