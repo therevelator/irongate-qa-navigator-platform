@@ -403,7 +403,7 @@ export function normaliseIncident(raw: any, at: string, defaults: { team?: strin
     }
     if (status) st = status;
   }
-  if (!openedAt && !st && !ack && !res) throw new ReportError(`${f('openedAt')} is required for a new incident (or send a status update: status and at)`);
+  // openedAt may be left out by an update of a known incident (checked when it is stored).
   return {
     id, team: str(raw.team ?? raw.teamId, 36) ?? defaults.team ?? null, title: str(raw.title ?? raw.summary ?? raw.name, 500),
     severity, severityLabel, service: str(raw.service ?? raw.serviceName, 255) ?? defaults.service ?? null,

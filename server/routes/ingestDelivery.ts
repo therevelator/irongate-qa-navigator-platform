@@ -33,7 +33,7 @@ import {
 import { storeCommitBatches, storeDeployments, storeIncidents, type StoredEvent } from '../lib/ingest/deliveryStore';
 import { recomputeTeamDays, type DayResult } from '../lib/calc/engine';
 import { deliveryAffectedDays } from '../lib/calc/delivery';
-import { HttpError, after, checkTime, computedOut, fail, summaryItem, text } from './ingestRaw';
+import { HttpError, after, computedOut, fail, summaryItem, text } from './ingestRaw';
 
 const router = express.Router();
 
@@ -136,7 +136,7 @@ function handler(kind: DeliveryKind) {
         if (e instanceof ReportError) throw new HttpError(400, e.message);
         throw e;
       }
-      for (const e of events) for (const t of eventTimes(kind, e)) checkTime(t);
+      for (const e of events) for (const t of eventTimes(kind, e)) checkEventTime(t);
       if (defaults.team && !(await teamsOwned(caller.companyId, [defaults.team]))) throw new HttpError(403, `Team ${defaults.team} is not accessible with this API key`);
       const teamOf = await resolveTeams(caller.companyId, kind, events);
       const teams = Array.from(new Set(teamOf.values()));
@@ -218,6 +218,12 @@ function handler(kind: DeliveryKind) {
       return fail(res, caller, key, hash, teamId, source, e);
     }
   };
+}
+
+const MAX_AGE_DAYS = 365;
+function checkEventTime(t: Date): void {
+  if (t.getTime() > Date.now() + 5 * 60_000) throw new HttpError(400, `An event time (${t.toISOString()}) is in the future`);
+  if (t.getTime() < Date.now() - MAX_AGE_DAYS * 86_400_000) throw new HttpError(400, `An event time (${t.toISOString()}) is more than ${MAX_AGE_DAYS} days in the past`);
 }
 
 async function teamsOwned(companyId: string, teamIds: string[]): Promise<boolean> {

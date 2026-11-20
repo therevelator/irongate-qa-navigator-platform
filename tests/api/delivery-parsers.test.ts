@@ -136,7 +136,8 @@ describe('Incidents', () => {
     expect(stream.acknowledgedAt?.toISOString()).toBe('2026-11-18T09:10:00.000Z');
     expect(stream.resolvedAt?.toISOString()).toBe('2026-11-18T11:00:00.000Z');
     expect(stream.status).toBe('resolved');
-    expect(err(() => parseIncidentBody({ id: 'INC-3' }, 'json'))).toMatch(/openedAt is required for a new incident/);
+    // An update of a known incident may carry only what changed (a new incident without openedAt is refused when stored).
+    expect(parseIncidentBody({ id: 'INC-3', deploymentId: 'd-9' }, 'json')[0]).toMatchObject({ openedAt: null, status: null, deployment: 'd-9' });
     expect(err(() => parseIncidentBody({ id: 'INC-3', openedAt: '2026-11-18T09:00:00Z', severity: 'bad' }, 'json'))).toMatch(/severity "bad" is not understood/);
     expect(err(() => parseIncidentBody({ id: 'INC-3', openedAt: '2026-11-18T09:00:00Z', resolvedAt: '2026-11-18T08:00:00Z' }, 'json'))).toMatch(/resolvedAt is before openedAt/);
     expect(err(() => parseIncidentBody({ mttr: 3, incidents: [] }, 'json'))).toMatch(/mttr: QE Navigator calculates/);

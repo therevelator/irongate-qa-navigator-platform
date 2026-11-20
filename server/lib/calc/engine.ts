@@ -385,7 +385,7 @@ export async function cleanupRawData(): Promise<Record<string, number>> {
     pipelineRuns: await n(`DELETE FROM pipeline_runs_raw WHERE started_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     deployments: await n(`DELETE FROM deployments_raw WHERE finished_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     deploymentCommits: await n(`DELETE FROM deployment_commits WHERE created_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
-    incidents: await n(`DELETE FROM incidents_raw WHERE opened_at < now() - make_interval(days => $1) AND (resolved_at IS NULL OR resolved_at < now() - make_interval(days => $1))`, [RAW_RETENTION_DAYS]),
+    incidents: await n(`DELETE FROM incidents_raw WHERE opened_at < now() - make_interval(days => $1) AND resolved_at IS NOT NULL AND resolved_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     flakyEvidence: await n(`DELETE FROM flaky_test_evidence WHERE last_seen < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     metricEvidence: await n(`DELETE FROM metric_evidence WHERE day < CURRENT_DATE - $1::int`, [RAW_RETENTION_DAYS]),
     uploads: await n(`DELETE FROM raw_uploads WHERE received_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
