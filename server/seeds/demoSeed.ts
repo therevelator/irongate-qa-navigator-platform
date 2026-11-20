@@ -21,7 +21,7 @@ import {
   DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, TeamGroup, Member, DEMO_LOGIN_EMAILS, type SampleShape,
 } from './demoData';
 import { sampleHealthSeries } from './demoData';
-import { RAW_SAMPLE_CLEAR, RAW_SAMPLE_DAYS, computeSampleEvidence, rawSampleSqlForTeam } from './demoRaw';
+import { RAW_SAMPLE_CLEAR, SAMPLE_HEALTH_DAYS, computeSampleEvidence, rawSampleSqlForTeam } from './demoRaw';
 
 export interface SeedRunResult {
   /** Demo rows added per table in this run (0 for rows that already existed). */
@@ -111,7 +111,8 @@ export function runDemoSeed(opts: { today?: string } = {}): Promise<DemoSeedResu
 }
 
 /**
- * Sample raw CI data (v2: test runs, coverage reports, pipeline runs; server/seeds/demoRaw.ts) for
+ * Sample raw CI data (v2: test runs, coverage reports, pipeline runs, deployments with commits,
+ * incidents; server/seeds/demoRaw.ts) for
  * teams with sample data, the last RAW_SAMPLE_DAYS days (only the missing days are added), and the
  * evidence calculated from it (never KPI values). A team with real raw data gets none. Returns the
  * rows added. Off with SAMPLE_RAW_DATA=false.
@@ -126,7 +127,7 @@ export async function addRawSampleData(teamIds: string[], stories?: Record<strin
       await client.query('BEGIN');
       try {
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`raw-sample:${t.id}`]);
-        const sql = rawSampleSqlForTeam({ id: t.id, companyId: t.company_id, name: t.name, health: sampleHealthSeries(t, RAW_SAMPLE_DAYS, stories) });
+        const sql = rawSampleSqlForTeam({ id: t.id, companyId: t.company_id, name: t.name, health: sampleHealthSeries(t, SAMPLE_HEALTH_DAYS, stories) });
         for (const st of sql) added += (await client.query(st)).rowCount ?? 0;
         await computeSampleEvidence(client, [t.id]);
         await client.query('COMMIT');

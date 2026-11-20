@@ -132,6 +132,9 @@ export const isProductionEnvironment = (env: string) => /^(prod|production|prd|l
 
 const RESULT: Record<string, DeployResult> = {
   success: 'success', succeeded: 'success', successful: 'success', passed: 'success', ok: 'success', deployed: 'success', completed: 'success',
+  // Jenkins UNSTABLE and Azure DevOps SucceededWithIssues / PartiallySucceeded: the deploy reached the environment.
+  unstable: 'success', succeededwithissues: 'success', partiallysucceeded: 'success', partially_succeeded: 'success',
+  not_built: 'failure', notbuilt: 'failure',
   failure: 'failure', failed: 'failure', error: 'failure', errored: 'failure', timed_out: 'failure', cancelled: 'failure', canceled: 'failure', aborted: 'failure',
   rolled_back: 'rolled_back', rolledback: 'rolled_back', 'rolled-back': 'rolled_back', rollback: 'rolled_back', reverted: 'rolled_back',
 };
