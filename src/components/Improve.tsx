@@ -150,8 +150,8 @@ export const TrendWithForecast: React.FC<{
   const crossing = f?.crossing ? dayNum(f.crossing.day) : null;
   const fmtV = (v: number) => forecastValue(v, unit);
   const label = f
-    ? `${name}: ${history.length ? `from ${fmtV(history[0].value)} to ${fmtV(last.value)} in the last ${history.length} snapshots, ` : ''}forecast ${f.text}${f.targetNow ? `, target ${forecastTargetText(f.targetNow, unit)}` : ''}`
-    : `${name} over the last ${history.length} snapshots`;
+    ? `${name} trend: ${history.length ? `from ${fmtV(history[0].value)} to ${fmtV(last.value)} in the last ${history.length} snapshots, ` : ''}forecast ${f.text}${f.targetNow ? `, target ${forecastTargetText(f.targetNow, unit)}` : ''}`
+    : `${name} trend over the last ${history.length} snapshots`;
   return (
     <div className={heightClass} role="img" aria-label={label} data-testid={testId}>
       <ResponsiveContainer width="100%" height="100%">
