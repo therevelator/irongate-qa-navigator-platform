@@ -283,7 +283,7 @@ router.get('/teams/:id/delivery', authenticateToken, async (req: AuthRequest, re
     const now = Date.now();
     const since = Date.parse(`${from}T00:00:00Z`);
     const failures = classifyFailedChanges(data.deploys, data.incidents, now);
-    const byExt = new Map(data.deploys.map((d) => [d.externalId, d]));
+    const byExt = new Map<string, (typeof data.deploys)[number]>(data.deploys.map((d) => [d.externalId, d] as const));
     const iso = (t: number | null) => (t === null ? null : new Date(t).toISOString());
     const reasons = (id: string) => (failures.get(id) ?? []).map((r) => ({ type: r.type, ref: r.ref, at: iso(r.at) }));
     const recent = data.deploys.filter((d) => d.finishedAt >= since).sort((a, b) => b.finishedAt - a.finishedAt);
