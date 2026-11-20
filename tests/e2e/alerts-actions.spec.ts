@@ -126,7 +126,7 @@ test.describe('Alerts, notifications and tracked actions', { tag: ['@area:alerts
 
     await page.goto(`http://localhost:5173/tv?team=${encodeURIComponent(team.id)}`);
     await page.mouse.move(300, 300);
-    await page.locator('button:has-text("Focus areas")').first().click();
+    await page.locator('button:has-text("Alerts & actions")').first().click(); // the panel was "Focus areas" before the wall-screen TV mode
     await expect(page.locator('[data-testid="tv-tracked-actions"]')).toBeVisible({ timeout: 20000 });
     await expect(page.locator('[data-testid="tv-tracked-actions"]')).not.toContainText('Team Lead'); // no owner names on TV
 

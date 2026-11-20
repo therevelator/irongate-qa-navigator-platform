@@ -123,7 +123,7 @@ Derived from the code, then checked against the documentation:
 | F5.12 | Data older than a day: the latest snapshot with "Last updated <date>" (overview, team detail, TV) | All | — | LATEST-01 | — |
 | F5.13 | Targets next to every status on cards, hero and gauges; battery colour by value (one scale) | All | — | TDH-05 | — |
 
-## 6. Team detail and TV mode
+## 6. Team detail, TV mode and the executive summary
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
@@ -135,12 +135,19 @@ Derived from the code, then checked against the documentation:
 | F6.4 | Formula mode ("Show formulas & data sources") and metric explanation | A | M L E V | TEAM-02 | TEAM-02 (manager has no switch) |
 | F6.5 | Open TV mode from the team, Exit back | Teams in scope | — | TV-01 | — |
 | F6.6 | E-mail TV link (mailto) and Copy link | Teams in scope | — | TEAM-03 | — |
-| F6.7 | TV keys (1–3, arrows, T, R, Esc) and kiosk options (`theme`, `rotate`) | Teams in scope | — | TV-02, TV-03 | — |
+| F6.7 | TV keys (1–4, arrows, T, R, S, Esc) and kiosk options (`theme`, `rotate`, `interval`, `panels`, `teams`) | Teams in scope | — | TV-02, TV-03, TVW-01 | — |
 | F6.8 | TV for a team outside the scope ("Show my team"); the team picker lists the teams in scope only | — | Out of scope | — | TV-04 |
 | F6.9 | TV link opened signed out → sign in → TV | Teams in scope | — | TV-05 | — |
 | F6.10 | TV errors and lost connection (keeps last data) | — | — | — | TV-06 server error, TV-07 refresh fails |
 | F6.11 | TV without a team (own team or "no team") | All | — | TV-08 | TV-08 |
 | F6.12 | Tracked actions on TV (no owner names) | Teams in scope | — | legacy:alerts-actions "…TV mode shows it" | — |
+| F6.14 | TV rotation between the chosen panels at the chosen interval (progress bar), then between the teams in scope (next team loaded ahead) | Teams in scope | Teams outside the scope in a link | TVW-01, TVW-02 | TVW-03 |
+| F6.15 | TV "Set up the screen": interval, panels, teams, theme, rotation; address and copied kiosk link | Teams in scope | Without a panel | TVW-04 | TVW-05 |
+| F6.16 | TV Alerts & actions and Wellbeing panels (team aggregates, pulse hidden below 3 responses, no comments) | Teams in scope | — | TVW-06 | API TVP-002 |
+| F6.17 | TV themes (Light, Dark, Graphite, Porcelain) with accessibility checks; app theme back on exit | All | — | TVW-07, APR-05, A11Y-34 … 37 | — |
+| F6.18 | TV recovers from a lost connection (keeps data, retries every 15 s, back on "online"); idle cursor and controls hidden; 4K layout | — | — | TVW-09, TVW-10 | TVW-08 |
+| F6.19 | Executive summary on a phone (390 × 844): scope QA score, risks, most improved, money at risk, alerts, last week; no sideways scroll; tap targets ≥ 44 px | All (scope) | Money at risk for L E V | SUMUI-01, SUMUI-02, SUMUI-10, SUMUI-11, SUMUI-12 | SUMUI-03 |
+| F6.20 | Executive summary offline copy, server error, share link; accessibility in four themes | All (scope) | — | SUMUI-04, SUMUI-06, A11Y-30 … 33 | SUMUI-04, SUMUI-05 |
 | F6.13 | Team AI toggle | A, M, L (own) | E V | legacy:team-lead-rbac "Toggle AI" | legacy:team-lead-rbac |
 
 ## 7. Analytics, compare, saved views

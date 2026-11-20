@@ -1,6 +1,6 @@
 # Manual test cases
 
-386 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+400 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -15,7 +15,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
 - [Team detail](#team-detail) (22)
-- [Team TV mode](#team-tv-mode) (8)
+- [Team TV mode](#team-tv-mode) (17)
 - [Business impact](#business-impact) (9)
 - [Analytics modules](#analytics-modules) (18)
 - [Developer insights](#developer-insights) (3)
@@ -24,6 +24,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [CSV export](#csv-export) (1)
 - [Onboarding](#onboarding) (4)
 - [KPI targets and ingestion log](#kpi-targets-and-ingestion-log) (4)
+- [Executive summary](#executive-summary) (5)
 - [Administration: manual metrics](#administration-manual-metrics) (7)
 - [API keys and ingestion](#api-keys-and-ingestion) (3)
 - [Sample (demo) data](#sample-demo-data) (4)
@@ -4457,7 +4458,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-01 "Open TV mode" shows the team full screen; Exit returns to the team page`
 
-### TC-DASH-028: TV mode keyboard: 1-3 and arrow keys switch panels, T theme, R rotation, Esc exits
+### TC-DASH-028: TV mode keyboard: 1-4 and arrow keys switch panels, T theme, R rotation, Esc exits
 
 **Type:** Positive · **Priority:** Medium · **Role:** Manager · **Flow:** F6.7
 
@@ -4476,17 +4477,18 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as Manager (manager@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd. | Sign-in succeeds and the page at /tv?team=team-1764200682441-sckxod8xd opens inside the app frame. |
 | 2 | Look at the TV view. | The team name "The Away Team" is shown and the panel "Key KPIs" is displayed. |
 | 3 | Press the key 2. | The panel "Trends · last <n> days" is shown. |
-| 4 | Press the Right arrow key. | The panel "Focus areas" is shown. |
-| 5 | Press the Right arrow key again. | The panel "Key KPIs" is shown again (wraps around). |
-| 6 | Note the current theme (light or dark) and press T. | The TV view switches to the other theme. |
-| 7 | Press T again. | The original theme is back. |
-| 8 | Press R, then move the mouse to show the controls. | The "Auto-rotate" control is shown as pressed/active and the status line at the bottom adds "panels rotate every 20 s". |
-| 9 | Press R again. | "Auto-rotate" is no longer active. |
-| 10 | Press Escape. | TV mode closes and the Overview is shown. |
+| 4 | Press the Right arrow key. | The panel "Alerts & actions" is shown. |
+| 5 | Press the Right arrow key again. | The panel "Wellbeing" is shown (the fourth panel). |
+| 6 | Press the Right arrow key once more. | The panel "Key KPIs" is shown again (wraps around). |
+| 7 | Note the current theme and press T. | The TV view switches to the next theme (Light → Dark → Graphite → Porcelain → Light). |
+| 8 | Press T three more times. | The original theme is back. |
+| 9 | Press R, then move the mouse to show the controls. | The "Auto-rotate" control is shown as pressed/active and the status line at the bottom adds "panels rotate every 20 s". |
+| 10 | Press R again. | "Auto-rotate" is no longer active. |
+| 11 | Press Escape. | TV mode closes and the Overview is shown. |
 
 **Notes:** The F key (full screen) is not covered here.
 
-*Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-02 keyboard: panels with 1-3 and arrows, T theme, R rotation, Esc exit`
+*Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-02 keyboard: panels with 1-4 and arrows, T theme, R rotation, Esc exit`
 
 ### TC-DASH-029: Kiosk options in the address (?theme=light&rotate=1) are applied
 
@@ -4577,7 +4579,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Enable request blocking for the pattern *localhost:3000/api/tv/teams/*. | The pattern is listed and ticked. |
 | 2 | Sign in as Team lead (lead@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd. | Sign-in succeeds and the page at /tv?team=team-1764200682441-sckxod8xd opens inside the app frame. |
-| 3 | Look at the TV view. | The message "Could not load the team" is shown with "The server did not respond. TV mode retries every minute." |
+| 3 | Look at the TV view. | The message "Could not load the team" is shown with "The server did not respond. TV mode keeps trying every 15 seconds and shows the team as soon as it answers." |
 | 4 | Click "Exit TV mode". | The Overview page is shown. |
 
 **After the test:** Remove the blocking pattern.
@@ -4606,7 +4608,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 1 | Sign in as Team lead (lead@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd. | Sign-in succeeds and the page at /tv?team=team-1764200682441-sckxod8xd opens inside the app frame. |
 | 2 | Wait until the TV view shows the team. | "The Away Team" and its KPIs are shown; the status line reads "Live · updated <time> · refreshes every 60 s". |
 | 3 | Now enable request blocking for *localhost:3000/api/tv/teams/* (or set DevTools Network throttling to Offline). | The block is active. |
-| 4 | Wait for the next automatic refresh (up to 60 seconds). | The status line changes to "Connection lost · showing data loaded at <time> · retrying every minute". |
+| 4 | Wait for the next automatic refresh (up to 60 seconds). | The status line changes to "Connection lost · showing data loaded at <time> · retrying every 15 s". |
 | 5 | Look at the rest of the screen. | The team name "The Away Team" and the last loaded KPIs are still shown. |
 
 **After the test:** Remove the blocking / set throttling back to No throttling.
@@ -4634,6 +4636,163 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 2 | Look at the TV view. | TV mode shows the own team "Mavericks"; for an account without a team the message "No team to show" is shown instead. |
 
 *Automated:* `tests/e2e/team/team-detail-and-tv.spec.ts › Team TV mode › TV-08 /tv without a team shows the own team (or says there is none)`
+
+### TC-DASH-091: TV mode rotates through the chosen panels at the chosen interval
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.7, F6.14
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: lead@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd&rotate=1&interval=5&panels=kpis,focus. | TV mode shows "The Away Team" with the panel "Key KPIs". |
+| 2 | Read the status line at the bottom. | It ends with "panels rotate every 5 s"; a thin bar along the top edge fills up over 5 seconds. |
+| 3 | Wait about 5 seconds without touching anything. | The panel "Alerts & actions" is shown. |
+| 4 | Wait another 5 seconds. | "Key KPIs" is shown again; "Trends" and "Wellbeing" never appear (they are not in the link). |
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-01`
+
+### TC-DASH-092: TV mode rotates between the teams in scope after the last panel
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6.14
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd&rotate=1&interval=5&panels=kpis&teams=all. | "The Away Team" is shown with a pill "Team <n> of <total>" next to the member count. |
+| 2 | Wait about 5 seconds. | The next team of the picker list is shown at once (no loading screen); the pill reads "Team <n+1> of <total>" and the address shows the new team id. |
+| 3 | Wait for a few more teams. | The screen keeps moving through every team of the company, and starts again with the first after the last. |
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-02`
+
+### TC-DASH-093: Teams outside the scope in a TV link are ignored
+
+**Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F6.14
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Software engineer (engineer@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764026202608-vcbic0w8g&rotate=1&interval=5&teams=team-1764026236967-uphpblii4,team-1764200682441-sckxod8xd,team-1764026202608-vcbic0w8g. | TV mode shows "Mavericks" (the engineer's own team); there is no "Team n of m" pill. |
+| 2 | Wait 10 seconds. | "Mavericks" is still shown: QualityCowboys and The Away Team (outside the scope) never appear. |
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-03`
+
+### TC-DASH-094: "Set up the screen" changes interval, panels, teams and theme and copies the screen link
+
+**Type:** Positive · **Priority:** High · **Role:** Manager · **Flow:** F6.15
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Manager (manager@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd. | TV mode shows "The Away Team". |
+| 2 | Press S (or move the mouse and click "Set up"). | The dialog "Set up the screen" opens. |
+| 3 | Choose "10 seconds", untick "Trends", choose "Every team in my scope", choose the theme "Porcelain" and tick "Rotate automatically". | The choices are shown as selected. |
+| 4 | Click "Copy screen link" and paste the clipboard into a text editor. | A link to /tv with team=…, theme=porcelain, rotate=1, interval=10, panels=kpis,focus,pulse and teams=all. |
+| 5 | Click "Start". | The dialog closes; the screen uses the Porcelain theme and the status line reads "… panels rotate every 10 s · <n> teams"; the address has interval=10 and teams=all. |
+| 6 | Open the copied link in another browser window (signed in as the manager). | The same set-up starts there without any click. |
+
+**After the test:** Open the set-up again and restore "This team only", 20 seconds, every panel and your theme, or clear the site data.
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-04`
+
+### TC-DASH-095: The screen set-up needs at least one panel; Esc closes it without changes
+
+**Type:** Negative · **Priority:** Medium · **Role:** Team lead · **Flow:** F6.15
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123), open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd and press S. | The dialog "Set up the screen" opens. |
+| 2 | Untick all four panels. | "Choose at least one panel." is shown and "Start" and "Copy screen link" are disabled. |
+| 3 | Press Escape. | The dialog closes; TV mode stays open, unchanged. |
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-05`
+
+### TC-DASH-096: Alerts & actions and Wellbeing panels show team aggregates only
+
+**Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.16
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd. | TV mode shows "The Away Team". |
+| 2 | Press 3. | "Alerts & actions" is shown: "Open alerts" with the number open and per severity, the most urgent alerts with their message and "since <date>" (or, with no open alert, the KPIs off target and "No open alerts"), and the action plan without owner names. |
+| 3 | Press 4. | "Wellbeing" is shown: the latest closed pulse period with its score out of 100 and band (Good / Watch / Low), the number of responses, the five answers as bars from 1 to 5 and the trend of the last periods; or "Not shown" when fewer than 3 people answered. |
+| 4 | Look for names or comments anywhere on the screen. | No person's name (other than the team lead in the header) and no survey comment is shown. |
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-06`
+
+### TC-DASH-097: TV mode cycles through the four themes and gives the app theme back on exit
+
+**Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F6.17
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd&theme=light. | TV mode is in the Light theme. |
+| 2 | Press T four times, looking at the screen after each press. | Dark, Graphite (dark glass), Porcelain (light frosted glass), then Light again; every text stays readable. |
+| 3 | Press Escape. | The Overview opens in the app's own theme. |
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-07; A11Y-34 … 37`
+
+### TC-DASH-098: TV mode recovers on its own after a lost connection
+
+**Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F6.18
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123), then open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd&rotate=1&interval=10. | The status line reads "Live · updated <time> …". |
+| 2 | In DevTools, set Network throttling to Offline and wait up to 60 seconds. | The status line reads "Connection lost · showing data loaded at <time> · retrying every 15 s"; the team and its figures stay on screen and the panels keep rotating. |
+| 3 | Set Network throttling back to No throttling and wait up to 15 seconds. | The status line reads "Live · updated <new time> …" again without any click. |
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-08`
+
+### TC-DASH-099: TV mode on a 4K screen and hands-off: cursor and controls hide
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F6.18
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On a 3840×2160 screen (or a browser window of that size), sign in as Super admin and open http://localhost:5173/tv?team=team-1764200682441-sckxod8xd&rotate=1. | The layout is the same as on a 1080p screen, twice as large; nothing scrolls. |
+| 2 | Press F, then leave the mouse and keyboard alone for 5 seconds. | The browser goes full screen; the controls bar and the mouse cursor disappear; the screen does not dim (where the browser allows a wake lock). |
+| 3 | Move the mouse. | The controls bar appears again. |
+
+**Notes:** Headless test browsers have no real full screen; the automated test checks the scaling, the idle cursor and the controls.
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-09, TVW-10`
 
 ## Business impact
 
@@ -5956,6 +6115,93 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/metrics-quality.spec.ts › Confidence, KPI targets and the ingestion log › An engineer has no Ingestion log`
 
+## Executive summary
+
+### TC-DASH-100: Executive summary on a phone: the company in one screen
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6.19
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On a phone (or DevTools device mode 390×844), sign in as Super admin (admin@irongate.com / demo123) and open http://localhost:5173/summary. | The top bar reads "Summary"; the page shows "Executive summary", the company name and "<n> teams · whole company". |
+| 2 | Read the first card. | The company QA score as a battery (or gauge, as chosen in Appearance), the number out of 100, its status (On target / Watch / Off target), "Target ≥ 85", the change since last week and the teams on track / at risk / off track. |
+| 3 | Read the two tiles below. | "Open alerts" with the number (and how many are critical) and "Money at risk" with a range per month. |
+| 4 | Scroll down. | "Since last week" (QA score, teams up / down, status changes, alerts, tracked actions), "Biggest risks" (at most 3 teams, each item with its value, target and change), "Most improved" (at most 3), "Money at risk" and "All <n> teams". |
+| 5 | Swipe sideways. | The page does not scroll sideways; every button and link is easy to tap. |
+
+*Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-01`
+
+### TC-DASH-101: Manager sees the summary of their department; software engineer of their team without money
+
+**Type:** Positive · **Priority:** High · **Role:** Manager, Software engineer · **Flow:** F6.19
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Manager (manager@irongate.com / demo123), open the navigation and click "Executive summary". | The summary opens with the title "DevOps" and "your departments"; every team in "All teams" belongs to DevOps. |
+| 2 | Sign out, sign in as Software engineer (engineer@irongate.com / demo123) and open the navigation. | There is no "Executive summary" entry. |
+| 3 | Open http://localhost:5173/summary. | The summary of "Mavericks" opens; "Money at risk" says it is shown to super admins and managers, with a link to Business impact. |
+
+*Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-02, SUMUI-03`
+
+### TC-DASH-102: Executive summary keeps the last copy offline and reloads on its own
+
+**Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F6.20
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Team lead (lead@irongate.com / demo123) and open http://localhost:5173/summary. | "Loaded today at <time>" is shown under the title. |
+| 2 | In DevTools set Network throttling to Offline, then click "Reload". | "Offline · showing the summary loaded today at <time>"; the figures stay on screen. |
+| 3 | Reload the browser page (still offline, the app files cached) or reopen the page from the history. | The last summary is shown again with the same Offline message. |
+| 4 | Set Network throttling back to No throttling. | Within seconds the line reads "Loaded today at <new time>" without any click. |
+
+**Notes:** The copy is kept per person in this browser and removed at sign-out.
+
+*Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-04, SUMUI-05`
+
+### TC-DASH-103: Executive summary: share link and money at risk assumptions
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F6.19, F6.20
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123) on a desktop and open http://localhost:5173/summary. | The summary is shown in two or three columns. |
+| 2 | Click "Share link". | "Summary link copied…" is shown; the clipboard holds http://localhost:5173/summary (on a phone the share sheet opens instead). |
+| 3 | In "Money at risk", open "How these are estimated". | The method and the caveats of Business impact are listed; the amounts are ranges, never single exact figures. |
+| 4 | Click "Assumptions and team figures". | Business impact opens on the "All teams" tab (the revenue roll-up with each team's figures). |
+
+*Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-06, SUMUI-10`
+
+### TC-DASH-104: Executive summary is readable in every theme and score display
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F6.20
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin on a phone-sized window and open http://localhost:5173/summary. | The summary is shown. |
+| 2 | In Appearance choose Light, Dark, Graphite and Porcelain in turn, each with Battery and Gauge. | Every text is readable in every theme; the score is drawn as the chosen battery or gauge. |
+
+*Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-11, A11Y-30 … 33`
+
 ## Administration: manual metrics
 
 ### TC-ADM-001: A team lead sees only the teams they lead in Manual metrics and saves a test coverage value
@@ -7209,7 +7455,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 3 | Enter the title, choose Linked KPI 'Test coverage', Due date 2030-03-01 and click 'Create action'. | A toast 'Action created' appears and the action is listed. |
 | 4 | Look at the action's KPI line. | It reads 'Test coverage (higher is better): baseline …'. |
 | 5 | Change the action's status to 'In progress'. | The action shows the badge 'In progress'. |
-| 6 | Click 'Open TV mode' (or open /tv?team=<The Away Team id>), move the mouse to show the controls and click 'Focus areas'. | An 'Action plan' panel with the tracked actions is shown, including the new action. |
+| 6 | Click 'Open TV mode' (or open /tv?team=<The Away Team id>), move the mouse to show the controls and click 'Alerts & actions'. | An 'Action plan' panel with the tracked actions is shown, including the new action. |
 | 7 | Read the Action plan panel on TV. | No owner names are shown (e.g. no 'Team Lead'). |
 
 **After the test:** Leave TV mode, open The Away Team's Team detail and delete the created action.

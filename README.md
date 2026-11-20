@@ -376,32 +376,54 @@ Endpoints: `GET|POST /api/admin/users/:id/assignments`, `DELETE /api/admin/users
 `GET /api/auth/invitations/:token`, `POST /api/auth/invitations/accept`,
 `POST /api/auth/forgot-password`, `POST /api/auth/reset-password`, `POST /api/admin/users/:id/send-reset-link`.
 
+## Executive summary (phones)
+
+`/summary`: the quality of the person's scope readable in one minute on a 390 px phone (and on a desktop), from one call,
+`GET /api/summary` ([`server/routes/summary.ts`](server/routes/summary.ts), rules in
+[`server/lib/executiveSummary.ts`](server/lib/executiveSummary.ts)). In the navigation for super admins and managers; every
+role with a team in scope may open the link, and sees their own scope (a manager their departments, a team lead their team).
+
+- The scope's QA score (Battery or Gauge, as chosen in Appearance) with status, target and the change since last week (the
+  overview's own figure over the same teams), and the teams vs KPI targets (on track / at risk / off track).
+- **Biggest risks** (3): teams with the QA score below its target or a tracked KPI off target, lowest QA score first, each item with
+  its value, target and the change since last week. **Most improved** (3): the biggest QA score rises since last week.
+- **Money at risk**: the Business impact revenue roll-up over the scope as a range per month and per year, the cost of delay of open
+  technical debt, how it is estimated and a link to the assumptions (Business impact → All teams). Super admins and managers only.
+- **Open alerts** (the Alerts page counts) and **since last week**: QA score change, teams up / down, status changes, alerts opened /
+  resolved, tracked actions done / new / overdue. "Last week" is each team's latest snapshot dated 7 to 14 days ago.
+- Offline-ish: the last summary is kept in the browser (per person, removed at sign-out) and shown with the time it was loaded when
+  the network is gone; it reloads when the connection returns, when the page is shown again and every 5 minutes.
+- **Share link** copies `/summary` (or opens the phone's share sheet): whoever opens it signs in and sees their own scope.
+
 ## Team TV mode
 
-A full-screen view of ONE team for a meeting-room screen or a team wall: `/tv?team=<id>`.
-Open it from the team's page (Team detail): **Open TV mode**, **E-mail TV link** (opens your mail
+A full-screen view for a wall or meeting-room screen, read from across the room, that needs no interaction once started:
+`/tv?team=<id>`. Open it from the team's page (Team detail): **Open TV mode**, **E-mail TV link** (opens your mail
 app with the team's TV link filled in) or **Copy link**. Whoever opens the link signs in and lands on
 that team's TV screen, if the team is in their scope (a signed-out visit keeps the address through
 sign-in). **TV mode** is also in the navigation for every role, with a team picker listing the teams of
 their scope (`GET /api/tv/teams`).
 
-- Shows the team name, department, lead and member count, the QA score battery with its
-  status and change since the previous snapshot, six key KPIs (value, target, status, change,
-  90-day sparkline), "data as of", a clock, and two more panels: 90-day trends with target
-  lines, and focus areas (KPIs off target, plus recommended actions for team leads and up).
-  Team aggregates only: no member list and no individual developer data.
+- Shows the team name, department, lead and member count, the QA score (battery or gauge) with its
+  status and change since the previous snapshot, "data as of", a clock, and four panels: **Key KPIs** (six KPIs with value,
+  target, status, change and a 90-day sparkline), **Trends** (90 days with target lines), **Alerts & actions** (the team's open
+  alerts by severity, most urgent first, or the KPIs off target when there is none; the tracked actions without owner names, or
+  recommended actions) and **Wellbeing** (the anonymous pulse: the latest closed period's score and answers, the trend; hidden below
+  3 responses; never comments). Team aggregates only: no member list and no individual developer data.
+- **Rotation**: auto-rotate moves through the chosen panels every N seconds and, after the last one, on to the next chosen team
+  (all the teams of the scope, or a list); the next team is loaded ahead, a thin bar shows the time left. **Set up the screen** (S, or
+  the Set up button) chooses the interval (10 s to 5 min), panels, teams, theme and rotation, and copies the screen link.
 - Scope: the analytics rule. Admins any team, managers the teams of their department,
   team leads / engineers / viewers their own team. `GET /api/tv/teams/:id` answers 403 for
-  any other team (also another company's team or an unknown id).
+  any other team (also another company's team or an unknown id); teams outside the scope in a link are ignored.
 - Refreshes every 60 s, on the live "metrics updated" event and when the tab becomes
-  visible; a failed refresh keeps the last data on screen and says so.
-- Keys: **F** full screen (if the browser refuses, a message suggests F11), **T** light/dark
-  (dark by default, remembered separately from the app theme; with the Graphite or Porcelain app theme, dark is Graphite and light
-  Porcelain), **R** auto-rotate the panels
-  every 20 s, **← →** or **1–3** panels, **Esc** exit. The controls bar appears on mouse
-  move and hides after 4 s, with the cursor.
-- Kiosk URL options: `?team=<id>&theme=light|dark&rotate=1`. The layout scales with the
-  screen (1366×768 up to 3840×2160) and keeps the screen awake where the browser allows it.
+  visible; a lost connection keeps the last data on screen, says so, retries every 15 s and reloads as soon as the browser is online.
+- Keys: **F** full screen (if the browser refuses, a message suggests F11), **T** theme (Light, Dark, Graphite, Porcelain; remembered
+  separately from the app theme; dark by default, Graphite with a glass app theme), **R** auto-rotate, **S** set up,
+  **← →** or **1–4** panels, **Esc** exit. The controls bar appears on mouse move and hides after 4 s, with the cursor.
+- Kiosk URL options: `?team=<id>&theme=light|dark|graphite|porcelain&rotate=1&interval=<seconds>&panels=kpis,trends,focus,pulse&teams=all|<id>,<id>`
+  (`theme=light|dark` keeps the glass family of a glass app theme). The layout scales with the
+  screen (1 rem = 1/120 of a 16:9 width: identical at 1366×768, 1920×1080 and 3840×2160) and keeps the screen awake where the browser allows it.
 
 ## KPI ingestion API
 

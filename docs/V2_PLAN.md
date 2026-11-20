@@ -106,6 +106,12 @@ Also in phase 1:
   readable from across the room.
 - Later: Slack / Microsoft Teams digests and alerts.
 
+Status: **done** (executive summary and TV mode). `/summary` (`GET /api/summary`, one call, scoped like every page; money at risk
+for super admins and managers) and the wall-screen TV mode (rotation between the teams in scope and the chosen panels, set-up dialog
+and kiosk link, alerts and wellbeing panels, four themes, recovery after a lost connection, 1080p and 4K). Tests: API
+`executive-summary.test.ts`, UI `summary/executive-summary.spec.ts` and `team/tv-wall-screen.spec.ts`, manual cases SUM-* and TVW-*.
+No database change. Slack / Teams digests remain for later.
+
 ## Data model (new tables)
 
 - `raw_uploads`: every file or event received (company, team, kind, format, commit, run id, size, hash, storage
@@ -152,4 +158,4 @@ Also in phase 1:
 2. Phase 2.
 3. Phase 3.
 4. Phases 4 and 5 (they need phases 1–3 data to be credible; forecasts can start after phase 1).
-5. Phase 6 (the executive phone summary and TV mode can be built in parallel at any time).
+5. Phase 6 — done (executive phone summary and wall-screen TV mode); Slack / Teams digests later.

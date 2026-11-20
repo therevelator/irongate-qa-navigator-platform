@@ -45,8 +45,8 @@ export async function collectGoldenOutputs(cookie: string, today: string) {
 
 /** Fields added by the metric-storage phase (confidence, staleness, targets, sample data) and FI-22 (lastUpdated, dataOutdated): additive, checked separately. */
 const ADDED_TEAM_FIELDS = ['qaScoreConfidence', 'qaScoreRecorded', 'kpiStaleness', 'kpiThresholds', 'kpiTargets', 'staleKpis', 'sampleData', 'membersHidden', 'lastUpdated', 'dataOutdated'];
-/** Team detail header (rank in the caller's scope, people per role, leads, Product Owners): additive. */
-const ADDED_DETAIL_FIELDS = ['qaRank', 'memberCount', 'member_count', 'memberRoles', 'teamLeads', 'productOwners'];
+/** Team detail header (rank in the caller's scope, people per role, leads, Product Owners) and the team's main branch (raw ingestion): additive. */
+const ADDED_DETAIL_FIELDS = ['qaRank', 'memberCount', 'member_count', 'memberRoles', 'teamLeads', 'productOwners', 'main_branch'];
 const ADDED_SUMMARY_FIELDS = ['globalQaScoreConfidence', 'globalQaScoreDistribution', 'engineeringHealthConfidence', 'deliveryPerformanceConfidence', 'kpiAveragesUnweighted', 'companyKpiTargets', 'sampleData', 'lastUpdated', 'dataOutdated', 'scope'];
 
 /** A copy of the outputs without the added fields, to compare with the baseline. */
@@ -70,6 +70,7 @@ export function withoutAddedFields(o: any): any {
   for (const h of Object.values<any>(c.history)) { delete h.qaConfidence; delete h.targets; }
   for (const t of Object.values<any>(c.tv)) {
     delete t.targets; delete t.qaConfidence;
+    delete t.alerts; delete t.pulse; // added with the wall-screen TV mode (open alerts, wellbeing pulse): additive
     if (t.latest) for (const k of ['qaScoreConfidence', 'kpiStaleness', 'kpiThresholds', 'lastUpdated', 'dataOutdated']) delete t.latest[k];
   }
   return c;
