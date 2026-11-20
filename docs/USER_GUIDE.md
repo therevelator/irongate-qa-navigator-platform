@@ -118,7 +118,8 @@ Open a team from the Overview. You see only teams in your scope.
   and the wellbeing pulse (never below 3 answers, never comments). It rotates through panels and the
   teams of your scope. Press S to set it up (interval, panels, teams, theme), then **Copy screen link**.
   Keys: F full screen, T theme, R rotate, S set up, arrows or 1–4 panels, Esc exit. It shows team figures
-  only, no individual data.
+  only, no individual data. The QA score follows your score display: the battery stands beside the big
+  score; the gauge, which is wider than tall, sits in the middle of the panel with the score in its centre.
 
 ## 6. Analytics and Compare teams
 

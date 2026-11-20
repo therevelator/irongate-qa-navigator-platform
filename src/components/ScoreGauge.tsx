@@ -1,7 +1,7 @@
 import React, { useId } from 'react';
 import { clampScore } from './BatteryIndicator';
 import { batteryBand } from '../lib/batteryScale';
-import { arcLength, arcPath, gaugeLayout, GAUGE_END, GAUGE_START, polar, valueToAngle } from '../lib/gaugeGeometry';
+import { arcLength, arcPath, gaugeLayout, GAUGE_END, GAUGE_SIZES, GAUGE_START, gaugeNeedle, polar, valueToAngle } from '../lib/gaugeGeometry';
 
 /**
  * Radial score gauge: the "Gauge" score display (Appearance menu), an alternative to the 3D
@@ -17,18 +17,17 @@ export interface ScoreGaugeProps {
   good?: number;
   warn?: number;
   size?: 'xs' | 'sm' | 'md' | 'lg';
+  /** Box width in px instead of the size's own (TV mode fills its space: fitGaugeWidth). Drawn at that size, so it stays crisp. */
+  width?: number;
   label: string;
   className?: string;
 }
 
-/** Box width per size (px), chosen to sit where the battery of the same size sits. */
-const GAUGE_SIZES = { xs: 52, sm: 68, md: 100, lg: 152 } as const;
-
-const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', label, className = '' }) => {
+const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', width: boxWidth, label, className = '' }) => {
   const id = useId().replace(/:/g, '');
   const value = clampScore(raw);
   const band = batteryBand(value);
-  const w = GAUGE_SIZES[size];
+  const w = boxWidth && boxWidth > 0 ? boxWidth : GAUGE_SIZES[size];
   const { cx, cy, r, stroke, width, height } = gaugeLayout(w);
   const track = arcPath(cx, cy, r, GAUGE_START, GAUGE_END);
   const valueArc = value != null && value > 0 ? arcPath(cx, cy, r, GAUGE_START, valueToAngle(value)) : '';
@@ -37,8 +36,9 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', 
   // The needle starts where the arc starts and travels with the sweep to the end of the coloured
   // arc (the value): drawn at the start angle and rotated about the centre by the value's angle.
   const needleTurn = value != null ? valueToAngle(value) - GAUGE_START : 0;
-  const t0 = polar(cx, cy, r - stroke / 2 - Math.max(1.5, w * 0.02), GAUGE_START);
-  const t1 = polar(cx, cy, r + stroke / 2 + Math.max(1.5, w * 0.02), GAUGE_START);
+  const needle = gaugeNeedle(w);
+  const t0 = polar(cx, cy, r - stroke / 2 - needle.reach, GAUGE_START);
+  const t1 = polar(cx, cy, r + stroke / 2 + needle.reach, GAUGE_START);
   const fontSize = Math.round(w * (size === 'xs' ? 0.3 : 0.28));
   const showUnit = size === 'lg' || size === 'md';
 
@@ -110,7 +110,7 @@ const ScoreGauge: React.FC<ScoreGaugeProps> = ({ value: raw, good, size = 'lg', 
           >
             <line
               x1={t0.x} y1={t0.y} x2={t1.x} y2={t1.y}
-              strokeWidth={Math.max(1.5, w * 0.022)}
+              strokeWidth={needle.width}
               strokeLinecap="round"
               style={{ stroke: 'var(--gauge-tick)' }}
             />

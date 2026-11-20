@@ -155,6 +155,88 @@ test.describe('TV mode on a 4K screen', { tag: [TAG.area('tv')] }, () => {
   });
 });
 
+/** Boxes of the QA hero's score visual (the battery or the gauge) and what holds it. */
+const heroBoxes = (page: Page) => page.evaluate(() => {
+  const r = (el: Element | null) => { if (!el) return null; const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height, r: b.right, b: b.bottom }; };
+  const slot = document.querySelector('[data-testid="tv-battery"]');
+  const visual = slot?.querySelector('[role="img"]') ?? null;
+  // A clipped ancestor would hide part of it: every ancestor up to the hero shows overflow, or holds it whole.
+  let clipped = false;
+  const hero = document.querySelector('[data-testid="tv-hero"]');
+  const vb = visual?.getBoundingClientRect();
+  for (let el = visual?.parentElement ?? null; el && vb; el = el.parentElement) {
+    const cs = getComputedStyle(el);
+    if (cs.overflow !== 'visible') {
+      const eb = el.getBoundingClientRect();
+      if (vb.left < eb.left - 0.5 || vb.right > eb.right + 0.5 || vb.top < eb.top - 0.5 || vb.bottom > eb.bottom + 0.5) clipped = true;
+    }
+    if (el === hero) break;
+  }
+  return {
+    hero: r(hero), slot: r(slot), visual: r(visual), clipped,
+    svg: r(slot?.querySelector('svg') ?? null),
+    needle: r(slot?.querySelector('[data-testid="score-gauge-marker"]') ?? null),
+    kind: visual?.getAttribute('data-score-visual') ?? 'battery',
+  };
+});
+
+test.describe('TV mode with the gauge', { tag: [TAG.area('tv')] }, () => {
+  for (const vp of [{ id: 'TVW-11', width: 1920, height: 1080 }, { id: 'TVW-12', width: 1366, height: 768 }] as const) {
+    test.describe(`${vp.width}×${vp.height}`, () => {
+      test.use({ viewport: { width: vp.width, height: vp.height } });
+
+      test(`${vp.id} ${vp.width}×${vp.height}: the gauge sits inside the hero, whole and centred, about as tall as the battery`, async ({ signInAs, page }) => {
+        await signInAs('admin', tv(`team=${DEMO.leadTeam.id}&theme=light`));
+        await expect(page.getByTestId('tv-hero')).toBeVisible();
+        await expect(page.getByTestId('tv-battery').getByRole('img')).toBeVisible();
+        const battery = await heroBoxes(page);
+        expect(battery.kind).toBe('battery');
+
+        await page.evaluate(() => localStorage.setItem('irongate_score_display', 'gauge'));
+        await page.reload();
+        await expect(page.getByTestId('tv-battery').getByTestId('score-gauge')).toBeVisible();
+        await expect(page.getByTestId('tv-status')).toBeVisible();
+        const g = await heroBoxes(page);
+        expect(g.kind).toBe('gauge');
+        const [hero, slot, svg, needle] = [g.hero!, g.slot!, g.svg!, g.needle!];
+        // Inside its slot and the hero, needle included; nothing clips it.
+        for (const box of [svg, needle]) {
+          expect(box.x).toBeGreaterThanOrEqual(slot.x - 0.5);
+          expect(box.r).toBeLessThanOrEqual(slot.r + 0.5);
+          expect(box.y).toBeGreaterThanOrEqual(slot.y - 0.5);
+          expect(box.b).toBeLessThanOrEqual(slot.b + 0.5);
+          expect(box.x).toBeGreaterThanOrEqual(hero.x);
+          expect(box.r).toBeLessThanOrEqual(hero.r);
+        }
+        expect(g.clipped).toBe(false);
+        // Centred in its slot.
+        expect(Math.abs((svg.x + svg.r) / 2 - (slot.x + slot.r) / 2)).toBeLessThanOrEqual(1);
+        expect(Math.abs((svg.y + svg.b) / 2 - (slot.y + slot.b) / 2)).toBeLessThanOrEqual(1);
+        // Height-driven: it fills its slot's height, and is a comparable size to the battery
+        // (a gauge is wider than tall, so not the very same height).
+        expect(svg.h).toBeGreaterThan(slot.h - 30);
+        expect(svg.h).toBeGreaterThanOrEqual(battery.visual!.h * 0.55);
+        expect(svg.w).toBeGreaterThanOrEqual(battery.visual!.w);
+        // Drawn at its size (no CSS scale), so it stays sharp: the SVG's own width is its width on screen.
+        expect(Number(await page.getByTestId('tv-battery').locator('svg').getAttribute('width'))).toBeCloseTo(svg.w, 0);
+        // The text around it stays inside the hero too (it used to be squeezed beside the gauge and spill over the KPIs).
+        const spill = await page.getByTestId('tv-hero').evaluate((h) => {
+          const hb = h.getBoundingClientRect();
+          return Array.from(h.querySelectorAll('h2, p, [data-testid="tv-status"]'))
+            .map((el) => ({ text: (el.textContent ?? '').slice(0, 30), b: el.getBoundingClientRect() }))
+            .filter(({ b }) => b.left < hb.left || b.right > hb.right + 0.5 || b.top < hb.top || b.bottom > hb.bottom + 0.5)
+            .map(({ text }) => text);
+        });
+        expect(spill).toEqual([]);
+        // Nothing scrolls or spills out of the screen.
+        const overflow = await page.getByTestId('tv-mode').evaluate((el) => ({ x: el.scrollWidth > el.clientWidth, y: el.scrollHeight > el.clientHeight }));
+        expect(overflow).toEqual({ x: false, y: false });
+        await page.evaluate(() => localStorage.removeItem('irongate_score_display'));
+      });
+    });
+  }
+});
+
 test.describe('TV mode accessibility', { tag: [TAG.a11y, TAG.area('tv')] }, () => {
   test.use({ viewport: { width: 1920, height: 1080 } });
   const cases = [

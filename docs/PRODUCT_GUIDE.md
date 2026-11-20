@@ -1231,6 +1231,10 @@ started (`/tv?team=<id>`, [`TeamTvView.tsx`](../src/components/TeamTvView.tsx), 
 
 - Team name, department, lead, member count; QA score (battery or gauge) with status and change since the previous snapshot; "data as
   of" and a clock, always on screen.
+- QA score layout: the battery is scaled to the height of the hero row, with the large score, status and details beside it. The gauge is
+  wider than tall, so beside the text it would be either tiny or squeeze the text out of the panel; it sits between the title (with the
+  status pill) and the details instead, sized from its own layout to the largest that fits, needle included (`fitGaugeWidth` in
+  `src/lib/gaugeGeometry.ts`), centred, and drawn at that size (no CSS scaling), so it stays sharp on 4K. Its centre shows the score.
 - Four panels: **Key KPIs** (test coverage, automation coverage, test flakiness, defect escape rate, change failure rate, deployments
   with value, target, status, change and a 90-day sparkline), **Trends** (90 days with the target line of each day), **Alerts & actions**
   (the team's open alerts by severity, or the KPIs off target when none is open; the tracked actions without owner names, or the

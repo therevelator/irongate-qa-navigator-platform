@@ -1,6 +1,6 @@
 # Manual test cases
 
-432 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+433 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -15,7 +15,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
 - [Team detail](#team-detail) (22)
-- [Team TV mode](#team-tv-mode) (17)
+- [Team TV mode](#team-tv-mode) (18)
 - [Business impact](#business-impact) (9)
 - [Analytics modules](#analytics-modules) (18)
 - [Developer insights](#developer-insights) (3)
@@ -4874,6 +4874,31 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-09, TVW-10`
 
+### TC-DASH-100: TV mode with the Gauge score display: the gauge fills the hero, whole and centred, on 1366×768, 1080p and 4K screens
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F6.18
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin, open Appearance in the top bar and choose Score display 'Gauge'. | Scores are drawn as radial gauges. |
+| 2 | On a 1920×1080 screen (or a browser window of that size) open TV mode for The Away Team (team page › Open TV mode). | The QA score panel shows 'QA score' and the status pill (e.g. 'Watch') on top, a large gauge in the middle with the score and '/ 100' in its centre, and the change, the target and the confidence centred below it. Nothing overlaps the team header or the Key KPIs panel; nothing is cut off; the gauge is centred in the panel. |
+| 3 | Resize the window to 1366×768, then (if available) view on a 3840×2160 screen. | The same layout, scaled with the screen; the arc, the marker and the number stay sharp on the 4K screen. |
+| 4 | Exit TV mode, choose Score display 'Battery' and open TV mode again. | The 3D battery stands on the left with the large score, the status and the details to its right, as before. |
+
+**After the test:** Set the score display back to Battery if you changed it.
+
+**Notes:** The gauge is wider than tall, so it is laid out between the title and the details instead of beside the text; its own centre shows the score.
+
+*Automated:* `tests/e2e/team/tv-wall-screen.spec.ts › TVW-11, TVW-12`
+
 ## Business impact
 
 ### TC-DASH-035: Super admin: Business impact opens on the money summary; the "All teams" tab is offered
@@ -6197,7 +6222,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Executive summary
 
-### TC-DASH-100: Executive summary on a phone: the company in one screen
+### TC-DASH-101: Executive summary on a phone: the company in one screen
 
 **Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6.19
 
@@ -6215,7 +6240,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-01`
 
-### TC-DASH-101: Manager sees the summary of their department; software engineer of their team without money
+### TC-DASH-102: Manager sees the summary of their department; software engineer of their team without money
 
 **Type:** Positive · **Priority:** High · **Role:** Manager, Software engineer · **Flow:** F6.19
 
@@ -6231,7 +6256,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-02, SUMUI-03`
 
-### TC-DASH-102: Executive summary keeps the last copy offline and reloads on its own
+### TC-DASH-103: Executive summary keeps the last copy offline and reloads on its own
 
 **Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F6.20
 
@@ -6250,7 +6275,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-04, SUMUI-05`
 
-### TC-DASH-103: Executive summary: share link and money at risk assumptions
+### TC-DASH-104: Executive summary: share link and money at risk assumptions
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F6.19, F6.20
 
@@ -6267,7 +6292,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/summary/executive-summary.spec.ts › SUMUI-06, SUMUI-10`
 
-### TC-DASH-104: Executive summary is readable in every theme and score display
+### TC-DASH-105: Executive summary is readable in every theme and score display
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F6.20
 
@@ -6284,7 +6309,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Team improve (forecasts and recommendations)
 
-### TC-DASH-105: Each KPI tile shows a Forecast line and its trend chart the projected band
+### TC-DASH-106: Each KPI tile shows a Forecast line and its trend chart the projected band
 
 **Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.21
 
@@ -6307,7 +6332,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/improve.spec.ts › IMP-01`
 
-### TC-DASH-106: Recommendations are ranked, top 3 visible, the rest collapsed, each with evidence, next step, expected effect and confidence
+### TC-DASH-107: Recommendations are ranked, top 3 visible, the rest collapsed, each with evidence, next step, expected effect and confidence
 
 **Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.22
 
@@ -6330,7 +6355,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/improve.spec.ts › IMP-02`
 
-### TC-DASH-107: Add to Action plan creates a tracked action linked to the recommendation and its metric
+### TC-DASH-108: Add to Action plan creates a tracked action linked to the recommendation and its metric
 
 **Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.23
 
@@ -6355,7 +6380,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/improve.spec.ts › IMP-03`
 
-### TC-DASH-108: A recommended action later shows whether its metric moved, with the dates
+### TC-DASH-109: A recommended action later shows whether its metric moved, with the dates
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F6.23
 
@@ -6376,7 +6401,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/improve.spec.ts › IMP-04`
 
-### TC-DASH-109: Dismiss needs a reason, shows who and why, and can be reopened
+### TC-DASH-110: Dismiss needs a reason, shows who and why, and can be reopened
 
 **Type:** Positive · **Priority:** High · **Role:** Team lead · **Flow:** F6.24
 
@@ -6400,7 +6425,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/improve.spec.ts › IMP-05`
 
-### TC-DASH-110: A software engineer sees the recommendations but cannot act on them; another team's are refused
+### TC-DASH-111: A software engineer sees the recommendations but cannot act on them; another team's are refused
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F6.22, F15.1
 
@@ -6421,7 +6446,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/improve.spec.ts › IMP-06`
 
-### TC-DASH-111: Recalculate keeps the decisions and the recommendations fit a phone
+### TC-DASH-112: Recalculate keeps the decisions and the recommendations fit a phone
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F6.22, F4.10
 
@@ -6442,7 +6467,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/improve.spec.ts › IMP-07, IMP-08`
 
-### TC-DASH-112: Executive summary: risks say what happens at this rate; KPIs forecast to miss are listed
+### TC-DASH-113: Executive summary: risks say what happens at this rate; KPIs forecast to miss are listed
 
 **Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6.25
 
@@ -6463,7 +6488,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/team/improve.spec.ts › IMP-09`
 
-### TC-DASH-113: Recommendations and forecasts are readable in all four themes
+### TC-DASH-114: Recommendations and forecasts are readable in all four themes
 
 **Type:** Positive · **Priority:** Medium · **Role:** Team lead · **Flow:** F15.1, F6.22
 

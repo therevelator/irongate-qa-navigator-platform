@@ -2,6 +2,8 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, ReferenceLine, ResponsiveContainer, CartesianGrid } from 'recharts';
 import ScoreVisual from '../ScoreVisual';
+import ScoreGauge from '../ScoreGauge';
+import { fitGaugeWidth, GAUGE_SIZES } from '../../lib/gaugeGeometry';
 import { useTheme } from '../../contexts/ThemeContext';
 import type { ThemeId } from '../../lib/appearance';
 import { expectationText } from '../../lib/targetText';
@@ -90,12 +92,23 @@ export const TrendText: React.FC<{ change: KpiChange | null; unit: string; digit
 };
 
 /**
- * The score visual (3D battery or gauge, as chosen in the Appearance menu), scaled to fill the
- * height it is given (crisp: CSS gradients / SVG).
+ * The score visual (3D battery or gauge, as chosen in the Appearance menu), filling the space it
+ * is given (crisp: CSS gradients / SVG).
+ *  - Battery: scaled to the height it is given (its lg box is 166 px tall with the nib); the box
+ *    is as wide as the scaled battery.
+ *  - Gauge: wider than tall, so it fills the box its parent gives it (TeamTvView: the middle of
+ *    the hero, between the title and the status), as large as fits both ways with its needle
+ *    (fitGaugeWidth, from the gauge's own layout), centred. Drawn at that size (no CSS scale), so
+ *    the arc, the needle and the number stay sharp on a 4K screen.
  */
 export const ScaledBattery: React.FC<{ value: number | null; good: number; warn: number; label: string }> = ({ value, good, warn, label }) => {
   const { scoreDisplay } = useTheme();
-  const baseWidth = scoreDisplay === 'gauge' ? 160 : 84;
+  return scoreDisplay === 'gauge'
+    ? <FittedGauge value={value} good={good} warn={warn} label={label} />
+    : <ScaledHeroBattery value={value} good={good} warn={warn} label={label} />;
+};
+
+const ScaledHeroBattery: React.FC<{ value: number | null; good: number; warn: number; label: string }> = ({ value, good, warn, label }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [k, setK] = useState(2);
   useLayoutEffect(() => {
@@ -108,10 +121,29 @@ export const ScaledBattery: React.FC<{ value: number | null; good: number; warn:
     return () => ro.disconnect();
   }, []);
   return (
-    <div ref={ref} className="flex h-full flex-shrink-0 items-center justify-center" style={{ width: baseWidth * k }} data-testid="tv-battery">
+    <div ref={ref} className="flex h-full flex-shrink-0 items-center justify-center" style={{ width: 84 * k }} data-testid="tv-battery">
       <div style={{ transform: `scale(${k})`, transformOrigin: 'center' }}>
-        <ScoreVisual value={value} good={good} warn={warn} size="lg" label={label} />
+        <ScoreVisual value={value} good={good} warn={warn} size="lg" label={label} variant="battery" />
       </div>
+    </div>
+  );
+};
+
+const FittedGauge: React.FC<{ value: number | null; good: number; warn: number; label: string }> = ({ value, good, warn, label }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [w, setW] = useState<number>(GAUGE_SIZES.lg);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setW(fitGaugeWidth(el.clientWidth, el.clientHeight, GAUGE_SIZES.sm));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={ref} className="flex h-full w-full min-w-0 items-center justify-center" data-testid="tv-battery" data-gauge-width={w}>
+      <ScoreGauge value={value} good={good} warn={warn} size="lg" width={w} label={label} />
     </div>
   );
 };

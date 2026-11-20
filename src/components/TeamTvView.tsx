@@ -153,7 +153,8 @@ const TeamTvView: React.FC = () => {
   const scope = useAnalyticsScope();
   const { user } = useAuth();
   const hideSampleNotice = useHideSampleNotice();
-  const { theme: appTheme } = useTheme();
+  const { theme: appTheme, scoreDisplay } = useTheme();
+  const gauge = scoreDisplay === 'gauge';
 
   /* ---------------- screen setup: theme, root font size, title, wake lock ---------------- */
 
@@ -527,6 +528,25 @@ const TeamTvView: React.FC = () => {
   const { team, latest } = data;
   const qaMeta = STATUS_META[model.qaStatus];
   const age = daysSince(latest?.snapshotDate);
+  // Pieces of the QA hero, laid out beside the battery or around the gauge (below).
+  const qaStatusPill = (
+    <span className={cx('inline-flex items-center gap-[0.5em] rounded-full px-[0.9em] py-[0.25em] text-[2rem] font-semibold ring-2 ring-inset', qaMeta.pill)} data-testid="tv-status">
+      <span aria-hidden className={cx('h-[0.55em] w-[0.55em] rounded-full', qaMeta.bar)} />
+      {qaMeta.label}
+    </span>
+  );
+  const qaTrend = latest?.qaScore == null
+    ? <span className="text-slate-500 dark:text-slate-400">No QA score recorded</span>
+    : <TrendText change={model.qaChange} unit="/100" digits={0} compact />;
+  const qaTargetText = `Target ≥ ${model.qaThreshold.good} · Watch: ${model.qaThreshold.warning}–${model.qaThreshold.good}`;
+  const qaConfidence = latest?.qaScoreConfidence ? (
+    <p className="mt-1 text-[1.35rem] text-slate-600 dark:text-slate-300" data-testid="tv-qa-confidence" title={confidenceExplanation(latest.qaScoreConfidence)}>
+      {basedOnText(latest.qaScoreConfidence).replace(/^b/, 'B')}
+      {' · '}
+      <span className={cx('font-semibold', CONFIDENCE_TEXT[latest.qaScoreConfidence.confidence])}>{latest.qaScoreConfidence.confidence} confidence</span>
+      {latest.qaScoreConfidence.staleInputs.length > 0 && <> · {latest.qaScoreConfidence.staleInputs.length} stale</>}
+    </p>
+  ) : null;
 
   return shell(
     <main
@@ -568,6 +588,26 @@ const TeamTvView: React.FC = () => {
           aria-labelledby="tv-qa-title"
           data-testid="tv-hero"
         >
+          {gauge ? (
+            /* Gauge: wider than tall, so it cannot stand beside the text at the height the battery
+               has. It takes the middle of the hero instead, as large as the height left by the
+               title above and the status below allows (FittedGauge), centred; its own centre shows
+               the score, so the big number beside the battery is not repeated. */
+            <div className={cx('flex flex-col gap-[1rem]', wide ? 'min-h-0 flex-1' : '')} data-testid="tv-qa-gauge-layout">
+              <div className="flex flex-wrap items-center justify-between gap-x-[1.5rem] gap-y-[0.5rem]">
+                <h2 id="tv-qa-title" className="text-[1.9rem] font-medium text-slate-600 dark:text-slate-300">QA score</h2>
+                {qaStatusPill}
+              </div>
+              <div className={cx('min-h-0', wide ? 'max-h-[30rem] flex-1' : 'h-[20rem]')}>
+                <ScaledBattery value={latest?.qaScore ?? null} good={model.qaThreshold.good} warn={model.qaThreshold.warning} label={`${team.name} QA score`} />
+              </div>
+              <div className="text-center">
+                <p className="flex flex-wrap items-center justify-center gap-x-[0.4em] text-[1.5rem]">{qaTrend}{model.qaChange && <span className="text-slate-500 dark:text-slate-400">· vs {shortDate(model.qaChange.prevDate)}</span>}</p>
+                <p className="mt-1 text-[1.35rem] text-slate-500 dark:text-slate-400">{qaTargetText}</p>
+                {qaConfidence}
+              </div>
+            </div>
+          ) : (
           <div className={cx('flex items-center gap-[2.5rem]', wide ? 'min-h-0 flex-1' : 'h-[24rem]')}>
             <div className={cx('min-h-0 self-stretch', wide ? 'max-h-[30rem] flex-[0_0_auto]' : '')}>
               <ScaledBattery value={latest?.qaScore ?? null} good={model.qaThreshold.good} warn={model.qaThreshold.warning} label={`${team.name} QA score`} />
@@ -580,33 +620,14 @@ const TeamTvView: React.FC = () => {
                 </span>
                 {latest?.qaScore != null && <span className="text-[2.5rem] font-medium text-slate-500 dark:text-slate-400">/ 100</span>}
               </p>
-              <p className="mt-4">
-                <span className={cx('inline-flex items-center gap-[0.5em] rounded-full px-[0.9em] py-[0.25em] text-[2rem] font-semibold ring-2 ring-inset', qaMeta.pill)} data-testid="tv-status">
-                  <span aria-hidden className={cx('h-[0.55em] w-[0.55em] rounded-full', qaMeta.bar)} />
-                  {qaMeta.label}
-                </span>
-              </p>
-              <p className="mt-4 text-[1.5rem]">
-                {latest?.qaScore == null ? (
-                  <span className="text-slate-500 dark:text-slate-400">No QA score recorded</span>
-                ) : (
-                  <TrendText change={model.qaChange} unit="/100" digits={0} compact />
-                )}
-              </p>
+              <p className="mt-4">{qaStatusPill}</p>
+              <p className="mt-4 text-[1.5rem]">{qaTrend}</p>
               {model.qaChange && <p className="mt-1 text-[1.35rem] text-slate-500 dark:text-slate-400">vs {shortDate(model.qaChange.prevDate)}</p>}
-              <p className="mt-1 text-[1.35rem] text-slate-500 dark:text-slate-400">
-                Target ≥ {model.qaThreshold.good} · Watch: {model.qaThreshold.warning}–{model.qaThreshold.good}
-              </p>
-              {latest?.qaScoreConfidence && (
-                <p className="mt-1 text-[1.35rem] text-slate-600 dark:text-slate-300" data-testid="tv-qa-confidence" title={confidenceExplanation(latest.qaScoreConfidence)}>
-                  {basedOnText(latest.qaScoreConfidence).replace(/^b/, 'B')}
-                  {' · '}
-                  <span className={cx('font-semibold', CONFIDENCE_TEXT[latest.qaScoreConfidence.confidence])}>{latest.qaScoreConfidence.confidence} confidence</span>
-                  {latest.qaScoreConfidence.staleInputs.length > 0 && <> · {latest.qaScoreConfidence.staleInputs.length} stale</>}
-                </p>
-              )}
+              <p className="mt-1 text-[1.35rem] text-slate-500 dark:text-slate-400">{qaTargetText}</p>
+              {qaConfidence}
             </div>
           </div>
+          )}
           <div className="mt-[1.5rem] grid grid-cols-2 gap-4 border-t border-slate-200 pt-[1.5rem] text-[1.4rem] dark:border-slate-800">
             <div>
               <p className="text-slate-500 dark:text-slate-400">KPIs on target</p>

@@ -1,4 +1,4 @@
-import { arcLength, arcPath, clampGaugeValue, gaugeLayout, GAUGE_END, GAUGE_START, GAUGE_SWEEP, polar, valueToAngle } from '../../src/lib/gaugeGeometry';
+import { arcLength, arcPath, clampGaugeValue, fitGaugeWidth, gaugeLayout, gaugeOverhang, GAUGE_END, GAUGE_START, GAUGE_SWEEP, polar, valueToAngle } from '../../src/lib/gaugeGeometry';
 import { batteryBand } from '../../src/lib/batteryScale';
 
 /**
@@ -54,5 +54,21 @@ describe('score gauge geometry', () => {
 
   it('GAU-007: the value arc uses the battery colour scale (same band as the battery)', () => {
     expect([batteryBand(81)?.key, batteryBand(68)?.key, batteryBand(25)?.key]).toEqual(['lightGreen', 'yellow', 'red']);
+  });
+
+  it('GAU-008: fitGaugeWidth gives the largest gauge whose box and needle fit the space (TV mode)', () => {
+    for (const [W, H] of [[586, 330], [410, 230], [1172, 660], [300, 900], [900, 300]]) {
+      const w = fitGaugeWidth(W, H);
+      const o = gaugeOverhang(w);
+      expect(w + 2 * o).toBeLessThanOrEqual(W);
+      expect(gaugeLayout(w).height + 2 * o).toBeLessThanOrEqual(H);
+      const n = w + 1;
+      const on = gaugeOverhang(n);
+      expect(n + 2 * on > W || gaugeLayout(n).height + 2 * on > H).toBe(true);
+    }
+    // Height-driven when the space is wide, width-driven when it is tall.
+    expect(gaugeLayout(fitGaugeWidth(5000, 300)).height).toBeGreaterThan(270);
+    expect(fitGaugeWidth(300, 5000)).toBeGreaterThan(280);
+    expect(fitGaugeWidth(0, 100, 52)).toBe(52);
   });
 });

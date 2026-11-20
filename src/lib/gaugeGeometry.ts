@@ -8,6 +8,9 @@ export const GAUGE_SWEEP = 240;
 export const GAUGE_START = -GAUGE_SWEEP / 2;
 export const GAUGE_END = GAUGE_SWEEP / 2;
 
+/** Box width per size (px) of ScoreGauge, chosen to sit where the battery of the same size sits. */
+export const GAUGE_SIZES = { xs: 52, sm: 68, md: 100, lg: 152 } as const;
+
 /** A 0–100 value clamped into range; null for a missing or non-finite value. */
 export function clampGaugeValue(v: number | null | undefined): number | null {
   if (v === null || v === undefined || !Number.isFinite(v)) return null;
@@ -54,4 +57,38 @@ export function gaugeLayout(size: number): { cx: number; cy: number; r: number; 
   // Lowest point of the arc ends (at ±120°) plus the round cap.
   const bottom = polar(cx, cy, r, GAUGE_END).y + stroke / 2 + 1;
   return { cx, cy, r, stroke, width: size, height: Math.ceil(Math.max(bottom, cy + size * 0.18)) };
+}
+
+/**
+ * Needle of a gauge of `size` px (ScoreGauge): it reaches `reach` px past the outside of the arc
+ * and is `width` px thick (round caps).
+ */
+export function gaugeNeedle(size: number): { reach: number; width: number } {
+  return { reach: Math.max(1.5, size * 0.02), width: Math.max(1.5, size * 0.022) };
+}
+
+/**
+ * How far the needle can stick out of the gauge's box (px) on the top, left and right: the outside
+ * of the arc is 1 px inside the box (gaugeLayout), the needle reaches past it, plus its round cap.
+ */
+export function gaugeOverhang(size: number): number {
+  const n = gaugeNeedle(size);
+  return Math.max(0, n.reach + n.width / 2 - 1);
+}
+
+/**
+ * Largest box width (whole px, at least `min`) whose gauge, needle included (gaugeOverhang), fits
+ * inside maxWidth × maxHeight when centred. Used where a gauge fills the space it is given (TV
+ * mode) instead of having a fixed size.
+ */
+export function fitGaugeWidth(maxWidth: number, maxHeight: number, min = 40): number {
+  if (!(maxWidth > 0) || !(maxHeight > 0)) return min;
+  const fits = (w: number) => {
+    const o = gaugeOverhang(w);
+    return w + 2 * o <= maxWidth && gaugeLayout(w).height + 2 * o <= maxHeight;
+  };
+  const ref = gaugeLayout(1000);
+  let w = Math.floor(Math.min(maxWidth, (maxHeight * ref.width) / ref.height));
+  while (w > min && !fits(w)) w -= 1;
+  return Math.max(min, w);
 }
