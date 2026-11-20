@@ -84,6 +84,7 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Team detail (KPIs, targets, trends, QA score card) | any team | scope | scope | scope | scope |
 | Team detail: members table | all members, metrics of opted-in people | same, in scope | same, in scope | own row | own row |
 | Team detail: team and developer recommendations | scope | scope | scope | — | — |
+| Team detail: Evidence from CI, How this was calculated (`GET /api/ci/teams/:id/evidence`, `…/metrics/:metric`) | any team | scope | scope | scope | scope |
 | TV mode (`/tv?team=`, team picker, rotation through the teams of the scope; team figures, open alerts, wellbeing pulse with the 3-response minimum) | any team | scope | scope | scope | scope |
 | Executive summary (`/summary`, `GET /api/summary`: QA score, risks, most improved, alerts, last week's changes) | company | their departments | their teams | their teams | their teams |
 | Executive summary: money at risk (the revenue roll-up of the scope) | company | their departments | — | — | — |
@@ -138,6 +139,7 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Departments page, move teams, assign managers and leads | yes | — | — | — | — |
 | Admin console (organisation structure) | yes | yes (their departments manageable) | — | — | — |
 | Admin console: API keys (ingestion), Sample data | yes | — | — | — | — |
+| Admin console: Connect your CI (steps, test call, last data received, main branch; `GET /api/ci/status`, `PUT /api/ci/teams/:id/main-branch`) | yes | — (managers have no API keys either) | — | — | — |
 | Parameters (financial and pipeline settings) | company, departments, teams; "apply to every department and team" | their departments and teams only (company-level values read-only: the page cannot save them and the API answers 403) | — | — | — |
 | KPI targets (with history) | company, department, team | department and team, in their departments | — | — | — |
 | Expected update frequency | yes | yes | — | — | — |

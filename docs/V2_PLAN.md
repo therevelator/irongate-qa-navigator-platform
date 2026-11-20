@@ -63,6 +63,18 @@ Also in phase 1:
   steps, a test call, and the last data received.
 - **Sample data** for demos generates raw runs too, so demos show the evidence views.
 
+Status: **done**. Endpoints `POST /api/ingest/tests | coverage | pipelines` (raw body or multipart, several report files per
+upload, gzip, 20 MB per request, format detection, 415 for unknown formats, safe XML without entities, idempotent per team +
+commit + run + attempt, dry-run test call), migration `20261129000000_raw_ingestion_phase1.sql` (raw_uploads, test_runs,
+test_results, flaky_test_evidence, coverage_reports, coverage_files, pipeline_runs_raw, pipeline_stage_runs, metric_evidence,
+teams.main_branch; the v1 `pipeline_runs` table is a per-stage status table and stays as it is), calculation engine
+`server/lib/calc/engine.ts` (on arrival, recalculation of affected days, nightly `calc-recompute`, KPI values with source
+`computed`), evidence and "How this was calculated" on the team page, Connect your CI in the Admin console (super admins, like
+API keys), sample raw data for demo and filled teams (`server/seeds/demoRaw.ts`; evidence only). Storage: per-test and
+per-file rows and payloads 35 days, the rest 13 months. Tests: `tests/api/ingest-parsers.test.ts`, `raw-ingestion.test.ts`,
+`tests/database/rawStore.test.ts`, UI `team/ci-evidence.spec.ts`, manual cases TC-ADM-045 … TC-ADM-050. Not in phase 1: forecasts on top
+of the new data (phase 4).
+
 ### Phase 2 — Delivery and reliability
 
 | Endpoint | Accepts | Calculates |
@@ -154,8 +166,8 @@ No database change. Slack / Teams digests remain for later.
 
 ## Order and status
 
-1. Phase 1 — in progress.
-2. Phase 2.
+1. Phase 1 — done (raw tests, coverage and pipelines, calculation engine, evidence, Connect your CI).
+2. Phase 2 — in progress.
 3. Phase 3.
 4. Phases 4 and 5 (they need phases 1–3 data to be credible; forecasts can start after phase 1).
 5. Phase 6 — done (executive phone summary and wall-screen TV mode); Slack / Teams digests later.

@@ -1,6 +1,6 @@
 # Manual test cases
 
-400 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+406 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -33,6 +33,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Administration: update frequency](#administration-update-frequency) (1)
 - [Alerts and notifications](#alerts-and-notifications) (11)
 - [Tracked actions](#tracked-actions) (10)
+- [CI evidence](#ci-evidence) (4)
+- [Connect your CI](#connect-your-ci) (2)
 - [Wellbeing pulse](#wellbeing-pulse) (24)
 - [Developer productivity](#developer-productivity) (1)
 - [Overview](#overview) (4)
@@ -7461,6 +7463,151 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Leave TV mode, open The Away Team's Team detail and delete the created action.
 
 *Automated:* `tests/e2e/alerts-actions.spec.ts › Alerts, notifications and tracked actions › A team lead creates a tracked action on Team detail, moves it to in progress, and TV mode shows it`
+
+## CI evidence
+
+### TC-ADM-049: The team page shows Evidence from CI: calculated metrics, flaky tests with their runs, lowest-coverage files, slowest tests and failing stages
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.7
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds 14 days of sample raw CI data).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as super admin, type 'The Away Team' in 'Search teams' on the Overview and click its card. | Team detail of The Away Team opens. |
+| 2 | Scroll to the section 'Evidence from CI'. | The section shows 'Last data received — Tests: …, Coverage: …, Pipelines: …' and a card 'Calculated from CI data' with tiles such as Line coverage, Pass rate, Average build time; each tile shows a date, the number of runs and a confidence (high / medium / low). |
+| 3 | Look at the card 'Flaky tests'. | Each flaky test shows its name and file, 'Failed in N runs, passed in M', the commit(s), red 'failed · run …' chips and green 'passed · run … #2' chips (the runs that prove it) and the failure message. If the list is empty it says 'No flaky tests found.' |
+| 4 | Look at 'Lowest-coverage files', 'Slowest tests' and 'Failing stages'. | Lowest-coverage files: the latest report (commit, branch, format, number of files, date) and files with 'Lines hit' and a coloured coverage badge, lowest first. Slowest tests: test, file, median duration and number of runs. Failing stages: stage name, '% failed' badge, 'N of M runs failed · median …' and the latest failing runs. |
+
+**Notes:** Sample raw data: its evidence is shown, but it is never written as KPI values.
+
+*Automated:* `tests/e2e/team/ci-evidence.spec.ts › Evidence from CI › CIEV-01`
+
+### TC-ADM-050: How this was calculated: from a KPI card and from a calculated metric, with the formula, values used and source runs
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.8
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds 14 days of sample raw CI data).
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On The Away Team's Team detail, find the 'Test coverage' KPI card and click 'How this was calculated'. | A dialog 'How this was calculated: Line coverage' opens with a confidence badge, the value, 'Formula: lines hit ÷ lines found × 100 …', 'Based on N run(s)' and the note 'Calculated from sample CI data: shown as evidence, not written to the team's KPIs.' |
+| 2 | Read the sections 'Values used', 'Lowest-coverage files in this report' and 'Source records'. | Values used lists Files, Lines hit, Lines found and the report format; Source records lists the coverage report with its commit, branch, date and 'hit / found lines · files'. |
+| 3 | Press Esc. | The dialog closes and focus returns to the link. |
+| 4 | In 'Calculated from CI data', click the 'Average build time' tile. | The dialog shows 'Average build time', the formula 'median pipeline duration …' and the pipeline runs it used (run id, commit, date, result and duration). |
+| 5 | Close it with the X button. | The dialog closes. |
+
+*Automated:* `tests/e2e/team/ci-evidence.spec.ts › Evidence from CI › CIEV-02`
+
+### TC-ADM-051: An engineer sees the evidence of their own team; another team and the CI status are refused
+
+**Type:** Negative · **Priority:** Medium · **Role:** Software engineer · **Flow:** F9.7
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds 14 days of sample raw CI data).
+
+**Test data**
+
+- E-mail: engineer@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as engineer and open the team card 'Mavericks'. | Team detail shows the section 'Evidence from CI'. |
+| 2 | In the same browser, open <API>/api/ci/teams/<QualityCowboys team id>/evidence (e.g. http://localhost:3000/api/ci/teams/team-1764026236967-uphpblii4/evidence). | The answer is 403 with "Access denied. This team is outside your analytics scope." |
+| 3 | Open <API>/api/ci/status. | The answer is 403 "Super admin access required". |
+
+*Automated:* `tests/e2e/team/ci-evidence.spec.ts › Evidence from CI › CIEV-03`
+
+### TC-ADM-052: A team without CI data says so and points the admin to Connect your CI
+
+**Type:** Positive · **Priority:** Low · **Role:** Super admin · **Flow:** F9.7
+
+**Preconditions**
+
+- A newly registered organisation (Register a company) with its first team; no CI data sent.
+
+**Test data**
+
+- The new organisation's super admin
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the new organisation's super admin and open its team from the Overview. | Team detail opens. |
+| 2 | Scroll to 'Evidence from CI'. | It reads 'No CI data for this team yet' and mentions 'Admin console → Connect your CI'. |
+
+*Automated:* `tests/e2e/team/ci-evidence.spec.ts › Evidence from CI › CIEV-04`
+
+## Connect your CI
+
+### TC-ADM-053: Connect your CI: steps per CI tool, test call, last data received after a real upload, main branch
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.6
+
+**Preconditions**
+
+- A newly registered organisation with one team (or any organisation: use a team that has no CI data).
+- A terminal with curl.
+
+**Test data**
+
+- Key name: CI evidence key
+- Wrong key: igk_wrong
+- JUnit file junit.xml with two test cases, one failing (see tests/e2e/team/ci-evidence.spec.ts JUNIT)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as super admin and open Admin console (/admin-panel); scroll to "Connect your CI". | Three endpoint boxes (Test reports, Coverage, Pipeline runs) show 'POST <address>/api/ingest/…'. Tabs GitHub Actions, GitLab CI, Jenkins, Azure DevOps; the GitHub Actions snippet contains 'secrets.QE_NAVIGATOR_API_KEY' and 'team=<the selected team id>'. |
+| 2 | Click 'GitLab CI', then press the Right arrow key; then click 'Azure DevOps'. | GitLab shows 'stage: .post' jobs; the arrow key selects 'Jenkins' (credentialsId 'qe-navigator-api-key'); Azure shows '$(System.JobAttempt)'. 'Copy' copies the snippet. |
+| 3 | In 'Last data received', find the team. | Tests, Coverage and Pipelines say 'none yet'. |
+| 4 | In 'API keys', create a key named 'CI evidence key' and copy it; click Done. | The key is shown once. |
+| 5 | In 'Send a test call', paste igk_wrong and click 'Send test call'. | A red message 'The key was refused: …'. |
+| 6 | Paste the real key and click 'Send test call'. | A green message 'Connected. The key is valid, team … accepts data and the sample report was read (3 tests). Nothing was stored.' The team row still says 'none yet'. |
+| 7 | In a terminal: curl -X POST "<API>/api/ingest/tests?team=<team id>&commit=abc&branch=main&run=1" -H "Authorization: Bearer <key>" -H "Content-Type: application/xml" --data-binary @junit.xml | HTTP 201 with "status":"accepted" and "computed" values. |
+| 8 | Reload the Admin console. | The team row shows today's date and 'junit' under Tests. |
+| 9 | Type 'develop' as the team's main branch and click Save; then clear it and Save again. | 'Saved' appears each time. |
+| 10 | Open the team on the Overview, click the 'Pass rate' tile under 'Calculated from CI data'. | The dialog shows 50.0 % and 'Shown here only (no KPI column)'. |
+| 11 | Close it; on the 'First-time pass rate' KPI card, read the source line and click 'How this was calculated'. | The card says 'computed · as of …'; the dialog says 'Written to the team's KPI as source "computed"'. |
+
+**After the test:** Revoke the key in API keys.
+
+*Automated:* `tests/e2e/team/ci-evidence.spec.ts › Connect your CI › CI-01`
+
+### TC-ADM-054: A manager has no Connect your CI
+
+**Type:** Negative · **Priority:** Low · **Role:** Manager · **Flow:** F9.6
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173) with the API and the NovaTech demo data loaded (npm run seed:demo, which also adds 14 days of sample raw CI data).
+
+**Test data**
+
+- E-mail: manager@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as manager and open Admin console (/admin-panel). | The Admin console opens without the sections 'API keys' and 'Connect your CI'. |
+
+*Automated:* `tests/e2e/team/ci-evidence.spec.ts › Connect your CI › CI-02`
 
 ## Wellbeing pulse
 

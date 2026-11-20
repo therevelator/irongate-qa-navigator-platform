@@ -998,6 +998,27 @@ curl -X POST "https://<host>/api/ingest/kpis?partial=true" \
 The response gives the snapshot day, the resulting QA score and status, which metrics were updated, which were carried forward,
 and whether the item was a duplicate.
 
+### 4.2a Raw CI data: tests, coverage, pipelines (v2)
+
+Why: customers send the raw output their tools already produce, and QE Navigator calculates every metric itself, so each
+number is traceable to the runs it came from (docs/V2_PLAN.md, phase 1).
+
+- `POST /api/ingest/tests` (JUnit XML from pytest, Jest, Maven / Gradle, Playwright, Cypress; TRX; Cucumber JSON),
+  `POST /api/ingest/coverage` (lcov, Cobertura, JaCoCo, Istanbul; optional diff for coverage of changed code) and
+  `POST /api/ingest/pipelines` (pipeline runs with stages). Same API keys, rate limit and ingestion log as the KPI API;
+  idempotent per team, commit, run and attempt. Reference: docs/INTEGRATION_GUIDE.md section 4A.
+- The calculation engine ([`server/lib/calc/engine.ts`](../server/lib/calc/engine.ts)) computes per team and day: line and
+  branch coverage, per-file coverage, coverage of changed code, pass rate, first-time pass rate, flaky tests (failed and passed
+  on the same commit within 7 days) and the flakiness rate, test execution time (median), average build time (median pipeline
+  duration), pipeline success rate and parallel test efficiency, each with the number of runs it rests on (high confidence from
+  10 runs, medium 3–9, low 1–2). Values with a KPI column are written through the one write path with source `computed`, so
+  dashboards, alerts, targets and the QA score use them; a late file recalculates the days it affects, and a nightly job
+  (`calc-recompute`) the last 8 days.
+- Evidence (`metric_evidence`): for every computed value its formula, the values used and the source runs, reports and tests.
+- Storage: runs, reports and evidence 13 months; per-test and per-file rows and the gzipped files 35 days.
+- Sample data: demo and filled teams get 14 days of sample raw CI data that follows their story (healthier teams: higher
+  coverage, fewer flaky tests, greener and faster pipelines). Its evidence is shown; it is never written as KPI values.
+
 ### 4.3 Manual metrics
 
 **Administration → Manual metrics** (super admin, manager, team lead; team scope enforced by the server). Sections: current
@@ -1108,6 +1129,12 @@ Why: everything about one team in one place, with each number explained
   from a recommendation (section 7). Grouped by status in accordions with counts (Open, In progress, Done, Dropped; Done and Dropped
   collapsed by default), 5 / 10 / 20 per page in each group; the whole card can be collapsed. What is expanded is remembered per person
   in the browser.
+- **Evidence from CI** (when the team's CI sends raw reports, section 4.2a): the metrics calculated from CI data (each opens
+  **How this was calculated**: the formula, the values used, the number of runs and confidence, and the source runs and reports
+  with their ids and links), **flaky tests** with the failed and passed runs that prove them, the **lowest-coverage files** of the
+  latest report, the **slowest tests** (median, last 7 days) and the **failing pipeline stages** (last 30 days, with the latest
+  failing runs). A KPI card whose metric was calculated from CI data has a **How this was calculated** link too. Without CI data
+  the section says so (and points super admins to Connect your CI).
 - **Open TV mode** and, for super admins, the **Show formulas & data sources** switch (formula mode) that opens the metric explanation
   for any value.
 - Team detail opens for the teams of the analytics scope only (as the overview list, TV mode and Compare); another team answers 403.
@@ -1214,7 +1241,7 @@ opted in to developer insights (off by default; an unset value counts as off). T
 
 | Page | Who | What |
 |---|---|---|
-| Admin console | super admin, manager | Organisation structure, team members, create users / teams; **API keys** and **Sample data** (super admin) |
+| Admin console | super admin, manager | Organisation structure, team members, create users / teams; **API keys**, **Connect your CI** (copy-paste steps for GitHub Actions, GitLab CI, Jenkins and Azure DevOps with the endpoint and team id filled in, a **Send test call** check that validates a pasted key, the team and a sample report without storing anything, the **last data received** per team and kind, and each team's main branch) and **Sample data** (super admin) |
 | Manual metrics | super admin, manager, team lead | Section 4.3 |
 | Update frequency | super admin, manager | Expected interval per metric (staleness) |
 | Parameters | super admin, manager | **KPI targets** (with history), **Alert rules**, **Notification channels** (Slack, test digest, evaluate now; super admin), **Performance SLA** (p95 response time, error-rate threshold), **Financial and ROI settings**; each field says which page reads it |

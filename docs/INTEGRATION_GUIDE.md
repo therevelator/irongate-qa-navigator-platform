@@ -17,10 +17,11 @@ with real data.
 2. [Before you start: base URL, team ids, environments](#2-before-you-start-base-url-team-ids-environments)
 3. [Authentication](#3-authentication)
 4. [The KPI ingestion API (reference)](#4-the-kpi-ingestion-api-reference)
+   - 4A. [Raw ingestion: tests, coverage, pipelines (v2)](#4a-raw-ingestion-tests-coverage-pipelines-v2)
 5. [All other data: how it can be sent today](#5-all-other-data-how-it-can-be-sent-today)
 6. [Code: curl, Node.js, Python, retries, batching, backfill](#6-code-curl-nodejs-python-retries-batching-backfill)
 7. [Recipes per source system](#7-recipes-per-source-system)
-8. [CI examples: GitHub Actions, Jenkins, GitLab CI](#8-ci-examples-github-actions-jenkins-gitlab-ci)
+8. [CI examples: GitHub Actions, Jenkins, GitLab CI](#8-ci-examples-github-actions-jenkins-gitlab-ci) (8.4: raw reports per CI tool, also Azure DevOps)
 9. ["Populate everything" checklist and end-to-end script](#9-populate-everything-checklist-and-end-to-end-script)
 10. [Verifying and troubleshooting](#10-verifying-and-troubleshooting)
 11. [Security and data protection](#11-security-and-data-protection)
@@ -444,6 +445,142 @@ per-item summary, errors and the response returned.
   them (Parameters → Alert rules), so the team lead and manager are notified when an integration breaks.
 
 ---
+
+## 4A. Raw ingestion: tests, coverage, pipelines (v2)
+
+Send the **raw output your tools already produce**; QE Navigator calculates every metric itself (docs/V2_PLAN.md,
+"Calculation rules (phase 1)"). You never send a computed percentage. Same API keys, the same rate limit (60 requests per
+minute per key) and the same ingestion log as `POST /api/ingest/kpis`, which stays available.
+
+| Endpoint | Accepts | Calculates (per team and UTC day) |
+|---|---|---|
+| `POST /api/ingest/tests` | JUnit XML (pytest, Jest `jest-junit`, Maven Surefire / Failsafe, Gradle, Playwright, Cypress / mocha, nested `<testsuites>`, `<properties>`, skipped / error / failure, Surefire `flakyFailure` / `rerunFailure`), TRX (`dotnet test --logger trx`, VSTest), Cucumber JSON | pass rate, first-time pass rate, flaky tests and flakiness rate, test execution time, slowest tests |
+| `POST /api/ingest/coverage` | lcov (`lcov.info`), Cobertura XML, JaCoCo XML, Istanbul `coverage-final.json` and `coverage-summary.json` (json-summary); optional unified diff or changed-lines list | line and branch coverage, per-file coverage, coverage of changed code |
+| `POST /api/ingest/pipelines` | pipeline run events (JSON) with stages | average build time, pipeline success rate, first-time pass rate, parallel test efficiency, failing stages |
+
+The team id is on Admin console → **Connect your CI** (with copy-paste steps for GitHub Actions, GitLab CI, Jenkins and
+Azure DevOps, a "send a test call" check and the last data received per team).
+
+### 4A.1 Sending a report (tests and coverage)
+
+Two ways, the same parameters:
+
+```bash
+# 1. The report as the body, parameters in the query (gzip recommended)
+gzip -c target/surefire-reports/TEST-com.bank.LoanServiceTest.xml | curl -sS --fail-with-body \
+  -X POST "$IRONGATE_URL/api/ingest/tests?team=$TEAM&commit=$SHA&branch=main&run=$RUN_ID&attempt=1" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+
+# 2. Multipart upload: one or several report files (one JUnit file per class is one run), plus a diff for changed code
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/coverage" -H "Authorization: Bearer $IRONGATE_API_KEY" \
+  -F team=$TEAM -F commit=$SHA -F branch=main -F run=$RUN_ID \
+  -F report=@coverage/lcov.info -F diff=@<(git diff origin/main...HEAD)
+```
+
+| Parameter | Required | Meaning |
+|---|---|---|
+| `team` (or `teamId`) | yes | The team id. A team of another company: `403`. |
+| `commit` | recommended | The commit sha (≤ 80 characters). Flaky tests are found per commit. |
+| `branch` | recommended | `refs/heads/` is removed. Coverage and pass rate use the team's **main branch** (set on Connect your CI; empty = `main` or `master`); a run without a branch counts as main. |
+| `run` | recommended | The CI run id (≤ 200 characters). Without it, the sha256 of the file is used. |
+| `attempt` | no (1) | The rerun number of the CI run (GitHub `GITHUB_RUN_ATTEMPT`, Azure `System.JobAttempt`). A failed attempt 1 and a passed attempt 2 of the same test on the same commit make it flaky. |
+| `format` | no | Detected from the content. Tests: `junit`, `trx`, `cucumber`; coverage: `lcov`, `cobertura`, `jacoco`, `istanbul`, `istanbul-summary`. Anything else: `415` with the supported list. |
+| `startedAt` | no | ISO 8601 time of the run; default the report's own timestamp, else now. Not in the future, at most 365 days back (late files are fine: the affected days are recalculated). |
+| `dryRun=true` | no | Checks the key, the team and the report; stores nothing (the "send a test call" button). |
+| `diff` (multipart file or field) | no, coverage | A unified diff (`git diff`); coverage of the added / changed lines is calculated. Coverage paths may be absolute (CI workspace); they are matched to the diff's relative paths by suffix. |
+| `changedLines` (multipart field) | no, coverage | Instead of a diff: `{"src/a.ts": [12, 13, "20-24"]}`. |
+
+**Idempotency.** One upload per team, kind, commit, run and attempt: sending it again answers `200 {"status":"duplicate"}`
+and writes nothing, so a CI step can be retried safely. An `Idempotency-Key` header works as for `/kpis` (a retry gets the
+stored answer with `Idempotent-Replayed: true`).
+
+**Response** (`201`): the upload id, the counts, how long parsing took, and the values calculated for every affected day:
+
+```json
+{
+  "status": "accepted", "kind": "tests", "format": "junit", "uploadId": "…", "parseMs": 2, "testRunId": "…",
+  "counts": { "total": 5, "passed": 2, "failed": 1, "errored": 1, "skipped": 1 }, "durationMs": 3250,
+  "computed": [{ "day": "2026-11-18", "metrics": [
+    { "key": "pass_rate", "value": 50, "sampleSize": 1, "confidence": "low", "kpi": null, "written": false },
+    { "key": "first_time_pass_rate", "value": 0, "sampleSize": 1, "confidence": "low", "kpi": "first_time_pass_rate", "written": true } ] }],
+  "ingestionId": "…"
+}
+```
+
+`kpi` names the team KPI the value is written to (source `computed`, so dashboards, alerts, targets and the QA score use it);
+`written` is false when the value did not change. Values without a KPI column (pass rate, branch coverage, coverage of
+changed code, flaky test count, pipeline success rate) are shown on the team page under **Evidence from CI**.
+
+### 4A.2 Pipeline runs
+
+```bash
+curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/pipelines?team=$TEAM" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Type: application/json" -d '{
+  "id": "6612345678", "attempt": 1, "name": "CI", "commit": "a1b2c3d4", "branch": "main",
+  "startedAt": "2026-11-18T08:00:00Z", "finishedAt": "2026-11-18T08:12:00Z", "result": "success",
+  "url": "https://github.com/acme/payments/actions/runs/6612345678",
+  "stages": [
+    { "name": "build", "startedAt": "2026-11-18T08:00:00Z", "finishedAt": "2026-11-18T08:03:00Z", "result": "success" },
+    { "name": "unit tests (shard 1/2)", "parallelGroup": "unit", "durationSeconds": 360, "result": "success" },
+    { "name": "unit tests (shard 2/2)", "parallelGroup": "unit", "durationSeconds": 240, "result": "success" }
+  ] }'
+```
+
+The body is one run, an array of runs, or `{"team": "…", "runs": [ … ]}` (1–100 runs, at most 1 MB). Required per run:
+`id`, `startedAt`, `result`. `result` accepts the names of every CI tool: `success` / `succeeded` / `passed`;
+`failure` / `failed` / `unstable` / `timed_out` / `partiallySucceeded` (failed); `cancelled` / `canceled` / `aborted` /
+`skipped` (cancelled, not counted). `durationSeconds` defaults to `finishedAt − startedAt`. Stages: `name`, `result`
+(also `skipped`), optional `kind` (`build`, `test`, `deploy`, `other`; guessed from the name), `parallelGroup`, times or
+`durationSeconds`. A run already stored (team, `id`, `attempt`) is a duplicate. Send each run once, when it has finished.
+
+### 4A.3 Calculation rules
+
+| Metric (KPI column) | Formula | Based on |
+|---|---|---|
+| Line coverage (`test_coverage`) | lines hit ÷ lines found × 100 | the latest report of the day's latest main-branch commit |
+| Branch coverage | branches hit ÷ branches found × 100 | same report |
+| Coverage of changed code | changed coverable lines hit ÷ changed coverable lines × 100 | the day's latest report sent with a diff |
+| Pass rate | passed ÷ (passed + failed + errors) × 100; skipped counted separately | the day's main-branch test runs |
+| First-time pass rate (`first_time_pass_rate`) | runs whose first attempt passed ÷ runs × 100 | pipeline runs (first attempt per run id); test runs when no pipeline data |
+| Flaky tests, flakiness rate (`test_flakiness_rate`) | tests that both failed and passed on the same commit within 7 days (or failed then passed in a rerun inside one run) ÷ distinct tests run × 100 | the 7 days up to the day |
+| Test execution time (`test_execution_time_minutes`) | median total test duration per run | the day's test runs (all branches) |
+| Average build time (`avg_build_time_minutes`) | median pipeline duration | the day's pipeline runs, cancelled excluded |
+| Pipeline success rate | successful ÷ (successful + failed) × 100 | the day's pipeline runs |
+| Parallel test efficiency (`parallel_test_efficiency`) | Σ shard durations ÷ (shards × longest shard) × 100, median over runs | stages with the same `parallelGroup`, or overlapping `test` stages |
+
+Each value carries the number of runs it is based on: **high** confidence from 10 runs, **medium** 3–9, **low** 1–2. Every
+value opens to its formula, the values used and the source runs ("How this was calculated"; `GET
+/api/ci/teams/:id/metrics/:metric`). A late file recalculates the days it affects (for tests, up to 6 days later, the
+flaky window); a nightly job (`calc-recompute`, 03:41 UTC) recalculates the last 8 days of every team.
+
+### 4A.4 Errors
+
+| Status | When |
+|---|---|
+| `400` | The problem is named: `team is required`, `attempt must be a whole number from 1`, `The run time … is in the future`, `Empty report …`, `Invalid XML: Unterminated start tag`, `XML entity declarations are not allowed`, `The report has no test cases`, `runs[0].result must be one of …`, `The body must be JSON` |
+| `401` / `403` | Missing, unknown or revoked key / a team of another company or a suspended organisation |
+| `413` | More than 20 MB received (`RAW_UPLOAD_MAX_MB`), or more than 100 MB after gzip; send gzip |
+| `415` | Unknown or undetectable format (the answer lists the supported ones), or a `Content-Encoding` other than gzip |
+| `429` | 60 requests per minute per key |
+
+Every request, accepted or rejected, is in the **ingestion log** (source `tests (junit)`, `coverage (lcov)`, `pipelines`;
+test calls `tests (junit, test call)`).
+
+### 4A.5 Size limits, hosting and storage
+
+- **Per request**: 20 MB as received, 100 MB after decompression (a gzip bomb stops there). gzip a report: JUnit and lcov
+  compress 20 to 100 times (a 20 MB JUnit file with 174,000 test cases is 0.6 MB gzipped).
+- **Netlify**: a synchronous function receives at most about **6 MB** of request body (the platform limit, before the
+  20 MB of the API) and runs at most 10 s by default (26 s when configured). Send gzip and it fits: measured parse times
+  (Node 22): JUnit 20 MB / 174,260 cases **0.28 s**, lcov 20 MB / 11,983 files **0.73 s**, Cobertura 20 MB / 4,854 classes
+  **0.53 s**; storing 5,000 test results takes about 0.1 s. Background functions are not needed for reports of this size;
+  very large suites can be sent as several uploads (one per shard, with `run` = the shard's job id).
+- **Storage** (Supabase size): the gzipped file is kept for 35 days when at most 512 KB (`RAW_PAYLOAD_MAX_KB`, `0` keeps
+  none; `RAW_PAYLOAD_DAYS`); per-test results and per-file coverage for 35 days (the latest coverage report of each team
+  keeps its files); runs, reports, pipeline runs, flaky-test and metric evidence for **13 months**. Cleaned up twice a day
+  by `db-keepalive`.
+- **Safe XML**: entity declarations are refused (no external entities, no entity expansion), a DTD is never fetched,
+  nesting depth and attribute counts are limited.
 
 ## 5. All other data: how it can be sent today
 
@@ -972,6 +1109,104 @@ irongate:
 ```
 
 ---
+
+### 8.4 Raw reports (v2) per CI tool
+
+The recommended set-up for v2: send the raw reports and the pipeline run (section 4A); QE Navigator calculates the
+metrics. Admin console → **Connect your CI** shows these steps with your endpoint and team id filled in. Store the API key
+as a secret named `QE_NAVIGATOR_API_KEY`; `$IRONGATE_URL` is your QE Navigator address and `$TEAM` the team id.
+
+**GitHub Actions** (steps at the end of the test job):
+
+```yaml
+      - name: Send test and coverage reports to QE Navigator
+        if: always()
+        env:
+          QE_NAVIGATOR_API_KEY: ${{ secrets.QE_NAVIGATOR_API_KEY }}
+        run: |
+          COMMON="team=$TEAM&commit=${GITHUB_SHA}&branch=${GITHUB_REF_NAME}&run=${GITHUB_RUN_ID}&attempt=${GITHUB_RUN_ATTEMPT}"
+          gzip -c test-results/junit.xml | curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/tests?$COMMON" \
+            -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+          gzip -c coverage/lcov.info | curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/coverage?$COMMON" \
+            -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+      - name: Send the pipeline run to QE Navigator
+        if: always()
+        env:
+          QE_NAVIGATOR_API_KEY: ${{ secrets.QE_NAVIGATOR_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          STARTED=$(gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }} --jq .run_started_at)
+          curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/pipelines?team=$TEAM" \
+            -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" \
+            -d "{\"id\":\"${GITHUB_RUN_ID}\",\"attempt\":${GITHUB_RUN_ATTEMPT},\"commit\":\"${GITHUB_SHA}\",\"branch\":\"${GITHUB_REF_NAME}\",\"startedAt\":\"$STARTED\",\"finishedAt\":\"$(date -u +%FT%TZ)\",\"result\":\"${{ job.status }}\"}"
+```
+
+**GitLab CI**:
+
+```yaml
+test:
+  stage: test
+  script: [npm test]          # writes junit.xml and coverage/lcov.info
+  after_script:
+    - gzip -c junit.xml | curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/tests?team=$TEAM&commit=$CI_COMMIT_SHA&branch=$CI_COMMIT_REF_NAME&run=$CI_JOB_ID" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+    - gzip -c coverage/lcov.info | curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/coverage?team=$TEAM&commit=$CI_COMMIT_SHA&branch=$CI_COMMIT_REF_NAME&run=$CI_JOB_ID" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+qe-navigator-pipeline-passed:
+  stage: .post
+  when: on_success
+  script:
+    - curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/pipelines?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" -d "{\"id\":\"$CI_PIPELINE_ID\",\"commit\":\"$CI_COMMIT_SHA\",\"branch\":\"$CI_COMMIT_REF_NAME\",\"startedAt\":\"$CI_PIPELINE_CREATED_AT\",\"finishedAt\":\"$(date -u +%FT%TZ)\",\"result\":\"success\",\"url\":\"$CI_PIPELINE_URL\"}"
+qe-navigator-pipeline-failed:
+  stage: .post
+  when: on_failure
+  script:
+    - curl … the same, with \"result\":\"failed\"
+```
+
+**Jenkins** (declarative `post`; the key as a Secret text credential `qe-navigator-api-key`):
+
+```groovy
+post {
+  always {
+    withCredentials([string(credentialsId: 'qe-navigator-api-key', variable: 'QE_NAVIGATOR_API_KEY')]) {
+      sh '''
+        # Every Surefire file (one per test class) in one upload: one run.
+        curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/tests" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" \
+          -F team=$TEAM -F commit=$GIT_COMMIT -F branch=$BRANCH_NAME -F run=$BUILD_NUMBER \
+          $(for f in target/surefire-reports/TEST-*.xml; do printf -- '-F report=@%s ' "$f"; done)
+        gzip -c target/site/jacoco/jacoco.xml | curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/coverage?team=$TEAM&commit=$GIT_COMMIT&branch=$BRANCH_NAME&run=$BUILD_NUMBER" \
+          -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+      '''
+      script {
+        def started = new Date(currentBuild.startTimeInMillis).format("yyyy-MM-dd'T'HH:mm:ss'Z'", TimeZone.getTimeZone('UTC'))
+        writeFile file: 'qe-pipeline.json', text: groovy.json.JsonOutput.toJson([id: env.BUILD_TAG, commit: env.GIT_COMMIT,
+          branch: env.BRANCH_NAME, startedAt: started, durationSeconds: (currentBuild.duration / 1000) as long,
+          result: currentBuild.currentResult, url: env.BUILD_URL])
+      }
+      sh 'curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/pipelines?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" --data-binary @qe-pipeline.json'
+    }
+  }
+}
+```
+
+**Azure DevOps** (the key as a secret pipeline variable):
+
+```yaml
+- script: |
+    COMMON="team=$TEAM&commit=$(Build.SourceVersion)&branch=$(Build.SourceBranchName)&run=$(Build.BuildId)&attempt=$(System.JobAttempt)"
+    gzip -c $(Agent.TempDirectory)/TestResults/*.trx | curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/tests?$COMMON" \
+      -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+    gzip -c coverage/cobertura-coverage.xml | curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/coverage?$COMMON" \
+      -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+    curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/pipelines?team=$TEAM" -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" \
+      -H "Content-Type: application/json" -d "{\"id\":\"$(Build.BuildId)\",\"attempt\":$(System.JobAttempt),\"commit\":\"$(Build.SourceVersion)\",\"startedAt\":\"$(System.PipelineStartTime)\",\"finishedAt\":\"$(date -u +%FT%TZ)\",\"result\":\"$(Agent.JobStatus)\"}"
+  displayName: Send results to QE Navigator
+  condition: always()
+  env:
+    QE_NAVIGATOR_API_KEY: $(QE_NAVIGATOR_API_KEY)
+```
+
+These pipeline definitions were not run in the real CI systems; each `curl` call they make was run against a local API
+(tests/api/raw-ingestion.test.ts covers the same requests).
 
 ## 9. "Populate everything" checklist and end-to-end script
 

@@ -460,6 +460,36 @@ curl -X POST "https://<host>/api/ingest/kpis?partial=true" \
 #     "carriedForward":["defect_escape_rate", …],"duplicate":false},"items":[…]}
 ```
 
+## Raw CI ingestion and the calculation engine (v2 phase 1)
+
+Customers send the **raw output** of their tools; QE Navigator calculates every metric (docs/V2_PLAN.md). Same API keys,
+rate limit and ingestion log as `/api/ingest/kpis`. Full reference: docs/INTEGRATION_GUIDE.md section 4A (and 8.4 for GitHub
+Actions, GitLab CI, Jenkins and Azure DevOps).
+
+- `POST /api/ingest/tests`: JUnit XML (pytest, Jest, Maven / Gradle, Playwright, Cypress), TRX, Cucumber JSON.
+- `POST /api/ingest/coverage`: lcov, Cobertura, JaCoCo, Istanbul `coverage-final.json` / json-summary; optional unified diff
+  (`diff`) or `changedLines` for coverage of changed code.
+- `POST /api/ingest/pipelines`: pipeline run events with stages (JSON).
+- Upload as the raw body with query parameters (`team`, `commit`, `branch`, `run`, `attempt`, `format`, `startedAt`,
+  `dryRun`) or multipart (`report` file(s) + the same fields); gzip accepted; 20 MB per request (100 MB decompressed); format
+  detected; unknown → `415` with the supported list; idempotent per team + commit + run + attempt; safe XML (no entities).
+- Code: `server/lib/ingest/` (safe XML reader, parsers, multipart / gzip body, raw store), `server/routes/ingestRaw.ts`,
+  `server/lib/calc/engine.ts` (calculation rules; writes KPI values with source `computed` and `metric_evidence`),
+  `server/routes/ci.ts` (evidence, "How this was calculated", Connect your CI status). Migration
+  `supabase/migrations/20261129000000_raw_ingestion_phase1.sql`.
+- Jobs: `netlify/functions/calc-recompute.ts` (nightly, last 8 days; locally `CALC_RECOMPUTE_CRON`), raw-store retention in
+  `db-keepalive` (payloads and per-test / per-file rows 35 days, the rest 13 months).
+- UI: team page → **Evidence from CI** and **How this was calculated**; Admin console → **Connect your CI**.
+- Sample data: demo and filled teams get 14 days of sample raw CI data (`server/seeds/demoRaw.ts`; evidence only, never KPI
+  values; off with `SAMPLE_RAW_DATA=false`).
+
+```bash
+gzip -c junit.xml | curl -sS --fail-with-body -X POST \
+  "https://<host>/api/ingest/tests?team=<team id>&commit=$SHA&branch=main&run=$RUN_ID&attempt=1" \
+  -H "Authorization: Bearer $IRONGATE_API_KEY" -H "Content-Encoding: gzip" --data-binary @-
+# → 201 {"status":"accepted","format":"junit","counts":{…},"computed":[{"day":"…","metrics":[{"key":"pass_rate","value":…}]}]}
+```
+
 ## Staleness, confidence, company aggregates and KPI targets
 
 Migration: `supabase/migrations/20261120000000_metric_values_targets_ingestion_log.sql` (tables

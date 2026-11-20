@@ -36,9 +36,9 @@ Derived from the code, then checked against the documentation:
 
 | | Count |
 |---|---|
-| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **157** |
-| Flows with a happy-path UI test | **131** of the 134 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
-| Flows with at least one negative UI test | **107** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
+| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **160** |
+| Flows with a happy-path UI test | **134** of the 137 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
+| Flows with at least one negative UI test | **109** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
 | UI tests (Playwright, `chromium` project) | **366** in 41 files: 73 existing (kept, tagged) + 293 new; no `test.fail` left |
 | …tagged `@smoke` / `@negative` / `@a11y` / `@readonly` | 40 / 121 / 13 / 4 |
 | Other tests (passing) | API 426 and database 29 (Jest); the golden baseline is untouched |
@@ -190,6 +190,9 @@ Derived from the code, then checked against the documentation:
 | F9.3 | API key: create (shown once), revoke (with cancel) | A | M L E V | ING-01 | ING-02 no name, manager has no keys; ING-01 revoked key refused (401) |
 | F9.4 | KPIs sent with an API key appear in the Ingestion log (written / rejected with reason) | A (key holder) | — | ING-01 | ING-01 (value out of range rejected) |
 | F9.5 | Sample data panel (load, logins) | A | M L E V | DEMO-02 (stubbed: server runs without `ENABLE_SYNTHETIC_DATA`) | DEMO-01 off on this server, DEMO-03 failure shown, DEMO-04 manager has none |
+| F9.6 | Connect your CI: steps per CI tool (GitHub Actions, GitLab CI, Jenkins, Azure DevOps) with the endpoint and team id, tab keyboard navigation, test call (wrong key refused, valid key "Connected", nothing stored), last data received after a real JUnit upload, main branch saved | A | M L E V | CI-01 (tests/e2e/team/ci-evidence.spec.ts) | CI-01 wrong key, CI-02 manager has no Connect your CI, CIEV-03 status refused to an engineer |
+| F9.7 | Evidence from CI on the team page: calculated metrics, flaky tests with proving runs, lowest-coverage files, slowest tests, failing stages; empty state without CI data | A M L E V (scope) | outside the scope | CIEV-01, CIEV-04 | CIEV-03 another team's evidence refused (403) |
+| F9.8 | How this was calculated: from a KPI card and from a calculated metric: formula, values used, runs / confidence, source runs; computed value written as KPI source "computed" | A M L E V (scope) | — | CIEV-02 (with a11y check), CI-01 | — |
 
 ## 10. Alerts, notifications, digest, Slack, tracked actions
 
