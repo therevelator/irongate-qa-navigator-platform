@@ -697,7 +697,7 @@ const ConnectCi: React.FC = () => {
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             Send your issues as the tracker has them and the SARIF report of your static analysis. QE Navigator calculates defect escape rate, defect density (code size from the coverage
             reports), velocity, commitment, carryover, blocked time, sizing accuracy and the code quality score, with new and fixed findings; computed values are not accepted.
-            A Jira project key or Linear team key can be mapped to a team like a service (below in Service → team mapping).
+            A Jira project key or Linear team key can be mapped to a team like a service (Service → team mapping, above).
           </p>
         </div>
         <div>
