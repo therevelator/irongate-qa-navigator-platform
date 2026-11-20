@@ -13,13 +13,16 @@ import { Badge, Card, CardHeader, buttonClass, cx, inputClass } from './ui';
  * Deployments and incidents (v2 phase 2): steps per CI tool that send the deployment and its commits,
  * steps for PagerDuty, Opsgenie or any other incident tool, and the service → team mapping used for
  * events that carry no team.
+ * Issues and code quality (v2 phase 3): steps for Jira (automation webhook and a backfill of the
+ * search API), Linear (webhook and GraphQL export) or any tracker (JSON), and the SARIF upload of
+ * SonarQube, CodeQL and ESLint per CI tool.
  * Data: GET /api/ci/status, PUT /api/ci/teams/:id/main-branch, GET / PUT / DELETE /api/ci/services.
  */
 
 interface TeamStatus {
   id: string; name: string; department: string | null; mainBranch: string | null;
   tests: Received; coverage: Received; pipelines: Received;
-  deployments?: Received; commits?: Received; incidents?: Received;
+  deployments?: Received; commits?: Received; incidents?: Received; issues?: Received; staticAnalysis?: Received;
 }
 interface ServiceMapping { service: string; teamId: string; teamName: string; updatedAt: string }
 type Received = { at: string; uploads: number; format: string | null; sample?: boolean } | null;
@@ -264,13 +267,116 @@ curl -sS --fail-with-body -X POST "${base}/ingest/incidents?team=${team}" \\
   -d '{"id":"INC-1042","status":"resolved","at":"2026-11-18T10:05:00Z"}'`;
 }
 
+type IssueTool = 'jira' | 'linear' | 'json';
+const ISSUE_TOOLS: Array<{ id: IssueTool; label: string; file: string }> = [
+  { id: 'jira', label: 'Jira', file: 'Jira automation rule (live) and a search export (backfill)' },
+  { id: 'linear', label: 'Linear', file: 'Linear webhook (live) and a GraphQL export (backfill)' },
+  { id: 'json', label: 'Other tracker (JSON)', file: 'Any script or tool' },
+];
+
+/** Steps that send issues (QE Navigator calculates escape rate, density, velocity, commitment, carryover, blocked time, sizing accuracy). */
+export function issueSnippet(tool: IssueTool, base: string, team: string): string {
+  if (tool === 'jira') {
+    return `# 1. Live: Jira → Project settings → Automation → Create rule
+#    When:  Issue created / Issue transitioned / Field value changed (Sprint, Story points, Flagged)
+#    Then:  Send web request
+#      URL:     ${base}/ingest/issues?team=${team}&format=jira
+#      Headers: Authorization = Bearer <your QE Navigator API key>, Content-Type = application/json
+#      Body:    Issue data (Jira format)
+#
+# 2. Backfill (once, a page of 100 at a time): the issues of the last year with their changelog.
+#    expand=changelog,names lets QE Navigator find the Story points and Sprint fields by name
+#    (or pass &storyPointsField=customfield_10016&sprintField=customfield_10020).
+curl -sS -u "$JIRA_EMAIL:$JIRA_API_TOKEN" -G "https://your-site.atlassian.net/rest/api/3/search/jql" \\
+  --data-urlencode "jql=project = PAY AND updated >= -365d ORDER BY updated" \\
+  --data-urlencode "fields=*all" --data-urlencode "expand=changelog,names" --data-urlencode "maxResults=100" |
+curl -sS --fail-with-body -X POST "${base}/ingest/issues?team=${team}&format=jira" \\
+  -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" --data-binary @-
+# Escaped defects: set the bug's Environment field (Production, Staging, …) or a label such as
+# "production" / "env:staging"; a custom "Found in" field works with &environmentField=customfield_…`;
+  }
+  if (tool === 'linear') {
+    return `# 1. Live: Linear → Settings → API → Webhooks → New webhook
+#    URL:       ${base}/ingest/issues?team=${team}&format=linear
+#    Resources: Issues
+#    Linear signs its webhooks; add the header Authorization = Bearer <your QE Navigator API key>
+#    through a small relay if your Linear plan cannot set headers.
+#
+# 2. Backfill: the issues with their state history and cycles (story points = estimate).
+curl -sS https://api.linear.app/graphql -H "Authorization: $LINEAR_API_KEY" -H "Content-Type: application/json" \\
+  -d '{"query":"{ issues(first: 250, filter: { team: { key: { eq: \\"PAY\\" } } }) { nodes { identifier title url createdAt updatedAt completedAt canceledAt estimate state { name type } labels { nodes { name } } cycle { id number startsAt endsAt completedAt } history(first: 50) { nodes { createdAt fromState { name type } toState { name type } } } } } }"}' |
+curl -sS --fail-with-body -X POST "${base}/ingest/issues?team=${team}&format=linear" \\
+  -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" --data-binary @-
+# Escaped defects: label bugs "Bug" and the environment as "env:production" / "env:staging".`;
+  }
+  return `# Issues with their status changes; sprints once with their dates (closed sprints with completedAt).
+curl -sS --fail-with-body -X POST "${base}/ingest/issues?team=${team}" \\
+  -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -H "Content-Type: application/json" -d '{
+  "sprints": [{"id":"S-47","name":"Sprint 47","startedAt":"2026-11-09T09:00:00Z","completedAt":"2026-11-20T15:00:00Z"}],
+  "issues": [
+    {"key":"PAY-101","type":"story","title":"Refund to card","status":"Done","createdAt":"2026-11-03T10:00:00Z","resolvedAt":"2026-11-18T14:00:00Z",
+     "storyPoints":5,"estimateHours":16,"timeLoggedHours":19,"sprint":"S-47",
+     "transitions":[{"at":"2026-11-10T09:00:00Z","to":"In Progress"},{"at":"2026-11-12T09:00:00Z","to":"Blocked"},{"at":"2026-11-12T15:00:00Z","to":"In Progress"},{"at":"2026-11-18T14:00:00Z","to":"Done"}]},
+    {"key":"PAY-102","type":"bug","title":"Wrong fee on refunds","status":"Open","environment":"production","createdAt":"2026-11-19T08:30:00Z"}
+  ]}'`;
+}
+
+type QualityTool = Tool;
+/** Steps that upload a SARIF report (QE Navigator calculates the code quality score, findings by severity and rule, new and fixed). */
+export function sarifSnippet(tool: QualityTool, base: string, team: string): string {
+  const upload = (indent: string, file: string, commit: string, branch: string, run: string) =>
+    `curl -sS --fail-with-body -X POST "${base}/ingest/static-analysis?team=${team}&commit=${commit}&branch=${branch}&run=${run}" \\\n${indent}  -H "Authorization: Bearer $QE_NAVIGATOR_API_KEY" -F report=@${file}`;
+  if (tool === 'github') {
+    return `# After CodeQL (github/codeql-action/analyze writes results/<language>.sarif) or ESLint:
+#   npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint.sarif
+- name: Send static analysis to QE Navigator
+  if: always() && github.ref_name == github.event.repository.default_branch
+  run: |
+    for f in results/*.sarif eslint.sarif; do [ -f "$f" ] || continue
+      ${upload('      ', '"$f"', '${{ github.sha }}', '${{ github.ref_name }}', '${{ github.run_id }}-$(basename $f)')}
+    done
+  env:
+    QE_NAVIGATOR_API_KEY: \${{ secrets.QE_NAVIGATOR_API_KEY }}`;
+  }
+  if (tool === 'gitlab') {
+    return `qe-navigator-static-analysis:
+  stage: .post
+  rules: [{ if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH' }]
+  script:
+    # SonarQube: the project's issues as SARIF (sonar.sarifReportPaths / the SARIF export);
+    # ESLint: npx eslint . -f @microsoft/eslint-formatter-sarif -o eslint.sarif
+    - ${upload('      ', 'sonar.sarif', '$CI_COMMIT_SHA', '$CI_COMMIT_BRANCH', '$CI_PIPELINE_ID')}`;
+  }
+  if (tool === 'jenkins') {
+    return `post {
+  always {
+    withCredentials([string(credentialsId: 'qe-navigator-api-key', variable: 'QE_NAVIGATOR_API_KEY')]) {
+      sh '''
+        ${upload('        ', 'eslint.sarif', '$GIT_COMMIT', '$BRANCH_NAME', '$BUILD_NUMBER')}
+      '''
+    }
+  }
+}`;
+  }
+  return `- script: |
+    ${upload('    ', '$(Build.ArtifactStagingDirectory)/CodeAnalysisLogs/codeql.sarif', '$(Build.SourceVersion)', '$(Build.SourceBranchName)', '$(Build.BuildId)')}
+  displayName: Send static analysis to QE Navigator
+  condition: always()
+  env:
+    QE_NAVIGATOR_API_KEY: $(QE_NAVIGATOR_API_KEY)`;
+}
+
+const TEST_SARIF = JSON.stringify({ version: '2.1.0', runs: [{ tool: { driver: { name: 'QE Navigator connection check', rules: [{ id: 'check/sample', defaultConfiguration: { level: 'note' } }] } }, results: [{ ruleId: 'check/sample', message: { text: 'Connection check finding' }, locations: [{ physicalLocation: { artifactLocation: { uri: 'src/check.ts' }, region: { startLine: 1 } } }] }] }] });
+
 const TEST_REPORT = '<?xml version="1.0"?><testsuites><testsuite name="QE Navigator connection check" time="0.3"><testcase classname="connection" name="the key is accepted" time="0.1"/><testcase classname="connection" name="the team is found" time="0.1"/><testcase classname="connection" name="the report is read" time="0.1"/></testsuite></testsuites>';
 
-type TestKind = 'tests' | 'deployments' | 'incidents';
+type TestKind = 'tests' | 'deployments' | 'incidents' | 'issues' | 'static-analysis';
 const testBody = (kind: TestKind): { type: string; body: string } => {
   const now = new Date(Date.now() - 60_000).toISOString();
   if (kind === 'deployments') return { type: 'application/json', body: JSON.stringify({ id: 'qe-connection-check', environment: 'production', service: 'connection-check', commit: '0000000', finishedAt: now, result: 'success' }) };
   if (kind === 'incidents') return { type: 'application/json', body: JSON.stringify({ id: 'qe-connection-check', title: 'Connection check', severity: 'low', service: 'connection-check', openedAt: now }) };
+  if (kind === 'issues') return { type: 'application/json', body: JSON.stringify({ issues: [{ key: 'QE-1', type: 'bug', title: 'Connection check', status: 'Open', environment: 'staging', createdAt: now }] }) };
+  if (kind === 'static-analysis') return { type: 'application/json', body: TEST_SARIF };
   return { type: 'application/xml', body: TEST_REPORT };
 };
 
@@ -289,6 +395,8 @@ const ConnectCi: React.FC = () => {
   const tabRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [deployTool, setDeployTool] = useState<Tool>('github');
   const [incidentTool, setIncidentTool] = useState<IncidentTool>('pagerduty');
+  const [issueTool, setIssueTool] = useState<IssueTool>('jira');
+  const [sarifTool, setSarifTool] = useState<QualityTool>('github');
   const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
   const [testKind, setTestKind] = useState<TestKind>('tests');
   const [mappings, setMappings] = useState<ServiceMapping[]>([]);
@@ -350,6 +458,8 @@ const ConnectCi: React.FC = () => {
   const code = useMemo(() => snippet(tool, base, team || 'YOUR_TEAM_ID'), [tool, base, team]);
   const deployCode = useMemo(() => deliverySnippet(deployTool, base, team || 'YOUR_TEAM_ID'), [deployTool, base, team]);
   const incidentCode = useMemo(() => incidentSnippet(incidentTool, base, team || 'YOUR_TEAM_ID'), [incidentTool, base, team]);
+  const issueCode = useMemo(() => issueSnippet(issueTool, base, team || 'YOUR_TEAM_ID'), [issueTool, base, team]);
+  const sarifCode = useMemo(() => sarifSnippet(sarifTool, base, team || 'YOUR_TEAM_ID'), [sarifTool, base, team]);
   const copyBlock = async (id: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopiedBlock(id); setTimeout(() => setCopiedBlock((c) => (c === id ? null : c)), 2000); } catch { /* the code stays selectable */ }
   };
@@ -370,7 +480,10 @@ const ConnectCi: React.FC = () => {
         body: t.body,
       });
       const body = await r.json().catch(() => ({}));
-      const what = testKind === 'tests' ? `the sample report was read (${body.counts?.total ?? 0} tests)` : `the sample ${testKind === 'deployments' ? 'deployment' : 'incident'} was read (${body.events ?? 0} event)`;
+      const what = testKind === 'tests' ? `the sample report was read (${body.counts?.total ?? 0} tests)`
+        : testKind === 'issues' ? `the sample issue was read (${body.issues ?? 0} issue)`
+        : testKind === 'static-analysis' ? `the sample SARIF report was read (${body.reports?.[0]?.findings ?? 0} finding)`
+        : `the sample ${testKind === 'deployments' ? 'deployment' : 'incident'} was read (${body.events ?? 0} event)`;
       if (r.ok) setResult({ ok: true, text: `Connected. The key is valid, team “${teams.find((x) => x.id === team)?.name ?? team}” accepts data and ${what}. Nothing was stored.` });
       else setResult({ ok: false, text: `${r.status === 401 ? 'The key was refused' : r.status === 403 ? 'The key cannot write this team' : 'The test call failed'}: ${body.error || r.statusText}` });
     } catch {
@@ -452,7 +565,8 @@ const ConnectCi: React.FC = () => {
 
         <dl className="mb-4 grid grid-cols-1 gap-2 text-sm md:grid-cols-3" data-testid="connect-ci-endpoints">
           {[['Test reports', 'tests', 'JUnit XML, TRX, Cucumber JSON'], ['Coverage', 'coverage', 'lcov, Cobertura, JaCoCo, Istanbul'], ['Pipeline runs', 'pipelines', 'JSON events'],
-            ['Deployments', 'deployments', 'JSON, GitHub / GitLab webhooks'], ['Commits', 'commits', 'JSON (git log), push webhooks'], ['Incidents', 'incidents', 'JSON, PagerDuty, Opsgenie']].map(([label, path, formats]) => (
+            ['Deployments', 'deployments', 'JSON, GitHub / GitLab webhooks'], ['Commits', 'commits', 'JSON (git log), push webhooks'], ['Incidents', 'incidents', 'JSON, PagerDuty, Opsgenie'],
+            ['Issues', 'issues', 'Jira, Linear, JSON'], ['Static analysis', 'static-analysis', 'SARIF 2.1.0 (SonarQube, CodeQL, ESLint)']].map(([label, path, formats]) => (
             <div key={path} className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
               <dt className="text-xs font-medium text-slate-500 dark:text-slate-400">{label} · {formats}</dt>
               <dd className="mt-1 break-all font-mono text-xs text-slate-800 dark:text-slate-200">POST {base}/ingest/{path}</dd>
@@ -508,6 +622,8 @@ const ConnectCi: React.FC = () => {
               <option value="tests">Test reports</option>
               <option value="deployments">Deployments</option>
               <option value="incidents">Incidents</option>
+              <option value="issues">Issues</option>
+              <option value="static-analysis">Static analysis</option>
             </select>
             <label htmlFor="connect-ci-key" className="sr-only">API key</label>
             <input id="connect-ci-key" type="password" autoComplete="off" className={cx(inputClass, 'sm:w-96')} placeholder="igk_…" value={key} onChange={(e) => setKey(e.target.value)} />
@@ -575,6 +691,25 @@ const ConnectCi: React.FC = () => {
         </div>
       </div>
 
+      <div className="space-y-5 border-t border-slate-200 p-5 dark:border-slate-800" data-testid="connect-ci-work">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Issues and code quality</h4>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            Send your issues as the tracker has them and the SARIF report of your static analysis. QE Navigator calculates defect escape rate, defect density (code size from the coverage
+            reports), velocity, commitment, carryover, blocked time, sizing accuracy and the code quality score, with new and fixed findings; computed values are not accepted.
+            A Jira project key or Linear team key can be mapped to a team like a service (below in Service → team mapping).
+          </p>
+        </div>
+        <div>
+          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">1. Issues, from the tracker</h5>
+          {toolTabs('issues', 'Issue steps', ISSUE_TOOLS, issueTool, setIssueTool, issueCode, 'connect-ci-issue-snippet')}
+        </div>
+        <div>
+          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">2. Static analysis (SARIF), from the pipeline</h5>
+          {toolTabs('sarif', 'Static analysis steps', TOOLS, sarifTool, setSarifTool, sarifCode, 'connect-ci-sarif-snippet')}
+        </div>
+      </div>
+
       <div className="border-t border-slate-200 dark:border-slate-800">
         <div className="px-5 pt-4">
           <h4 className="text-sm font-semibold text-slate-900 dark:text-white">Last data received</h4>
@@ -584,7 +719,7 @@ const ConnectCi: React.FC = () => {
           <table className="mt-2 min-w-full text-sm" data-testid="connect-ci-status">
             <caption className="sr-only">Last data received per team</caption>
             <thead className="bg-slate-50 text-left text-xs text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">
-              <tr><th scope="col" className="px-5 py-2 font-medium">Team</th><th scope="col" className="px-3 py-2 font-medium">Tests</th><th scope="col" className="px-3 py-2 font-medium">Coverage</th><th scope="col" className="px-3 py-2 font-medium">Pipelines</th><th scope="col" className="px-3 py-2 font-medium">Deployments</th><th scope="col" className="px-3 py-2 font-medium">Incidents</th><th scope="col" className="px-3 py-2 font-medium">Main branch</th></tr>
+              <tr><th scope="col" className="px-5 py-2 font-medium">Team</th><th scope="col" className="px-3 py-2 font-medium">Tests</th><th scope="col" className="px-3 py-2 font-medium">Coverage</th><th scope="col" className="px-3 py-2 font-medium">Pipelines</th><th scope="col" className="px-3 py-2 font-medium">Deployments</th><th scope="col" className="px-3 py-2 font-medium">Incidents</th><th scope="col" className="px-3 py-2 font-medium">Issues</th><th scope="col" className="px-3 py-2 font-medium">Static analysis</th><th scope="col" className="px-3 py-2 font-medium">Main branch</th></tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {teams.map((t) => (
@@ -595,6 +730,8 @@ const ConnectCi: React.FC = () => {
                   <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{cell(t.pipelines)}</td>
                   <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{cell(t.deployments ?? null)}</td>
                   <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{cell(t.incidents ?? null)}</td>
+                  <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{cell(t.issues ?? null)}</td>
+                  <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{cell(t.staticAnalysis ?? null)}</td>
                   <td className="px-3 py-2">
                     <form className="flex items-center gap-1.5" onSubmit={(e) => { e.preventDefault(); saveBranch(t.id); }}>
                       <label htmlFor={`mb-${t.id}`} className="sr-only">Main branch of {t.name}</label>
