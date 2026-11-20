@@ -93,7 +93,7 @@ async function handleIssues(req: ApiKeyRequest, res: express.Response) {
     source = `issues (${format})`;
     const defTeam = (q.team ?? q.teamId ?? '').trim() || null;
     if (defTeam) teamId = defTeam;
-    let parsed;
+    let parsed: ReturnType<typeof parseIssueBody>;
     try {
       parsed = parseIssueBody(body, format, {
         team: defTeam, storyPointsField: (q.storyPointsField ?? '').trim() || null, sprintField: (q.sprintField ?? '').trim() || null, environmentField: (q.environmentField ?? '').trim() || null,
