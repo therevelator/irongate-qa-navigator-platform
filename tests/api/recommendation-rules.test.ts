@@ -1,5 +1,5 @@
 import {
-  buildTimeRule, changeFailureRule, coverageGapRule, effectText, escapeWithFallingCoverageRule, failingStageRule, flakyTestsRule,
+  availabilityRule, buildTimeRule, changeFailureRule, coverageGapRule, effectText, escapeWithFallingCoverageRule, failingStageRule, flakyTestsRule,
   historyEffect, MAX_RECOMMENDATIONS, mttrRule, ownBest, recommend, scoreOf, sizingDriftRule, slowTestsRule, technicalDebtRule,
   valueWeeksAgo, wellbeingBlockedRule, type MetricFacts, type TeamFacts,
 } from '../../server/lib/recommendations/rules';
@@ -240,6 +240,14 @@ describe('rules', () => {
     expect(r.effect).toMatchObject({ from: 22 });
     expect(r.effect!.high).toBeCloseTo(22 * 0.95, 10);
     expect(r.items[0]).toEqual({ kind: 'test', name: 'push › cancels a statement download', detail: 'median 18.3 s over 25 runs' });
+  });
+
+  test('availability below target: the downtime a month it means against what the target allows', () => {
+    const m = metric('system_availability', { label: 'System availability', lowerIsBetter: false, target: { good: 99.9, warning: 99 }, series: (w) => 99.8 - w * 0.001 });
+    const r = availabilityRule(facts([m]))!;
+    expect(r.title).toBe('Availability 99.8% means about 88 minutes of downtime a month; the target ≥ 99.9% allows 44 minutes');
+    expect(r.metricKey).toBe('system_availability');
+    expect(availabilityRule(facts([metric('system_availability', { target: { good: 99.9, warning: 99 }, series: () => 99.95 })]))).toBeNull();
   });
 
   test('change failure rate off target', () => {

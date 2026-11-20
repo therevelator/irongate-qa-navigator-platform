@@ -573,6 +573,33 @@ export const changeFailureRule: Rule = (f) => {
   };
 };
 
+/** System availability below target: the downtime it means, with the outage incidents when sent. */
+export const availabilityRule: Rule = (f) => {
+  const m = f.metrics.system_availability;
+  if (!needsAttention(m) || !m.target) return null;
+  const hoursPerMonth = 730;
+  const down = ((100 - (m.current as number)) / 100) * hoursPerMonth;
+  const allowed = ((100 - m.target.good) / 100) * hoursPerMonth;
+  const mins = (h: number) => (h >= 2 ? `${r1(h)} hours` : `${Math.round(h * 60)} minutes`);
+  const inc = f.incidents;
+  return {
+    ruleKey: 'availability', subjectKey: '',
+    title: missTitle(m) ?? `Availability ${fmt(m.current as number, m.unit)} means about ${mins(down)} of downtime a month; the target ${targetText(m)} allows ${mins(allowed)}`,
+    evidence: compact<Evidence>([
+      currentEvidence(m),
+      { label: 'Downtime a month at this level (730 h)', value: mins(down), detail: `target allows ${mins(allowed)}` },
+      trendEvidence(m),
+      inc && { label: `Incidents resolved in the last ${inc.windowDays} days`, value: String(inc.count), detail: `median ${r1(inc.medianHours)} h to recover` },
+      forecastEvidence(m),
+    ]),
+    items: (inc?.longest ?? []).map((i) => ({ kind: 'incident' as const, name: i.title, detail: `${i.severity}${i.service ? ` · ${i.service}` : ''} · ${r1(i.hours)} h · opened ${shortDay(i.opened)}` })),
+    nextStep: 'Find the top downtime causes of the last month (incidents above), add health checks with automatic restart or failover for the service that was down longest, and alert on error rate before users notice.',
+    metricKey: 'system_availability',
+    effect: historyEffect(m),
+    confidence: confidenceOf(!!inc, m),
+  };
+};
+
 export const RULES: Array<{ key: string; rule: Rule }> = [
   { key: 'flaky_tests', rule: flakyTestsRule },
   { key: 'coverage_gap', rule: coverageGapRule },
@@ -585,6 +612,7 @@ export const RULES: Array<{ key: string; rule: Rule }> = [
   { key: 'technical_debt', rule: technicalDebtRule },
   { key: 'slow_tests', rule: slowTestsRule },
   { key: 'change_failure', rule: changeFailureRule },
+  { key: 'availability', rule: availabilityRule },
 ];
 
 /** At most this many recommendations at a time (the highest ranked), so the list stays a plan. */
