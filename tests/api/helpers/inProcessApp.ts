@@ -12,7 +12,7 @@ import { apiErrorHandler } from '../../../server/middleware/errorHandler';
 /**
  * An in-process copy of the API (same middleware order as server/index.ts and
  * netlify/functions/api.ts) for tests that change environment variables per test
- * (PLATFORM_OPERATOR_EMAILS, ...) or swap the mailer (setMailerForTests): auth, admin, activity and
+ * (PLATFORM_OPERATOR_ALLOWED_IPS, ...) or swap the mailer (setMailerForTests): auth, admin, activity and
  * operator routes only (set data up through the live API). It uses the same local database as the live API.
  * `extra` mounts test-only routes (e.g. one that throws) before the error handler.
  */
