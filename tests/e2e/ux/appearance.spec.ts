@@ -1,13 +1,16 @@
 import { test, expect, TAG } from '../support/fixtures';
 import { checkA11y } from '../support/a11y';
 import { DEMO } from '../support/roles';
+import { API_URL } from '../support/env';
 import type { Page } from '@playwright/test';
 
 /**
  * Appearance menu in the top bar (src/components/HeaderParts.tsx AppearanceMenu,
  * src/contexts/ThemeContext.tsx, src/lib/appearance.ts): the theme (Light, Dark, Graphite,
  * Porcelain, Match system), the score display (Battery or Gauge, src/components/ScoreVisual.tsx) and
- * its depth (3D or flat 2D). All are kept in the browser and applied before the first paint (index.html).
+ * its depth (3D or flat 2D), and the battery style (Cell, the default: src/components/CellBattery.tsx;
+ * Liquid: the original HeroBattery). All are kept in the browser and applied before the first paint
+ * (index.html).
  */
 
 const htmlState = (page: Page) => page.evaluate(() => ({
@@ -15,6 +18,10 @@ const htmlState = (page: Page) => page.evaluate(() => ({
   dark: document.documentElement.classList.contains('dark'),
   display: document.documentElement.getAttribute('data-score-display'),
 }));
+const styleOnHtml = (page: Page) => page.evaluate(() => document.documentElement.getAttribute('data-battery-style'));
+const BAND = (v: number) => (v < 30 ? 'red' : v < 45 ? 'deepAmber' : v < 60 ? 'amber' : v < 75 ? 'yellow' : v < 90 ? 'lightGreen' : 'green');
+/** Cell charge in % of the body's inside (src/lib/cellBattery.ts): 0–100 → 11–90. */
+const cellCharge = (v: number) => 11 + (Math.max(0, Math.min(100, v)) / 100) * 79;
 const depthOnHtml = (page: Page) => page.evaluate(() => document.documentElement.getAttribute('data-score-depth'));
 
 /**
@@ -69,11 +76,10 @@ test.describe('Appearance', { tag: [TAG.area('ux')] }, () => {
     await page.keyboard.press('Enter');
     await expect.poll(() => htmlState(page)).toEqual({ theme: 'graphite', dark: true, display: 'battery' });
     await expect(app.appearanceMenu.getByRole('menuitemradio', { name: /^Graphite/ })).toHaveAttribute('aria-checked', 'true');
-    // End jumps to the last item (2D, in the Depth group); two up is Gauge.
+    // End jumps to the last item (2D, in the Depth group); four up (past 3D, Cell, Liquid) is Gauge.
     await page.keyboard.press('End');
     await expect(app.appearanceMenu.getByRole('menuitemradio', { name: /^2D/ })).toBeFocused();
-    await page.keyboard.press('ArrowUp');
-    await page.keyboard.press('ArrowUp');
+    for (let i = 0; i < 4; i++) await page.keyboard.press('ArrowUp');
     await expect(app.appearanceMenu.getByRole('menuitemradio', { name: 'Gauge' })).toBeFocused();
     await page.keyboard.press('Space');
     await expect.poll(() => htmlState(page)).toEqual({ theme: 'graphite', dark: true, display: 'gauge' });
@@ -229,6 +235,100 @@ test.describe('Appearance: 3D / 2D', { tag: [TAG.area('ux')] }, () => {
   });
 });
 
+test.describe('Appearance: battery style', { tag: [TAG.area('ux')] }, () => {
+  test('APR-07 Cell is the default battery; Liquid, Cell and Gauge switch from the menu, with 3D / 2D, and survive a reload', { tag: [TAG.smoke] }, async ({ signInAs, page, app }) => {
+    await signInAs('viewer');
+    expect(await styleOnHtml(page)).toBe('cell');
+    const hero = page.locator('[data-testid="dashboard"] [role="img"][data-battery-band]').first();
+    await expect(hero).toHaveAttribute('data-battery-style', 'cell');
+    await expect(hero).toHaveAttribute('aria-label', /: (\d+ of 100|no data)$/);
+    const label = await hero.getAttribute('aria-label');
+
+    await app.openAppearance();
+    const group = app.appearanceMenu.getByRole('group', { name: 'Battery style' });
+    await expect(group.getByRole('menuitemradio')).toHaveCount(2);
+    await expect(group.getByRole('menuitemradio', { name: /^Cell/ })).toHaveAttribute('aria-checked', 'true');
+    await group.getByRole('menuitemradio', { name: /^Liquid/ }).click();
+    await expect(group.getByRole('menuitemradio', { name: /^Liquid/ })).toHaveAttribute('aria-checked', 'true');
+    await app.closeAppearance();
+    expect(await styleOnHtml(page)).toBe('liquid');
+    // Liquid: the original battery, same text alternative and band.
+    await expect(hero).not.toHaveAttribute('data-battery-style', 'cell');
+    await expect(page.locator('[data-battery-style="cell"]')).toHaveCount(0);
+    await expect(hero).toHaveAttribute('aria-label', label!);
+
+    // 2D with Liquid, then reload: both kept.
+    await app.setScoreDepth('2D');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(await page.evaluate(() => [document.documentElement.getAttribute('data-battery-style'), document.documentElement.getAttribute('data-score-depth')])).toEqual(['liquid', '2d']);
+    await expect(page.getByTestId('dashboard')).toBeVisible();
+    await expect(hero).toHaveAttribute('data-score-depth', '2d');
+    await expect(page.locator('[data-battery-style="cell"]')).toHaveCount(0);
+
+    // Gauge stays its own choice; the battery style is kept for when Battery comes back.
+    await app.setScoreDisplay('Gauge');
+    await expect(page.getByTestId('score-gauge').first()).toHaveAttribute('data-score-depth', '2d');
+    await app.setScoreDisplay('Battery');
+    await app.setBatteryStyle('Cell');
+    await expect(hero).toHaveAttribute('data-battery-style', 'cell');
+    await expect(hero).toHaveAttribute('data-score-depth', '2d');
+    await app.setScoreDepth('3D');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    expect(await page.evaluate(() => [document.documentElement.getAttribute('data-battery-style'), document.documentElement.getAttribute('data-score-depth')])).toEqual(['cell', '3d']);
+    await expect(hero).toHaveAttribute('data-score-depth', '3d');
+    await page.evaluate(() => { localStorage.removeItem('irongate_battery_style'); localStorage.removeItem('irongate_score_depth'); localStorage.removeItem('irongate_score_display'); });
+  });
+
+  test('APR-08 Cell fill and colour follow the value (10, 45, 81, 100; band edges 29/30 and 89/90), in 3D and 2D, vertical and horizontal', async ({ signInAs, page, app }) => {
+    const values = [10, 45, 81, 100, 29, 30, 89, 90];
+    await page.route(`${API_URL}/teams`, async (route) => {
+      const res = await route.fetch();
+      const body = await res.json();
+      body.teams = body.teams.map((t: any, i: number) => (i < values.length ? { ...t, qaScore: values[i] } : t));
+      await route.fulfill({ response: res, json: body });
+    });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await signInAs('admin');
+    await expect(page.getByTestId('team-card').first()).toBeVisible();
+    const measure = () => page.locator('[data-testid="team-card"] [data-battery-style="cell"]').evaluateAll((els) => els.map((el) => {
+      const value = Number((el.getAttribute('aria-label') ?? '').match(/: (\d+) of 100$/)?.[1] ?? NaN);
+      const body = el.querySelector('[data-testid="cell-body"]')!.getBoundingClientRect();
+      const fill = el.querySelector('[data-testid="cell-fill"]')?.getBoundingClientRect();
+      const vertical = body.height > body.width;
+      const len = vertical ? body.height : body.width;
+      const edge = Math.max(1, (2 * len) / 250);
+      const end = !fill ? null : vertical ? body.bottom - fill.top : fill.right - body.left;
+      return { value, band: el.getAttribute('data-battery-band'), vertical, at: end == null ? null : ((end - edge) / (len - 2 * edge)) * 100 };
+    }));
+    for (const depth of ['3D', '2D'] as const) {
+      if (depth === '2D') await app.setScoreDepth('2D');
+      const cells = await measure();
+      for (const v of values) {
+        const c = cells.find((x) => x.value === v);
+        expect(c, `a team card with QA ${v}`).toBeTruthy();
+        expect([v, c!.band]).toEqual([v, BAND(v)]);
+        expect(c!.vertical).toBe(true);
+        expect(Math.abs(c!.at! - cellCharge(v)), `fill end of ${v} (${depth}): ${c!.at} vs ${cellCharge(v)}`).toBeLessThan(1);
+      }
+    }
+    // Horizontal on Team detail, same mapping.
+    await page.getByLabel('Search teams').fill(DEMO.leadTeam.name);
+    await page.getByTestId('team-card').filter({ hasText: DEMO.leadTeam.name }).first().click();
+    const qa = page.getByTestId('team-qa-card').getByRole('img', { name: /^QA score:/ });
+    await expect(qa).toHaveAttribute('data-battery-style', 'cell');
+    const h = await qa.evaluate((el) => {
+      const value = Number((el.getAttribute('aria-label') ?? '').match(/: (\d+) of 100$/)?.[1] ?? NaN);
+      const body = el.querySelector('[data-testid="cell-body"]')!.getBoundingClientRect();
+      const fill = el.querySelector('[data-testid="cell-fill"]')?.getBoundingClientRect();
+      const edge = Math.max(1, (2 * body.width) / 250);
+      return { value, wide: body.width > body.height, at: fill ? ((fill.right - body.left - edge) / (body.width - 2 * edge)) * 100 : null };
+    });
+    expect(h.wide).toBe(true);
+    if (!Number.isNaN(h.value)) expect(Math.abs(h.at! - cellCharge(h.value))).toBeLessThan(1);
+    await page.evaluate(() => localStorage.removeItem('irongate_score_depth'));
+  });
+});
+
 test.describe('Appearance accessibility', { tag: [TAG.a11y, TAG.area('ux')] }, () => {
   const cases = [
     { id: 'A11Y-20', theme: 'Light', display: 'Gauge' },
@@ -270,6 +370,34 @@ test.describe('Appearance accessibility', { tag: [TAG.a11y, TAG.area('ux')] }, (
       await page.waitForLoadState('networkidle').catch(() => undefined);
       await checkA11y(page, testInfo, { known: [] });
       await page.evaluate(() => { localStorage.removeItem('irongate_score_depth'); localStorage.removeItem('irongate_score_display'); localStorage.removeItem('irongate_theme_mode'); });
+    });
+  }
+
+  const cellCases = [
+    { id: 'A11Y-54', theme: 'Light', depth: '3D' },
+    { id: 'A11Y-55', theme: 'Dark', depth: '2D' },
+    { id: 'A11Y-56', theme: 'Graphite', depth: '3D' },
+    { id: 'A11Y-57', theme: 'Porcelain', depth: '2D' },
+  ] as const;
+  for (const c of cellCases) {
+    test(`${c.id} ${c.theme} theme, Cell battery (${c.depth}): the Appearance menu, overview, team detail and TV mode have no serious violations`, async ({ signInAs, page, app }, testInfo) => {
+      await signInAs('admin');
+      await app.setTheme(c.theme);
+      await app.setBatteryStyle('Cell');
+      await app.setScoreDepth(c.depth);
+      await app.openAppearance();
+      await checkA11y(page, testInfo, { known: [], include: '[data-testid="appearance-menu"]' });
+      await app.closeAppearance();
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await checkA11y(page, testInfo, { known: [] });
+      await openTeam(page);
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await checkA11y(page, testInfo, { known: [] });
+      await page.goto(`/tv?team=${encodeURIComponent(DEMO.leadTeam.id)}&theme=${c.theme.toLowerCase()}`);
+      await expect(page.getByTestId('tv-battery').getByRole('img')).toHaveAttribute('data-battery-style', 'cell');
+      await page.waitForLoadState('networkidle').catch(() => undefined);
+      await checkA11y(page, testInfo, { known: [] });
+      await page.evaluate(() => { localStorage.removeItem('irongate_score_depth'); localStorage.removeItem('irongate_battery_style'); localStorage.removeItem('irongate_theme_mode'); localStorage.removeItem('irongate_tv_theme'); });
     });
   }
 

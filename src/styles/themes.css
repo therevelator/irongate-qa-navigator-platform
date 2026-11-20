@@ -28,6 +28,8 @@
   --battery-nib-a: #64748b;
   --battery-nib-b: #334155;
   --battery-shadow: 0 4px 10px rgb(15 23 42 / 0.18);
+  /* Cell battery (CellBattery.tsx): a thin outline so its rounded ends read on light backgrounds. */
+  --cell-outline: rgb(15 23 42 / 0.22);
   --gauge-track: #e2e8f0;
   --gauge-track-edge: #cbd5e1;
   --gauge-tick: #0f172a;
@@ -42,6 +44,7 @@
 }
 .dark {
   --app-bg: var(--color-slate-950);
+  --cell-outline: transparent;
   --gauge-track: #1e293b;
   --gauge-track-edge: #334155;
   --gauge-tick: #f1f5f9;
@@ -182,6 +185,7 @@
   --battery-nib-a: #eef0f3;
   --battery-nib-b: #a3a9b2;
   --battery-shadow: 0 8px 18px -6px rgb(90 70 45 / 0.35), 0 1px 2px rgb(90 70 45 / 0.2);
+  --cell-outline: rgb(90 70 45 / 0.28);
   --gauge-track: rgb(120 105 85 / 0.12);
   --gauge-track-edge: rgb(120 105 85 / 0.22);
   --gauge-tick: #2a2622;

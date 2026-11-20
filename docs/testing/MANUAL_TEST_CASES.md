@@ -1,6 +1,6 @@
 # Manual test cases
 
-435 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+438 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -10,8 +10,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
-- [Accessibility](#accessibility) (21)
-- [Theme and phone layout](#theme-and-phone-layout) (29)
+- [Accessibility](#accessibility) (22)
+- [Theme and phone layout](#theme-and-phone-layout) (31)
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
 - [Team detail](#team-detail) (22)
@@ -723,7 +723,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/sessions.spec.ts › Sign-in lifetime and signing out other devices › "Sign out my other devices" keeps this browser and signs the other one out with a message`
 
-### TC-AUTH-134: Five wrong passwords in a row lock the account for 15 minutes; a locked account looks like a wrong password
+### TC-AUTH-137: Five wrong passwords in a row lock the account for 15 minutes; a locked account looks like a wrong password
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F1.2
 
@@ -1295,7 +1295,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/auth/invitations.spec.ts › Invitations › INV-09 a manager may invite team leads, software engineers and viewers only; a team lead engineers and viewers`
 
-### TC-AUTH-133: Right after signing in with the form, a company that hides sample-data notices shows no 'Includes sample data' banner
+### TC-AUTH-136: Right after signing in with the form, a company that hides sample-data notices shows no 'Includes sample data' banner
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F1.14
 
@@ -2169,7 +2169,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Routes, history and the navigation drawer › NAV-17 the brand button returns to the overview from any page`
 
-### TC-AUTH-127: Top bar shows the QE Navigator brand, company badge and the person with their role label
+### TC-AUTH-130: Top bar shows the QE Navigator brand, company badge and the person with their role label
 
 **Type:** Positive · **Priority:** High · **Role:** Viewer · **Flow:** F4.14
 
@@ -2193,7 +2193,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-01 viewer: brand, company badge, name and role label`
 
-### TC-AUTH-128: "What you can do here" explains the viewer's role, scope and limits; Escape and a click outside close it
+### TC-AUTH-131: "What you can do here" explains the viewer's role, scope and limits; Escape and a click outside close it
 
 **Type:** Positive · **Priority:** High · **Role:** Viewer · **Flow:** F4.15
 
@@ -2218,7 +2218,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-02 viewer: "What you can do here" says her role, scope and limits; Escape and outside click close it`
 
-### TC-AUTH-129: "What you can do here" for a super admin lists company-wide powers and nothing they cannot do
+### TC-AUTH-132: "What you can do here" for a super admin lists company-wide powers and nothing they cannot do
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.15
 
@@ -2238,7 +2238,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-03 super admin: help lists company-wide powers and nothing she cannot do`
 
-### TC-AUTH-130: A job title set by a super admin replaces the role label in the top bar; others cannot set it
+### TC-AUTH-133: A job title set by a super admin replaces the role label in the top bar; others cannot set it
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin, Viewer · **Flow:** F4.14
 
@@ -2264,7 +2264,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-04 a job title set by a super admin replaces the role label; only super admins may set it`
 
-### TC-AUTH-131: Phone: the top bar shows company initials only; name, title and sign out are in the account menu
+### TC-AUTH-134: Phone: the top bar shows company initials only; name, title and sign out are in the account menu
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.16
 
@@ -2287,7 +2287,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/navigation/header.spec.ts › Top bar › HDR-05 phone: company initials only; name, title and sign out in the account menu`
 
-### TC-AUTH-132: TV mode is in every role's navigation and opens with a team of the role's scope
+### TC-AUTH-135: TV mode is in every role's navigation and opens with a team of the role's scope
 
 **Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.17
 
@@ -2614,7 +2614,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/accessibility.spec.ts › Accessibility › A11Y-13 compare teams, users and team detail in the dark theme`
 
-### TC-AUTH-121: Overview and Team detail in the Light theme (Gauge) have no serious or critical accessibility violations
+### TC-AUTH-123: Overview and Team detail in the Light theme (Gauge) have no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
 
@@ -2640,7 +2640,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-20 Light theme (Gauge): overview and team detail have no serious violations`
 
-### TC-AUTH-122: Overview and Team detail in the Dark theme (Gauge) have no serious or critical accessibility violations
+### TC-AUTH-124: Overview and Team detail in the Dark theme (Gauge) have no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
 
@@ -2666,7 +2666,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-21 Dark theme (Gauge): overview and team detail have no serious violations`
 
-### TC-AUTH-123: Overview and Team detail in the Graphite theme (Battery) have no serious or critical accessibility violations
+### TC-AUTH-125: Overview and Team detail in the Graphite theme (Battery) have no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
 
@@ -2692,7 +2692,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-22 Graphite theme (Battery): overview and team detail have no serious violations`
 
-### TC-AUTH-124: Overview and Team detail in the Porcelain theme (Gauge) have no serious or critical accessibility violations
+### TC-AUTH-126: Overview and Team detail in the Porcelain theme (Gauge) have no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
 
@@ -2718,7 +2718,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-23 Porcelain theme (Gauge): overview and team detail have no serious violations`
 
-### TC-AUTH-125: Sign-in screen in Graphite and Porcelain has no serious or critical accessibility violations
+### TC-AUTH-127: Sign-in screen in Graphite and Porcelain has no serious or critical accessibility violations
 
 **Type:** Accessibility · **Priority:** Low · **Role:** Signed out · **Flow:** F15.1
 
@@ -2738,7 +2738,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-24 sign-in screen in Graphite and Porcelain`
 
-### TC-AUTH-126: Appearance menu, Overview and Team detail with flat (2D) scores have no serious or critical accessibility violations in all four themes
+### TC-AUTH-128: Appearance menu, Overview and Team detail with flat (2D) scores have no serious or critical accessibility violations in all four themes
 
 **Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
 
@@ -2763,6 +2763,32 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Choose Theme 'Light', Score display 'Battery' and Depth '3D' in the Appearance menu (or clear irongate_theme_mode, irongate_score_display and irongate_score_depth in DevTools > Application > Local storage).
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-50 … A11Y-53`
+
+### TC-AUTH-129: Appearance menu, Overview, Team detail and TV mode with the Cell battery have no serious or critical accessibility violations in all four themes
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F15.1, F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- An accessibility checker browser extension using axe-core (e.g. axe DevTools) configured for WCAG 2.1 A and AA rules
+
+**Test data**
+
+- Super admin: admin@irongate.com / demo123
+- Team: The Away Team
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin (admin@irongate.com / demo123). | The overview opens. |
+| 2 | Click Appearance, choose Theme 'Light', Battery style 'Cell' and Depth '3D'; with the menu open run the axe-core scan on the menu. | No serious or critical violation. |
+| 3 | Press Escape and scan the overview; open The Away Team and scan; open TV mode for it and scan. | No serious or critical violation. |
+| 4 | Repeat with Dark + 2D, Graphite + 3D and Porcelain + 2D. | No serious or critical violation in any of them. |
+
+**After the test:** Choose Theme 'Light', Battery style 'Cell' and Depth '3D' (or clear irongate_theme_mode, irongate_battery_style and irongate_score_depth in DevTools > Application > Local storage).
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance accessibility › A11Y-54 … A11Y-57`
 
 ### TC-ADM-060: Deliveries & incidents and Connect your CI are accessible in the four themes
 
@@ -3352,10 +3378,10 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens in the Light theme; the QA scores are drawn as 3D batteries. |
-| 2 | Press Tab until the Appearance button (palette icon) in the top bar has the focus ring, then press Enter. | A menu opens with three groups: Theme (Light, Dark, Graphite, Porcelain, Match system), Score display (Battery, Gauge) and Depth (3D, 2D). The focus is on 'Light', which has a check mark. |
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens in the Light theme; the QA scores are drawn as 3D Cell batteries. |
+| 2 | Press Tab until the Appearance button (palette icon) in the top bar has the focus ring, then press Enter. | A menu opens with four groups: Theme (Light, Dark, Graphite, Porcelain, Match system), Score display (Battery, Gauge), Battery style (Liquid, Cell) and Depth (3D, 2D). The focus is on 'Light', which has a check mark. |
 | 3 | Press the Down arrow twice, then Enter. | 'Graphite' has the focus and is chosen: the app turns deep graphite with translucent dark-glass cards, light hairline borders and a soft diagonal light sheen; text is white / silver. |
-| 4 | Press End, then the Up arrow twice, then Space. | End moves the focus to '2D' (the last item); two steps up is 'Gauge', which is chosen: every QA score (company hero, executive metrics, team cards) is now a radial gauge with the number in the centre, a coloured arc with a marker at its end (the score). |
+| 4 | Press End, then the Up arrow four times, then Space. | End moves the focus to '2D' (the last item); four steps up (3D, Cell, Liquid) is 'Gauge', which is chosen: every QA score (company hero, executive metrics, team cards) is now a radial gauge with the number in the centre, a coloured arc with a marker at its end (the score). |
 | 5 | Press Escape. | The menu closes and the focus returns to the Appearance button. |
 | 6 | Reload the page. | The overview opens directly in Graphite with gauges, without a flash of the light theme. |
 | 7 | Open the navigation and click Sign out. | The sign-in screen is shown in Graphite (dark glass, graphite brand panel on wide screens). |
@@ -3428,7 +3454,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens with 3D batteries. |
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens with 3D batteries (Cell style, the default). |
 | 2 | Click Appearance and choose Score display 'Gauge'. | The team cards show a small gauge next to 'QA score'. A screen reader reads it as '<team> QA score: <n> of 100', as for the battery. |
 | 3 | Click the team card 'The Away Team'. | Team detail opens; the QA score card shows a gauge whose marker sits at the end of the coloured arc, at the team's QA score. |
 | 4 | Choose Score display 'Battery'. | The QA score card shows the horizontal 3D battery again. |
@@ -3495,6 +3521,57 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** With 'Reduce motion' on in the OS nothing moves in either depth. In 2D a liquid wave, where shown, is a flat crest in the same colour.
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance: 3D / 2D › APR-06 keyboard: the Depth group (3D / 2D) flattens the battery and the gauge everywhere, keeps the colours, and the choice survives a reload`
+
+### TC-AUTH-121: Battery style: Cell by default, Liquid one click away, with 3D / 2D, remembered after a reload
+
+**Type:** Positive · **Priority:** Medium · **Role:** Viewer · **Flow:** F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+
+**Test data**
+
+- Viewer: viewer@irongate.com / demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Viewer (viewer@irongate.com / demo123) in a fresh browser profile. | The overview shows the Cell battery: a glass cell with elliptically rounded ends, a short nib, highlight bands and a dark band before the nib; the charge in the band colour with a bright leading edge fading into the dark empty part. |
+| 2 | Open Appearance. | A group 'Battery style' lists 'Liquid' and 'Cell'; 'Cell' has the check mark. |
+| 3 | Choose 'Liquid', press Escape. | Every battery becomes the original glass tube with a liquid; the colours and the screen-reader text ('Global QA score: 80 of 100') are the same. |
+| 4 | Choose Depth '2D' and reload the page. | The page opens with flat Liquid batteries (no flash of another style or depth). |
+| 5 | Choose Score display 'Gauge', then 'Battery' again, then Battery style 'Cell' and Depth '3D'; reload. | The gauge shows while chosen; back on Battery the chosen style returns. After the reload: 3D Cell batteries. |
+| 6 | Open a team page and TV mode for The Away Team. | The team page shows a horizontal Cell battery (nib on the right); TV mode shows a vertical Cell battery as tall as the Liquid battery was. |
+
+**After the test:** Choose Battery style 'Cell' and Depth '3D' (or clear irongate_battery_style and irongate_score_depth in DevTools > Application > Local storage).
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance: battery style › APR-07 Cell is the default battery; Liquid, Cell and Gauge switch from the menu, with 3D / 2D, and survive a reload`
+
+### TC-AUTH-122: Cell battery: the charge length and colour follow the value (10, 45, 81, 100; band edges 29/30 and 89/90)
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- Teams whose QA scores are 10, 45, 81, 100, 29, 30, 89 and 90 (set them with Manual metrics or the ingestion API; the automated test replaces the values in the team list response).
+
+**Test data**
+
+- Super admin: admin@irongate.com / demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin and look at the team cards (Cell battery, 3D). | The charge reaches 11 % of the inside of the battery at 0 and 90 % at 100, in proportion between: 10 → about 19 %, 45 → about 47 %, 81 → about 75 %, 100 → up to the dark band before the nib. |
+| 2 | Compare the colours at the band edges. | 29 red, 30 deep amber, 89 light green, 90 green (the same scale as every battery). |
+| 3 | Choose Depth '2D'. | The charges keep the same lengths and colours, flat. |
+| 4 | Open a team page. | The horizontal Cell battery fills from the left with the same mapping. |
+
+**After the test:** Choose Depth '3D'; restore the teams' values if you changed them.
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance: battery style › APR-08 Cell fill and colour follow the value (10, 45, 81, 100; band edges 29/30 and 89/90), in 3D and 2D, vertical and horizontal`
 
 ## Overview (dashboard)
 
@@ -4262,6 +4339,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Preconditions**
 
 - App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Appearance menu › Battery style 'Liquid' (the animated liquid belongs to the Liquid style; Cell is the default).
 
 **Test data**
 
@@ -4333,6 +4411,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 - App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
 - Operating system setting "Reduce motion" on (or DevTools > Rendering > Emulate prefers-reduced-motion: reduce)
+- Appearance menu › Battery style 'Liquid' (the animated liquid belongs to the Liquid style; Cell is the default).
 
 | Step | Action | Expected result |
 |---|---|---|

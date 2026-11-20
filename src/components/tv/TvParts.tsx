@@ -94,8 +94,8 @@ export const TrendText: React.FC<{ change: KpiChange | null; unit: string; digit
 /**
  * The score visual (3D battery or gauge, as chosen in the Appearance menu), filling the space it
  * is given (crisp: CSS gradients / SVG).
- *  - Battery: scaled to the height it is given (its lg box is 166 px tall with the nib); the box
- *    is as wide as the scaled battery.
+ *  - Battery (Cell or Liquid): scaled to the height it is given, from its own box; the box is as
+ *    wide as the scaled battery.
  *  - Gauge: wider than tall, so it fills the box its parent gives it (TeamTvView: the middle of
  *    the hero, between the title and the status), as large as fits both ways with its needle
  *    (fitGaugeWidth, from the gauge's own layout), centred. Drawn at that size (no CSS scale), so
@@ -108,21 +108,34 @@ export const ScaledBattery: React.FC<{ value: number | null; good: number; warn:
     : <ScaledHeroBattery value={value} good={good} warn={warn} label={label} />;
 };
 
+/**
+ * The battery (Cell or Liquid, as chosen) scaled to the height it is given: sized from the battery's
+ * own box (its layout size, which a CSS scale does not change) plus 4 px of room on each side, so
+ * each style fills the same height. For the Liquid battery that is the 84 × 166 px box it always had.
+ */
 const ScaledHeroBattery: React.FC<{ value: number | null; good: number; warn: number; label: string }> = ({ value, good, warn, label }) => {
+  const { batteryStyle } = useTheme();
   const ref = useRef<HTMLDivElement>(null);
-  const [k, setK] = useState(2);
+  const visualRef = useRef<HTMLDivElement>(null);
+  const [box, setBox] = useState({ k: 2, w: 84 });
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    const measure = () => setK(Math.max(0.5, el.clientHeight / 166));
+    const v = visualRef.current;
+    if (!el || !v) return;
+    const measure = () => {
+      const natW = (v.offsetWidth || 76) + 8;
+      const natH = (v.offsetHeight || 158) + 8;
+      const k = Math.max(0.5, el.clientHeight / natH);
+      setBox((b) => (b.k === k && b.w === natW ? b : { k, w: natW }));
+    };
     measure();
     const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
+  }, [batteryStyle]);
   return (
-    <div ref={ref} className="flex h-full flex-shrink-0 items-center justify-center" style={{ width: 84 * k }} data-testid="tv-battery">
-      <div style={{ transform: `scale(${k})`, transformOrigin: 'center' }}>
+    <div ref={ref} className="flex h-full flex-shrink-0 items-center justify-center" style={{ width: box.w * box.k }} data-testid="tv-battery">
+      <div ref={visualRef} style={{ transform: `scale(${box.k})`, transformOrigin: 'center' }}>
         <ScoreVisual value={value} good={good} warn={warn} size="lg" label={label} variant="battery" />
       </div>
     </div>

@@ -1,7 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
-import { HelpCircle, LogOut, MonitorSmartphone, X, Check, Minus, Palette, BatteryMedium, Gauge, Box, Square } from 'lucide-react';
+import { HelpCircle, LogOut, MonitorSmartphone, X, Check, Minus, Palette, BatteryMedium, Gauge, Box, Square, Droplets, BatteryFull } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { SCORE_DEPTH_OPTIONS, SCORE_DISPLAY_OPTIONS, THEME_OPTIONS, type ThemePreference } from '../lib/appearance';
+import { BATTERY_STYLE_OPTIONS, SCORE_DEPTH_OPTIONS, SCORE_DISPLAY_OPTIONS, THEME_OPTIONS, type ThemePreference } from '../lib/appearance';
 
 import type { AccessSummary } from '../lib/accessSummary';
 
@@ -207,13 +207,14 @@ const THEME_SWATCH: Record<ThemePreference, string> = {
 
 /**
  * "Appearance" in the top bar: the colour theme (Light, Dark, Graphite, Porcelain, Match system)
- * the score display (Battery or Gauge) and its depth (3D or flat 2D). A menu of three radio groups:
+ * the score display (Battery or Gauge), the battery style (Liquid or Cell) and the depth (3D or flat
+ * 2D). A menu of four radio groups:
  * arrow keys move, Home/End
  * jump, Enter/Space choose (the menu stays open to compare), Escape or Tab closes it and focus
  * returns to the button. The choice is kept in this browser (src/contexts/ThemeContext.tsx).
  */
 export const AppearanceMenu: React.FC = () => {
-  const { preference, setTheme, scoreDisplay, setScoreDisplay, scoreDepth, setScoreDepth } = useTheme();
+  const { preference, setTheme, scoreDisplay, setScoreDisplay, batteryStyle, setBatteryStyle, scoreDepth, setScoreDepth } = useTheme();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -302,6 +303,28 @@ export const AppearanceMenu: React.FC = () => {
                 {o.id === 'battery' ? <BatteryMedium size={16} className="flex-shrink-0 -rotate-90 text-slate-500 dark:text-slate-400" aria-hidden /> : <Gauge size={16} className="flex-shrink-0 text-slate-500 dark:text-slate-400" aria-hidden />}
                 <span className="flex-1">{o.label}</span>
                 {scoreDisplay === o.id && <Check size={15} className="flex-shrink-0 text-brand-700 dark:text-brand-300" aria-hidden />}
+              </button>
+            ))}
+          </div>
+          <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
+          <div role="group" aria-labelledby="appearance-battery-label">
+            <p id="appearance-battery-label" className={groupLabel}>Battery style</p>
+            {BATTERY_STYLE_OPTIONS.map((o) => (
+              <button
+                key={o.id}
+                type="button"
+                role="menuitemradio"
+                aria-checked={batteryStyle === o.id}
+                className={item}
+                onClick={() => setBatteryStyle(o.id)}
+                data-testid={`battery-style-option-${o.id}`}
+              >
+                {o.id === 'liquid' ? <Droplets size={16} className="flex-shrink-0 text-slate-500 dark:text-slate-400" aria-hidden /> : <BatteryFull size={16} className="flex-shrink-0 -rotate-90 text-slate-500 dark:text-slate-400" aria-hidden />}
+                <span className="flex-1">
+                  {o.label}
+                  <span className="block text-[11px] leading-tight text-slate-600 dark:text-slate-400">{o.hint}</span>
+                </span>
+                {batteryStyle === o.id && <Check size={15} className="flex-shrink-0 text-brand-700 dark:text-brand-300" aria-hidden />}
               </button>
             ))}
           </div>

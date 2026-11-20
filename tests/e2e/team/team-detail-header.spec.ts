@@ -4,8 +4,8 @@ import { API_URL } from '../support/env';
 import type { Page } from '@playwright/test';
 
 /**
- * Team detail header (src/components/TeamDetailView.tsx QaScoreCard): the 3D battery (horizontal,
- * animated liquid, still with reduced motion, colour band by value: src/lib/batteryScale.ts), the
+ * Team detail header (src/components/TeamDetailView.tsx QaScoreCard): the 3D battery (horizontal; the
+ * Liquid style has an animated liquid, still with reduced motion, colour band by value: src/lib/batteryScale.ts), the
  * QA score with status and target, the 30-day change, the 30 / 90 day trend, rank, the input that
  * costs the score most, people; targets next to every KPI status (src/lib/targetText.ts) on Team
  * detail, the overview cards and Compare.
@@ -21,6 +21,8 @@ async function openTeam(page: Page, name: string) {
 
 test.describe('Team detail header', { tag: [TAG.area('team')] }, () => {
   test('TDH-01 viewer: QA card with battery band, target, change, trend toggle and people', { tag: [TAG.role('viewer'), TAG.smoke] }, async ({ signInAs, page }) => {
+    // The animated liquid belongs to the Liquid battery style (Cell, the default, has none).
+    await page.addInitScript(() => localStorage.setItem('irongate_battery_style', 'liquid'));
     await signInAs('viewer');
     await openTeam(page, DEMO.leadTeam.name);
     const card = page.getByTestId('team-qa-card');
@@ -61,6 +63,7 @@ test.describe('Team detail header', { tag: [TAG.area('team')] }, () => {
 
   test('TDH-04 reduced motion: the battery liquid does not move', { tag: [TAG.role('viewer')] }, async ({ signInAs, page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.addInitScript(() => localStorage.setItem('irongate_battery_style', 'liquid'));
     await signInAs('viewer');
     await openTeam(page, DEMO.leadTeam.name);
     const wave = page.getByTestId('battery-liquid').locator('svg');

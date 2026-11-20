@@ -1123,14 +1123,23 @@ Escape):
 - **Score display:** **Battery** (the 3D battery) or **Gauge** (a 240° radial gauge in the same colour scale, number in the centre, a marker
   at the end of the coloured arc (the score; the target is in the text beside it), a short sweep on load, none with reduced motion). It applies everywhere a score is drawn: Overview hero, executive
   metrics, team cards, the Team detail QA card, the executive summary and TV mode. Both read the same to a screen reader ("QA score: 81 of 100").
-- **Depth:** **3D** (default: the glossy battery with glass highlights, rims, nib gradient and shadow; the gauge with a gradient arc,
+- **Battery style:** **Cell** (default; `src/components/CellBattery.tsx`, adapted from Lynn Fisher's single-div battery,
+  a.singlediv.com: an elliptically rounded body with side edges, a nib, a glass overlay with highlight bands and a dark band before the
+  nib, and a charge in five shades of its band colour with a bright leading edge fading into the dark empty part) or **Liquid** (the
+  original glass tube with a liquid, `HeroBattery.tsx`, kept unchanged). Both use the one colour scale (the five stops of each band
+  follow the reference's shade relationship: tests/api/battery-scale.test.ts BAT-006), the same footprint, orientation (vertical on the
+  overview and the summary, horizontal on Team detail) and text alternative. The Cell charge maps 0–100 onto 11–90 % of the inside of
+  the body (`src/lib/cellBattery.ts`) and grows to the value on load (instant with reduced motion); the empty part is the dark battery
+  shell in every theme, with a thin outline on the light themes (`--cell-outline`). TV mode scales either style from its own box.
+- **Depth:** **3D** (default: the glossy battery with glass highlights, rims, nib gradient and shadow (Cell: glass, highlight bands,
+  edges and the shaded leading edge); the gauge with a gradient arc,
   highlight, bevelled track and drop shadow) or **2D** (the same shapes, sizes and colours, flat: the battery's charge in the band's flat
   colour on the plain shell, a plain nib, no glass, rims, edges or shadow; the gauge's value arc in the band's flat colour, no gradient,
   highlight, bevel or shadow filter). The liquid wave, where shown, is a flat crest in the same colour in 2D; motion still stops with
   reduced motion. It applies everywhere the score display does, TV mode included. `data-score-depth` on `<html>` and on each visual.
 - **Signed-out screens** (sign-in, registration, invitation and password pages) always use the classic Light look (blue brand panel,
   white form), whatever theme is chosen; the chosen theme returns once the person is signed in.
-- The choices are kept in the browser (localStorage `irongate_theme_mode`, `irongate_score_display`, `irongate_score_depth`) and applied before the first
+- The choices are kept in the browser (localStorage `irongate_theme_mode`, `irongate_score_display`, `irongate_battery_style`, `irongate_score_depth`) and applied before the first
   paint. TV mode keeps its own theme (any of the four, T cycles through them); a kiosk link with `theme=dark` or `theme=light` shows
   Graphite or Porcelain while the app shows a glass theme.
 - Implementation: `src/lib/appearance.ts`, `src/contexts/ThemeContext.tsx`, `src/styles/themes.css` (tokens per `<html data-theme>`),

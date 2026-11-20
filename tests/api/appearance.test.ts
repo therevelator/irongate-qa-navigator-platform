@@ -3,15 +3,17 @@ import path from 'node:path';
 import vm from 'node:vm';
 import {
   applyScoreDepth, applyScoreDisplay, applyTheme, parseScoreDepth, readScoreDepth, writeScoreDepth, SCORE_DEPTH_KEY, SCORE_DEPTH_OPTIONS,
-  DEFAULT_SCORE_DEPTH, isDarkTheme, isGlassTheme, parseScoreDisplay, parseThemePreference, readScoreDisplay,
+  DEFAULT_SCORE_DEPTH, applyBatteryStyle, parseBatteryStyle, readBatteryStyle, writeBatteryStyle, BATTERY_STYLE_KEY,
+  BATTERY_STYLE_OPTIONS, DEFAULT_BATTERY_STYLE, isDarkTheme, isGlassTheme, parseScoreDisplay, parseThemePreference, readScoreDisplay,
   readThemePreference, resolveTheme, tvTheme, writeScoreDisplay, writeThemePreference, SCORE_DISPLAY_KEY, SIGNED_IN_KEY, THEME_KEY,
   THEME_OPTIONS, type ThemeId,
 } from '../../src/lib/appearance';
 import { BATTERY_BANDS, BATTERY_SHELLS, contrastRatio } from '../../src/lib/batteryScale';
 import { chartTheme } from '../../src/data/advancedFeatures';
+import { cellCharge, CELL_CHARGE_EMPTY, CELL_CHARGE_FULL } from '../../src/lib/cellBattery';
 
 /**
- * Appearance preferences (src/lib/appearance.ts): theme, score display and depth, how they are stored
+ * Appearance preferences (src/lib/appearance.ts): theme, score display, battery style and depth, how they are stored
  * and put on <html>, and the pre-paint script in index.html that must do the same thing.
  * Pure functions: no backend needed.
  */
@@ -92,13 +94,14 @@ describe('appearance: theme preference', () => {
     expect(script).toBeTruthy();
     for (const stored of [null, 'light', 'dark', 'graphite', 'porcelain', 'system', 'bogus']) {
       for (const systemDark of [false, true]) {
-        for (const display of [null, 'gauge', 'battery']) for (const depth of [null, '2d', '3d', 'flat']) {
+        for (const display of [null, 'gauge', 'battery']) for (const depth of [null, '2d', '3d', 'flat']) for (const bstyle of [null, 'liquid', 'cell', 'x']) {
           // Signed-out screens keep the classic Light theme (AuthWrapper); the operator panel follows the choice.
           for (const [signedIn, pathname] of [[true, '/'], [false, '/'], [false, '/operator']] as const) {
             const s = new FakeStorage();
             if (stored) s.setItem(THEME_KEY, stored);
             if (display) s.setItem(SCORE_DISPLAY_KEY, display);
             if (depth) s.setItem(SCORE_DEPTH_KEY, depth);
+            if (bstyle) s.setItem(BATTERY_STYLE_KEY, bstyle);
             if (signedIn) s.setItem(SIGNED_IN_KEY, '1');
             const pre = new FakeEl();
             vm.runInNewContext(script!, { document: { documentElement: pre }, localStorage: s, location: { pathname }, window: { matchMedia: () => ({ matches: systemDark }) } });
@@ -107,8 +110,9 @@ describe('appearance: theme preference', () => {
             applyTheme(ref, followsChoice ? resolveTheme(readThemePreference(s), systemDark) : 'light');
             applyScoreDisplay(ref, readScoreDisplay(s));
             applyScoreDepth(ref, readScoreDepth(s));
-            expect([stored, systemDark, display, depth, signedIn, pathname, pre.attrs, [...pre.classes], pre.style])
-              .toEqual([stored, systemDark, display, depth, signedIn, pathname, ref.attrs, [...ref.classes], ref.style]);
+            applyBatteryStyle(ref, readBatteryStyle(s));
+            expect([stored, systemDark, display, depth, bstyle, signedIn, pathname, pre.attrs, [...pre.classes], pre.style])
+              .toEqual([stored, systemDark, display, depth, bstyle, signedIn, pathname, ref.attrs, [...ref.classes], ref.style]);
           }
         }
       }
@@ -143,6 +147,41 @@ describe('appearance: score depth (3D / 2D)', () => {
     const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
     expect(readScoreDepth(broken)).toBe('3d');
     expect(() => writeScoreDepth(broken, '2d')).not.toThrow();
+  });
+});
+
+describe('appearance: battery style (Cell / Liquid)', () => {
+  it('APP-014: the menu offers Liquid and Cell; Cell is the default and anything unknown is Cell', () => {
+    expect(BATTERY_STYLE_OPTIONS.map((o) => o.label)).toEqual(['Liquid', 'Cell']);
+    expect(DEFAULT_BATTERY_STYLE).toBe('cell');
+    expect(parseBatteryStyle(null)).toBe('cell');
+    expect(parseBatteryStyle('glass')).toBe('cell');
+    expect(parseBatteryStyle('liquid')).toBe('liquid');
+    expect(parseBatteryStyle('cell')).toBe('cell');
+  });
+
+  it('APP-015: the style round-trips through storage on its own key, is put on <html>, and a throwing storage falls back to Cell', () => {
+    const s = new FakeStorage();
+    expect(readBatteryStyle(s)).toBe('cell');
+    writeBatteryStyle(s, 'liquid');
+    expect(s.getItem(BATTERY_STYLE_KEY)).toBe('liquid');
+    expect([s.getItem(THEME_KEY), s.getItem(SCORE_DISPLAY_KEY), s.getItem(SCORE_DEPTH_KEY)]).toEqual([null, null, null]);
+    expect(readBatteryStyle(s)).toBe('liquid');
+    const el = new FakeEl();
+    applyBatteryStyle(el, 'liquid');
+    expect(el.attrs['data-battery-style']).toBe('liquid');
+    const broken = { getItem: () => { throw new Error('blocked'); }, setItem: () => { throw new Error('blocked'); } };
+    expect(readBatteryStyle(broken)).toBe('cell');
+    expect(() => writeBatteryStyle(broken, 'liquid')).not.toThrow();
+  });
+
+  it('APP-016: the Cell charge maps 0–100 linearly onto the usable inside of the body (11–90 %), clamped', () => {
+    expect([CELL_CHARGE_EMPTY, CELL_CHARGE_FULL]).toEqual([11, 90]);
+    expect(cellCharge(0)).toBe(11);
+    expect(cellCharge(100)).toBe(90);
+    expect(cellCharge(50)).toBeCloseTo(50.5, 5);
+    expect(cellCharge(-5)).toBe(11);
+    expect(cellCharge(140)).toBe(90);
   });
 });
 
