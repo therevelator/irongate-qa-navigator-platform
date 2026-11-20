@@ -108,3 +108,14 @@ npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories script
 Apply migration `20261201000000_raw_ingestion_phase3_work_quality.sql` first. The sprint, escaped-defect and report lists work at
 once; the calculated values ("How this was calculated") appear with the nightly sample refresh or the operator panel's **Refresh
 sample data now**.
+
+## Business impact: financial settings and deployments per month
+
+The generator (`server/seeds/demoData.ts`) now writes the monthly business-impact deployment frequency as **deployments per
+month** (the month's weekly average × days ÷ 7, the unit of Data entry) and, for a filled company that has none of its own,
+the **Financial and ROI settings** its sample assumes: developer hourly rate 85, support ticket cost 30, SLA breach penalty
+2500 (company), and per team the revenue per user (the team's sample revenue per active user) and the downtime cost per
+minute (the team's monthly revenue ÷ 43 200 minutes). A rebuild picks both up. For the **live** Meridian company, a plain SQL
+file converts the existing sample months and adds the settings (idempotent, only the three Meridian teams; no migration):
+`business-impact-mft-meridian.sql`, undone by `business-impact-mft-meridian-remove.sql`. The nightly refresh adds new months
+with the new unit and adds the settings itself where they are missing.

@@ -1,6 +1,6 @@
 # Manual test cases
 
-447 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+451 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -16,7 +16,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Executive briefing](#executive-briefing) (3)
 - [Team detail](#team-detail) (22)
 - [Team TV mode](#team-tv-mode) (18)
-- [Business impact](#business-impact) (9)
+- [Business impact](#business-impact) (13)
 - [Analytics modules](#analytics-modules) (18)
 - [Developer insights](#developer-insights) (3)
 - [Compare teams](#compare-teams) (7)
@@ -5287,7 +5287,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/analytics/business-impact.spec.ts › Business impact › BIZ-02 what-if with empty, huge and negative changes keeps the page working`
 
-### TC-DASH-080: Super admin: money summary first, explanations behind "How is this calculated?", What-if, Details and All teams
+### TC-DASH-080: Super admin: money summary first, explanations behind "How this was calculated", What-if, Details and All teams
 
 **Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.9
 
@@ -5307,14 +5307,14 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 2 | Wait for the Money view. | The headings "Where the money is going now", "What you gain when these are fixed" and "Where to put the money first" are shown. |
 | 3 | Look at "Where the money is going now". | Exactly five causes are listed (quality gaps, technical debt, downtime, support, churn), each with a rounded figure like "$1.2k/month", "$300/month", "$1.5M/month" (negative with −) or "—" with its reason. |
 | 4 | Look at "What you gain when these are fixed". | At most five gains are shown before a "Show all <n> …" button. |
-| 5 | On the first cause click "How is this calculated?". | The explanation opens and contains "Monthly revenue at stake = …". |
+| 5 | On the first cause click "How this was calculated". | The explanation opens and contains "Monthly revenue at stake = …". |
 | 6 | Click the tab "What-if". | The what-if result box is shown. |
 | 7 | Enter 2 in the Change field. | The result says "… is associated with this change in monthly revenue." or "No projection." with a reason. |
 | 8 | Click the tab "Details". | At least three collapsible sections are shown, all collapsed. |
 | 9 | Click "How sure are we? Revenue per metric". | It expands and shows "$ per month associated with +1 unit of each metric…" or "Not enough months yet". |
 | 10 | Click the tab "All teams". | The company roll-up is shown with the tile "Teams with a figure" and an "Export CSV" button. |
 
-*Automated:* `tests/e2e/revenue-impact.spec.ts › Business impact: revenue impact › super admin: money summary first, explanations behind "How is this calculated?", what-if and all teams`
+*Automated:* `tests/e2e/revenue-impact.spec.ts › Business impact: revenue impact › super admin: money summary first, explanations behind "How this was calculated", what-if and all teams`
 
 ### TC-DASH-081: Software engineer: no All teams / Data entry tabs, the roll-up API refuses; money summary for the own team
 
@@ -5363,6 +5363,106 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Reset the viewport to the normal size.
 
 *Automated:* `tests/e2e/revenue-impact.spec.ts › Business impact: revenue impact › phone width: the money summary fits without horizontal scrolling`
+
+### TC-DASH-115: Super admin: every tab of a filled team has content; the summary works without an AI provider
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F7.9
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+- No AI provider configured on the server (GROQ_API_KEY empty), as on the UI test servers
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+- Team: The Away Team (team-1764200682441-sckxod8xd)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin and open http://localhost:5173/analytics/business-impact?team=team-1764200682441-sckxod8xd. | The Money tab opens with "Where the money is going now". |
+| 2 | Look at the five causes of "Where the money is going now". | Each shows an amount like "$4.8k/month" with a yearly figure; none shows "—". |
+| 3 | Look at "What you gain when these are fixed" and "Where to put the money first". | Both list at least one item; each gain has a label: Strong evidence, Some evidence, Company-wide evidence or Cost estimate. No "No gain can be shown yet" or "Nothing to rank yet". |
+| 4 | Click the tab "What-if". | The preselected metric shows "… is associated with this change in monthly revenue." and an amount per month. |
+| 5 | Click the tab "Details" and open every section. | The revenue-per-metric table is shown and no row says "Not significant"; the four tiles show values (no "—"); the Summary card shows "Rule-based summary" and "In short". |
+| 6 | In the Summary card click "Generate AI summary". | A notice says the AI provider is not available; the card still shows the rule-based summary with "What this does not say". No error toast, no empty box. |
+| 7 | Click the tab "All teams". | The tiles and the table are filled; no team shows "—" under Quality gaps. |
+
+**Notes:** Teams filled by Populate metrics / the demo generator use the same rules as Meridian.
+
+*Automated:* `tests/e2e/analytics/business-impact-explain.spec.ts › Business impact: populated and explained › BIZ-03 super admin: every tab of a filled team has content, the summary works without an AI provider`
+
+### TC-DASH-116: Software engineer: "How this works" explains the method; Details tiles open "How this was calculated"
+
+**Type:** Positive · **Priority:** Medium · **Role:** Software engineer · **Flow:** F7.9
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: engineer@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Software engineer and open http://localhost:5173/analytics/business-impact. | "How this works" is shown above the tabs, collapsed. |
+| 2 | Click "How this works". | Four parts open: What goes in, How the links are found, How the money figures are derived, Confidence labels and limits. The text names Benjamini–Hochberg, q < 0.05, "same month (no lag)", Financial and ROI settings, Company-wide evidence and "correlation is not causation". |
+| 3 | Click the tab "Details", open "Monthly trends". | Each of the four tiles has a "How this was calculated" link. |
+| 4 | Open "How this was calculated" under "Significant pairs". | It explains the t-test and "Benjamini–Hochberg: q = p × pairs ÷ rank", significant when q < 0.05. |
+
+*Automated:* `tests/e2e/analytics/business-impact-explain.spec.ts › Business impact: populated and explained › BIZ-04 "How this works" opens with the method used; Details tiles open "How this was calculated"`
+
+### TC-DASH-117: Meridian CTO: Payments Core, Lending Journey and Mobile Experience are fully populated
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F7.9
+
+**Preconditions**
+
+- The Meridian showcase company loaded (scripts/reseed) with the business-impact production SQL applied
+- Signed-in password known for eleanor.vance@meridian-fintech.example
+
+**Test data**
+
+- E-mail: eleanor.vance@meridian-fintech.example
+- Teams: mft-team-payments-core-116, mft-team-lending-journey-64, mft-team-mobile-experience-140
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /analytics/business-impact?team=mft-team-payments-core-116. | Quality below target shows about $4.8k/month; the gain "Change failure rate to target" is tagged Company-wide evidence; rates show no "(default)". |
+| 2 | Open "How this was calculated" under that gain. | It shows this team's own months (not significant, the metric moved only a little) and the company-wide share per +1 percentage point over 3 teams and 36 months. |
+| 3 | Repeat the Money, What-if and Details checks of the previous case for Lending Journey and Mobile Experience. | Every section is filled; Lending Journey's summary warns that most pairs move together (one shared movement). |
+| 4 | Open All teams. | Teams with a figure: 3 of 3. |
+
+**Notes:** Skipped automatically where the Meridian company is not loaded.
+
+*Automated:* `tests/e2e/analytics/business-impact-explain.spec.ts › Business impact: populated and explained › BIZ-05 Meridian (when the showcase company is loaded): every team is fully populated for the CTO`
+
+### TC-DASH-118: Accessibility: Business impact with "How this works" and every Details section open, in Light, Dark, Graphite and Porcelain
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F7.9
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+
+**Test data**
+
+- E-mail: admin@irongate.com
+- Password: demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | For each theme (Appearance menu: Light, Dark, Graphite, Porcelain) open Business impact for The Away Team, open "How this works" and every "How this was calculated" on Money. | An axe scan (WCAG 2.1 A/AA) finds no serious or critical violation; text is readable in the theme. |
+| 2 | Click Details, open every section. | The same scan finds no serious or critical violation. |
+
+**After the test:** Set the theme back to Light.
+
+**Notes:** A11Y-62 Light, A11Y-63 Dark, A11Y-64 Graphite, A11Y-65 Porcelain.
+
+*Automated:* `tests/e2e/analytics/business-impact-explain.spec.ts › Business impact accessibility › A11Y-62 … A11Y-65`
 
 ## Analytics modules
 

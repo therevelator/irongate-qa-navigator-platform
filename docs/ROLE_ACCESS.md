@@ -96,13 +96,18 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | Analytics: Developer productivity | rows of opted-in people | same, in scope | same, in scope | own row, team averages (≥ 3) | own row, team averages (≥ 3) |
 | Analytics: Team rankings | teams of the company (by department) | scope | scope | scope | scope |
 | Analytics: Reports (PDF) | any team | scope | scope | scope | scope |
-| Business impact: Money, What-if, Details | any team | scope | scope | scope | scope |
+| Business impact: Money, What-if, Details, How this works, rule-based summary | any team | scope | scope | scope | scope |
+| Business impact: Generate AI summary (team statistics only; rule-based without a provider) | any team | scope | scope | scope | scope |
 | Business impact: All teams (revenue roll-up) | company | their departments | — | — | — |
 | Business impact: edit business data, correlations | any team | their departments | teams they lead | — | — |
 | Executive briefing (AI) | company | scope | scope | — | — |
 | "Show formulas & data sources" | yes | — | — | — | — |
 | Saved views: use own and shared views | yes | yes | yes | yes | yes |
 | Saved views: share with the company / stop sharing | yes | — | — | — | — |
+
+Business impact's company-wide revenue slope (used for a team whose own months are inconclusive) is fitted over all
+active teams of the company, also for a reader whose scope is one team. It returns only the fitted share, its range,
+r, p and the number of teams and months: no other team's name, id or values.
 
 ### Wellbeing pulse
 

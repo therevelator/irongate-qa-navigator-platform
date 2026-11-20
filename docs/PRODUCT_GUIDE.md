@@ -874,7 +874,8 @@ The Business impact page relates a team's monthly quality metrics to its busines
   lead time, code quality score, change failure rate.
 - **Business KPIs** (`BI_KPI_FIELDS`): monthly revenue, active users, churn rate, feature adoption rate, NPS, CSAT, support
   ticket volume.
-- **Method** (`CORRELATION_METHOD`): Pearson r for each quality × business pair over the months where both exist; two-sided
+- **Method** (`CORRELATION_METHOD`): Pearson r for each quality × business pair over the months where both exist (same month,
+  no lag; recalculated from the stored months on every load); two-sided
   Student t-test (df = n − 2, exact); Benjamini–Hochberg false-discovery-rate correction across all pairs tested for the
   team; **significant when q < 0.05**. Needs at least 6 months of each series and 6 paired months; pairs with zero variance
   are skipped. Strength label: |r| ≥ 0.7 strong, ≥ 0.5 moderate, ≥ 0.3 weak, else none.
@@ -884,7 +885,15 @@ The Business impact page relates a team's monthly quality metrics to its busines
   (`data_source = 'synthetic'`). Production: quality from the KPI history; business KPIs from finance / BI (revenue), product
   analytics (Amplitude, Mixpanel: active users, adoption), CRM / billing (churn), survey tools (NPS, CSAT), Zendesk /
   ServiceNow (ticket volume).
-- An optional **AI summary** (needs `GROQ_API_KEY`) describes the stored correlations; it is labelled as model output.
+- **Summary**: a rule-based summary of the correlations is always shown (`server/lib/correlationSummary.ts`: months and pairs
+  tested, significant pairs in plain words, a shared-trend warning when half or more are significant, else the strongest pair
+  and the |r| needed for p < 0.05). **Generate AI summary** (needs `GROQ_API_KEY`) replaces it with model output, labelled as
+  such; without a provider, or when it fails, the rule-based summary is returned (`source: 'rules'`), never an error or an
+  empty box.
+- **How this works** (an expander at the top of every tab, `src/components/BusinessImpactHowItWorks.tsx`): what goes in
+  (which metrics, entered vs calculated), how links are found (this section), how the money figures are derived, which inputs
+  are assumptions the company sets, what the confidence labels mean and what the page does not claim. Every figure, and every
+  tile on Details and All teams, opens **How this was calculated** with its formula, inputs and sample size.
 
 **Revenue impact** (the Money, What-if, Details and All teams tabs; `server/lib/revenueImpact.ts`,
 `server/lib/stats.ts`, `GET /api/revenue-impact/teams/:teamId`, `…/what-if?metric=&change=`, `GET /api/revenue-impact/rollup`).
@@ -904,15 +913,20 @@ Amounts are per month and per year (month × 12), rounded; a missing input shows
   significant when p < 0.05, **exploratory, not corrected for multiple comparisons** (the Correlations matrix applies
   BH-FDR across all pairs). Sample and recorded months are never fitted together: when both exist, only the months
   with the kind of source of the latest month are used. In the page: Details → "How sure are we?" (Strong evidence
-  p < 0.01, Some evidence p < 0.05, Not significant).
+  p < 0.01, Some evidence p < 0.05, Company-wide evidence, Not significant).
+- **Company-wide slope** (`pooledRevenueFit`): when the team's own slope is not significant or the metric did not change,
+  the company's active teams with 6 or more paired months of the same kind of source are fitted together, each against its own
+  averages (x = metric − team average, y = revenue ÷ team average revenue − 1; b = Σxy ÷ Σx²; SE with df = N − teams − 1;
+  95 % range; at least 2 teams). If significant (p < 0.05), the team's slope = b × its average monthly revenue, tagged
+  **Company-wide evidence**, with the team's own fit shown beside it. Only the count of teams and months leaves the fit.
 - **Where the money is going now** (the causes overlap, so no total):
   quality below target = Σ over metrics with a significant slope of b × (target valid today − latest value), a met
-  target adding 0, metrics taken by smallest p and a metric whose monthly series correlates at |r| ≥ 0.7 with one
+  target adding 0, metrics below target taken first and then by smallest p, and a metric whose monthly series correlates at |r| ≥ 0.7 with one
   already counted not added again, range = Σ(CI low × gap, CI high × gap); open technical debt = Σ of the open items'
   monthly cost of delay (section 3.5, components shown); incidents and downtime = latest month's downtime minutes ×
   downtime cost per minute; support tickets = latest month's tickets × support ticket cost; customers leaving =
   churn % × monthly revenue of the latest month (assumes churned customers had average revenue). Deployment frequency
-  has no target in the same unit and so no gap.
+  is per month; its target is the weekly KPI target × 52 ÷ 12.
 - **What you gain when these are fixed**, biggest first, five shown: each counted quality gap (b × gap with its range
   and evidence tag; metrics that move with it are named), each open debt item (its monthly cost of delay; fix cost =
   effort hours × developer hourly rate), downtime above the availability target ((downtime − (100 − target %) ÷ 100 ×
@@ -924,8 +938,11 @@ Amounts are per month and per year (month × 12), rounded; a missing input shows
   with the reason when the slope is not significant; a value outside the recorded range is flagged as extrapolation.
 - **All teams**: sum of the team figures over the teams of the caller's analytics scope (super admin: company, QA
   manager: their departments; optional department); teams without a figure are listed with the reason.
-- Rates come from Parameters → Financial and ROI settings (team, else department, else company); built-in defaults are
-  labelled "(default)". Production sources: finance / BI for revenue, product analytics for active users and churn,
+- Rates come from Parameters → Financial and ROI settings (team, else department, else company); they are assumptions the
+  company sets, and built-in defaults are labelled "(default)". Sample data (demo generator, Populate metrics, Meridian)
+  adds the rates it assumes where a company has none: hourly rate 85, ticket cost 30, SLA penalty 2500, and per team the
+  revenue per user (its sample revenue per active user) and the downtime cost per minute (its monthly revenue ÷ 43 200).
+- The page does **not** claim causation, forecasts or that reaching a target brings the money back. Production sources: finance / BI for revenue, product analytics for active users and churn,
   incident tooling for downtime, Zendesk / ServiceNow for tickets, SonarQube / Jira for debt items.
 
 ### 3.14 Team rankings
@@ -1329,7 +1346,7 @@ All roles can open them, each for the teams in their analytics scope, chosen in 
 | CI/CD pipeline | Stage flow, average duration and success rate per stage, bottleneck score, stage executions over 14 days (section 3.7) | Find the stage that slows delivery |
 | Developer productivity | Team tiles (k-anonymous), DDPS by developer, recorded DDPS snapshots, developer list and recommendations (section 3.10) | Spot overload and slow review loops; fix the environment, not the person |
 | Wellbeing pulse | Answer the survey; results of closed periods with response rate and trend; for the lead, managers and admins **Send survey to the team**, **Send reminder to those who haven't answered**, the send log and, for managers, how often it goes out and whether automatically (sections 3.11 and 6) | Ask the team directly how it is doing, and make sure everyone is asked |
-| Business impact | **Money** first: where the money is going now, what you gain when issues are fixed, where to put the money first; **What-if**; **Details** (revenue per metric, monthly trends, correlation matrix, AI summary); **All teams** roll-up for super admins and managers (section 3.13) | Say in money what quality problems cost and what fixing them is worth, with honest statistics |
+| Business impact | **Money** first: where the money is going now, what you gain when issues are fixed, where to put the money first; **What-if**; **Details** (revenue per metric, monthly trends, correlation matrix, rule-based or AI summary); **How this works** on every tab; **All teams** roll-up for super admins and managers (section 3.13) | Say in money what quality problems cost and what fixing them is worth, with honest statistics |
 | Team rankings | Department teams ranked by a chosen KPI (section 3.14) | Friendly comparison inside a department |
 | Reports | A PDF report for the selected team: QA score with confidence and 14 KPIs (coverage, automation, escape rate, defect density, change failure rate, flakiness, code quality, deployments, lead time, MTTR, build time, first-time pass rate, commitment rate, availability) | A shareable snapshot for reviews and steering meetings |
 

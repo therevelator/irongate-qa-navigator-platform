@@ -134,6 +134,19 @@ Open a team from the Overview. You see only teams in your scope.
 Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact,
 Team rankings and Reports (PDF). Each module shows "No data recorded" when the team has no data for it.
 
+**Business impact** shows, in money, what quality problems cost a team and what fixing them is worth.
+**Money** lists where the money is going now (quality below target, open technical debt, downtime, support
+tickets, churn; they overlap, so there is no total), what you gain when each issue is fixed and where to start.
+**What-if** projects the revenue change for a change in one metric. **Details** has the revenue per metric,
+monthly trends, the correlation matrix and a plain-language summary (written by rules; **Generate AI summary**
+uses an AI model when one is configured). **All teams** (super admins and managers) adds up the teams of your
+scope; **Data entry** (super admins, managers, team leads) is where the monthly values are entered. Open **How
+this works** at the top for what goes in, how each figure is calculated, which rates are your company's
+assumptions (Parameters → Financial and ROI settings) and what the labels mean: *Strong* or *Some evidence* (the
+team's own months), *Company-wide evidence* (the team's own months are inconclusive, so the link across the
+company's teams is used), *Cost estimate* (arithmetic on your rates). Every figure opens **How this was
+calculated**. The figures are associations, not causes, and not forecasts.
+
 **Compare teams** puts 2 to 4 teams of your scope side by side over 7 to 90 days, with CSV export.
 
 ## 7. Wellbeing pulse
