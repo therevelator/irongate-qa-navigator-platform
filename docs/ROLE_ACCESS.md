@@ -50,6 +50,29 @@ or a manager of two departments); their access is the union. Data never crosses 
   its team detail, TV mode, Compare (that team only) and the Analytics modules; any other team's page and API answer
   403.
 
+## Demo sandbox visitors (/try)
+
+A visitor of `/try` is signed in, without a password, as one of four shared persona users of the fictional
+company **Northwind Bank — demo** ([`server/lib/sandbox.ts`](../server/lib/sandbox.ts)): **CTO** (super admin),
+**Head of QA** (manager of both departments), **Team lead** (Scrum Master of Mobile Banking) and **Engineer**
+(software engineer in Mobile Banking). They see exactly what that role sees (the rules below), with these
+limits enforced on the server for every request of a sandbox session (`sandboxGate` in
+[`server/middleware/auth.ts`](../server/middleware/auth.ts), rules in
+[`server/lib/sandboxConfig.ts`](../server/lib/sandboxConfig.ts)); anything else answers
+`403 sandbox_read_only`:
+
+| Allowed (wiped by the nightly reset) | Refused |
+|---|---|
+| Every read the role allows: overview, teams, team pages, Analytics, Compare, TV mode, executive summary, business impact, alerts, actions | Invitations and every e-mail (none is ever sent to the sandbox domain) |
+| Appearance (stored in the browser) | Users, roles, assignments, departments, teams, company settings, targets, parameters, alert rules, update intervals, undo |
+| Recommendations: Add to Action plan (the recommendation's own title), Dismiss (a fixed reason), Reopen, Recalculate | API keys (list, create; the sandbox's keys are refused for ingestion) |
+| Tracked actions: change the status | Password, sessions ("sign out my other devices"), single sign-on; a password sign-in of a persona |
+| Acknowledge alerts, mark notifications read | User activity log and its CSV, admin CSV exports |
+| Rule-based summaries (no AI provider is called) | Demo Data / Populate / sample-data generators, manual data entry, pulse sending and answers, saved views, new or edited action text |
+
+Operator routes answer 401 to a sandbox session; the platform operator keeps full access to the sandbox company.
+Tests: `tests/api/sandbox.test.ts`, `tests/e2e/platform/sandbox.spec.ts`.
+
 ## Scope rule (one rule for every page)
 
 A team is **in scope** for a person when one of their assignments covers it (`canViewTeamAnalytics`):

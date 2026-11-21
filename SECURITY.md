@@ -59,6 +59,28 @@ always enforces it. Per-role tests: `tests/api/r2-security-matrix.test.ts`, `tes
   account is never locked out and its sign-in is not rate limited; lockout and sign-in rate limits apply
   to company users only. Set `PLATFORM_OPERATOR_ALLOWED_IPS` and a long, unique password.
 
+**Demo sandbox (/try).** Anonymous visitors get a session as one of four shared persona users of one
+fictional company (`sandbox-demo`, [`server/lib/sandbox.ts`](server/lib/sandbox.ts)). Controls, all on the server:
+
+- Every request of a sandbox session passes `sandboxGate` (in `authenticateToken`), whatever the route: reads
+  are allowed except API keys, the user activity log and admin CSV exports; writes only from a short allowlist
+  (recommendation decisions, action status, alert acknowledge, notifications read) with the body narrowed so no
+  visitor's free text is kept and shown to the next one. Everything else is `403 sandbox_read_only` before the
+  handler runs. The request runs in a sandbox context in which no AI provider is called (`server/lib/groq.ts`).
+- Persona users cannot be signed in to any other way: the password sign-in refuses them (same `401 Invalid
+  credentials`), `issueSessionCookie` throws for them (SSO, invitation, re-issue), forgot-password sends nothing;
+  their password hashes are of random values nobody holds. Their API keys are refused.
+- No e-mail is ever sent to the sandbox domain (`sendMail`); the digest and pulse sending skip the company.
+- Sessions last two hours (token and row; browser-session cookie). A sandbox token is valid only with its session
+  row, and the nightly reset deletes the company (rows included) and moves `sessions_valid_after`, so every
+  session ends. The session row keeps only a keyed hash of the client address (no address, location or
+  browser); sandbox requests are not written to the user activity log.
+- `POST /api/auth/sandbox` accepts JSON only (a cross-site form cannot start a session; CORS as for the rest of
+  the API), at most `SANDBOX_SESSIONS_PER_IP_HOUR` (20) new sessions per address per hour and
+  `SANDBOX_MAX_SESSIONS` (300) open sessions, both counted in the database (global across Netlify instances).
+- Isolation is the ordinary tenancy boundary; operator routes need an operator session. `/try` is `noindex`.
+- Tests: `tests/api/sandbox.test.ts` (every refused action, session creation and limits, isolation, reset).
+
 **API keys.** Ingestion keys (`igk_…`) are stored as a hash, shown once, scoped to one company, and
 revocable. A suspended company's keys are refused.
 
@@ -94,3 +116,4 @@ contributors. Individual developer metrics are shown only for people who opted i
 - [ ] Platform operator accounts exist only for IronGate support; `PLATFORM_OPERATOR_ALLOWED_IPS` is set if
       support works from fixed addresses.
 - [ ] Database backups are enabled at the provider.
+- [ ] The demo sandbox: keep `SANDBOX_ENABLED` on only where `/try` should work (off on a customer deployment).

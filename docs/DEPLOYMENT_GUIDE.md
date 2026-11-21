@@ -68,6 +68,8 @@ Netlify functions on Netlify:
 | `db-keepalive` | 06:00 and 18:00 | keeps the database awake; retention cleanup (logs, sessions, sign-in events, raw payloads) |
 | `demo-refresh` | daily 02:17 | starts `demo-refresh-background`, which adds the missing recent days of sample data (never real data) |
 | `demo-data-background` | on demand | the operator's Demo Data and Populate metrics jobs (up to 15 minutes) |
+| `sandbox-reset` | daily 02:47 | starts `sandbox-reset-background`, which rebuilds the demo sandbox behind `/try` (section 8) |
+| `sandbox-reset-background` | on demand | the sandbox rebuild (up to 15 minutes; the scheduler, the operator's **Reset sandbox now** and the first visit of `/try` on a database without the sandbox start it, with a signed token) |
 
 ## 3. Long-running Node service (alternative)
 
@@ -130,7 +132,10 @@ prefixed `VITE_` ends up in the browser bundle.
 | `OPERATOR_PASSWORD` | Read by `npm run operator:create` when `--password` is not given; not used by the running app |
 | `ENABLE_SYNTHETIC_DATA` | `true` enables the sample-data generators; off by default |
 | `DEMO_MODE` | `true` shows demo account chips on the sign-in page; on by default locally only |
-| `DEMO_REFRESH_ENABLED`, `DEMO_REFRESH_SECRET` | Nightly sample-data refresh on Netlify; the secret signs the background call (else `JWT_SECRET`) |
+| `DEMO_REFRESH_ENABLED`, `DEMO_REFRESH_SECRET` | Nightly sample-data refresh on Netlify; the secret signs the background call (else `JWT_SECRET`); it also signs the sandbox reset call |
+| `SANDBOX_ENABLED` | `false` turns the self-serve demo (`/try`, `POST /api/auth/sandbox`) off; on by default |
+| `SANDBOX_RESET_ENABLED`, `SANDBOX_RESET_CRON` | Nightly sandbox rebuild (`false` / `off` turns it off; the Node service's schedule, default `47 2 * * *`) |
+| `SANDBOX_SESSIONS_PER_IP_HOUR`, `SANDBOX_MAX_SESSIONS` | New sandbox sessions per client address per hour (default 20); open sandbox sessions in all (default 300) |
 | `SAMPLE_RAW_DATA`, `SAMPLE_PULSE_WEEKS`, `SAMPLE_TEAM_STORIES`, `SAMPLE_SPRINT_RELEASES` | Sample data generation options |
 | `ALERTS_CRON`, `ALERTS_EVALUATE_CRON`, `DIGEST_CRON`, `PULSE_CRON`, `PULSE_SEND_CRON`, `LOG_CLEANUP_CRON`, `CALC_RECOMPUTE_CRON` | Node service schedules (section 3) |
 | `VITE_DISABLE_WEBSOCKET` | Front end: turn the live-update socket off |
@@ -165,3 +170,25 @@ first hourly run.
 prefer SQL files
 (`npm run seed:demo -- --sql out/demo-seed.sql`) or use `scripts/reseed/` (one showcase company; see
 [scripts/reseed/README.md](../scripts/reseed/README.md)), and load them with `psql`.
+
+## 8. Demo sandbox (/try)
+
+The website links to `https://<app>/try` ("Explore the live demo — no sign-up"). Visitors pick a role and
+explore a fictional company, **Northwind Bank — demo** (company id `sandbox-demo`), as one of four shared
+persona users for up to two hours, without a password ([`server/lib/sandbox.ts`](../server/lib/sandbox.ts)).
+
+- **No schema change and no manual seed.** The sandbox uses the existing tables. The first run of the reset
+  builds it: the nightly `sandbox-reset` (02:47 UTC), the operator's **Reset sandbox now**, or simply the
+  first visit of `/try` on a database without it (that starts the background build at most once every 20
+  minutes; the page says the demo is being prepared). A build takes about 15 seconds locally and about a
+  minute against Supabase, well within the background function's 15 minutes.
+- **By hand** (optional, e.g. right after a deploy):
+  `DATABASE_URL=<production connection string> npx tsx scripts/sandbox/build.ts --allow-remote`
+  (`--status` only prints the state). It touches only the `sandbox-demo` company.
+- **Nightly reset.** Ends every sandbox session, deletes the company (every table cascades) and builds it again
+  with today's dates, so the data always looks current and visitors' changes are gone. One run at a time
+  (advisory lock). The outcome is in the operator panel's **Scheduled jobs** (`sandbox-reset`,
+  `sandbox-reset-background`) and its **Demo sandbox** section.
+- **Settings:** `SANDBOX_ENABLED`, `SANDBOX_RESET_ENABLED`, `SANDBOX_SESSIONS_PER_IP_HOUR`,
+  `SANDBOX_MAX_SESSIONS` (section 4). `DEMO_REFRESH_SECRET` or `JWT_SECRET` signs the background call.
+- `/try` is served with `X-Robots-Tag: noindex, nofollow` (`netlify.toml`) and the page adds a robots meta tag.

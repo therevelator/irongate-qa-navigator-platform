@@ -1,6 +1,6 @@
 # Manual test cases
 
-451 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+461 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -10,7 +10,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
-- [Accessibility](#accessibility) (26)
+- [Accessibility](#accessibility) (31)
 - [Theme and phone layout](#theme-and-phone-layout) (31)
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
@@ -48,6 +48,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [User activity](#user-activity) (4)
 - [Invitations](#invitations) (1)
 - [Platform support](#platform-support) (25)
+- [Demo sandbox](#demo-sandbox) (5)
 - [Navigation and access control](#navigation-and-access-control) (12)
 - [Users and teams](#users-and-teams) (6)
 - [Analytics](#analytics) (4)
@@ -2941,6 +2942,119 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Set the theme back to the one used before.
 
 *Automated:* `tests/e2e/team/action-history.spec.ts › Action status history accessibility › A11Y-61 Porcelain theme: the Action plan with the status lines and an open history has no serious violations`
+
+### TC-ORG-079: Light theme: the overview with the demo sandbox banner has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Visitor (no account) · **Flow:** F15.1
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000)
+- The demo sandbox is built (Operator panel → Demo sandbox shows Ready; else click Reset sandbox now and wait a minute)
+- Browser signed out (fresh private window)
+- axe DevTools (or Lighthouse) in the browser
+
+**Test data**
+
+- Role: CTO
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Start exploring as CTO from /try, choose Appearance → Light. | The banner is readable in this theme. |
+| 2 | Run axe on the page. | No serious or critical violations, in the banner or elsewhere on the page. |
+
+**After the test:** Set the theme back to Light.
+
+*Automated:* `tests/e2e/platform/sandbox.spec.ts › A11Y-66`
+
+### TC-ORG-080: Dark theme: the overview with the demo sandbox banner has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Visitor (no account) · **Flow:** F15.1
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000)
+- The demo sandbox is built (Operator panel → Demo sandbox shows Ready; else click Reset sandbox now and wait a minute)
+- Browser signed out (fresh private window)
+- axe DevTools (or Lighthouse) in the browser
+
+**Test data**
+
+- Role: CTO
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Start exploring as CTO from /try, choose Appearance → Dark. | The banner is readable in this theme. |
+| 2 | Run axe on the page. | No serious or critical violations, in the banner or elsewhere on the page. |
+
+**After the test:** Set the theme back to Light.
+
+*Automated:* `tests/e2e/platform/sandbox.spec.ts › A11Y-67`
+
+### TC-ORG-081: Graphite theme: the overview with the demo sandbox banner has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Visitor (no account) · **Flow:** F15.1
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000)
+- The demo sandbox is built (Operator panel → Demo sandbox shows Ready; else click Reset sandbox now and wait a minute)
+- Browser signed out (fresh private window)
+- axe DevTools (or Lighthouse) in the browser
+
+**Test data**
+
+- Role: CTO
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Start exploring as CTO from /try, choose Appearance → Graphite. | The banner is readable in this theme. |
+| 2 | Run axe on the page. | No serious or critical violations, in the banner or elsewhere on the page. |
+
+**After the test:** Set the theme back to Light.
+
+*Automated:* `tests/e2e/platform/sandbox.spec.ts › A11Y-68`
+
+### TC-ORG-082: Porcelain theme: the overview with the demo sandbox banner has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Visitor (no account) · **Flow:** F15.1
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000)
+- The demo sandbox is built (Operator panel → Demo sandbox shows Ready; else click Reset sandbox now and wait a minute)
+- Browser signed out (fresh private window)
+- axe DevTools (or Lighthouse) in the browser
+
+**Test data**
+
+- Role: CTO
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Start exploring as CTO from /try, choose Appearance → Porcelain. | The banner is readable in this theme. |
+| 2 | Run axe on the page. | No serious or critical violations, in the banner or elsewhere on the page. |
+
+**After the test:** Set the theme back to Light.
+
+*Automated:* `tests/e2e/platform/sandbox.spec.ts › A11Y-69`
+
+### TC-ORG-083: The /try page has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Visitor (no account) · **Flow:** F15.1
+
+**Preconditions**
+
+- App running at the test URL
+- axe DevTools (or Lighthouse) in the browser
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open <app>/try and run axe. | No serious or critical violations; the roles are a radio group reachable with the keyboard. |
+
+**After the test:** None.
+
+*Automated:* `tests/e2e/platform/sandbox.spec.ts › A11Y-70`
 
 ## Theme and phone layout
 
@@ -10704,6 +10818,133 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** Clear lockout on a person with no failed sign-ins answers "This account has no lockout to clear."
 
 *Automated:* `tests/api/login-lockout.test.ts › LCK-004 (API)`
+
+## Demo sandbox
+
+### TC-ORG-074: /try: start exploring as the CTO, the banner on every page, a team page, TV mode and sign-out back to /try
+
+**Type:** Positive · **Priority:** High · **Role:** Visitor (no account) · **Flow:** F14.15
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000)
+- The demo sandbox is built (Operator panel → Demo sandbox shows Ready; else click Reset sandbox now and wait a minute)
+- Browser signed out (fresh private window)
+
+**Test data**
+
+- Address: <app>/try
+- Role: CTO
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open <app>/try. | The page "Explore QE Navigator with a sample bank" explains the sample company, "Sample data.", "Resets every night." and "Up to 2 hours."; four roles are offered: CTO, Head of QA, Team lead, Engineer (CTO selected). No password field. |
+| 2 | Keep CTO and click "Start exploring". | The Overview opens without any sign-in form. A banner at the top reads "Demo sandbox — sample data, resets every night. Viewing as Alex Morgan (CTO)." with Book a demo, Start a pilot and Switch role. The company badge shows Northwind Bank — demo and five team cards are shown. |
+| 3 | Hover Book a demo and Start a pilot. | They link to https://irongate.ie/navigator and https://irongate.ie/navigator/pilot. |
+| 4 | Open the Mobile Banking team card. | The team page opens with a year of KPI history, forecasts, recommendations and the action plan; the banner is still shown. |
+| 5 | Click Open TV mode. | TV mode shows Mobile Banking; its footer shows "Demo sandbox · sample data, resets every night". |
+| 6 | Press Esc, open the account menu. | There is no "Sign out my other devices" item. |
+| 7 | Click Sign out. | The /try page opens again. |
+
+**After the test:** None (the sandbox is rebuilt every night).
+
+**Notes:** The page is never indexed: View source / DevTools shows <meta name="robots" content="noindex, nofollow">.
+
+*Automated:* `tests/e2e/platform/sandbox.spec.ts › SBX-01`
+
+### TC-ORG-075: The Engineer persona sees only their team; Switch role returns to /try
+
+**Type:** Positive · **Priority:** Medium · **Role:** Visitor (no account) · **Flow:** F14.15
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000)
+- The demo sandbox is built (Operator panel → Demo sandbox shows Ready; else click Reset sandbox now and wait a minute)
+- Browser signed out (fresh private window)
+
+**Test data**
+
+- Role: Engineer
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open <app>/try, choose Engineer and click Start exploring. | The banner says "Viewing as Jamie Lindqvist (Engineer)"; the Overview shows one team card, Mobile Banking. |
+| 2 | Click Switch role in the banner. | The /try page opens; you can choose another role. |
+
+**After the test:** None.
+
+*Automated:* `tests/e2e/platform/sandbox.spec.ts › SBX-02`
+
+### TC-ORG-076: A sandbox persona cannot be signed in to with a password
+
+**Type:** Negative · **Priority:** High · **Role:** Visitor (no account) · **Flow:** F14.15
+
+**Preconditions**
+
+- App running at the test URL
+- Browser signed out
+
+**Test data**
+
+- E-mail: alex.morgan@northwind-bank.example
+- Password: anything, e.g. demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On the sign-in page enter the e-mail and password and click Sign in. | "Invalid credentials"; the app does not open. |
+| 2 | Click Forgot password?, enter the same e-mail and send. | The usual "If an account exists…" message; no e-mail is sent (the sandbox domain never receives mail). |
+
+**After the test:** None.
+
+*Automated:* `tests/e2e/platform/sandbox.spec.ts › SBX-03; tests/api/sandbox.test.ts › SB-003 (API)`
+
+### TC-ORG-077: Hard limits: administration, invitations, API keys and sign-in changes are refused in the sandbox; recommendations and action statuses work
+
+**Type:** Negative · **Priority:** High · **Role:** Visitor (no account) · **Flow:** F14.15
+
+**Preconditions**
+
+- App running at the test URL (local: http://localhost:5173, API on http://localhost:3000)
+- The demo sandbox is built (Operator panel → Demo sandbox shows Ready; else click Reset sandbox now and wait a minute)
+- Browser signed out (fresh private window)
+
+**Test data**
+
+- Role: CTO, then Team lead
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Start exploring as CTO. Open Users and try Invite, Add with password or Edit on someone. | The change is refused with "Not available in the demo sandbox. Book a demo to see this with your own data."; nothing changes. |
+| 2 | Open Admin console → API keys. | The list does not load (refused with the same message); no key can be created. |
+| 3 | Try to rename a team or department, change a KPI target or the session length. | Refused with the same message. |
+| 4 | Go back to /try and start as Team lead. On Mobile Banking dismiss a recommendation, reopen it, then Add another to the Action plan and change that action's status. | All four work; the dismissal is stored with a fixed reason and the new action uses the recommendation's own title. |
+
+**After the test:** None (the nightly reset wipes the changes).
+
+**Notes:** The server refuses every forbidden action (tests/api/sandbox.test.ts SB-004 lists them all), not just the UI.
+
+*Automated:* `tests/api/sandbox.test.ts › SB-004, SB-005 (API)`
+
+### TC-ORG-078: Operator: Reset sandbox now ends every demo session and rebuilds the sandbox with today's data
+
+**Type:** Positive · **Priority:** Medium · **Role:** Platform operator · **Flow:** F14.16
+
+**Preconditions**
+
+- A platform operator account, signed in at /operator
+- In another browser, a demo session started from /try
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On the operator Overview find the Demo sandbox section. | It shows Northwind Bank — demo, state Ready, the day the data runs up to (today), open sessions (at least 1) and the last reset; the company is listed among the companies with a Sandbox badge. |
+| 2 | Click Reset sandbox now, tick "I want to do this now" and confirm. | "Sandbox rebuilt: 5 teams, … rows" (on Netlify: "Sandbox reset started…", then Ready again after a minute or two). |
+| 3 | In the other browser click anywhere in the demo. | The visitor is sent back to /try with "Your demo session ended. Start a new one below." |
+
+**After the test:** None.
+
+**Notes:** The same reset runs every night at 02:47 UTC (sandbox-reset in Scheduled jobs).
+
+*Automated:* `tests/api/sandbox.test.ts › SB-010, SB-011 (API)`
 
 ## Navigation and access control
 

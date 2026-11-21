@@ -169,6 +169,15 @@ data and one shared password, shown once. **Populate metrics** writes a year of 
 company's teams that have none. One job per company at a time. All rows are sample rows, removable with
 "Remove sample data".
 
+**Demo sandbox** (Overview, section **Demo sandbox**). The fictional company behind `/try`, **Northwind
+Bank — demo** (also listed among the companies with a **Sandbox** badge): its state (Ready, Building,
+Failed, Not built yet), the day its data runs up to, open visitor sessions, sessions started today and the
+last reset. **Reset sandbox now** (confirmed in the page) ends every sandbox session, deletes the sandbox
+company and builds it again with today's dates; on Netlify it runs in the background for a minute or two,
+elsewhere the answer comes when it is done. It also builds the sandbox the first time. No other company is
+touched. The same reset runs every night at 02:47 UTC. The operator keeps full access to the sandbox
+company like any other; sandbox limits apply only to the visitors' sessions.
+
 **Not logged.** Nothing an operator does is logged: there is no operator activity log and no platform access
 log. Operator actions do not appear in the company's Activity or user activity log. Secrets are never shown
 (password, key and token hashes, reset links, the Slack webhook, integration credentials).

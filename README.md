@@ -169,6 +169,28 @@ unverified.
 - The CLI refuses a non-local `DATABASE_URL` unless you pass `--allow-remote`. For a hosted
   database, prefer the SQL files.
 
+## Self-serve demo sandbox (/try)
+
+`/try` lets a website visitor explore the product with no sign-up: pick **CTO**, **Head of QA**, **Team lead** or
+**Engineer** and start exploring **Northwind Bank — demo**, a fictional company (2 departments, 5 teams, a year of
+every module, forecasts, recommendations, action plans, business impact) built with the same generators as the
+Meridian showcase. Sessions last up to two hours, need no password and have server-side limits (no e-mails, no
+administration, no API keys, no sign-in changes, no exports of people's activity, no other company, no
+sample-data generators, no paid AI); a banner on every page links to booking a demo and starting a pilot.
+
+| Part | Where |
+|---|---|
+| Build, reset, sessions | [`server/lib/sandbox.ts`](server/lib/sandbox.ts), rules in [`server/lib/sandboxConfig.ts`](server/lib/sandboxConfig.ts) |
+| API | `GET` / `POST /api/auth/sandbox` ([`server/routes/authSandbox.ts`](server/routes/authSandbox.ts)); the gate in `authenticateToken` |
+| Nightly reset | `netlify/functions/sandbox-reset.ts` (02:47 UTC) → `sandbox-reset-background.ts`; the Node service's cron (`SANDBOX_RESET_CRON`) |
+| Operator | Overview → **Demo sandbox**: state, sessions, **Reset sandbox now** (`GET /api/operator/sandbox`, `POST /api/operator/sandbox/reset`) |
+| By hand | `DATABASE_URL=… npx tsx scripts/sandbox/build.ts [--allow-remote] [--status]` |
+| UI | [`src/components/TryDemo.tsx`](src/components/TryDemo.tsx), [`src/components/SandboxBanner.tsx`](src/components/SandboxBanner.tsx) |
+
+No migration: the first reset (nightly, by the operator, or triggered by the first visit of `/try`) builds the
+sandbox on a new database. Details: [docs/DEPLOYMENT_GUIDE.md, section 8](docs/DEPLOYMENT_GUIDE.md#8-demo-sandbox-try),
+[SECURITY.md](SECURITY.md), [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md#demo-sandbox-visitors-try).
+
 ## Where metrics come from
 
 - **KPI ingestion API** (below): the supported way to feed metrics from CI, issue trackers,

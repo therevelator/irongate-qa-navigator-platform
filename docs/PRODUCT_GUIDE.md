@@ -442,6 +442,30 @@ setting decides whether **Load sample data** also creates the separate fictional
 its shared accounts: in production / on Netlify it only fills the signed-in company's own teams.
 Demo mode is independent of sample data (section 4.7).
 
+### Self-serve demo sandbox (/try)
+
+The website links to **/try** ("Explore the live demo — no sign-up"). The page explains what the visitor is
+about to see (a fictional bank with two departments, five teams and a year of data), that it is sample data
+and that it resets every night, and offers four roles: **CTO**, **Head of QA**, **Team lead**, **Engineer**.
+**Start exploring** signs the visitor in as that persona of **Northwind Bank — demo** for up to two hours,
+with no account and no password, and opens the overview.
+
+- Built with the same generators as the Meridian showcase and the operator's Demo Data: KPIs for a year,
+  evidence from CI (tests, coverage, pipelines, deployments, incidents, issues, static analysis), forecasts,
+  recommendations, action plans with their history, alerts, wellbeing pulse, business impact and its
+  financial settings. Every person is fictional, on the reserved domain `northwind-bank.example`.
+- A banner on every page: "Demo sandbox — sample data, resets every night", with **Book a demo**
+  (irongate.ie/navigator), **Start a pilot** (irongate.ie/navigator/pilot) and **Switch role** (back to /try).
+  TV mode shows the same note in its footer. Signing out, or a session that ends, returns to /try.
+- Visitors can browse everything their role sees, use TV mode, the executive summary and appearance
+  settings, add recommendations to the action plan, dismiss or reopen them, change action statuses,
+  acknowledge alerts. Nothing else changes: no e-mails or invitations, no administration, no API keys, no
+  password or sign-in changes, no exports of people's activity, no access to any other company, no sample-data
+  generators, no paid AI (the rule-based texts are shown). See [ROLE_ACCESS.md](ROLE_ACCESS.md#demo-sandbox-visitors-try).
+- Every night at 02:47 UTC the sandbox is rebuilt from scratch with today's dates and every visitor session
+  ends; the platform operator can also **Reset sandbox now**. New sessions are limited per address
+  (20 an hour) and in total (300 open); `/try` is never indexed by search engines.
+
 ### Production reseed
 
 `scripts/reseed/build.sh <out> [day]` builds `000_wipe.sql` (empties every public table except

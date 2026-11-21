@@ -284,12 +284,14 @@ Derived from the code, then checked against the documentation:
 | F14.12 | Delete a team / a company only with the typed name | P | — | OPC-04 | OPC-04 wrong name keeps the button disabled |
 | F14.13 | Last views per team, sessions, access log with CSV, sign-ins filtered | P | — | OPC-05 | — |
 | F14.14 | Demo Data: sizes with a live preview, progress, then the shared password (shown once) and one sign-in per role level; Populate metrics fills teams without data and creates nobody | P | Every company user (API 401) | OPD-01; API `demo-data.test.ts` DD-002 … DD-005, DD-007, DD-008 | OPD-01 out-of-range size disables Generate; API `demo-data.test.ts` DD-001 (no token, company session, bad sizes), DD-006 (other companies untouched), DD-009 (background start failed: 502 with the reason) |
+| F14.15 | Demo sandbox: /try → role → Start exploring signs in as that persona without a password; banner with Book a demo / Start a pilot / Switch role on every page; team page; TV mode note; sign out back to /try; the Engineer sees one team | Visitor | Password sign-in of a persona | SBX-01, SBX-02; API `sandbox.test.ts` SB-001, SB-002, SB-005 | SBX-03 (password sign-in refused); API `sandbox.test.ts` SB-003, SB-004 (every forbidden action 403), SB-006 (no AI call), SB-007 (other companies), SB-008 (no e-mail), SB-009 (limits) |
+| F14.16 | Demo sandbox in the operator panel: state, sessions, Reset sandbox now (ends every sandbox session, rebuilds with today's dates); nightly reset | P | Every company user, sandbox sessions (401) | API `sandbox.test.ts` SB-010, SB-011 | API `sandbox.test.ts` SB-011 (no confirm 400, no operator 401, wrong background token ignored) |
 
 ## 15. Accessibility
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
-| F15.1 | No serious / critical axe violations on sign-in, forgot password, registration, overview, compare, pulse, technical debt, notifications, users, parameters, activity, team detail, navigation in dark mode; compare, users and team detail in dark mode | — | — | A11Y-01 … A11Y-13 | none accepted (KA11Y-01 … 04 fixed) |
+| F15.1 | No serious / critical axe violations on sign-in, forgot password, registration, overview, compare, pulse, technical debt, notifications, users, parameters, activity, team detail, navigation in dark mode; compare, users and team detail in dark mode | — | — | A11Y-01 … A11Y-13; the demo sandbox banner in Light, Dark, Graphite and Porcelain and /try: A11Y-66 … A11Y-70 | none accepted (KA11Y-01 … 04 fixed) |
 
 ## 16. Resilience (cross-cutting)
 
