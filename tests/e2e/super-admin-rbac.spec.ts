@@ -77,7 +77,13 @@ test.describe('Super Admin Role-Based Access Control', { tag: ['@area:navigation
       await page.selectOption('[data-testid="department-select"]', { index: i });
       if (await page.locator('[data-testid="team-select"] option').count() > 1) break;
     }
-    await page.selectOption('[data-testid="team-select"]', { index: 1 });
+    // A stable seeded team: other tests running in parallel create and delete temporary teams
+    // ("UI Team …", "QA Manager Team …"), and picking one of those races its deletion.
+    const stable = await page.locator('[data-testid="team-select"] option').evaluateAll((os) =>
+      (os as HTMLOptionElement[]).map((o) => ({ v: o.value, t: o.textContent || '' }))
+        .filter((o) => o.v && !/^(UI Team|QA Manager Team|e2e|Refresh test)/i.test(o.t)));
+    if (stable.length) await page.selectOption('[data-testid="team-select"]', stable[0].v);
+    else await page.selectOption('[data-testid="team-select"]', { index: 1 });
 
     // Submit form
     await page.click('[data-testid="create-user-btn"]');
