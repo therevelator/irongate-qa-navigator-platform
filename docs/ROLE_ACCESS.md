@@ -162,20 +162,24 @@ r, p and the number of teams and months: no other team's name, id or values.
 | Page / section | Super admin | Manager | Team lead | Software engineer | Viewer |
 |---|---|---|---|---|---|
 | Users page | everyone | users of their departments | users of the teams they lead | — | — |
-| Edit a user's profile and assignments; delete (= deactivate) | anyone but themselves | users ranked below manager in their departments | — | — | — |
-| Activate / deactivate, reset password, developer-insights toggle | anyone but themselves | users below manager in their departments | users below team lead in their teams | — | — |
-| Give / remove assignments, invitations | any | team lead, software engineer, viewer on teams of their departments | software engineer, viewer on teams they lead | — | — |
+| Edit a user's profile and assignments; delete (= deactivate) | anyone but themselves | users ranked below manager ENTIRELY within their departments (rule below) | — | — | — |
+| Activate / deactivate, reset password, send reset link, sign out everywhere, developer-insights toggle | anyone but themselves | users below manager ENTIRELY within their departments | users below team lead ENTIRELY within the teams they lead | — | — |
+| Change another person's e-mail address | anyone but themselves | — | — | — | — |
+| Give assignments to an existing user | any | team lead, software engineer, viewer on teams of their departments, to users already entirely within their departments | software engineer, viewer on teams they lead, to users already entirely within those teams | — | — |
+| Remove assignments, invitations (new people) | any | team lead, software engineer, viewer on teams of their departments | software engineer, viewer on teams they lead | — | — |
 | Job titles (users.job_title) | yes | — | — | — | — |
 | Teams page | all teams (create, edit, delete) | directory of all teams; create, edit, delete in their departments; QA scores of scope | directory of all teams; QA scores of scope (read-only) | — | — |
+| Rename or (de)activate a team (`PUT /api/teams/:id` name / isActive, `PUT /api/admin/teams/:id`, `…/toggle-status`) | any team | teams of their departments | — (description and platform of the teams they lead only) | — | — |
 | Departments page, move teams, assign managers and leads | yes | — | — | — | — |
 | Admin console (organisation structure) | yes | yes (their departments manageable) | — | — | — |
-| Admin console: API keys (ingestion), Sample data | yes | — | — | — | — |
+| Admin console: API keys (ingestion), Sample data | yes (Sample data: only in a sample company, below) | — | — | — | — |
 | Admin console: Connect your CI (steps, test call, last data received, main branch; `GET /api/ci/status`, `PUT /api/ci/teams/:id/main-branch`) | yes | — (managers have no API keys either) | — | — | — |
 | Connect your CI: service → team mapping (`GET / PUT /api/ci/services`, `DELETE /api/ci/services/:service`) | yes | — | — | — | — |
 | Team page: Deliveries & incidents (`GET /api/ci/teams/:id/delivery`) and How this was calculated of the DORA metrics | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope |
 | Team page: Work & code quality (`GET /api/ci/teams/:id/work`) and How this was calculated of the work and code-quality metrics | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope |
 | Connect your CI: issue and SARIF steps, test calls for issues and static analysis; a Jira / Linear project key mapped like a service | yes | — | — | — | — |
 | Parameters (financial and pipeline settings) | company, departments, teams; "apply to every department and team" | their departments and teams only (company-level values read-only: the page cannot save them and the API answers 403) | — | — | — |
+| Read configuration values (`GET /api/admin/configs`, `/configs/raw`) at department / team level | any | their departments and the teams in them; company level | (merged view only) the teams they lead; company level | — | — |
 | Manual metrics: pipeline configuration (`PUT /api/analytics/pipeline-config`, one company-wide row) and company default pipeline stages (`PUT /api/analytics/pipeline-stages/:id`, `team_id` empty) | yes | read-only (the page hides Save; the API answers 403) | — | — | — |
 | Manual metrics: a team's own pipeline stages (`PUT /api/analytics/pipeline-stages/:id`) | any team | teams of their departments | — | — | — |
 | KPI targets (with history) | company, department, team | department and team, in their departments | — | — | — |
@@ -190,6 +194,53 @@ r, p and the number of teams and months: no other team's name, id or values.
 
 Nobody may change their own role, department or team, give themselves an assignment, or manage someone of their own
 rank or above.
+
+### Account-wide actions and adding assignments (exact rule)
+
+An **account-wide action** changes the person everywhere, not only in the actor's teams: reset the password, send a
+reset link, change the e-mail address, activate / deactivate, sign out everywhere, delete (= deactivate), the
+developer-insights switch and editing the profile (`userPolicy.manageUserVia`, `canManageUser`, `canEditUser`,
+`canResetPassword`, `canDeleteUser`; routes `PUT / DELETE /api/admin/users/:id`, `POST …/reset-password`,
+`…/send-reset-link`, `…/sign-out-everywhere`, `…/toggle-status`, `PATCH …/developer-insights-toggle`).
+
+A person other than yourself may be the subject of an account-wide action by:
+
+- a **super admin**: anyone in the company;
+- a **manager**: only when the person's highest role is below manager AND **every one** of the person's active
+  assignments is on a team of a department the manager manages (`userPolicy.targetWithinScope(…, 'qa_manager')`);
+- a **team lead**: only when the person's highest role is below team lead AND **every one** of the person's active
+  assignments is on a team the lead leads (`targetWithinScope(…, 'team_lead')`); editing the profile and deleting
+  stay with managers and super admins.
+
+One assignment elsewhere (another department, another team, a team without a department) or no assignment at all:
+super admins only. Overlap is never enough; a manager of two departments covers a person spread over both, but the
+manager and lead routes are not combined (a person must be entirely within the managed departments, or entirely within
+the led teams).
+
+**Adding an assignment to an existing person** (`POST /api/admin/users/:id/assignments`, `canAddAssignmentTo`) needs
+both: the grant is one the actor may give (`canGrant`, table above) AND the person is already entirely within the
+actor's scope by the rule above. Otherwise 403: cross-scope additions are for super admins only (this closes the
+"manufactured overlap": a manager giving someone of another department a viewer seat on their own team, then
+resetting that person's password). New people are given their first assignment when they are created
+(`POST /api/admin/users`) or invited, by the actor's `canGrant`. Removing an assignment needs `canGrant` for it; a
+primary-assignment change in the edit form (`PUT /api/admin/users/:id` role / department / team) must have the right
+to revoke every grant it removes (the same rule as undo in the Activity log).
+
+**E-mail addresses.** Another person's e-mail: super admins only (`canChangeUserEmail`; managers and leads get 403).
+Your own: `PUT /api/users/:id` or your row on the Users page. Every change is validated (a valid address of at most
+255 characters, not a platform operator's address, not used by another account; stored in lower case) and ends every
+other session of that person; when you change your own, this browser gets a fresh sign-in (`server/lib/emailChange.ts`).
+No confirmation e-mail is sent to the new address (the product has no verification flow); ending the other sessions
+and the change history entry are the safeguards.
+
+### Sample (synthetic) data
+
+Generated random data is only ever written to a **sample company**: a company created by the demo generators, whose id
+starts with `demo-` (`server/lib/sampleCompany.ts`). `POST /api/analytics/update-daily`, `POST /api/analytics/seed-data`
+and `POST /api/analytics/business-impact-v2/:teamId/generate-realistic-data` act on the caller's own company only and
+answer 403 in a real company (super admin of a sample company: allowed, with `ENABLE_SYNTHETIC_DATA=true`). The
+background generators select sample companies only. Real companies get sample data only from the platform operator's
+Demo Data and Populate metrics (above).
 
 ## Navigation
 
@@ -211,6 +262,7 @@ roll-up tab) stay in the navigation.
 
 ## Tests
 
+- Account takeover and synthetic data (attacker paths, through the Netlify function): `tests/api/security-authz.test.ts`.
 - API: `tests/api/viewer-scope.test.ts` (a viewer of one team: other teams' detail, history, Analytics, revenue,
   pulse, alerts, actions and Compare answer 403; allowed for someone with that team in scope; the summary and metrics
   reads cover the scope only; the TV picker lists her team only), `tests/api/tv-mode.test.ts`, `tests/api/role-matrix.test.ts`, `tests/api/r2-security-matrix.test.ts`,

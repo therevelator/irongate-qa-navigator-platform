@@ -75,7 +75,7 @@ const STATUS_META: Record<DeveloperStatus, { label: string; tone: 'good' | 'warn
 const fmtH = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}h`);
 
 import API_URL from '../config/api';
-import { canEditUser, canEditAssignment, canManageUser, canDeleteUser, canResetPassword, canAssignRole, canCreateUsers, canInvite, canSetJobTitle, highestRole, TEAM_OPTIONAL_ROLES, type PolicyActor } from '../../server/lib/userPolicy';
+import { canEditUser, canEditAssignment, canManageUser, canDeleteUser, canResetPassword, canAssignRole, canCreateUsers, canInvite, canSetJobTitle, canChangeUserEmail, highestRole, TEAM_OPTIONAL_ROLES, type PolicyActor } from '../../server/lib/userPolicy';
 import { policyActorOf, grantableOptions } from '../lib/policyActor';
 import { InviteDialog, InvitationsPanel } from './InviteDialog';
 import { AssignmentChips, type AssignmentRow } from './AssignmentChips';
@@ -285,6 +285,8 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
   const asTarget = (u: User) => ({
     id: u.id, role: u.role, department_id: u.department_id ?? null, primary_team_id: u.primary_team_id ?? null,
     department_ids: u.department_ids ?? null, team_ids: u.team_ids ?? null,
+    // Every active assignment: account-wide actions need the person entirely within your scope.
+    assignments: u.assignments ? u.assignments.map((a) => ({ role: a.role, scope_type: a.scope_type, scope_id: a.scope_id, department_id: a.department_id })) : null,
   });
   // Assignments the signed-in user may give (shared rule canGrant), for chips and invitations.
   const grantOptions = useMemo(
@@ -973,7 +975,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
           if (emailInUse) {
             showAlert(
               'Email Already in Use',
-              `The email <strong>${userForm.email}</strong> is already assigned to another user.<br><br>Please use a different email address.`,
+              `The email ${userForm.email} is already assigned to another user. Please use a different email address.`,
               'error'
             );
             return;
@@ -1031,7 +1033,11 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
             )}
             <div>
               <label htmlFor="edit-user-email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
-              <input id="edit-user-email" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500" required />
+              {/* Another person's e-mail: super admins only (server: canChangeUserEmail); yourself: always. */}
+              <input id="edit-user-email" type="email" value={userForm.email} onChange={(e) => setUserForm({ ...userForm, email: e.target.value })} readOnly={!!selectedUser && selectedUser.id !== user?.id && !canChangeUserEmail(actor, asTarget(selectedUser))} aria-describedby={!!selectedUser && selectedUser.id !== user?.id && !canChangeUserEmail(actor, asTarget(selectedUser)) ? 'edit-user-email-note' : undefined} className="w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-cyan-500 read-only:opacity-70" required />
+              {!!selectedUser && selectedUser.id !== user?.id && !canChangeUserEmail(actor, asTarget(selectedUser)) && (
+                <p id="edit-user-email-note" className="mt-1 text-xs text-gray-500 dark:text-slate-400">Only a super admin can change another person's e-mail address.</p>
+              )}
             </div>
             <div>
               <label htmlFor="edit-user-role" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Role</label>

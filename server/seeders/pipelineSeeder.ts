@@ -1,5 +1,6 @@
 import { query } from '../../src/lib/db';
 import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+import { assertSampleCompany, activeSampleCompanyIds } from '../lib/sampleCompany';
 
 // SYNTHETIC DATA: everything in this file generates simulated pipeline stages and
 // runs with Math.random(). It only writes when ENABLE_SYNTHETIC_DATA=true.
@@ -42,6 +43,8 @@ function calculateBottleneck(duration: number, successRate: number, mean: number
 
 // Seed or update pipeline stages for a company (and optionally per team)
 export async function seedPipelineStages(companyId: string, teamId?: string): Promise<number> {
+  // Simulated values only ever go to a SAMPLE company (server/lib/sampleCompany.ts).
+  assertSampleCompany(companyId);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('Pipeline seeder (stages)');
     return 0;
@@ -220,6 +223,7 @@ export async function seedPipelineStages(companyId: string, teamId?: string): Pr
 
 // Seed pipeline runs (simulated execution history)
 export async function seedPipelineRuns(companyId: string, count: number = 10): Promise<number> {
+  assertSampleCompany(companyId);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('Pipeline seeder (runs)');
     return 0;
@@ -283,6 +287,7 @@ export async function seedPipelineRuns(companyId: string, count: number = 10): P
 
 // Update daily execution summary from pipeline_runs
 async function updateExecutionSummary(companyId: string): Promise<void> {
+  assertSampleCompany(companyId);
   await query(`
     INSERT INTO pipeline_execution_summary 
       (company_id, team_id, stage_id, execution_date, total_runs, successful_runs, 
@@ -318,6 +323,7 @@ async function updateExecutionSummary(companyId: string): Promise<void> {
 
 // Seed pipeline stages for all teams in a company
 export async function seedPipelineStagesForAllTeams(companyId: string): Promise<number> {
+  assertSampleCompany(companyId);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('Pipeline seeder (team stages)');
     return 0;
@@ -327,7 +333,7 @@ export async function seedPipelineStagesForAllTeams(companyId: string): Promise<
   try {
     // Get all active teams for this company
     const teams = await query<any>(
-      'SELECT id FROM teams WHERE company_id = ? AND is_active = true',
+      "SELECT id FROM teams WHERE company_id = ? AND is_active = true AND id NOT LIKE 'demo-%'", // not the fixed demo dataset
       [companyId]
     );
     
@@ -345,15 +351,15 @@ export async function seedPipelineStagesForAllTeams(companyId: string): Promise<
   }
 }
 
-// Run seeder for all companies
+// Run the seeder for every active SAMPLE company (server/lib/sampleCompany.ts). Real companies are
+// never seeded (this used to run over every active real company every five minutes).
 export async function runPipelineSeederForAllCompanies(): Promise<void> {
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('Pipeline seeder (5-minute job)');
     return;
   }
   try {
-    // The demo company (npm run seed:demo) is a fixed, consistent dataset: never randomised.
-    const companies = await query<any>("SELECT id FROM companies WHERE is_active = true AND id NOT LIKE 'demo-%'");
+    const companies = (await activeSampleCompanyIds()).map((id) => ({ id }));
     
     console.log(`[PipelineSeeder] Running for ${companies.length} companies...`);
     

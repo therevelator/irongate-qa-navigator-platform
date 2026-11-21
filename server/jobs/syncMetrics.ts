@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { query } from '../../src/lib/db';
 import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+import { sampleCompanySql } from '../lib/sampleCompany';
 import { computeQaScore } from '../lib/metricFormulas';
 
 // SYNTHETIC DATA (currently not imported by server/index.ts). Writes mock KPIs, so it
@@ -17,11 +18,14 @@ cron.schedule('*/15 * * * *', async () => {
   console.log('🔄 Starting metrics sync...', new Date().toISOString());
   
   try {
-    // Get all active teams that are NOT excluded from auto-sync (manually edited data)
+    // Active teams of SAMPLE companies only (server/lib/sampleCompany.ts), not excluded from
+    // auto-sync and not part of the fixed demo dataset; real companies are never touched.
     const teams = await query<any[]>(
       `SELECT id, name, company_id FROM teams 
        WHERE is_active = true 
-       AND (exclude_from_auto_sync = FALSE OR exclude_from_auto_sync IS NULL)`
+       AND (exclude_from_auto_sync = FALSE OR exclude_from_auto_sync IS NULL)
+       AND ${sampleCompanySql('company_id')}
+       AND id NOT LIKE 'demo-%'`
     );
     
     // Also get teams with manually edited snapshots to skip

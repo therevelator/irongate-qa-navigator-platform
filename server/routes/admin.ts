@@ -9,17 +9,19 @@ import { randomUUID } from 'crypto';
 import {
   ROLE_HIERARCHY, TEAM_OPTIONAL_ROLES, canAssignRole, canManageUser, canEditUser, canSetJobTitle, canEditAssignment,
   canResetPassword, canDeleteUser, canGrant, canCreateUsers, canManageTeam, canManageDepartment, canManageCompanyConfig,
-  isCompanyAdmin, highestRole, managedDepartmentIds, ledTeamIds, holdsRole, type PolicyActor,
+  isCompanyAdmin, highestRole, managedDepartmentIds, ledTeamIds, holdsRole, canChangeUserEmail, type PolicyActor,
 } from '../lib/userPolicy';
 import { teamMemberCountSql, teamLeadNameSql, teamLeadIdSql } from '../lib/teamMembership';
 import {
   execOn, grantsForPrimary, grantAssignment, setPrimaryAssignment, syncUserDisplay, lastSuperAdminGuard, departmentManagers,
-  listAssignments, userTeamIdsSql, userDepartmentIdsSql, AssignmentError,
+  listAssignments, userTeamIdsSql, userDepartmentIdsSql, assignmentScopesSql, primaryAssignmentChange, AssignmentError,
 } from '../lib/assignments';
+import { checkNewEmail, isEmailChange } from '../lib/emailChange';
 import { recordAudit, auditedUserChange } from '../lib/audit';
 import orgAdminRoutes from './orgAdmin';
 import { loadResetTarget, sendResetLinkByAdmin, RESET_TTL_MINUTES } from '../lib/passwordReset';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
+import { validateDisplayName } from '../lib/displayName';
 import {
   currentSessionPersistent, endUserSessions, issueSessionCookie, isAllowedLifetime, lifetimeHours, lifetimeLabel,
   DEFAULT_SESSION_HOURS, SESSION_LIFETIME_CHOICES, SESSION_LIFETIME_KEY,
@@ -42,11 +44,25 @@ router.use(orgAdminRoutes);
 // role assignments (server/lib/assignments.ts).
 const actorOf = (req: any): PolicyActor => policyActor(req);
 
-/** A user of the caller's company as a policy target (display columns + assigned departments / teams). */
+/** May the actor revoke this grant (canGrant with the grant's team, as audit.canUndoEntry)? */
+async function mayRevokeGrant(actor: PolicyActor, companyId: string, g: { role: string; scopeType: string; scopeId: string }, exec = execOn()): Promise<boolean> {
+  const [team] = g.scopeType === 'team'
+    ? await exec<any>('SELECT id, department_id FROM teams WHERE id = ? AND company_id = ?', [g.scopeId, companyId])
+    : [null];
+  if (g.scopeType === 'team' && !team) return false;
+  return canGrant(actor, g, team ?? null);
+}
+
+/**
+ * A user of the caller's company as a policy target: display columns, assigned departments /
+ * teams and EVERY active assignment (assignments: the account-wide rules in userPolicy need the
+ * complete list, see targetWithinScope).
+ */
 async function loadTarget(userId: string, companyId: string) {
   return queryOne<any>(
     `SELECT u.id, u.role, u.email, u.first_name, u.last_name, u.department_id, u.primary_team_id, u.is_active, u.job_title,
-            ${userTeamIdsSql('u')} AS team_ids, ${userDepartmentIdsSql('u')} AS department_ids
+            ${userTeamIdsSql('u')} AS team_ids, ${userDepartmentIdsSql('u')} AS department_ids,
+            ${assignmentScopesSql('u')} AS assignments
        FROM users u WHERE u.id = ? AND u.company_id = ?`,
     [userId, companyId]
   );
@@ -106,7 +122,9 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     const actor = actorOf(req);
     const actorRole = highestRole(actor);
     const { companyId } = req.user;
-    const { email, password, firstName, lastName, role } = req.body ?? {};
+    const { email, password, role } = req.body ?? {};
+    let firstName: string = req.body?.firstName;
+    let lastName: string = req.body?.lastName;
     let teamId: string | null = req.body?.teamId || null;
     let departmentId: string | null = req.body?.departmentId || null;
 
@@ -116,6 +134,14 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     }
     if (!email || !password || !firstName || !lastName || !role) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    // Names are shown across the app, e-mails and Slack (server/lib/displayName.ts).
+    {
+      const first = validateDisplayName(firstName, 'First name');
+      if (!first.ok) return res.status(400).json({ error: first.error });
+      const last = validateDisplayName(lastName, 'Last name');
+      if (!last.ok) return res.status(400).json({ error: last.error });
+      firstName = first.value; lastName = last.value;
     }
     // The same password rules as registration, invitations and reset links (src/lib/passwordPolicy.ts).
     const weak = typeof password === 'string' ? passwordProblem(password, String(email)) : 'The password is required.';
@@ -205,8 +231,10 @@ router.post('/users', authenticateToken, async (req: any, res) => {
   }
 });
 
-// Update user. Self: name and email only. Others: super_admin / qa_manager for users they
-// can manage; a changed role must be one they may assign. Fields not sent keep their value.
+// Update user. Self: name and email only (the e-mail with the self-service rules of
+// server/lib/emailChange.ts). Others: super_admin / qa_manager for users entirely within their
+// scope (userPolicy.canEditUser); a changed role must be one they may assign; another person's
+// e-mail only by a super admin (canChangeUserEmail). Fields not sent keep their value.
 // role / departmentId / primaryTeamId change the user's PRIMARY assignment (other assignments
 // stay; they are managed with /users/:id/assignments). Recorded in the change history (undoable).
 router.put('/users/:id', authenticateToken, async (req: any, res) => {
@@ -217,9 +245,11 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
     if (!target) return res.status(404).json({ error: 'User not found' });
 
     const body = req.body ?? {};
-    const firstName = body.firstName ?? undefined;
-    const lastName = body.lastName ?? undefined;
-    const email = body.email ?? undefined;
+    let firstName: string | undefined = body.firstName ?? undefined;
+    let lastName: string | undefined = body.lastName ?? undefined;
+    // The edit form always sends the e-mail; only a different address is a change.
+    const emailChanged = isEmailChange(body.email, target.email);
+    let email: string | undefined;
     const role: string = body.role ?? target.role;
     const departmentId: string | null = body.departmentId === undefined ? target.department_id : (body.departmentId || null);
     const primaryTeamId: string | null = body.primaryTeamId === undefined ? target.primary_team_id : (body.primaryTeamId || null);
@@ -228,6 +258,20 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
     if (!canEditUser(actor, target)) {
       return res.status(403).json({ error: 'You cannot edit this user' });
     }
+    if (emailChanged && target.id !== actor.id && !canChangeUserEmail(actor, target)) {
+      return res.status(403).json({ error: 'Only a super admin can change another person\'s e-mail address' });
+    }
+    // Names are shown across the app, e-mails and Slack (server/lib/displayName.ts).
+    if (firstName !== undefined) {
+      const checked = validateDisplayName(firstName, 'First name');
+      if (!checked.ok) return res.status(400).json({ error: checked.error });
+      firstName = checked.value;
+    }
+    if (lastName !== undefined) {
+      const checked = validateDisplayName(lastName, 'Last name');
+      if (!checked.ok) return res.status(400).json({ error: checked.error });
+      lastName = checked.value;
+    }
     // Job title (shown in the top bar and on Team detail): super admins only; '' clears it.
     let jobTitle: string | null | undefined;
     if (body.jobTitle !== undefined) {
@@ -235,6 +279,10 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
       if (body.jobTitle !== null && typeof body.jobTitle !== 'string') return res.status(400).json({ error: 'Job title must be text' });
       jobTitle = typeof body.jobTitle === 'string' && body.jobTitle.trim() ? body.jobTitle.trim() : null;
       if (jobTitle && jobTitle.length > 120) return res.status(400).json({ error: 'Job title must be at most 120 characters' });
+      if (jobTitle) {
+        const checked = validateDisplayName(jobTitle, 'Job title', 120);
+        if (!checked.ok) return res.status(400).json({ error: checked.error });
+      }
     }
     const jobTitleChanged = jobTitle !== undefined && jobTitle !== (target.job_title ?? null);
     let team: { id: string; department_id: string | null } | null = null;
@@ -261,11 +309,20 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
       for (const g of grantsForPrimary(companyId, role, departmentId, primaryTeamId)) {
         if (!canGrant(actor, g, g.scopeType === 'team' ? team : null)) return res.status(403).json({ error: 'You cannot give that assignment' });
       }
+      // Every grant the change REMOVES must be one the actor may revoke (the same rule as undo,
+      // audit.canUndoEntry): checked here for a clear answer and again inside setPrimaryAssignment.
+      const { removed } = primaryAssignmentChange(companyId,
+        { role: target.role, departmentId: target.department_id, teamId: target.primary_team_id },
+        { role, departmentId, teamId: primaryTeamId });
+      for (const g of removed) {
+        if (!(await mayRevokeGrant(actor, companyId, g))) return res.status(403).json({ error: 'You cannot remove one of this user\'s current assignments' });
+      }
       if (target.role === 'super_admin' && role !== 'super_admin') await lastSuperAdminGuard(companyId, target.id);
     }
-    if (email !== undefined) {
-      const clash = await queryOne<any>('SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id <> ?', [email, target.id]);
-      if (clash) return res.status(400).json({ error: 'Email already registered' });
+    if (emailChanged) {
+      const check = await checkNewEmail(body.email, target.id);
+      if (!check.ok) return res.status(check.status).json({ error: check.error });
+      email = check.email;
     }
 
     await auditedUserChange(
@@ -277,14 +334,17 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
           [firstName ?? null, lastName ?? null, email ?? null, target.id, companyId]
         );
         if (jobTitleChanged) await exec('UPDATE users SET job_title = ? WHERE id = ? AND company_id = ?', [jobTitle, target.id, companyId]);
+        // A new sign-in address ends every other session of that person (server/lib/emailChange.ts).
+        if (email !== undefined) await endUserSessions(target.id, exec, { by: actor.id, reason: 'E-mail address changed' });
         if (assignmentChanged) {
           await setPrimaryAssignment(exec, {
             companyId, userId: target.id, actorId: actor.id,
             from: { role: target.role, departmentId: target.department_id, teamId: target.primary_team_id },
             to: { role, departmentId, teamId: primaryTeamId },
+            mayRevoke: (g) => mayRevokeGrant(actor, companyId, g, exec),
           });
         }
-        const parts = [assignmentChanged ? `role / team changed to ${role}` : null, (firstName || lastName || email) ? 'profile updated' : null, jobTitleChanged ? `job title ${jobTitle ? `set to "${jobTitle}"` : 'cleared'}` : null].filter(Boolean);
+        const parts = [assignmentChanged ? `role / team changed to ${role}` : null, (firstName || lastName || email) ? 'profile updated' : null, email !== undefined ? 'e-mail address changed' : null, jobTitleChanged ? `job title ${jobTitle ? `set to "${jobTitle}"` : 'cleared'}` : null].filter(Boolean);
         return { summary: `${fullName(target)}: ${parts.join(', ') || 'saved without changes'}`, result: null };
       },
     );
@@ -297,6 +357,9 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
        WHERE u.id = ?`,
       [target.id]
     );
+    if (email !== undefined && target.id === actor.id) {
+      await issueSessionCookie(res, actor.id, JWT_SECRET, { persistent: currentSessionPersistent(req), method: 'reissue' });
+    }
     res.json((await withAssignments(companyId, [updatedUser]))[0]);
   } catch (error: any) {
     if (error instanceof AssignmentError) return res.status(error.status).json({ error: error.message });
@@ -562,7 +625,7 @@ router.get('/teams', authenticateToken, async (req: any, res) => {
 router.post('/teams', authenticateToken, async (req: any, res) => {
   try {
     const { companyId, departmentId: userDepartmentId } = req.user;
-    const { name, description, departmentId: requestDepartmentId } = req.body;
+    const { description, departmentId: requestDepartmentId } = req.body ?? {};
     const actor = actorOf(req);
 
     // Only QA Managers and Super Admins can create teams (canManageDepartment for the department).
@@ -570,9 +633,9 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Only managers and super admins can create teams' });
     }
 
-    if (!name) {
-      return res.status(400).json({ error: 'Team name is required' });
-    }
+    const checkedName = validateDisplayName(req.body?.name, 'Team name');
+    if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+    const name = checkedName.value;
 
     // Department: the one requested, else the caller's own (a manager: one they manage).
     const managed = managedDepartmentIds(actor);
@@ -642,7 +705,7 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
     const { id: teamId } = req.params;
-    const { name, description } = req.body;
+    const { description } = req.body ?? {};
     const actor = actorOf(req);
 
     // Only Super Admin and QA Managers (teams of their departments) can update teams.
@@ -657,6 +720,13 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
     }
     if (!canManageTeam(actor, team)) {
       return res.status(403).json({ error: 'Can only update teams in your department' });
+    }
+    // A name not sent keeps the current one; a sent name follows server/lib/displayName.ts.
+    let name: string = team.name;
+    if (req.body?.name !== undefined) {
+      const checkedName = validateDisplayName(req.body.name, 'Team name');
+      if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+      name = checkedName.value;
     }
 
     await query(
@@ -926,16 +996,16 @@ router.get('/departments/:id/teams', authenticateToken, async (req: any, res) =>
 // Create department (Super Admin only)
 router.post('/departments', authenticateToken, async (req: any, res) => {
   try {
-    const { role, companyId } = req.user;
-    const { name, description } = req.body;
+    const { companyId } = req.user;
+    const { description } = req.body ?? {};
 
     if (!isCompanyAdmin(actorOf(req))) {
       return res.status(403).json({ error: 'Only Super Admins can create departments' });
     }
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Department name is required' });
-    }
+    const checkedName = validateDisplayName(req.body?.name, 'Department name');
+    if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+    const name = checkedName.value;
 
     // Duplicate names are checked among active departments only. A deleted (inactive)
     // department with the same name is reactivated instead of creating a second row.
@@ -987,17 +1057,17 @@ router.post('/departments', authenticateToken, async (req: any, res) => {
 // Update department (Super Admin only)
 router.put('/departments/:id', authenticateToken, async (req: any, res) => {
   try {
-    const { role, companyId } = req.user;
+    const { companyId } = req.user;
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { description } = req.body ?? {};
 
     if (!isCompanyAdmin(actorOf(req))) {
       return res.status(403).json({ error: 'Only Super Admins can update departments' });
     }
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Department name is required' });
-    }
+    const checkedName = validateDisplayName(req.body?.name, 'Department name');
+    if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+    const name = checkedName.value;
 
     // Check if department exists and belongs to company
     const department = await queryOne<any>(
@@ -1124,6 +1194,28 @@ router.delete('/departments/:id', authenticateToken, async (req: any, res) => {
 // returned: the merged view omits them and the raw view reports them only as set/not set.
 const SECRET_MASK = '__secret_set__';
 
+/**
+ * Which department / team levels of the configuration may this reader see? Super admins: every
+ * level of the company. Others: a department they manage; a team of a department they manage or
+ * a team they lead. Company-level values (no department, no team, or 'all') stay readable to the
+ * roles that may open the endpoint. Returns the refusal message, or null when allowed.
+ */
+async function configReadScopeProblem(actor: PolicyActor, companyId: string, departmentId: unknown, teamId: unknown): Promise<string | null> {
+  if (isCompanyAdmin(actor)) return null;
+  const dept = typeof departmentId === 'string' && departmentId && departmentId !== 'all' ? departmentId : null;
+  const team = typeof teamId === 'string' && teamId && teamId !== 'all' ? teamId : null;
+  if ((departmentId !== undefined && typeof departmentId !== 'string') || (teamId !== undefined && typeof teamId !== 'string')) return 'Invalid scope';
+  const mine = managedDepartmentIds(actor);
+  if (dept && !mine.includes(dept)) return 'Access denied for this department';
+  if (team) {
+    const row = await queryOne<any>('SELECT id, department_id FROM teams WHERE id = ? AND company_id = ?', [team, companyId]);
+    if (!row) return 'Access denied for this team';
+    const inScope = (!!row.department_id && mine.includes(row.department_id)) || ledTeamIds(actor).includes(row.id);
+    if (!inScope) return 'Access denied for this team';
+  }
+  return null;
+}
+
 // Get configs (resolved with the one inheritance rule: team → department → company)
 router.get('/configs', authenticateToken, async (req: any, res) => {
   try {
@@ -1133,9 +1225,10 @@ router.get('/configs', authenticateToken, async (req: any, res) => {
     const isManager = canManageCompanyConfig(actor);
     if (!isManager && !holdsRole(actor, 'team_lead')) return res.status(403).json({ error: 'Insufficient permissions' });
     const { departmentId, teamId } = req.query;
-    if (!isManager && teamId && !ledTeamIds(actor).includes(String(teamId))) {
-      return res.status(403).json({ error: 'Access denied for this team' });
-    }
+    // Department and team levels: only the departments the reader manages / the teams they lead
+    // or that lie in a department they manage (super admins: any of the company).
+    const scopeProblem = await configReadScopeProblem(actor, companyId, departmentId, teamId);
+    if (scopeProblem) return res.status(403).json({ error: scopeProblem });
     const resolved = await resolveConfigs(companyId, {
       teamId: typeof teamId === 'string' ? teamId : null,
       departmentId: typeof departmentId === 'string' ? departmentId : null,
@@ -1155,8 +1248,11 @@ router.get('/configs', authenticateToken, async (req: any, res) => {
 router.get('/configs/raw', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    if (!canManageCompanyConfig(actorOf(req))) return res.status(403).json({ error: 'Insufficient permissions' });
+    const actor = actorOf(req);
+    if (!canManageCompanyConfig(actor)) return res.status(403).json({ error: 'Insufficient permissions' });
     const { departmentId, teamId } = req.query;
+    const scopeProblem = await configReadScopeProblem(actor, companyId, departmentId, teamId);
+    if (scopeProblem) return res.status(403).json({ error: scopeProblem });
 
     let sql = `SELECT * FROM configs WHERE company_id = ?`;
     const params: any[] = [companyId];

@@ -9,6 +9,7 @@ import 'dotenv/config';
 import { pool, query as dbQuery } from '../../src/lib/db';
 import { computeDdps } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled } from '../lib/syntheticData';
+import { sampleCompanySql } from '../lib/sampleCompany';
 
 // SYNTHETIC DATA: this script fills developer_productivity_snapshots with random
 // sample values. It refuses to run unless ENABLE_SYNTHETIC_DATA=true.
@@ -96,11 +97,15 @@ export async function seedProductivitySnapshots() {
     const conn = await getConnection();
 
     try {
-        // Get all developers (engineers and team leads)
+        // Developers (engineers and team leads) of SAMPLE companies only (server/lib/sampleCompany.ts),
+        // not the fixed demo dataset's people ('demo-' ids): real companies' people are never given
+        // generated snapshots.
         const developers = await query(conn, `
           SELECT id FROM users 
           WHERE role IN ('engineer', 'qa_engineer', 'team_lead')
           AND is_active = TRUE
+          AND ${sampleCompanySql('company_id')}
+          AND id NOT LIKE 'demo-%'
         `);
 
         if (!developers.length) {
@@ -110,8 +115,8 @@ export async function seedProductivitySnapshots() {
 
         console.log(`Found ${developers.length} developers to seed`);
 
-        // Clear existing snapshots
-        await query(conn, 'DELETE FROM developer_productivity_snapshots');
+        // Clear the existing snapshots of these developers only (never another company's rows).
+        await query(conn, 'DELETE FROM developer_productivity_snapshots WHERE developer_id = ANY(?::text[])', [developers.map((d: any) => d.id)]);
         console.log('Cleared existing snapshots');
 
         // Generate 6 months of data (180 days)

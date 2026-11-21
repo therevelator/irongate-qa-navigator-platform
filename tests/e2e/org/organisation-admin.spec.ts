@@ -61,11 +61,14 @@ test.describe('Departments', { tag: [TAG.area('org')] }, () => {
     await expect(page.getByRole('cell', { name: `${name} renamed` })).toHaveCount(0);
   });
 
-  test('ORG-02 a department name with markup is stored and shown as text', { tag: [TAG.negative] }, async ({ freshCompany, signInAs, page }) => {
+  test('ORG-02 a department name with markup is refused with the reason and nothing runs', { tag: [TAG.negative] }, async ({ freshCompany, signInAs, page }) => {
+    // Names with < or > are refused by the API (server/lib/displayName.ts); legacy names with markup
+    // are shown as text (tests/e2e/org/stored-xss.spec.ts).
     await signInAs(freshCompany, '/departments');
     await createDepartment(page, `X ${XSS}`);
-    await expect(page.getByText(`X ${XSS}`).first()).toBeVisible();
+    await expect(page.getByText('Failed to create department: Department name cannot contain < or >')).toBeVisible();
     expect(await page.evaluate(() => (window as any).__xss)).toBeUndefined();
+    expect(Number((await sql('SELECT count(*)::int AS n FROM departments WHERE company_id = $1 AND name LIKE $2', [freshCompany.id, '%<img%']))[0].n)).toBe(0);
   });
 });
 

@@ -30,6 +30,7 @@ import { runAsPlatformSupport, PLATFORM_SUPPORT_REQUEST } from '../lib/platformC
 import { validateName as validateViewName, SavedViewError } from '../lib/savedViews';
 import { emailDomainOf, isPublicEmailDomain } from '../../src/lib/emailDomains';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
+import { validateDisplayName } from '../lib/displayName';
 import { toCsv, csvFileName, type CsvColumn } from '../../src/lib/csv';
 import adminRoutes from './admin';
 import targetsRoutes from './targets';
@@ -81,6 +82,12 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const NOT_FOUND = { error: 'Not found' };
 const intParam = (v: unknown, def: number, min: number, max: number) => Math.min(Math.max(parseInt(String(v ?? def), 10) || def, min), max);
 /** Optional one-line text (reason of a suspension, billing note): trimmed, at most `max` characters, null when empty. */
+/** A company / department / team / person name (server/lib/displayName.ts); OpError 400 when it breaks the rules. */
+const displayName = (v: unknown, label: string): string => {
+  const checked = validateDisplayName(v, label);
+  if (!checked.ok) throw new OpError(400, checked.error);
+  return checked.value;
+};
 const text = (v: unknown, max: number): string | null => (typeof v === 'string' && v.replace(/[\r\n\t]+/g, ' ').trim() ? v.replace(/[\r\n\t]+/g, ' ').trim().slice(0, max) : null);
 
 /** Feature off (no active platform operator): every route is 404. */
@@ -1021,8 +1028,8 @@ const FIRST_PERSON_ROLES = ['super_admin', 'qa_manager', 'team_lead', 'qa_engine
 router.post('/companies', ...op, async (req: OperatorRequest, res) => {
   try {
     const b = req.body ?? {};
-    const name = text(b.name, 255);
-    if (!name) return void res.status(400).json({ error: 'Enter the company name.' });
+    if (!text(b.name, 255)) return void res.status(400).json({ error: 'Enter the company name.' });
+    const name = displayName(b.name, 'Company name');
     if (await queryOne<any>('SELECT 1 FROM companies WHERE LOWER(name) = LOWER(?)', [name])) return void res.status(409).json({ error: 'An organisation with this name already exists.' });
     const admin = b.admin && typeof b.admin === 'object' ? b.admin : null;
     const adminEmail = admin ? text(admin.email, 255)?.toLowerCase() ?? '' : '';
@@ -1034,12 +1041,14 @@ router.post('/companies', ...op, async (req: OperatorRequest, res) => {
     // A password for the first person follows the company's password rules (src/lib/passwordPolicy.ts);
     // checked before anything is created, so a weak password does not leave a company without its admin.
     if (admin && admin.mode !== 'invite') {
+      displayName(admin.firstName, 'First name');
+      displayName(admin.lastName, 'Last name');
       const weak = typeof admin.password === 'string' ? passwordProblem(admin.password, adminEmail) : 'Enter a password for the first person.';
       if (weak) return void res.status(400).json({ error: weak });
     }
     const { domain, isPublic } = await checkDomain(text(b.domain, 255) ?? (adminEmail ? emailDomainOf(adminEmail) : ''), null);
-    const departmentName = text(b.departmentName, 255) ?? 'General';
-    const teamName = text(b.teamName, 255) ?? 'Team 1';
+    const departmentName = text(b.departmentName, 255) ? displayName(b.departmentName, 'Department name') : 'General';
+    const teamName = text(b.teamName, 255) ? displayName(b.teamName, 'Team name') : 'Team 1';
     const companyId = newCompanyId();
     const departmentId = (await queryOne<any>('SELECT gen_random_uuid()::text AS id'))!.id;
     const teamId = `team-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
@@ -1083,8 +1092,8 @@ router.post('/companies', ...op, async (req: OperatorRequest, res) => {
 
 // Name, e-mail domain and the sample-data notice setting (companies.settings.hideSampleDataNotice).
 router.put('/companies/:companyId', ...op, write(async (_req, res, company, b) => {
-  const name = b.name === undefined ? company.name : text(b.name, 255);
-  if (!name) throw new OpError(400, 'Enter the company name.');
+  if (b.name !== undefined && !text(b.name, 255)) throw new OpError(400, 'Enter the company name.');
+  const name = b.name === undefined ? company.name : displayName(b.name, 'Company name');
   if (name.toLowerCase() !== String(company.name).toLowerCase()
     && await queryOne<any>('SELECT 1 FROM companies WHERE LOWER(name) = LOWER(?) AND id <> ?', [name, company.id])) {
     throw new OpError(409, 'An organisation with this name already exists.');

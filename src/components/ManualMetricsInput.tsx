@@ -5,6 +5,7 @@ import { Save, AlertCircle, CheckCircle, Info, ChevronDown, ChevronRight, Histor
 import { useAuth } from '../contexts/AuthContext';
 import toast from 'react-hot-toast';
 import Swal from 'sweetalert2';
+import { escapeHtml } from '../lib/escapeHtml';
 import API_URL from '../config/api';
 import { METRICS_CONFIG, KPI_TARGETS, getMetricStatus, metricTargetText } from '../config/metricsConfig';
 import { SIZING_ACCURACY_TOLERANCE } from '../data/metricCatalog';
@@ -1225,7 +1226,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
       Swal.fire({
         icon: 'success',
-        title: 'Technical Debt Impact Saved',
+        titleText: 'Technical Debt Impact Saved',
         text: `Updated impact metrics for ${technicalDebtItems.length} debt items`,
         confirmButtonColor: '#3b82f6',
       });
@@ -1315,7 +1316,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     if (!selectedTeamId) {
       Swal.fire({
         icon: 'warning',
-        title: 'No Team Selected',
+        titleText: 'No Team Selected',
         text: 'Please select a team first',
         confirmButtonColor: '#3b82f6',
       });
@@ -1329,7 +1330,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     if (metricsToSave.length === 0) {
       Swal.fire({
         icon: 'warning',
-        title: 'No Developer Metrics',
+        titleText: 'No Developer Metrics',
         text: 'Please enter metrics for at least one developer',
         confirmButtonColor: '#3b82f6',
       });
@@ -1366,7 +1367,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
 
       Swal.fire({
         icon: 'success',
-        title: 'Developer Metrics Saved',
+        titleText: 'Developer Metrics Saved',
         text: `Metrics saved for ${metricsToSave.length} developer(s)`,
         confirmButtonColor: '#3b82f6',
       });
@@ -1374,7 +1375,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       console.error('Error saving developer metrics:', error);
       Swal.fire({
         icon: 'error',
-        title: 'Failed to Save Developer Metrics',
+        titleText: 'Failed to Save Developer Metrics',
         text: error instanceof Error ? error.message : 'Failed to save developer metrics',
         confirmButtonColor: '#3b82f6',
       });
@@ -1415,7 +1416,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     if (!selectedTeamId) {
       Swal.fire({
         icon: 'warning',
-        title: 'No Team Selected',
+        titleText: 'No Team Selected',
         text: 'Please select a team first',
         confirmButtonColor: '#3b82f6',
       });
@@ -1426,7 +1427,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     if (Object.keys(calculatedValues).length === 0) {
       Swal.fire({
         icon: 'warning',
-        title: 'No Metrics',
+        titleText: 'No Metrics',
         text: 'Please enter at least one metric',
         confirmButtonColor: '#3b82f6',
       });
@@ -1457,8 +1458,9 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         
         Swal.fire({
           icon: 'success',
-          title: 'Team Metrics Saved',
-          html: `<p><strong>${selectedTeam?.name || 'Team'}</strong> metrics saved successfully${result.snapshotDate ? ` for ${result.snapshotDate}` : ''}.</p><p>QA Score: <strong>${result.qaScore == null ? '—' : `${result.qaScore}/100`}</strong> (${result.status === 'insufficient-data' ? 'insufficient data' : result.status})</p>${result.qaScore == null && Array.isArray(result.qaScoreMissingInputs) && result.qaScoreMissingInputs.length ? `<p>Missing inputs: ${result.qaScoreMissingInputs.join(', ')}</p>` : ''}`,
+          titleText: 'Team Metrics Saved',
+          // The team name and every server value are escaped (src/lib/escapeHtml.ts): a team name is user input.
+          html: `<p><strong>${escapeHtml(selectedTeam?.name || 'Team')}</strong> metrics saved successfully${result.snapshotDate ? ` for ${escapeHtml(result.snapshotDate)}` : ''}.</p><p>QA Score: <strong>${result.qaScore == null ? '—' : `${escapeHtml(result.qaScore)}/100`}</strong> (${escapeHtml(result.status === 'insufficient-data' ? 'insufficient data' : result.status)})</p>${result.qaScore == null && Array.isArray(result.qaScoreMissingInputs) && result.qaScoreMissingInputs.length ? `<p>Missing inputs: ${escapeHtml(result.qaScoreMissingInputs.join(', '))}</p>` : ''}`,
           confirmButtonColor: '#3b82f6',
         });
         
@@ -1471,7 +1473,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         const error = await response.json();
         Swal.fire({
           icon: 'error',
-          title: 'Failed to Save Team Metrics',
+          titleText: 'Failed to Save Team Metrics',
           text: error.error || 'Unknown error occurred',
           confirmButtonColor: '#3b82f6',
         });
@@ -1480,7 +1482,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
       console.error('Error saving metrics:', error);
       Swal.fire({
         icon: 'error',
-        title: 'Error',
+        titleText: 'Error',
         text: 'Failed to save team metrics. Check console for details.',
         confirmButtonColor: '#3b82f6',
       });

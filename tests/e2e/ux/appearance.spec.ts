@@ -242,7 +242,12 @@ test.describe('Appearance: battery style', { tag: [TAG.area('ux')] }, () => {
     const hero = page.locator('[data-testid="dashboard"] [role="img"][data-battery-band]').first();
     await expect(hero).toHaveAttribute('data-battery-style', 'cell');
     await expect(hero).toHaveAttribute('aria-label', /: (\d+ of 100|no data)$/);
-    const label = await hero.getAttribute('aria-label');
+    // Capture the text alternatives only once the dashboard has finished loading: the hero reads
+    // "no data" while the summary is still on its way, and team cards render as data arrives.
+    await page.waitForLoadState('networkidle');
+    const batteries = page.locator('[data-testid="dashboard"] [role="img"][data-battery-band]');
+    const labels = await batteries.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')));
+    const label = labels[0];
 
     await app.openAppearance();
     const group = app.appearanceMenu.getByRole('group', { name: 'Battery style' });
@@ -256,6 +261,7 @@ test.describe('Appearance: battery style', { tag: [TAG.area('ux')] }, () => {
     await expect(hero).not.toHaveAttribute('data-battery-style', 'cell');
     await expect(page.locator('[data-battery-style="cell"]')).toHaveCount(0);
     await expect(hero).toHaveAttribute('aria-label', label!);
+    expect(await batteries.evaluateAll((els) => els.map((e) => e.getAttribute('aria-label')))).toEqual(labels);
 
     // 2D with Liquid, then reload: both kept.
     await app.setScoreDepth('2D');
