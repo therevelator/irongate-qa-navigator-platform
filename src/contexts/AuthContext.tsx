@@ -81,6 +81,7 @@ export function mapApiUser(u: any): User {
     isActive: u.is_active ?? u.isActive ?? true,
     emailVerified: u.email_verified ?? u.emailVerified ?? false,
     hideSampleNotice: !!(u.hide_sample_notice ?? u.hideSampleNotice),
+    sandbox: u.sandbox ?? null,
   };
 }
 
@@ -250,6 +251,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   const logout = async () => {
+    // A demo sandbox session goes back to /try (to start again or switch role).
+    const sandbox = !!authState.user?.sandbox;
     try {
       await fetch(`${API_URL}/auth/logout`, {
         method: 'POST',
@@ -272,6 +275,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         isLoading: false,
         error: null,
       });
+      if (sandbox) {
+        try { sessionStorage.removeItem('irongate_sandbox_visit'); } catch { /* storage unavailable */ }
+        window.location.assign('/try');
+      }
     }
   };
 

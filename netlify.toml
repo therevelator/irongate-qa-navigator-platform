@@ -61,6 +61,13 @@
     Referrer-Policy = "no-referrer"
     Cache-Control = "no-store"
 
+# The self-serve demo (/try, server/lib/sandbox.ts) is never indexed.
+[[headers]]
+  for = "/try"
+  [headers.values]
+    X-Robots-Tag = "noindex, nofollow"
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
 [[headers]]
   for = "/assets/*"
   [headers.values]

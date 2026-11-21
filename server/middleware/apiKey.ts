@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'crypto';
 import { Request, Response, NextFunction } from 'express';
 import { query, queryOne } from '../../src/lib/db';
+import { isSandboxCompany } from '../lib/sandboxConfig';
 
 /**
  * Per-company API keys for machine ingestion. Format: igk_<43 base64url chars>.
@@ -39,6 +40,8 @@ export async function authenticateApiKey(req: ApiKeyRequest, res: Response, next
     if (row.company_status === 'suspended') {
       return res.status(403).json({ error: "Your organisation's access is suspended. Contact your administrator.", code: 'company_suspended' });
     }
+    // The demo sandbox (server/lib/sandboxConfig.ts) takes no data from outside: its keys are refused.
+    if (isSandboxCompany(row.company_id)) return res.status(403).json({ error: 'The demo sandbox does not accept data.', code: 'sandbox_read_only' });
     req.apiKey = { id: row.id, companyId: row.company_id, name: row.name };
     // Best effort; never blocks the request.
     query('UPDATE api_keys SET last_used_at = now() WHERE id = ?', [row.id]).catch(() => undefined);

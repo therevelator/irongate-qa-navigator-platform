@@ -22,6 +22,8 @@ import { JOB_NAMES, recordJobOutcome, withJobRun } from '../lib/opsLog';
 import { demoRefreshEnabled, runningOnNetlify, startBackgroundDemoRefresh } from '../lib/demoRefreshJob';
 import { DemoDataError, createDemoOrg, getDemoJob, latestDemoJob, parseDemoSize, queuePopulate, startDemoJob } from '../lib/demoGenerate';
 import { mailChannel } from '../lib/mailer';
+import { runSandboxReset, sandboxStatus, startSandboxReset } from '../lib/sandbox';
+import { SANDBOX_COMPANY_ID, SANDBOX_COMPANY_NAME, sandboxEnabled } from '../lib/sandboxConfig';
 import { endUserSessions, revokeSession, SESSION_LIFETIME_KEY, SESSION_LIFETIME_CHOICES, DEFAULT_SESSION_HOURS } from '../lib/sessions';
 import { filtersFromQuery, listUserActivity, userActivityFacets } from '../lib/userActivityQuery';
 import { runAsPlatformSupport, PLATFORM_SUPPORT_REQUEST } from '../lib/platformContext';
@@ -46,6 +48,7 @@ import { ACTIVITY_CSV_COLUMNS } from './activity';
  *   GET  /auth-events[.csv]         sign-in events of every company (and of unknown e-mails)
  *   POST /companies                 create a company (department, team, first super admin)
  *   POST /actions/demo-refresh
+ *   GET  /sandbox | POST /sandbox/reset { confirm: true }   the demo sandbox (/try): state, "Reset sandbox now"
  *
  * Sample data of one company (server/lib/demoGenerate.ts): POST /companies/:companyId/demo-data
  *   { departments, teamsPerDepartment, membersPerTeam } (202: the people, one login per role level and
@@ -1286,6 +1289,38 @@ router.post('/actions/demo-refresh', ...op, async (req: OperatorRequest, res) =>
   } catch (e) {
     console.error('Operator demo refresh error:', e);
     res.status(500).json({ error: 'The action failed' });
+  }
+});
+
+/* ---- Demo sandbox (/try; server/lib/sandbox.ts) --------------------------------------------- */
+
+// The sandbox company's state (ready, building, failed, missing), open sessions and the last reset.
+router.get('/sandbox', ...op, async (_req: OperatorRequest, res) => {
+  try {
+    res.json({ sandbox: { companyId: SANDBOX_COMPANY_ID, name: SANDBOX_COMPANY_NAME, enabled: sandboxEnabled(), ...(await sandboxStatus()) } });
+  } catch (e) {
+    console.error('Operator sandbox status error:', e);
+    res.status(500).json({ error: 'Failed to load the sandbox status' });
+  }
+});
+
+// "Reset sandbox now": ends every sandbox session, deletes the sandbox company and builds it again
+// (builds it the first time). On Netlify the background function does the work (202); elsewhere it
+// runs here and answers when done. Needs { confirm: true }.
+router.post('/sandbox/reset', ...op, async (req: OperatorRequest, res) => {
+  try {
+    if (req.body?.confirm !== true) return void res.status(400).json({ error: 'Confirm the reset ({ confirm: true }).' });
+    if (req.app?.locals?.behindNetlify || runningOnNetlify()) {
+      const r = await startSandboxReset({ behindNetlify: true, reason: 'manual, platform support' });
+      if (!r.ok) return void res.status(502).json({ error: `The sandbox reset could not be started: ${r.summary}.` });
+      return void res.status(202).json({ started: true, mode: 'background' });
+    }
+    const result = await runSandboxReset();
+    if (result.skipped) return void res.status(409).json({ error: result.reason ?? 'A reset is already running.' });
+    res.json({ started: true, mode: 'direct', result, sandbox: await sandboxStatus() });
+  } catch (e) {
+    console.error('Operator sandbox reset error:', e);
+    res.status(500).json({ error: 'The sandbox reset failed' });
   }
 });
 

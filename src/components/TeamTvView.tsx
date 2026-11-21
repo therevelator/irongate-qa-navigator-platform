@@ -697,6 +697,11 @@ const TeamTvView: React.FC = () => {
             ? <>Connection lost · showing data loaded at {updatedAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) ?? '—'} · retrying every {Math.round(OFFLINE_RETRY_MS / 1000)} s</>
             : <>Live · updated {updatedAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '—'} · refreshes every {Math.round(REFRESH_MS / 1000)} s{rotate ? ` · panels rotate every ${settings.intervalSec} s${teamRotation ? ` · ${rotationTeams.length} teams` : ''}` : ''}</>}
         </p>
+        {user?.sandbox && (
+          <p className="rounded-full bg-amber-100 px-[0.8em] py-[0.15em] font-medium text-amber-950 ring-1 ring-inset ring-amber-300" data-testid="tv-sandbox">
+            Demo sandbox · sample data, resets every night
+          </p>
+        )}
         {latest?.sampleData && !hideSampleNotice && (
           <p className="rounded-full bg-slate-200 px-[0.8em] py-[0.15em] font-medium text-slate-700 dark:bg-slate-800 dark:text-slate-200" data-testid="tv-sample-data">
             Includes sample data

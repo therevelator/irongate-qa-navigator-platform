@@ -4,6 +4,8 @@ import { loadAccessContext } from '../lib/assignments';
 import { companyProblem, refuseSession, sessionIdOf, sessionProblem, touchSession, SESSION_EXPIRED_MESSAGE } from '../lib/sessions';
 import type { Grant } from '../lib/userPolicy';
 import { PLATFORM_SUPPORT_REQUEST, platformSupportContext, type PlatformSupportRequest } from '../lib/platformContext';
+import { apiPathOf, isSandboxCompany, sandboxBody, sandboxVerdict, SANDBOX_REFUSED_CODE, SANDBOX_REFUSED_MESSAGE } from '../lib/sandboxConfig';
+import { runAsSandbox } from '../lib/sandboxContext';
 
 // Resolve the signing secret once. In production a secret MUST be provided;
 // we fail closed (throw on startup) rather than fall back to a public default,
@@ -87,7 +89,9 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
   const problem = sessionProblem(decoded, row);
   if (problem) return refuseSession(res, problem);
   const sid = sessionIdOf(decoded);
-  if (sid && row.session_last_seen_at) touchSession(req, sid, row.session_last_seen_at);
+  const sandbox = isSandboxCompany(row.company_id);
+  // A sandbox session's row keeps no address (the persona is shared by every visitor): not touched.
+  if (sid && row.session_last_seen_at && !sandbox) touchSession(req, sid, row.session_last_seen_at);
 
   req.user = {
     id: row.id,
@@ -101,7 +105,35 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
   req.userId = row.id;
   req.userRole = row.role;
   req.companyId = row.company_id;
+  if (sandbox) return sandboxGate(req, res, next);
   next();
+}
+
+/**
+ * Demo sandbox session (server/lib/sandboxConfig.ts): every request of a sandbox user passes here,
+ * whatever the route. Reads are allowed (except API keys, the user activity log and CSV exports of
+ * people); writes only from a short allowlist (recommendations, action statuses, alerts and
+ * notifications read), with their bodies narrowed so no free text is kept. Everything else answers
+ * 403 sandbox_read_only before the route's handler runs. The request then runs in the sandbox
+ * context, where no AI provider is ever called (server/lib/groq.ts).
+ */
+function sandboxGate(req: AuthRequest, res: Response, next: NextFunction) {
+  const path = apiPathOf(req.originalUrl || req.url || '');
+  const verdict = sandboxVerdict(req.method, path);
+  const refuse = () => res.status(403).json({ error: SANDBOX_REFUSED_MESSAGE, code: SANDBOX_REFUSED_CODE });
+  if (verdict === 'refuse') return refuse();
+  if (verdict === 'noop') {
+    res.locals.activitySkip = true;
+    return res.status(204).end();
+  }
+  const m = req.method.toUpperCase();
+  if (m !== 'GET' && m !== 'HEAD' && m !== 'OPTIONS') {
+    const body = sandboxBody(m, path, req.body);
+    if (!body) return refuse();
+    req.body = body;
+  }
+  (req as any).sandbox = true;
+  return runAsSandbox(req.user!.companyId, () => next());
 }
 
 export function requireRole(...roles: string[]) {

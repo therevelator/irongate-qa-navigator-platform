@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { inSandboxRequest } from './sandboxContext';
 
 const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -24,6 +25,8 @@ export interface GroqResult {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export function isGroqConfigured(): boolean {
+  // A demo sandbox session never calls the AI provider (it costs money): the rule-based fallbacks answer.
+  if (inSandboxRequest()) return false;
   const key = process.env.GROQ_API_KEY;
   return !!key && key.length > 10;
 }
@@ -37,6 +40,7 @@ export function isGroqConfigured(): boolean {
  *     rule-based fallback.
  */
 export async function groqChatCompletion(req: GroqRequest): Promise<GroqResult> {
+  if (inSandboxRequest()) throw new Error('AI provider not used in the demo sandbox');
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey || apiKey.length <= 10) {
     throw new Error('GROQ_API_KEY not configured');

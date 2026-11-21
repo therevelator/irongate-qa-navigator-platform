@@ -14,6 +14,7 @@ import {
 } from '../../server/lib/userPolicy';
 import { policyActorOf, ROLE_LABELS } from '../lib/policyActor';
 import PulsePendingBanner from './PulsePendingBanner';
+import SandboxBanner from './SandboxBanner';
 import NotificationsBell from './NotificationsBell';
 import { AccessHelp, AccountMenu, AppearanceMenu, CompanyBadge } from './HeaderParts';
 import { accessSummary } from '../lib/accessSummary';
@@ -394,7 +395,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-400 truncate">{ROLE_LABEL[role] ?? role}</p>
               </div>
-              <button
+              {!user?.sandbox && <button
                 onClick={signOutOthers}
                 title="Sign out my other devices"
                 aria-label="Sign out my other devices"
@@ -403,7 +404,7 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
               >
                 <MonitorSmartphone size={16} />
                 <span className="sr-only">Sign out my other devices</span>
-              </button>
+              </button>}
               <button
                 onClick={logout}
                 title="Sign out"
@@ -465,10 +466,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
               }}
             />
             <AppearanceMenu />
-            <AccountMenu name={fullName} title={personTitle} companyName={profile?.companyName} onSignOutOthers={signOutOthers} onSignOut={logout} />
+            <AccountMenu name={fullName} title={personTitle} companyName={profile?.companyName} onSignOutOthers={user?.sandbox ? undefined : signOutOthers} onSignOut={logout} />
           </div>
         </header>
 
+        <SandboxBanner />
         {onOpenPulse && <PulsePendingBanner userId={user?.id ? String(user.id) : null} onOpen={onOpenPulse} />}
         <main id="main-scroll" className="flex-1 overflow-auto flex flex-col">
           <div className="flex-1">{children}</div>

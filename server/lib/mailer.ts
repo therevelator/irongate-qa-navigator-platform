@@ -20,6 +20,7 @@
 import { appendFileSync } from 'fs';
 import { createHash } from 'crypto';
 import { recordServerError } from './opsLog';
+import { isSandboxEmail } from './sandboxConfig';
 
 export type MailChannel = 'resend' | 'smtp' | 'log';
 
@@ -186,6 +187,8 @@ export function setMailerForTests(m: Mailer | null): void {
 }
 
 export function sendMail(message: MailMessage): Promise<MailResult> {
+  // The demo sandbox's people (server/lib/sandboxConfig.ts) are never mailed, whatever sends it.
+  if (isSandboxEmail(message.to)) return Promise.resolve({ delivered: false, channel: getMailer().channel, error: 'Not sent: demo sandbox address' });
   return getMailer().send(message);
 }
 

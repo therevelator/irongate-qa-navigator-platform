@@ -2,6 +2,7 @@ import type express from 'express';
 import { query } from '../../src/lib/db';
 import { clientIp, onRequestEnd, type RequestContext } from './requestContext';
 import { inBackground, onFlush } from './opsLog';
+import { isSandboxCompany } from './sandboxConfig';
 
 /**
  * User activity log (table user_activity): every authenticated API request (reads included),
@@ -212,6 +213,8 @@ export function activityRowFor(req: express.Request, res: express.Response, ctx:
   const base = baseRow(req, ctx, res.statusCode);
   const ent = entityOf(ctx.route, ctx.params);
   const user = (req as any).user as { id: string; companyId: string } | undefined;
+  // Demo sandbox sessions are not recorded: the personas are shared by every visitor (server/lib/sandbox.ts).
+  if (isSandboxCompany(user?.companyId)) return null;
   const apiKey = (req as any).apiKey as { id: string; companyId: string } | undefined;
   const common = { ...base, ...ent, route: ctx.route ?? 'unmatched' };
   if (typeof res.locals.activitySignIn === 'string') {

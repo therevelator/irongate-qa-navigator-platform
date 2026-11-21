@@ -1970,11 +1970,11 @@ router.post('/business-impact-v2/:teamId/ai-analysis', aiLimiter, authenticateTo
     const periodEnd = aiMatrix.pairedMonths[aiMatrix.pairedMonths.length - 1];
     const testedCount = aiMatrix.correlations.length;
 
-    const groqApiKey = process.env.GROQ_API_KEY;
     // Without an AI provider (or when it fails, below) the rule-based summary is returned, never an empty box.
+    // A demo sandbox session never calls the provider (isGroqConfigured is false there).
     const rulesSummary = () => correlationSummaryHtml({ correlations: aiMatrix.correlations, pairedMonths: aiMatrix.pairedMonths });
 
-    if (!groqApiKey || groqApiKey.length <= 10) {
+    if (!isGroqConfigured()) {
       return res.json({ success: true, source: 'rules', analysis: rulesSummary(), note: 'No AI provider is configured; this summary is written from fixed rules.' });
     }
 

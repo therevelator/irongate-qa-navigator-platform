@@ -23,6 +23,8 @@ import { passwordProblem } from '../../src/lib/passwordPolicy';
 import { emailDomainOf, isPublicEmailDomain } from '../../src/lib/emailDomains';
 import { EMAIL_RE } from '../lib/invitations';
 import { recordFailedPassword, recordLockedAttempt } from '../lib/loginLockout';
+import { isSandboxCompany, SANDBOX_PERSONAS, SANDBOX_PERSONA_KEYS, BOOK_DEMO_URL, START_PILOT_URL } from '../lib/sandboxConfig';
+import sandboxRoutes from './authSandbox';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -34,6 +36,8 @@ const router = express.Router();
 
 // SSO (Google / Microsoft), invitation acceptance and GET /providers: server/routes/authSso.ts.
 router.use(ssoRoutes);
+// The demo sandbox (/try): GET /sandbox, POST /sandbox { persona } (server/routes/authSandbox.ts).
+router.use(sandboxRoutes);
 
 /** The user's active assignments with scope names (the UI builds its policy actor from them). */
 async function assignmentsOf(user: { id: string; company_id: string }) {
@@ -231,6 +235,11 @@ router.post('/login', authLimiter, async (req, res) => {
       await failed('unknown_email');
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+    // The demo sandbox's shared users cannot be signed in to with a password at all (POST /api/auth/sandbox only).
+    if (isSandboxCompany(user.company_id)) {
+      await failed('sandbox_account');
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
     // From here the email belongs to a user: a failure is recorded in their company's user activity.
     noteFailedSignIn(res, user.email);
 
@@ -407,6 +416,14 @@ router.get('/me', async (req, res) => {
     );
     user.assignedTeams = teams.map(t => t.team_id);
     user.assignments = await assignmentsOf(user);
+    // A demo sandbox session (/try): the app shows the sandbox banner and hides what the API refuses.
+    if (isSandboxCompany(user.company_id)) {
+      const persona = SANDBOX_PERSONA_KEYS.find((k) => SANDBOX_PERSONAS[k].userId === user.id) ?? null;
+      user.sandbox = {
+        persona, bookDemoUrl: BOOK_DEMO_URL, startPilotUrl: START_PILOT_URL,
+        expiresAt: typeof decoded.exp === 'number' ? new Date(decoded.exp * 1000).toISOString() : null,
+      };
+    }
 
     res.json({ user, session: { issuedAt: new Date(decoded.iat * 1000).toISOString(), lifetimeHours: sessionHours } });
   } catch (error) {

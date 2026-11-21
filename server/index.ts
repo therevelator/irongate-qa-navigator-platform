@@ -176,6 +176,8 @@ if (process.env.NODE_ENV === 'production') {
   app.get(/^\/(?!api\/|health$).*/, (req, res) => {
     // The reset page's address carries a one-time token: never send it on as a Referer.
     if (req.path === '/reset-password') res.setHeader('Referrer-Policy', 'no-referrer');
+    // The self-serve demo page is never indexed (netlify.toml sets the same header there).
+    if (req.path === '/try' || req.path === '/try/') res.setHeader('X-Robots-Tag', 'noindex, nofollow');
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }

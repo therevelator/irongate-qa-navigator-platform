@@ -170,8 +170,10 @@ const SAMPLE_MARKER_TABLES = [
 /** Active non-demo teams that already hold demo (sample) rows, per company. */
 export async function teamsWithSampleData(db: pg.Pool | pg.PoolClient, opts: { skipSuspended?: boolean } = {}): Promise<Map<string, string[]>> {
   const union = SAMPLE_MARKER_TABLES.map((t) => `SELECT team_id FROM ${t} WHERE id LIKE 'demo-%'`).join(' UNION ');
-  // skipSuspended: the scheduled refresh leaves suspended organisations (companies.status) alone.
-  const suspended = opts.skipSuspended ? `AND NOT EXISTS (SELECT 1 FROM companies c WHERE c.id = t.company_id AND c.status = 'suspended')` : '';
+  // skipSuspended: the scheduled refresh leaves suspended organisations (companies.status) alone, and the
+  // demo sandbox too (it is rebuilt with today's dates every night: server/lib/sandbox.ts).
+  const suspended = opts.skipSuspended
+    ? `AND NOT EXISTS (SELECT 1 FROM companies c WHERE c.id = t.company_id AND c.status = 'suspended') AND t.company_id <> 'sandbox-demo'` : '';
   const rows = (await db.query(
     `SELECT t.company_id, t.id FROM teams t
       WHERE t.is_active = TRUE AND t.id NOT LIKE 'demo-%' AND t.id IN (${union}) ${suspended}

@@ -149,6 +149,51 @@ const createCompanySpec = (onCreated: (c: { id: string; name: string }) => void)
   doneMessage: (out) => `${out.company.name} created`,
 });
 
+/** The id of the demo sandbox company (server/lib/sandboxConfig.ts). */
+const SANDBOX_COMPANY_ID = 'sandbox-demo';
+const SANDBOX_STATE: Record<string, { label: string; tone: 'good' | 'warn' | 'bad' | 'neutral' }> = {
+  ready: { label: 'Ready', tone: 'good' }, building: { label: 'Building', tone: 'warn' }, failed: { label: 'Failed', tone: 'bad' }, missing: { label: 'Not built yet', tone: 'neutral' },
+};
+
+/**
+ * The demo sandbox behind /try (server/lib/sandbox.ts): its state, open visitor sessions, the last
+ * reset, and "Reset sandbox now" (ends every sandbox session, deletes the company and builds it again).
+ */
+const SandboxSection: React.FC<{ onOpen: (c: { id: string; name: string }) => void; run: (a: any) => void; reloadKey: unknown }> = ({ onOpen, run, reloadKey }) => {
+  const [sb, setSb] = useState<any>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { opFetch('/sandbox').then((d) => { setSb(d.sandbox); setError(null); }).catch((e) => setError(e.message)); }, [reloadKey]);
+  const state = SANDBOX_STATE[sb?.state ?? 'missing'] ?? SANDBOX_STATE.missing;
+  return (
+    <Section title="Demo sandbox" subtitle="The fictional company behind /try. Rebuilt every night at 02:47 UTC with today's dates; every visitor session ends." action={
+      <button type="button" className={cx(buttonClass.secondary, 'h-8 px-2.5 text-xs')} data-testid="op-sandbox-reset" onClick={() => run({
+        title: 'Reset sandbox now',
+        description: 'Ends every demo session, deletes the sandbox company and builds it again with today\'s dates (about a minute). Visitors\' changes are lost; no other company is touched.',
+        path: '/sandbox/reset',
+        destructive: true,
+        confirmLabel: 'Reset sandbox',
+        doneMessage: (out: any) => (out?.mode === 'background'
+          ? 'Sandbox reset started. It runs in the background for a minute or two.'
+          : `Sandbox rebuilt: ${out?.result?.teams ?? 0} teams, ${out?.result?.rows ?? 0} rows.`),
+      })}>Reset sandbox now</button>
+    }>
+      <ErrorText error={error} />
+      {sb && (
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-4 text-sm sm:grid-cols-3 lg:grid-cols-6" data-testid="op-sandbox">
+          <div><dt className="text-xs text-slate-500 dark:text-slate-400">Company</dt><dd>
+            {sb.exists ? <button type="button" className="font-medium text-brand-700 hover:underline dark:text-brand-300" onClick={() => onOpen({ id: sb.companyId, name: sb.name })}>{sb.name}</button> : sb.name}
+          </dd></div>
+          <div><dt className="text-xs text-slate-500 dark:text-slate-400">State</dt><dd data-testid="op-sandbox-state"><Badge tone={state.tone}>{state.label}</Badge>{!sb.enabled && <Badge className="ml-1">/try off</Badge>}</dd></div>
+          <div><dt className="text-xs text-slate-500 dark:text-slate-400">Data up to</dt><dd>{sb.dataUpTo ?? '—'}</dd></div>
+          <div><dt className="text-xs text-slate-500 dark:text-slate-400">Open sessions</dt><dd data-testid="op-sandbox-sessions">{sb.openSessions}</dd></div>
+          <div><dt className="text-xs text-slate-500 dark:text-slate-400">Sessions today</dt><dd>{sb.sessionsToday}</dd></div>
+          <div><dt className="text-xs text-slate-500 dark:text-slate-400">Last reset</dt><dd>{sb.lastReset ? <>{fmtDate(sb.lastReset.at)} <OkBadge ok={sb.lastReset.ok} /></> : '—'}</dd></div>
+        </dl>
+      )}
+    </Section>
+  );
+};
+
 const Overview: React.FC<{ onOpen: (c: { id: string; name: string }) => void }> = ({ onOpen }) => {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
@@ -175,7 +220,7 @@ const Overview: React.FC<{ onOpen: (c: { id: string; name: string }) => void }> 
         <DataTable testId="operator-companies" rows={data.companies} rowTestId={(c: any) => `op-company-row-${c.id}`} columns={[
           { key: 'name', label: 'Company', render: (c: any) => (
             <button type="button" onClick={() => onOpen({ id: c.id, name: c.name })} className="text-left font-medium text-brand-700 hover:underline dark:text-brand-300" data-testid="operator-open-company">
-              {c.name}{c.demo && <Badge tone="warn" className="ml-1">Demo</Badge>}{c.sample_teams > 0 && <Badge className="ml-1">Sample data</Badge>}
+              {c.name}{c.id === SANDBOX_COMPANY_ID && <Badge tone="warn" className="ml-1">Sandbox</Badge>}{c.demo && <Badge tone="warn" className="ml-1">Demo</Badge>}{c.sample_teams > 0 && <Badge className="ml-1">Sample data</Badge>}
             </button>
           ) },
           { key: 'status', label: 'Status', render: (c: any) => (
@@ -193,6 +238,7 @@ const Overview: React.FC<{ onOpen: (c: { id: string; name: string }) => void }> 
           { key: 'last_activity_at', label: 'Last activity', render: (c: any) => fmtDate(c.last_activity_at) },
         ]} />
       </Section>
+      <SandboxSection onOpen={onOpen} run={run} reloadKey={data} />
       <Section title="Scheduled jobs" subtitle={noRuns ? 'No runs recorded yet: the jobs record a row each time they run (on Netlify, scheduled functions; locally, the server\'s schedules).' : 'Last run of each job.'} action={
         <button type="button" className={cx(buttonClass.secondary, 'h-8 px-2.5 text-xs')} data-testid="op-demo-refresh" onClick={() => run({
           title: 'Refresh sample data now',

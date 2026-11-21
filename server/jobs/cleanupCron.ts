@@ -29,3 +29,17 @@ if (process.env.CALC_RECOMPUTE_CRON !== 'off' && !process.env.NETLIFY && !proces
     await withJobRun('calc-recompute', () => recomputeRecent(8), (x) => `${x.teams} teams, ${x.values} values written${x.skipped ? `, ${x.skipped} left for the next run` : ''}`).catch(() => undefined);
   }, { timezone: 'UTC' });
 }
+
+/**
+ * Nightly demo sandbox reset (Netlify: netlify/functions/sandbox-reset.ts and sandbox-reset-background.ts):
+ * the sandbox company is deleted and built again with today's dates, every sandbox session ends
+ * (server/lib/sandbox.ts). SANDBOX_RESET_CRON (default '47 2 * * *'); off (or SANDBOX_RESET_ENABLED=false)
+ * turns it off.
+ */
+if (process.env.SANDBOX_RESET_CRON !== 'off' && !process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
+  cron.schedule(process.env.SANDBOX_RESET_CRON || '47 2 * * *', async () => {
+    const { runSandboxReset, sandboxResetEnabled } = await import('../lib/sandbox');
+    if (!sandboxResetEnabled()) return;
+    await runSandboxReset().catch((e) => console.error('[sandbox-reset] failed:', (e as Error)?.message ?? e));
+  }, { timezone: 'UTC' });
+}

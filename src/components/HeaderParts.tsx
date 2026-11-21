@@ -128,7 +128,8 @@ export const AccountMenu: React.FC<{
   name: string;
   title: string;
   companyName?: string | null;
-  onSignOutOthers: () => void;
+  /** Left out for a demo sandbox session (the API refuses it). */
+  onSignOutOthers?: () => void;
   onSignOut: () => void;
 }> = ({ name, title, companyName, onSignOutOthers, onSignOut }) => {
   const [open, setOpen] = useState(false);
@@ -168,9 +169,11 @@ export const AccountMenu: React.FC<{
             {companyName && <p className="truncate text-xs text-slate-500 dark:text-slate-400">{companyName}</p>}
           </div>
           <div className="my-1 h-px bg-slate-100 dark:bg-slate-800" />
-          <button type="button" role="menuitem" className={item} onClick={() => { close(); onSignOutOthers(); }} data-testid="account-sign-out-others">
-            <MonitorSmartphone size={15} aria-hidden /> Sign out my other devices
-          </button>
+          {onSignOutOthers && (
+            <button type="button" role="menuitem" className={item} onClick={() => { close(); onSignOutOthers(); }} data-testid="account-sign-out-others">
+              <MonitorSmartphone size={15} aria-hidden /> Sign out my other devices
+            </button>
+          )}
           <button type="button" role="menuitem" className={item} onClick={() => { close(); onSignOut(); }} data-testid="account-sign-out">
             <LogOut size={15} aria-hidden /> Sign out
           </button>

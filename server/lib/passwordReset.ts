@@ -7,6 +7,7 @@ import { sendMail, escapeHtml, type MailResult } from './mailer';
 import { appBaseUrl } from './sso';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
 import { endUserSessions } from './sessions';
+import { isSandboxEmail } from './sandboxConfig';
 
 /**
  * Reset a forgotten password by e-mail (table password_resets).
@@ -118,6 +119,8 @@ export async function requestPasswordReset(email: unknown, ip: string | null): P
   if (!clean || clean.length > 255 || !/^[^\s@]+@[^\s@]+$/.test(clean)) return null;
   const user = await queryOne<ResetUser>(`SELECT ${USER_COLUMNS('u')} FROM users u WHERE LOWER(u.email) = LOWER(?)`, [clean]);
   if (!user || !user.is_active) return null;
+  // The demo sandbox's shared users have no password to reset (server/lib/sandboxConfig.ts).
+  if (isSandboxEmail(user.email)) return null;
   const mail = await issueAndSend(user, { ip, requestedBy: null });
   if (!mail.delivered) console.warn(`[password-reset] reset e-mail not delivered (${mail.channel})`);
   return user.id;

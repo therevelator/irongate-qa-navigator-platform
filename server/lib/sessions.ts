@@ -5,6 +5,7 @@ import { query, queryOne } from '../../src/lib/db';
 import type { Exec } from './assignments';
 import { requestFacts } from './authEvents';
 import { inBackground } from './opsLog';
+import { isSandboxCompany } from './sandboxConfig';
 
 // No runtime import of assignments.ts (it imports this file): the default runs on the pool.
 const onPool: Exec = (sql, params) => query<never[]>(sql, params);
@@ -129,6 +130,8 @@ export function refuseSession(res: express.Response, problem: SessionProblem): v
 
 const isProduction = () => process.env.NODE_ENV === 'production';
 const cookieOptions = () => ({ httpOnly: true, secure: isProduction(), sameSite: (isProduction() ? 'strict' : 'lax') as 'strict' | 'lax' });
+/** Options of the session cookie (a browser-session cookie; add maxAge for a persistent one). */
+export const sessionCookieOptions = cookieOptions;
 
 export function clearSessionCookie(res: express.Response): void {
   res.clearCookie(SESSION_COOKIE, cookieOptions());
@@ -154,6 +157,10 @@ export interface SessionCookieOptions {
 export async function issueSessionCookie(
   res: express.Response, userId: string, secret: string, opts: SessionCookieOptions = {},
 ): Promise<{ token: string; hours: number; persistent: boolean; sessionId: string }> {
+  // The demo sandbox's shared users (server/lib/sandbox.ts) are never signed in this way: not by
+  // password, single sign-on, invitation or re-issue. Their only session is POST /api/auth/sandbox.
+  const [owner] = await onPool<{ company_id: string }>('SELECT company_id FROM users WHERE id = ?', [userId]);
+  if (isSandboxCompany(owner?.company_id)) throw Object.assign(new Error('Sandbox users have no sign-in'), { status: 403, code: 'sandbox_no_sign_in' });
   const hours = await lifetimeForUser(userId);
   const persistent = opts.persistent === true;
   const sessionId = randomUUID();

@@ -28,6 +28,8 @@ export interface User {
   emailVerified: boolean;
   /** The company hides the "Includes sample data" notices (companies.settings.hideSampleDataNotice), e.g. for a demo. */
   hideSampleNotice?: boolean;
+  /** A demo sandbox session (/try; server/lib/sandbox.ts): which persona, and where the banner links to. */
+  sandbox?: { persona: string | null; bookDemoUrl: string; startPilotUrl: string; expiresAt: string | null } | null;
 }
 
 export interface UserAssignment {

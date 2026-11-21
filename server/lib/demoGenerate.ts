@@ -184,7 +184,7 @@ export async function createDemoOrg(companyId: string, size: DemoSize): Promise<
   }
 }
 
-async function writeOrg(client: pg.PoolClient, companyId: string, plan: OrgPlan, hash: string): Promise<void> {
+export async function writeOrg(client: pg.PoolClient, companyId: string, plan: OrgPlan, hash: string): Promise<void> {
   const ago = (days: number, hour = 9) => new Date(Date.now() - days * 86_400_000 - (Date.now() % 86_400_000) + hour * 3_600_000).toISOString();
   await multiInsert(client, 'departments', ['id', 'company_id', 'name', 'description', 'is_active::boolean', 'created_at::timestamptz', 'updated_at::timestamptz'],
     plan.departments.map((d) => [d.id, companyId, d.name, d.description, true, ago(400), ago(400)]));

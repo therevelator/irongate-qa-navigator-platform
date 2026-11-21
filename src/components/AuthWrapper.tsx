@@ -8,6 +8,11 @@ import AcceptInvite from './AcceptInvite';
 import PulseAnswerLink from './PulseAnswerLink';
 import { ForgotPassword, ResetPassword } from './PasswordReset';
 import { FORGOT_PATH, RESET_PATH } from '../lib/passwordResetPaths';
+import { SANDBOX_VISIT_KEY } from './TryDemo';
+
+const sandboxVisit = (): boolean => {
+  try { return sessionStorage.getItem(SANDBOX_VISIT_KEY) === '1'; } catch { return false; }
+};
 
 const isAcceptInvitePath = () => window.location.pathname === '/accept-invite';
 /** Personal survey link from the pulse e-mail: works signed in or not (the token covers one answer only). */
@@ -61,6 +66,13 @@ const AuthWrapper: React.FC<AuthWrapperProps> = ({ children }) => {
         </div>
       </div>
     );
+  }
+
+  // A demo sandbox session of this tab ended (two hours, or the nightly reset): back to /try.
+  if (!isAuthenticated && sandboxVisit()) {
+    try { sessionStorage.removeItem(SANDBOX_VISIT_KEY); } catch { /* storage unavailable */ }
+    window.location.replace('/try?ended=1');
+    return null;
   }
 
   // Show auth screens if not authenticated
