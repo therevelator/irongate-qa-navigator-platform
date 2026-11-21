@@ -5,13 +5,14 @@ import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyDat
 import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageSampleData, canManageTeam, isCompanyAdmin, canRequestExecutiveBriefing, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
-import { runDemoSeed, runFillExisting, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
-import { demoSummary, todayUtc } from '../seeds/demoData';
+import { runDemoSeed, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
+import { demoSummary, todayUtc, DEMO_COMPANY_ID } from '../seeds/demoData';
 import { randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues, teamKpiTrack } from '../../src/config/metricsConfig';
 import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT, techDebtRoi } from '../lib/metricFormulas';
 import { isSyntheticDataEnabled, separateSampleCompanyEnabled } from '../lib/syntheticData';
+import { isSampleCompanyId } from '../lib/sampleCompany';
 import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
@@ -80,6 +81,9 @@ function assertAnalyticsRole(req: any, res: any): boolean {
 /** Synthetic-data refusal (409) used by every endpoint that generates random data. */
 const SYNTHETIC_DISABLED_MESSAGE =
   'Synthetic (sample) data generation is disabled on this server. Start the API with ENABLE_SYNTHETIC_DATA=true to use it.';
+/** Refusal (403) of the synthetic endpoints in a real (non-sample) company (server/lib/sampleCompany.ts). */
+const SAMPLE_ONLY_MESSAGE =
+  'Sample data is only generated in the sample company, never in a real one. Ask platform support for Demo Data.';
 
 /**
  * Parse a DB/body value to a number, keeping 0 as a real value.
@@ -1038,21 +1042,23 @@ router.get('/business-impact', authenticateToken, async (req: any, res) => {
 // ============================================================================
 
 // Sample data: the one-shot demo dataset (server/seeds/demoData.ts), the same data as
-// `npm run seed:demo` + `--fill-existing`. It creates the separate sample company (own users,
-// password demo123) and fills the caller's own active teams that lack data (demo- ids, removed
-// by seed:demo:clear). Additive: existing rows are never changed; re-running adds nothing new
-// on the same day. super_admin only; off unless ENABLE_SYNTHETIC_DATA=true.
+// `npm run seed:demo`. Only in a sample company (server/lib/sampleCompany.ts), for that company
+// itself: the demo company's super admin re-seeds it (additive: existing rows are never changed;
+// re-running adds nothing new on the same day). In a real company it answers 403 and writes
+// nothing (it used to fill the caller's real teams and create / refresh the separate sample
+// company from any company). super_admin only; off unless ENABLE_SYNTHETIC_DATA=true.
 router.get('/seed-data/status', authenticateToken, async (req: any, res) => {
   try {
     if (!canManageSampleData(policyActor(req))) {
       return res.status(403).json({ error: 'Only super admin can load sample data' });
     }
-    const enabled = isSyntheticDataEnabled();
+    const sample = isSampleCompanyId(req.user.companyId);
+    const enabled = isSyntheticDataEnabled() && sample;
     const summary = demoSummary(todayUtc());
-    const separate = separateSampleCompanyEnabled();
+    const separate = separateSampleCompanyEnabled() && req.user.companyId === DEMO_COMPANY_ID;
     res.json({
       enabled,
-      message: enabled ? null : SYNTHETIC_DISABLED_MESSAGE,
+      message: enabled ? null : sample ? SYNTHETIC_DISABLED_MESSAGE : SAMPLE_ONLY_MESSAGE,
       separateCompany: separate,
       seeded: separate ? await isDemoSeeded() : false,
       ownCompany: req.user.companyId && !String(req.user.companyId).startsWith('demo-')
@@ -1075,27 +1081,31 @@ router.post('/seed-data', authenticateToken, async (req: any, res) => {
     if (!canManageSampleData(policyActor(req))) {
       return res.status(403).json({ error: 'Only super admin can load sample data' });
     }
+    // Only the caller's own company, and only a sample company (server/lib/sampleCompany.ts): a
+    // company super admin (anyone can register one) never writes generated rows into a real
+    // company, nor into another company. Real companies get sample data from the platform operator
+    // (Demo Data / Populate metrics) or `npm run seed:demo`.
+    const companyId = String(req.user.companyId ?? '');
+    if (!isSampleCompanyId(companyId)) {
+      return res.status(403).json({ error: SAMPLE_ONLY_MESSAGE });
+    }
     if (!isSyntheticDataEnabled()) {
       return res.status(409).json({ error: SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
 
-    // The separate sample company (shared accounts) only where demo accounts make sense.
-    const separate = separateSampleCompanyEnabled();
+    // Re-seed the sample company itself (additive), only when it is the caller's company.
+    const separate = separateSampleCompanyEnabled() && companyId === DEMO_COMPANY_ID;
     const result = separate ? await runDemoSeed() : { insertedTotal: 0, inserted: {}, companyName: null as string | null, logins: [] as any[], password: '' };
-    const companyId = String(req.user.companyId ?? '');
-    const fill = companyId && !companyId.startsWith('demo-') ? await runFillExisting({ companyIds: [companyId] }) : null;
-    const filledTeams = fill?.companies[0]?.teamsFilled ?? 0;
-    const total = result.insertedTotal + (fill?.insertedTotal ?? 0);
+    const total = result.insertedTotal;
     res.json({
       success: true,
       message: total > 0
-        ? (separate ? `Sample data loaded: ${result.insertedTotal} rows for "${result.companyName}"` + (fill ? ' and ' : '.') : 'Sample data loaded: ') +
-          (fill ? `${fill.insertedTotal} rows for ${filledTeams} of your teams that lacked data.` : '')
+        ? `Sample data loaded: ${result.insertedTotal} rows for "${result.companyName}".`
         : 'Sample data is already loaded (nothing new to add).',
       companyName: result.companyName,
       insertedTotal: total,
       inserted: result.inserted,
-      ownCompany: fill ? { insertedTotal: fill.insertedTotal, inserted: fill.inserted, teams: fill.companies[0]?.teams ?? 0, teamsFilled: filledTeams } : null,
+      ownCompany: null,
       logins: result.logins,
       password: result.password,
     });
@@ -1111,13 +1121,19 @@ router.post('/update-daily', authenticateToken, async (req: any, res) => {
     if (!canManageSampleData(policyActor(req))) {
       return res.status(403).json({ error: 'Only super admin can trigger updates' });
     }
-    // updateDailyAnalytics applies random drift / random rows: synthetic only.
+    // Random drift / random rows: only ever the caller's OWN company, and only when it is a sample
+    // company (server/lib/sampleCompany.ts). Real companies are refused whatever
+    // ENABLE_SYNTHETIC_DATA says (it used to drift every active company of the platform).
+    const companyId = String(req.user.companyId ?? '');
+    if (!isSampleCompanyId(companyId)) {
+      return res.status(403).json({ error: 'Generated sample updates only run in a sample company, never in a real one.' });
+    }
     if (!isSyntheticDataEnabled()) {
       return res.status(409).json({ error: SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
 
     // Run update in background
-    updateDailyAnalytics().catch(err => console.error('Update error:', err));
+    updateDailyAnalytics(companyId).catch(err => console.error('Update error:', err));
 
     res.json({ success: true, message: 'Daily analytics update triggered' });
   } catch (error) {
@@ -1790,14 +1806,16 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
 });
 
 // POST: Generate SAMPLE (synthetic) correlation data. Not persisted, not a measurement.
-// Disabled unless ENABLE_SYNTHETIC_DATA === 'true'.
+// Sample companies only (403 elsewhere); disabled unless ENABLE_SYNTHETIC_DATA === 'true'.
 router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateToken, async (req: any, res) => {
   try {
     const { teamId } = req.params;
+    if (!(await assertTeamWrite(req, res, teamId))) return;
+    // Generated values are never shown for a real company's team, even unsaved (sample companies only).
+    if (!isSampleCompanyId(req.user.companyId)) return res.status(403).json({ error: SAMPLE_ONLY_MESSAGE });
     if (!isSyntheticDataEnabled()) {
       return res.status(409).json({ error: SYNTHETIC_DISABLED_MESSAGE, disabled: true });
     }
-    if (!(await assertTeamWrite(req, res, teamId))) return;
 
     // Generate 12 months of realistic data
     const months: string[] = [];

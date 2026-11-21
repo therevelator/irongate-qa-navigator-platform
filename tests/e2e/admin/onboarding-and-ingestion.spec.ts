@@ -6,7 +6,7 @@ import { uid } from '../support/ids';
  * A new organisation's first steps end to end (fresh organisation): the onboarding checklist ticks
  * each step from the real state; an API key is created (shown once), KPIs are sent with it through
  * the ingestion API, the Ingestion log shows the request and a rejected one with its reason, the
- * key is revoked and then refused. Also the Sample data panel (off on this server; the enabled
+ * key is revoked and then refused. Also the Sample data panel (refused in a real company; the enabled
  * path is stubbed).
  */
 
@@ -109,10 +109,14 @@ test.describe('Onboarding, API keys and ingestion', { tag: [TAG.area('onboarding
 });
 
 test.describe('Sample (demo) data controls', { tag: [TAG.area('demo-data')] }, () => {
-  test('DEMO-01 the panel says sample data is off on this server and the button is disabled', { tag: [TAG.role('admin')] }, async ({ signInAs, page }) => {
+  // A real company never gets generated rows from its own super admin (server/lib/sampleCompany.ts):
+  // the panel says so and the button is disabled, whatever ENABLE_SYNTHETIC_DATA says.
+  test('DEMO-01 in a real company the panel says sample data is only for the sample company and the button is disabled', { tag: [TAG.role('admin')] }, async ({ signInAs, page }) => {
     await signInAs('admin', '/admin-panel');
     await expect(page.getByTestId('load-sample-data')).toBeDisabled();
-    await expect(page.getByText(/ENABLE_SYNTHETIC_DATA=true/).first()).toBeVisible();
+    await expect(page.getByText(/only generated in the sample company, never in a real one/).first()).toBeVisible();
+    const res = await page.request.post(`${API_URL}/analytics/seed-data`);
+    expect(res.status()).toBe(403);
   });
 
   test('DEMO-02 when enabled, loading sample data reports the result and lists the logins (stubbed server)', { tag: [TAG.role('admin')] }, async ({ signInAs, page }) => {

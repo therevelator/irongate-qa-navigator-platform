@@ -3,6 +3,7 @@ import { query, queryOne } from '../../src/lib/db';
 import { runPipelineSeederForAllCompanies } from '../seeders/pipelineSeeder';
 import { emitJobNotification } from '../eventBus';
 import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+import { isSampleCompanyId, sampleCompanySql } from '../lib/sampleCompany';
 import { recordKpiValues } from '../lib/kpiIngest';
 
 // NOTE: every KPI value this job writes comes from the random generators below or
@@ -168,6 +169,9 @@ async function updateMetrics(teamId: string, metrics: string[]): Promise<number>
     return 0;
   }
 
+  // Generated values only ever go to a team of a SAMPLE company (server/lib/sampleCompany.ts).
+  if (!isSampleCompanyId(await getCompanyIdForTeam(teamId))) return 0;
+
   const values: Record<string, number> = {};
   for (const metric of metrics) {
     let value: number | null;
@@ -197,13 +201,15 @@ async function updateMetrics(teamId: string, metrics: string[]): Promise<number>
 // qa_score / status are computed by the database trigger kpi_snapshots_qa_score
 // (same rules as computeQaScore), so no app-side recalculation is needed.
 
-// Get all active teams that are NOT excluded from auto-sync (manually edited data)
+// Active teams of SAMPLE companies (server/lib/sampleCompany.ts) that are NOT excluded from
+// auto-sync (manually edited data) and not part of the fixed demo dataset ('demo-' team ids).
+// Teams of real companies are never given generated values (this used to cover every company).
 async function getActiveTeams(): Promise<{ id: string; name: string }[]> {
-  // Get teams not excluded from auto-sync
   const teams = await query<any>(
     `SELECT id, name FROM teams 
      WHERE is_active = true 
      AND (exclude_from_auto_sync = FALSE OR exclude_from_auto_sync IS NULL)
+     AND ${sampleCompanySql('company_id')}
      AND id NOT LIKE 'demo-%'`
   );
 

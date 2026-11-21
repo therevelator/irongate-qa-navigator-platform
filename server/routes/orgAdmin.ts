@@ -5,11 +5,11 @@ import { authenticateToken } from '../middleware/auth';
 import { policyActor } from '../middleware/access';
 import {
   canGrant, canInvite, canViewActivity, canViewAuditEntry, isCompanyAdmin, managedDepartmentIds, ledTeamIds, highestRole,
-  ROLE_RANK, type Grant, type PolicyActor,
+  canAddAssignmentTo, ROLE_RANK, type Grant, type PolicyActor,
 } from '../lib/userPolicy';
 import {
   execOn, resolveGrant, grantAssignment, revokeGrant, syncUserDisplay, lastSuperAdminGuard, listAssignments,
-  AssignmentError, type ScopeInfo,
+  assignmentScopesSql, userTeamIdsSql, userDepartmentIdsSql, AssignmentError, type ScopeInfo,
 } from '../lib/assignments';
 import { auditedUserChange, recordAudit, undoEntry, canUndoEntry, isReversible, REVERSIBLE_ACTIONS, UndoError, type AuditEntry } from '../lib/audit';
 import { newToken, sendInvitationEmail, statusSql, INVITE_TTL_HOURS, EMAIL_RE, ROLE_NAMES, reissueInvitation } from '../lib/invitations';
@@ -49,7 +49,10 @@ async function loadAssignable(req: any, res: any): Promise<any | null> {
   // Permission before anything else (FI-15): someone who can give no assignment at all gets 403.
   if (!canInvite(actor)) { res.status(403).json({ error: 'You cannot change role assignments' }); return null; }
   const target = await queryOne<any>(
-    'SELECT id, first_name, last_name, email, role, is_active FROM users WHERE id = ? AND company_id = ?',
+    `SELECT u.id, u.first_name, u.last_name, u.email, u.role, u.is_active, u.department_id, u.primary_team_id,
+            ${userTeamIdsSql('u')} AS team_ids, ${userDepartmentIdsSql('u')} AS department_ids,
+            ${assignmentScopesSql('u')} AS assignments
+       FROM users u WHERE u.id = ? AND u.company_id = ?`,
     [req.params.id, req.user.companyId]
   );
   if (!target) { res.status(404).json({ error: 'User not found' }); return null; }
@@ -93,6 +96,12 @@ router.post('/users/:id/assignments', authenticateToken, async (req: any, res) =
     const target = await loadAssignable(req, res);
     if (!target) return;
     if (!target.is_active) return res.status(400).json({ error: 'That user is inactive. Reactivate them first.' });
+    // Adding to an existing user: the user must ALREADY be entirely within the actor's scope
+    // (userPolicy.canAddAssignmentTo). A grant on the actor's own team must never pull someone of
+    // another department or team into their reach (manufactured overlap → password reset).
+    if (!canAddAssignmentTo(actor, target)) {
+      return res.status(403).json({ error: 'This person also has access outside your departments or teams. Only a super admin can add assignments to them.' });
+    }
     const { grant, scope } = await resolveGrant(companyId, req.body ?? {});
     if (!canGrant(actor, grant, scope.team)) return res.status(403).json({ error: 'You cannot give this assignment' });
     const replaceLead = req.body?.replaceLead === true;

@@ -18,6 +18,9 @@ interface User {
   is_active: boolean;
   created_at: string;
   developer_insights_enabled?: boolean;
+  department_ids?: string[] | null;
+  team_ids?: string[] | null;
+  assignments?: Array<{ role: string; scope_type: string; scope_id: string; department_id: string | null }>;
 }
 
 interface Team {
@@ -52,7 +55,10 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
   const { user } = useAuth();
   // Offer only what the server allows (server/lib/userPolicy, shared with the Users page).
   const actor: PolicyActor = policyActorOf(user);
-  const asTarget = (u: User) => ({ id: u.id, role: u.role, department_id: u.department_id ?? null, primary_team_id: u.primary_team_id ?? null });
+  const asTarget = (u: User) => ({
+    id: u.id, role: u.role, department_id: u.department_id ?? null, primary_team_id: u.primary_team_id ?? null,
+    department_ids: u.department_ids ?? null, team_ids: u.team_ids ?? null, assignments: u.assignments ?? null,
+  });
   const canEdit = (u: User) => canEditUser(actor, asTarget(u));
   const canReset = (u: User) => canResetPassword(actor, asTarget(u));
   const [users, setUsers] = useState<User[]>([]);
