@@ -7180,7 +7180,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ## Sample (demo) data
 
-### TC-ADM-013: The Sample data panel says sample data is off on this server and its button is disabled
+### TC-ADM-013: In a real company the Sample data panel says sample data is only for the sample company and its button is disabled
 
 **Type:** Negative · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.5
 
@@ -7198,9 +7198,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Super admin and open Admin console (/admin-panel). | A 'Sample data' card is shown. |
 | 2 | Look at the 'Load sample data' button. | The button is disabled. |
-| 3 | Read the text below the button. | It says 'Sample data is turned off on this server. Start the API with ENABLE_SYNTHETIC_DATA=true to enable it. It can also be loaded from a terminal with npm run seed:demo.' |
+| 3 | Read the text below the button. | It says 'Sample data is only generated in the sample company, never in a real one. Ask platform support for Demo Data. It can also be loaded from a terminal with npm run seed:demo.' (In the sample company itself, without ENABLE_SYNTHETIC_DATA=true, it says the server has sample data turned off.) |
 
-*Automated:* `tests/e2e/admin/onboarding-and-ingestion.spec.ts › Sample (demo) data controls › DEMO-01 the panel says sample data is off on this server and the button is disabled`
+*Automated:* `tests/e2e/admin/onboarding-and-ingestion.spec.ts › Sample (demo) data controls › DEMO-01 in a real company the panel says sample data is only for the sample company and the button is disabled`
 
 ### TC-ADM-014: When sample data is enabled, loading it reports the result and lists the sample logins
 

@@ -83,7 +83,7 @@ const SYNTHETIC_DISABLED_MESSAGE =
   'Synthetic (sample) data generation is disabled on this server. Start the API with ENABLE_SYNTHETIC_DATA=true to use it.';
 /** Refusal (403) of the synthetic endpoints in a real (non-sample) company (server/lib/sampleCompany.ts). */
 const SAMPLE_ONLY_MESSAGE =
-  'Sample data is only generated in the sample company, never in a real one. Ask platform support for Demo Data, or run npm run seed:demo locally.';
+  'Sample data is only generated in the sample company, never in a real one. Ask platform support for Demo Data.';
 
 /**
  * Parse a DB/body value to a number, keeping 0 as a real value.
