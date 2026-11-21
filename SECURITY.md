@@ -28,6 +28,29 @@ in [`server/lib/userPolicy.ts`](server/lib/userPolicy.ts). The UI hides what the
 always enforces it. Per-role tests: `tests/api/r2-security-matrix.test.ts`, `tests/api/role-matrix.test.ts`,
 `tests/api/viewer-scope.test.ts`.
 
+**Managing other people (account takeover).** An account-wide action (reset the password or send a reset
+link, change the e-mail address, activate / deactivate, sign out everywhere, delete, the developer-insights
+switch, editing the profile) changes the person everywhere, so a manager or team lead may take it only when
+the person is ENTIRELY theirs: every active assignment of the person is on a team of a department the
+manager manages (a team the lead leads), and the person ranks below them. One assignment anywhere else, or
+none at all, and only a super admin may act. Adding an assignment to an existing person needs the same: a
+manager can no longer give someone of another department a viewer seat on their own team to bring that
+person into reach (`userPolicy.targetWithinScope`, `canAddAssignmentTo`). Changing another person's e-mail
+is for super admins only; every e-mail change, including your own, is validated (format, not a platform
+operator's address, not taken) and ends the person's other sessions (`server/lib/emailChange.ts`; no
+confirmation e-mail is sent to the new address: there is no verification flow). Rules:
+[docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md#account-wide-actions-and-adding-assignments-exact-rule).
+Attacker-path tests: `tests/api/security-authz.test.ts`.
+
+**Synthetic data never reaches a real company.** Every generator of random data (the daily drift
+`POST /api/analytics/update-daily`, `POST /api/analytics/seed-data`, `…/generate-realistic-data`, the
+interval and pipeline generators in `server/jobs`, `server/seeders/pipelineSeeder.ts`,
+`server/seeds/seedProductivitySnapshots.ts`) writes only to sample companies: companies created by the demo
+generators, whose id starts with `demo-` (`server/lib/sampleCompany.ts`; a registered or operator-created
+company has a random id). An endpoint acts only on the caller's own company and answers 403 in a real one;
+the background jobs select sample companies only, and every writer refuses a real company id with an
+exception. This holds whatever `ENABLE_SYNTHETIC_DATA` says. The daily drift has no schedule any more.
+
 **Authentication.**
 
 - Passwords are hashed with bcrypt. Registration, accepting an invitation, resetting a password with a
