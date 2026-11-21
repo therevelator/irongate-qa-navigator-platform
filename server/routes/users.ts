@@ -1,6 +1,9 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
-import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { authenticateToken, AuthRequest, JWT_SECRET } from '../middleware/auth';
+import { checkNewEmail, isEmailChange } from '../lib/emailChange';
+import { currentSessionPersistent, endUserSessions, issueSessionCookie } from '../lib/sessions';
+import { recordAudit } from '../lib/audit';
 
 /**
  * Self-service profile routes.
@@ -73,24 +76,40 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'You cannot change role, team, department, or status' });
     }
 
+    const current = await queryOne<any>('SELECT email, department_id FROM users WHERE id = ? AND company_id = ?', [req.userId, req.companyId]);
+    if (!current) return res.status(404).json({ error: 'User not found' });
+    // A new sign-in address: valid, not a platform operator's, not taken (server/lib/emailChange.ts).
+    let newEmail: string | null = null;
+    if (isEmailChange(email, current.email)) {
+      const check = await checkNewEmail(email, req.userId!);
+      if (!check.ok) return res.status(check.status).json({ error: check.error });
+      newEmail = check.email;
+    }
+
     const updates: string[] = [];
     const values: any[] = [];
     if (firstName !== undefined) { updates.push('first_name = ?'); values.push(firstName); }
     if (lastName !== undefined) { updates.push('last_name = ?'); values.push(lastName); }
-    if (email !== undefined) { updates.push('email = ?'); values.push(email); }
+    if (newEmail !== null) { updates.push('email = ?'); values.push(newEmail); }
     if (phone !== undefined) { updates.push('phone = ?'); values.push(phone); }
     if (timezone !== undefined) { updates.push('timezone = ?'); values.push(timezone); }
     if (updates.length === 0) {
+      // An unchanged e-mail alone is not an error.
+      if (email !== undefined) return res.json({ user: await loadProfile(req.userId!, req.companyId!) });
       return res.status(400).json({ error: 'No fields to update' });
-    }
-
-    if (email !== undefined) {
-      const clash = await queryOne<any>('SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id <> ?', [email, req.userId]);
-      if (clash) return res.status(400).json({ error: 'Email already registered' });
     }
 
     values.push(req.userId, req.companyId);
     await query(`UPDATE users SET ${updates.join(', ')}, updated_at = NOW() WHERE id = ? AND company_id = ?`, values);
+    if (newEmail !== null) {
+      // Every other session ends; this browser gets a fresh cookie and stays signed in.
+      await endUserSessions(req.userId!, undefined, { by: req.userId!, reason: 'E-mail address changed' });
+      await issueSessionCookie(res, req.userId!, JWT_SECRET, { persistent: currentSessionPersistent(req), method: 'reissue' });
+      await recordAudit({
+        companyId: req.companyId!, actorId: req.userId!, action: 'user.email_change', entityType: 'user', entityId: req.userId!,
+        summary: 'Changed own e-mail address; other sessions were signed out', departmentIds: [current.department_id].filter(Boolean), subjectIds: [req.userId!],
+      });
+    }
     res.json({ user: await loadProfile(req.userId!, req.companyId!) });
   } catch (error) {
     console.error('Update user error:', error);

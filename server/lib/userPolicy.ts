@@ -21,19 +21,29 @@
  * Individual developer rows: super_admin / qa_manager / team_lead grants covering the team
  * show every developer who has opted in to developer insights; a member grant only shows the actor's own row.
  *
- * Managing another user (activate/deactivate, delete = deactivate, reset password,
- * developer-insights toggle):
+ * Managing another user: the ACCOUNT-WIDE actions (activate/deactivate, delete = deactivate,
+ * reset password, send a reset link, sign out everywhere, developer-insights toggle, editing the
+ * profile):
  *   super_admin  any user in the company
- *   qa_manager   users of a department they manage whose highest role is below qa_manager
- *   team_lead    users of a team they lead whose highest role is below team_lead
+ *   qa_manager   a user whose highest role is below qa_manager and EVERY one of whose active
+ *                assignments is on a team of a department the actor manages
+ *   team_lead    a user whose highest role is below team_lead and EVERY one of whose active
+ *                assignments is on a team the actor leads
+ *   A user with no active assignment, or with one assignment anywhere else (another department,
+ *   another team, a team without a department), is managed by super admins only: an account-wide
+ *   action changes the person everywhere, so partial overlap is never enough (account takeover
+ *   through a manufactured overlap, docs/ROLE_ACCESS.md).
  * Editing another user's profile and assignments: super_admin and qa_manager (for users they
- * manage that way). Editing yourself: name and email only.
+ * manage that way). Editing yourself: name and e-mail (the e-mail validated and your other
+ * sessions ended, server/lib/emailChange.ts). Changing another user's e-mail: super_admin only.
  *
  * Granting / revoking an assignment (Users page chips, invitations):
  *   super_admin  any grant in the company
  *   qa_manager   team_lead / qa_engineer / viewer on teams of a department they manage
  *   team_lead    qa_engineer / viewer on a team they lead
- *   never your own assignments.
+ *   never your own assignments. ADDING an assignment to an existing user additionally needs
+ *   canManageUser (the user is already entirely within the actor's scope); a cross-scope
+ *   addition is for super admins only.
  */
 
 export type Role = 'super_admin' | 'qa_manager' | 'team_lead' | 'qa_engineer' | 'viewer';
@@ -90,6 +100,20 @@ export interface PolicyTarget {
   department_ids?: string[] | null;
   /** Teams the target is assigned to. */
   team_ids?: string[] | null;
+  /**
+   * Every active assignment of the target (role, scope and, for a team, the team's department).
+   * The server always sets it (assignmentScopesSql); the account-wide rules need the complete
+   * list. Without it the rules fall back to department_ids / team_ids.
+   */
+  assignments?: TargetAssignment[] | null;
+}
+
+export interface TargetAssignment {
+  role?: string | null;
+  scope_type: string;
+  scope_id: string;
+  /** The team's department (team scope) or the department itself (department scope). */
+  department_id?: string | null;
 }
 
 export interface ScopeTeam {
@@ -163,14 +187,34 @@ export function canAssignRole(actorRole: string, targetRole: string): boolean {
 const targetDepartments = (t: PolicyTarget) => t.department_ids ?? (t.department_id ? [t.department_id] : []);
 const targetTeams = (t: PolicyTarget) => t.team_ids ?? (t.primary_team_id ? [t.primary_team_id] : []);
 
-/** Through which role (if any) may the actor manage this user? */
+/** Does every assignment of the target rank below `role`? (The display role is the highest.) */
+const allBelow = (target: PolicyTarget, role: 'qa_manager' | 'team_lead') =>
+  canAssignRole(role, target.role) && (target.assignments ?? []).every((a) => canAssignRole(role, String(a.role ?? target.role)));
+
+/**
+ * Is the target ENTIRELY within the departments the actor manages (via 'qa_manager') or the
+ * teams the actor leads (via 'team_lead')? Every active assignment must be inside; a target
+ * without any assignment is not inside anyone's scope (super admins only).
+ */
+export function targetWithinScope(actor: PolicyActor, target: PolicyTarget, via: 'qa_manager' | 'team_lead'): boolean {
+  const mine = via === 'qa_manager' ? managedDepartmentIds(actor) : ledTeamIds(actor);
+  if (!mine.length || !allBelow(target, via)) return false;
+  if (target.assignments) {
+    if (!target.assignments.length) return false;
+    return target.assignments.every((a) => a.scope_type === 'team' && (via === 'qa_manager'
+      ? !!a.department_id && mine.includes(a.department_id)
+      : mine.includes(a.scope_id)));
+  }
+  const list = via === 'qa_manager' ? targetDepartments(target) : targetTeams(target);
+  return list.length > 0 && list.every((x) => mine.includes(x));
+}
+
+/** Through which role (if any) may the actor manage this user (account-wide actions)? */
 export function manageUserVia(actor: PolicyActor, target: PolicyTarget): 'super_admin' | 'qa_manager' | 'team_lead' | null {
   if (actor.id === target.id) return null;
   if (hasCompany(actor)) return 'super_admin';
-  const depts = managedDepartmentIds(actor);
-  if (depts.length && canAssignRole('qa_manager', target.role) && targetDepartments(target).some((d) => depts.includes(d))) return 'qa_manager';
-  const led = ledTeamIds(actor);
-  if (led.length && canAssignRole('team_lead', target.role) && targetTeams(target).some((t) => led.includes(t))) return 'team_lead';
+  if (targetWithinScope(actor, target, 'qa_manager')) return 'qa_manager';
+  if (targetWithinScope(actor, target, 'team_lead')) return 'team_lead';
   return null;
 }
 
@@ -193,6 +237,21 @@ export function canEditAssignment(actor: PolicyActor, target: PolicyTarget): boo
 
 export function canResetPassword(actor: PolicyActor, target: PolicyTarget): boolean {
   return actor.id === target.id || canManageUser(actor, target);
+}
+
+/** May the actor change this user's e-mail address? Super admins only (yourself: PUT /api/users/:id). */
+export function canChangeUserEmail(actor: PolicyActor, target: PolicyTarget): boolean {
+  return actor.id !== target.id && hasCompany(actor);
+}
+
+/**
+ * May the actor ADD an assignment to this existing user? The grant itself must be one the actor
+ * may give (canGrant, checked separately) AND the user must already be entirely within the
+ * actor's scope (canManageUser). Otherwise a manager could grant a viewer seat on their own team
+ * to someone of another department and then reset that person's password (manufactured overlap).
+ */
+export function canAddAssignmentTo(actor: PolicyActor, target: PolicyTarget): boolean {
+  return actor.id !== target.id && canManageUser(actor, target);
 }
 
 /** Delete is a soft delete (deactivation) offered to super_admin and qa_manager. */

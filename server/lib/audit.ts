@@ -2,11 +2,11 @@ import { transaction } from '../../src/lib/db';
 import { platformSupportContext } from './platformContext';
 import {
   execOn, snapshotUser, sameGrants, revokeGrantsNotIn, addGrantsMissing, syncUserDisplay, lastSuperAdminGuard, grantAssignment,
-  AssignmentError, type Exec, type UserSnapshot,
+  AssignmentError, assignmentScopesSql, type Exec, type UserSnapshot,
 } from './assignments';
 import {
   canEditAssignment, canGrant, canManageUser, isCompanyAdmin, managedDepartmentIds, canViewAuditEntry,
-  type Grant, type PolicyActor,
+  type Grant, type PolicyActor, type TargetAssignment,
 } from './userPolicy';
 
 /**
@@ -186,7 +186,15 @@ export async function canUndoEntry(actor: PolicyActor, entry: AuditEntry, exec: 
   for (const [uid, b] of Object.entries<UserSnapshot>(entry.before?.users ?? {})) {
     if (uid === actor.id) return { ok: false, reason: 'You cannot undo a change to your own access.' };
     const a: UserSnapshot | undefined = entry.after?.users?.[uid];
-    const target = { id: uid, role: b.role, department_id: b.department_id, primary_team_id: b.primary_team_id, department_ids: entry.department_ids };
+    // The person's CURRENT assignments too: an undo is an account-level change, so the person must
+    // be entirely within the manager's departments now (userPolicy.targetWithinScope).
+    const [cur] = await exec<any>(`SELECT ${assignmentScopesSql('u')} AS assignments FROM users u WHERE u.id = ?`, [uid]);
+    const current: TargetAssignment[] = cur?.assignments ?? [];
+    const recorded: TargetAssignment[] = b.grants.map((g) => ({ role: g.role, scope_type: g.scopeType, scope_id: g.scopeId, department_id: g.scopeType === 'team' ? teamOf(g.scopeId)?.department_id ?? null : g.scopeType === 'department' ? g.scopeId : null }));
+    const target = {
+      id: uid, role: b.role, department_id: b.department_id, primary_team_id: b.primary_team_id, department_ids: entry.department_ids,
+      assignments: [...recorded, ...current],
+    };
     if (entry.action === 'user.deactivate' || entry.action === 'user.activate') {
       if (!canManageUser(actor, target)) return { ok: false, reason: 'You cannot manage this user.' };
       continue;

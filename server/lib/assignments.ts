@@ -99,6 +99,20 @@ export const userDepartmentIdsSql = (userAlias = 'u') => `ARRAY(
   ) x WHERE x.d IS NOT NULL
 )`;
 
+/**
+ * SQL expression (json array): every active assignment of user `<userAlias>` with its role, scope
+ * and department (a team's department; the department itself for a department grant). The
+ * account-wide user rules (userPolicy.targetWithinScope) need the complete list.
+ */
+export const assignmentScopesSql = (userAlias = 'u') => `COALESCE((
+  SELECT json_agg(json_build_object(
+           'role', ra.role, 'scope_type', ra.scope_type, 'scope_id', ra.scope_id,
+           'department_id', CASE ra.scope_type WHEN 'team' THEN tt.department_id WHEN 'department' THEN ra.scope_id ELSE NULL END)
+         ORDER BY ra.created_at)
+    FROM role_assignments ra LEFT JOIN teams tt ON ra.scope_type = 'team' AND tt.id = ra.scope_id
+   WHERE ${ACTIVE} AND ra.user_id = ${userAlias}.id
+), '[]'::json)`;
+
 /** SQL condition: user `<userAlias>` is an active QA manager of the department given by `deptExpr`. */
 export const isDepartmentManagerSql = (userAlias: string, deptExpr: string) => `EXISTS (
   SELECT 1 FROM role_assignments ra
@@ -377,19 +391,40 @@ export function grantsForPrimary(companyId: string, role: string, departmentId: 
  * grants of the old triple that the new triple does not contain are revoked, the new ones
  * granted. Other (secondary) assignments stay.
  */
+/** The grants a primary-assignment change removes and adds (setPrimaryAssignment). */
+export function primaryAssignmentChange(
+  companyId: string,
+  from: { role: string; departmentId: string | null; teamId: string | null },
+  to: { role: string; departmentId: string | null; teamId: string | null },
+): { removed: Grant[]; added: Grant[] } {
+  const before = grantsForPrimary(companyId, from.role, from.departmentId, from.teamId);
+  const after = grantsForPrimary(companyId, to.role, to.departmentId, to.teamId);
+  const afterKeys = new Set(after.map(grantKey));
+  const beforeKeys = new Set(before.map(grantKey));
+  return { removed: before.filter((g) => !afterKeys.has(grantKey(g))), added: after.filter((g) => !beforeKeys.has(grantKey(g))) };
+}
+
 export async function setPrimaryAssignment(
   exec: Exec,
   args: {
     companyId: string; userId: string; actorId: string | null;
     from: { role: string; departmentId: string | null; teamId: string | null };
     to: { role: string; departmentId: string | null; teamId: string | null };
+    /**
+     * Required: may the actor revoke this grant? (canGrant with the grant's team.) Every grant
+     * the change removes is checked, in the same transaction, before anything is written; a
+     * refusal throws AssignmentError 403 and nothing changes.
+     */
+    mayRevoke: (g: Grant) => boolean | Promise<boolean>;
   },
 ): Promise<void> {
   const { companyId, userId, actorId, from, to } = args;
-  const before = grantsForPrimary(companyId, from.role, from.departmentId, from.teamId);
+  const { removed } = primaryAssignmentChange(companyId, from, to);
   const after = grantsForPrimary(companyId, to.role, to.departmentId, to.teamId);
-  const afterKeys = new Set(after.map(grantKey));
-  for (const g of before) if (!afterKeys.has(grantKey(g))) await revokeGrant(exec, { userId, grant: g, actorId });
+  for (const g of removed) {
+    if (!(await args.mayRevoke(g))) throw new AssignmentError(403, 'You cannot remove one of this user\'s current assignments');
+  }
+  for (const g of removed) await revokeGrant(exec, { userId, grant: g, actorId });
   for (const g of after) await grantAssignment(exec, { companyId, userId, grant: g, actorId });
   await syncUserDisplay(exec, userId, { primaryTeamId: to.teamId, departmentId: to.departmentId, fallbackRole: to.role });
 }

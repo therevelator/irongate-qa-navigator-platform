@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor } from '../middleware/access';
-import { canViewIndividualDevelopers, canManageDepartment, canRequestTeamInsights, canViewTeamMembers, analyticsTeamsInScope, analyticsScopeLevelOf, canViewTeamAnalytics } from '../lib/userPolicy';
+import { canManageTeam, canViewIndividualDevelopers, canManageDepartment, canRequestTeamInsights, canViewTeamMembers, analyticsTeamsInScope, analyticsScopeLevelOf, canViewTeamAnalytics } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { groqChatCompletion, parseGroqJson, isGroqConfigured } from '../lib/groq';
 import {
@@ -992,6 +992,14 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
       return res.status(400).json({ error: 'Set the team lead with PUT /api/admin/teams/:id/lead (Departments page)' });
     }
     const before = await queryOne<any>('SELECT name, description, platform, is_active FROM teams WHERE id = ? AND company_id = ?', [req.params.id, req.companyId]);
+    // Renaming or (de)activating a team is team management (userPolicy.canManageTeam: super admins
+    // and the managers of its department, as PUT /api/admin/teams/:id and /toggle-status), not a
+    // team-data write: a team lead may not rename or deactivate the team they lead.
+    const renames = name !== undefined && name !== null && name !== before?.name;
+    const togglesActive = isActive !== undefined && isActive !== null && Boolean(isActive) !== Boolean(before?.is_active);
+    if ((renames || togglesActive) && !canManageTeam(policyActor(req), owned)) {
+      return res.status(403).json({ error: 'Only a super admin or a manager of this team\'s department can rename or deactivate it' });
+    }
 
     await query(
       `UPDATE teams
