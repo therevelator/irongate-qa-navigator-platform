@@ -1,7 +1,19 @@
-import cron from 'node-cron';
 import { query } from '../../src/lib/db';
 import { emitJobNotification } from '../eventBus';
 import { isSyntheticDataEnabled, logSyntheticSkip } from '../lib/syntheticData';
+import { assertSampleCompany, activeSampleCompanyIds, sampleCompanySql } from '../lib/sampleCompany';
+
+/**
+ * Every writer below generates random (synthetic) rows. It only ever writes to ONE sample
+ * company (server/lib/sampleCompany.ts: id prefix 'demo-'), checked first, whatever
+ * ENABLE_SYNTHETIC_DATA says; a real company is refused with an exception. Team ids passed in are
+ * narrowed to that company's teams.
+ */
+async function ownTeamIds(companyId: string, teamIds: string[]): Promise<string[]> {
+  if (!teamIds.length) return [];
+  const rows = await query<any>('SELECT id FROM teams WHERE company_id = ? AND id = ANY(?::text[])', [companyId, teamIds]);
+  return rows.map((r: any) => r.id);
+}
 
 // SYNTHETIC DATA: every generator in this file writes random sample data. The seed
 // functions and the daily update only run when ENABLE_SYNTHETIC_DATA=true.
@@ -31,6 +43,7 @@ const generateId = (prefix: string): string =>
 
 // Seed pipeline stages for a company
 async function seedPipelineStages(companyId: string): Promise<void> {
+  assertSampleCompany(companyId);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('analyticsSync.seedPipelineStages');
     return;
@@ -76,6 +89,7 @@ async function seedPipelineStages(companyId: string): Promise<void> {
 
 // Seed business impact metrics with historical data
 async function seedBusinessImpactHistory(companyId: string, days: number = 30): Promise<void> {
+  assertSampleCompany(companyId);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('analyticsSync.seedBusinessImpactHistory');
     return;
@@ -116,6 +130,8 @@ async function seedBusinessImpactHistory(companyId: string, days: number = 30): 
 
 // Seed test cases for Test Case Management
 async function seedTestCases(companyId: string, teamIds: string[], count: number = 30): Promise<void> {
+  assertSampleCompany(companyId);
+  teamIds = await ownTeamIds(companyId, teamIds);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('analyticsSync.seedTestCases');
     return;
@@ -197,6 +213,8 @@ async function seedTestCases(companyId: string, teamIds: string[], count: number
 
 // Seed flaky tests for Flaky Test Intelligence (links to test_cases marked as flaky)
 async function seedFlakyTests(companyId: string, teamIds: string[]): Promise<void> {
+  assertSampleCompany(companyId);
+  teamIds = await ownTeamIds(companyId, teamIds);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('analyticsSync.seedFlakyTests');
     return;
@@ -243,6 +261,8 @@ async function seedFlakyTests(companyId: string, teamIds: string[]): Promise<voi
 
 // Seed test execution runs with historical data
 async function seedTestExecutionHistory(companyId: string, teamIds: string[], count: number = 100): Promise<void> {
+  assertSampleCompany(companyId);
+  teamIds = await ownTeamIds(companyId, teamIds);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('analyticsSync.seedTestExecutionHistory');
     return;
@@ -285,6 +305,8 @@ async function seedTestExecutionHistory(companyId: string, teamIds: string[], co
 
 // Seed performance metrics with historical data
 async function seedPerformanceHistory(companyId: string, teamIds: string[], days: number = 30): Promise<void> {
+  assertSampleCompany(companyId);
+  teamIds = await ownTeamIds(companyId, teamIds);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('analyticsSync.seedPerformanceHistory');
     return;
@@ -338,6 +360,8 @@ async function seedPerformanceHistory(companyId: string, teamIds: string[], days
 
 // Seed technical debt items
 async function seedTechnicalDebt(companyId: string, teamIds: string[], count: number = 20): Promise<void> {
+  assertSampleCompany(companyId);
+  teamIds = await ownTeamIds(companyId, teamIds);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('analyticsSync.seedTechnicalDebt');
     return;
@@ -400,6 +424,7 @@ async function seedTechnicalDebt(companyId: string, teamIds: string[], count: nu
 // NOTE: non-functional — developer_metrics has no user_id/recorded_date columns (it is keyed by
 // team_id + developer_id with one row per developer). Kept only for reference; not called anywhere.
 async function seedDeveloperMetricsHistory(companyId: string, days: number = 30): Promise<void> {
+  assertSampleCompany(companyId);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('analyticsSync.seedDeveloperMetricsHistory');
     return;
@@ -448,7 +473,13 @@ async function seedDeveloperMetricsHistory(companyId: string, days: number = 30)
 // DAILY UPDATE FUNCTIONS
 // ============================================================================
 
-async function updateDailyAnalytics(): Promise<void> {
+/**
+ * Daily drift of ONE sample company's synthetic analytics (POST /api/analytics/update-daily, by
+ * that company's super admin). Never a real company and never more than the one company named:
+ * a non-sample company id throws before anything is read or written.
+ */
+async function updateDailyAnalytics(companyId: string): Promise<void> {
+  assertSampleCompany(companyId);
   if (!isSyntheticDataEnabled()) {
     logSyntheticSkip('Daily analytics update (random drift and sample rows)');
     return;
@@ -456,9 +487,7 @@ async function updateDailyAnalytics(): Promise<void> {
   console.log('📊 [DAILY ANALYTICS] Starting update...', new Date().toISOString());
 
   try {
-    // Get all companies
-    // The demo company (npm run seed:demo) is a fixed, consistent dataset: never randomised.
-    const companies = await query<any>("SELECT id FROM companies WHERE is_active = true AND id NOT LIKE 'demo-%'");
+    const companies = await query<any>(`SELECT id FROM companies WHERE id = ? AND is_active = true AND ${sampleCompanySql('id')}`, [companyId]);
 
     for (const company of companies) {
       const companyId = company.id;
@@ -589,8 +618,8 @@ export async function seedAllAnalyticsData(): Promise<void> {
   console.log('📊 Seeding all analytics data...');
 
   try {
-    // The demo company (npm run seed:demo) is a fixed, consistent dataset: never randomised.
-    const companies = await query<any>("SELECT id FROM companies WHERE is_active = true AND id NOT LIKE 'demo-%'");
+    // Sample companies only (server/lib/sampleCompany.ts); real companies are never seeded.
+    const companies = (await activeSampleCompanyIds()).map((id) => ({ id }));
 
     for (const company of companies) {
       const companyId = company.id;
@@ -627,13 +656,11 @@ export async function seedAllAnalyticsData(): Promise<void> {
 // CRON SCHEDULE (only in non-serverless environments)
 // ============================================================================
 
-// Only initialize cron jobs when not running in serverless (Netlify Functions)
-if (!process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
-  // Daily at 00:30 - Update analytics data
-  cron.schedule('30 0 * * *', updateDailyAnalytics);
-  console.log('  📊 Daily analytics job scheduled: 30 0 * * * (daily at 00:30)');
-  console.log('✅ Analytics sync job initialized!');
-}
+// No schedule: the daily drift used to run every night over EVERY active real company (random
+// changes to pipeline_stages, random business_impact_metrics, test runs and performance rows) when
+// ENABLE_SYNTHETIC_DATA=true. It now only runs on request, for the caller's own sample company
+// (POST /api/analytics/update-daily). The demo company keeps its fixed dataset; the nightly demo
+// refresh (server/lib/demoRefreshJob.ts) keeps it current.
 
 // ============================================================================
 // EXPORTS
