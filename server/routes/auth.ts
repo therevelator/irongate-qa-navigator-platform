@@ -14,7 +14,7 @@ import { requestPasswordReset, completePasswordReset, PasswordResetError } from 
 import { clientIp } from '../lib/requestContext';
 import { recordServerError } from '../lib/opsLog';
 import {
-  clearSessionCookie, currentSessionPersistent, endUserSessions, issueSessionCookie, wantsPersistentSession, lifetimeHours, lifetimeSettingSql, refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE,
+  clearSessionCookie, currentSessionPersistent, endUserSessions, issueSessionCookie, wantsPersistentSession, lifetimeHours, lifetimeSettingSql, refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE, SESSION_ENDED_MESSAGE,
   companyProblem, companyStatusSql, hideSampleNoticeSql, sessionIdOf, COMPANY_SUSPENDED, COMPANY_SUSPENDED_MESSAGE,
 } from '../lib/sessions';
 import { recordAuthEvent } from '../lib/authEvents';
@@ -385,9 +385,10 @@ router.get('/me', async (req, res) => {
               u.created_at, u.last_login, u.is_active, u.email_verified,
               u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime, ${companyStatusSql('u')} AS company_status,
               (SELECT s.revoked_at FROM user_sessions s WHERE s.id = ?::text AND s.user_id = u.id) AS session_revoked_at,
+              EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = ?::text AND s.user_id = u.id) AS session_exists,
               ${hideSampleNoticeSql('u')} AS hide_sample_notice
        FROM users u WHERE u.id = ?`,
-      [sessionIdOf(decoded), decoded.userId]
+      [sessionIdOf(decoded), sessionIdOf(decoded), decoded.userId]
     );
 
     if (!user) {
@@ -403,6 +404,9 @@ router.get('/me', async (req, res) => {
     // Signed out everywhere, or older than the company's sign-in lifetime.
     const problem = companyProblem(user) ?? sessionProblem(decoded, user);
     if (problem) return refuseSession(res, problem);
+    // A demo sandbox token is only valid with its session row (gone after the nightly reset).
+    if (isSandboxCompany(user.company_id) && !user.session_exists) return refuseSession(res, { code: 'session_ended', message: SESSION_ENDED_MESSAGE });
+    delete user.session_exists;
     delete user.company_status;
     delete user.session_revoked_at;
     const sessionHours = lifetimeHours(user.session_lifetime);

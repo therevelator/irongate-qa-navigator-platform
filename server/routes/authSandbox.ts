@@ -26,7 +26,7 @@ const router = express.Router();
 const sandboxLimiter = rateLimit({
   keyGenerator: (req) => `ip:${clientIp(req)}`,
   windowMs: 60 * 60 * 1000,
-  max: () => sandboxSessionsPerIpHour() * 2,
+  max: () => Math.max(60, sandboxSessionsPerIpHour() * 2),
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many demo sessions from this address. Try again later.', code: 'sandbox_rate_limited' },

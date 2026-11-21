@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { loadAccessContext } from '../lib/assignments';
-import { companyProblem, refuseSession, sessionIdOf, sessionProblem, touchSession, SESSION_EXPIRED_MESSAGE } from '../lib/sessions';
+import { companyProblem, refuseSession, sessionIdOf, sessionProblem, touchSession, SESSION_ENDED_MESSAGE, SESSION_EXPIRED_MESSAGE } from '../lib/sessions';
 import type { Grant } from '../lib/userPolicy';
 import { PLATFORM_SUPPORT_REQUEST, platformSupportContext, type PlatformSupportRequest } from '../lib/platformContext';
 import { apiPathOf, isSandboxCompany, sandboxBody, sandboxVerdict, SANDBOX_REFUSED_CODE, SANDBOX_REFUSED_MESSAGE } from '../lib/sandboxConfig';
@@ -90,6 +90,8 @@ export async function authenticateToken(req: AuthRequest, res: Response, next: N
   if (problem) return refuseSession(res, problem);
   const sid = sessionIdOf(decoded);
   const sandbox = isSandboxCompany(row.company_id);
+  // A sandbox token is only valid with its session row (gone after the nightly reset).
+  if (sandbox && !row.session_exists) return refuseSession(res, { code: 'session_ended', message: SESSION_ENDED_MESSAGE });
   // A sandbox session's row keeps no address (the persona is shared by every visitor): not touched.
   if (sid && row.session_last_seen_at && !sandbox) touchSession(req, sid, row.session_last_seen_at);
 

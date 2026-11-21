@@ -125,6 +125,8 @@ export interface AccessContext {
   /** The token's user_sessions row (null without a jti or without a row). */
   session_revoked_at: string | Date | null;
   session_last_seen_at: string | Date | null;
+  /** Whether the token's session row exists (a demo sandbox token needs it). */
+  session_exists?: boolean;
 }
 
 /**
@@ -136,7 +138,7 @@ export async function loadAccessContext(userId: string, sessionId: string | null
     `SELECT u.id, u.role, u.company_id, u.department_id, u.primary_team_id, u.is_active,
             u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime,
             (SELECT c.status FROM companies c WHERE c.id = u.company_id) AS company_status,
-            s.revoked_at AS session_revoked_at, s.last_seen_at AS session_last_seen_at,
+            s.revoked_at AS session_revoked_at, s.last_seen_at AS session_last_seen_at, (s.id IS NOT NULL) AS session_exists,
             COALESCE((
               SELECT json_agg(json_build_object('role', ra.role, 'scopeType', ra.scope_type, 'scopeId', ra.scope_id) ORDER BY ra.created_at)
                 FROM role_assignments ra

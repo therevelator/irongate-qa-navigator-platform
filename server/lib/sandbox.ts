@@ -173,6 +173,9 @@ async function writeSandboxOrg(client: pg.PoolClient, plan: OrgPlan): Promise<vo
     [randomUUID(), SANDBOX_COMPANY_ID, hq.userId, DEPT_PLATFORM],
   );
   await client.query(`UPDATE departments SET manager_id = $1 WHERE company_id = $2`, [hq.userId, SANDBOX_COMPANY_ID]);
+  // Every token issued before this build is refused (the users get the same ids after a reset, and
+  // their old session rows are gone with the old company).
+  await client.query(`UPDATE users SET sessions_valid_after = date_trunc('second', clock_timestamp()) + interval '1 second' WHERE company_id = $1`, [SANDBOX_COMPANY_ID]);
 }
 
 /* ------------------------------------------------------------------------------------------
