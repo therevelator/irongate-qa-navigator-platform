@@ -39,6 +39,7 @@ env:
   DB_NAME: irongate_qa
   JWT_SECRET: ci-only-jwt-secret-not-used-anywhere-else
   API_RATE_LIMIT_MAX: '10000'
+  SANDBOX_SESSIONS_PER_IP_HOUR: '1000'
   LOG_DIR: /tmp/irongate-ci-logs
   # The log mailer also writes each e-mail here, so tests can follow invitation, reset and pulse links.
   MAIL_CAPTURE_FILE: /tmp/irongate-ci-logs/mail.jsonl

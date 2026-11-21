@@ -698,7 +698,7 @@ const TeamTvView: React.FC = () => {
             : <>Live · updated {updatedAt?.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) ?? '—'} · refreshes every {Math.round(REFRESH_MS / 1000)} s{rotate ? ` · panels rotate every ${settings.intervalSec} s${teamRotation ? ` · ${rotationTeams.length} teams` : ''}` : ''}</>}
         </p>
         {user?.sandbox && (
-          <p className="rounded-full bg-amber-100 px-[0.8em] py-[0.15em] font-medium text-amber-950 ring-1 ring-inset ring-amber-300" data-testid="tv-sandbox">
+          <p className="rounded-full bg-amber-100 px-[0.8em] py-[0.15em] font-medium text-amber-950 ring-1 ring-inset ring-amber-300 dark:bg-amber-950/60 dark:text-amber-50 dark:ring-amber-700/60" data-testid="tv-sandbox">
             Demo sandbox · sample data, resets every night
           </p>
         )}

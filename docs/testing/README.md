@@ -82,7 +82,7 @@ workflow input):
 | `@a11y` | axe-core accessibility checks of the main pages. |
 | `@readonly` | Checks that change nothing and work with any account (the only ones run against a live site). |
 | `@role:admin`, `@role:manager`, `@role:lead`, `@role:engineer`, `@role:viewer` | Tests for that role. |
-| `@area:auth`, `@area:navigation`, `@area:dashboard`, `@area:team`, `@area:tv`, `@area:analytics`, `@area:compare`, `@area:saved-views`, `@area:business-impact`, `@area:parameters`, `@area:targets`, `@area:alerts`, `@area:actions`, `@area:slack`, `@area:pulse`, `@area:org`, `@area:activity`, `@area:onboarding`, `@area:admin`, `@area:metrics`, `@area:demo-data`, `@area:operator`, `@area:ux`, `@area:resilience`, `@area:privacy`, `@area:ai` | One part of the product. |
+| `@area:auth`, `@area:navigation`, `@area:dashboard`, `@area:team`, `@area:tv`, `@area:analytics`, `@area:compare`, `@area:saved-views`, `@area:business-impact`, `@area:parameters`, `@area:targets`, `@area:alerts`, `@area:actions`, `@area:slack`, `@area:pulse`, `@area:org`, `@area:activity`, `@area:onboarding`, `@area:admin`, `@area:metrics`, `@area:demo-data`, `@area:operator`, `@area:ux`, `@area:resilience`, `@area:privacy`, `@area:ai`, `@area:sandbox` | One part of the product. |
 
 Examples: `npm run test:ui:local -- --grep "@area:pulse"`, `--grep "@negative.*@role:viewer"`,
 `--grep "AUTH-0"` (test ids are in the titles too).

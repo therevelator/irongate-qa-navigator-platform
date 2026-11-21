@@ -20,12 +20,12 @@ const SandboxBanner: React.FC = () => {
       role="region"
       aria-label="Demo sandbox"
       data-testid="sandbox-banner"
-      className="flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:px-6 sm:text-sm"
+      className="flex flex-shrink-0 flex-wrap items-center gap-x-3 gap-y-1 border-b border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-950 sm:px-6 sm:text-sm dark:border-amber-700/60 dark:bg-amber-950/60 dark:text-amber-50"
     >
       <FlaskConical size={15} className="flex-shrink-0" aria-hidden="true" />
       <p className="min-w-0 flex-1">
         <span className="font-semibold">Demo sandbox</span> — sample data, resets every night.{' '}
-        <span className="text-amber-900">Viewing as {who}.</span>
+        <span className="text-amber-900 dark:text-amber-200">Viewing as {who}.</span>
       </p>
       <nav aria-label="Demo sandbox links" className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <a href={sb.bookDemoUrl} className={link} data-testid="sandbox-book-demo">Book a demo</a>

@@ -131,6 +131,8 @@ async function main() {
     JWT_SECRET: testEnv.TEST_JWT_SECRET || `ui-tests-${randomBytes(16).toString('hex')}`,
     PORT: '3000',
     API_RATE_LIMIT_MAX: '10000',
+    // The demo sandbox (/try) specs start many sessions from one address.
+    SANDBOX_SESSIONS_PER_IP_HOUR: '1000',
     NOTIFY_SLACK_ALLOW_LOCAL: 'true',
     MAIL_CAPTURE_FILE: mailFile,
     DEMO_MODE: 'true',
