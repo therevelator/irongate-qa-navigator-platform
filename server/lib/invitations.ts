@@ -8,6 +8,7 @@ import { appBaseUrl } from './sso';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
 import type { Grant } from './userPolicy';
 import { ROLE_LABELS } from './roleLabels';
+import { validateDisplayName, normaliseDisplayName } from './displayName';
 
 /**
  * Invitations (table invitations): invite a person by email to exactly one role assignment.
@@ -127,9 +128,24 @@ export async function acceptInvitation(args: {
   /** SSO: the verified email must be the invited one. */
   verifiedEmail?: string | null;
 }): Promise<{ userId: string; companyId: string }> {
-  const first = args.firstName.trim();
-  const last = args.lastName.trim();
-  if (!first || !last || first.length > 100 || last.length > 100) throw new InvitationError(400, 'Enter your first and last name (up to 100 characters each).');
+  // Names follow server/lib/displayName.ts. Typed names (the accept form) are refused when they
+  // break the rules; names from an identity provider (SSO) are normalised instead, since the
+  // person cannot fix them on our side.
+  let first: string;
+  let last: string;
+  if (args.sso) {
+    first = normaliseDisplayName(args.firstName) || 'User';
+    last = normaliseDisplayName(args.lastName) || '-';
+  } else {
+    if (typeof args.firstName !== 'string' || typeof args.lastName !== 'string' || !args.firstName.trim() || !args.lastName.trim()) {
+      throw new InvitationError(400, 'Enter your first and last name (up to 100 characters each).');
+    }
+    const f = validateDisplayName(args.firstName, 'First name');
+    if (!f.ok) throw new InvitationError(400, f.error);
+    const l = validateDisplayName(args.lastName, 'Last name');
+    if (!l.ok) throw new InvitationError(400, l.error);
+    first = f.value; last = l.value;
+  }
   return transaction(async (client) => {
     const exec = execOn(client);
     const byId = !args.token && !!args.invitationId;

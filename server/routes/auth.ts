@@ -23,6 +23,7 @@ import { passwordProblem } from '../../src/lib/passwordPolicy';
 import { emailDomainOf, isPublicEmailDomain } from '../../src/lib/emailDomains';
 import { EMAIL_RE } from '../lib/invitations';
 import { recordFailedPassword, recordLockedAttempt } from '../lib/loginLockout';
+import { validateDisplayName } from '../lib/displayName';
 
 // WebSocket imports - disabled for Netlify Functions compatibility
 // import { broadcast } from '../websocket';
@@ -72,7 +73,8 @@ const domainTakenMessage = (domain: string) =>
 // Register
 router.post('/register', authLimiter, async (req, res) => {
   try {
-    const { email, password, firstName, lastName, companyName, departmentName, teamName } = req.body;
+    const { email, password } = req.body ?? {};
+    let { firstName, lastName, companyName, departmentName, teamName } = req.body ?? {};
     // The registering user creates a new organisation and becomes its super_admin.
     // Additional users are created by an admin in Users.
     const role = 'super_admin';
@@ -80,6 +82,17 @@ router.post('/register', authLimiter, async (req, res) => {
     // Validate required fields
     if (!email || !password || !firstName || !lastName || !companyName || !departmentName || !teamName) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    // Names are shown across the app, e-mails and Slack (server/lib/displayName.ts).
+    {
+      const checks = [
+        validateDisplayName(firstName, 'First name'), validateDisplayName(lastName, 'Last name'),
+        validateDisplayName(companyName, 'Organisation name'), validateDisplayName(departmentName, 'Department name'),
+        validateDisplayName(teamName, 'Team name'),
+      ];
+      const bad = checks.find((c) => !c.ok);
+      if (bad) return res.status(400).json({ error: bad.error });
+      [firstName, lastName, companyName, departmentName, teamName] = checks.map((c) => c.value ?? '');
     }
 
     if (typeof email !== 'string' || email.length > 255 || !EMAIL_RE.test(email.trim())) {

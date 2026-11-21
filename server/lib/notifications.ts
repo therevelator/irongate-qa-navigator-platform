@@ -231,7 +231,9 @@ export async function notifyAlerts(companyId: string, items: Array<{ alert: Aler
       }
     }
     if (settings.slackEnabled && settings.webhook && atLeast(alert.severity, settings.slackMinSeverity)) {
-      const text = `*${SEVERITY_LABEL[alert.severity]}* · ${title}\n${alert.message}${link ? `\n<${link}|Open in QE Navigator>` : ''}`;
+      // Team names and alert text are escaped for Slack mrkdwn: an unescaped <!channel> or <url|label> in a
+      // team name would ping the channel or show a disguised link.
+      const text = `*${SEVERITY_LABEL[alert.severity]}* · ${escapeSlack(title)}\n${escapeSlack(alert.message)}${link ? `\n<${link}|Open in QE Navigator>` : ''}`;
       if (await enqueue({ companyId, channel: 'slack', kind: 'alert', recipient: 'slack', alertId: alert.id, subject: title, payload: { text }, dedupeKey: `alert:${alert.id}:slack:${alert.severity}` })) queued++;
     }
   }
@@ -288,6 +290,14 @@ export async function notifyPulseEscalation(args: {
  * ---------------------------------------------------------------------------------------- */
 
 const MAX_ATTEMPTS = 3;
+
+/**
+ * Escape text for Slack mrkdwn (https://api.slack.com/reference/surfaces/formatting#escaping):
+ * &, < and > are the control characters; everything that is not a literal in the code (team
+ * names, alert messages, people's names) goes through this before it is put in a Slack message.
+ */
+export const escapeSlack = (s: unknown): string =>
+  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
 /** POST a message to a Slack webhook. Never logs or returns the URL. */
 export async function postToSlack(webhook: string, text: string): Promise<{ ok: boolean; error?: string }> {

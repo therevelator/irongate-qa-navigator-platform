@@ -1,4 +1,15 @@
 import Swal from 'sweetalert2';
+import { escapeHtml } from '../lib/escapeHtml';
+
+/*
+ * Every helper here takes PLAIN TEXT (names, e-mail addresses, server messages), never HTML.
+ * SweetAlert2 renders `title` and `html` as HTML, so:
+ *   - plain text goes in `titleText` / `text` (set as text, never parsed);
+ *   - where a dialog needs markup (<strong>, a list), every value is passed through
+ *     escapeHtml (src/lib/escapeHtml.ts) before it is put in the string.
+ * Names and messages can come from other people (a user's own name, a team name, a 409
+ * listing the members of a team), so treat every argument as untrusted.
+ */
 
 // Custom SweetAlert2 configuration for the app
 const Toast = Swal.mixin({
@@ -31,35 +42,40 @@ const swalWithStyledButtons = Swal.mixin({
 export const showSuccess = (message: string) => {
   return Toast.fire({
     icon: 'success',
-    title: message
+    titleText: message
   });
 };
 
 export const showError = (message: string) => {
   return Toast.fire({
     icon: 'error',
-    title: message
+    titleText: message
   });
 };
 
 export const showInfo = (message: string) => {
   return Toast.fire({
     icon: 'info',
-    title: message
+    titleText: message
   });
 };
 
 export const showWarning = (message: string) => {
   return Toast.fire({
     icon: 'warning',
-    title: message
+    titleText: message
   });
 };
 
-export const confirmDelete = async (itemName: string, itemType: string = 'item') => {
+/**
+ * Confirm a deletion. itemName and detail are plain text (escaped here). detail is an
+ * optional extra line, e.g. "This will affect 3 teams and 12 users".
+ */
+export const confirmDelete = async (itemName: string, _itemType: string = 'item', detail?: string) => {
+  const name = escapeHtml(itemName);
   const result = await swalWithStyledButtons.fire({
-    title: 'Are you sure?',
-    html: `You won't be able to revert this!<br><strong>${itemName}</strong> will be permanently deleted.`,
+    titleText: 'Are you sure?',
+    html: `You won't be able to revert this!<br><strong>${name}</strong> will be permanently deleted.${detail ? `<br><small>${escapeHtml(detail)}</small>` : ''}`,
     icon: 'warning',
     showCancelButton: true,
     confirmButtonText: 'Yes, delete it!',
@@ -69,8 +85,8 @@ export const confirmDelete = async (itemName: string, itemType: string = 'item')
 
   if (result.isConfirmed) {
     swalWithStyledButtons.fire({
-      title: 'Deleted!',
-      html: `<strong>${itemName}</strong> has been deleted.`,
+      titleText: 'Deleted!',
+      html: `<strong>${name}</strong> has been deleted.`,
       icon: 'success',
       confirmButtonText: 'OK',
       timer: 2000,
@@ -79,8 +95,8 @@ export const confirmDelete = async (itemName: string, itemType: string = 'item')
     return { isConfirmed: true };
   } else if (result.dismiss === Swal.DismissReason.cancel) {
     swalWithStyledButtons.fire({
-      title: 'Cancelled',
-      html: `<strong>${itemName}</strong> is safe.`,
+      titleText: 'Cancelled',
+      html: `<strong>${name}</strong> is safe.`,
       icon: 'error',
       confirmButtonText: 'OK',
       timer: 2000,
@@ -92,13 +108,14 @@ export const confirmDelete = async (itemName: string, itemType: string = 'item')
   return { isConfirmed: false };
 };
 
+/** title, message and confirmText are plain text. */
 export const confirmAction = async (title: string, message: string, confirmText: string = 'Confirm') => {
   const result = await swalWithStyledButtons.fire({
-    title,
-    html: message,
+    titleText: title,
+    text: message,
     icon: 'question',
     showCancelButton: true,
-    confirmButtonText: confirmText,
+    confirmButtonText: escapeHtml(confirmText), // SweetAlert2 renders button text as HTML
     cancelButtonText: 'Cancel',
     reverseButtons: true,
     customClass: {
@@ -110,7 +127,7 @@ export const confirmAction = async (title: string, message: string, confirmText:
     return { isConfirmed: true };
   } else if (result.dismiss === Swal.DismissReason.cancel) {
     swalWithStyledButtons.fire({
-      title: 'Cancelled',
+      titleText: 'Cancelled',
       text: 'Action was cancelled.',
       icon: 'info',
       confirmButtonText: 'OK',
@@ -123,10 +140,11 @@ export const confirmAction = async (title: string, message: string, confirmText:
   return { isConfirmed: false };
 };
 
+/** title and message are plain text. */
 export const showAlert = (title: string, message: string, icon: 'success' | 'error' | 'warning' | 'info' = 'info') => {
   return swalWithStyledButtons.fire({
-    title,
-    html: message,
+    titleText: title,
+    text: message,
     icon,
     confirmButtonText: 'OK',
     customClass: {
@@ -135,26 +153,27 @@ export const showAlert = (title: string, message: string, icon: 'success' | 'err
   });
 };
 
-// Warning for items that cannot be deleted due to dependencies
+// Warning for items that cannot be deleted due to dependencies. reason and the dependency
+// names (from the server's 409: user, team names) are plain text, escaped here.
 export const showCannotDeleteWarning = (
   itemType: 'team' | 'department' | 'user',
   reason: string,
   dependencyList?: string[]
 ) => {
-  let html = `<p class="mb-3">${reason}</p>`;
+  let html = `<p class="mb-3">${escapeHtml(reason)}</p>`;
   
   if (dependencyList && dependencyList.length > 0) {
     html += `<div class="text-left bg-gray-100 dark:bg-slate-700 rounded-lg p-3 mt-2">
       <p class="font-medium mb-2">Active ${itemType === 'department' ? 'teams/users' : 'users'}:</p>
       <ul class="list-disc list-inside text-sm">
-        ${dependencyList.map(item => `<li>${item}</li>`).join('')}
+        ${dependencyList.map(item => `<li>${escapeHtml(item)}</li>`).join('')}
       </ul>
       ${dependencyList.length >= 5 ? '<p class="text-xs text-gray-500 mt-2">...and more</p>' : ''}
     </div>`;
   }
 
   return swalWithStyledButtons.fire({
-    title: `Cannot Delete ${itemType.charAt(0).toUpperCase() + itemType.slice(1)}`,
+    titleText: `Cannot Delete ${itemType.charAt(0).toUpperCase() + itemType.slice(1)}`,
     html,
     icon: 'warning',
     confirmButtonText: 'I Understand',
@@ -167,11 +186,11 @@ export const showCannotDeleteWarning = (
   });
 };
 
-// Confirm deactivation instead of deletion
-export const confirmDeactivate = async (itemName: string, itemType: string = 'user') => {
+// Confirm deactivation instead of deletion. itemName is plain text, escaped here.
+export const confirmDeactivate = async (itemName: string, _itemType: string = 'user') => {
   const result = await swalWithStyledButtons.fire({
-    title: 'Deactivate User?',
-    html: `<strong>${itemName}</strong> will be deactivated and will no longer be able to log in.<br><br>
+    titleText: 'Deactivate User?',
+    html: `<strong>${escapeHtml(itemName)}</strong> will be deactivated and will no longer be able to log in.<br><br>
            <span class="text-sm text-gray-500">This action can be reversed by reactivating the user later.</span>`,
     icon: 'warning',
     showCancelButton: true,

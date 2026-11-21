@@ -1,6 +1,7 @@
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { validateDisplayName } from '../lib/displayName';
 
 /**
  * Self-service profile routes.
@@ -75,8 +76,13 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
 
     const updates: string[] = [];
     const values: any[] = [];
-    if (firstName !== undefined) { updates.push('first_name = ?'); values.push(firstName); }
-    if (lastName !== undefined) { updates.push('last_name = ?'); values.push(lastName); }
+    // Names are shown across the app, e-mails and Slack: same rules everywhere (server/lib/displayName.ts).
+    for (const [raw, column, label] of [[firstName, 'first_name', 'First name'], [lastName, 'last_name', 'Last name']] as const) {
+      if (raw === undefined) continue;
+      const checked = validateDisplayName(raw, label);
+      if (!checked.ok) return res.status(400).json({ error: checked.error });
+      updates.push(`${column} = ?`); values.push(checked.value);
+    }
     if (email !== undefined) { updates.push('email = ?'); values.push(email); }
     if (phone !== undefined) { updates.push('phone = ?'); values.push(phone); }
     if (timezone !== undefined) { updates.push('timezone = ?'); values.push(timezone); }

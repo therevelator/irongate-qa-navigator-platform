@@ -281,7 +281,8 @@ const DepartmentsView: React.FC<DepartmentsViewProps> = ({ onOpenTeam, onTeamsCh
                             onClick={async () => {
                               const result = await confirmDelete(
                                 dept.name,
-                                `department<br><small>This will affect ${dept.team_count} teams and ${dept.user_count} users</small>`
+                                'department',
+                                `This will affect ${dept.team_count} teams and ${dept.user_count} users`
                               );
                               if (result.isConfirmed) {
                                 try {

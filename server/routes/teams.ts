@@ -27,6 +27,7 @@ import { recordAudit } from '../lib/audit';
 import { evaluateLatestSnapshot, kpiHistoryFor, loadDataClock, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
 import { loadIntervals } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
+import { validateDisplayName } from '../lib/displayName';
 
 const router = express.Router();
 
@@ -937,11 +938,14 @@ router.post('/', authenticateToken, async (req: AuthRequest, res) => {
     if (!canManageCompanyData(req)) {
       return res.status(403).json({ error: 'Only managers and super admins can create teams' });
     }
-    const { name, description, departmentId, platform, leadId } = req.body;
+    const { description, departmentId, platform, leadId } = req.body ?? {};
 
-    if (!name || !departmentId) {
+    if (!req.body?.name || !departmentId) {
       return res.status(400).json({ error: 'Name and department required' });
     }
+    const checkedName = validateDisplayName(req.body.name, 'Team name');
+    if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+    const name = checkedName.value;
     // The department and optional lead must belong to the caller's company.
     if (!(await departmentInCompany(req, departmentId))) {
       return res.status(400).json({ error: 'Invalid department' });
@@ -986,7 +990,13 @@ router.put('/:id', authenticateToken, async (req: AuthRequest, res) => {
     const owned = await assertTeamWrite(req, res, req.params.id);
     if (!owned) return;
 
-    const { name, description, platform, leadId, isActive } = req.body;
+    const { description, platform, leadId, isActive } = req.body ?? {};
+    let name: string | null = null;
+    if (req.body?.name !== undefined && req.body?.name !== null) {
+      const checkedName = validateDisplayName(req.body.name, 'Team name');
+      if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+      name = checkedName.value;
+    }
     // The lead is a role assignment (one source of truth): set it with PUT /api/admin/teams/:id/lead.
     if (leadId !== undefined && leadId !== null) {
       return res.status(400).json({ error: 'Set the team lead with PUT /api/admin/teams/:id/lead (Departments page)' });

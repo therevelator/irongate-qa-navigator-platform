@@ -973,7 +973,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
           if (emailInUse) {
             showAlert(
               'Email Already in Use',
-              `The email <strong>${userForm.email}</strong> is already assigned to another user.<br><br>Please use a different email address.`,
+              `The email ${userForm.email} is already assigned to another user. Please use a different email address.`,
               'error'
             );
             return;

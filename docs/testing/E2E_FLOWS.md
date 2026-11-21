@@ -243,7 +243,7 @@ Derived from the code, then checked against the documentation:
 
 | ID | Flow | Can | Must not | Happy path | Negative |
 |---|---|---|---|---|---|
-| F12.1 | Departments: create, rename, delete (with cancel) | A | M L E V | ORG-01 | ORG-01 duplicate name, ORG-02 markup shown as text, NAV-03 |
+| F12.1 | Departments: create, rename, delete (with cancel) | A | M L E V | ORG-01 | ORG-01 duplicate name, ORG-02 markup refused (400 with the reason), XSS-05 legacy markup shown as text, NAV-03 |
 | F12.2 | Move a team to another department (with the move plan) | A | M L E V | ORG-03 | — |
 | F12.3 | Assign / remove department managers and team leads | A | M L E V | API tests (`team-department-move.test.ts`, `role-assignment.test.ts`) | — |
 | F12.4 | Teams: create, edit, delete | A, M (their departments) | L E V | ORG-10, ORG-04 (Admin console), legacy:qa-manager-rbac | ORG-11 required fields, long unicode name; legacy:comprehensive-rbac "Team Lead cannot delete other teams" |
@@ -303,7 +303,7 @@ Derived from the code, then checked against the documentation:
 | F16.6 | Reload in the middle of a flow sends nothing | — | — | — | RES-06 |
 | F16.7 | Back while a dialog is open | — | — | — | RES-07 |
 | F16.8 | Rapid clicks through the navigation | — | — | — | RES-08 |
-| F16.9 | Markup in user input is shown as text, never run | — | — | — | DASH-03, REG-03, ORG-02, ORG-22, VIEW-02, ACT-02, BRIEF-01, PUL-15 |
+| F16.9 | Markup in user input is shown as text, never run | — | — | — | DASH-03, REG-03, ORG-02, ORG-22, VIEW-02, ACT-02, BRIEF-01, PUL-15; XSS-01 to XSS-06 (names with markup planted in the database: confirmation dialogs, Cannot delete warnings, toasts and Manual metrics show them as text, no script runs); API `stored-xss.test.ts` XSSAPI-001 to 009 (every write path for a name refuses markup) |
 | F16.10 | Double submits create one record | — | — | — | AUTH-13, MM-06, ACT-03, VIEW-02, PUL-15 |
 | F16.11 | Very long and unicode text | — | — | — | UX-13, ORG-11, ACT-02, PUL-16 |
 

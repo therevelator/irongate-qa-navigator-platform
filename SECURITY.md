@@ -67,6 +67,36 @@ revocable. A suspended company's keys are refused.
 e-mail), reset password, invitations, ingestion (60 per minute), language-model routes and Recalculate.
 The store is in memory, so on Netlify a limit applies per warm function instance.
 
+**Input handling and output escaping (XSS).** Names typed by one person are shown to others (dialogs,
+toasts, lists, e-mails, Slack, PDFs, CSV), so they are handled on both sides:
+
+- *Names are validated on the server* ([`server/lib/displayName.ts`](server/lib/displayName.ts),
+  `validateDisplayName`): trimmed, 1 to 100 characters, no `<` or `>`, no control characters (C0, DEL, C1)
+  and no line or paragraph separators; apostrophes, hyphens, `&`, accents and other scripts are fine. A
+  name that breaks the rules gets `400` with the reason (for example `First name cannot contain < or >`)
+  and nothing is stored. Applied to people's first and last names (own profile `PUT /api/users/:id`,
+  `POST` / `PUT /api/admin/users`, registration, accepting an invitation, the operator's create company
+  first person), the job title (up to 120), team names (`POST` / `PUT /api/admin/teams`, `POST` /
+  `PUT /api/teams`), department names (`POST` / `PUT /api/admin/departments`) and company names
+  (registration, operator create / rename company and its first department and team). Names from an
+  identity provider (SSO provisioning) are normalised instead (`normaliseDisplayName`: markup and control
+  characters removed, cut to 100), since the person cannot correct them.
+- *The front end never builds HTML from data.* React renders text. SweetAlert2 renders `title`, `html` and
+  button text as HTML, so every dialog helper in [`src/utils/alerts.ts`](src/utils/alerts.ts) takes plain
+  text: it uses `titleText` / `text`, and where a dialog needs markup (bold name, a list of members) each
+  value goes through the one escaper, [`src/lib/escapeHtml.ts`](src/lib/escapeHtml.ts). Callers pass
+  names and server messages, never HTML. The only `dangerouslySetInnerHTML` is the language-model answer
+  on Business impact, sanitised with DOMPurify first. Links built from ingested URLs accept `http(s)` only.
+- *Other outputs*: e-mail bodies escape every value (`escapeHtml` in `server/lib/mailer.ts`); Slack
+  messages escape `&`, `<`, `>` in team names and alert text (`escapeSlack` in
+  `server/lib/notifications.ts`; the digest's Slack summary holds counts only); PDFs are drawn as text by
+  jsPDF; CSV cells that start with `=`, `+`, `-`, `@`, tab or CR are prefixed with `'` (`src/lib/csv.ts`).
+- Legacy rows written before the validation existed are still shown as text.
+  Tests: `tests/api/display-name.test.ts` (escaper and rules), `tests/api/stored-xss.test.ts` (every write
+  path refuses markup), `tests/api/display-name-data.test.ts` (seed and demo names pass the rules),
+  `tests/e2e/org/stored-xss.spec.ts` (names with markup planted in the database are shown as text in every
+  dialog and toast; no script runs).
+
 **Headers and CORS.** CORS allows only exact origins (local development and `FRONTEND_URL`). Netlify sets
 `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and a strict referrer policy.
 

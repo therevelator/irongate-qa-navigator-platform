@@ -20,6 +20,7 @@ import { recordAudit, auditedUserChange } from '../lib/audit';
 import orgAdminRoutes from './orgAdmin';
 import { loadResetTarget, sendResetLinkByAdmin, RESET_TTL_MINUTES } from '../lib/passwordReset';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
+import { validateDisplayName } from '../lib/displayName';
 import {
   currentSessionPersistent, endUserSessions, issueSessionCookie, isAllowedLifetime, lifetimeHours, lifetimeLabel,
   DEFAULT_SESSION_HOURS, SESSION_LIFETIME_CHOICES, SESSION_LIFETIME_KEY,
@@ -106,7 +107,9 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     const actor = actorOf(req);
     const actorRole = highestRole(actor);
     const { companyId } = req.user;
-    const { email, password, firstName, lastName, role } = req.body ?? {};
+    const { email, password, role } = req.body ?? {};
+    let firstName: string = req.body?.firstName;
+    let lastName: string = req.body?.lastName;
     let teamId: string | null = req.body?.teamId || null;
     let departmentId: string | null = req.body?.departmentId || null;
 
@@ -116,6 +119,14 @@ router.post('/users', authenticateToken, async (req: any, res) => {
     }
     if (!email || !password || !firstName || !lastName || !role) {
       return res.status(400).json({ error: 'Missing required fields' });
+    }
+    // Names are shown across the app, e-mails and Slack (server/lib/displayName.ts).
+    {
+      const first = validateDisplayName(firstName, 'First name');
+      if (!first.ok) return res.status(400).json({ error: first.error });
+      const last = validateDisplayName(lastName, 'Last name');
+      if (!last.ok) return res.status(400).json({ error: last.error });
+      firstName = first.value; lastName = last.value;
     }
     // The same password rules as registration, invitations and reset links (src/lib/passwordPolicy.ts).
     const weak = typeof password === 'string' ? passwordProblem(password, String(email)) : 'The password is required.';
@@ -217,8 +228,8 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
     if (!target) return res.status(404).json({ error: 'User not found' });
 
     const body = req.body ?? {};
-    const firstName = body.firstName ?? undefined;
-    const lastName = body.lastName ?? undefined;
+    let firstName: string | undefined = body.firstName ?? undefined;
+    let lastName: string | undefined = body.lastName ?? undefined;
     const email = body.email ?? undefined;
     const role: string = body.role ?? target.role;
     const departmentId: string | null = body.departmentId === undefined ? target.department_id : (body.departmentId || null);
@@ -228,6 +239,17 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
     if (!canEditUser(actor, target)) {
       return res.status(403).json({ error: 'You cannot edit this user' });
     }
+    // Names are shown across the app, e-mails and Slack (server/lib/displayName.ts).
+    if (firstName !== undefined) {
+      const checked = validateDisplayName(firstName, 'First name');
+      if (!checked.ok) return res.status(400).json({ error: checked.error });
+      firstName = checked.value;
+    }
+    if (lastName !== undefined) {
+      const checked = validateDisplayName(lastName, 'Last name');
+      if (!checked.ok) return res.status(400).json({ error: checked.error });
+      lastName = checked.value;
+    }
     // Job title (shown in the top bar and on Team detail): super admins only; '' clears it.
     let jobTitle: string | null | undefined;
     if (body.jobTitle !== undefined) {
@@ -235,6 +257,10 @@ router.put('/users/:id', authenticateToken, async (req: any, res) => {
       if (body.jobTitle !== null && typeof body.jobTitle !== 'string') return res.status(400).json({ error: 'Job title must be text' });
       jobTitle = typeof body.jobTitle === 'string' && body.jobTitle.trim() ? body.jobTitle.trim() : null;
       if (jobTitle && jobTitle.length > 120) return res.status(400).json({ error: 'Job title must be at most 120 characters' });
+      if (jobTitle) {
+        const checked = validateDisplayName(jobTitle, 'Job title', 120);
+        if (!checked.ok) return res.status(400).json({ error: checked.error });
+      }
     }
     const jobTitleChanged = jobTitle !== undefined && jobTitle !== (target.job_title ?? null);
     let team: { id: string; department_id: string | null } | null = null;
@@ -562,7 +588,7 @@ router.get('/teams', authenticateToken, async (req: any, res) => {
 router.post('/teams', authenticateToken, async (req: any, res) => {
   try {
     const { companyId, departmentId: userDepartmentId } = req.user;
-    const { name, description, departmentId: requestDepartmentId } = req.body;
+    const { description, departmentId: requestDepartmentId } = req.body ?? {};
     const actor = actorOf(req);
 
     // Only QA Managers and Super Admins can create teams (canManageDepartment for the department).
@@ -570,9 +596,9 @@ router.post('/teams', authenticateToken, async (req: any, res) => {
       return res.status(403).json({ error: 'Only managers and super admins can create teams' });
     }
 
-    if (!name) {
-      return res.status(400).json({ error: 'Team name is required' });
-    }
+    const checkedName = validateDisplayName(req.body?.name, 'Team name');
+    if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+    const name = checkedName.value;
 
     // Department: the one requested, else the caller's own (a manager: one they manage).
     const managed = managedDepartmentIds(actor);
@@ -642,7 +668,7 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
     const { id: teamId } = req.params;
-    const { name, description } = req.body;
+    const { description } = req.body ?? {};
     const actor = actorOf(req);
 
     // Only Super Admin and QA Managers (teams of their departments) can update teams.
@@ -657,6 +683,13 @@ router.put('/teams/:id', authenticateToken, async (req: any, res) => {
     }
     if (!canManageTeam(actor, team)) {
       return res.status(403).json({ error: 'Can only update teams in your department' });
+    }
+    // A name not sent keeps the current one; a sent name follows server/lib/displayName.ts.
+    let name: string = team.name;
+    if (req.body?.name !== undefined) {
+      const checkedName = validateDisplayName(req.body.name, 'Team name');
+      if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+      name = checkedName.value;
     }
 
     await query(
@@ -926,16 +959,16 @@ router.get('/departments/:id/teams', authenticateToken, async (req: any, res) =>
 // Create department (Super Admin only)
 router.post('/departments', authenticateToken, async (req: any, res) => {
   try {
-    const { role, companyId } = req.user;
-    const { name, description } = req.body;
+    const { companyId } = req.user;
+    const { description } = req.body ?? {};
 
     if (!isCompanyAdmin(actorOf(req))) {
       return res.status(403).json({ error: 'Only Super Admins can create departments' });
     }
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Department name is required' });
-    }
+    const checkedName = validateDisplayName(req.body?.name, 'Department name');
+    if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+    const name = checkedName.value;
 
     // Duplicate names are checked among active departments only. A deleted (inactive)
     // department with the same name is reactivated instead of creating a second row.
@@ -987,17 +1020,17 @@ router.post('/departments', authenticateToken, async (req: any, res) => {
 // Update department (Super Admin only)
 router.put('/departments/:id', authenticateToken, async (req: any, res) => {
   try {
-    const { role, companyId } = req.user;
+    const { companyId } = req.user;
     const { id } = req.params;
-    const { name, description } = req.body;
+    const { description } = req.body ?? {};
 
     if (!isCompanyAdmin(actorOf(req))) {
       return res.status(403).json({ error: 'Only Super Admins can update departments' });
     }
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Department name is required' });
-    }
+    const checkedName = validateDisplayName(req.body?.name, 'Department name');
+    if (!checkedName.ok) return res.status(400).json({ error: checkedName.error });
+    const name = checkedName.value;
 
     // Check if department exists and belongs to company
     const department = await queryOne<any>(
