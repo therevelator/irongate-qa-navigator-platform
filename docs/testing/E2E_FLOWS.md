@@ -36,11 +36,11 @@ Derived from the code, then checked against the documentation:
 
 | | Count |
 |---|---|
-| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **165** |
-| Flows with a happy-path UI test | **134** of the 137 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
-| Flows with at least one negative UI test | **109** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
-| UI tests (Playwright, `chromium` project) | **366** in 41 files: 73 existing (kept, tagged) + 293 new; no `test.fail` left |
-| …tagged `@smoke` / `@negative` / `@a11y` / `@readonly` | 40 / 121 / 13 / 4 |
+| Flows in this inventory (rows F1.1 … F17.4; F11.11 only points at F4.12) | **169** |
+| Flows with a happy-path UI test | **138** of the 141 flows that have a happy path (F2.4, F12.3, F13.3 are covered by API tests); the other 15 are negative-only by nature (limits, refusals, failures) |
+| Flows with at least one negative UI test | **111** (the rest have no meaningful negative case, e.g. show / hide a password, open a module from the hub) |
+| UI tests (Playwright, `chromium` project) | **373** in 42 files: 73 existing (kept, tagged) + 300 new; no `test.fail` left |
+| …tagged `@smoke` / `@negative` / `@a11y` / `@readonly` | 41 / 122 / 17 / 4 |
 | Other tests (passing) | API 426 and database 29 (Jest); the golden baseline is untouched |
 
 ## 1. Sign-in and sessions
@@ -206,6 +206,10 @@ Derived from the code, then checked against the documentation:
 | F9.14 | How this was calculated of a work or code-quality metric: from a tile and from the KPI card; formula, sprint, the issues (with their part) or reports counted | A M L E V (scope) | — | WRK-03 (with a11y check), CI-04 | — |
 | F9.15 | Connect your CI → Issues and code quality: issue steps for Jira, Linear, JSON and SARIF steps per CI tool (tabs, arrow keys), test calls for issues and static analysis, real issues and a SARIF report calculated on the team page | A | M L E V | CI-04 (tests/e2e/team/work-evidence.spec.ts) | — |
 | F9.16 | Accessibility of Work & code quality and the Connect your CI issue steps in Light, Dark, Graphite and Porcelain | A | — | A11Y-46 … A11Y-49 | — |
+| F9.17 | Upload files: from the Admin console card, choose the team, add exported files (Jira CSV, PagerDuty CSV), preview (detected type, records, stored fields, columns not stored, minimised sample without descriptions, comments or e-mail addresses, warnings, what the export cannot carry), nothing stored before Upload, upload, result per file, its ingestion log entry naming the file | A M L (scope) | E V | UPL-01 (tests/e2e/admin/upload-files.spec.ts) | — |
+| F9.18 | Upload files: a CSV with unknown columns: type chosen by hand, the column mapping confirmed, "Preview again" required before Upload, then uploaded | A M L | — | UPL-02 | UPL-02 (unrecognised type, required columns not mapped, Upload disabled while the preview is stale) |
+| F9.19 | Upload files for a team lead (only the teams they lead; the titles setting read-only) and no entry for an engineer | L | E V | UPL-03 | UPL-03 (engineer: no navigation entry, the address opens the overview) |
+| F9.20 | Accessibility of Upload files with a preview and its column mapping in Light, Dark, Graphite and Porcelain | A | — | A11Y-71 … A11Y-74 | — |
 
 ## 10. Alerts, notifications, digest, Slack, tracked actions
 

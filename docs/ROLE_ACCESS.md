@@ -37,11 +37,11 @@ or a manager of two departments); their access is the union. Data never crosses 
   length, sample data and job titles. Reads the change history, the ingestion log and the user activity log.
 - **Manager.** Sees the teams of the departments they manage (and nothing of other departments): dashboards, trends,
   Compare, TV mode, Analytics, the revenue roll-up of those teams, and individual developer rows of people who opted in.
-  Manages those teams and their people (below manager), sets their targets, parameters and alert rules (company-wide
-  values stay the super admin's), and reads the change history
+  Manages those teams and their people (below manager), uploads exported files for them (Upload files), sets their targets,
+  parameters and alert rules (company-wide values stay the super admin's), and reads the change history
   and ingestion log of their departments.
-- **Team lead.** Sees the teams they lead or belong to. Writes those teams' data (manual metrics, alerts, tracked actions,
-  sending the wellbeing pulse), sees individual rows of people who opted in, and manages software engineers and viewers of
+- **Team lead.** Sees the teams they lead or belong to. Writes those teams' data (manual metrics, uploaded files, alerts,
+  tracked actions, sending the wellbeing pulse), sees individual rows of people who opted in, and manages software engineers and viewers of
   the teams they lead. Cannot change company settings or targets.
 - **Software engineer.** Sees the teams they belong to (read-only), their own individual developer row only, and answers
   the wellbeing pulse of their teams. Can update the status of a tracked action they own.
@@ -178,6 +178,9 @@ r, p and the number of teams and months: no other team's name, id or values.
 | Team page: Deliveries & incidents (`GET /api/ci/teams/:id/delivery`) and How this was calculated of the DORA metrics | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope |
 | Team page: Work & code quality (`GET /api/ci/teams/:id/work`) and How this was calculated of the work and code-quality metrics | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope | teams of the analytics scope |
 | Connect your CI: issue and SARIF steps, test calls for issues and static analysis; a Jira / Linear project key mapped like a service | yes | — | — | — | — |
+| Upload files (Administration → Upload files; Admin console card): preview and upload exported files (`GET /api/uploads/context`, `POST /api/uploads/preview`, `POST /api/uploads/commit`; `canUploadFiles`, `canUploadToTeam`) | any team | teams of their departments | teams they lead | — | — |
+| Upload files: a file whose rows resolve (own team id, or "map by service / project key") to a team outside the above | — (403, nothing stored) | — (403) | — (403) | — | — |
+| Store issue and incident titles (data minimisation; `PUT /api/uploads/privacy`, `canChangeDataMinimisation`); read by those who may upload | change | read | read | — | — |
 | Parameters (financial and pipeline settings) | company, departments, teams; "apply to every department and team" | their departments and teams only (company-level values read-only: the page cannot save them and the API answers 403) | — | — | — |
 | Read configuration values (`GET /api/admin/configs`, `/configs/raw`) at department / team level | any | their departments and the teams in them; company level | (merged view only) the teams they lead; company level | — | — |
 | Manual metrics: pipeline configuration (`PUT /api/analytics/pipeline-config`, one company-wide row) and company default pipeline stages (`PUT /api/analytics/pipeline-stages/:id`, `team_id` empty) | yes | read-only (the page hides Save; the API answers 403) | — | — | — |
@@ -255,7 +258,7 @@ The navigation drawer and the Analytics hub show only the pages the person may o
 | Users, Teams | super admins, managers, team leads |
 | Departments, User activity | super admins |
 | Activity, Ingestion log, Admin console, Update frequency, Parameters | super admins, managers |
-| Manual metrics | super admins, managers, team leads |
+| Manual metrics, Upload files | super admins, managers, team leads |
 
 Pages that open with limited data (Developer productivity with only your own row, the Business impact page without the
 roll-up tab) stay in the navigation.
@@ -267,5 +270,8 @@ roll-up tab) stay in the navigation.
   pulse, alerts, actions and Compare answer 403; allowed for someone with that team in scope; the summary and metrics
   reads cover the scope only; the TV picker lists her team only), `tests/api/tv-mode.test.ts`, `tests/api/role-matrix.test.ts`, `tests/api/r2-security-matrix.test.ts`,
   `tests/api/team-read-policy.test.ts`, `tests/api/analytics-scope.test.ts`.
+- Upload files: `tests/api/upload.test.ts` (UPL-001, UPL-006, UPL-007: a manager cannot upload to another department's team,
+  directly or by key mapping; a team lead only to the teams they lead; engineers 403), `tests/api/view-access.test.ts` (VIEW-005),
+  `tests/e2e/admin/upload-files.spec.ts` (UPL-03).
 - UI: `tests/e2e/viewer-rbac.spec.ts`, `tests/e2e/navigation/role-navigation.spec.ts` (visible entries per role) and the
   other `*-rbac.spec.ts` suites.

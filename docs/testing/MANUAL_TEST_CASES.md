@@ -1,6 +1,6 @@
 # Manual test cases
 
-461 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+473 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -10,7 +10,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Registration and invitations](#registration-and-invitations) (19)
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
-- [Accessibility](#accessibility) (31)
+- [Accessibility](#accessibility) (35)
 - [Theme and phone layout](#theme-and-phone-layout) (31)
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
@@ -38,6 +38,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Connect your CI](#connect-your-ci) (4)
 - [Deliveries & incidents](#deliveries--incidents) (4)
 - [Work & code quality](#work--code-quality) (4)
+- [Upload files](#upload-files) (8)
 - [Wellbeing pulse](#wellbeing-pulse) (24)
 - [Developer productivity](#developer-productivity) (1)
 - [Overview](#overview) (4)
@@ -2942,6 +2943,70 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Set the theme back to the one used before.
 
 *Automated:* `tests/e2e/team/action-history.spec.ts › Action status history accessibility › A11Y-61 Porcelain theme: the Action plan with the status lines and an open history has no serious violations`
+
+### TC-ADM-085: Light theme: Upload files with a preview and its column mapping has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.20
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- The fixture files of tests/fixtures/upload in the repository (jira-all-fields.csv, pagerduty-incidents.csv, sprints-template.csv), or exports of your own Jira and PagerDuty.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Choose the Light theme (top bar → appearance). Open Upload files, choose the team, add jira-all-fields.csv and click Preview; open Column mapping. | The preview, the sample table and the mapping are shown. |
+| 2 | Run axe DevTools (WCAG 2.1 A/AA) on the page; move through it with Tab only. | No serious or critical violation; the drop area, the file inputs, File type, the mapping lists, Preview and Upload are reachable and labelled; the sample table can be scrolled with the keyboard. |
+
+*Automated:* `tests/e2e/admin/upload-files.spec.ts › Upload files › A11Y-71 Light theme: Upload files with a preview and its column mapping has no serious violations`
+
+### TC-ADM-086: Dark theme: Upload files with a preview and its column mapping has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.20
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- The fixture files of tests/fixtures/upload in the repository (jira-all-fields.csv, pagerduty-incidents.csv, sprints-template.csv), or exports of your own Jira and PagerDuty.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Choose the Dark theme (top bar → appearance). Open Upload files, choose the team, add jira-all-fields.csv and click Preview; open Column mapping. | The preview, the sample table and the mapping are shown. |
+| 2 | Run axe DevTools (WCAG 2.1 A/AA) on the page; move through it with Tab only. | No serious or critical violation; the drop area, the file inputs, File type, the mapping lists, Preview and Upload are reachable and labelled; the sample table can be scrolled with the keyboard. |
+
+*Automated:* `tests/e2e/admin/upload-files.spec.ts › Upload files › A11Y-72 Dark theme: Upload files with a preview and its column mapping has no serious violations`
+
+### TC-ADM-087: Graphite theme: Upload files with a preview and its column mapping has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.20
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- The fixture files of tests/fixtures/upload in the repository (jira-all-fields.csv, pagerduty-incidents.csv, sprints-template.csv), or exports of your own Jira and PagerDuty.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Choose the Graphite theme (top bar → appearance). Open Upload files, choose the team, add jira-all-fields.csv and click Preview; open Column mapping. | The preview, the sample table and the mapping are shown. |
+| 2 | Run axe DevTools (WCAG 2.1 A/AA) on the page; move through it with Tab only. | No serious or critical violation; the drop area, the file inputs, File type, the mapping lists, Preview and Upload are reachable and labelled; the sample table can be scrolled with the keyboard. |
+
+*Automated:* `tests/e2e/admin/upload-files.spec.ts › Upload files › A11Y-73 Graphite theme: Upload files with a preview and its column mapping has no serious violations`
+
+### TC-ADM-088: Porcelain theme: Upload files with a preview and its column mapping has no serious accessibility violations
+
+**Type:** Accessibility · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.20
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- The fixture files of tests/fixtures/upload in the repository (jira-all-fields.csv, pagerduty-incidents.csv, sprints-template.csv), or exports of your own Jira and PagerDuty.
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Choose the Porcelain theme (top bar → appearance). Open Upload files, choose the team, add jira-all-fields.csv and click Preview; open Column mapping. | The preview, the sample table and the mapping are shown. |
+| 2 | Run axe DevTools (WCAG 2.1 A/AA) on the page; move through it with Tab only. | No serious or critical violation; the drop area, the file inputs, File type, the mapping lists, Preview and Upload are reachable and labelled; the sample table can be scrolled with the keyboard. |
+
+*Automated:* `tests/e2e/admin/upload-files.spec.ts › Upload files › A11Y-74 Porcelain theme: Upload files with a preview and its column mapping has no serious violations`
 
 ### TC-ORG-079: Light theme: the overview with the demo sandbox banner has no serious accessibility violations
 
@@ -8770,6 +8835,188 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 3 | Sign in as the super admin of a newly registered company and open its team. | Evidence from CI says there is no CI data yet and names issues and static-analysis reports; the Work & code quality part is not shown. |
 
 *Automated:* `tests/e2e/team/work-evidence.spec.ts › Work & code quality › WRK-04, WRK-05`
+
+## Upload files
+
+### TC-ADM-077: Upload files from the Admin console: preview first (nothing stored), then upload, the result per file and its ingestion log entry
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.17
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- The fixture files of tests/fixtures/upload in the repository (jira-all-fields.csv, pagerduty-incidents.csv, sprints-template.csv), or exports of your own Jira and PagerDuty.
+
+**Test data**
+
+- jira-all-fields.csv (Jira CSV export with descriptions, comments, people and a row without a key)
+- pagerduty-incidents.csv (PagerDuty incidents CSV with a notes column)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open Admin console and find the Upload files card below Connect your CI; click Upload files. | The Upload files page opens (top bar: Upload files). The right column shows What is stored (Issues, Incidents, Never stored) and Store issue and incident titles (ticked). |
+| 2 | Under 1. Where the data goes keep Upload to a team and choose Core Team. | The team is selected. |
+| 3 | Drop jira-all-fields.csv and pagerduty-incidents.csv on the drop area (or click it and choose them). | Both files are listed with their sizes and a Remove button each. |
+| 4 | Click Preview. | 3. Preview appears with 'Nothing has been stored yet'. jira-all-fields.csv: detected Jira issues (CSV export), Ready, Records 6, the date range, Team Core Team, Feeds Defect escape rate …; Left out: 1 × Issue key is empty (row 7). |
+| 5 | In the Jira file read Fields that will be stored, Not stored and the Sample table. | Stored fields include key, type, status, transitions, storyPoints, sprints, environment, title, assigneeHash, reporterHash; Not stored lists column “Description”, column “Comment”, column “Attachment”, column “Custom field (Customer notes)”, column “Priority”. The sample shows PAY-101 … with 32-character hashes instead of people; no description text, comment, phone number or e-mail address appears. |
+| 6 | Read the warnings and What this export cannot carry. | A warning says 3 sprints have no dates in this file; the box says a Jira CSV has no status-change history (blocked time cannot be calculated) and names no sprint dates. |
+| 7 | In a second tab open Administration → Ingestion log. | No entry says 'uploaded “jira-all-fields.csv”': the preview stored nothing. |
+| 8 | Back on Upload files click Upload 2 files. | 4. Result lists both files as Stored: the Jira file '6 new, 0 updated, 0 already stored, 1 rows left out · Core Team' with Recalculated: Defect escape rate, …; the PagerDuty file '3 new …'. |
+| 9 | Click Open in the ingestion log under the Jira file. | The Ingestion log opens with that entry expanded: 'Owner Uitest uploaded “jira-all-fields.csv”', source issues (json), Accepted. |
+| 10 | Back on Upload files, choose Preview again with the same Jira file. | A warning says 6 of these issues are already stored (updated where they changed). |
+
+*Automated:* `tests/e2e/admin/upload-files.spec.ts › Upload files › UPL-01 from the Admin console: preview first (nothing stored), the fields and a minimised sample, then upload and the ingestion log entry`
+
+### TC-ADM-078: A CSV whose columns are named differently: choose the type, confirm the column mapping, preview again, upload
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F9.18
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- The fixture files of tests/fixtures/upload in the repository (jira-all-fields.csv, pagerduty-incidents.csv, sprints-template.csv), or exports of your own Jira and PagerDuty.
+
+**Test data**
+
+- A file tracker.csv with the header Ticket,Kind,State,Opened on,Points and two rows (ODD-1, Bug, Done, a date in the last week, 2; ODD-2, Story, Open, a date, 3)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open Upload files, choose Core Team, add tracker.csv and click Preview. | The file shows Cannot be stored: 'The type of this file was not recognised …'. |
+| 2 | In File type choose Jira issues (CSV export). | A notice says you changed a setting and must choose Preview again; Upload is disabled. |
+| 3 | Click Preview again. | 'Required columns not mapped: Issue key, Issue type, Status, Created. Choose the columns in the mapping below.' The Column mapping section is open. |
+| 4 | Map Issue key → Ticket, Issue type → Kind, Status → State, Created → Opened on, Story points → Points. Leave Date order on Day / month / year. | Each list offers the file's headers and 'Not in this file'. Upload stays disabled. |
+| 5 | Click Preview again. | The file is Ready with Records 2 and a sample starting with ODD-1. |
+| 6 | Click Upload 1 file. | The result reads '2 new, 0 updated, 0 already stored'. |
+
+*Automated:* `tests/e2e/admin/upload-files.spec.ts › Upload files › UPL-02 a CSV with unknown column names: the mapping is confirmed by hand, previewed again, then uploaded`
+
+### TC-ADM-079: Jira CSV plus the sprints CSV: velocity and escape rate are calculated; blocked time is not
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.17
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- The fixture files of tests/fixtures/upload in the repository (jira-all-fields.csv, pagerduty-incidents.csv, sprints-template.csv), or exports of your own Jira and PagerDuty.
+
+**Test data**
+
+- A Jira CSV export of the last few weeks with story points, a Sprint column and Environment on the bugs
+- A sprints CSV (template: sprint,startDate,endDate,completedDate) with the dates of those sprints, the last one closed
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Upload files: choose the team, add both files, Preview. | The Jira file warns that its sprints have no dates in this file; the sprints file is detected as Sprints (QE Navigator CSV template) and is Ready. |
+| 2 | Upload, then open the team page → Work & code quality. | Sprint velocity, commitment and carryover show values for the closed sprint; Defect escape rate shows a value; Blocked time is not calculated from this data (no status history in a Jira CSV). |
+
+*Automated:* `tests/api/upload.test.ts › UPL-003 (velocity 8 and escape rate 50 % from a Jira CSV with a sprints CSV)`
+
+### TC-ADM-080: Map by service / project key: rows go to their mapped teams; unmapped rows are left out with the reason
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.17
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- Admin console → Connect your CI → service → team mapping: checkout-api → Core Team (and no mapping for ledger-db or webhooks).
+
+**Test data**
+
+- pagerduty-incidents.csv (services checkout-api, ledger-db, webhooks)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Upload files: choose Map by service / project key, add pagerduty-incidents.csv, Preview. | The file is Ready with Records 1, Team Core Team; Left out: 1 × No team: service "ledger-db" is not mapped to a team (Connect your CI) (row 3) and 1 × … "webhooks" … (row 4). |
+| 2 | Add a JUnit XML file to the same upload and Preview again. | The JUnit file cannot be stored: 'A test report carries no team: choose the team it belongs to …'. |
+
+*Automated:* `tests/api/upload-parsers.test.ts › UPP-033, UPP-035`
+
+### TC-ADM-081: A team lead uploads to the teams they lead only; an engineer has no Upload files
+
+**Type:** Negative · **Priority:** High · **Role:** Team lead · **Flow:** F9.19
+
+**Preconditions**
+
+- App running with the NovaTech demo data.
+
+**Test data**
+
+- lead@irongate.com / demo123
+- engineer@irongate.com / demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as lead@irongate.com, open the navigation and choose Upload files (under Administration). | The page opens. The Team list holds only 'Choose a team…' and The Away Team. Store issue and incident titles is shown but cannot be changed ('A super admin can change this'). |
+| 2 | Sign out; sign in as engineer@irongate.com and open the navigation. | There is no Upload files entry. |
+| 3 | Type the address /upload-files. | The overview opens instead (the page is not available to this role). |
+
+*Automated:* `tests/e2e/admin/upload-files.spec.ts › Upload files › UPL-03 a team lead uploads to the team they lead only; an engineer has no Upload files entry`
+
+### TC-ADM-082: A manager cannot upload to another department's team, directly or through the key mapping
+
+**Type:** Negative · **Priority:** High · **Role:** Manager · **Flow:** F9.17
+
+**Preconditions**
+
+- App running with the NovaTech demo data; manager@irongate.com manages one department.
+- Connect your CI (as admin): a project key mapped to a team of ANOTHER department (e.g. GSMALL → that team).
+
+**Test data**
+
+- manager@irongate.com / demo123
+- A Jira CSV whose issue keys start with GSMALL-
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the manager and open Upload files. | The Team list holds only the teams of the manager's department. |
+| 2 | Choose Map by service / project key, add the GSMALL Jira CSV, Preview. | The file cannot be stored: 'Records of this file belong to team <other team>, which you may not upload to'. |
+| 3 | Click Upload (if offered for other files) and check the ingestion log as admin. | Nothing of this file was stored. |
+
+*Automated:* `tests/api/upload.test.ts › UPL-007`
+
+### TC-ADM-083: Store issue and incident titles off: titles deleted, new uploads keep only the key
+
+**Type:** Positive · **Priority:** Medium · **Role:** Super admin · **Flow:** F9.17
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- Some issues uploaded with titles (the first case).
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | On Upload files untick Store issue and incident titles. | A confirmation explains that stored titles are deleted and lists will show the key only; after OK the message says how many issue and incident titles were deleted. |
+| 2 | Open the team page → Work & code quality → an escaped defect. | Only the key is shown, no title. |
+| 3 | Preview a Jira CSV again. | Fields that will be stored no longer include title; a warning says titles are not stored; the sample has no title column. |
+| 4 | Open Activity. | An entry 'Store issue and incident titles: off (… cleared)'. |
+| 5 | Tick the box again. | 'Titles are stored from now on.' |
+
+*Automated:* `tests/api/upload.test.ts › UPL-006`
+
+### TC-ADM-084: Hostile and oversized files are refused and nothing is stored: zip-slip, zip bomb, over 50 MB
+
+**Type:** Negative · **Priority:** High · **Role:** Super admin · **Flow:** F9.17
+
+**Preconditions**
+
+- A newly registered company (its super admin signed in) with one team (e.g. Core Team).
+- The fixture files of tests/fixtures/upload in the repository (jira-all-fields.csv, pagerduty-incidents.csv, sprints-template.csv), or exports of your own Jira and PagerDuty.
+
+**Test data**
+
+- evil.zip containing an entry named ../../etc/x.csv
+- bomb.zip: one 30 MB file of zeros (compresses about 1000 : 1)
+- A 51 MB file
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Upload files: choose a team, add evil.zip, Preview. | 'evil.zip: The zip contains "../../etc/x.csv", with a ".." path (zip-slip): refused'. Nothing is listed for preview. |
+| 2 | Remove it, add bomb.zip, Preview. | '… expands 1000 times (a zip bomb?): refused'. |
+| 3 | Remove it, add the 51 MB file. | The page says the files are 51.0 MB in total, at most 50.0 MB, and Preview is disabled. |
+| 4 | Check the Ingestion log. | No upload entry was added. |
+
+*Automated:* `tests/api/upload.test.ts › UPL-008; tests/api/upload-parsers.test.ts › UPP-041 … UPP-044`
 
 ## Wellbeing pulse
 

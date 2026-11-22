@@ -1124,6 +1124,30 @@ customer's own read-only credentials, and only ever makes outbound HTTPS calls t
 - Security posture for the customer's review: [`agent/SECURITY.md`](../agent/SECURITY.md) (data flow, fields per source, permissions,
   network, verification of the bundle and the image).
 
+### 4.2e Upload files ("Level 0": no token, no network access, no CI step)
+
+Why: some companies can give QE Navigator nothing at all: no API key in their CI, no token to their tracker, no outbound
+connection from an agent. They can still export files. Upload files is the zero-access way in, and the trust feature is the
+**preview**: before anything is stored the person sees exactly which fields of which records will be kept.
+
+- Where: Administration → **Upload files** (and a card in the Admin console next to Connect your CI). Super admins for every team,
+  managers for their departments' teams, team leads for the teams they lead (the people who may write a team's data).
+- What: everything the ingestion API accepts (JUnit, TRX, Cucumber, lcov, Cobertura, JaCoCo, Istanbul, SARIF, pipeline /
+  deployment / commit / incident / issue JSON including Jira search results with changelog, Linear exports, PagerDuty and Opsgenie
+  exports) plus the CSV exports people can get without API access: Jira (all or current fields, any language), Linear, PagerDuty
+  incidents, Opsgenie alerts or incidents, and two QE Navigator templates (deployments, sprints). Zip archives are unpacked with safe
+  limits. Types are detected by content; the person can override the type and confirm the CSV column mapping.
+- How: the files are turned into requests of the ingestion API and run through the same handlers (parsers, field allow-list,
+  idempotency, dry run for the preview, ingestion log, calculation engine): uploaded data is indistinguishable from API data and
+  recalculates the same metrics. Rows with no team, unreadable rows and dates the API would refuse are left out and listed.
+- Honest limits: a Jira CSV has no status-change history (blocked time is not calculated; only the last status-category change is
+  known) and no sprint dates (velocity, commitment and carryover need the sprints template or the sprints sent once by API);
+  escape rate, density and sizing accuracy are calculated when the export carries the environment and the estimates.
+- Data minimisation: one **field allow-list** for every path (API, uploads, agent): only the fields the calculations need, people
+  as a salted hash, never descriptions, comments, attachments or free text. Titles are kept for the evidence lists unless a super
+  admin turns off **Store issue and incident titles** (default on, for backward compatibility; off deletes the stored titles too).
+  Details: [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) section 4E.
+
 ### 4.3 Manual metrics
 
 **Administration → Manual metrics** (super admin, manager, team lead; team scope enforced by the server). Sections: current

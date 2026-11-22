@@ -115,9 +115,30 @@ policy before anything leaves, and shows the exact payload with `qe-agent previe
 one reproducible file or a distroless non-root image. Its own security posture, for customers' security reviews:
 [agent/SECURITY.md](agent/SECURITY.md). Its requests are marked **agent** in the ingestion log.
 
+**File uploads** ([`server/routes/uploads.ts`](server/routes/uploads.ts), Administration → Upload files). Session
+authentication and the same cookie (`SameSite`) and exact-origin CORS protection as the rest of the app; the sandbox refuses
+every upload. Who: super admins, managers (their departments' teams) and team leads (teams they lead); every team a file's
+rows resolve to is checked on the server, also inside the ingestion handlers (`IngestCaller.teamScope`), so neither "map by
+key" nor a team id written into the file reaches another team. Server-side limits: 50 MB per upload as received, 100 MB and
+100 files once unpacked, 20 files per upload, CSV 50,000 rows / 500 columns. ZIP archives are read in memory
+([`server/lib/ingest/zip.ts`](server/lib/ingest/zip.ts)): zip-slip names (`..`, absolute, drive letter, backslash), more than
+100 entries, more than 50 MB per entry or 100 MB in all, a ratio above 200 : 1, an entry inflating beyond its declared size
+(bounded while inflating), encryption and ZIP64 are refused; nested zips are not opened, symbolic links are skipped. Content is
+detected, never executed; XML uses the hardened reader of the API; CSV cells are text and a value a spreadsheet would run as a
+formula is stored with a leading apostrophe. The preview writes nothing (not even a log row). No file is kept: the parsed rows,
+plus the minimised copy `raw_uploads` keeps for the API (35 days). 60 previews and uploads per company per 10 minutes.
+Tests, attacker paths included: `tests/api/upload.test.ts`, `tests/api/upload-parsers.test.ts`, `tests/api/upload-netlify.test.ts`.
+
+**Field allow-list** ([`server/lib/ingest/fieldAllowList.ts`](server/lib/ingest/fieldAllowList.ts)). Every issue and incident,
+on every path (ingestion API, uploads, the agent), is reduced to the fields the calculations need before it is stored; the
+copy kept in `raw_uploads` for issues and incidents is the minimised records, never the body as received. Descriptions,
+comments, attachments, custom free-text fields, priority, other labels, names and e-mail addresses are never stored; people
+only as a salted hash (the commit-author hash). Titles only while the company setting "Store issue and incident titles" is on
+(super admins; off deletes the stored titles and is recorded in the Activity log). The field list: docs/INTEGRATION_GUIDE.md 4E.6.
+
 **Rate limits** ([`server/middleware/rateLimit.ts`](server/middleware/rateLimit.ts)): general API
 (`API_RATE_LIMIT_MAX` per minute, default 300), sign-in (20 failed attempts per 15 minutes per IP), forgot password (per IP and per
-e-mail), reset password, invitations, ingestion (60 per minute), language-model routes and Recalculate.
+e-mail), reset password, invitations, ingestion (60 per minute), file uploads (60 per company per 10 minutes), language-model routes and Recalculate.
 The store is in memory, so on Netlify a limit applies per warm function instance.
 
 **Input handling and output escaping (XSS).** Names typed by one person are shown to others (dialogs,

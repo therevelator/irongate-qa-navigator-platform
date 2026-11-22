@@ -177,10 +177,25 @@ For super admins, managers and team leads, within their scope. Details: [ADMIN_P
 - **Parameters:** KPI targets (company, department, team, with history), alert rules, financial and
   pipeline settings, and how long sign-ins last.
 - **Update frequency:** how often each metric is expected to update (drives the stale marker).
+- **Upload files** (super admins, managers for their departments' teams, team leads for the teams they
+  lead; also a card in the Admin console next to Connect your CI): for a company that cannot connect its
+  tools. Export files (test reports, coverage, SARIF, Jira or Linear issues as CSV or JSON, PagerDuty or
+  Opsgenie incidents, the deployments and sprints CSV templates, or a zip of them), drop them on the page,
+  choose the team (or "map by service / project key") and choose **Preview**. Nothing is stored yet: per
+  file you see the detected type (change it in *File type* if it is wrong), the number of records, the
+  dates, the team, the exact fields that will be stored and the columns that will not, three records
+  exactly as they will be stored, warnings (rows that cannot be read, with their row numbers; rows without
+  a team; records already stored) and what the export cannot carry (a Jira CSV has no status history, so
+  blocked time is not calculated, and no sprint dates: add the sprints CSV). For a CSV, check the **column
+  mapping** and the date order, change what is wrong and choose *Preview again*. Then **Upload**: per file
+  the records stored, updated and already stored, the rows left out and why, the metrics recalculated, and
+  a link to its ingestion log entry. *What is stored* lists the field allow-list; a super admin can turn off
+  **Store issue and incident titles** (the titles already stored are deleted; lists show the key only).
 - **Manual metrics:** enter team KPIs and developer metrics by hand. The company-wide pipeline
   configuration and the company default pipeline stages are changed by super admins only; managers edit
   the pipeline stages of their own departments' teams.
-- **Activity:** the change history with undo. **Ingestion log:** every data import. **User activity**
+- **Activity:** the change history with undo. **Ingestion log:** every data import (uploads show who
+  uploaded which file; filter *File uploads*). **User activity**
   (super admins): sign-ins, requests and screens of the company's users for 90 days.
 
 ## 10. Reading the numbers

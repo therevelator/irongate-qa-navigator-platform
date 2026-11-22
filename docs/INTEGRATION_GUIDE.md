@@ -21,6 +21,7 @@ with real data.
    - 4B. [Raw ingestion: deployments, commits, incidents (v2)](#4b-raw-ingestion-deployments-commits-incidents-v2)
    - 4C. [Raw ingestion: issues and static analysis (v2)](#4c-raw-ingestion-issues-and-static-analysis-v2)
    - 4D. [On-premises agent: Jira, Linear, PagerDuty, Opsgenie from inside your network](#4d-on-premises-agent-jira-linear-pagerduty-opsgenie-from-inside-your-network)
+   - 4E. [Upload files: no API key, no network access, no CI step ("Level 0")](#4e-upload-files-no-api-key-no-network-access-no-ci-step-level-0) (4E.6: the field allow-list)
 5. [All other data: how it can be sent today](#5-all-other-data-how-it-can-be-sent-today)
 6. [Code: curl, Node.js, Python, retries, batching, backfill](#6-code-curl-nodejs-python-retries-batching-backfill)
 7. [Recipes per source system](#7-recipes-per-source-system)
@@ -913,6 +914,222 @@ node dist/qe-agent.mjs sync    -c qe-agent.yaml                 # then every 15 
 Verified end to end against a local instance by `tests/api/agent-e2e.test.ts` (the agent bundle against mock Jira, Linear,
 PagerDuty and Opsgenie servers and the real API: records stored for the mapped teams, velocity, MTTR and infrastructure
 failures computed, nothing personal stored, re-runs send nothing).
+
+## 4E. Upload files: no API key, no network access, no CI step ("Level 0")
+
+For a company that cannot give QE Navigator a token, network access or a CI step: someone exports files from their tools
+and drops them on **Administration → Upload files** (also linked from Admin console, next to Connect your CI). A **preview**
+shows exactly what would be stored; nothing is written until **Upload**. The files go through the same ingestion handlers as
+the API of sections 4A–4C (same parsers, field allow-list, idempotency, dry run, `raw_uploads`, ingestion log and calculation
+engine): uploaded data and API data are indistinguishable afterwards, and metrics recalculate the same way.
+
+**Who:** super admins (every team), managers (the teams of their departments), team leads (the teams they lead): the people
+who may write a team's data (`canUploadFiles` / `canUploadToTeam`, docs/ROLE_ACCESS.md). The server checks every team a
+file's rows resolve to; one row of a team outside the person's scope refuses the whole file (`403`), and a team id written
+into the file is not a way round it.
+
+### 4E.1 Steps
+
+1. **Where the data goes.** *Upload to a team* (every row goes to that team; team ids inside the file are replaced), or
+   *Map by service / project key*: each issue goes to the team its Jira / Linear project key is mapped to, each incident or
+   deployment to the team of its service, as mapped in Connect your CI (service → team). Rows with no mapped key are left out
+   and listed. Test, coverage, SARIF and pipeline files carry no key: they need *Upload to a team*.
+2. **Files.** Drag and drop or choose files, or one zip archive. Up to **50 MB** in total per upload (as sent; the browser
+   gzips text files before sending), 20 files per upload, 100 files and 100 MB once unpacked.
+3. **Preview** (`POST /api/uploads/preview`, writes nothing: no data, no raw upload, no ingestion log row). Per file:
+   detected type (with a *File type* override), records, date range, team(s), the **fields that will be stored** (after the
+   field allow-list) and the input fields / columns that will not, a **sample of 3 records exactly as they will be stored**,
+   warnings (rows that cannot be read, with row numbers; rows without a team; dates out of range; duplicate rows; records
+   already stored; the same file twice), what the export cannot carry, and the metrics it feeds. For a CSV, the detected
+   **column mapping** can be changed (and the date order and time zone of times without one); a change asks for *Preview
+   again* before *Upload*.
+4. **Upload** (`POST /api/uploads/commit`, the same files with the confirmed choices). Per file: records stored, updated,
+   already stored, rows left out and why, the metrics recalculated, and a link to its ingestion log entry (channel
+   `upload`, the person who uploaded, the file name; a file sent in several requests shows *part n of m*).
+
+### 4E.2 Accepted files (detected by content, not by name)
+
+| Kind | Formats | Stored as |
+|---|---|---|
+| Test results | JUnit XML (Surefire, pytest, Jest, Gradle, Playwright, Cypress, Go), TRX, Cucumber JSON | a test run of the chosen team (4A) |
+| Coverage | lcov, Cobertura XML, JaCoCo XML, Istanbul `coverage-final.json` / `json-summary` | a coverage report (4A) |
+| Static analysis | SARIF 2.1.0 (SonarQube, CodeQL, ESLint, Semgrep, …) | an analysis report (4C) |
+| Pipeline runs | QE Navigator JSON (4A.2) | pipeline runs (4A) |
+| Deployments | QE Navigator JSON, GitHub `deployment_status`, GitLab deployment events, **deployments CSV template** | deployments (4B) |
+| Commits | QE Navigator JSON (git log), GitHub / GitLab push events | commits; authors as a salted hash only (4B) |
+| Incidents | QE Navigator JSON, PagerDuty REST export / webhook, Opsgenie alerts export / webhook, **PagerDuty incidents CSV**, **Opsgenie alerts or incidents CSV** | incidents (4B) |
+| Issues | Jira search result with changelog (`/rest/api/3/search/jql?expand=changelog,names`), Linear GraphQL export, QE Navigator JSON, **Jira CSV** (all fields or current fields), **Linear CSV** | issues and sprints (4C) |
+| Sprints | **sprints CSV template** (the dates of the sprints a Jira CSV names) | sprints (4C) |
+
+A file of a report kind (tests, coverage, SARIF) carries no time other than its own: a coverage file, and a test report
+without a timestamp, are recorded at the time of the upload. Vendor JSON larger than one API request is split into requests
+of at most 1,000 issues or 500 events.
+
+### 4E.3 CSV exports and their column mapping
+
+CSV files are read as people get them: a UTF-8 BOM is removed (UTF-16 with a BOM, as Excel's "Unicode text" saves it, is
+decoded); the separator is detected from the header row (comma, **semicolon** for locales with a decimal comma, tab, pipe);
+quoted values may hold separators, doubled quotes and **line breaks** (Jira descriptions); repeated column names are kept
+apart (Jira repeats *Sprint*, *Labels*, *Component/s*, *Comment*). At most 50,000 rows, 500 columns. Column names are
+compared without case, accents, spaces or punctuation, in English, German, French, Spanish, Italian, Dutch and Portuguese,
+and custom-field variants are matched by pattern (*Custom field (Story Points)*, *Story point estimate*, *Story Punkte*).
+Every column that is not mapped is never read and never stored; the preview lists them.
+
+**Dates:** ISO 8601, epoch milliseconds or seconds, Jira's `21/Nov/26 3:45 PM` (month names in English, German, French,
+Spanish, Dutch, Portuguese, Italian), `21.11.2026 15:45`, `21/11/2026`, `11/21/2026 3:45 PM`, `Nov 21, 2026`. The day /
+month order of numeric dates is detected per file (a first part above 12 means day first); when every date fits both, it is
+read day first and the preview says so (*Date order* changes it). Times without a zone are UTC unless a *Time zone* offset
+(`+01:00`, …) is given. **Numbers:** `2,5`, `1.234,5`, `1,234.5`. **Durations** (Jira time fields): seconds, or `1w 2d 3h 30m`
+(1 w = 40 h, 1 d = 8 h).
+
+**Jira CSV** (Issues → Export → *CSV (all fields)* or *CSV (current fields)*), `jira-csv`:
+
+| Field | Column names (examples; any language listed above) |
+|---|---|
+| key (required) | Issue key · Schlüssel / Vorgangsschlüssel · Clé de ticket · Clave de incidencia · Chiave |
+| type (required) | Issue Type · Vorgangstyp · Type de ticket · Tipo de incidencia |
+| status (required) | Status · État / Statut · Estado · Stato |
+| created (required) | Created · Erstellt · Création · Creada · Creato |
+| title | Summary · Zusammenfassung · Résumé · Resumen |
+| status category | Status Category (To Do / In Progress / Done, also translated) |
+| status category changed | Status Category Changed (the one status change a Jira CSV carries) |
+| resolution, resolved, updated | Resolution / Lösung, Resolved / Erledigt, Updated / Aktualisiert |
+| project | Project key / Projektschlüssel (else the key's prefix) |
+| story points | Custom field (Story Points) / (Story point estimate) / Story Punkte |
+| sprint (every column) | Sprint |
+| labels (every column) | Labels / Stichwörter (only labels naming an environment or a type are kept) |
+| components (every column) | Component/s / Komponenten |
+| environment | Environment / Umgebung, or a found-in custom field |
+| original estimate, time spent | Original Estimate, Time Spent (seconds) |
+| assignee, reporter | Assignee / Bearbeiter, Reporter / Autor (salted hash only) |
+
+The status category comes from *Status Category*, else a status name Jira uses (any of the languages above), else *done*
+when the row has a resolution and a resolved date. Sprints are named but have no dates in a Jira CSV: their id is
+`name:<sprint name>`; add a **sprints CSV** (template below) for velocity, commitment and carryover.
+
+**Linear CSV** (Settings → Import / export → Export CSV), `linear-csv`: ID (required), Title, Team, Status (required),
+Estimate, Labels (one cell, comma separated: the type is Bug / Story from labels, Sub-task with a parent issue, else Task),
+Project (kept as the component), Parent issue, Cycle Number / Cycle Name / Cycle Start / Cycle End (the issue's cycle; a
+cycle whose end has passed counts as closed), Created (required), Updated, Started, Completed, Canceled (status changes:
+started → in progress, completed / canceled → done; canceled is resolution *Canceled*, not completed), Assignee, Creator.
+
+**PagerDuty CSV** (Incidents → *Download CSV*, or Analytics → incident export), `pagerduty-csv`: id / Incident ID (required,
+else incident_number), description / Title, status, urgency (high / low, when there is no priority), priority / Priority
+Name (P1–P5), service_name / Service Name, created_on / Created At (required), acknowledged_on, resolved_on, or Seconds To
+First Ack / Seconds To Resolve (added to the creation time), assigned_to / resolved_by_user_name (salted hash only).
+
+**Opsgenie CSV** (alerts or incidents export), `opsgenie-csv`: TinyId / Alert ID / Incident ID (required), Message, Status
+(closed / resolved), Acknowledged (true / false), Priority (P1–P5), Impacted Services / Entity, or a `service:<name>` tag
+in Tags, CreatedAt (required), UpdatedAt, Closed At / Resolved At, AckTime / CloseTime (milliseconds after creation),
+Owner / Responders (salted hash only).
+
+**Deployments CSV template** (`deployments-csv`; downloadable on the Upload files page):
+
+```csv
+id,service,environment,commit,commitAuthoredAt,startedAt,finishedAt,result,rollbackOf,hotfix,url
+rel-4.2.0,checkout-api,production,a1b2c3d4e5,2026-11-01T15:00:00Z,2026-11-02T09:00:00Z,2026-11-02T09:12:00Z,success,,false,https://ci.example.com/deploy/420
+rel-4.2.1,checkout-api,production,b2c3d4e5f6,,2026-11-03T09:30:00Z,2026-11-03T09:41:00Z,failed,,false,
+rel-4.2.1-rb,checkout-api,production,a1b2c3d4e5,,2026-11-03T10:40:00Z,2026-11-03T10:48:00Z,success,rel-4.2.1,false,
+```
+
+Required: id, environment, finishedAt, result (success / failed / rolled_back and the synonyms of 4B.1), and commit.
+Optional: team (a team id, used in *map* mode), service, commitAuthoredAt (the first commit's time: lead time for changes),
+startedAt, rollbackOf, hotfix, url.
+
+**Sprints CSV template** (`sprints-csv`; needs *Upload to a team*):
+
+```csv
+sprint,startDate,endDate,completedDate
+Sprint 41,2026-11-02,2026-11-15,2026-11-15
+Sprint 42,2026-11-16,2026-11-29,
+```
+
+Matched to the issues of a Jira CSV by name. A date without a time closes the sprint at the end of that day (UTC), so
+issues resolved that day count. Upload it with or after the Jira CSV; the order does not matter (each recalculates).
+
+### 4E.4 What a CSV export cannot carry (said in the preview too)
+
+- **Jira CSV:** no status-change history, only the time of the last status-category change. **Blocked time cannot be
+  calculated** (it needs the blocked / flagged intervals). No sprint dates: **velocity, commitment and carryover** are
+  calculated only once the sprint dates are known (sprints CSV, or the sprints sent once through the API). Commitment counts
+  an issue as committed when it was created before the sprint started (Jira's sprint changes are not in the CSV). **Escape
+  rate and density** need an environment / found-in value (or a label such as `production` / `staging`) on the bugs.
+  **Sizing accuracy** needs Original Estimate and Time Spent. Computed from a Jira CSV: escape rate, density, velocity,
+  commitment and carryover (with sprint dates), sizing accuracy.
+- **Linear CSV:** only the started, completed and canceled times: no blocked time.
+- **PagerDuty / Opsgenie CSV:** no link to the deployment that caused an incident: the change failure rate counts these
+  incidents only through the deployments (rollbacks, hotfixes).
+- **Deployments CSV:** without commitAuthoredAt, lead time for changes is not calculated.
+
+### 4E.5 Limits and safety
+
+| | |
+|---|---|
+| Size | 50 MB per upload as received (`UPLOAD_MAX_MB`), 100 MB once unpacked (gzip and zip), 20 files per upload, 100 files once unzipped; a CSV 50,000 rows and 500 columns. On Netlify the platform's request limit (about 6 MB, after the browser's gzip) applies first: upload large exports in parts. |
+| Zip | Read in memory, nothing written to disk. Refused: names with `..`, an absolute path, a drive letter or a backslash (zip-slip), more than 100 files, more than 50 MB for one file or 100 MB in all uncompressed, a compression ratio above 200 : 1, an entry that inflates beyond its declared size (checked while inflating), encrypted entries, ZIP64. A zip inside the zip is not opened; symbolic links, directories and `__MACOSX` / `._` files are skipped. |
+| Content | Detected by content; nothing is executed or evaluated. CSV cells are text: a value that a spreadsheet would run as a formula (`=`, `+`, `-`, `@` first) is stored with an apostrophe in front. XML is read by the same hardened reader as the API (no entities, no DTD). |
+| Dates | Incidents, deployments and commits older than 365 days or in the future, and issues with a time in the future, are left out and listed (the API refuses them). |
+| Rate | 60 previews and uploads per company per 10 minutes (`UPLOAD_RATE_LIMIT`); then `429`. |
+| Auth | The session cookie (`SameSite`) and the exact-origin CORS of the rest of the app; the demo sandbox refuses every upload. |
+| Storage | No file is kept. What is stored is the parsed rows and, for 35 days, the minimised copy `raw_uploads` keeps for the API (`RAW_PAYLOAD_DAYS`; issues and incidents: the minimised records, never the file as received; `raw_uploads` rows 13 months). |
+
+Errors: `400` (no file, a bad option, a damaged zip, a zip-slip name), `403` (a team the person may not upload to; another
+company's team), `413` (over a size limit, a zip bomb), `415` (not `multipart/form-data`), `429` (rate). Per file in a `200`
+answer: `status: error` with the reason (type not recognised, a required column not mapped, nothing storable, a team out of
+scope, the API's own refusal of the dry run).
+
+### 4E.6 Field allow-list (every path: API, uploads, the agent)
+
+The only fields of an issue, a sprint or an incident QE Navigator keeps, applied to every path that receives them: the
+ingestion API (`POST /api/ingest/issues`, `/incidents`), file uploads and the on-premises agent (4D). One file,
+`server/lib/ingest/fieldAllowList.ts`: plain data and a pure `minimise(kind, record)`, no server dependency (Node's `crypto`
+only); the agent vendors it byte for byte (`agent/scripts/sync-allow-list.mjs`, checked by a test).
+
+| Issues | Used for |
+|---|---|
+| `key`, `team`, `project` | identity; the team; the project key mapped to a team |
+| `type` | bugs feed escape rate and density; epics and sub-tasks are left out of sprint metrics |
+| `status`, `statusCategory`, `resolution` | completed or not; won't do / duplicate / cannot reproduce are neither completed nor confirmed defects |
+| `transitions` (field, from, to, toCategory, at) | status, sprint and flagged changes: blocked time, commitment |
+| `createdAt`, `resolvedAt`, `updatedAt` | the defect window, completion, ordering of updates |
+| `storyPoints`, `sprints` (id, name, state, startedAt, endsAt, completedAt) | velocity, commitment, carryover |
+| `environment` | found in production or before release: escape rate, density |
+| `labels` | only labels naming an environment (production, env:staging, …) or a type (bug, feature, …) |
+| `components` | shown with the escaped defects |
+| `estimateHours`, `timeLoggedHours` | sizing accuracy |
+| `url` | link back to the issue |
+| `title` | shown next to the key, **only while the company setting "Store issue and incident titles" is on** |
+| `assigneeHash`, `reporterHash` | people as a salted hash only |
+
+| Incidents | Used for |
+|---|---|
+| `id`, `team`, `service` | identity; the team; the service mapped to a team |
+| `severity` | critical / high count as an outage: MTBF, availability |
+| `status`, `openedAt`, `acknowledgedAt`, `resolvedAt`, `at`, `updates` (status, at) | MTTR, MTBF, availability, time to acknowledge |
+| `deploymentId` | the deployment that caused it: change failure rate |
+| `outage`, `category` | availability; infrastructure failures |
+| `url` | link back to the incident |
+| `title` | only while "Store issue and incident titles" is on |
+| `responderHash` | the responder as a salted hash only |
+
+**Never kept, whatever the source or setting:** descriptions, comments, attachments, custom free-text fields, work-log
+text, watchers and voters, names and e-mail addresses of people, priority, due dates, fix versions, other labels, alert /
+incident notes and details. **People** (assignee, reporter, creator, responder) are replaced by
+`sha256("<company id>:<identity in lower case>")`, first 32 hex characters: the same hash as commit authors (4B.2), never
+reversible to a person; without a salt they are dropped. Text that a spreadsheet would run as a formula is prefixed with an
+apostrophe. The copy of an issues or incidents request kept in `raw_uploads` is the minimised records (`{"minimised": true,
+…}`), never the body as received.
+
+**Store issue and incident titles** (super admins; Upload files page → *What is stored*; `GET / PUT /api/uploads/privacy`,
+company column `companies.store_issue_titles`, default **on** as before). Off: titles are dropped on every path from then
+on, the titles already stored are deleted (issues, incidents, and the raw copies of issues and incidents requests), the
+evidence lists show the key only, and the change is in the Activity log. It cannot be undone for the titles already deleted.
+
+Tests: `tests/api/upload-parsers.test.ts` (CSV, dates, every fixture export in `tests/fixtures/upload`, mapping, the
+allow-list, zip limits), `tests/api/upload.test.ts` (preview writes nothing, upload stores, nothing personal reaches the
+database on the upload and the API path, the titles setting, scope, zip-slip, zip bomb, oversize),
+`tests/api/upload-netlify.test.ts` (through the Netlify function; the per-company rate limit),
+`tests/e2e/admin/upload-files.spec.ts` (UPL-01–03, A11Y-71–74).
 
 ## 5. All other data: how it can be sent today
 
@@ -1811,6 +2028,13 @@ run it against a test team, or overwrite the values with real ones (the latest v
 - For Jira, Linear, PagerDuty and Opsgenie, the agent of section 4D keeps your tool credentials inside your network, needs no inbound
   access, applies the shared field allow-list before sending, and shows the exact payload with `qe-agent preview` (`--offline` for an
   air-gapped review). Its security posture for your review: `agent/SECURITY.md`.
+
+**Upload files and the field allow-list**
+
+- Without any API key or network access, exported files can be uploaded after a preview of exactly what will be stored
+  (section 4E). Every issue and incident, on every path, passes the field allow-list (4E.6): descriptions, comments,
+  attachments, free-text fields, names and e-mail addresses are never stored; people only as a salted hash; titles only
+  while the company setting "Store issue and incident titles" is on.
 
 **No personal data in KPI payloads**
 
