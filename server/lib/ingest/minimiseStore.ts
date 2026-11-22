@@ -12,7 +12,7 @@
  *     true when the column does not exist yet).
  */
 import { query } from '../../../src/lib/db';
-import { minimise, usefulLabel } from './fieldAllowList';
+import { minimiseRecord, minimiseSprint, usefulLabel } from './allowListPolicy';
 import type { IssueEvent, SprintRef } from './issueEvents';
 import type { IncidentEvent } from './deliveryEvents';
 
@@ -27,6 +27,7 @@ export async function storeTitlesOf(companyId: string): Promise<boolean> {
   }
 }
 
+/** The parsed issues keep only allowed values before they are stored (fieldAllowList.ts): no priority, only the labels the calculations read, titles per the setting. */
 export function applyIssueAllowList(events: IssueEvent[], storeTitles: boolean): void {
   for (const e of events) {
     if (!storeTitles) e.title = null;
@@ -66,14 +67,12 @@ export function incidentRecord(e: IncidentEvent): Record<string, unknown> {
   };
 }
 
-const clean = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([, v]) => v !== null && v !== undefined && !(Array.isArray(v) && v.length === 0)));
-
 /** What raw_uploads keeps of an issues request: the minimised records, never the body as received. */
 export function minimisedIssuePayload(companyId: string, issues: IssueEvent[], sprints: SprintRef[], storeTitles: boolean): Buffer {
-  const out = issues.map((e) => clean(minimise('issue', issueRecord(e), { storeTitles, salt: companyId }).record));
-  return Buffer.from(JSON.stringify({ minimised: true, issues: out, sprints: sprints.map((s) => clean(minimise('sprint', sprintRecord(s)).record)) }));
+  const out = issues.map((e) => minimiseRecord('issue', issueRecord(e), { storeTitles, salt: companyId }).record);
+  return Buffer.from(JSON.stringify({ minimised: true, issues: out, sprints: sprints.map((s) => minimiseSprint(sprintRecord(s))).filter(Boolean) }));
 }
 
 export function minimisedIncidentPayload(companyId: string, incidents: IncidentEvent[], storeTitles: boolean): Buffer {
-  return Buffer.from(JSON.stringify({ minimised: true, incidents: incidents.map((e) => clean(minimise('incident', incidentRecord(e), { storeTitles, salt: companyId }).record)) }));
+  return Buffer.from(JSON.stringify({ minimised: true, incidents: incidents.map((e) => minimiseRecord('incident', incidentRecord(e), { storeTitles, salt: companyId }).record) }));
 }

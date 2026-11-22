@@ -19,7 +19,7 @@ import { BodyError, gunzipLimited, isGzip } from './body';
 import { CsvError, decodeText, parseCsv, parseOffset, type Csv, type DateOrder } from './csv';
 import { CSV_FORMATS, CSV_SPECS, convertCsv, detectCsvFormat, limitsOf, type CsvFormat, type CsvMapping } from './csvImports';
 import { isZip, readZip, ZipError } from './zip';
-import { minimise, storedFieldNames, type MinimiseKind } from './fieldAllowList';
+import { allowedFields, minimiseRecord, minimiseSprint, type AllowKind } from './allowListPolicy';
 import { ReportError, detectTestFormat, parseTestReport, type TestFormat } from './testReports';
 import { detectCoverageFormat, parseCoverageReport, type CoverageFormat } from './coverageReports';
 import { looksLikeSarif, parseSarif } from './sarif';
@@ -532,14 +532,14 @@ function planEvents(plan: FilePlan, file: InFile, text: string, type: UploadType
   }
 
   // 2. Team, date range, the allow-list, and a check of each record by the API's own parser.
-  const kindOfMin: MinimiseKind | null = type.kind === 'issues' ? 'issue' : type.kind === 'incidents' ? 'incident' : type.kind === 'sprints' ? 'sprint' : null;
+  const kindOfMin: AllowKind | null = type.kind === 'issues' ? 'issue' : type.kind === 'incidents' ? 'incident' : null;
   const keyField = type.kind === 'issues' ? 'project' : 'service';
   const kept: Array<{ rec: Record<string, unknown>; team: string; row?: number }> = [];
   const sprintsOnly: Array<Record<string, unknown>> = [];
   const seen = new Map<string, number>();
   const allDropped = new Set<string>(plan.dropped);
   for (const { rec, row } of recs) {
-    if (rec.__sprint) { const { __sprint: _x, ...s } = rec; sprintsOnly.push(clean(minimise('sprint', s).record)); continue; }
+    if (rec.__sprint) { const { __sprint: _x, ...s } = rec; const m = minimiseSprint(s); if (m) sprintsOnly.push(m); continue; }
     let team: string | null;
     if (type.kind === 'sprints') team = requireTeam(ctx, 'A sprints file');
     else if (type.kind === 'commits' && ctx.mode === 'map' && !rec.team && !(typeof rec.service === 'string' && ctx.serviceTeams.has(rec.service as string)) && rec.deployment) team = '__by_deployment__';
@@ -557,9 +557,11 @@ function planEvents(plan: FilePlan, file: InFile, text: string, type: UploadType
     if (bad) { addSkip(plan.skipped, `Date out of range: ${bad}`, row); continue; }
     let out: Record<string, unknown>;
     if (kindOfMin) {
-      const m = minimise(kindOfMin, rec, { storeTitles: ctx.storeTitles, salt });
-      for (const d of m.dropped) if (!['team', '__sprint'].includes(d)) allDropped.add(isCsv ? `${d} (from its column)` : d);
-      out = clean(m.record);
+      const m = minimiseRecord(kindOfMin, rec, { storeTitles: ctx.storeTitles, salt });
+      for (const d of m.dropped) if (!['team', '__sprint'].includes(d)) allDropped.add(d);
+      out = m.record;
+    } else if (type.kind === 'sprints') {
+      out = minimiseSprint(rec) ?? {};
     } else out = clean(rec);
     if (team !== '__by_deployment__') out.team = team;
     // The API's parser on this one record: a record it would refuse is skipped, with the reason.
@@ -591,7 +593,7 @@ function planEvents(plan: FilePlan, file: InFile, text: string, type: UploadType
   plan.teams = teamSummary(ctx, realTeams);
   if (kept.some((k) => k.team === '__by_deployment__')) plan.warnings.push('Some commit batches carry no team or service: they go to the team of the deployment they name (it must have been uploaded first).');
   plan.dropped = Array.from(allDropped);
-  plan.fields = type.kind === 'sprints' ? storedFieldNames('sprint') : kindOfMin ? storedFieldNames(kindOfMin, { storeTitles: ctx.storeTitles, salt }) : REPORT_FIELDS[type.kind];
+  plan.fields = type.kind === 'sprints' ? allowedFields('sprint', ctx.storeTitles) : kindOfMin ? allowedFields(kindOfMin, ctx.storeTitles) : REPORT_FIELDS[type.kind];
   if (kindOfMin && !ctx.storeTitles) plan.warnings.push('Titles are not stored (company setting “Store issue and incident titles” is off): the evidence lists show the key only.');
   plan.sample = [...kept.slice(0, 3).map((k) => k.rec), ...(kept.length < 3 ? sprintsOnly.slice(0, 3 - kept.length) : [])];
   const firstTime = (r: Record<string, unknown>) => (r.createdAt ?? r.openedAt ?? r.finishedAt ?? r.startedAt ?? (r.commits as any[])?.[0]?.authoredAt ?? null) as string | null;
