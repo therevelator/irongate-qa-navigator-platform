@@ -34,10 +34,10 @@ const ANALYTICS = ['nav-dashboard', 'nav-analytics', 'nav-compare', 'nav-tv', 'n
 const WITH_SUMMARY = ['nav-dashboard', 'nav-summary', ...ANALYTICS.slice(1)];
 export const NAV_BY_ROLE: Record<Role, string[]> = {
   admin: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-departments', 'nav-activity', 'nav-user-activity', 'nav-admin',
-    'nav-manual-metrics', 'nav-metric-intervals', 'nav-parameters-config', 'nav-ingestion-log'],
-  manager: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-activity', 'nav-admin', 'nav-manual-metrics', 'nav-metric-intervals',
+    'nav-manual-metrics', 'nav-upload-files', 'nav-metric-intervals', 'nav-parameters-config', 'nav-ingestion-log'],
+  manager: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-activity', 'nav-admin', 'nav-manual-metrics', 'nav-upload-files', 'nav-metric-intervals',
     'nav-parameters-config', 'nav-ingestion-log'],
-  lead: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-manual-metrics'],
+  lead: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-manual-metrics', 'nav-upload-files'],
   engineer: [...ANALYTICS],
   viewer: [...ANALYTICS],
 };
@@ -53,6 +53,7 @@ export const RESTRICTED_PAGES: Array<{ path: string; title: string; allowed: Rol
   { path: '/ingestion-log', title: 'Ingestion log', allowed: ['admin', 'manager'] },
   { path: '/admin-panel', title: 'Admin console', allowed: ['admin', 'manager'] },
   { path: '/manual-metrics', title: 'Manual metrics', allowed: ['admin', 'manager', 'lead'] },
+  { path: '/upload-files', title: 'Upload files', allowed: ['admin', 'manager', 'lead'] },
   { path: '/metric-intervals', title: 'Expected update frequency', allowed: ['admin', 'manager'] },
   { path: '/parameters-config', title: 'Parameters', allowed: ['admin', 'manager'] },
 ];

@@ -17,14 +17,14 @@ const engineer = actor('e', 'qa_engineer', [['qa_engineer', 'team', 't1']]);
 const viewer = actor('v', 'viewer', [['viewer', 'team', 't1']]);
 const noTeam = actor('n', 'viewer', []);
 
-const ADMIN_VIEWS = ['users', 'teams', 'departments', 'activity', 'user-activity', 'ingestion-log', 'admin-panel', 'manual-metrics', 'metric-intervals', 'parameters-config'];
+const ADMIN_VIEWS = ['users', 'teams', 'departments', 'activity', 'user-activity', 'ingestion-log', 'admin-panel', 'manual-metrics', 'upload-files', 'metric-intervals', 'parameters-config'];
 const open = (a: PolicyActor) => ADMIN_VIEWS.filter((v) => canOpenView(a, v));
 
 describe('canOpenView', () => {
   it('VIEW-001: administration pages per role', () => {
     expect(open(admin)).toEqual(ADMIN_VIEWS);
-    expect(open(manager)).toEqual(['users', 'teams', 'activity', 'ingestion-log', 'admin-panel', 'manual-metrics', 'metric-intervals', 'parameters-config']);
-    expect(open(lead)).toEqual(['users', 'teams', 'manual-metrics']);
+    expect(open(manager)).toEqual(['users', 'teams', 'activity', 'ingestion-log', 'admin-panel', 'manual-metrics', 'upload-files', 'metric-intervals', 'parameters-config']);
+    expect(open(lead)).toEqual(['users', 'teams', 'manual-metrics', 'upload-files']);
     expect(open(engineer)).toEqual([]);
     expect(open(viewer)).toEqual([]);
   });
@@ -75,5 +75,14 @@ describe('accessSummary', () => {
     expect(m.scope).toBe('You see the teams of Digital Banking. Other teams are not shown to you.');
     expect(m.can.join(' ')).toMatch(/revenue impact roll-up/);
     expect(accessSummary(noTeam, [], 'Meridian').scope).toMatch(/No team is in your scope/);
+  });
+});
+
+describe('Upload files', () => {
+  it('VIEW-005: the Upload files page and the "What you can do here" line: super admins, managers and team leads only', () => {
+    for (const a of [admin, manager, lead]) expect([a.role, canOpenView(a, 'upload-files')]).toEqual([a.role, true]);
+    for (const a of [engineer, viewer, noTeam]) expect([a.role, canOpenView(a, 'upload-files')]).toEqual([a.role, false]);
+    expect(accessSummary(lead, [{ role: 'team_lead', scopeType: 'team', scopeId: 't1', scopeName: 'Payments Core' }], 'Meridian').can.join(' ')).toMatch(/Upload exported files/);
+    expect(accessSummary(viewer, [{ role: 'viewer', scopeType: 'team', scopeId: 't1', scopeName: 'Payments Core' }], 'Meridian').can.join(' ')).not.toMatch(/Upload exported files/);
   });
 });
