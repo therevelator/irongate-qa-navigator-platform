@@ -1,0 +1,187 @@
+{
+  "data": {
+    "issues": {
+      "pageInfo": {
+        "hasNextPage": true,
+        "endCursor": "cursor-1"
+      },
+      "nodes": [
+        {
+          "id": "i-1",
+          "identifier": "ENG-1",
+          "title": "SECRET-LINEAR-TITLE ENG-1 from frank@example.com",
+          "description": "SECRET-LINEAR-DESCRIPTION",
+          "url": "https://linear.app/acme/issue/ENG-1",
+          "assignee": {
+            "id": "u-1",
+            "name": "Frank Doe",
+            "email": "frank@example.com"
+          },
+          "creator": {
+            "name": "Grace"
+          },
+          "team": {
+            "key": "ENG",
+            "name": "Engineering SECRET"
+          },
+          "parent": null,
+          "comments": {
+            "nodes": [
+              {
+                "body": "SECRET-LINEAR-COMMENT"
+              }
+            ]
+          },
+          "createdAt": "2026-11-03T09:00:00.000Z",
+          "updatedAt": "2026-11-15T09:00:00.000Z",
+          "completedAt": "2026-11-14T15:00:00.000Z",
+          "canceledAt": null,
+          "estimate": 3,
+          "labels": {
+            "nodes": [
+              {
+                "name": "Feature"
+              }
+            ]
+          },
+          "cycle": {
+            "id": "c7a1e7b2-0000-4000-8000-000000000007",
+            "number": 7,
+            "startsAt": "2026-11-02T00:00:00.000Z",
+            "endsAt": "2026-11-16T00:00:00.000Z",
+            "completedAt": "2026-11-16T01:00:00.000Z"
+          },
+          "history": {
+            "pageInfo": {
+              "hasNextPage": true,
+              "endCursor": "h-1"
+            },
+            "nodes": [
+              {
+                "createdAt": "2026-11-03T09:00:00.000Z",
+                "fromState": null,
+                "toState": {
+                  "name": "Backlog",
+                  "type": "backlog"
+                },
+                "fromCycle": null,
+                "toCycle": null,
+                "actor": {
+                  "name": "Frank Doe",
+                  "email": "frank@example.com"
+                }
+              },
+              {
+                "createdAt": "2026-11-03T09:05:00.000Z",
+                "fromState": null,
+                "toState": null,
+                "fromCycle": null,
+                "toCycle": {
+                  "id": "c7a1e7b2-0000-4000-8000-000000000007",
+                  "number": 7,
+                  "startsAt": "2026-11-02T00:00:00.000Z",
+                  "endsAt": "2026-11-16T00:00:00.000Z",
+                  "completedAt": "2026-11-16T01:00:00.000Z"
+                }
+              }
+            ]
+          },
+          "state": {
+            "name": "Done",
+            "type": "completed"
+          }
+        },
+        {
+          "id": "i-2",
+          "identifier": "ENG-2",
+          "title": "SECRET-LINEAR-TITLE ENG-2 from frank@example.com",
+          "description": "SECRET-LINEAR-DESCRIPTION",
+          "url": "https://linear.app/acme/issue/ENG-2",
+          "assignee": {
+            "id": "u-1",
+            "name": "Frank Doe",
+            "email": "frank@example.com"
+          },
+          "creator": {
+            "name": "Grace"
+          },
+          "team": {
+            "key": "ENG",
+            "name": "Engineering SECRET"
+          },
+          "parent": null,
+          "comments": {
+            "nodes": [
+              {
+                "body": "SECRET-LINEAR-COMMENT"
+              }
+            ]
+          },
+          "createdAt": "2026-11-03T09:00:00.000Z",
+          "updatedAt": "2026-11-17T09:00:00.000Z",
+          "completedAt": null,
+          "canceledAt": null,
+          "estimate": 2,
+          "labels": {
+            "nodes": [
+              {
+                "name": "Bug"
+              },
+              {
+                "name": "env:production"
+              },
+              {
+                "name": "customer: SECRET-LABEL"
+              }
+            ]
+          },
+          "cycle": {
+            "id": "c7a1e7b2-0000-4000-8000-000000000008",
+            "number": 8,
+            "startsAt": "2026-11-16T00:00:00.000Z",
+            "endsAt": "2026-11-30T00:00:00.000Z",
+            "completedAt": null
+          },
+          "history": {
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            },
+            "nodes": [
+              {
+                "createdAt": "2026-11-16T09:00:00.000Z",
+                "fromState": {
+                  "name": "Todo",
+                  "type": "unstarted"
+                },
+                "toState": {
+                  "name": "In Progress",
+                  "type": "started"
+                },
+                "fromCycle": null,
+                "toCycle": null
+              },
+              {
+                "createdAt": "2026-11-17T09:00:00.000Z",
+                "fromState": {
+                  "name": "In Progress",
+                  "type": "started"
+                },
+                "toState": {
+                  "name": "Blocked",
+                  "type": "started"
+                },
+                "fromCycle": null,
+                "toCycle": null
+              }
+            ]
+          },
+          "state": {
+            "name": "Blocked",
+            "type": "started"
+          }
+        }
+      ]
+    }
+  }
+}

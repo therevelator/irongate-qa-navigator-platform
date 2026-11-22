@@ -1,0 +1,141 @@
+{
+  "data": [
+    {
+      "id": "6f2c-0001",
+      "tinyId": "101",
+      "alias": "SECRET-ALIAS",
+      "message": "Disk full on db-1 (erin@example.com)",
+      "status": "closed",
+      "acknowledged": true,
+      "isSeen": true,
+      "tags": [
+        "service:payments-api",
+        "category:infrastructure",
+        "deployment:rel-2026-11-17.1"
+      ],
+      "snoozed": false,
+      "count": 1,
+      "lastOccurredAt": "2026-11-17T10:00:00.000Z",
+      "createdAt": "2026-11-17T10:00:00.000Z",
+      "updatedAt": "2026-11-17T10:15:00.000Z",
+      "source": "SECRET-SOURCE host-1",
+      "owner": "erin@example.com",
+      "priority": "P2",
+      "teams": [
+        {
+          "id": "team-og-1"
+        }
+      ],
+      "responders": [
+        {
+          "type": "team",
+          "id": "team-og-1"
+        }
+      ],
+      "integration": {
+        "id": "x",
+        "name": "SECRET-INTEGRATION",
+        "type": "API"
+      },
+      "report": {
+        "ackTime": 120000,
+        "closeTime": 900000,
+        "acknowledgedBy": "erin@example.com",
+        "closedBy": "erin@example.com"
+      },
+      "description": "SECRET-OG-DESCRIPTION",
+      "details": {
+        "note": "SECRET-OG-DETAIL"
+      }
+    },
+    {
+      "id": "6f2c-0002",
+      "tinyId": "102",
+      "alias": "SECRET-ALIAS",
+      "message": "Latency high",
+      "status": "open",
+      "acknowledged": true,
+      "isSeen": true,
+      "tags": [],
+      "snoozed": false,
+      "count": 1,
+      "lastOccurredAt": "2026-11-19T10:00:00.000Z",
+      "createdAt": "2026-11-19T10:00:00.000Z",
+      "updatedAt": "2026-11-19T10:05:00.000Z",
+      "source": "SECRET-SOURCE host-1",
+      "owner": "erin@example.com",
+      "priority": "P3",
+      "teams": [
+        {
+          "id": "team-og-1"
+        }
+      ],
+      "responders": [
+        {
+          "type": "team",
+          "id": "team-og-1"
+        }
+      ],
+      "integration": {
+        "id": "x",
+        "name": "SECRET-INTEGRATION",
+        "type": "API"
+      },
+      "report": {
+        "ackTime": 300000,
+        "acknowledgedBy": "erin@example.com"
+      },
+      "description": "SECRET-OG-DESCRIPTION",
+      "details": {
+        "note": "SECRET-OG-DETAIL"
+      }
+    },
+    {
+      "id": "6f2c-0003",
+      "tinyId": "103",
+      "alias": "SECRET-ALIAS",
+      "message": "Queue backlog",
+      "status": "open",
+      "acknowledged": false,
+      "isSeen": true,
+      "tags": [
+        "service:unknown-svc"
+      ],
+      "snoozed": false,
+      "count": 1,
+      "lastOccurredAt": "2026-11-20T10:00:00.000Z",
+      "createdAt": "2026-11-20T10:00:00.000Z",
+      "updatedAt": "2026-11-20T10:00:00.000Z",
+      "source": "SECRET-SOURCE host-1",
+      "owner": "erin@example.com",
+      "priority": "P4",
+      "teams": [
+        {
+          "id": "team-og-9"
+        }
+      ],
+      "responders": [
+        {
+          "type": "team",
+          "id": "team-og-9"
+        }
+      ],
+      "integration": {
+        "id": "x",
+        "name": "SECRET-INTEGRATION",
+        "type": "API"
+      },
+      "report": {},
+      "description": "SECRET-OG-DESCRIPTION",
+      "details": {
+        "note": "SECRET-OG-DETAIL"
+      }
+    }
+  ],
+  "paging": {
+    "first": "x",
+    "last": "x"
+  },
+  "took": 0.01,
+  "requestId": "r"
+}

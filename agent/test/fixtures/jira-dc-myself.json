@@ -1,0 +1,7 @@
+{
+  "name": "svc-qe-agent",
+  "key": "JIRAUSER10200",
+  "emailAddress": "svc@corp.example.com",
+  "displayName": "QE agent service account",
+  "timeZone": "America/New_York"
+}

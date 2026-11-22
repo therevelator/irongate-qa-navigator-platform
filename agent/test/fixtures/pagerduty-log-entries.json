@@ -1,0 +1,677 @@
+{
+  "log_entries": [
+    {
+      "id": "L1",
+      "type": "trigger_log_entry",
+      "summary": "SECRET-LOG-SUMMARY",
+      "created_at": "2026-11-18T09:12:00Z",
+      "agent": {
+        "id": "PSVC001",
+        "type": "service_reference",
+        "summary": "payments-api"
+      },
+      "channel": {
+        "type": "api",
+        "summary": "SECRET-CHANNEL",
+        "details": {
+          "SECRET": "x"
+        }
+      },
+      "service": {
+        "id": "PSVC001",
+        "type": "service_reference",
+        "summary": "payments-api",
+        "self": "x",
+        "html_url": "x"
+      },
+      "incident": {
+        "id": "Q1INC0001",
+        "type": "incident",
+        "summary": "[#1042] SECRET-PD-SUMMARY",
+        "incident_number": 1042,
+        "title": "Card payments failing (dave@example.com) #1042",
+        "description": "SECRET-PD-DESCRIPTION",
+        "created_at": "2026-11-18T09:12:00Z",
+        "status": "resolved",
+        "incident_key": "SECRET-KEY",
+        "service": {
+          "id": "PSVC001",
+          "type": "service_reference",
+          "summary": "payments-api",
+          "self": "x",
+          "html_url": "x"
+        },
+        "assignments": [
+          {
+            "at": "2026-11-18T09:12:00Z",
+            "assignee": {
+              "id": "PUSER01",
+              "type": "user_reference",
+              "summary": "Dave Doe",
+              "self": "x",
+              "html_url": "https://acme.pagerduty.com/users/PUSER01"
+            }
+          }
+        ],
+        "acknowledgements": [],
+        "last_status_change_at": "2026-11-18T10:05:00Z",
+        "last_status_change_by": {
+          "id": "PUSER01",
+          "type": "user_reference",
+          "summary": "Dave Doe",
+          "self": "x",
+          "html_url": "https://acme.pagerduty.com/users/PUSER01"
+        },
+        "first_trigger_log_entry": {
+          "id": "R1",
+          "type": "trigger_log_entry_reference"
+        },
+        "escalation_policy": {
+          "summary": "SECRET-EP"
+        },
+        "teams": [
+          {
+            "id": "PTEAM1",
+            "type": "team_reference",
+            "summary": "Payments"
+          }
+        ],
+        "urgency": "high",
+        "priority": {
+          "id": "P1ID",
+          "summary": "P1",
+          "name": "P1"
+        },
+        "html_url": "https://acme.pagerduty.com/incidents/Q1INC0001",
+        "body": {
+          "details": "SECRET-PD-BODY"
+        },
+        "resolved_at": "2026-11-18T10:05:00Z"
+      },
+      "teams": [
+        {
+          "id": "PTEAM1",
+          "type": "team_reference",
+          "summary": "Payments"
+        }
+      ],
+      "contexts": []
+    },
+    {
+      "id": "L2",
+      "type": "acknowledge_log_entry",
+      "summary": "SECRET-LOG-SUMMARY",
+      "created_at": "2026-11-18T09:20:00Z",
+      "agent": {
+        "id": "PUSER01",
+        "type": "user_reference",
+        "summary": "Dave Doe",
+        "self": "x",
+        "html_url": "https://acme.pagerduty.com/users/PUSER01"
+      },
+      "channel": {
+        "type": "api",
+        "summary": "SECRET-CHANNEL",
+        "details": {
+          "SECRET": "x"
+        }
+      },
+      "service": {
+        "id": "PSVC001",
+        "type": "service_reference",
+        "summary": "payments-api",
+        "self": "x",
+        "html_url": "x"
+      },
+      "incident": {
+        "id": "Q1INC0001",
+        "type": "incident",
+        "summary": "[#1042] SECRET-PD-SUMMARY",
+        "incident_number": 1042,
+        "title": "Card payments failing (dave@example.com) #1042",
+        "description": "SECRET-PD-DESCRIPTION",
+        "created_at": "2026-11-18T09:12:00Z",
+        "status": "resolved",
+        "incident_key": "SECRET-KEY",
+        "service": {
+          "id": "PSVC001",
+          "type": "service_reference",
+          "summary": "payments-api",
+          "self": "x",
+          "html_url": "x"
+        },
+        "assignments": [
+          {
+            "at": "2026-11-18T09:12:00Z",
+            "assignee": {
+              "id": "PUSER01",
+              "type": "user_reference",
+              "summary": "Dave Doe",
+              "self": "x",
+              "html_url": "https://acme.pagerduty.com/users/PUSER01"
+            }
+          }
+        ],
+        "acknowledgements": [],
+        "last_status_change_at": "2026-11-18T10:05:00Z",
+        "last_status_change_by": {
+          "id": "PUSER01",
+          "type": "user_reference",
+          "summary": "Dave Doe",
+          "self": "x",
+          "html_url": "https://acme.pagerduty.com/users/PUSER01"
+        },
+        "first_trigger_log_entry": {
+          "id": "R1",
+          "type": "trigger_log_entry_reference"
+        },
+        "escalation_policy": {
+          "summary": "SECRET-EP"
+        },
+        "teams": [
+          {
+            "id": "PTEAM1",
+            "type": "team_reference",
+            "summary": "Payments"
+          }
+        ],
+        "urgency": "high",
+        "priority": {
+          "id": "P1ID",
+          "summary": "P1",
+          "name": "P1"
+        },
+        "html_url": "https://acme.pagerduty.com/incidents/Q1INC0001",
+        "body": {
+          "details": "SECRET-PD-BODY"
+        },
+        "resolved_at": "2026-11-18T10:05:00Z"
+      },
+      "teams": [
+        {
+          "id": "PTEAM1",
+          "type": "team_reference",
+          "summary": "Payments"
+        }
+      ],
+      "contexts": []
+    },
+    {
+      "id": "L3",
+      "type": "annotate_log_entry",
+      "summary": "SECRET-LOG-SUMMARY",
+      "created_at": "2026-11-18T09:30:00Z",
+      "agent": {
+        "id": "PUSER01",
+        "type": "user_reference",
+        "summary": "Dave Doe",
+        "self": "x",
+        "html_url": "https://acme.pagerduty.com/users/PUSER01"
+      },
+      "channel": {
+        "type": "note",
+        "summary": "SECRET-NOTE call +1 555"
+      },
+      "service": {
+        "id": "PSVC001",
+        "type": "service_reference",
+        "summary": "payments-api",
+        "self": "x",
+        "html_url": "x"
+      },
+      "incident": {
+        "id": "Q1INC0001",
+        "type": "incident",
+        "summary": "[#1042] SECRET-PD-SUMMARY",
+        "incident_number": 1042,
+        "title": "Card payments failing (dave@example.com) #1042",
+        "description": "SECRET-PD-DESCRIPTION",
+        "created_at": "2026-11-18T09:12:00Z",
+        "status": "resolved",
+        "incident_key": "SECRET-KEY",
+        "service": {
+          "id": "PSVC001",
+          "type": "service_reference",
+          "summary": "payments-api",
+          "self": "x",
+          "html_url": "x"
+        },
+        "assignments": [
+          {
+            "at": "2026-11-18T09:12:00Z",
+            "assignee": {
+              "id": "PUSER01",
+              "type": "user_reference",
+              "summary": "Dave Doe",
+              "self": "x",
+              "html_url": "https://acme.pagerduty.com/users/PUSER01"
+            }
+          }
+        ],
+        "acknowledgements": [],
+        "last_status_change_at": "2026-11-18T10:05:00Z",
+        "last_status_change_by": {
+          "id": "PUSER01",
+          "type": "user_reference",
+          "summary": "Dave Doe",
+          "self": "x",
+          "html_url": "https://acme.pagerduty.com/users/PUSER01"
+        },
+        "first_trigger_log_entry": {
+          "id": "R1",
+          "type": "trigger_log_entry_reference"
+        },
+        "escalation_policy": {
+          "summary": "SECRET-EP"
+        },
+        "teams": [
+          {
+            "id": "PTEAM1",
+            "type": "team_reference",
+            "summary": "Payments"
+          }
+        ],
+        "urgency": "high",
+        "priority": {
+          "id": "P1ID",
+          "summary": "P1",
+          "name": "P1"
+        },
+        "html_url": "https://acme.pagerduty.com/incidents/Q1INC0001",
+        "body": {
+          "details": "SECRET-PD-BODY"
+        },
+        "resolved_at": "2026-11-18T10:05:00Z"
+      },
+      "teams": [
+        {
+          "id": "PTEAM1",
+          "type": "team_reference",
+          "summary": "Payments"
+        }
+      ],
+      "contexts": []
+    },
+    {
+      "id": "L4",
+      "type": "resolve_log_entry",
+      "summary": "SECRET-LOG-SUMMARY",
+      "created_at": "2026-11-18T10:05:00Z",
+      "agent": {
+        "id": "PUSER01",
+        "type": "user_reference",
+        "summary": "Dave Doe",
+        "self": "x",
+        "html_url": "https://acme.pagerduty.com/users/PUSER01"
+      },
+      "channel": {
+        "type": "api",
+        "summary": "SECRET-CHANNEL",
+        "details": {
+          "SECRET": "x"
+        }
+      },
+      "service": {
+        "id": "PSVC001",
+        "type": "service_reference",
+        "summary": "payments-api",
+        "self": "x",
+        "html_url": "x"
+      },
+      "incident": {
+        "id": "Q1INC0001",
+        "type": "incident",
+        "summary": "[#1042] SECRET-PD-SUMMARY",
+        "incident_number": 1042,
+        "title": "Card payments failing (dave@example.com) #1042",
+        "description": "SECRET-PD-DESCRIPTION",
+        "created_at": "2026-11-18T09:12:00Z",
+        "status": "resolved",
+        "incident_key": "SECRET-KEY",
+        "service": {
+          "id": "PSVC001",
+          "type": "service_reference",
+          "summary": "payments-api",
+          "self": "x",
+          "html_url": "x"
+        },
+        "assignments": [
+          {
+            "at": "2026-11-18T09:12:00Z",
+            "assignee": {
+              "id": "PUSER01",
+              "type": "user_reference",
+              "summary": "Dave Doe",
+              "self": "x",
+              "html_url": "https://acme.pagerduty.com/users/PUSER01"
+            }
+          }
+        ],
+        "acknowledgements": [],
+        "last_status_change_at": "2026-11-18T10:05:00Z",
+        "last_status_change_by": {
+          "id": "PUSER01",
+          "type": "user_reference",
+          "summary": "Dave Doe",
+          "self": "x",
+          "html_url": "https://acme.pagerduty.com/users/PUSER01"
+        },
+        "first_trigger_log_entry": {
+          "id": "R1",
+          "type": "trigger_log_entry_reference"
+        },
+        "escalation_policy": {
+          "summary": "SECRET-EP"
+        },
+        "teams": [
+          {
+            "id": "PTEAM1",
+            "type": "team_reference",
+            "summary": "Payments"
+          }
+        ],
+        "urgency": "high",
+        "priority": {
+          "id": "P1ID",
+          "summary": "P1",
+          "name": "P1"
+        },
+        "html_url": "https://acme.pagerduty.com/incidents/Q1INC0001",
+        "body": {
+          "details": "SECRET-PD-BODY"
+        },
+        "resolved_at": "2026-11-18T10:05:00Z"
+      },
+      "teams": [
+        {
+          "id": "PTEAM1",
+          "type": "team_reference",
+          "summary": "Payments"
+        }
+      ],
+      "contexts": []
+    },
+    {
+      "id": "L5",
+      "type": "trigger_log_entry",
+      "summary": "SECRET-LOG-SUMMARY",
+      "created_at": "2026-11-19T22:00:00Z",
+      "agent": {
+        "id": "PSVC001",
+        "type": "service_reference",
+        "summary": "payments-api"
+      },
+      "channel": {
+        "type": "api",
+        "summary": "SECRET-CHANNEL",
+        "details": {
+          "SECRET": "x"
+        }
+      },
+      "service": {
+        "id": "PSVC002",
+        "type": "service_reference",
+        "summary": "checkout",
+        "self": "x",
+        "html_url": "x"
+      },
+      "incident": {
+        "id": "Q1INC0002",
+        "type": "incident",
+        "summary": "[#1043] SECRET-PD-SUMMARY",
+        "incident_number": 1043,
+        "title": "Card payments failing (dave@example.com) #1043",
+        "description": "SECRET-PD-DESCRIPTION",
+        "created_at": "2026-11-19T22:00:00Z",
+        "status": "acknowledged",
+        "incident_key": "SECRET-KEY",
+        "service": {
+          "id": "PSVC002",
+          "type": "service_reference",
+          "summary": "checkout",
+          "self": "x",
+          "html_url": "x"
+        },
+        "assignments": [
+          {
+            "at": "2026-11-19T22:00:00Z",
+            "assignee": {
+              "id": "PUSER01",
+              "type": "user_reference",
+              "summary": "Dave Doe",
+              "self": "x",
+              "html_url": "https://acme.pagerduty.com/users/PUSER01"
+            }
+          }
+        ],
+        "acknowledgements": [],
+        "last_status_change_at": "2026-11-19T22:04:00Z",
+        "last_status_change_by": {
+          "id": "PUSER01",
+          "type": "user_reference",
+          "summary": "Dave Doe",
+          "self": "x",
+          "html_url": "https://acme.pagerduty.com/users/PUSER01"
+        },
+        "first_trigger_log_entry": {
+          "id": "R1",
+          "type": "trigger_log_entry_reference"
+        },
+        "escalation_policy": {
+          "summary": "SECRET-EP"
+        },
+        "teams": [
+          {
+            "id": "PTEAM1",
+            "type": "team_reference",
+            "summary": "Payments"
+          }
+        ],
+        "urgency": "low",
+        "priority": null,
+        "html_url": "https://acme.pagerduty.com/incidents/Q1INC0002",
+        "body": {
+          "details": "SECRET-PD-BODY"
+        }
+      },
+      "teams": [
+        {
+          "id": "PTEAM1",
+          "type": "team_reference",
+          "summary": "Payments"
+        }
+      ],
+      "contexts": []
+    },
+    {
+      "id": "L6",
+      "type": "acknowledge_log_entry",
+      "summary": "SECRET-LOG-SUMMARY",
+      "created_at": "2026-11-19T22:04:00Z",
+      "agent": {
+        "id": "PUSER01",
+        "type": "user_reference",
+        "summary": "Dave Doe",
+        "self": "x",
+        "html_url": "https://acme.pagerduty.com/users/PUSER01"
+      },
+      "channel": {
+        "type": "api",
+        "summary": "SECRET-CHANNEL",
+        "details": {
+          "SECRET": "x"
+        }
+      },
+      "service": {
+        "id": "PSVC002",
+        "type": "service_reference",
+        "summary": "checkout",
+        "self": "x",
+        "html_url": "x"
+      },
+      "incident": {
+        "id": "Q1INC0002",
+        "type": "incident",
+        "summary": "[#1043] SECRET-PD-SUMMARY",
+        "incident_number": 1043,
+        "title": "Card payments failing (dave@example.com) #1043",
+        "description": "SECRET-PD-DESCRIPTION",
+        "created_at": "2026-11-19T22:00:00Z",
+        "status": "acknowledged",
+        "incident_key": "SECRET-KEY",
+        "service": {
+          "id": "PSVC002",
+          "type": "service_reference",
+          "summary": "checkout",
+          "self": "x",
+          "html_url": "x"
+        },
+        "assignments": [
+          {
+            "at": "2026-11-19T22:00:00Z",
+            "assignee": {
+              "id": "PUSER01",
+              "type": "user_reference",
+              "summary": "Dave Doe",
+              "self": "x",
+              "html_url": "https://acme.pagerduty.com/users/PUSER01"
+            }
+          }
+        ],
+        "acknowledgements": [],
+        "last_status_change_at": "2026-11-19T22:04:00Z",
+        "last_status_change_by": {
+          "id": "PUSER01",
+          "type": "user_reference",
+          "summary": "Dave Doe",
+          "self": "x",
+          "html_url": "https://acme.pagerduty.com/users/PUSER01"
+        },
+        "first_trigger_log_entry": {
+          "id": "R1",
+          "type": "trigger_log_entry_reference"
+        },
+        "escalation_policy": {
+          "summary": "SECRET-EP"
+        },
+        "teams": [
+          {
+            "id": "PTEAM1",
+            "type": "team_reference",
+            "summary": "Payments"
+          }
+        ],
+        "urgency": "low",
+        "priority": null,
+        "html_url": "https://acme.pagerduty.com/incidents/Q1INC0002",
+        "body": {
+          "details": "SECRET-PD-BODY"
+        }
+      },
+      "teams": [
+        {
+          "id": "PTEAM1",
+          "type": "team_reference",
+          "summary": "Payments"
+        }
+      ],
+      "contexts": []
+    },
+    {
+      "id": "L7",
+      "type": "trigger_log_entry",
+      "summary": "SECRET-LOG-SUMMARY",
+      "created_at": "2026-11-20T01:00:00Z",
+      "agent": {
+        "id": "PSVC001",
+        "type": "service_reference",
+        "summary": "payments-api"
+      },
+      "channel": {
+        "type": "api",
+        "summary": "SECRET-CHANNEL",
+        "details": {
+          "SECRET": "x"
+        }
+      },
+      "service": {
+        "id": "PSVC999",
+        "type": "service_reference",
+        "summary": "unmapped-svc",
+        "self": "x",
+        "html_url": "x"
+      },
+      "incident": {
+        "id": "Q1INC0003",
+        "type": "incident",
+        "summary": "[#1044] SECRET-PD-SUMMARY",
+        "incident_number": 1044,
+        "title": "Card payments failing (dave@example.com) #1044",
+        "description": "SECRET-PD-DESCRIPTION",
+        "created_at": "2026-11-20T01:00:00Z",
+        "status": "triggered",
+        "incident_key": "SECRET-KEY",
+        "service": {
+          "id": "PSVC999",
+          "type": "service_reference",
+          "summary": "unmapped-svc",
+          "self": "x",
+          "html_url": "x"
+        },
+        "assignments": [
+          {
+            "at": "2026-11-20T01:00:00Z",
+            "assignee": {
+              "id": "PUSER01",
+              "type": "user_reference",
+              "summary": "Dave Doe",
+              "self": "x",
+              "html_url": "https://acme.pagerduty.com/users/PUSER01"
+            }
+          }
+        ],
+        "acknowledgements": [],
+        "last_status_change_at": "2026-11-20T01:00:00Z",
+        "last_status_change_by": {
+          "id": "PUSER01",
+          "type": "user_reference",
+          "summary": "Dave Doe",
+          "self": "x",
+          "html_url": "https://acme.pagerduty.com/users/PUSER01"
+        },
+        "first_trigger_log_entry": {
+          "id": "R1",
+          "type": "trigger_log_entry_reference"
+        },
+        "escalation_policy": {
+          "summary": "SECRET-EP"
+        },
+        "teams": [
+          {
+            "id": "PTEAM1",
+            "type": "team_reference",
+            "summary": "Payments"
+          }
+        ],
+        "urgency": "high",
+        "priority": null,
+        "html_url": "https://acme.pagerduty.com/incidents/Q1INC0003",
+        "body": {
+          "details": "SECRET-PD-BODY"
+        }
+      },
+      "teams": [
+        {
+          "id": "PTEAM1",
+          "type": "team_reference",
+          "summary": "Payments"
+        }
+      ],
+      "contexts": []
+    }
+  ],
+  "limit": 100,
+  "offset": 0,
+  "more": false,
+  "total": null
+}

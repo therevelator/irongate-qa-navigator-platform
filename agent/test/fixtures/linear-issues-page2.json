@@ -1,0 +1,108 @@
+{
+  "data": {
+    "issues": {
+      "pageInfo": {
+        "hasNextPage": false,
+        "endCursor": "cursor-2"
+      },
+      "nodes": [
+        {
+          "id": "i-3",
+          "identifier": "ENG-3",
+          "title": "SECRET-LINEAR-TITLE ENG-3 from frank@example.com",
+          "description": "SECRET-LINEAR-DESCRIPTION",
+          "url": "https://linear.app/acme/issue/ENG-3",
+          "assignee": {
+            "id": "u-1",
+            "name": "Frank Doe",
+            "email": "frank@example.com"
+          },
+          "creator": {
+            "name": "Grace"
+          },
+          "team": {
+            "key": "ENG",
+            "name": "Engineering SECRET"
+          },
+          "parent": {
+            "id": "i-1"
+          },
+          "comments": {
+            "nodes": [
+              {
+                "body": "SECRET-LINEAR-COMMENT"
+              }
+            ]
+          },
+          "createdAt": "2026-11-03T09:00:00.000Z",
+          "updatedAt": "2026-11-10T09:00:00.000Z",
+          "completedAt": null,
+          "canceledAt": "2026-11-10T09:00:00.000Z",
+          "estimate": null,
+          "labels": {
+            "nodes": []
+          },
+          "cycle": null,
+          "history": {
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            },
+            "nodes": []
+          },
+          "state": {
+            "name": "Canceled",
+            "type": "canceled"
+          }
+        },
+        {
+          "id": "i-4",
+          "identifier": "DES-1",
+          "title": "SECRET-LINEAR-TITLE DES-1 from frank@example.com",
+          "description": "SECRET-LINEAR-DESCRIPTION",
+          "url": "https://linear.app/acme/issue/DES-1",
+          "assignee": {
+            "id": "u-1",
+            "name": "Frank Doe",
+            "email": "frank@example.com"
+          },
+          "creator": {
+            "name": "Grace"
+          },
+          "team": {
+            "key": "DES",
+            "name": "Engineering SECRET"
+          },
+          "parent": null,
+          "comments": {
+            "nodes": [
+              {
+                "body": "SECRET-LINEAR-COMMENT"
+              }
+            ]
+          },
+          "createdAt": "2026-11-03T09:00:00.000Z",
+          "updatedAt": "2026-11-11T09:00:00.000Z",
+          "completedAt": null,
+          "canceledAt": null,
+          "estimate": null,
+          "labels": {
+            "nodes": []
+          },
+          "cycle": null,
+          "history": {
+            "pageInfo": {
+              "hasNextPage": false,
+              "endCursor": null
+            },
+            "nodes": []
+          },
+          "state": {
+            "name": "Todo",
+            "type": "unstarted"
+          }
+        }
+      ]
+    }
+  }
+}

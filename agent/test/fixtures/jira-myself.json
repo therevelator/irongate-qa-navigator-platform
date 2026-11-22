@@ -1,0 +1,9 @@
+{
+  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=x",
+  "accountId": "5b10ac8d82e05b22cc7d4ef5",
+  "emailAddress": "alice@example.com",
+  "displayName": "Alice Smith",
+  "active": true,
+  "timeZone": "Europe/Dublin",
+  "locale": "en_GB"
+}

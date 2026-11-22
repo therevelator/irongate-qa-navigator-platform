@@ -1,0 +1,64 @@
+{
+  "startAt": 2,
+  "maxResults": 2,
+  "total": 3,
+  "issues": [
+    {
+      "expand": "operations,changelog",
+      "id": "20003",
+      "self": "https://jira.internal.example.com/rest/api/2/issue/20003",
+      "key": "OPS-3",
+      "fields": {
+        "project": {
+          "key": "OPS",
+          "name": "Ops SECRET"
+        },
+        "labels": [],
+        "environment": null,
+        "resolution": null,
+        "resolutiondate": null,
+        "timeoriginalestimate": 28800,
+        "timespent": null,
+        "description": "SECRET-DESCRIPTION-DC h.user@corp.example.com",
+        "comment": {
+          "comments": [
+            {
+              "body": "SECRET-COMMENT-DC",
+              "author": {
+                "name": "jdoe",
+                "emailAddress": "jdoe@corp.example.com",
+                "displayName": "John Doe"
+              }
+            }
+          ]
+        },
+        "assignee": {
+          "name": "jdoe",
+          "key": "JIRAUSER10100",
+          "emailAddress": "jdoe@corp.example.com",
+          "displayName": "John Doe"
+        },
+        "summary": "Upgrade nodes",
+        "issuetype": {
+          "name": "Story",
+          "subtask": false
+        },
+        "status": {
+          "name": "Open",
+          "statusCategory": {
+            "key": "new"
+          }
+        },
+        "created": "2026-11-04T09:00:00.000+0000",
+        "updated": "2026-11-06T16:00:00.000+0000",
+        "customfield_10004": 8.0
+      },
+      "changelog": {
+        "startAt": 0,
+        "maxResults": 0,
+        "total": 0,
+        "histories": []
+      }
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "data": {
+    "organization": {
+      "urlKey": "acme"
+    },
+    "teams": {
+      "nodes": [
+        {
+          "key": "ENG"
+        },
+        {
+          "key": "DES"
+        }
+      ]
+    }
+  }
+}
