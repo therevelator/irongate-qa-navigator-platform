@@ -17,6 +17,7 @@ import { afterIngestionRejected, afterKpiWrite } from '../lib/alerts';
 import rawIngestRoutes from './ingestRaw';
 import deliveryIngestRoutes from './ingestDelivery';
 import workIngestRoutes from './ingestWork';
+import collectorIngestRoutes from './ingestCollector';
 import { logRejected, requestHash, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 
 const router = express.Router();
@@ -211,9 +212,11 @@ function sourcesOf(items: ItemSummary[]): string | null {
 
 // v2 raw ingestion: POST /tests, /coverage, /pipelines (server/routes/ingestRaw.ts) and
 // POST /deployments, /commits, /incidents (server/routes/ingestDelivery.ts) and
-// POST /issues, /static-analysis (server/routes/ingestWork.ts).
+// POST /issues, /static-analysis (server/routes/ingestWork.ts) and
+// POST /collector/metrics, /collector/heartbeat (server/routes/ingestCollector.ts: the QE Navigator Collector).
 router.use(rawIngestRoutes);
 router.use(deliveryIngestRoutes);
 router.use(workIngestRoutes);
+router.use(collectorIngestRoutes);
 
 export default router;

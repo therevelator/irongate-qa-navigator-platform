@@ -274,7 +274,7 @@ export const flakyTestsRule: Rule = (f) => {
     evidence: compact<Evidence>([
       currentEvidence(m),
       trendEvidence(m),
-      fl && { label: fl.source === 'ci' ? `Flaky tests (failed and passed on the same commit), last ${fl.windowDays} days` : 'Tracked flaky tests (not quarantined, flaky in the last 60 days)', value: String(fl.flakyCount), detail: `${fl.failedRunsTotal} failed runs` },
+      fl && { label: fl.source === 'ci' ? `Flaky tests (failed and passed on the same commit), last ${fl.windowDays} days` : 'Tracked flaky tests (not quarantined, flaky in the last 60 days)', value: String(fl.flakyCount), detail: fl.failedRunsTotal ? `${fl.failedRunsTotal} failed runs` : undefined },
       fl?.reruns ? { label: `Re-runs in the last ${fl.windowDays} days`, value: String(fl.reruns), detail: hours ? `about ${hours} hours of pipeline time` : undefined } : null,
       fl?.testsRun ? { label: 'Distinct tests run', value: String(fl.testsRun) } : null,
       forecastEvidence(m),

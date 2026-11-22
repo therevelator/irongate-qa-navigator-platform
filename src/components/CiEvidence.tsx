@@ -22,7 +22,9 @@ export interface Evidence {
   lastReceived: Record<'tests' | 'coverage' | 'pipelines', { at: string | null; uploads: number; sample: boolean }>;
   metrics: Array<{ key: string; label: string; day: string; value: number; unit: string | null; sampleSize: number; confidence: 'high' | 'medium' | 'low' }>;
   flakyTests: Array<{ testKey: string; suite: string | null; name: string; commits: string[]; failureMessage: string | null; lastSeen: string; failedRunCount: number; passedRunCount: number; failedRuns: EvidenceRun[]; passedRuns: EvidenceRun[] }>;
-  coverage: null | { reportId: string; commit: string; branch: string | null; format: string; createdAt: string; linesFound: number; linesHit: number; fileCount: number; lowestFiles: Array<{ path: string; linesFound: number; linesHit: number; coverage: number }> };
+  coverage: null | { reportId: string | null; commit: string | null; branch: string | null; format: string | null; createdAt: string; linesFound: number | null; linesHit: number | null; fileCount: number | null; lowestFiles: Array<{ path: string; linesFound: number; linesHit: number; coverage: number }> };
+  /** Evidence sent by the team's QE Navigator Collector (evidence mode): there are no raw records here. */
+  collector?: { asOf: string; engineVersion: string; collectorVersion: string; receivedAt: string } | null;
   slowestTests: Array<{ testKey: string; suite: string | null; name: string; runs: number; medianMs: number; maxMs: number }>;
   failingStages: Array<{ name: string; runs: number; failed: number; failureRate: number; medianSeconds: number | null; lastFailedRuns: Array<{ id: string; runId: string | null; url: string | null }> }>;
 }
@@ -150,6 +152,11 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
               </ul>
             </Card>
           )}
+          {hasCi && data!.collector && (
+            <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="ci-evidence-collector">
+              Evidence calculated by your QE Navigator Collector (engine {data!.collector.engineVersion}) as of {formatAsOf(data!.collector.asOf)}: the raw records stay in your network.
+            </p>
+          )}
           {hasCi && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             <Card>
@@ -178,7 +185,7 @@ export const CiEvidenceSection: React.FC<{ teamId: string; evidence: ReturnType<
             <Card>
               <CardHeader
                 title="Lowest-coverage files"
-                subtitle={data!.coverage ? `Latest report: commit ${short(data!.coverage.commit)}${data!.coverage.branch ? ` on ${data!.coverage.branch}` : ''} (${data!.coverage.format}, ${data!.coverage.fileCount} files), ${formatAsOf(data!.coverage.createdAt)}` : 'From the latest coverage report.'}
+                subtitle={data!.coverage ? (data!.coverage.commit ? `Latest report: commit ${short(data!.coverage.commit)}${data!.coverage.branch ? ` on ${data!.coverage.branch}` : ''} (${data!.coverage.format}, ${data!.coverage.fileCount} files), ${formatAsOf(data!.coverage.createdAt)}` : `Latest report, calculated by your QE Navigator Collector, ${formatAsOf(data!.coverage.createdAt)}`) : 'From the latest coverage report.'}
                 action={<FileCode2 size={16} className="text-slate-400" aria-hidden="true" />}
               />
               {!data!.coverage || data!.coverage.lowestFiles.length === 0 ? (
@@ -266,8 +273,14 @@ interface Calculation {
   sample?: boolean;
   metric: string; label: string; kpiColumn: string | null; day: string; value: number; unit: string | null; formula: string;
   inputs: Record<string, unknown>; sampleSize: number; confidence: 'high' | 'medium' | 'low'; recordedAt: string | null; computedAt: string;
-  flakyTests?: Array<{ name: string; suite: string | null; commit: string; failedRuns: string[]; passedRuns: string[] }>;
+  /** failedRuns / passedRuns: the run ids (calculated here) or their counts (sent by a QE Navigator Collector). */
+  flakyTests?: Array<{ name: string; suite: string | null; commit: string | null; failedRuns: string[] | number; passedRuns: string[] | number }>;
   lowestFiles?: Array<{ path: string; linesFound: number; linesHit: number }>;
+  collector?: {
+    engineVersion: string; collectorVersion: string; mode: 'evidence' | 'metrics'; calculatedAt: string; localEvidenceUrl: string | null;
+    failedDeployments?: Array<{ deploymentId: string; reasons: Array<{ type: string; ref: string | null; at: string | null }> }>;
+    escaped?: string[];
+  };
   sources: {
     testRuns: Array<{ id: string; runId: string; attempt: number; commit: string; branch: string | null; startedAt: string; passed: number; failed: number; errors: number; skipped: number; durationMs: number; format: string }>;
     pipelineRuns: Array<{ id: string; runId: string; attempt: number; name: string | null; commit: string; branch: string | null; startedAt: string; durationSeconds: number | null; result: string; url: string | null }>;
@@ -348,8 +361,13 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
             <div>
               <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white" data-testid="how-calculated-value">{fmtValue(calc.value, calc.unit, calc.metric)}</p>
               <p className="mt-1 text-slate-700 dark:text-slate-300" data-testid="how-calculated-formula"><span className="font-medium">Formula:</span> {calc.formula}</p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Based on {calc.sampleSize} {noun}{calc.sampleSize === 1 ? '' : 's'} ({help}).{calc.sample ? ' Calculated from sample CI data: shown as evidence, not written to the team’s KPIs.' : calc.kpiColumn ? ' Written to the team’s KPI as source “computed”.' : ' Shown here only (no KPI column).'}</p>
-              {cardSource && cardSource !== 'computed' && calc.kpiColumn && !calc.sample && (
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Based on {calc.sampleSize} {noun}{calc.sampleSize === 1 ? '' : 's'} ({help}).{calc.sample ? ' Calculated from sample CI data: shown as evidence, not written to the team’s KPIs.' : calc.kpiColumn ? ` Written to the team’s KPI as source “${calc.collector ? 'collector' : 'computed'}”.` : ' Shown here only (no KPI column).'}</p>
+              {calc.collector && (
+                <p className="mt-1 text-xs font-medium text-slate-700 dark:text-slate-200" data-testid="how-calculated-collector">
+                  Calculated by your QE Navigator Collector (engine {calc.collector.engineVersion}) on {formatAsOf(calc.collector.calculatedAt)}.
+                </p>
+              )}
+              {cardSource && cardSource !== 'computed' && cardSource !== 'collector' && calc.kpiColumn && !calc.sample && (
                 <p className="mt-1 text-xs text-amber-800 dark:text-amber-300" data-testid="how-calculated-other-source">The card shows the latest value from “{cardSource === 'synthetic' ? 'sample data' : cardSource}”; this is the value calculated from CI data.</p>
               )}
             </div>
@@ -369,9 +387,13 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
             <div>
               <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Flaky tests counted</h3>
               <ul className="space-y-1">
-                {calc.flakyTests.map((f) => (
-                  <li key={`${f.name}${f.commit}`} className="text-xs text-slate-700 dark:text-slate-300"><span className="font-medium">{f.name}</span> · commit <span className="font-mono">{short(f.commit)}</span> · failed in {f.failedRuns.length}, passed in {f.passedRuns.length} run{f.passedRuns.length === 1 ? '' : 's'}</li>
-                ))}
+                {calc.flakyTests.map((f) => {
+                  const failed = typeof f.failedRuns === 'number' ? f.failedRuns : f.failedRuns.length;
+                  const passed = typeof f.passedRuns === 'number' ? f.passedRuns : f.passedRuns.length;
+                  return (
+                    <li key={`${f.name}${f.commit}`} className="text-xs text-slate-700 dark:text-slate-300"><span className="font-medium">{f.name}</span>{f.commit ? <> · commit <span className="font-mono">{short(f.commit)}</span></> : null} · failed in {failed}, passed in {passed} run{passed === 1 ? '' : 's'}</li>
+                  );
+                })}
               </ul>
             </div>
           )}
@@ -383,6 +405,30 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
                   <li key={f.path} className="flex justify-between gap-3 text-xs"><span className="truncate font-mono text-slate-700 dark:text-slate-300" title={f.path}>{f.path}</span><span className="shrink-0 tabular-nums text-slate-500 dark:text-slate-400">{f.linesHit} / {f.linesFound}</span></li>
                 ))}
               </ul>
+            </div>
+          )}
+          {calc.collector?.mode === 'metrics' && (
+            <div className="rounded-md border border-slate-200 p-3 text-xs text-slate-600 dark:border-slate-700 dark:text-slate-300" data-testid="how-calculated-local">
+              <p className="font-medium text-slate-800 dark:text-slate-100">Details stay in your network</p>
+              <p className="mt-0.5">This team’s Collector sends values and counts only (privacy mode “metrics”): test names, files, deployments and issue keys are not sent.
+                {calc.collector.localEvidenceUrl && /^https?:\/\//.test(calc.collector.localEvidenceUrl) ? <> See them on your <a className="text-brand-700 hover:underline dark:text-brand-300" href={calc.collector.localEvidenceUrl} target="_blank" rel="noopener noreferrer" data-testid="how-calculated-local-link">local evidence page</a> (reachable inside your network only).</> : ' Your Collector’s local evidence page (qe-collector serve) shows them inside your network.'}
+              </p>
+            </div>
+          )}
+          {calc.collector?.failedDeployments && calc.collector.failedDeployments.length > 0 && (
+            <div>
+              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Failed changes counted</h3>
+              <ul className="space-y-0.5" data-testid="how-calculated-failed-deployments">
+                {calc.collector.failedDeployments.map((d) => (
+                  <li key={d.deploymentId} className="text-xs text-slate-700 dark:text-slate-300"><span className="font-mono">{d.deploymentId}</span> · {d.reasons.map((r) => `${r.type.replace('_', ' ')}${r.ref ? ` (${r.ref})` : ''}`).join('; ')}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {calc.collector?.escaped && calc.collector.escaped.length > 0 && (
+            <div>
+              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Bugs found in production</h3>
+              <p className="text-xs text-slate-700 dark:text-slate-300" data-testid="how-calculated-escaped">{calc.collector.escaped.map((k) => <span key={k} className="mr-2 font-mono">{k}</span>)}</p>
             </div>
           )}
           {calc.sprint && (
