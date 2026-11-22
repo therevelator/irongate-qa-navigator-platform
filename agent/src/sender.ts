@@ -129,7 +129,9 @@ export async function deliver(client: QeClient, b: Batch, budget: { extraRequest
     const r = await client.post(x, false);
     if (r.status === 200 || r.status === 201) {
       const list: any[] = Array.isArray(r.body?.[x.kind === 'issues' ? 'issues' : 'events']) ? r.body[x.kind === 'issues' ? 'issues' : 'events'] : [];
-      for (const s of list) { if (s?.status === 'duplicate') out.duplicate++; else out.written++; }
+      // A replayed answer (same Idempotency-Key, e.g. after a lost state file): nothing was written this time.
+      if (r.replayed) out.duplicate += x.items.length;
+      else for (const s of list) { if (s?.status === 'duplicate') out.duplicate++; else out.written++; }
       out.delivered.push(...x.items);
       onDelivered(x.items);
       return;
