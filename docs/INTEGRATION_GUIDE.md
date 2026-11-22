@@ -20,6 +20,7 @@ with real data.
    - 4A. [Raw ingestion: tests, coverage, pipelines (v2)](#4a-raw-ingestion-tests-coverage-pipelines-v2)
    - 4B. [Raw ingestion: deployments, commits, incidents (v2)](#4b-raw-ingestion-deployments-commits-incidents-v2)
    - 4C. [Raw ingestion: issues and static analysis (v2)](#4c-raw-ingestion-issues-and-static-analysis-v2)
+   - 4D. [On-premises agent: Jira, Linear, PagerDuty, Opsgenie from inside your network](#4d-on-premises-agent-jira-linear-pagerduty-opsgenie-from-inside-your-network)
 5. [All other data: how it can be sent today](#5-all-other-data-how-it-can-be-sent-today)
 6. [Code: curl, Node.js, Python, retries, batching, backfill](#6-code-curl-nodejs-python-retries-batching-backfill)
 7. [Recipes per source system](#7-recipes-per-source-system)
@@ -878,6 +879,40 @@ curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/static-analysis?team
 Ingestion log sources: `issues (jira)`, `issues (linear)`, `issues (json)`, `static-analysis (sarif)`; test calls `… test call`.
 Issues are kept until 13 months after they were resolved (open issues are kept), sprints and reports 13 months, the findings
 of a report 35 days (the latest report of each repository and tool keeps them).
+
+## 4D. On-premises agent: Jira, Linear, PagerDuty, Opsgenie from inside your network
+
+When QE Navigator should not reach your tools directly (no inbound access, no third-party holding your Jira or PagerDuty
+token), run the **on-premises agent** (`agent/` in this repository; `agent/README.md`, `agent/SECURITY.md`). It runs in
+your network, reads your tools with **your own read-only credentials**, and sends minimised records to the endpoints of
+sections 4B and 4C over **outbound HTTPS only**. No credential of yours leaves your network and nothing connects into it.
+
+| | |
+|---|---|
+| Form | One file `qe-agent.mjs` (Node 20+, no runtime dependencies, ~120 KB) or a distroless container (non-root, read-only file system, no shell). Examples: Kubernetes CronJob + NetworkPolicy, systemd timer, cron (`agent/deploy/`). |
+| Commands | `qe-agent check` (config, each source, QE Navigator dry run with your team ids; never prints secrets) · `qe-agent preview` (prints every request body exactly as it would be sent, validated by `dryRun=true`; `--offline` contacts QE Navigator not at all) · `qe-agent sync` (incremental) · `qe-agent sync --since 2026-01-01` (backfill). |
+| Config | One YAML file without secrets (`agent/config.example.yaml`; Admin console → Connect your CI → *On-premises agent* generates one with your team ids). Secrets only as environment variables or `VAR_FILE`: `QE_API_KEY` (an `igk_` key of section 3), `JIRA_TOKEN` (+ `JIRA_EMAIL` for Cloud), `LINEAR_API_KEY`, `PAGERDUTY_TOKEN`, `OPSGENIE_API_KEY`, `QE_PEOPLE_SALT`. |
+| Sources | **Jira Cloud** (e-mail + API token) and **Server / Data Center** (Personal Access Token; private CA bundle): JQL `(<yours>) AND updated >= <cursor>`, only the needed fields, changelog read in full when truncated, story points / sprint / found-in / flagged fields detected by name like section 4C (overridable). **Linear** (API key, GraphQL queries): issues by `updatedAt` with state and cycle history. **PagerDuty** (read-only key): log entries (trigger, acknowledge, resolve) with their incidents. **Opsgenie** (read-access key, US or EU): alerts by `updatedAt` with ack / close times. |
+| Team mapping | In the agent: Jira project key / Linear team key / PagerDuty service (or team) / Opsgenie team (or `service:` tag) → team id; every record carries its `team`. Unmapped records are skipped and reported (or go to `defaultTeam`). |
+| What is sent | QE Navigator JSON only (`format=json`). Issues: `key, team, type, status, statusCategory, resolution, environment` (`production` / `pre-release` only, classified in the agent), `storyPoints, estimateHours, timeLoggedHours, createdAt, resolvedAt, updatedAt, sprints[] (id, state, dates), transitions[] (status, sprint ids, flagged, with times)`. Incidents: `id, team, service, severity, status, at, openedAt, acknowledgedAt, resolvedAt, updates[], deploymentId, category`. Opt-in only: titles (`sendTitles`), links (`sendLinks`), people as `HMAC-SHA256(customer salt, id)` (`people: hash`). Never: descriptions, comments, attachments, free-text custom fields, labels, names, e-mail addresses. |
+| Minimisation | Every record passes the **shared field allow-list** (`server/lib/ingest/fieldAllowList.ts`, vendored byte for byte into `agent/src/vendor/` by `npm run sync-allow-list`; a test fails when the copy is out of date) and then the agent's stricter typed send policy; a record that still contains an e-mail address is not sent. |
+| Delivery | Batches within the limits (≤ 1,000 issues / ≤ 500 incidents, well under 10 / 5 MB), gzip, `Idempotency-Key` derived from the body (a retried or re-sent batch is answered from the ingestion log, never written twice), at most 50 requests per minute, retries with jitter and `Retry-After` on 429 / 5xx, timeouts on every request, `HTTPS_PROXY` / `NO_PROXY`. A batch refused with `400` is split to isolate the record at fault; the others are delivered. |
+| State | A local state file per source: the cursor and a fingerprint of each delivered record (atomic writes, a lock against overlapping runs). A re-run sends nothing already delivered. |
+| Exit codes | `0` ok, `2` config, `3` a source could not be read, `4` QE Navigator refused or unreachable, `5` another run is in progress, `6` some records refused. |
+| Ingestion log | Requests carry `User-Agent: qe-agent/<version>`; the log shows them as `issues (json)` / `incidents (json)` with an **agent** marker and "via the on-premises agent (qe-agent/0.1.0)" (stored as `response.client`; `GET /api/ingestion-log` returns `client`). |
+
+```bash
+# The five-minute path (details: agent/README.md)
+cd agent && npm ci --ignore-scripts && npm run build             # or: docker build -t qe-agent:0.1.0 agent/
+export QE_API_KEY=igk_... JIRA_TOKEN=... JIRA_EMAIL=qe-agent@example.com
+node dist/qe-agent.mjs check   -c qe-agent.yaml
+node dist/qe-agent.mjs preview -c qe-agent.yaml --out preview.json
+node dist/qe-agent.mjs sync    -c qe-agent.yaml                 # then every 15 minutes (agent/deploy/)
+```
+
+Verified end to end against a local instance by `tests/api/agent-e2e.test.ts` (the agent bundle against mock Jira, Linear,
+PagerDuty and Opsgenie servers and the real API: records stored for the mapped teams, velocity, MTTR and infrastructure
+failures computed, nothing personal stored, re-runs send nothing).
 
 ## 5. All other data: how it can be sent today
 
@@ -1770,6 +1805,12 @@ run it against a test team, or overwrite the values with real ones (the latest v
 - IronGate stores only the SHA-256 hash; the rate limiter counts by hash; the server's request log records only method and path; the
   ingestion log records the key id, name and prefix, never the key.
 - One key per integration, least privilege for session accounts (3.6), rotation (3.3), HTTPS only (3.5).
+
+**On-premises agent**
+
+- For Jira, Linear, PagerDuty and Opsgenie, the agent of section 4D keeps your tool credentials inside your network, needs no inbound
+  access, applies the shared field allow-list before sending, and shows the exact payload with `qe-agent preview` (`--offline` for an
+  air-gapped review). Its security posture for your review: `agent/SECURITY.md`.
 
 **No personal data in KPI payloads**
 
