@@ -26,12 +26,14 @@ const result = await build({
   charset: 'utf8',
   logLevel: 'warning',
   metafile: true,
-  banner: { js: `// qe-collector ${version}: QE Navigator Collector. Built from collector/src with esbuild; no runtime dependencies.` },
+  banner: { js: `// qe-collector ${version}: QE Navigator Collector. Built from collector/src and packages/engine/src with esbuild; no runtime dependencies.` },
 });
 const inputs = Object.keys(result.metafile.inputs);
-const foreign = inputs.filter((p) => !p.startsWith('src/') && !p.includes('/src/'));
-if (foreign.length) throw new Error(`The bundle must contain only collector/src: found ${foreign.join(', ')}`);
+// Only the Collector's own code and the shared calculation engine (packages/engine/src): no third-party code.
+const foreign = inputs.filter((p) => !p.startsWith('src/') && !p.startsWith('../packages/engine/src/'));
+if (foreign.length) throw new Error(`The bundle must contain only collector/src and packages/engine/src: found ${foreign.join(', ')}`);
+const engineVersion = readFileSync(join(root, '..', 'packages/engine/src/version.ts'), 'utf8').match(/ENGINE_VERSION = '([^']+)'/)[1];
 const bytes = readFileSync(out);
 const sum = createHash('sha256').update(bytes).digest('hex');
 writeFileSync(join(root, 'dist/SHA256SUMS'), `${sum}  qe-collector.mjs\n`);
-console.log(`dist/qe-collector.mjs  ${bytes.length} bytes  sha256 ${sum}  (${inputs.length} source files)`);
+console.log(`dist/qe-collector.mjs  ${bytes.length} bytes  sha256 ${sum}  (${inputs.length} source files, engine ${engineVersion})`);

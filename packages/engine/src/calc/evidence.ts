@@ -12,6 +12,8 @@ export interface CiEvidence {
   lowestFiles: Array<{ path: string; linesFound: number; linesHit: number; branchesFound: number; branchesHit: number; coverage: number }>;
   slowestTests: Array<{ testKey: string; name: string; suite: string; runs: number; medianMs: number; maxMs: number }>;
   failingStages: Array<{ name: string; runs: number; failed: number; failureRate: number; medianSeconds: number | null; lastFailedRuns: Array<{ runId: string; url: string | null }> }>;
+  /** The slowest pipeline stages (jobs) over the 30 days ending the day: median duration, with their slowest steps when the CI reports steps. */
+  slowestStages: Array<{ name: string; runs: number; medianSeconds: number; maxSeconds: number; slowestSteps: Array<{ name: string; medianSeconds: number }> }>;
 }
 
 export function ciEvidence(day: string, data: CiData): CiEvidence {
@@ -85,8 +87,36 @@ export function ciEvidence(day: string, data: CiData): CiEvidence {
       };
     });
 
+  // Slowest stages over the same 30 days (median duration), with their slowest steps.
+  const durs = new Map<string, { name: string; s: number[]; steps: Map<string, number[]> }>();
+  const newStage = (name: string) => ({ name, s: [] as number[], steps: new Map<string, number[]>() });
+  for (const p of data.pipelines) {
+    if (p.day < from30 || p.day > day) continue;
+    for (const s of p.stages ?? []) {
+      if (s.result === 'skipped' || s.durationS === null) continue;
+      const t = durs.get(s.name) ?? newStage(s.name);
+      t.s.push(s.durationS);
+      durs.set(s.name, t);
+    }
+    for (const st of p.steps ?? []) {
+      if (st.durationS === null) continue;
+      const t = durs.get(st.job);
+      if (!t) continue;
+      const l = t.steps.get(st.name) ?? [];
+      l.push(st.durationS);
+      t.steps.set(st.name, l);
+    }
+  }
+  const slowestStages = Array.from(durs.values())
+    .map((t) => ({
+      name: t.name, runs: t.s.length, medianSeconds: Math.round(median(t.s) ?? 0), maxSeconds: Math.max(...t.s),
+      slowestSteps: Array.from(t.steps.entries()).map(([name, v]) => ({ name, medianSeconds: Math.round(median(v) ?? 0) })).sort((a, b) => b.medianSeconds - a.medianSeconds).slice(0, 3),
+    }))
+    .sort((a, b) => b.medianSeconds - a.medianSeconds)
+    .slice(0, 10);
+
   return {
-    flakyTests,
+    flakyTests, slowestStages,
     coverage: report ? { reportId: report.id, commit: report.commit, branch: report.branch, format: report.format, createdAt: new Date(report.createdAt).toISOString(), linesFound: report.linesFound, linesHit: report.linesHit, fileCount: report.fileCount } : null,
     lowestFiles, slowestTests, failingStages,
   };

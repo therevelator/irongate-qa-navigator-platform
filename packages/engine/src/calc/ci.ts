@@ -59,6 +59,8 @@ export interface CoverageFileRec { path: string; linesFound: number; linesHit: n
 /** One coverage report (coverage_reports). */
 export interface CoverageRec {
   id: string; commit: string; branch: string | null; attempt: number; day: string; createdAt: number; format: string;
+  /** The CI run the report came from (identity, with team, commit and attempt). */
+  runId?: string;
   linesFound: number; linesHit: number; branchesFound: number; branchesHit: number; fileCount: number;
   changedLinesFound: number | null; changedLinesHit: number | null;
   /** The per-file figures (needed for the lowest-coverage files). */
@@ -75,6 +77,8 @@ export interface PipelineRec {
   id: string; externalId: string; attempt: number; name?: string | null; commit?: string; branch?: string | null; day: string;
   startedAt: number; finishedAt: number | null; durationS: number | null; result: 'success' | 'failed' | 'cancelled'; url?: string | null;
   stages?: StageRec[];
+  /** The steps of each stage (job), when the CI reports them: shown as evidence (slowest steps), not used by the calculations. */
+  steps?: Array<{ job: string; name: string; durationS: number | null; result: StageRec['result'] }>;
 }
 
 export interface CiData {

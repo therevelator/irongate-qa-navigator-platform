@@ -18,9 +18,22 @@ export interface SourceState {
   sent: Record<string, string>;
   /** record id → fingerprint of a record QE Navigator refused (not retried until it changes). */
   rejected?: Record<string, string>;
+  /** Failed runs since the last successful one, the time and kind (auth, network, http, …) of the last failure: for the heartbeat. */
+  errors?: number;
+  lastErrorAt?: string | null;
+  lastErrorKind?: string | null;
 }
 
-export interface State { version: 1; collectorVersion: string; sources: Record<string, SourceState> }
+export interface State {
+  version: 1;
+  collectorVersion: string;
+  sources: Record<string, SourceState>;
+  /** evidence / metrics modes: "team|day" → fingerprint of the values last delivered (with the engine version). */
+  metrics?: Record<string, string>;
+  /** "team" → fingerprint of the evidence panel last delivered. */
+  evidence?: Record<string, string>;
+  lastHeartbeatAt?: string | null;
+}
 
 export const MAX_FINGERPRINTS = 250_000;
 

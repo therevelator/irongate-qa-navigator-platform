@@ -77,6 +77,8 @@ beforeEach(async () => {
   dir = tmpDir();
   cfg = config({
     qeNavigator: { url: qe.url, requestsPerMinute: 60 },
+    privacy: { mode: 'full' },
+    heartbeat: false,
     state: { path: join(dir, 'state.json') },
     http: { maxRetries: 1, maxRetryWaitSeconds: 1 },
     sources: [
@@ -246,7 +248,7 @@ describe('the bundle', () => {
   const bundle = join(here, '..', 'dist', 'qe-collector.mjs');
   test('dist/qe-collector.mjs runs preview --offline as a plain node process and exits 0', { skip: !existsSync(bundle) && 'run npm run build first' }, async () => {
     const cfgFile = join(dir, 'agent.yaml');
-    writeFileSync(cfgFile, `qeNavigator:\n  url: ${qe.url}\nstate:\n  path: ${join(dir, 'state.json')}\nsources:\n  - type: jira\n    baseUrl: ${vendors.url}\n    deployment: cloud\n    jql: project = PAY\n    teams: { PAY: team-pay, WEB: team-web }\n`);
+    writeFileSync(cfgFile, `qeNavigator:\n  url: ${qe.url}\nprivacy:\n  mode: full\nstate:\n  path: ${join(dir, 'state.json')}\nsources:\n  - type: jira\n    baseUrl: ${vendors.url}\n    deployment: cloud\n    jql: project = PAY\n    teams: { PAY: team-pay, WEB: team-web }\n`);
     const r = await new Promise<{ code: number | null; stdout: string; stderr: string }>((res) => {
       execFile(process.execPath, [bundle, 'preview', '--offline', '-c', cfgFile, '--log-format', 'json'], { env: { PATH: process.env.PATH, JIRA_TOKEN: 'jira-secret-token-1', JIRA_EMAIL: 'svc@example.com' } }, (err, stdout, stderr) => res({ code: err ? (err as any).code : 0, stdout, stderr }));
     });

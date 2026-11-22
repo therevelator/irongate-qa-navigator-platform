@@ -7,14 +7,32 @@
  * (Docker / Kubernetes secrets).
  */
 import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { parseYaml } from './yaml';
 import { addSecret } from './log';
 
 export class ConfigError extends Error {}
 
-export type SourceType = 'jira' | 'linear' | 'pagerduty' | 'opsgenie';
+export type SourceType = 'jira' | 'linear' | 'pagerduty' | 'opsgenie' | 'github' | 'gitlab' | 'jenkins' | 'azure-devops' | 'sonarqube';
+export const SOURCE_TYPES: SourceType[] = ['jira', 'linear', 'pagerduty', 'opsgenie', 'github', 'gitlab', 'jenkins', 'azure-devops', 'sonarqube'];
+/** The CI and code-quality sources (read pipelines, tests, coverage, deployments, findings) as opposed to the issue and incident tools. */
+export const CI_TYPES: SourceType[] = ['github', 'gitlab', 'jenkins', 'azure-devops', 'sonarqube'];
+
+/**
+ * What leaves your network (privacy.mode):
+ *   full      minimised raw records (issues, incidents, test results, coverage per file, pipeline runs,
+ *             deployments, findings) to the existing ingestion endpoints; QE Navigator calculates.
+ *   evidence  (default) the metric values calculated here per team and day, with the evidence lists the app
+ *             shows (flaky test names, least-covered files, slowest and failing stages, failed deploys,
+ *             escaped issue keys); no raw records.
+ *   metrics   the metric values and counts only: no names, keys, paths or titles at all.
+ */
+export type PrivacyMode = 'full' | 'evidence' | 'metrics';
 
 export interface Privacy {
+  mode: PrivacyMode;
+  /** metrics mode: the URL of your local evidence page (qe-collector serve), shown in QE Navigator as a link. */
+  localEvidenceUrl: string | null;
   /** Send issue / incident titles (default false: the key or id only). */
   sendTitles: boolean;
   /** Send a link back to the issue / incident (default false: it names your internal host). */
@@ -77,7 +95,72 @@ export interface OpsgenieSource extends SourceBase {
   categories: Record<string, string>;
 }
 
-export type SourceConfig = JiraSource | LinearSource | PagerDutySource | OpsgenieSource;
+/** Artifact names (globs, * and ?) whose files are read as test reports, coverage reports or SARIF; files are recognised by content. */
+export interface ArtifactSettings { tests: string[]; coverage: string[]; sarif: string[]; maxMB: number }
+
+export interface GitHubSource extends SourceBase {
+  type: 'github';
+  apiUrl: string;
+  /** token: a fine-grained or classic PAT (GITHUB_TOKEN); app: a GitHub App installation (app id, installation id, private key in GITHUB_APP_PRIVATE_KEY). */
+  auth: 'token' | 'app';
+  appId: string | null;
+  installationId: string | null;
+  privateKeyEnv: string;
+  /** Workflow names or file names to read (empty: all). */
+  workflows: string[];
+  /** Branches to read runs of (empty: all). */
+  branches: string[];
+  /** Deployment environments that are production (default: production, prod, live). */
+  environments: string[];
+  artifacts: ArtifactSettings;
+  maxRunsPerRepo: number;
+}
+
+export interface GitLabSource extends SourceBase {
+  type: 'gitlab';
+  apiUrl: string;
+  environments: string[];
+  artifacts: ArtifactSettings;
+  maxRunsPerRepo: number;
+}
+
+export interface JenkinsSource extends SourceBase {
+  type: 'jenkins';
+  baseUrl: string;
+  user: string | null;
+  userEnv: string;
+  /** Job path → team id for deployment jobs: each build of such a job is a deployment. */
+  deployJobs: Record<string, string>;
+  deployEnvironment: string;
+  artifacts: ArtifactSettings;
+  maxRunsPerRepo: number;
+  allowHttp: boolean;
+}
+
+export interface AzureDevOpsSource extends SourceBase {
+  type: 'azure-devops';
+  orgUrl: string;
+  project: string;
+  environments: string[];
+  /** Also read classic release pipelines' deployments (vsrm.dev.azure.com). */
+  releases: boolean;
+  releasesUrl: string;
+  artifacts: ArtifactSettings;
+  maxRunsPerRepo: number;
+}
+
+export interface SonarQubeSource extends SourceBase {
+  type: 'sonarqube';
+  baseUrl: string;
+  auth: 'bearer' | 'basic';
+  /** Branch to read (empty: the main branch). */
+  branch: string | null;
+  allowHttp: boolean;
+}
+
+export type CiSourceConfig = GitHubSource | GitLabSource | JenkinsSource | AzureDevOpsSource | SonarQubeSource;
+export type SourceConfig = JiraSource | LinearSource | PagerDutySource | OpsgenieSource | CiSourceConfig;
+export const isCiSource = (s: SourceConfig): s is CiSourceConfig => CI_TYPES.includes(s.type);
 
 export interface Config {
   path: string;
@@ -85,6 +168,14 @@ export interface Config {
   privacy: Privacy;
   peopleSaltEnv: string;
   statePath: string;
+  /** The local copy of the raw records (JSON lines, one folder per kind, one file per month): stays in your network. */
+  store: { dir: string; retentionDays: number; detailDays: number };
+  /** Days recalculated on every sync (values change while late data arrives). */
+  recalcDays: number;
+  /** A team's main branch when it is not main or master (coverage, pass rate and code quality use the main branch). */
+  mainBranches: Record<string, string>;
+  serve: { host: string; port: number; userEnv: string; passwordEnv: string };
+  heartbeat: boolean;
   backfillDays: number;
   overlapMinutes: number;
   http: HttpSettings;
@@ -170,7 +261,30 @@ export function httpsUrl(v: unknown, where: string, def?: string, allowHttp = fa
   return s.replace(/\/+$/, '');
 }
 
-const DEFAULT_TOKEN_ENV: Record<SourceType, string> = { jira: 'JIRA_TOKEN', linear: 'LINEAR_API_KEY', pagerduty: 'PAGERDUTY_TOKEN', opsgenie: 'OPSGENIE_API_KEY' };
+const DEFAULT_TOKEN_ENV: Record<SourceType, string> = {
+  jira: 'JIRA_TOKEN', linear: 'LINEAR_API_KEY', pagerduty: 'PAGERDUTY_TOKEN', opsgenie: 'OPSGENIE_API_KEY',
+  github: 'GITHUB_TOKEN', gitlab: 'GITLAB_TOKEN', jenkins: 'JENKINS_TOKEN', 'azure-devops': 'AZURE_DEVOPS_TOKEN', sonarqube: 'SONAR_TOKEN',
+};
+/** The key a source's team mapping is written under in the config (stored as `teams`). */
+const MAP_KEY: Partial<Record<SourceType, string>> = { github: 'repos', gitlab: 'projects', jenkins: 'jobs', 'azure-devops': 'pipelines', sonarqube: 'projects' };
+const DEFAULT_ARTIFACTS = {
+  tests: ['*test*', '*junit*', '*result*', '*report*', '*.trx', '*cucumber*'],
+  coverage: ['*coverage*', '*lcov*', '*cobertura*', '*jacoco*'],
+  sarif: ['*sarif*', '*codeql*', '*semgrep*', '*analysis*'],
+};
+const list = (v: unknown, where: string, def: string[] = []): string[] => {
+  if (v === undefined || v === null) return def;
+  if (!Array.isArray(v)) throw new ConfigError(`${where} must be a list`);
+  return v.map((x, j) => reqStr(x, `${where}[${j}]`));
+};
+function artifacts(v: unknown, where: string): ArtifactSettings {
+  const o = obj(v, where);
+  only(o, ['tests', 'coverage', 'sarif', 'maxMB'], where);
+  return {
+    tests: list(o.tests, `${where}.tests`, DEFAULT_ARTIFACTS.tests), coverage: list(o.coverage, `${where}.coverage`, DEFAULT_ARTIFACTS.coverage),
+    sarif: list(o.sarif, `${where}.sarif`, DEFAULT_ARTIFACTS.sarif), maxMB: int(o.maxMB, `${where}.maxMB`, 50, 1, 500),
+  };
+}
 const NAME = /^[a-z0-9][a-z0-9_-]{0,49}$/;
 const FIELD_ID = /^(customfield_\d+|[a-z][A-Za-z0-9_]{0,63})$/;
 
@@ -178,16 +292,65 @@ function source(raw: unknown, i: number, names: Set<string>): SourceConfig {
   const where = `sources[${i}]`;
   const o = obj(raw, where);
   const type = str(o.type, `${where}.type`) as SourceType;
-  if (!['jira', 'linear', 'pagerduty', 'opsgenie'].includes(type)) throw new ConfigError(`${where}.type must be jira, linear, pagerduty or opsgenie`);
+  if (!SOURCE_TYPES.includes(type)) throw new ConfigError(`${where}.type must be one of ${SOURCE_TYPES.join(', ')}`);
   const name = str(o.name, `${where}.name`, type)!;
   if (!NAME.test(name)) throw new ConfigError(`${where}.name must be lowercase letters, digits, "-" or "_" (it keys the state file)`);
   if (names.has(name)) throw new ConfigError(`${where}.name "${name}" is used twice`);
   names.add(name);
+  const mapKey = MAP_KEY[type];
   const base = {
-    name, type, tokenEnv: envName(o.tokenEnv, `${where}.tokenEnv`, DEFAULT_TOKEN_ENV[type]), teams: teamMap(o.teams, `${where}.teams`),
+    name, type, tokenEnv: envName(o.tokenEnv, `${where}.tokenEnv`, DEFAULT_TOKEN_ENV[type]),
+    teams: mapKey ? teamMap(o[mapKey], `${where}.${mapKey}`) : teamMap(o.teams, `${where}.teams`),
     defaultTeam: team(o.defaultTeam, `${where}.defaultTeam`), caFile: str(o.caFile, `${where}.caFile`), enabled: bool(o.enabled, `${where}.enabled`, true),
   };
-  const common = ['type', 'name', 'tokenEnv', 'teams', 'defaultTeam', 'caFile', 'enabled'];
+  const common = ['type', 'name', 'tokenEnv', mapKey ?? 'teams', 'defaultTeam', 'caFile', 'enabled'];
+  if (mapKey && !Object.keys(base.teams).length && !base.defaultTeam) throw new ConfigError(`${where}.${mapKey} must map at least one ${mapKey.replace(/s$/, '')} to a QE Navigator team id (or set defaultTeam)`);
+  const ciCommon = [...common, 'artifacts', 'maxRunsPerRepo'];
+  const maxRuns = () => int(o.maxRunsPerRepo, `${where}.maxRunsPerRepo`, 500, 1, 10000);
+  const envs = () => list(o.environments, `${where}.environments`, ['production', 'prod', 'live']);
+  if (type === 'github') {
+    only(o, [...ciCommon, 'apiUrl', 'auth', 'appId', 'installationId', 'privateKeyEnv', 'workflows', 'branches', 'environments'], where);
+    const auth = str(o.auth, `${where}.auth`, 'token');
+    if (auth !== 'token' && auth !== 'app') throw new ConfigError(`${where}.auth must be token (a personal access token) or app (a GitHub App installation)`);
+    const appId = str(o.appId, `${where}.appId`);
+    const installationId = str(o.installationId, `${where}.installationId`);
+    if (auth === 'app' && (!appId || !/^\d+$/.test(appId) || !installationId || !/^\d+$/.test(installationId))) throw new ConfigError(`${where}: auth: app needs appId and installationId (numbers, from the app's settings and its installation URL)`);
+    for (const r of Object.keys(base.teams)) if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(r)) throw new ConfigError(`${where}.repos.${r} must be owner/name`);
+    return {
+      ...base, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://api.github.com'), auth, appId, installationId,
+      privateKeyEnv: envName(o.privateKeyEnv, `${where}.privateKeyEnv`, 'GITHUB_APP_PRIVATE_KEY'), workflows: list(o.workflows, `${where}.workflows`),
+      branches: list(o.branches, `${where}.branches`), environments: envs(), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(),
+    };
+  }
+  if (type === 'gitlab') {
+    only(o, [...ciCommon, 'apiUrl', 'environments'], where);
+    return { ...base, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://gitlab.com/api/v4'), environments: envs(), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns() };
+  }
+  if (type === 'jenkins') {
+    only(o, [...ciCommon, 'baseUrl', 'user', 'userEnv', 'deployJobs', 'deployEnvironment', 'allowHttp'], where);
+    const allowHttp = bool(o.allowHttp, `${where}.allowHttp`, false);
+    return {
+      ...base, type, baseUrl: httpsUrl(o.baseUrl, `${where}.baseUrl`, undefined, allowHttp), user: str(o.user, `${where}.user`), userEnv: envName(o.userEnv, `${where}.userEnv`, 'JENKINS_USER'),
+      deployJobs: teamMap(o.deployJobs, `${where}.deployJobs`), deployEnvironment: str(o.deployEnvironment, `${where}.deployEnvironment`, 'production')!,
+      artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(), allowHttp,
+    };
+  }
+  if (type === 'azure-devops') {
+    only(o, [...ciCommon, 'orgUrl', 'project', 'environments', 'releases', 'releasesUrl'], where);
+    const orgUrl = httpsUrl(o.orgUrl, `${where}.orgUrl`);
+    const org = new URL(orgUrl).pathname.split('/').filter(Boolean)[0] ?? new URL(orgUrl).hostname.split('.')[0];
+    return {
+      ...base, type, orgUrl, project: reqStr(o.project, `${where}.project`), environments: envs(), releases: bool(o.releases, `${where}.releases`, false),
+      releasesUrl: httpsUrl(o.releasesUrl, `${where}.releasesUrl`, `https://vsrm.dev.azure.com/${org}`), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(),
+    };
+  }
+  if (type === 'sonarqube') {
+    only(o, [...common, 'baseUrl', 'auth', 'branch', 'allowHttp'], where);
+    const auth = str(o.auth, `${where}.auth`, 'bearer');
+    if (auth !== 'bearer' && auth !== 'basic') throw new ConfigError(`${where}.auth must be bearer (SonarQube 10+, SonarCloud) or basic (older SonarQube: the token as user name)`);
+    const allowHttp = bool(o.allowHttp, `${where}.allowHttp`, false);
+    return { ...base, type, baseUrl: httpsUrl(o.baseUrl, `${where}.baseUrl`, 'https://sonarcloud.io', allowHttp), auth, branch: str(o.branch, `${where}.branch`), allowHttp };
+  }
   if (type === 'jira') {
     only(o, [...common, 'baseUrl', 'deployment', 'auth', 'email', 'emailEnv', 'jql', 'fields', 'pageSize', 'allowHttp'], where);
     const auth = str(o.auth, `${where}.auth`);
@@ -233,19 +396,32 @@ export function defaultStatePath(): string {
 
 export function parseConfig(raw: unknown, path = '(inline)'): Config {
   const o = obj(raw, 'config');
-  only(o, ['qeNavigator', 'privacy', 'state', 'backfillDays', 'overlapMinutes', 'http', 'sources'], 'config');
+  only(o, ['qeNavigator', 'privacy', 'state', 'serve', 'heartbeat', 'recalcDays', 'mainBranches', 'backfillDays', 'overlapMinutes', 'http', 'sources'], 'config');
   const qe = obj(o.qeNavigator, 'qeNavigator');
   only(qe, ['url', 'apiKeyEnv', 'caFile', 'requestsPerMinute', 'timeoutSeconds'], 'qeNavigator');
   const pr = obj(o.privacy, 'privacy');
-  only(pr, ['sendTitles', 'sendLinks', 'people', 'saltEnv'], 'privacy');
+  only(pr, ['mode', 'localEvidenceUrl', 'sendTitles', 'sendLinks', 'people', 'saltEnv'], 'privacy');
+  const mode = str(pr.mode, 'privacy.mode', 'evidence') as PrivacyMode;
+  if (!['full', 'evidence', 'metrics'].includes(mode)) throw new ConfigError('privacy.mode must be full, evidence or metrics');
+  const localEvidenceUrl = pr.localEvidenceUrl === undefined || pr.localEvidenceUrl === null ? null : (() => {
+    const v = reqStr(pr.localEvidenceUrl, 'privacy.localEvidenceUrl');
+    let u: URL;
+    try { u = new URL(v); } catch { throw new ConfigError('privacy.localEvidenceUrl must be a URL (http:// or https://), e.g. http://qe-collector.internal:8787/'); }
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new ConfigError('privacy.localEvidenceUrl must be http:// or https://');
+    if (u.username || u.password) throw new ConfigError('privacy.localEvidenceUrl must not contain credentials');
+    return v;
+  })();
   const people = str(pr.people, 'privacy.people', 'none');
   if (people !== 'none' && people !== 'hash') throw new ConfigError('privacy.people must be none or hash');
   const st = obj(o.state, 'state');
-  only(st, ['path'], 'state');
+  only(st, ['path', 'dataDir', 'retentionDays', 'detailDays'], 'state');
+  const sv = obj(o.serve, 'serve');
+  only(sv, ['host', 'port', 'userEnv', 'passwordEnv'], 'serve');
   const h = obj(o.http, 'http');
   only(h, ['timeoutSeconds', 'maxRetries', 'maxRetryWaitSeconds', 'caFile'], 'http');
-  if (!Array.isArray(o.sources) || o.sources.length === 0) throw new ConfigError('sources must list at least one source (jira, linear, pagerduty or opsgenie)');
+  if (!Array.isArray(o.sources) || o.sources.length === 0) throw new ConfigError(`sources must list at least one source (${SOURCE_TYPES.join(', ')})`);
   const names = new Set<string>();
+  const statePath = str(st.path, 'state.path', defaultStatePath())!;
   return {
     path,
     qeNavigator: {
@@ -253,9 +429,29 @@ export function parseConfig(raw: unknown, path = '(inline)'): Config {
       caFile: str(qe.caFile, 'qeNavigator.caFile'), requestsPerMinute: int(qe.requestsPerMinute, 'qeNavigator.requestsPerMinute', 50, 1, 60),
       timeoutSeconds: int(qe.timeoutSeconds, 'qeNavigator.timeoutSeconds', 120, 5, 600),
     },
-    privacy: { sendTitles: bool(pr.sendTitles, 'privacy.sendTitles', false), sendLinks: bool(pr.sendLinks, 'privacy.sendLinks', false), people },
+    privacy: { mode, localEvidenceUrl, sendTitles: bool(pr.sendTitles, 'privacy.sendTitles', false), sendLinks: bool(pr.sendLinks, 'privacy.sendLinks', false), people },
     peopleSaltEnv: envName(pr.saltEnv, 'privacy.saltEnv', 'QE_PEOPLE_SALT'),
-    statePath: str(st.path, 'state.path', defaultStatePath())!,
+    statePath,
+    store: {
+      dir: str(st.dataDir, 'state.dataDir', join(dirname(statePath), 'qe-collector-data'))!,
+      retentionDays: int(st.retentionDays, 'state.retentionDays', 400, 30, 3650), detailDays: int(st.detailDays, 'state.detailDays', 35, 7, 400),
+    },
+    recalcDays: int(o.recalcDays, 'recalcDays', 35, 1, 400),
+    mainBranches: (() => {
+      const m = obj(o.mainBranches, 'mainBranches');
+      const out: Record<string, string> = {};
+      for (const [t, b] of Object.entries(m)) {
+        if (!TEAM_ID.test(t)) throw new ConfigError(`mainBranches.${t} must be keyed by a QE Navigator team id`);
+        if (typeof b !== 'string' || !b.trim() || /\s/.test(b.trim())) throw new ConfigError(`mainBranches.${t} must be a branch name`);
+        out[t] = b.trim().replace(/^refs\/heads\//, '');
+      }
+      return out;
+    })(),
+    serve: {
+      host: str(sv.host, 'serve.host', '127.0.0.1')!, port: int(sv.port, 'serve.port', 8787, 1, 65535),
+      userEnv: envName(sv.userEnv, 'serve.userEnv', 'QE_SERVE_USER'), passwordEnv: envName(sv.passwordEnv, 'serve.passwordEnv', 'QE_SERVE_PASSWORD'),
+    },
+    heartbeat: bool(o.heartbeat, 'heartbeat', true),
     backfillDays: int(o.backfillDays, 'backfillDays', 90, 1, 365),
     overlapMinutes: int(o.overlapMinutes, 'overlapMinutes', 10, 0, 1440),
     http: {

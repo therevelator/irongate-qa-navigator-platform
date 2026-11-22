@@ -14,7 +14,7 @@ import { minimise } from './vendor/fieldAllowList';
 import { applyPolicy, type PolicyKind } from './policy';
 import type { Privacy } from './config';
 
-export interface PrivacyContext { privacy: Privacy; salt: string | null }
+export interface PrivacyContext { privacy: Pick<Privacy, 'sendTitles' | 'sendLinks' | 'people'>; salt: string | null }
 
 export function personHash(salt: string, identity: string): string {
   return createHmac('sha256', salt).update(identity.trim().toLowerCase()).digest('hex').slice(0, 32);

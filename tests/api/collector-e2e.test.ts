@@ -125,6 +125,9 @@ beforeAll(async () => {
   cfgPath = join(dir, 'qe-collector.yaml');
   writeFileSync(cfgPath, `qeNavigator:
   url: ${API_URL}
+privacy:
+  mode: full
+heartbeat: false
 backfillDays: 60
 sources:
   - type: jira

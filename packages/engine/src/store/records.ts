@@ -55,7 +55,7 @@ export function testRunRecord(team: string, rep: ParsedTestReport, m: RunMeta): 
 export function coverageRecord(team: string, cov: ParsedCoverage, m: Omit<RunMeta, 'startedAt'> & { createdAt: number }, changed: ChangedLines | null = null): CoverageRec {
   const ch = changed ? changedCoverage(cov, changed) : null;
   return {
-    id: recordId('coverage', team, m.commit, m.runId, m.attempt), commit: m.commit, branch: m.branch, attempt: m.attempt, day: dayOf(m.createdAt), createdAt: m.createdAt,
+    id: recordId('coverage', team, m.commit, m.runId, m.attempt), commit: m.commit, branch: m.branch, attempt: m.attempt, runId: m.runId, day: dayOf(m.createdAt), createdAt: m.createdAt,
     format: cov.format, linesFound: cov.totals.linesFound, linesHit: cov.totals.linesHit, branchesFound: cov.totals.branchesFound, branchesHit: cov.totals.branchesHit,
     fileCount: cov.files.length, changedLinesFound: ch ? ch.found : null, changedLinesHit: ch ? ch.hit : null,
     files: cov.files.map((f) => ({ path: f.path, linesFound: f.linesFound, linesHit: f.linesHit, branchesFound: f.branchesFound, branchesHit: f.branchesHit })),
@@ -250,6 +250,8 @@ export interface AnalysisRec {
   fingerprints: string[];
   /** Per finding: rule and severity, and the path when the privacy mode keeps it (local evidence page). */
   rules: Array<{ ruleId: string; severity: string; path: string | null }>;
+  /** The quality gate status when the tool has one (SonarQube: OK, WARN, ERROR); evidence only. */
+  qualityGate?: string | null;
 }
 
 /** A static-analysis report (as storeAnalysis keeps it); the id is derived from team + tool + repo + commit + run + attempt. */

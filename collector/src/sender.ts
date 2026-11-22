@@ -86,29 +86,49 @@ export class QeClient {
   }
 
   async post(b: Batch, dryRun: boolean): Promise<PostResult> {
+    return this.send(`/api/ingest/${b.kind}`, { format: 'json', ...(dryRun ? { dryRun: 'true' } : {}) }, 'application/json', b.json, dryRun ? null : b.idempotencyKey, { kind: b.kind, records: b.items.length });
+  }
+
+  /** The URL of an ingestion endpoint with its query (for the preview). */
+  endpoint(path: string, query: Record<string, string>): string {
+    const q = new URLSearchParams(query).toString();
+    return `${this.cfg.qeNavigator.url}${path}${q ? `?${q}` : ''}`;
+  }
+
+  /**
+   * POST a body (gzip) to an ingestion endpoint with the key, the User-Agent and an Idempotency-Key; 401 / 403
+   * stop the run (QeError with auth). Any other status is returned for the caller to handle.
+   */
+  async send(path: string, query: Record<string, string>, contentType: string, body: string, idempotencyKey: string | null, what: Record<string, unknown> = {}): Promise<PostResult> {
     if (!this.apiKey) throw new QeError('QE Navigator API key missing', null, true);
     await this.throttle();
     this.requests++;
-    const url = this.url(b.kind, dryRun);
+    const url = this.endpoint(path, query);
     const t0 = Date.now();
     let res: HttpResponse;
     try {
       res = await requestWithRetry(
-        { method: 'POST', url, headers: this.headers(b, dryRun), body: gzipSync(Buffer.from(b.json)), timeoutMs: this.cfg.qeNavigator.timeoutSeconds * 1000, ca: this.ca },
+        {
+          method: 'POST', url, body: gzipSync(Buffer.from(body)), timeoutMs: this.cfg.qeNavigator.timeoutSeconds * 1000, ca: this.ca,
+          headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': contentType, 'Content-Encoding': 'gzip', 'User-Agent': USER_AGENT, ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}) },
+        },
         { maxRetries: this.cfg.http.maxRetries, maxWaitMs: this.cfg.http.maxRetryWaitSeconds * 1000, ...this.retry },
       );
     } catch (e) {
       throw new QeError(`QE Navigator could not be reached (${redact((e as Error).message)})`, null);
     }
-    let body: any = null;
-    try { body = res.json(); } catch { body = { error: res.text().slice(0, 300) }; }
-    log.debug('QE Navigator answered', { kind: b.kind, dryRun, records: b.items.length, status: res.status, ms: Date.now() - t0, replayed: res.headers['idempotent-replayed'] === 'true' });
+    let parsed: any = null;
+    try { parsed = res.json(); } catch { parsed = { error: res.text().slice(0, 300) }; }
+    log.debug('QE Navigator answered', { path, ...what, status: res.status, ms: Date.now() - t0, replayed: res.headers['idempotent-replayed'] === 'true' });
     if (res.status === 401 || res.status === 403) {
-      throw new QeError(`QE Navigator refused the request (HTTP ${res.status}): ${body?.error ?? 'no detail'}${res.status === 401 ? ' (check QE_API_KEY: Admin console → API keys)' : ''}`, res.status, true);
+      throw new QeError(`QE Navigator refused the request (HTTP ${res.status}): ${parsed?.error ?? 'no detail'}${res.status === 401 ? ' (check QE_API_KEY: Admin console → API keys)' : ''}`, res.status, true);
     }
-    return { status: res.status, body, replayed: res.headers['idempotent-replayed'] === 'true' };
+    return { status: res.status, body: parsed, replayed: res.headers['idempotent-replayed'] === 'true' };
   }
 }
+
+/** An Idempotency-Key derived from what is sent (a retried request is answered from QE Navigator's log). */
+export const keyOf = (kind: string, body: string) => `qe-collector:${kind}:${createHash('sha256').update(body).digest('hex').slice(0, 48)}`;
 
 export interface DeliveryOutcome {
   delivered: Item[];
