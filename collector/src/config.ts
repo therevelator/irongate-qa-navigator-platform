@@ -270,7 +270,7 @@ const MAP_KEY: Partial<Record<SourceType, string>> = { github: 'repos', gitlab: 
 const DEFAULT_ARTIFACTS = {
   tests: ['*test*', '*junit*', '*result*', '*report*', '*.trx', '*cucumber*'],
   coverage: ['*coverage*', '*lcov*', '*cobertura*', '*jacoco*'],
-  sarif: ['*sarif*', '*codeql*', '*semgrep*', '*analysis*'],
+  sarif: ['*sarif*', '*codeql*', '*semgrep*', '*sast*', '*analysis*'],
 };
 const list = (v: unknown, where: string, def: string[] = []): string[] => {
   if (v === undefined || v === null) return def;

@@ -36,7 +36,7 @@ export class MockServer {
         try {
           const out = await route.handler(rec);
           res.writeHead(out.status ?? 200, { 'Content-Type': 'application/json', ...(out.headers ?? {}) });
-          res.end(out.body === undefined ? '' : typeof out.body === 'string' ? out.body : JSON.stringify(out.body));
+          res.end(out.body === undefined ? '' : typeof out.body === 'string' || Buffer.isBuffer(out.body) ? out.body : JSON.stringify(out.body));
         } catch (e) {
           res.writeHead(500); res.end(String(e));
         }
