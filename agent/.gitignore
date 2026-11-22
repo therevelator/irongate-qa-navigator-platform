@@ -1,0 +1,5 @@
+node_modules/
+dist/
+*.tsbuildinfo
+qe-agent-state.json
+qe-agent-state.json.lock
