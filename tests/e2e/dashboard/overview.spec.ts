@@ -39,6 +39,36 @@ test.describe('Overview', { tag: [TAG.area('dashboard')] }, () => {
     }
   });
 
+  test('DASH-02b Needs attention holds exactly the teams below their QA target; a KPI off target alone does not count', async ({ signInAs, page }) => {
+    await signInAs('admin');
+    await expect(cards(page).first()).toBeVisible();
+    const filter = async (label: string) => {
+      const button = page.getByRole('button', { name: new RegExp(`^${label} \\d+$`) });
+      await button.click();
+      return Number((await button.innerText()).match(/(\d+)$/)![1]);
+    };
+    const read = async () => {
+      const out: { qa: number; target: number }[] = [];
+      for (const card of await cards(page).all()) {
+        const qa = Number(await card.getByTestId('team-card-qa').innerText().then((t) => t.match(/^\d+/)?.[0]));
+        const target = Number((await card.getByTestId('team-card-qa-target').innerText()).match(/(\d+)/)![1]);
+        out.push({ qa, target });
+      }
+      return out;
+    };
+    const all = await filter('All');
+    const attention = await filter('Needs attention');
+    for (const c of attention ? await read() : []) expect(c.qa).toBeLessThan(c.target);
+    const high = await filter('High performing');
+    const highCards = high ? await read() : [];
+    for (const c of highCards) expect(c.qa).toBeGreaterThanOrEqual(c.target);
+    // Every team with a QA score is in exactly one of the two filters.
+    await filter('All');
+    const scored = (await cards(page).getByTestId('team-card-qa').allInnerTexts()).filter((t) => /^\d/.test(t)).length;
+    expect(high + attention).toBe(scored);
+    expect(scored).toBeLessThanOrEqual(all);
+  });
+
   test('DASH-03 search narrows the list; no match says so; markup typed in is only text', { tag: [TAG.negative] }, async ({ signInAs, page }) => {
     await signInAs('viewer');
     let dialogs = 0;
