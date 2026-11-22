@@ -16,8 +16,8 @@ import path from 'path';
 import { gzipSync } from 'zlib';
 import { decodeText, detectDateOrder, detectDelimiter, parseCsv, parseDate, parseDurationHours, parseNumber, CsvError, MAX_COLUMNS } from '../../server/lib/ingest/csv';
 import { CSV_SPECS, autoMapping, convertCsv, detectCsvFormat, limitsOf } from '../../server/lib/ingest/csvImports';
-import { FIELD_ALLOW_LIST, minimise, allowedFields, ALWAYS_DROPPED } from '../../server/lib/ingest/fieldAllowList';
-import { formulaSafe, hashPerson, minimiseRecord } from '../../server/lib/ingest/allowListPolicy';
+import { FIELD_ALLOW_LIST, minimise, storedFieldNames, ALWAYS_DROPPED, formulaSafe, hashPerson, usefulLabel } from '../../server/lib/ingest/fieldAllowList';
+import { minimiseRecord } from '../../server/lib/ingest/allowListPolicy';
 import { authorHash } from '../../server/lib/ingest/deliveryEvents';
 import { detectFile, expandUpload, planFile, type UploadContext } from '../../server/lib/ingest/upload';
 import { readZip, ZipError, unsafeName } from '../../server/lib/ingest/zip';
@@ -253,50 +253,57 @@ describe('CSV formats and the column mapping', () => {
 });
 
 describe('Field allow-list (shared with the agent)', () => {
-  test('UPP-020 the shared file is plain data and pure functions: no imports, no server dependency', () => {
+  test('UPP-020 the shared file is plain data and pure functions: no import but Node crypto, vendored byte for byte by the agent', () => {
     const src = fs.readFileSync(path.join(__dirname, '..', '..', 'server', 'lib', 'ingest', 'fieldAllowList.ts'), 'utf8');
-    expect(src).not.toMatch(/^\s*import\s/m);
+    const imports = [...src.matchAll(/^\s*import\s[^;]*?from\s+['"]([^'"]+)['"]/gm)].map((m) => m[1]);
+    expect(imports).toEqual(['crypto']);
     expect(src).not.toMatch(/require\(/);
-    expect(Object.keys(FIELD_ALLOW_LIST)).toEqual(['issue', 'incident']);
-    for (const kind of ['issue', 'incident'] as const) for (const [, r] of Object.entries(FIELD_ALLOW_LIST[kind])) expect(r.why.length).toBeGreaterThan(5);
+    expect(Object.keys(FIELD_ALLOW_LIST)).toEqual(['issue', 'sprint', 'incident']);
+    for (const kind of ['issue', 'sprint', 'incident'] as const) for (const f of FIELD_ALLOW_LIST[kind]) expect(f.why.length).toBeGreaterThan(5);
     expect(ALWAYS_DROPPED.join(' ')).toMatch(/descriptions.*comments.*attachments/);
+    const vendored = path.join(__dirname, '..', '..', 'agent', 'src', 'vendor', 'fieldAllowList.ts');
+    if (fs.existsSync(vendored)) expect(fs.readFileSync(vendored, 'utf8').endsWith(src)).toBe(true);
   });
 
-  test('UPP-021 descriptions, comments, attachments, custom free text, priority, labels and people never survive minimise (at any depth)', () => {
+  test('UPP-021 descriptions, comments, attachments, custom free text, priority, other labels and raw people never survive minimise', () => {
     const rec = {
-      key: 'PAY-1', type: 'bug', status: 'Done', description: 'secret', comments: [{ body: 'c', author: 'a@example.com' }], attachment: 'x.png',
-      customfield_10050: 'free text', priority: 'High', labels: ['customer-acme'], assignee: 'dana@example.com', reporter: { emailAddress: 'r@example.com' },
+      key: 'PAY-1', type: 'Bug', status: 'Done', description: 'secret', comments: [{ body: 'c', author: 'a@example.com' }], attachment: 'x.png',
+      customfield_10050: 'free text', priority: 'High', labels: ['customer-acme', 'production'], assignee: 'dana@example.com', reporter: { emailAddress: 'r@example.com' },
       sprints: [{ id: 'S1', name: 'Sprint 1', goal: 'secret goal', state: 'closed' }], transitions: [{ field: 'status', to: 'Done', at: '2026-11-01T00:00:00Z', author: 'x@example.com' }],
-      createdAt: '2026-11-01T00:00:00Z', title: 'A title',
+      createdAt: '2026-11-01T00:00:00Z', title: 'A title', fields: { summary: 'nested' },
     };
-    const out = minimise('issue', rec, { titles: true, links: true, people: true });
-    const s = JSON.stringify(out);
-    for (const bad of ['secret', 'example.com', 'free text', 'High', 'customer-acme', 'x.png', 'goal']) expect(s).not.toContain(bad);
-    expect(out).toMatchObject({ key: 'PAY-1', type: 'bug', status: 'Done', title: 'A title', sprints: [{ id: 'S1', name: 'Sprint 1', state: 'closed' }] });
-    expect(Object.keys(out).every((k) => k in FIELD_ALLOW_LIST.issue)).toBe(true);
-    expect(minimise('issue', rec)).not.toHaveProperty('title');
+    const { record, dropped } = minimise('issue', rec, { storeTitles: true, salt: 'co-1' });
+    const s = JSON.stringify(record);
+    for (const bad of ['secret', 'example.com', 'free text', 'High', 'customer-acme', 'x.png', 'goal', 'nested']) expect(s).not.toContain(bad);
+    expect(record).toMatchObject({ key: 'PAY-1', type: 'Bug', status: 'Done', title: 'A title', labels: ['production'], sprints: [{ id: 'S1', name: 'Sprint 1', state: 'closed' }] });
+    expect(dropped).toEqual(expect.arrayContaining(['description', 'comments', 'attachment', 'customfield_10050', 'priority', 'assignee', 'reporter', 'fields']));
+    const allowed = new Set(storedFieldNames('issue', { storeTitles: true, salt: 'co-1' }));
+    expect(Object.keys(record).every((k) => allowed.has(k))).toBe(true);
+    expect(usefulLabel('env:staging')).toBe(true);
+    expect(usefulLabel('customer-acme')).toBe(false);
   });
 
-  test('UPP-022 people are kept only as the salted hash (the commit-author hash); a raw name or e-mail never', () => {
+  test('UPP-022 people are kept only as the salted hash (the commit-author hash); a raw name or e-mail never; without a salt, nothing', () => {
     expect(hashPerson('co-1', 'Dana@Example.com ')).toBe(authorHash('co-1', 'dana@example.com'));
     expect(hashPerson('co-1', 'x')).not.toBe(hashPerson('co-2', 'x'));
     const { record, dropped } = minimiseRecord('issue', { key: 'PAY-1', type: 'Bug', createdAt: '2026-11-01T00:00:00Z', assignee: 'dana@example.com', reporter: 'sam@example.com' }, { salt: 'co-1', storeTitles: true });
-    expect(record.assigneeHash).toBe(hashPerson('co-1', 'dana@example.com'));
+    expect(record).toMatchObject({ assigneeHash: hashPerson('co-1', 'dana@example.com'), reporterHash: hashPerson('co-1', 'sam@example.com') });
     expect(JSON.stringify(record)).not.toContain('example.com');
-    expect(dropped).toEqual(expect.arrayContaining(['assignee (stored as a salted hash only)', 'reporter']));
+    expect(dropped).toEqual(expect.arrayContaining(['assignee (stored as a salted hash only)', 'reporter (stored as a salted hash only)']));
     const inc = minimiseRecord('incident', { id: 'I1', severity: 'P1', status: 'triggered', responder: { email: 'oncall@example.com' }, notes: 'customer called' }, { salt: 'co-1', storeTitles: true });
-    expect(inc.record).toMatchObject({ id: 'I1', severity: 'critical', severityLabel: 'P1', status: 'open', responderHash: hashPerson('co-1', 'oncall@example.com') });
+    expect(inc.record).toMatchObject({ id: 'I1', severity: 'P1', status: 'triggered', responderHash: hashPerson('co-1', 'oncall@example.com') });
     expect(JSON.stringify(inc.record)).not.toMatch(/example\.com|customer called/);
+    expect(minimise('issue', { key: 'K-1', assignee: 'a@example.com' }).record).toEqual({ key: 'K-1' });
   });
 
-  test('UPP-023 "Store issue and incident titles" off: titles (and sprint names) are dropped; on: kept', () => {
-    const on = minimiseRecord('issue', { key: 'PAY-1', type: 'Bug', createdAt: '2026-11-01T00:00:00Z', title: 'Refund fails', sprints: [{ id: 'S', name: 'Sprint 4' }] }, { salt: 'c', storeTitles: true });
-    expect(on.record).toMatchObject({ title: 'Refund fails', sprints: [{ id: 'S', name: 'Sprint 4' }] });
-    const off = minimiseRecord('issue', { key: 'PAY-1', type: 'Bug', createdAt: '2026-11-01T00:00:00Z', title: 'Refund fails', sprints: [{ id: 'S', name: 'Sprint 4' }] }, { salt: 'c', storeTitles: false });
+  test('UPP-023 "Store issue and incident titles" off: titles are dropped (preview fields too); on: kept', () => {
+    const rec = { key: 'PAY-1', type: 'Bug', createdAt: '2026-11-01T00:00:00Z', title: 'Refund fails' };
+    expect(minimiseRecord('issue', rec, { salt: 'c', storeTitles: true }).record).toMatchObject({ title: 'Refund fails' });
+    const off = minimiseRecord('issue', rec, { salt: 'c', storeTitles: false });
     expect(off.record).not.toHaveProperty('title');
-    expect(off.record.sprints).toEqual([{ id: 'S' }]);
     expect(off.dropped).toContain('title');
-    expect(allowedFields('incident', { titles: false, links: true, people: true })).not.toContain('title');
+    expect(storedFieldNames('incident', { storeTitles: false, salt: 'c' })).not.toContain('title');
+    expect(storedFieldNames('incident', { storeTitles: true, salt: 'c' })).toContain('title');
   });
 
   test('UPP-024 CSV injection: text that a spreadsheet would run is prefixed with an apostrophe; numbers are left alone', () => {
@@ -309,9 +316,10 @@ describe('Field allow-list (shared with the agent)', () => {
     expect(record).toMatchObject({ title: "'=1+1", status: "'@x" });
   });
 
-  test('UPP-025 the environment survives as the calculation needs it, also when it came from a label', () => {
-    expect(minimiseRecord('issue', { key: 'E-1', type: 'Bug', createdAt: '2026-11-01T00:00:00Z', labels: ['env:production', 'customer-acme'] }, { salt: 'c', storeTitles: true }).record).toMatchObject({ environment: 'production' });
-    expect(minimiseRecord('issue', { key: 'E-2', type: 'Bug', createdAt: '2026-11-01T00:00:00Z', labels: ['staging'] }, { salt: 'c', storeTitles: true }).record).toMatchObject({ environment: 'staging' });
+  test('UPP-025 nested structured values keep their plain name only; links only as http(s)', () => {
+    const { record } = minimise('issue', { key: 'K-1', status: { name: 'Done', self: 'x' }, url: 'javascript:alert(1)', environment: { value: 'Production' } });
+    expect(record).toEqual({ key: 'K-1', status: 'Done', environment: 'Production' });
+    expect(minimise('issue', { key: 'K-1', url: 'https://jira.example.net/browse/K-1' }).record.url).toBe('https://jira.example.net/browse/K-1');
   });
 });
 

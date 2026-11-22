@@ -115,7 +115,7 @@ describe('Upload files', () => {
     expect(a.body.teams.map((t: any) => t.id)).not.toContain('golden-team-inactive');
     expect(a.body.types.map((t: any) => t.value)).toEqual(expect.arrayContaining(['issues:jira-csv', 'issues:linear-csv', 'incidents:pagerduty-csv', 'incidents:opsgenie-csv', 'deployments:deployments-csv', 'sprints:sprints-csv', 'tests:junit', 'coverage:lcov', 'static-analysis:sarif']));
     expect(a.body.limits.maxBytes).toBe(50 * 1024 * 1024);
-    expect(Object.keys(a.body.allowList.issue)).toEqual(expect.arrayContaining(['key', 'type', 'transitions', 'storyPoints', 'title', 'assigneeHash']));
+    expect(a.body.allowList.issue.map((f: any) => f.field)).toEqual(expect.arrayContaining(['key', 'type', 'transitions', 'storyPoints', 'title', 'assignee']));
     expect(a.body).toMatchObject({ storeTitles: true, canChangePrivacy: true, canViewLog: true });
     const m = await get('/api/uploads/context', manager);
     expect(m.body.teams.map((t: any) => t.id).sort()).toEqual([EMPTY, PARTIAL, 'golden-team-stale']);
@@ -143,7 +143,7 @@ describe('Upload files', () => {
     expect(jira.csv.mapping).toMatchObject({ key: 'Issue key', storyPoints: 'Custom field (Story Points)' });
     expect(jira).not.toHaveProperty('submissions');
     expect(pd).toMatchObject({ status: 'ready', records: 1, type: { value: 'incidents:pagerduty-csv' } });
-    expect(pd.sample[0]).toMatchObject({ id: 'PDGOLD1', severity: 'critical', severityLabel: 'P1', status: 'resolved' });
+    expect(pd.sample[0]).toMatchObject({ id: 'PDGOLD1', severity: 'P1', status: 'resolved', responderHash: hashPerson(GOLDEN_COMPANY, 'oncall@corp.example') });
     expect(JSON.stringify(pd.sample)).not.toMatch(/CONFIDENTIAL|corp\.example/);
   });
 
@@ -189,8 +189,9 @@ describe('Upload files', () => {
     expect(kept.minimised).toBe(true);
     const gup1 = kept.issues.find((i: any) => i.key === 'GUP-1');
     expect(gup1.assigneeHash).toBe(hashPerson(GOLDEN_COMPANY, 'dana.wright@corp.example'));
-    expect(Object.keys(gup1).every((k) => ['key', 'team', 'project', 'type', 'status', 'statusCategory', 'resolution', 'environment', 'storyPoints', 'estimateHours', 'timeLoggedHours', 'createdAt', 'resolvedAt', 'updatedAt', 'sprints', 'transitions', 'components', 'title', 'url', 'assigneeHash'].includes(k))).toBe(true);
-    expect((await db.query(`SELECT priority, labels FROM issues WHERE team_id = $1 AND external_id = 'GUP-1'`, [EMPTY])).rows[0]).toEqual({ priority: null, labels: [] });
+    expect(gup1.reporterHash).toBe(hashPerson(GOLDEN_COMPANY, 'Sam Lee'));
+    expect(Object.keys(gup1).every((k) => ['key', 'team', 'project', 'type', 'status', 'statusCategory', 'resolution', 'transitions', 'createdAt', 'resolvedAt', 'updatedAt', 'storyPoints', 'sprints', 'environment', 'labels', 'components', 'estimateHours', 'timeLoggedHours', 'url', 'title', 'assigneeHash', 'reporterHash'].includes(k))).toBe(true);
+    expect((await db.query(`SELECT priority, labels FROM issues WHERE team_id = $1 AND external_id = 'GUP-1'`, [EMPTY])).rows[0]).toEqual({ priority: null, labels: ['production'] });
   });
 
   it('UPL-005 the ingestion API path is minimised too: full Jira and PagerDuty JSON leave only allowed fields in the raw copy', async () => {
