@@ -33,7 +33,8 @@ export function diagnostics(cfg: Config | null, env: NodeJS.ProcessEnv, configEr
     sources: cfg.sources.map((s) => ({ name: s.name, type: s.type, enabled: s.enabled, teams: Object.keys(s.teams).length, defaultTeam: !!s.defaultTeam, caFile: !!s.caFile,
       host: (() => { const u = (s as any).baseUrl ?? (s as any).apiUrl ?? (s as any).orgUrl; try { return u ? new URL(u).host : null; } catch { return null; } })() })),
   };
-  out.secrets = Object.fromEntries(SECRET_ENVS(cfg).map((n) => [n, secret(n, env) ? 'set' : 'not set']));
+  // Which of the variables that hold secrets are set (never their values).
+  out.variables = SECRET_ENVS(cfg).map((n) => ({ variable: n, set: !!secret(n, env) }));
   try {
     const st = existsSync(cfg.statePath) ? loadState(cfg.statePath) : null;
     out.state = st ? {

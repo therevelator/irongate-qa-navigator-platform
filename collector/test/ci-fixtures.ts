@@ -165,7 +165,8 @@ export function mockGitHub(s: MockServer, store: StorageMock, opts: { rateLimitO
     const run = Math.floor(aid / 100);
     const kind = aid % 100;
     const key = `${aid}-${run === 101 ? attemptOf101 : 1}`;
-    if (kind === 1) store.blobs.set(key, zip({ 'junit/checkout.xml': junit(run === 101 && attemptOf101 === 1) }));
+    const firstAttempt = attemptOf101 % 2 === 1;
+    if (kind === 1) store.blobs.set(key, zip({ 'junit/checkout.xml': junit(run === 101 && firstAttempt) }));
     else if (kind === 2) store.blobs.set(key, zip({ 'coverage/lcov.info': LCOV }));
     else if (kind === 3) store.blobs.set(key, zip({ 'results/codeql.sarif': SARIF(run === 102 ? 'ccc:1' : 'aaa:1') }));
     else if (kind === 4) return { status: 410, body: { message: 'Artifact has expired' } };
