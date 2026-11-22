@@ -273,10 +273,13 @@ function countsOf(sub: Submission, r: { status: number; body: any }) {
   const b = r.body ?? {};
   const out = { stored: 0, updated: 0, unchanged: 0 };
   if (r.status >= 400) return out;
+  // Sprints sent on their own: the answer counts the sprints changed, and lists no issue.
+  if (sub.kind === 'issues' && typeof b.sprints === 'number' && Array.isArray(b.issues) && b.issues.length === 0) {
+    out.updated = b.sprints; out.unchanged = Math.max(0, sub.count - b.sprints); return out;
+  }
   const list: any[] | null = Array.isArray(b.issues) ? b.issues : Array.isArray(b.events) ? b.events : Array.isArray(b.runs) ? b.runs : null;
   if (list) {
     for (const x of list) { if (x.status === 'written') out.stored++; else if (x.status === 'updated') out.updated++; else out.unchanged++; }
-    if (typeof b.sprints === 'number') out.updated += b.sprints;
     return out;
   }
   if (typeof b.sprints === 'number' && sub.kind === 'issues') { out.updated += b.sprints; out.unchanged += Math.max(0, sub.count - b.sprints); return out; }
