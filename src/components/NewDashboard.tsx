@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import API_URL from '../config/api';
 import type { Team } from '../data/mockData';
-import { KPI_TARGETS, METRICS_CONFIG, getMetricStatus, teamAttentionIssues, type MetricsConfig } from '../config/metricsConfig';
+import { KPI_TARGETS, METRICS_CONFIG, getMetricStatus, type MetricsConfig } from '../config/metricsConfig';
 import { canRequestExecutiveBriefing } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
 import { COMPOSITE_INDEX_BANDS, QA_SCORE_THRESHOLDS, qaStatusFromScore } from '../../server/lib/metricFormulas';
@@ -81,13 +81,17 @@ interface CompanySummary {
 type Filter = 'all' | 'high' | 'attention';
 
 /**
- * The two filters are mutually exclusive:
- *  - Needs attention: QA score below 70, or any recorded KPI off its target (same rule as the server).
- *  - High performing: QA score at or above 85 AND no KPI off target.
- * A team with a high QA score but a KPI off target (e.g. coverage below 80%) is "Needs attention" only.
+ * The two filters split the teams that have a QA score by the team's QA score target (the "Target ≥ …"
+ * shown on its card: its kpiThresholds.qaScore, else QA_SCORE_THRESHOLDS.good, 85):
+ *  - High performing: QA score at or above the target.
+ *  - Needs attention: QA score below the target.
+ * A single KPI off its own target (e.g. flakiness 2.5% against ≤ 2%) does not move a team into "Needs
+ * attention": it is shown on the team's card in amber. Teams with no QA score are in neither filter.
  */
-const isHighPerforming = (r: { qa: number | null; attention: boolean }) =>
-  r.qa != null && r.qa >= QA_SCORE_THRESHOLDS.good && !r.attention;
+const qaTargetOf = (thresholds: { qaScore?: { good: number } } | null | undefined) =>
+  thresholds?.qaScore?.good ?? QA_SCORE_THRESHOLDS.good;
+const isHighPerforming = (r: { qa: number | null; thresholds: { qaScore?: { good: number } } | null }) =>
+  r.qa != null && r.qa >= qaTargetOf(r.thresholds);
 type SortKey = 'qa' | 'name' | 'department' | 'coverage' | 'flakiness' | 'escapeRate' | 'automation' | 'deploys';
 type ViewMode = 'grid' | 'list';
 type Status = 'good' | 'warning' | 'critical' | 'none';
@@ -268,12 +272,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, teamsError, onTeamCl
       deploys: num(k.deploymentFrequencyPerWeek),
       members: num(t.memberCount),
       snapshotDate: t.snapshotDate ?? null,
-      // Same rule as the server's "needs attention" list (teamAttentionIssues, with the targets
-      // valid at the values' dates and stale values left out).
-      attention: qa != null && teamAttentionIssues(
-        { qaScore: qa, testCoverage: coverage, testFlakinessRate: flakiness, defectEscapeRate: escapeRate, automationCoverage: automation },
-        { targets: t.kpiTargets ?? undefined, stale: new Set(t.staleKpis ?? []) },
-      ).length > 0,
+      attention: qa != null && qa < qaTargetOf(t.kpiThresholds),
       confidence: t.qaScoreConfidence ?? null,
       staleness: t.kpiStaleness ?? {},
       thresholds: t.kpiThresholds ?? null,
@@ -375,7 +374,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, teamsError, onTeamCl
             <div>
               <h2 id="team-overview-title" className="text-lg font-semibold tracking-tight text-slate-900 dark:text-white">Team performance</h2>
               <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
-                Latest KPI snapshot per team. Colour shows QA status: green ≥ {QA_GOOD}, amber ≥ {QA_WARN}, red below; grey has no data. High performing = QA ≥ {QA_GOOD} with every KPI on target; Needs attention = QA below {QA_WARN} or any KPI off target.
+                Latest KPI snapshot per team. Colour shows QA status: green ≥ {QA_GOOD}, amber ≥ {QA_WARN}, red below; grey has no data. High performing = QA at or above the team's QA target (≥ {QA_GOOD} unless set otherwise); Needs attention = QA below it. A KPI off its own target shows in amber on the card.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -888,7 +887,7 @@ const TeamCard: React.FC<{ row: Row; layout: ViewMode; primary: boolean; onOpen:
               <ScoreVisual value={r.qa} good={QA_GOOD} warn={QA_WARN} size="xs" label={`${r.name} QA score`} />
               <div>
                 <p className="text-xs text-slate-500 dark:text-slate-400">QA score</p>
-                <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white">
+                <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white" data-testid="team-card-qa">
                   {r.qa == null ? '—' : Math.round(r.qa)}
                   {r.qa != null && <span className="ml-1 text-xs font-normal text-slate-500 dark:text-slate-400">/ 100</span>}
                 </p>

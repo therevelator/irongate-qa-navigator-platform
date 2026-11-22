@@ -651,11 +651,16 @@ with a current (recorded, not stale) value, each judged against the target valid
 The counts and the per-team breakdown both come from `GET /api/analytics/company-summary` (`kpiStatus`,
 `kpiStatusTeams`), produced by the same function, so a tab's list always equals its count.
 
-**Needs attention** (`teamAttentionIssues`): QA score below 70 (critical), or any of the four KPIs off its
-target. Returns the reasons, for example "Test coverage 72.4% (target ≥80%)". Used by the Company status card
-and the dashboard's "Needs attention" filter.
+**Attention issues** (`teamAttentionIssues`): QA score below 70 (critical), or any of the four KPIs off its
+target. Returns the reasons, for example "Test coverage 72.4% (target ≥80%)". Used by the Company status card.
 
-**High performing** (dashboard filter): QA score ≥ 85 and no attention issue (every current headline KPI on target).
+**Dashboard filters** (Team performance, `src/components/NewDashboard.tsx`): split the teams that have a QA score
+by the team's QA score target (the "Target ≥ …" on its card, 85 unless set otherwise):
+- **High performing:** QA score at or above the target.
+- **Needs attention:** QA score below the target.
+
+A KPI off its own target alone (for example flakiness 2.5% against ≤ 2%) does not put a team in "Needs
+attention"; it shows in amber on the team's card. A team with no QA score is in neither filter.
 
 ### 3.5 Technical debt
 
@@ -1837,7 +1842,7 @@ Still open:
 | KPI targets (headline four) | Coverage ≥ 80 %, automation ≥ 70 %, flakiness ≤ 2 %, escape rate ≤ 5 % by default |
 | Metric value | One stored measurement with its time and source (`metric_values`), the raw data behind snapshots |
 | MTBF / MTTR | Mean time between failures / mean time to recovery |
-| Needs attention | QA score below 70 or any headline KPI off target |
+| Needs attention (dashboard filter) | QA score below the team's QA target (85 unless set otherwise) |
 | On track / at risk / off track | Share of current headline KPI targets met: ≥ 75 %, 50–75 %, < 50 % (needs at least 2) |
 | Pulse survey | Five-question anonymous wellbeing survey per team, weekly or every two weeks |
 | QA score | Team quality composite of coverage (30 %), 100 − escape rate (25 %), 100 − CFR (25 %), code quality (20 %); good ≥ 85, warning ≥ 70 |
