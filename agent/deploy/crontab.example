@@ -1,4 +1,0 @@
-# Plain cron (e.g. /etc/cron.d/qe-agent): every 15 minutes as the unprivileged user qe-agent.
-# /etc/qe-agent/env (mode 0600, owner qe-agent) holds the secrets as `export QE_API_KEY=igk_…` lines.
-# flock keeps runs from overlapping (the agent also takes its own lock and exits 5 if one is running).
-*/15 * * * * qe-agent . /etc/qe-agent/env && flock -n /var/lib/qe-agent/cron.lock /usr/bin/node /opt/qe-agent/qe-agent.mjs sync -c /etc/qe-agent/qe-agent.yaml --log-format json >> /var/log/qe-agent/qe-agent.log 2>&1

@@ -274,17 +274,17 @@ const ISSUE_TOOLS: Array<{ id: IssueTool; label: string; file: string }> = [
   { id: 'json', label: 'Other tracker (JSON)', file: 'Any script or tool' },
 ];
 
-/** On-premises agent (agent/ in the QE Navigator repository): config file, container, Kubernetes and plain Node. */
+/** QE Navigator Collector (collector/ in the QE Navigator repository): config file, container, Kubernetes and plain Node. */
 export type AgentTab = 'config' | 'docker' | 'kubernetes' | 'node';
 export const AGENT_TABS: Array<{ id: AgentTab; label: string; file: string }> = [
-  { id: 'config', label: 'Config file', file: 'qe-agent.yaml (no secrets in it; your team ids are filled in)' },
+  { id: 'config', label: 'Config file', file: 'qe-collector.yaml (no secrets in it; your team ids are filled in)' },
   { id: 'docker', label: 'Docker', file: 'Container: non-root, read-only file system, no shell' },
-  { id: 'kubernetes', label: 'Kubernetes', file: 'CronJob every 15 minutes (agent/deploy/kubernetes/cronjob.yaml)' },
-  { id: 'node', label: 'Node 20 (no container)', file: 'One file, no dependencies: qe-agent.mjs, with a cron or systemd timer' },
+  { id: 'kubernetes', label: 'Kubernetes', file: 'CronJob every 15 minutes (collector/deploy/kubernetes/cronjob.yaml)' },
+  { id: 'node', label: 'Node 20 (no container)', file: 'One file, no dependencies: qe-collector.mjs, with a cron or systemd timer' },
 ];
-export const AGENT_VERSION = '0.1.0';
+export const AGENT_VERSION = '0.2.0';
 
-/** The fields the agent sends (its send policy, agent/src/policy.ts); everything else never leaves the customer's network. */
+/** The fields the Collector sends in full mode (its send policy, collector/src/policy.ts); everything else never leaves the customer's network. */
 export const AGENT_FIELDS = {
   issues: 'key, team, type, status, status category, resolution, environment (production / pre-release only), story points, original estimate and time logged (hours), created / resolved / updated, sprints (id, state, dates), status / sprint / flagged changes with their times',
   incidents: 'id, team, service, severity, status, opened / acknowledged / resolved, status changes with their times, linked deployment, category',
@@ -300,7 +300,7 @@ export function agentConfigSnippet(origin: string, teams: Array<{ id: string; na
   const svc = services.length
     ? services.map((m) => `      ${yamlKey(m.service)}: ${m.teamId}`).join('\n')
     : keyLines('payments-api');
-  return `# qe-agent ${AGENT_VERSION} configuration. Secrets are NOT in this file: set them as environment variables
+  return `# qe-collector ${AGENT_VERSION} configuration. Secrets are NOT in this file: set them as environment variables
 # QE_API_KEY (an igk_ key from Admin console → API keys), JIRA_TOKEN (+ JIRA_EMAIL for Jira Cloud),
 # LINEAR_API_KEY, PAGERDUTY_TOKEN, OPSGENIE_API_KEY. Keep only the sources you use.
 qeNavigator:
@@ -310,14 +310,14 @@ privacy:
   sendLinks: false
   people: none        # or hash (salted on your side with QE_PEOPLE_SALT)
 state:
-  path: /var/lib/qe-agent/state.json
+  path: /var/lib/qe-collector/state.json
 backfillDays: 90
 sources:
   - name: jira
     type: jira
     baseUrl: https://your-site.atlassian.net   # Server / Data Center: your Jira URL and auth: bearer
     auth: basic
-    email: qe-agent@your-company.example
+    email: qe-collector@your-company.example
     jql: project in (PAY)
     teams:   # Jira project key → team id
 ${keyLines('PAY')}
@@ -340,40 +340,40 @@ ${keyLines('Payments')}
 export function agentRunSnippet(tab: AgentTab, origin: string): string {
   let host = origin;
   try { host = new URL(origin).host; } catch { /* keep as given */ }
-  if (tab === 'docker') return `# Build the image from the agent's source (agent/ of the QE Navigator repository), or load the image you were given:
-docker build -t qe-agent:${AGENT_VERSION} agent/
+  if (tab === 'docker') return `# Build the image from the Collector's source (collector/ of the QE Navigator repository), or load the image you were given:
+docker build -t qe-collector:${AGENT_VERSION} collector/
 
 # 1. Check the config, each source and QE Navigator (prints what would be read; never prints secrets)
 docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \\
-  -v "$PWD/qe-agent.yaml:/etc/qe-agent/qe-agent.yaml:ro" -v qe-agent-state:/var/lib/qe-agent \\
-  -e QE_API_KEY -e JIRA_TOKEN -e JIRA_EMAIL qe-agent:${AGENT_VERSION} check
+  -v "$PWD/qe-collector.yaml:/etc/qe-collector/qe-collector.yaml:ro" -v qe-collector-state:/var/lib/qe-collector \\
+  -e QE_API_KEY -e JIRA_TOKEN -e JIRA_EMAIL qe-collector:${AGENT_VERSION} check
 
 # 2. See exactly what would be sent (nothing is sent; --offline: no call to QE Navigator at all)
-docker run --rm --read-only ... qe-agent:${AGENT_VERSION} preview --out /var/lib/qe-agent/preview.json
+docker run --rm --read-only ... qe-collector:${AGENT_VERSION} preview --out /var/lib/qe-collector/preview.json
 
 # 3. Send: the first run reads backfillDays (or --since 2026-01-01), then only what changed
-docker run --rm --read-only ... qe-agent:${AGENT_VERSION} sync`;
-  if (tab === 'kubernetes') return `kubectl create namespace qe-agent
-kubectl -n qe-agent create secret generic qe-agent-secrets \\
-  --from-literal=QE_API_KEY=igk_... --from-literal=JIRA_TOKEN=... --from-literal=JIRA_EMAIL=qe-agent@your-company.example
-kubectl -n qe-agent create configmap qe-agent-config --from-file=qe-agent.yaml
-kubectl -n qe-agent apply -f agent/deploy/kubernetes/cronjob.yaml   # every 15 min, non-root, read-only, no service account token
+docker run --rm --read-only ... qe-collector:${AGENT_VERSION} sync`;
+  if (tab === 'kubernetes') return `kubectl create namespace qe-collector
+kubectl -n qe-collector create secret generic qe-collector-secrets \\
+  --from-literal=QE_API_KEY=igk_... --from-literal=JIRA_TOKEN=... --from-literal=JIRA_EMAIL=qe-collector@your-company.example
+kubectl -n qe-collector create configmap qe-collector-config --from-file=qe-collector.yaml
+kubectl -n qe-collector apply -f collector/deploy/kubernetes/cronjob.yaml   # every 15 min, non-root, read-only, no service account token
 
 # Egress: only TCP 443 to ${host} (and to your Jira / Linear / PagerDuty / Opsgenie); no ingress at all.
-kubectl -n qe-agent create job --from=cronjob/qe-agent qe-agent-first-run   # run once now
-kubectl -n qe-agent logs job/qe-agent-first-run`;
-  if (tab === 'node') return `# Node 20 or later; the agent is one file without dependencies. Verify it first:
-sha256sum -c SHA256SUMS            # qe-agent.mjs: OK
-node qe-agent.mjs --version
+kubectl -n qe-collector create job --from=cronjob/qe-collector qe-collector-first-run   # run once now
+kubectl -n qe-collector logs job/qe-collector-first-run`;
+  if (tab === 'node') return `# Node 20 or later; the Collector is one file without dependencies. Verify it first:
+sha256sum -c SHA256SUMS            # qe-collector.mjs: OK
+node qe-collector.mjs --version
 
-export QE_API_KEY=igk_... JIRA_TOKEN=... JIRA_EMAIL=qe-agent@your-company.example
-node qe-agent.mjs check  -c qe-agent.yaml
-node qe-agent.mjs preview -c qe-agent.yaml --offline   # air-gapped review: reads your tools, sends nothing
-node qe-agent.mjs sync   -c qe-agent.yaml
+export QE_API_KEY=igk_... JIRA_TOKEN=... JIRA_EMAIL=qe-collector@your-company.example
+node qe-collector.mjs check  -c qe-collector.yaml
+node qe-collector.mjs preview -c qe-collector.yaml --offline   # air-gapped review: reads your tools, sends nothing
+node qe-collector.mjs sync   -c qe-collector.yaml
 
 # Every 15 minutes (cron); exit codes: 0 ok, 2 config, 3 a source, 4 QE Navigator, 5 still running, 6 some records refused
-*/15 * * * * qe-agent  . /etc/qe-agent/env && node /opt/qe-agent/qe-agent.mjs sync -c /etc/qe-agent/qe-agent.yaml --log-format json >> /var/log/qe-agent.log 2>&1
-# or the systemd timer in agent/deploy/systemd/`;
+*/15 * * * * qe-collector  . /etc/qe-collector/env && node /opt/qe-collector/qe-collector.mjs sync -c /etc/qe-collector/qe-collector.yaml --log-format json >> /var/log/qe-collector.log 2>&1
+# or the systemd timer in collector/deploy/systemd/`;
   return '';
 }
 
@@ -821,12 +821,12 @@ const ConnectCi: React.FC = () => {
 
       <div className="space-y-4 border-t border-slate-200 p-5 dark:border-slate-800" data-testid="connect-ci-agent">
         <div>
-          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">On-premises agent</h4>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">QE Navigator Collector</h4>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             For Jira (Cloud, Server or Data Center), Linear, PagerDuty and Opsgenie that QE Navigator should not reach directly: a small program you run inside your network
             reads them with your own read-only credentials and sends minimised records to this site over outbound HTTPS. Your credentials never leave your network, nothing
-            connects into it, and <span className="font-mono">qe-agent preview</span> shows exactly what would be sent before anything is. Its requests appear in the
-            ingestion log marked <span className="font-medium">agent</span>. Security review: <span className="font-mono">agent/SECURITY.md</span>.
+            connects into it, and <span className="font-mono">qe-collector preview</span> shows exactly what would be sent before anything is. Its requests appear in the
+            ingestion log marked <span className="font-medium">Collector</span>. Security review: <span className="font-mono">collector/SECURITY.md</span>.
           </p>
         </div>
         <dl className="grid grid-cols-1 gap-2 text-xs md:grid-cols-2" data-testid="connect-ci-agent-fields">
@@ -837,7 +837,7 @@ const ConnectCi: React.FC = () => {
             </div>
           ))}
         </dl>
-        {toolTabs('agent', 'Agent setup', AGENT_TABS, agentTab, setAgentTab, agentCode, 'connect-ci-agent-snippet')}
+        {toolTabs('agent', 'Collector setup', AGENT_TABS, agentTab, setAgentTab, agentCode, 'connect-ci-agent-snippet')}
       </div>
 
       <div className="border-t border-slate-200 dark:border-slate-800">

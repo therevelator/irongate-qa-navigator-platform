@@ -1,0 +1,25 @@
+{
+  "name": "qe-collector",
+  "version": "0.2.0",
+  "description": "QE Navigator Collector: reads Jira, Linear, PagerDuty and Opsgenie inside your network with your own credentials and sends minimised records to QE Navigator over outbound HTTPS.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "bin": { "qe-collector": "dist/qe-collector.mjs", "qe-agent": "dist/qe-collector.mjs" },
+  "files": ["dist/qe-collector.mjs", "dist/SHA256SUMS", "README.md", "SECURITY.md", "config.example.yaml"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node scripts/build.mjs && node --import tsx --test --test-timeout=60000 test/*.test.ts",
+    "sync-allow-list": "node scripts/sync-allow-list.mjs",
+    "check-allow-list": "node scripts/sync-allow-list.mjs --check"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "esbuild": "0.27.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

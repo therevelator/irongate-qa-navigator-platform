@@ -107,13 +107,13 @@ fictional company (`sandbox-demo`, [`server/lib/sandbox.ts`](server/lib/sandbox.
 **API keys.** Ingestion keys (`igk_…`) are stored as a hash, shown once, scoped to one company, and
 revocable. A suspended company's keys are refused.
 
-**On-premises agent** ([`agent/`](agent/README.md)). For Jira, Linear, PagerDuty and Opsgenie a customer can run the agent
+**On-premises agent** ([`collector/`](collector/README.md)). For Jira, Linear, PagerDuty and Opsgenie a customer can run the agent
 inside their own network instead of giving QE Navigator their tool tokens: it reads with their read-only credentials, opens no
 port, connects out only to QE Navigator over HTTPS, applies the shared field allow-list
 ([`server/lib/ingest/fieldAllowList.ts`](server/lib/ingest/fieldAllowList.ts), vendored into the agent) and a stricter send
 policy before anything leaves, and shows the exact payload with `qe-agent preview`. It has no runtime dependencies and ships as
 one reproducible file or a distroless non-root image. Its own security posture, for customers' security reviews:
-[agent/SECURITY.md](agent/SECURITY.md). Its requests are marked **agent** in the ingestion log.
+[collector/SECURITY.md](collector/SECURITY.md). Its requests are marked **agent** in the ingestion log.
 
 **File uploads** ([`server/routes/uploads.ts`](server/routes/uploads.ts), Administration → Upload files). Session
 authentication and the same cookie (`SameSite`) and exact-origin CORS protection as the rest of the app; the sandbox refuses

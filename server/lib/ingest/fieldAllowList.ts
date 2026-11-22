@@ -2,11 +2,11 @@
  * FIELD ALLOW-LIST (data minimisation): the only fields of an issue, a sprint or an incident that QE
  * Navigator keeps. Applied to every path that receives issues or incidents: the ingestion API
  * (POST /api/ingest/issues, /api/ingest/incidents), file uploads (Admin console → Upload files) and the
- * on-premises agent. Documented field by field in docs/INTEGRATION_GUIDE.md ("Field allow-list") and
+ * QE Navigator Collector. Documented field by field in docs/INTEGRATION_GUIDE.md ("Field allow-list") and
  * shown in the upload preview.
  *
- * Shared with the agent (agent/): plain data plus pure functions, no imports from the server or the
- * database. The only dependency is Node's crypto module, for the salted hash of people.
+ * Shared with the QE Navigator Collector (collector/): plain data plus pure functions, no imports from the
+ * server or the database. The only dependency is Node's crypto module, for the salted hash of people.
  *
  *   minimise(kind, record, options)  a copy of the record with the allowed fields only:
  *     - fields not on the list are dropped (descriptions, comments, attachments, custom free-text

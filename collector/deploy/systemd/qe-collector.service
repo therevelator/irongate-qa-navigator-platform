@@ -1,0 +1,45 @@
+# /etc/systemd/system/qe-collector.service — one sync run (started by qe-collector.timer).
+#   install -d -o qe-collector -g qe-collector -m 0700 /var/lib/qe-collector
+#   install -m 0444 qe-collector.mjs SHA256SUMS /opt/qe-collector/
+#   /etc/qe-collector/qe-collector.yaml (0644) and /etc/qe-collector/env (0600: QE_API_KEY=…, JIRA_TOKEN=…)
+#   systemctl daemon-reload && systemctl enable --now qe-collector.timer
+#   journalctl -u qe-collector        # structured JSON logs, no secrets
+[Unit]
+Description=QE Navigator Collector (one sync run)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=qe-collector
+Group=qe-collector
+EnvironmentFile=/etc/qe-collector/env
+Environment=QE_COLLECTOR_CONFIG=/etc/qe-collector/qe-collector.yaml
+ExecStart=/usr/bin/node /opt/qe-collector/qe-collector.mjs sync --log-format json
+TimeoutStartSec=50min
+# Exit codes 2–6 are reported failures (config, source, QE Navigator, locked, partial): see README.
+SuccessExitStatus=0
+# Hardening: read-only system, only the state directory is writable, no privileges, outbound only.
+StateDirectory=qe-collector
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077
