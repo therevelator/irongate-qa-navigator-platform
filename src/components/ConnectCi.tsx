@@ -20,7 +20,7 @@ import { Badge, Card, CardHeader, buttonClass, cx, inputClass } from './ui';
  */
 
 interface TeamStatus {
-  id: string; name: string; department: string | null; mainBranch: string | null;
+  id: string; name: string; department: string | null; departmentId?: string | null; mainBranch: string | null;
   tests: Received; coverage: Received; pipelines: Received;
   deployments?: Received; commits?: Received; incidents?: Received; issues?: Received; staticAnalysis?: Received;
 }
@@ -274,55 +274,49 @@ const ISSUE_TOOLS: Array<{ id: IssueTool; label: string; file: string }> = [
   { id: 'json', label: 'Other tracker (JSON)', file: 'Any script or tool' },
 ];
 
-/** QE Navigator Collector (collector/ in the QE Navigator repository): config file per CI, container, Kubernetes and plain Node. */
-export type AgentTab = 'config' | 'docker' | 'kubernetes' | 'node';
+/** QE Navigator Exporter (exporter/ in the QE Navigator repository): setup page, config file, container, Kubernetes and plain Node. */
+export type AgentTab = 'setup' | 'config' | 'docker' | 'kubernetes' | 'node';
 export const AGENT_TABS: Array<{ id: AgentTab; label: string; file: string }> = [
-  { id: 'config', label: 'Config file', file: 'qe-collector.yaml (no secrets in it; your team ids are filled in)' },
+  { id: 'setup', label: 'Setup page', file: 'qe-exporter setup: a local page (127.0.0.1 only, one-time token) to connect your tools and pick the team per source' },
+  { id: 'config', label: 'Config file', file: 'qe-exporter.yaml, for people who prefer files (no secrets in it; your ids are filled in)' },
   { id: 'docker', label: 'Docker', file: 'Container: non-root, read-only file system, no shell' },
-  { id: 'kubernetes', label: 'Kubernetes', file: 'CronJob every 15 minutes (collector/deploy/kubernetes/cronjob.yaml)' },
-  { id: 'node', label: 'Node 20 (no container)', file: 'One file, no dependencies: qe-collector.mjs, with a cron or systemd timer' },
+  { id: 'kubernetes', label: 'Kubernetes', file: 'CronJob every 15 minutes (exporter/deploy/kubernetes/cronjob.yaml)' },
+  { id: 'node', label: 'Node 20 (no container)', file: 'One file, no dependencies: qe-exporter.mjs, with a cron or systemd timer' },
 ];
-export const AGENT_VERSION = '0.2.0';
+export const AGENT_VERSION = '0.3.0';
 
-export type CollectorCi = 'github' | 'gitlab' | 'jenkins' | 'azure-devops' | 'none';
-export const COLLECTOR_CIS: Array<{ id: CollectorCi; label: string; file: string }> = [
-  { id: 'github', label: 'GitHub Actions', file: 'Token: fine-grained PAT (Actions, Contents, Deployments: read) or a GitHub App' },
-  { id: 'gitlab', label: 'GitLab CI', file: 'Token: access token with the read_api scope (Reporter)' },
+export type ExporterCi = 'github' | 'gitlab' | 'bitbucket' | 'jenkins' | 'azure-devops' | 'none';
+export const EXPORTER_CIS: Array<{ id: ExporterCi; label: string; file: string }> = [
+  { id: 'github', label: 'GitHub Actions', file: 'Fine-grained token (Actions, Contents, Deployments, Metadata: read), a GitHub App, or OAuth with your own OAuth app' },
+  { id: 'gitlab', label: 'GitLab CI', file: 'Access token with the read_api scope (Reporter), or OAuth with your own GitLab application' },
+  { id: 'bitbucket', label: 'Bitbucket', file: 'Cloud: app password or OAuth consumer (read scopes); Data Center: HTTP access token (read)' },
   { id: 'jenkins', label: 'Jenkins', file: 'User + API token (Overall/Read, Job/Read)' },
   { id: 'azure-devops', label: 'Azure DevOps', file: 'PAT: Build, Test Management, Code, Environment (Read)' },
   { id: 'none', label: 'No CI (issues and incidents only)', file: 'Jira, Linear, PagerDuty, Opsgenie' },
 ];
-export type CollectorMode = 'evidence' | 'metrics' | 'full';
-export const COLLECTOR_MODES: Array<{ id: CollectorMode; label: string; sent: string }> = [
-  { id: 'evidence', label: 'Evidence (default)', sent: 'The metric values calculated in your network per team and day, with the evidence lists the app shows: flaky test names, least-covered files, slowest and failing stages, failed deployments, escaped issue keys. No raw records.' },
-  { id: 'metrics', label: 'Metrics only', sent: 'The metric values and counts only: no test names, file paths, stage names, deployment ids, issue keys or titles. “How this was calculated” links to your local evidence page (qe-collector serve).' },
-  { id: 'full', label: 'Full (raw records)', sent: 'Minimised raw records (test results without messages, coverage per file, pipeline runs, deployments with commits, findings without messages, issues, incidents) to the ingestion endpoints; QE Navigator calculates.' },
-];
 
-/** The fields full mode sends for issues and incidents (the send policy, collector/src/policy.ts); everything else never leaves the customer's network. */
+/** What the Exporter sends: the raw data, minimised; QE Navigator calculates everything. */
 export const AGENT_FIELDS = {
-  issues: 'key, team, type, status, status category, resolution, environment (production / pre-release only), story points, original estimate and time logged (hours), created / resolved / updated, sprints (id, state, dates), status / sprint / flagged changes with their times',
-  incidents: 'id, team, service, severity, status, opened / acknowledged / resolved, status changes with their times, linked deployment, category',
-  optIn: 'titles (sendTitles), links back to the tool (sendLinks), people as a salted hash computed on your side (people: hash)',
-  never: 'descriptions, comments, attachments, failure messages and logs, finding messages, commit messages, custom free-text fields, names and e-mail addresses, labels, priorities, notes and alert details',
+  ci: 'test report and coverage files as they are (JUnit, TRX, Cucumber; lcov, Cobertura, JaCoCo, Istanbul), SARIF, pipeline runs with their jobs, steps and times, deployments with their commits (sha and times)',
+  issues: 'key, type, status, status category, resolution, environment (production / pre-release only), story points, estimate and time logged, created / resolved / updated, sprints, status / sprint / flagged changes with their times',
+  incidents: 'id, service, severity, status, opened / acknowledged / resolved, status changes with their times, linked deployment, category',
+  never: 'your tool credentials, descriptions, comments, attachments, build logs, commit messages, names and e-mail addresses of people (commit authors become a salted hash on our side), custom free-text fields',
 };
 
 const yamlKey = (k: string) => (/^[A-Za-z0-9_./-]+$/.test(k) ? k : JSON.stringify(k));
 
-/** qe-collector.yaml for a CI and a privacy mode, with the team ids filled in. */
-export function agentConfigSnippet(origin: string, teams: Array<{ id: string; name: string }>, services: Array<{ service: string; teamId: string }> = [], ci: CollectorCi = 'github', mode: CollectorMode = 'evidence'): string {
-  const list = teams.length ? teams : [{ id: '<team id>', name: 'your team' }];
+/** qe-exporter.yaml for a CI, with the company, department and team ids filled in. */
+export function agentConfigSnippet(origin: string, companyId: string, teams: Array<{ id: string; name: string; departmentId?: string | null }>, services: Array<{ service: string; teamId: string }> = [], ci: ExporterCi = 'github'): string {
+  const list = teams.length ? teams : [{ id: '<team id>', name: 'your team', departmentId: '<department id>' }];
   const keyLines = (placeholder: string, indent = '      ') => list.map((t, i) => `${indent}${i === 0 ? '' : '# '}${placeholder}${i === 0 ? '' : String(i + 1)}: ${t.id}   # ${t.name.replace(/[\r\n#]/g, ' ')}`).join('\n');
   const svc = services.length ? services.map((m) => `      ${yamlKey(m.service)}: ${m.teamId}`).join('\n') : keyLines('payments-api');
-  const secrets = ci === 'github' ? 'GITHUB_TOKEN' : ci === 'gitlab' ? 'GITLAB_TOKEN' : ci === 'jenkins' ? 'JENKINS_USER + JENKINS_TOKEN' : ci === 'azure-devops' ? 'AZURE_DEVOPS_TOKEN' : '';
+  const secrets = ci === 'github' ? 'GITHUB_TOKEN' : ci === 'gitlab' ? 'GITLAB_TOKEN' : ci === 'bitbucket' ? 'BITBUCKET_USERNAME + BITBUCKET_APP_PASSWORD (Data Center: BITBUCKET_TOKEN)' : ci === 'jenkins' ? 'JENKINS_USER + JENKINS_TOKEN' : ci === 'azure-devops' ? 'AZURE_DEVOPS_TOKEN' : '';
   const ciSource = ci === 'github' ? `  - name: github
     type: github
     # apiUrl: https://github.example.com/api/v3   # GitHub Enterprise Server
-    # auth: app, appId: 123456, installationId: 7890123 (key in GITHUB_APP_PRIVATE_KEY)
     repos:   # owner/name → team id
 ${keyLines('your-org/your-repo')}
     environments: [production]   # deployments to these environments count
-    # artifacts: { tests: ["*test*"], coverage: ["*coverage*"], sarif: ["*sarif*"], maxMB: 50 }
 `
     : ci === 'gitlab' ? `  - name: gitlab
     type: gitlab
@@ -331,14 +325,18 @@ ${keyLines('your-org/your-repo')}
 ${keyLines('your-group/your-project')}
     environments: [production]
 `
+    : ci === 'bitbucket' ? `  - name: bitbucket
+    type: bitbucket            # Bitbucket Cloud (bitbucket-dc: Data Center, with baseUrl)
+    repos:   # workspace/repo → team id
+${keyLines('your-workspace/your-repo')}
+    environments: [production]
+`
     : ci === 'jenkins' ? `  - name: jenkins
     type: jenkins
     baseUrl: https://jenkins.example.com
-    user: qe-collector
+    user: qe-exporter
     jobs:   # folder/job → team id
 ${keyLines('your-folder/your-job')}
-    deployJobs:   # each build of these jobs is a production deployment
-${keyLines('deploy-production')}
 `
     : ci === 'azure-devops' ? `  - name: azure
     type: azure-devops
@@ -347,29 +345,28 @@ ${keyLines('deploy-production')}
     pipelines:   # pipeline name (or definition id) → team id
 ${keyLines('your-pipeline')}
     environments: [Production]
-    # releases: true   # classic release pipelines too (Release: Read)
 `
     : '';
-  return `# qe-collector ${AGENT_VERSION} configuration. Secrets are NOT in this file: set them as environment variables
-# QE_API_KEY (an igk_ key from Admin console → API keys)${secrets ? `, ${secrets}` : ''}, and for the other sources
-# SONAR_TOKEN, JIRA_TOKEN (+ JIRA_EMAIL), LINEAR_API_KEY, PAGERDUTY_TOKEN, OPSGENIE_API_KEY. Keep only what you use.
+  const deps = Array.from(new Map(list.map((t) => [t.id, t.departmentId ?? '<department id>'])).entries());
+  return `# qe-exporter ${AGENT_VERSION} configuration (or run "qe-exporter setup" and do this on a local page).
+# Secrets are NOT in this file: set them as environment variables (or let the setup page keep them in its
+# credentials file): QE_API_KEY (an igk_ key from Admin console → API keys)${secrets ? `, ${secrets}` : ''}, and
+# for the other sources SONAR_TOKEN, JIRA_TOKEN (+ JIRA_EMAIL), LINEAR_API_KEY, PAGERDUTY_TOKEN, OPSGENIE_API_KEY.
+# Every request carries companyId, departmentId and teamId; QE Navigator refuses any id that is not yours.
 qeNavigator:
   url: ${origin}
-privacy:
-  mode: ${mode}   # evidence (default) | metrics | full
-${mode === 'metrics' ? '  localEvidenceUrl: http://qe-collector.internal:8787/   # your qe-collector serve page, linked from the app\n' : ''}${mode === 'full' ? '  sendTitles: false   # key / id only\n  people: none        # or hash (salted on your side with QE_PEOPLE_SALT)\n' : ''}state:
-  path: /var/lib/qe-collector/state.json   # the local copy of the records is kept next to it (your network only)
+  companyId: ${companyId || '<company id>'}
+teams:   # team id → its department id
+${deps.map(([t, d]) => `  ${t}: ${d}`).join('\n')}
+state:
+  path: /var/lib/qe-exporter/state.json   # cursors only; no data is kept
 backfillDays: 90
 sources:
-${ciSource}  # - name: sonarqube
-  #   type: sonarqube
-  #   baseUrl: https://sonarqube.example.com
-  #   projects: { your_project_key: ${list[0].id} }
-  - name: jira
+${ciSource}  - name: jira
     type: jira
     baseUrl: https://your-site.atlassian.net   # Server / Data Center: your Jira URL and auth: bearer
     auth: basic
-    email: qe-collector@your-company.example
+    email: qe-exporter@your-company.example
     jql: project in (PAY)
     teams:   # Jira project key → team id
 ${keyLines('PAY')}
@@ -380,55 +377,65 @@ ${svc}
 `;
 }
 
-export function agentRunSnippet(tab: AgentTab, origin: string, ci: CollectorCi = 'github'): string {
+export function agentRunSnippet(tab: AgentTab, origin: string, ci: ExporterCi = 'github'): string {
   let host = origin;
   try { host = new URL(origin).host; } catch { /* keep as given */ }
-  const token = ci === 'github' ? '-e GITHUB_TOKEN' : ci === 'gitlab' ? '-e GITLAB_TOKEN' : ci === 'jenkins' ? '-e JENKINS_USER -e JENKINS_TOKEN' : ci === 'azure-devops' ? '-e AZURE_DEVOPS_TOKEN' : '';
-  const ciHost = ci === 'github' ? 'api.github.com' : ci === 'gitlab' ? 'gitlab.com (or yours)' : ci === 'jenkins' ? 'your Jenkins' : ci === 'azure-devops' ? 'dev.azure.com' : 'your tools';
-  if (tab === 'docker') return `# Build the image from the repository root (it bundles collector/ and the shared engine), or load the image you were given:
-docker build -f collector/Dockerfile -t qe-collector:${AGENT_VERSION} .
+  const token = ci === 'github' ? '-e GITHUB_TOKEN' : ci === 'gitlab' ? '-e GITLAB_TOKEN' : ci === 'bitbucket' ? '-e BITBUCKET_USERNAME -e BITBUCKET_APP_PASSWORD' : ci === 'jenkins' ? '-e JENKINS_USER -e JENKINS_TOKEN' : ci === 'azure-devops' ? '-e AZURE_DEVOPS_TOKEN' : '';
+  const ciHost = ci === 'github' ? 'api.github.com' : ci === 'gitlab' ? 'gitlab.com (or yours)' : ci === 'bitbucket' ? 'api.bitbucket.org (or your Bitbucket)' : ci === 'jenkins' ? 'your Jenkins' : ci === 'azure-devops' ? 'dev.azure.com' : 'your tools';
+  if (tab === 'setup') return `# 1. Start the setup page (bound to 127.0.0.1 only; it prints a one-time link with a token)
+docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:${AGENT_VERSION} setup
+#    or, without Docker:  node qe-exporter.mjs setup
+
+# 2. Open the printed link (http://127.0.0.1:8788/?token=…) and:
+#    - paste your QE Navigator API key (Admin console → API keys): the page loads your company, departments and teams
+#    - connect each tool (token, app password, service account, or OAuth with your own OAuth app) and test it
+#    - pick the department and team for each repository, project, pipeline or service
+#    - save: the config is written to the volume, the credentials to a 0600 file in a 0700 folder (never sent to us)
+
+# 3. See exactly what would be sent (the JSON with the three ids; nothing is sent), then sync
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:${AGENT_VERSION} preview
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:${AGENT_VERSION} sync`;
+  if (tab === 'docker') return `# Build the image from the repository root, or load the image you were given:
+docker build -f exporter/Dockerfile -t qe-exporter:${AGENT_VERSION} .
 
 # 1. Check the config, each source and QE Navigator (prints what would be read; never prints secrets)
 docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \\
-  -v "$PWD/qe-collector.yaml:/etc/qe-collector/qe-collector.yaml:ro" -v qe-collector-state:/var/lib/qe-collector \\
-  -e QE_API_KEY ${token} -e JIRA_TOKEN -e JIRA_EMAIL qe-collector:${AGENT_VERSION} check
+  -v "$PWD/qe-exporter.yaml:/etc/qe-exporter/qe-exporter.yaml:ro" -v qe-exporter:/var/lib/qe-exporter \\
+  -e QE_API_KEY ${token} -e JIRA_TOKEN -e JIRA_EMAIL qe-exporter:${AGENT_VERSION} check
 
-# 2. See exactly what would be sent in your privacy mode (nothing is sent; --offline: no call to QE Navigator)
-docker run --rm --read-only ... qe-collector:${AGENT_VERSION} preview --out /var/lib/qe-collector/preview.json
+# 2. See exactly what would be sent: every JSON body with companyId, departmentId and teamId (nothing is sent)
+docker run --rm --read-only ... qe-exporter:${AGENT_VERSION} preview --out /var/lib/qe-exporter/preview.json
 
-# 3. Sync: reads backfillDays the first time, then what changed; calculates; sends; heartbeat
-docker run --rm --read-only ... qe-collector:${AGENT_VERSION} sync
-
-# Local evidence page (metrics mode), inside your network only
-docker run --rm --read-only -p 127.0.0.1:8787:8787 -e QE_SERVE_USER -e QE_SERVE_PASSWORD ... qe-collector:${AGENT_VERSION} serve`;
-  if (tab === 'kubernetes') return `kubectl create namespace qe-collector
-kubectl -n qe-collector create secret generic qe-collector-secrets \\
+# 3. Sync: reads backfillDays the first time, then what changed; sends the raw data; heartbeat
+docker run --rm --read-only ... qe-exporter:${AGENT_VERSION} sync`;
+  if (tab === 'kubernetes') return `kubectl create namespace qe-exporter
+kubectl -n qe-exporter create secret generic qe-exporter-secrets \\
   --from-literal=QE_API_KEY=igk_... ${token ? `--from-literal=${token.replace(/-e /g, '').split(' ')[0]}=...` : ''} --from-literal=JIRA_TOKEN=...
-kubectl -n qe-collector create configmap qe-collector-config --from-file=qe-collector.yaml
-kubectl -n qe-collector apply -f collector/deploy/kubernetes/cronjob.yaml -f collector/deploy/kubernetes/networkpolicy.yaml
+kubectl -n qe-exporter create configmap qe-exporter-config --from-file=qe-exporter.yaml
+kubectl -n qe-exporter apply -f exporter/deploy/kubernetes/cronjob.yaml -f exporter/deploy/kubernetes/networkpolicy.yaml
 
 # Egress: only TCP 443 to ${host} and ${ciHost} (and your other tools); no ingress at all.
-kubectl -n qe-collector create job --from=cronjob/qe-collector qe-collector-first-run   # run once now
-kubectl -n qe-collector logs job/qe-collector-first-run`;
-  if (tab === 'node') return `# Node 20 or later; the Collector is one file without dependencies. Verify it first:
-sha256sum -c SHA256SUMS            # qe-collector.mjs: OK
-node qe-collector.mjs --version    # qe-collector ${AGENT_VERSION} (engine …)
+kubectl -n qe-exporter create job --from=cronjob/qe-exporter qe-exporter-first-run   # run once now
+kubectl -n qe-exporter logs job/qe-exporter-first-run`;
+  if (tab === 'node') return `# Node 20 or later; the Exporter is one file without dependencies. Verify it first:
+sha256sum -c SHA256SUMS            # qe-exporter.mjs: OK
+node qe-exporter.mjs --version     # qe-exporter ${AGENT_VERSION}
 
 export QE_API_KEY=igk_... ${token.replace(/-e (\w+)/g, '$1=...')}
-node qe-collector.mjs check   -c qe-collector.yaml
-node qe-collector.mjs preview -c qe-collector.yaml --offline   # air-gapped review: reads your tools, sends nothing
-node qe-collector.mjs sync    -c qe-collector.yaml
+node qe-exporter.mjs check   -c qe-exporter.yaml
+node qe-exporter.mjs preview -c qe-exporter.yaml --offline   # reads your tools, sends nothing
+node qe-exporter.mjs sync    -c qe-exporter.yaml
 
 # Every 15 minutes (cron); exit codes: 0 ok, 2 config, 3 a source, 4 QE Navigator, 5 still running, 6 some records refused
-*/15 * * * * qe-collector  . /etc/qe-collector/env && node /opt/qe-collector/qe-collector.mjs sync -c /etc/qe-collector/qe-collector.yaml --log-format json >> /var/log/qe-collector.log 2>&1
-# or the systemd timer in collector/deploy/systemd/. After an update: node qe-collector.mjs recalc --since 2026-01-01`;
+*/15 * * * * qe-exporter  . /etc/qe-exporter/env && node /opt/qe-exporter/qe-exporter.mjs sync -c /etc/qe-exporter/qe-exporter.yaml --log-format json >> /var/log/qe-exporter.log 2>&1
+# or the systemd timer in exporter/deploy/systemd/`;
   return '';
 }
 
-export interface CollectorStatus {
-  apiKeyName: string | null; keyRevoked: boolean; version: string; engineVersion: string; mode: CollectorMode; localEvidenceUrl: string | null;
+export interface ExporterStatus {
+  apiKeyName: string | null; keyRevoked: boolean; version: string;
   sources: Array<{ name: string; type: string; lastSuccessAt: string | null; errors: number; lastErrorAt: string | null; lastErrorKind: string | null }>;
-  firstSeen: string; lastSeen: string; beats: number; outdated: boolean; latestVersion: string; currentEngineVersion: string; stale: boolean;
+  firstSeen: string; lastSeen: string; beats: number; outdated: boolean; latestVersion: string; stale: boolean;
 }
 
 /** Steps that send issues (QE Navigator calculates escape rate, density, velocity, commitment, carryover, blocked time, sizing accuracy). */
@@ -553,10 +560,10 @@ const ConnectCi: React.FC = () => {
   const [deployTool, setDeployTool] = useState<Tool>('github');
   const [incidentTool, setIncidentTool] = useState<IncidentTool>('pagerduty');
   const [issueTool, setIssueTool] = useState<IssueTool>('jira');
-  const [agentTab, setAgentTab] = useState<AgentTab>('config');
-  const [collectorCi, setCollectorCi] = useState<CollectorCi>('github');
-  const [collectorMode, setCollectorMode] = useState<CollectorMode>('evidence');
-  const [collectors, setCollectors] = useState<CollectorStatus[]>([]);
+  const [agentTab, setAgentTab] = useState<AgentTab>('setup');
+  const [exporterCi, setExporterCi] = useState<ExporterCi>('github');
+  const [exporters, setExporters] = useState<ExporterStatus[]>([]);
+  const [companyId, setCompanyId] = useState('');
   const [sarifTool, setSarifTool] = useState<QualityTool>('github');
   const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
   const [testKind, setTestKind] = useState<TestKind>('tests');
@@ -573,7 +580,8 @@ const ConnectCi: React.FC = () => {
       if (!r.ok) throw new Error(body.error || 'Failed to load the CI status');
       setTeams(body.teams || []);
       setActiveKeys(body.activeKeys ?? 0);
-      setCollectors(body.collectors || []);
+      setExporters(body.exporters || []);
+      setCompanyId(body.companyId || '');
       setBranches(Object.fromEntries((body.teams || []).map((t: TeamStatus) => [t.id, t.mainBranch ?? ''])));
       setTeam((cur) => cur || body.teams?.[0]?.id || '');
       setError(null);
@@ -624,9 +632,9 @@ const ConnectCi: React.FC = () => {
   const agentOrigin = base.replace(/\/api$/, '');
   const agentCode = useMemo(
     () => (agentTab === 'config'
-      ? agentConfigSnippet(agentOrigin, teams.map((t) => ({ id: t.id, name: t.name })), mappings.map((m) => ({ service: m.service, teamId: m.teamId })), collectorCi, collectorMode)
-      : agentRunSnippet(agentTab, agentOrigin, collectorCi)),
-    [agentTab, agentOrigin, teams, mappings, collectorCi, collectorMode],
+      ? agentConfigSnippet(agentOrigin, companyId, teams.map((t) => ({ id: t.id, name: t.name, departmentId: t.departmentId ?? null })), mappings.map((m) => ({ service: m.service, teamId: m.teamId })), exporterCi)
+      : agentRunSnippet(agentTab, agentOrigin, exporterCi)),
+    [agentTab, agentOrigin, companyId, teams, mappings, exporterCi],
   );
   const sarifCode = useMemo(() => sarifSnippet(sarifTool, base, team || 'YOUR_TEAM_ID'), [sarifTool, base, team]);
   const copyBlock = async (id: string, text: string) => {
@@ -881,65 +889,53 @@ const ConnectCi: React.FC = () => {
 
       <div className="space-y-4 border-t border-slate-200 p-5 dark:border-slate-800" data-testid="connect-ci-agent">
         <div>
-          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">QE Navigator Collector</h4>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">QE Navigator Exporter</h4>
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-            No pipeline changes: a small program you run inside your network reads GitHub Actions, GitLab CI, Jenkins or Azure DevOps (runs, jobs, test, coverage and
-            SARIF artifacts, deployments), SonarQube, Jira, Linear, PagerDuty and Opsgenie with your own read-only credentials, calculates the metrics there with
-            QE Navigator’s engine, and sends the results to this site over outbound HTTPS. Your credentials and the raw data stay in your network, nothing connects into it,
-            and <span className="font-mono">qe-collector preview</span> shows exactly what would be sent. Security review: <span className="font-mono">collector/SECURITY.md</span>.
+            No pipeline changes: a small program you run inside your network (a Docker container or one file) reads GitHub Actions, GitLab CI, Bitbucket, Jenkins or
+            Azure DevOps (runs, jobs, test, coverage and SARIF files, deployments), SonarQube, Jira, Linear, PagerDuty and Opsgenie with your own read-only credentials,
+            and sends the raw data to this site as JSON over outbound HTTPS with an API key from Admin console → API keys. QE Navigator calculates every value; the
+            Exporter calculates nothing. Each request names your company, the department and the team, and is refused if any of them is not yours. Your credentials
+            stay in your network and <span className="font-mono">qe-exporter preview</span> shows exactly what would be sent. Security review: <span className="font-mono">exporter/SECURITY.md</span>.
           </p>
+          {companyId && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Your company id: <span className="font-mono" data-testid="connect-ci-company-id">{companyId}</span> (department and team ids are in the table below and on the setup page).</p>}
         </div>
-        <fieldset data-testid="connect-ci-collector-mode">
-          <legend className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">What leaves your network (privacy mode)</legend>
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-            {COLLECTOR_MODES.map((m) => (
-              <label key={m.id} className={cx('flex cursor-pointer gap-2 rounded-md border p-3 text-xs', collectorMode === m.id ? 'border-brand-500 bg-brand-50/40 dark:bg-brand-900/20' : 'border-slate-200 dark:border-slate-800')}>
-                <input type="radio" name="collector-mode" value={m.id} checked={collectorMode === m.id} onChange={() => setCollectorMode(m.id)} className="mt-0.5" />
-                <span><span className="block font-medium text-slate-800 dark:text-slate-100">{m.label}</span><span className="mt-0.5 block text-slate-600 dark:text-slate-400">{m.sent}</span></span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        {collectorMode === 'full' && (
-          <dl className="grid grid-cols-1 gap-2 text-xs md:grid-cols-2" data-testid="connect-ci-agent-fields">
-            {([['Issue fields sent', AGENT_FIELDS.issues], ['Incident fields sent', AGENT_FIELDS.incidents], ['Only if you enable them', AGENT_FIELDS.optIn], ['Never sent', AGENT_FIELDS.never]] as const).map(([k, v]) => (
-              <div key={k} className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
-                <dt className="font-medium text-slate-700 dark:text-slate-300">{k}</dt>
-                <dd className="mt-1 text-slate-600 dark:text-slate-400">{v}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
+        <dl className="grid grid-cols-1 gap-2 text-xs md:grid-cols-2" data-testid="connect-ci-agent-fields">
+          {([['CI data sent', AGENT_FIELDS.ci], ['Issue fields sent', AGENT_FIELDS.issues], ['Incident fields sent', AGENT_FIELDS.incidents], ['Never sent', AGENT_FIELDS.never]] as const).map(([k, v]) => (
+            <div key={k} className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+              <dt className="font-medium text-slate-700 dark:text-slate-300">{k}</dt>
+              <dd className="mt-1 text-slate-600 dark:text-slate-400">{v}</dd>
+            </div>
+          ))}
+        </dl>
         <div>
           <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Your CI</h5>
-          <div role="radiogroup" aria-label="CI the Collector reads" className="inline-flex flex-wrap rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900" data-testid="connect-ci-collector-ci">
-            {COLLECTOR_CIS.map((c) => (
-              <button key={c.id} type="button" role="radio" aria-checked={collectorCi === c.id} onClick={() => setCollectorCi(c.id)} title={c.file}
+          <div role="radiogroup" aria-label="CI the Exporter reads" className="inline-flex flex-wrap rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900" data-testid="connect-ci-exporter-ci">
+            {EXPORTER_CIS.map((c) => (
+              <button key={c.id} type="button" role="radio" aria-checked={exporterCi === c.id} onClick={() => setExporterCi(c.id)} title={c.file}
                 className={cx('rounded px-3 py-1.5 text-sm whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500',
-                  collectorCi === c.id ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white')}>
+                  exporterCi === c.id ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900' : 'text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white')}>
                 {c.label}
               </button>
             ))}
           </div>
-          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{COLLECTOR_CIS.find((c) => c.id === collectorCi)!.file}.</p>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{EXPORTER_CIS.find((c) => c.id === exporterCi)!.file}.</p>
         </div>
-        {toolTabs('agent', 'Collector setup', AGENT_TABS, agentTab, setAgentTab, agentCode, 'connect-ci-agent-snippet')}
-        <div data-testid="connect-ci-collector-status">
-          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Collector status</h5>
-          {collectors.length === 0 ? (
-            <p className="text-xs text-slate-500 dark:text-slate-400">No Collector has reported yet. Each sync ends with a heartbeat (versions, privacy mode, sources and their last success; no data).</p>
+        {toolTabs('agent', 'Exporter setup', AGENT_TABS, agentTab, setAgentTab, agentCode, 'connect-ci-agent-snippet')}
+        <div data-testid="connect-ci-exporter-status">
+          <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Exporter status</h5>
+          {exporters.length === 0 ? (
+            <p className="text-xs text-slate-500 dark:text-slate-400">No Exporter has reported yet. Each sync ends with a heartbeat (version, sources and their last success; no data).</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="min-w-full text-xs">
-                <caption className="sr-only">QE Navigator Collectors that reported, with their last heartbeat</caption>
-                <thead className="text-left text-slate-500 dark:text-slate-400"><tr><th scope="col" className="py-1 pr-3 font-medium">API key</th><th scope="col" className="py-1 pr-3 font-medium">Last seen</th><th scope="col" className="py-1 pr-3 font-medium">Version</th><th scope="col" className="py-1 pr-3 font-medium">Privacy mode</th><th scope="col" className="py-1 font-medium">Sources</th></tr></thead>
+                <caption className="sr-only">QE Navigator Exporters that reported, with their last heartbeat</caption>
+                <thead className="text-left text-slate-500 dark:text-slate-400"><tr><th scope="col" className="py-1 pr-3 font-medium">API key</th><th scope="col" className="py-1 pr-3 font-medium">Last seen</th><th scope="col" className="py-1 pr-3 font-medium">Version</th><th scope="col" className="py-1 font-medium">Sources</th></tr></thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {collectors.map((c, i) => (
-                    <tr key={`${c.apiKeyName}${i}`} data-testid="connect-ci-collector-row">
+                  {exporters.map((c, i) => (
+                    <tr key={`${c.apiKeyName}${i}`} data-testid="connect-ci-exporter-row">
                       <td className="py-1.5 pr-3 align-top text-slate-800 dark:text-slate-200">{c.apiKeyName ?? 'deleted key'}{c.keyRevoked && <> <Badge tone="bad">revoked</Badge></>}</td>
                       <td className="py-1.5 pr-3 align-top">{formatAsOf(c.lastSeen)}{c.stale && <> <Badge tone="warn">not seen for over 2 hours</Badge></>}</td>
-                      <td className="py-1.5 pr-3 align-top">{c.version} · engine {c.engineVersion}{c.outdated && <> <Badge tone="warn">outdated: {c.latestVersion} (engine {c.currentEngineVersion}) is available</Badge></>}</td>
-                      <td className="py-1.5 pr-3 align-top">{c.mode}{c.mode === 'metrics' && c.localEvidenceUrl ? <span className="block break-all text-slate-500 dark:text-slate-400">{c.localEvidenceUrl}</span> : null}</td>
+                      <td className="py-1.5 pr-3 align-top">{c.version}{c.outdated && <> <Badge tone="warn">outdated: {c.latestVersion} is available</Badge></>}</td>
                       <td className="py-1.5 align-top">
                         <ul className="space-y-0.5">
                           {c.sources.map((s) => (

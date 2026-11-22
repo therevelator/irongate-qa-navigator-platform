@@ -44,6 +44,7 @@ import { rawIngestHandler } from './ingestRaw';
 import { deliveryIngestHandler } from './ingestDelivery';
 import { handleIssues, handleStaticAnalysis } from './ingestWork';
 import type { IngestCaller } from '../lib/ingestionLog';
+import { invokeHandler } from '../lib/ingest/invoke';
 
 const router = express.Router();
 
@@ -158,21 +159,8 @@ async function contextFor(req: AuthRequest, opts: Parsed['options']): Promise<{ 
 
 /** Run one ingestion request through the API's own handler (same parsing, checks, storage, log). */
 async function submit(sub: Submission, caller: IngestCaller, dryRun: boolean): Promise<{ status: number; body: any }> {
-  const req: any = {
-    ingestCaller: caller, apiKey: { companyId: caller.companyId, id: null },
-    headers: { 'content-type': sub.contentType }, query: { ...sub.query, ...(dryRun ? { dryRun: 'true' } : {}) }, body: sub.body,
-    get: () => undefined, on: () => req,
-  };
-  let status = 200;
-  let body: any = null;
-  const res: any = {
-    status(n: number) { status = n; return res; },
-    json(o: unknown) { body = o; return res; },
-    set() { return res; },
-    setHeader() { return res; },
-  };
-  await HANDLERS[sub.kind](req, res);
-  return { status, body };
+  const r = await invokeHandler(HANDLERS[sub.kind], { caller, body: sub.body, contentType: sub.contentType, query: { ...sub.query, ...(dryRun ? { dryRun: 'true' } : {}) } });
+  return { status: r.status, body: r.body };
 }
 
 /** Plans of every file, with the API's dry run on each request and the duplicate check. Writes nothing. */

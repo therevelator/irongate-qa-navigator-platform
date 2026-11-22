@@ -16,7 +16,7 @@
  *
  * Without a code size (no lines of code sent and no coverage report) the score is not calculated; the
  * findings still are. Pure computeQualityDay (the server reads the reports in server/lib/calc/quality.ts,
- * loadQualityData; the QE Navigator Collector from its local copy).
+ * loadQualityData).
  */
 import type { ComputedMetric, MetricSpec } from './types';
 

@@ -44,7 +44,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
     const params: any[] = [req.user.companyId];
     let where = 'l.company_id = ?' + scopeWhere(actor, params);
     if (['accepted', 'partial', 'rejected'].includes(q.status)) { where += ' AND l.status = ?'; params.push(q.status); }
-    if (['api', 'manual', 'upload'].includes(q.channel)) { where += ' AND l.channel = ?'; params.push(q.channel); }
+    if (['api', 'manual', 'upload', 'exporter'].includes(q.channel)) { where += ' AND l.channel = ?'; params.push(q.channel); }
     if (typeof q.source === 'string' && q.source) { where += ' AND ? = ANY(string_to_array(l.source, \', \'))'; params.push(q.source); }
     if (typeof q.teamId === 'string' && q.teamId) { where += ' AND ? = ANY(l.team_ids)'; params.push(q.teamId); }
     if (typeof q.from === 'string' && DATE_RE.test(q.from)) { where += ' AND l.received_at >= ?::date'; params.push(q.from); }

@@ -1,6 +1,5 @@
 /**
- * The engine's version. Recorded with every value the QE Navigator Collector sends (and shown in "How this was
- * calculated"), so a value can always be traced to the rules that produced it. Bump it whenever a calculation,
+ * The engine's version (the server's calculation rules), so a value can always be traced to the rules that produced it. Bump it whenever a calculation,
  * a parser or an evidence list changes its output: minor for a new metric or evidence field, patch for a fix,
  * major for a changed rule.
  */

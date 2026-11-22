@@ -1,6 +1,6 @@
 /**
  * The field allow-list (fieldAllowList.ts: plain data and a pure minimise(), vendored byte for byte into
- * the QE Navigator Collector by collector/scripts/sync-allow-list.mjs) as the server applies it to the records it
+ * the QE Navigator Exporter by exporter/scripts/sync-allow-list.mjs) as the server applies it to the records it
  * builds itself: file uploads (CSV rows, vendor JSON) and the copy of API requests kept in raw_uploads.
  * Here only what the server adds around it: the salt (the company id), the company setting "Store issue
  * and incident titles", and the preview's wording of what was dropped.

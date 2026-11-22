@@ -22,8 +22,7 @@
  * The period starts at the team's first event when that is later than the window start (a new team
  * is not diluted by weeks without data), and is at least 7 days.
  *
- * The calculation itself is the shared engine's (packages/engine/src/calc/delivery.ts, also run by the QE
- * Navigator Collector); this file reads the rows needed for a range of days in three queries (loadDeliveryData)
+ * The calculation itself is the shared engine's (packages/engine/src/calc/delivery.ts); this file reads the rows needed for a range of days in three queries (loadDeliveryData)
  * and applies the server's hotfix window (CHANGE_FAILURE_WINDOW_HOURS).
  */
 import type pg from 'pg';

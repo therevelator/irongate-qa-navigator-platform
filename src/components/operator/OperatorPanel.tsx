@@ -8,6 +8,7 @@ import { CompanyStatusBadge, DataTable, ErrorText, FormDialog, OkBadge, Section,
 import { fmtBytes, fmtDate } from './format';
 import OperatorCompany, { ErrorRows } from './OperatorCompany';
 import AuthEventsList from './OperatorAuthEvents';
+import ExporterDeliveries from './OperatorExporterDeliveries';
 import { PASSWORD_RULES_TEXT } from '../../lib/passwordPolicy';
 
 /**
@@ -61,7 +62,7 @@ const SignIn: React.FC = () => {
   );
 };
 
-type Screen = 'overview' | 'sign-ins' | 'errors';
+type Screen = 'overview' | 'sign-ins' | 'exporter' | 'errors';
 
 const OperatorPanel: React.FC = () => {
   const [status, setStatus] = useState<OperatorStatus | null>(null);
@@ -99,11 +100,12 @@ const OperatorPanel: React.FC = () => {
         <OperatorCompany company={company} onBack={() => setCompany(null)} />
       ) : (
         <>
-          <PageIntro title="Platform" description="All companies, sign-ins, scheduled jobs and server errors." actions={
-            <SegmentedControl value={screen} onChange={setScreen} options={[{ value: 'overview', label: 'Overview' }, { value: 'sign-ins', label: 'Sign-ins' }, { value: 'errors', label: 'Error search' }]} />
+          <PageIntro title="Platform" description="All companies, sign-ins, Exporter deliveries, scheduled jobs and server errors." actions={
+            <SegmentedControl value={screen} onChange={setScreen} options={[{ value: 'overview', label: 'Overview' }, { value: 'sign-ins', label: 'Sign-ins' }, { value: 'exporter', label: 'Exporter deliveries' }, { value: 'errors', label: 'Error search' }]} />
           } />
           {screen === 'overview' && <Overview onOpen={(c) => setCompany(c)} />}
           {screen === 'sign-ins' && <Section title="Sign-in events" subtitle="Every company, including failed sign-ins with an e-mail that belongs to nobody. Kept 180 days."><AuthEventsList base="" /></Section>}
+          {screen === 'exporter' && <Section title="Exporter deliveries" subtitle="Every batch a QE Navigator Exporter sent, accepted or rejected (a bad key with its prefix only). Open a row for the summary and the sanitised preview. Kept 30 days." testId="op-exporter-section"><ExporterDeliveries /></Section>}
           {screen === 'errors' && <ErrorSearch />}
         </>
       )}

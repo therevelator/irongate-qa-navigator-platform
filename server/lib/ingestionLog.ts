@@ -23,24 +23,24 @@ export type IngestStatus = 'accepted' | 'partial' | 'rejected';
 
 export interface IngestCaller {
   companyId: string;
-  /** api: an API key; manual: Manual metrics; upload: Admin console → Upload files (a signed-in person). */
-  channel: 'api' | 'manual' | 'upload';
+  /** api: an API key; manual: Manual metrics; upload: Admin console → Upload files (a signed-in person); exporter: the QE Navigator Exporter's batches (an API key). */
+  channel: 'api' | 'manual' | 'upload' | 'exporter';
   apiKeyId?: string | null;
   actorId?: string | null;
   /** Upload preview: a dry run that writes nothing at all (not even an ingestion log row). */
   preview?: boolean;
   /** Upload: the teams the person may write to; any other team is refused (403). */
   teamScope?: ReadonlySet<string> | null;
-  /** The sending program when it identifies itself (the QE Navigator Collector: "qe-collector/<version>"), shown in the log. */
+  /** The sending program when it identifies itself (the QE Navigator Exporter: "qe-exporter/<version>"), shown in the log. */
   client?: string | null;
 }
 
 /**
- * "qe-collector/<version>" from a User-Agent header of the QE Navigator Collector (or "qe-agent/<version>" from
- * its earlier releases, named the on-premises agent); null for anything else.
+ * "qe-exporter/<version>" from a User-Agent header of the QE Navigator Exporter (or "qe-collector/<version>" and
+ * "qe-agent/<version>" from its earlier releases); null for anything else.
  */
 export function agentClient(userAgent: string | null | undefined): string | null {
-  const m = /^(qe-collector|qe-agent)\/(\d+\.\d+\.\d+[0-9A-Za-z.+-]{0,20})(?:\s|$)/.exec(String(userAgent ?? ''));
+  const m = /^(qe-exporter|qe-collector|qe-agent)\/(\d+\.\d+\.\d+[0-9A-Za-z.+-]{0,20})(?:\s|$)/.exec(String(userAgent ?? ''));
   return m ? `${m[1]}/${m[2]}` : null;
 }
 

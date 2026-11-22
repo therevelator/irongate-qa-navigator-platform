@@ -24,8 +24,7 @@
  * Committed = in the sprint when it started (Jira's Sprint changes when sent; otherwise created before the
  * start). Epics and sub-tasks are not counted in the sprint metrics.
  *
- * The calculation is the shared engine's (packages/engine/src/calc/work.ts, also run by the QE Navigator
- * Collector); this file reads what a range of days depends on (loadWorkData).
+ * The calculation is the shared engine's (packages/engine/src/calc/work.ts); this file reads what a range of days depends on (loadWorkData).
  */
 import type pg from 'pg';
 import type { ComputedMetric } from './engine';

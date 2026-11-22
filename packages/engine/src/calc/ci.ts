@@ -22,7 +22,7 @@
  * main / master when it is not set.
  *
  * Pure: the records in, metric values and their evidence out. The server reads the records from its raw
- * store (server/lib/calc/engine.ts, computeTeamDay); the QE Navigator Collector from its local copy.
+ * store (server/lib/calc/engine.ts, computeTeamDay).
  */
 import type { ComputedMetric, MetricSpec } from './types';
 import { DAY_MS, median } from './types';

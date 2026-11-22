@@ -1,7 +1,7 @@
 {
   "name": "@qe-navigator/engine",
   "version": "1.0.0",
-  "description": "QE Navigator calculation engine: report parsers and metric calculations shared by the QE Navigator server and the QE Navigator Collector. Pure, no dependencies.",
+  "description": "QE Navigator calculation engine: report parsers and metric calculations of the QE Navigator server (internal). Pure, no dependencies.",
   "license": "UNLICENSED",
   "private": true,
   "type": "module",

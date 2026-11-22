@@ -1,6 +1,6 @@
 /**
- * QE Navigator calculation engine: the parsers and metric calculations shared by the QE Navigator server and the
- * QE Navigator Collector (which runs them inside the customer's network). Pure TypeScript: inputs in, metric values
+ * QE Navigator calculation engine: the parsers and metric calculations of the QE Navigator server (its internal
+ * calculation code; nothing outside the server runs it). Pure TypeScript: inputs in, metric values
  * and evidence out. No database, no HTTP, no environment variables, no file system; the only imports are Node's
  * built-in crypto (stable hashes of test names and findings) and zlib (reading zip archives).
  */

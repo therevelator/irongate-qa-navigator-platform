@@ -23,7 +23,7 @@
  * is not diluted by weeks without data), and is at least 7 days.
  *
  * Pure: inputs in, metric values and evidence out (no database, no environment). The server reads the rows
- * (server/lib/calc/delivery.ts, loadDeliveryData); the QE Navigator Collector reads its local copy.
+ * (server/lib/calc/delivery.ts, loadDeliveryData).
  */
 import type { ComputedMetric, MetricSpec } from './types';
 import { isOutage, type Severity } from '../parsers/deliveryEvents';

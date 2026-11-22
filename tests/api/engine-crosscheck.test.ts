@@ -17,14 +17,16 @@ import { parseIssueBody } from '../../packages/engine/src/parsers/issueEvents';
 import { parseSarif } from '../../packages/engine/src/parsers/sarif';
 
 /**
- * ENG-XCHK: the server and the QE Navigator Collector calculate with the same engine (packages/engine). The same
- * fixtures go two ways and must give identical metric values:
+ * ENG-XCHK: the server's calculation (server/lib/calc/*.ts: the database loaders that feed the engine) gives exactly
+ * what the pure engine (packages/engine, the server's internal calculation code) gives for the same data, so the
+ * loaders select the same records per day as the engine's own selection. The same fixtures go two ways and must give
+ * identical metric values:
  *   server path   the reports and events are sent to the real ingestion API (POST /api/ingest/tests, coverage,
  *                 pipelines, deployments, commits, incidents, issues, static-analysis), stored in the raw store,
  *                 and every day is recalculated by server/lib/calc/engine.ts (recomputeTeamDays, all groups);
  *                 the result is read from metric_evidence;
  *   engine path   the same payloads are parsed by the engine's parsers, turned into records by
- *                 packages/engine/src/store/records.ts (what the Collector keeps locally) and calculated by the
+ *                 packages/engine/src/store/records.ts and calculated by the
  *                 engine directly (computeCiDay, computeDeliveryDay, computeWorkDay, computeQualityDay), with no
  *                 database and no server code.
  * Compared per day before today and per metric: the set of metrics, the value, the sample size (confidence), the
@@ -137,7 +139,7 @@ const analyses = () => [
 const send = (kind: string, params: Record<string, string>, body: string, ct = 'application/octet-stream') =>
   request(API_URL).post(`/api/ingest/${kind}?${new URLSearchParams({ team: TEAM, ...params })}`).set('Authorization', `Bearer ${apiKey}`).set('Content-Type', ct).send(body);
 
-/** The engine path: parse, build the Collector's records, calculate one day. */
+/** The engine path: parse, build the engine's records, calculate one day. */
 function engineDays(days: string[]): Map<string, E.ComputedMetric[]> {
   const testRuns: E.TestRunRec[] = [];
   const coverage: E.CoverageRec[] = [];

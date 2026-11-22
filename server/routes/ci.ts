@@ -7,8 +7,8 @@
  *                                             runs (confidence) and the source runs (?date=YYYY-MM-DD,
  *                                             default the latest day). :metric is a metric key
  *                                             (line_coverage, pass_rate, …) or a KPI column (test_coverage, …)
- *   GET /api/ci/status                        per team and kind: last data received; the QE Navigator Collectors'
- *                                             heartbeats (last seen, versions, outdated, sources) (super admins)
+ *   GET /api/ci/status                        per team and kind: last data received; the QE Navigator Exporters'
+ *                                             heartbeats (last seen, version, outdated, sources) (super admins)
  *   PUT /api/ci/teams/:id/main-branch         the branch coverage and pass rate use (super admins)
  *   GET /api/ci/teams/:id/delivery            deliveries and incidents (v2 phase 2): DORA values, recent production
  *                                             deploys with commit count and lead time, failed changes with what made
@@ -35,7 +35,7 @@ import { isOutage } from '../lib/ingest/deliveryEvents';
 import { recordAudit } from '../lib/audit';
 import { loadWorkData, phase3Tables, summariseSprint, confirmedBug, WORK_WINDOW_DAYS } from '../lib/calc/work';
 import { computeQualityDay, latestReports, loadQualityData, weightedOf } from '../lib/calc/quality';
-import { CURRENT_ENGINE_VERSION, LATEST_COLLECTOR_VERSION, isOutdated } from '../lib/collectorIngest';
+import { LATEST_EXPORTER_VERSION, isOutdated } from '../lib/exporterIngest';
 
 const router = express.Router();
 
@@ -113,16 +113,9 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
       `SELECT DISTINCT ON (metric_key) metric_key, day, value::float8 AS value, unit, sample_size, confidence
          FROM metric_evidence WHERE team_id = ? ORDER BY metric_key, day DESC`, [teamId])).filter((m: any) => groupOf(m.metric_key) === 'ci');
 
-    // Evidence mode of the QE Navigator Collector: no raw records here, the evidence panel it sent instead.
-    const col = !flakyTests.length && !report && !slowest.length && !stages.length
-      ? await queryOne<any>(`SELECT as_of, engine_version, collector_version, payload, received_at FROM collector_evidence WHERE team_id = ?`, [teamId]).catch(() => null)
-      : null;
-    const p = col?.payload ?? {};
-    const arr = (v: unknown) => (Array.isArray(v) ? v : []);
     res.json({
       teamId,
       lastReceived: await lastReceived(teamId),
-      collector: col ? { asOf: dayStr(col.as_of), engineVersion: col.engine_version, collectorVersion: col.collector_version, receivedAt: col.received_at } : null,
       metrics: latest.map((m: any) => ({ key: m.metric_key, label: METRICS[m.metric_key]?.label ?? m.metric_key, day: dayStr(m.day), value: m.value, unit: m.unit, sampleSize: m.sample_size, confidence: m.confidence })),
       flakyTests,
       coverage: report ? {
@@ -135,12 +128,6 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
         name: s.name, runs: s.runs, failed: s.failed, failureRate: Math.round((s.failed / s.runs) * 1000) / 10, medianSeconds: s.median_s === null ? null : Math.round(s.median_s),
         lastFailedRuns: (s.last_failed_runs ?? []).map((id: string, i: number) => ({ id, runId: s.last_failed_external?.[i] ?? null, url: s.last_failed_urls?.[i] ?? null })),
       })),
-      ...(col ? {
-        flakyTests: arr(p.flakyTests).map((f: any) => ({ testKey: f.name, suite: f.suite ?? null, name: f.name, commits: arr(f.commits), failureMessage: null, lastSeen: f.lastSeen ?? null, failedRunCount: f.failedRuns, passedRunCount: f.passedRuns, failedRuns: [], passedRuns: [] })),
-        coverage: arr(p.lowestFiles).length ? { reportId: null, commit: null, branch: null, format: null, createdAt: col.received_at, linesFound: null, linesHit: null, fileCount: null, lowestFiles: arr(p.lowestFiles) } : null,
-        slowestStages: arr(p.slowestStages),
-        failingStages: arr(p.failingStages).map((x: any) => ({ ...x, lastFailedRuns: [] })),
-      } : {}),
     });
   } catch (error) {
     console.error('Evidence error:', error);
@@ -180,8 +167,7 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
     if (!key) return res.status(404).json({ error: `No calculation for "${raw}"` });
     const date = typeof req.query.date === 'string' && DAY_RE.test(req.query.date) ? req.query.date : null;
     const ev = await queryOne<any>(
-      `SELECT day, metric_key, value::float8 AS value, unit, formula, inputs, sources, sample_size, confidence, kpi_column, recorded_at, computed_at,
-              origin, engine_version, collector_version, privacy_mode, local_evidence_url
+      `SELECT day, metric_key, value::float8 AS value, unit, formula, inputs, sources, sample_size, confidence, kpi_column, recorded_at, computed_at
          FROM metric_evidence WHERE team_id = ? AND metric_key = ? ${date ? 'AND day <= ?::date' : ''} ORDER BY day DESC LIMIT 1`,
       date ? [team.id, key, date] : [team.id, key]);
     if (!ev) return res.status(404).json({ error: 'This metric has not been calculated from CI data for this team yet', metric: key });
@@ -252,14 +238,6 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
         analysisReports: reportRows.map((r: any) => ({ id: r.id, tool: r.tool, repo: r.repo, branch: r.branch, commit: r.commit_sha, analyzedAt: r.analyzed_at, linesOfCode: r.lines_of_code, findings: r.findings, critical: r.critical, high: r.high, medium: r.medium, low: r.low, info: r.info, newFindings: r.new_findings, fixedFindings: r.fixed_findings })),
       },
       sprint: s.sprint && typeof s.sprint === 'object' ? s.sprint : undefined,
-      // Calculated by the customer's QE Navigator Collector: its engine version and, in evidence mode, the evidence
-      // lists it sent (there are no raw records here); in metrics mode the details stay in the customer's network.
-      collector: ev.origin === 'collector' ? {
-        engineVersion: ev.engine_version, collectorVersion: ev.collector_version, mode: ev.privacy_mode, calculatedAt: ev.computed_at,
-        localEvidenceUrl: ev.privacy_mode === 'metrics' ? ev.local_evidence_url : null,
-        failedDeployments: ev.privacy_mode === 'evidence' && Array.isArray(s.failedDeployments) ? s.failedDeployments : undefined,
-        escaped: ev.privacy_mode === 'evidence' && Array.isArray(s.escaped) ? s.escaped : undefined,
-      } : undefined,
     });
   } catch (error) {
     console.error('Metric evidence error:', error);
@@ -272,7 +250,7 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
     if (!isCompanyAdmin(policyActor(req))) return res.status(403).json({ error: 'Super admin access required' });
     const companyId = req.user!.companyId;
     const teams = await query<any[]>(
-      `SELECT t.id, t.name, t.main_branch, d.name AS department_name FROM teams t LEFT JOIN departments d ON d.id = t.department_id
+      `SELECT t.id, t.name, t.main_branch, t.department_id, d.name AS department_name FROM teams t LEFT JOIN departments d ON d.id = t.department_id
         WHERE t.company_id = ? AND t.is_active IS NOT FALSE ORDER BY d.name NULLS LAST, t.name`, [companyId]);
     const uploads = await query<any[]>(
       `SELECT team_id, kind, MAX(received_at) AS at, COUNT(*)::int AS n,
@@ -294,17 +272,18 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
        ${p3 ? `UNION ALL SELECT team_id, 'issues', MAX(created_at), COUNT(*)::int FROM issues WHERE company_id = ? AND is_sample GROUP BY team_id
        UNION ALL SELECT team_id, 'static-analysis', MAX(created_at), COUNT(*)::int FROM analysis_reports WHERE company_id = ? AND is_sample GROUP BY team_id` : ''}`,
       [companyId, companyId, companyId, companyId, companyId, companyId, ...(p3 ? [companyId, companyId] : [])]);
-    // QE Navigator Collectors of the company: their last heartbeat (versions, privacy mode, sources; no data).
+    // QE Navigator Exporters of the company: their last heartbeat (version, sources; no data).
     const beats = await query<any[]>(
-      `SELECT h.api_key_id, k.name AS key_name, k.revoked_at, h.collector_version, h.engine_version, h.privacy_mode, h.local_evidence_url, h.sources, h.details, h.first_seen, h.last_seen, h.beats
-         FROM collector_heartbeats h LEFT JOIN api_keys k ON k.id = h.api_key_id WHERE h.company_id = ? ORDER BY h.last_seen DESC LIMIT 20`, [companyId]).catch(() => [] as any[]);
+      `SELECT h.api_key_id, k.name AS key_name, k.revoked_at, h.exporter_version, h.sources, h.details, h.first_seen, h.last_seen, h.beats
+         FROM exporter_heartbeats h LEFT JOIN api_keys k ON k.id = h.api_key_id WHERE h.company_id = ? ORDER BY h.last_seen DESC LIMIT 20`, [companyId]).catch(() => [] as any[]);
     res.json({
+      companyId,
       activeKeys: keys[0]?.n ?? 0,
       rejectedLast7Days: rejected[0]?.n ?? 0,
-      collectors: beats.map((b: any) => ({
-        apiKeyName: b.key_name ?? null, keyRevoked: !!b.revoked_at, version: b.collector_version, engineVersion: b.engine_version, mode: b.privacy_mode,
-        localEvidenceUrl: b.local_evidence_url, sources: b.sources ?? [], details: b.details ?? {}, firstSeen: b.first_seen, lastSeen: b.last_seen, beats: b.beats,
-        outdated: isOutdated(b.collector_version, b.engine_version), latestVersion: LATEST_COLLECTOR_VERSION, currentEngineVersion: CURRENT_ENGINE_VERSION,
+      exporters: beats.map((b: any) => ({
+        apiKeyName: b.key_name ?? null, keyRevoked: !!b.revoked_at, version: b.exporter_version,
+        sources: b.sources ?? [], details: b.details ?? {}, firstSeen: b.first_seen, lastSeen: b.last_seen, beats: b.beats,
+        outdated: isOutdated(b.exporter_version), latestVersion: LATEST_EXPORTER_VERSION,
         stale: Date.now() - new Date(b.last_seen).getTime() > 2 * 3600_000,
       })),
       teams: teams.map((t: any) => {
@@ -315,7 +294,7 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
           return x ? { at: x.at, uploads: x.n, format: null, sample: true } : null;
         };
         return {
-          id: t.id, name: t.name, department: t.department_name, mainBranch: t.main_branch, tests: of('tests'), coverage: of('coverage'), pipelines: of('pipelines'),
+          id: t.id, name: t.name, department: t.department_name, departmentId: t.department_id, mainBranch: t.main_branch, tests: of('tests'), coverage: of('coverage'), pipelines: of('pipelines'),
           deployments: of('deployments'), commits: of('commits'), incidents: of('incidents'), issues: of('issues'), staticAnalysis: of('static-analysis'),
         };
       }),

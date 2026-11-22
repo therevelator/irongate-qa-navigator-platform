@@ -17,7 +17,7 @@ import { afterIngestionRejected, afterKpiWrite } from '../lib/alerts';
 import rawIngestRoutes from './ingestRaw';
 import deliveryIngestRoutes from './ingestDelivery';
 import workIngestRoutes from './ingestWork';
-import collectorIngestRoutes from './ingestCollector';
+import exporterIngestRoutes from './ingestExporter';
 import { logRejected, requestHash, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 
 const router = express.Router();
@@ -49,12 +49,18 @@ interface Prepared {
  * the batch is all or nothing (any invalid item: 400, nothing written).
  * Every request is recorded in the ingestion log (Administration → Ingestion log).
  */
-router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyRequest, res) => {
-  const body = req.body;
+export async function handleKpis(req: ApiKeyRequest, res: express.Response) {
+  // In-process callers (the Exporter's envelope, server/routes/ingestExporter.ts) pass the caller and a Buffer body.
+  const given = (req as any).ingestCaller as IngestCaller | undefined;
+  let body: any = req.body;
+  if (Buffer.isBuffer(body)) {
+    try { body = JSON.parse(body.toString('utf8')); } catch { return res.status(400).json({ error: 'The body must be JSON' }); }
+  }
   const isBatch = Array.isArray(body);
   const items: any[] = isBatch ? body : [body];
   const partialMode = req.query.partial === 'true';
-  const caller: IngestCaller = { companyId: req.apiKey!.companyId, channel: 'api', apiKeyId: req.apiKey!.id };
+  const caller: IngestCaller = given ?? { companyId: req.apiKey!.companyId, channel: 'api', apiKeyId: req.apiKey!.id };
+  const dryRun = req.query.dryRun === 'true' || req.query.dryRun === '1';
   const hash = requestHash(body);
 
   let key: string | null = null;
@@ -71,6 +77,8 @@ router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyReques
   }
 
   const reject = async (httpStatus: number, response: any, summaries: ItemSummary[], errors: Array<{ index: number | null; errors: string[] }>, teamIds: string[] = []) => {
+    // A preview (the Exporter's check before writing) writes nothing, not even the rejection.
+    if (caller.preview) return res.status(httpStatus).json({ ...response, status: 'rejected', ingestionId: null });
     const id = await logRejected(caller, { key, hash }, { httpStatus, response, items: summaries, errors, teamIds, source: sourcesOf(summaries) });
     await afterIngestionRejected(caller.companyId, [...teamIds, ...summaries.map((s) => s.teamId).filter((t): t is string => !!t)]);
     return res.status(httpStatus).json({ ...response, status: 'rejected', ingestionId: id });
@@ -123,6 +131,8 @@ router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyReques
       (await query<any>('SELECT id FROM teams WHERE company_id = ? AND id = ANY(?::text[])', [caller.companyId, teamIds])).map((r: any) => r.id)
     );
     const ownedTeamIds = teamIds.filter((t) => owned.has(t));
+    // An in-process caller limited to some teams (the Exporter's envelope: its one team).
+    if (caller.teamScope) for (const t of teamIds) if (!caller.teamScope.has(t)) owned.delete(t);
     for (const p of prepared) {
       if (!owned.has(p.teamId)) {
         const msg = `Team ${p.teamId} is not accessible with this API key`;
@@ -143,6 +153,9 @@ router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyReques
     if (writable.length === 0) {
       return reject(400, { error: 'No item could be written', details: errors }, summaries, errors, ownedTeamIds);
     }
+    if (dryRun) {
+      return res.status(200).json({ status: 'dry-run', kind: 'kpis', items: writable.length, teams: ownedTeamIds, message: 'Key, teams and values are valid. Nothing was stored.' });
+    }
 
     // 3. Write the items atomically, with the log row.
     const outcome = await runLogged(caller, { key, hash, source: Array.from(new Set(writable.map((p) => p.source))).join(', ') }, async (client, ingestionId) => {
@@ -151,7 +164,7 @@ router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyReques
         const r = await recordKpiValues(p.teamId, p.metrics, {
           source: p.source,
           recordedAt: p.recordedAt,
-          actorId: `api_key:${req.apiKey!.id}`,
+          actorId: caller.apiKeyId ? `api_key:${caller.apiKeyId}` : caller.actorId ?? null,
           client,
           notify: false,
           idempotencyKey: p.idempotencyKey,
@@ -203,7 +216,9 @@ router.post('/kpis', ingestLimiter, authenticateApiKey, async (req: ApiKeyReques
     });
     res.status(500).json({ error: 'Failed to ingest metrics' });
   }
-});
+}
+
+router.post('/kpis', ingestLimiter, authenticateApiKey, handleKpis);
 
 function sourcesOf(items: ItemSummary[]): string | null {
   const s = Array.from(new Set(items.map((i) => i.source).filter((x): x is string => !!x)));
@@ -213,10 +228,10 @@ function sourcesOf(items: ItemSummary[]): string | null {
 // v2 raw ingestion: POST /tests, /coverage, /pipelines (server/routes/ingestRaw.ts) and
 // POST /deployments, /commits, /incidents (server/routes/ingestDelivery.ts) and
 // POST /issues, /static-analysis (server/routes/ingestWork.ts) and
-// POST /collector/metrics, /collector/heartbeat (server/routes/ingestCollector.ts: the QE Navigator Collector).
+// POST /exporter/batch, GET /exporter/context, POST /exporter/heartbeat (server/routes/ingestExporter.ts: the QE Navigator Exporter).
 router.use(rawIngestRoutes);
 router.use(deliveryIngestRoutes);
 router.use(workIngestRoutes);
-router.use(collectorIngestRoutes);
+router.use(exporterIngestRoutes);
 
 export default router;

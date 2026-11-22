@@ -1,2 +1,2 @@
-/** Moved to the shared calculation engine (packages/engine): the server and the QE Navigator Collector use the same code. */
+/** Moved to the shared calculation engine (packages/engine): the server's internal parsers and calculation. */
 export * from '../../../packages/engine/src/parsers/coverageReports';

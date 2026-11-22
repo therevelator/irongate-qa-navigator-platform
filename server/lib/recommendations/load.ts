@@ -12,10 +12,7 @@
  *   escapes    raw issues (v2 phase 3): bugs of the last 28 days, the escaped ones and their components
  *   sprintIssues  the latest closed sprint's most blocked issues and those furthest from their estimate
  *   findings   static-analysis findings of the latest main-branch reports, by rule
- * A team whose values come from a QE Navigator Collector (no raw records here): the same facts from what it
- * sent (collectorFacts): in evidence mode the evidence lists (flaky test names, lowest-coverage files, failing
- * stages, failed deployments, escaped issue keys) with the counts; in metrics mode the counts only (the rules
- * then name no test, file or issue, and say how many).
+ * Data a QE Navigator Exporter sends is stored in the same raw tables, so its teams get the same facts.
  */
 import { query, queryOne } from '../../../src/lib/db';
 import { judgeInstant } from '../../../src/config/metricsConfig';
@@ -72,72 +69,9 @@ export async function loadTeamFacts(team: TeamRefLite & { name: string }, foreca
     loadIncidents(team.id), loadDeploys(team.id), loadWork(team.id),
   ]);
   const facts: TeamFacts = { teamId: team.id, teamName: team.name, asOf, metrics, flaky, coverage, stages, wellbeing, debt, slowTests: slow?.tests ?? null, slowTestsTotalMs: slow?.totalMs ?? null, incidents, deploys, ...work };
-  return withCollectorFacts(facts, await loadCollectorRows(team.id));
+  return facts;
 }
 
-export interface CollectorRows {
-  values: Record<string, { day: string; value: number; inputs: Record<string, any>; sources: Record<string, any>; mode: string | null }>;
-  evidence: Record<string, any> | null;
-}
-
-/** The latest Collector values of the metrics the rules read, and the team's evidence panel (evidence mode). */
-export async function loadCollectorRows(teamId: string): Promise<CollectorRows> {
-  try {
-    const rows = await query<any[]>(
-      `SELECT DISTINCT ON (metric_key) metric_key, day, value::float8 AS value, inputs, sources, privacy_mode FROM metric_evidence
-        WHERE team_id = ? AND origin = 'collector' AND metric_key = ANY(?::text[]) AND day >= CURRENT_DATE - 30 ORDER BY metric_key, day DESC`,
-      [teamId, ['flaky_tests', 'line_coverage', 'change_failure_rate', 'escape_rate', 'findings']]);
-    const ev = await queryOne<any>(`SELECT payload FROM collector_evidence WHERE team_id = ? AND as_of >= CURRENT_DATE - 30`, [teamId]);
-    return {
-      values: Object.fromEntries(rows.map((r: any) => [r.metric_key, { day: dayStr(r.day), value: Number(r.value), inputs: r.inputs ?? {}, sources: r.sources ?? {}, mode: r.privacy_mode }])),
-      evidence: ev?.payload ?? null,
-    };
-  } catch {
-    return { values: {}, evidence: null };
-  }
-}
-
-/** Fill the facts that raw records would give from a Collector's values (graceful in metrics mode: counts only). Pure. */
-export function withCollectorFacts(f: TeamFacts, c: CollectorRows): TeamFacts {
-  const out = { ...f };
-  const v = c.values;
-  const list = (x: unknown) => (Array.isArray(x) ? x : []);
-  if (!out.flaky && v.flaky_tests) {
-    const named = list(c.evidence?.flakyTests).length ? list(c.evidence?.flakyTests) : list(v.flaky_tests.sources.flakyTests);
-    const tests = named.map((t: any) => ({ name: String(t.name), suite: t.suite ?? null, failedRuns: Number(t.failedRuns) || 0, passedRuns: Number(t.passedRuns) || 0, lastSeen: t.lastSeen ?? null }));
-    out.flaky = {
-      source: 'ci', windowDays: 7, tests, flakyCount: Math.round(v.flaky_tests.value), failedRunsTotal: tests.reduce((n, t) => n + t.failedRuns, 0),
-      reruns: null, rerunMinutes: null, testsRun: Number(v.flaky_tests.inputs.distinctTests) || null,
-    };
-  }
-  if (!out.coverage && v.line_coverage && Number(v.line_coverage.inputs.linesFound) > 0) {
-    const files = list(c.evidence?.lowestFiles).length ? list(c.evidence?.lowestFiles) : list(v.line_coverage.sources.lowestFiles);
-    out.coverage = {
-      day: v.line_coverage.day, commit: '', linesFound: Number(v.line_coverage.inputs.linesFound), linesHit: Number(v.line_coverage.inputs.linesHit),
-      files: files.map((x: any) => ({ path: String(x.path), linesFound: Number(x.linesFound) || 0, linesHit: Number(x.linesHit) || 0 })),
-    };
-  }
-  if (!out.stages && c.evidence && list(c.evidence.failingStages).length) {
-    out.stages = { windowDays: 7, stages: [], failing: list(c.evidence.failingStages).map((x: any) => ({ name: String(x.name), runs: Number(x.runs) || 0, failed: Number(x.failed) || 0 })) };
-  }
-  if (!out.deploys && v.change_failure_rate) {
-    const failed = list(v.change_failure_rate.sources.failedDeployments);
-    out.deploys = {
-      windowDays: 28, production: Number(v.change_failure_rate.inputs.productionDeploys) || 0, failed: Number(v.change_failure_rate.inputs.failedChanges) || 0,
-      failedList: failed.slice(0, 3).map((d: any) => ({ id: String(d.deploymentId), service: null, day: String(list(d.reasons)[0]?.at ?? v.change_failure_rate.day).slice(0, 10) })), services: [],
-    };
-  }
-  if (!out.escapes && v.escape_rate) {
-    out.escapes = {
-      windowDays: 28, bugs: Number(v.escape_rate.inputs.bugsWithEnvironment) || 0, escaped: Number(v.escape_rate.inputs.escapedBugs) || 0,
-      list: list(v.escape_rate.sources.escaped).slice(0, 10).map((k: any) => ({ key: String(k), title: null, components: [], opened: v.escape_rate.day })), byComponent: [],
-    };
-  }
-  if (!out.findings && v.findings) {
-    out.findings = { reports: Number(v.findings.inputs.reports) || 0, total: Math.round(v.findings.value), critical: Number(v.findings.inputs.critical) || 0, high: Number(v.findings.inputs.high) || 0, rules: [] };
-  }
-  return out;
-}
 
 async function loadFlaky(teamId: string): Promise<TeamFacts['flaky']> {
   const rows = await query<any[]>(

@@ -25,11 +25,11 @@ interface Item {
 
 interface Entry {
   id: string;
-  channel: 'api' | 'manual' | 'upload';
+  channel: 'api' | 'manual' | 'upload' | 'exporter';
   source: string | null;
   /** File uploads: the file this request came from (Admin console → Upload files). */
   upload?: { file: string; type: string | null; batch: string; part: number; parts: number } | null;
-  /** The sending program when it identifies itself: the QE Navigator Collector ("qe-collector/<version>"; "qe-agent/<version>" from earlier releases). */
+  /** The sending program when it identifies itself: the QE Navigator Exporter ("qe-exporter/<version>"; "qe-collector/…" and "qe-agent/…" from earlier releases). */
   client?: string | null;
   received_at: string;
   status: 'accepted' | 'partial' | 'rejected';
@@ -147,7 +147,7 @@ const IngestionLog: React.FC = () => {
               rows={entries}
               columns={[
                 { header: 'Received', value: (e) => when(e.received_at), raw: (e) => e.received_at },
-                { header: 'Channel', value: (e) => (e.channel === 'api' ? 'API' : e.channel === 'upload' ? 'Upload' : 'Manual') },
+                { header: 'Channel', value: (e) => (e.channel === 'api' ? 'API' : e.channel === 'upload' ? 'Upload' : e.channel === 'exporter' ? 'Exporter' : 'Manual') },
                 { header: 'File', value: (e) => e.upload?.file ?? '' },
                 { header: 'Client', value: (e) => e.client ?? '' },
                 { header: 'Source', value: (e) => e.source ?? '' },
@@ -225,6 +225,7 @@ const IngestionLog: React.FC = () => {
               <option value="api">Ingestion API</option>
               <option value="manual">Manual metrics</option>
               <option value="upload">File uploads</option>
+              <option value="exporter">Exporter</option>
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
@@ -264,7 +265,8 @@ const IngestionLog: React.FC = () => {
               const caller = e.channel === 'upload'
                 ? `${e.actor_name ?? 'Someone'} uploaded ${e.upload?.file ? `“${e.upload.file}”${e.upload.parts > 1 ? ` (part ${e.upload.part} of ${e.upload.parts})` : ''}` : 'a file'}`
                 : e.channel === 'manual' ? (e.actor_name ? `${e.actor_name} (Manual metrics)` : 'Manual metrics') : e.api_key_name ? `API key ${e.api_key_name}${e.api_key_prefix ? ` (${e.api_key_prefix}…)` : ''}` : 'API key (deleted)';
-              const sentBy = e.client ? `${caller} via the QE Navigator Collector (${e.client})` : caller;
+              const viaExporter = e.channel === 'exporter' || !!e.client;
+              const sentBy = viaExporter ? `${caller} via the QE Navigator Exporter${e.client ? ` (${e.client})` : ''}` : caller;
               const errorCount = e.errors?.length ?? 0;
               return (
                 <li key={e.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="ingestion-entry" data-entry-id={e.id}>
@@ -278,7 +280,7 @@ const IngestionLog: React.FC = () => {
                       <span className="flex flex-wrap items-center gap-2">
                         <Badge tone={st.tone}>{st.label}</Badge>
                         <span className="text-sm font-medium text-slate-900 dark:text-white">{e.source ?? 'unknown source'}</span>
-                        {e.client && <span data-testid="ingestion-entry-agent" title={e.client}><Badge tone="neutral">Collector</Badge></span>}
+                        {viaExporter && <span data-testid="ingestion-entry-agent" title={e.client ?? 'QE Navigator Exporter'}><Badge tone="neutral">Exporter</Badge></span>}
                         <span className="text-xs text-slate-500 dark:text-slate-400">{when(e.received_at)}</span>
                       </span>
                       <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">

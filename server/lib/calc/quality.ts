@@ -15,8 +15,8 @@
  *   fixed_findings                        findings of the previous report that are gone
  *
  * Without a code size (no lines of code sent and no coverage report) the score is not calculated; the
- * findings still are. The calculation is the shared engine's (packages/engine/src/calc/quality.ts, also run by
- * the QE Navigator Collector); loadQualityData reads what a range of days needs.
+ * findings still are. The calculation is the shared engine's (packages/engine/src/calc/quality.ts);
+ * loadQualityData reads what a range of days needs.
  */
 import type pg from 'pg';
 import type { ComputedMetric } from './engine';

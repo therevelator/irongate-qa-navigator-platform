@@ -300,7 +300,7 @@ const UploadFiles: React.FC = () => {
 
           <div className="space-y-6">
             <Card>
-              <CardHeader title="What is stored" subtitle="The field allow-list, on every path: uploads, the API and the QE Navigator Collector." />
+              <CardHeader title="What is stored" subtitle="The field allow-list, on every path: uploads, the API and the QE Navigator Exporter." />
               <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300" data-testid="upload-allow-list">
                 {(['issue', 'incident'] as const).map((k) => (
                   <details key={k}>

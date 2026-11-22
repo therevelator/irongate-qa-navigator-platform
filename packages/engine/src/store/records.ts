@@ -3,8 +3,8 @@
  * keeps them (server/lib/ingest/store.ts, deliveryStore.ts, workStore.ts): the same identities, the same merge
  * rules for a record sent again (a deployment that became rolled back, an incident's status stream, an issue's
  * growing sprint list, a sprint's dates sent later), and the same selection of rows per range of days as the
- * server's loaders. The QE Navigator Collector keeps these records in its local copy and calculates from them;
- * the cross-check test proves both paths give the same values.
+ * server's loaders. The cross-check test (tests/api/engine-crosscheck.test.ts) proves the server's database
+ * loaders and these records give the same values.
  *
  * All times are epoch milliseconds (JSON-friendly). Pure: no database, no clock unless passed in.
  */
@@ -31,7 +31,7 @@ const DAY = 86_400_000;
 const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 const t = (d: Date | null | undefined): number | null => (d ? d.getTime() : null);
 const dayStart = (day: string) => Date.parse(`${day}T00:00:00Z`);
-/** A stable id for a record from its identity (the Collector has no database to hand out ids). */
+/** A stable id for a record from its identity (for records built without a database). */
 export const recordId = (...parts: Array<string | number | null | undefined>) =>
   createHash('sha256').update(parts.map((p) => String(p ?? '')).join('\u0000')).digest('hex').slice(0, 32);
 

@@ -3,7 +3,7 @@
  *
  * The rules themselves are the shared engine's (packages/engine: phase 1 tests / coverage / pipelines in
  * calc/ci.ts, phase 2 delivery in calc/delivery.ts, phase 3 work and code quality in calc/work.ts and
- * calc/quality.ts). The QE Navigator Collector runs the same code inside a customer's network. This file reads
+ * calc/quality.ts). This file reads
  * the records a team's days depend on from the raw store (test_runs / test_results, coverage_reports /
  * coverage_files, pipeline_runs_raw / pipeline_stage_runs, and through delivery.ts, work.ts and quality.ts the
  * deliveries, incidents, issues and static-analysis reports), runs the engine and stores the result.

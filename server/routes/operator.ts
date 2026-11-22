@@ -47,6 +47,8 @@ import { ACTIVITY_CSV_COLUMNS } from './activity';
  *   GET  /overview                  every company (status, users, sessions, sign-ins), jobs, errors, tables
  *   GET  /errors?requestId&before   server errors, platform-wide
  *   GET  /auth-events[.csv]         sign-in events of every company (and of unknown e-mails)
+ *   GET  /exporter-deliveries[.csv] | /exporter-deliveries/:id   every batch a QE Navigator Exporter sent (accepted or
+ *                                   rejected), filters companyId, teamId, result, from, to; the detail has the sanitised preview
  *   POST /companies                 create a company (department, team, first super admin)
  *   POST /actions/demo-refresh
  *   GET  /sandbox | POST /sandbox/reset { confirm: true }   the demo sandbox (/try): state, "Reset sandbox now"
@@ -454,6 +456,89 @@ router.get('/auth-events.csv', ...op, async (req: OperatorRequest, res) => {
   } catch (e) {
     console.error('Operator sign-in events CSV error:', e);
     res.status(500).json({ error: 'Failed to export the sign-in events' });
+  }
+});
+
+/* ------------------------------------------------------------------------------------------
+ * Exporter deliveries (server/lib/exporterDeliveries.ts): every batch an Exporter sent, accepted or rejected
+ * ---------------------------------------------------------------------------------------- */
+
+const DELIVERY_COLUMNS = `d.id, d.received_at, d.company_id, c.name AS company_name, d.department_id, dp.name AS department_name, d.team_id, t.name AS team_name,
+  d.claimed_company_id, d.claimed_department_id, d.claimed_team_id, d.api_key_name, d.api_key_prefix, d.exporter_version, d.host_label, d.source, d.kind,
+  d.item_count, d.records_from, d.records_to, d.bytes_received, d.bytes_raw, d.idempotency_key, d.dry_run, d.result, d.reason_code, d.reason, d.http_status, d.records_stored`;
+const DELIVERY_FROM = `FROM exporter_deliveries d LEFT JOIN companies c ON c.id = d.company_id LEFT JOIN departments dp ON dp.id = d.department_id LEFT JOIN teams t ON t.id = d.team_id`;
+const DAY_PARAM = /^\d{4}-\d{2}-\d{2}$/;
+
+function deliveryFilters(q: any): { where: string; params: unknown[] } {
+  let where = 'WHERE TRUE';
+  const params: unknown[] = [];
+  if (typeof q.companyId === 'string' && ID.test(q.companyId)) { where += ' AND d.company_id = ?'; params.push(q.companyId); }
+  if (q.companyId === 'none') where += ' AND d.company_id IS NULL';
+  if (typeof q.teamId === 'string' && ID.test(q.teamId)) { where += ' AND d.team_id = ?'; params.push(q.teamId); }
+  if (['accepted', 'duplicate', 'partial', 'rejected'].includes(q.result)) { where += ' AND d.result = ?'; params.push(q.result); }
+  if (typeof q.from === 'string' && DAY_PARAM.test(q.from)) { where += ' AND d.received_at >= ?::date'; params.push(q.from); }
+  if (typeof q.to === 'string' && DAY_PARAM.test(q.to)) { where += " AND d.received_at < ?::date + interval '1 day'"; params.push(q.to); }
+  if (typeof q.before === 'string' && !Number.isNaN(Date.parse(q.before))) { where += ' AND d.received_at < ?'; params.push(new Date(q.before).toISOString()); }
+  return { where, params };
+}
+
+router.get('/exporter-deliveries', ...op, async (req: OperatorRequest, res) => {
+  try {
+    const { where, params } = deliveryFilters(req.query);
+    const limit = intParam(req.query.limit, 50, 1, 200);
+    const rows = await query<any[]>(`SELECT ${DELIVERY_COLUMNS} ${DELIVERY_FROM} ${where} ORDER BY d.received_at DESC LIMIT ?`, [...params, limit + 1]);
+    const companies = await query<any[]>(`SELECT DISTINCT d.company_id AS id, c.name FROM exporter_deliveries d LEFT JOIN companies c ON c.id = d.company_id WHERE d.company_id IS NOT NULL ORDER BY c.name`);
+    res.json({ entries: rows.slice(0, limit), more: rows.length > limit, companies, retentionDays: 30 });
+  } catch (e) {
+    console.error('Operator exporter deliveries error:', e);
+    res.status(500).json({ error: 'Failed to load the Exporter deliveries' });
+  }
+});
+
+const DELIVERY_CSV_COLUMNS: CsvColumn<any>[] = [
+  { header: 'Received (UTC)', value: (r) => new Date(r.received_at).toISOString() },
+  { header: 'Company', value: (r) => r.company_name ?? r.company_id ?? '' },
+  { header: 'Department', value: (r) => r.department_name ?? r.department_id ?? '' },
+  { header: 'Team', value: (r) => r.team_name ?? r.team_id ?? '' },
+  { header: 'API key', value: (r) => [r.api_key_name, r.api_key_prefix ? `(${r.api_key_prefix}…)` : ''].filter(Boolean).join(' ') },
+  { header: 'Exporter version', value: (r) => r.exporter_version },
+  { header: 'Host', value: (r) => r.host_label },
+  { header: 'Source', value: (r) => r.source },
+  { header: 'Kind', value: (r) => r.kind },
+  { header: 'Items', value: (r) => r.item_count },
+  { header: 'Records from', value: (r) => (r.records_from ? new Date(r.records_from).toISOString() : '') },
+  { header: 'Records to', value: (r) => (r.records_to ? new Date(r.records_to).toISOString() : '') },
+  { header: 'Bytes received', value: (r) => r.bytes_received },
+  { header: 'Bytes uncompressed', value: (r) => r.bytes_raw },
+  { header: 'Idempotency key', value: (r) => r.idempotency_key },
+  { header: 'Dry run', value: (r) => (r.dry_run ? 'yes' : 'no') },
+  { header: 'Result', value: (r) => r.result },
+  { header: 'Reason', value: (r) => [r.reason_code, r.reason].filter(Boolean).join(': ') },
+  { header: 'HTTP status', value: (r) => r.http_status },
+  { header: 'Records stored', value: (r) => r.records_stored },
+];
+
+router.get('/exporter-deliveries.csv', ...op, async (req: OperatorRequest, res) => {
+  try {
+    const { where, params } = deliveryFilters({ ...req.query, before: undefined });
+    const rows = await query<any[]>(`SELECT ${DELIVERY_COLUMNS} ${DELIVERY_FROM} ${where} ORDER BY d.received_at DESC LIMIT 10000`, params);
+    sendCsv(res, 'exporter-deliveries', toCsv(DELIVERY_CSV_COLUMNS, rows));
+  } catch (e) {
+    console.error('Operator exporter deliveries CSV error:', e);
+    res.status(500).json({ error: 'Failed to export the Exporter deliveries' });
+  }
+});
+
+router.get('/exporter-deliveries/:id', ...op, async (req: OperatorRequest, res) => {
+  try {
+    const id = String(req.params.id);
+    if (!ID.test(id)) return res.status(400).json({ error: 'Invalid id' });
+    const row = await queryOne<any>(`SELECT ${DELIVERY_COLUMNS}, d.preview ${DELIVERY_FROM} WHERE d.id = ?`, [id]);
+    if (!row) return res.status(404).json({ error: 'Delivery not found' });
+    res.json(row);
+  } catch (e) {
+    console.error('Operator exporter delivery error:', e);
+    res.status(500).json({ error: 'Failed to load the delivery' });
   }
 });
 

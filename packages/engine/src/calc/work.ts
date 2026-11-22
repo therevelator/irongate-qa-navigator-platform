@@ -25,7 +25,7 @@
  * start). Epics and sub-tasks are not counted in the sprint metrics.
  *
  * Pure: computeWorkDay takes the issues, sprints and coverage sizes (the server reads them in
- * server/lib/calc/work.ts, loadWorkData; the QE Navigator Collector from its local copy).
+ * server/lib/calc/work.ts, loadWorkData).
  */
 import type { ComputedMetric, MetricSpec } from './types';
 import { isCompleted } from '../parsers/issueEvents';

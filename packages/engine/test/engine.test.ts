@@ -1,7 +1,6 @@
 /**
  * The engine stays a pure, dependency-free package: only relative imports and Node's built-in crypto and zlib; no
- * database, HTTP, file system, process or environment access anywhere in src/. The QE Navigator Collector bundles
- * these files as they are, so this is also part of its security posture.
+ * database, HTTP, file system, process or environment access anywhere in src/.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
