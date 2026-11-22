@@ -1,68 +1,33 @@
 /**
- * Calculation engine, phase 1 (docs/V2_PLAN.md, "Calculation rules (phase 1)").
+ * Calculation engine (docs/V2_PLAN.md, "Calculation rules"): the server side.
  *
- * From the raw store (test_runs / test_results, coverage_reports / coverage_files,
- * pipeline_runs_raw / pipeline_stage_runs) it computes, per team and UTC day:
- *
- *   line_coverage → test_coverage      lines hit ÷ lines found, latest report of the day's latest
- *                                      main-branch commit
- *   branch_coverage                    branches hit ÷ branches found, same report
- *   changed_code_coverage              hit ÷ found over the changed lines (when a diff was sent)
- *   pass_rate                          passed ÷ (passed + failed + errors), main-branch runs of the day
- *   first_time_pass_rate               share of pipeline runs whose first attempt passed (test runs'
- *                                      first attempts when no pipeline data exists)
- *   flaky_tests, test_flakiness_rate   tests that failed and passed on the same commit within 7 days
- *                                      (or failed then passed in a rerun inside one run) ÷ distinct tests
- *   test_execution_time_minutes        median total test duration per run
- *   avg_build_time_minutes             median pipeline duration
- *   pipeline_success_rate              successful ÷ (successful + failed) pipeline runs
- *   parallel_test_efficiency           Σ shard durations ÷ (shards × longest shard), median over runs
- *                                      with parallel test stages
+ * The rules themselves are the shared engine's (packages/engine: phase 1 tests / coverage / pipelines in
+ * calc/ci.ts, phase 2 delivery in calc/delivery.ts, phase 3 work and code quality in calc/work.ts and
+ * calc/quality.ts). The QE Navigator Collector runs the same code inside a customer's network. This file reads
+ * the records a team's days depend on from the raw store (test_runs / test_results, coverage_reports /
+ * coverage_files, pipeline_runs_raw / pipeline_stage_runs, and through delivery.ts, work.ts and quality.ts the
+ * deliveries, incidents, issues and static-analysis reports), runs the engine and stores the result.
  *
  * Each value is stored in metric_evidence with its formula, the values used, the number of runs
  * (confidence) and the source records; the values that have a KPI column are written through the
  * one KPI write path (recordKpiValues, source 'computed'), so dashboards, alerts, targets and the
  * QA score use them. A value that did not change is not written again.
- *
- * Runs without a branch count as main-branch runs; the main branch is teams.main_branch, or
- * main / master when it is not set.
  */
 import type pg from 'pg';
 import { pool } from '../../../src/lib/db';
 import { KPI_COLUMNS, recordKpiValues, withTransaction, type KpiColumn } from '../kpiIngest';
-import { computeDeliveryDays, DELIVERY_METRICS, WINDOW_DAYS } from './delivery';
-import { computeWorkDays, phase3Tables, WORK_METRICS, SPRINT_STALE_DAYS } from './work';
-import { computeQualityDays, QUALITY_METRICS, REPORT_STALE_DAYS } from './quality';
+import { computeDeliveryDays, WINDOW_DAYS, CHANGE_FAILURE_WINDOW_HOURS } from './delivery';
+import { computeWorkDays, phase3Tables, SPRINT_STALE_DAYS } from './work';
+import { computeQualityDays, REPORT_STALE_DAYS } from './quality';
+import { buildMetrics, ALL_GROUPS, confidenceFor, type ComputedMetric, type Confidence, type MetricGroup, type MetricSpec } from '../../../packages/engine/src/index';
+import { computeCiDay, pickCoverageReport, type CiData } from '../../../packages/engine/src/calc/ci';
 
-export interface MetricSpec {
-  key: string;
-  label: string;
-  unit: string;
-  kpi: KpiColumn | null;
-  formula: string;
-  /** 'ci' (phase 1: tests, coverage, pipelines; default), 'delivery' (phase 2: deployments, incidents), 'work' (phase 3: issues) or 'quality' (phase 3: static analysis). */
-  group?: MetricGroup;
-}
+export { ALL_GROUPS, confidenceFor, median, type ComputedMetric, type MetricGroup, type MetricSpec, type Confidence } from '../../../packages/engine/src/calc/types';
+export { affectedDays } from '../../../packages/engine/src/calc/ci';
+export { ENGINE_VERSION } from '../../../packages/engine/src/version';
 
-export type MetricGroup = 'ci' | 'delivery' | 'work' | 'quality';
-export const ALL_GROUPS: MetricGroup[] = ['ci', 'delivery', 'work', 'quality'];
-
-const CI_METRICS: Record<string, MetricSpec> = {
-  line_coverage: { key: 'line_coverage', label: 'Line coverage', unit: '%', kpi: 'test_coverage', formula: 'lines hit ÷ lines found × 100 (latest report of the latest main-branch commit of the day)' },
-  branch_coverage: { key: 'branch_coverage', label: 'Branch coverage', unit: '%', kpi: null, formula: 'branches hit ÷ branches found × 100 (same report)' },
-  changed_code_coverage: { key: 'changed_code_coverage', label: 'Coverage of changed code', unit: '%', kpi: null, formula: 'changed lines hit ÷ changed coverable lines × 100 (latest report with a diff)' },
-  pass_rate: { key: 'pass_rate', label: 'Pass rate', unit: '%', kpi: null, formula: 'passed ÷ (passed + failed + errors) × 100 over the day’s main-branch test runs; skipped counted separately' },
-  first_time_pass_rate: { key: 'first_time_pass_rate', label: 'First-time pass rate', unit: '%', kpi: 'first_time_pass_rate', formula: 'runs whose first attempt passed ÷ runs × 100' },
-  flaky_tests: { key: 'flaky_tests', label: 'Flaky tests', unit: 'tests', kpi: null, formula: 'tests that both failed and passed on the same commit within the last 7 days' },
-  test_flakiness_rate: { key: 'test_flakiness_rate', label: 'Test flakiness rate', unit: '%', kpi: 'test_flakiness_rate', formula: 'flaky tests ÷ distinct tests run in the last 7 days × 100' },
-  test_execution_time: { key: 'test_execution_time', label: 'Test execution time', unit: 'min', kpi: 'test_execution_time_minutes', formula: 'median total test duration per run (minutes)' },
-  build_time: { key: 'build_time', label: 'Average build time', unit: 'min', kpi: 'avg_build_time_minutes', formula: 'median pipeline duration (minutes), cancelled runs excluded' },
-  pipeline_success_rate: { key: 'pipeline_success_rate', label: 'Pipeline success rate', unit: '%', kpi: null, formula: 'successful ÷ (successful + failed) pipeline runs × 100; cancelled runs excluded' },
-  parallel_test_efficiency: { key: 'parallel_test_efficiency', label: 'Parallel test efficiency', unit: '%', kpi: 'parallel_test_efficiency', formula: 'Σ shard durations ÷ (shards × longest shard) × 100, median over runs with parallel test stages' },
-};
-
-/** Every computed metric: phase 1 (CI), phase 2 (delivery and reliability, ./delivery.ts), phase 3 (work, ./work.ts; code quality, ./quality.ts). */
-export const METRICS: Record<string, MetricSpec> = { ...CI_METRICS, ...DELIVERY_METRICS, ...WORK_METRICS, ...QUALITY_METRICS };
+/** Every computed metric (the engine's specs, with the server's hotfix window in the change-failure formula). */
+export const METRICS: Record<string, MetricSpec> = buildMetrics({ changeFailureWindowHours: CHANGE_FAILURE_WINDOW_HOURS });
 export const groupOf = (key: string): MetricGroup => METRICS[key]?.group ?? 'ci';
 
 /** The metric_evidence key behind a KPI column (for "How this was calculated"). */
@@ -70,170 +35,70 @@ export const EVIDENCE_FOR_KPI: Partial<Record<string, string>> = Object.fromEntr
   Object.values(METRICS).filter((m) => m.kpi).map((m) => [m.kpi as string, m.key])
 );
 
-export type Confidence = 'high' | 'medium' | 'low';
-export const confidenceFor = (n: number): Confidence => (n >= 10 ? 'high' : n >= 3 ? 'medium' : 'low');
-
-export interface ComputedMetric {
-  key: string;
-  value: number;
-  inputs: Record<string, unknown>;
-  sources: Record<string, unknown>;
-  sampleSize: number;
-  /** The latest source time the value is based on (recorded_at of the KPI value). */
-  recordedAt: string;
-}
-
-const r2 = (n: number) => Math.round(n * 100) / 100;
-
-export function median(values: number[]): number | null {
-  const v = values.filter((x) => Number.isFinite(x)).sort((a, b) => a - b);
-  if (!v.length) return null;
-  const m = Math.floor(v.length / 2);
-  return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
-}
-
 async function rows<T = any>(client: pg.PoolClient, sql: string, params: any[]): Promise<T[]> {
   return (await client.query(sql, params)).rows as T[];
 }
 
-const MAIN = (alias: string) =>
-  `(${alias}.branch IS NULL OR ${alias}.branch = '' OR (t.main_branch IS NULL AND ${alias}.branch IN ('main', 'master')) OR ${alias}.branch = t.main_branch)`;
-
 const iso = (d: any) => (d instanceof Date ? d.toISOString() : new Date(d).toISOString());
+const ms = (d: any): number | null => (d === null || d === undefined ? null : new Date(d).getTime());
 
-/** Compute every phase-1 metric of a team for one day (UTC). Pure reads. */
-export async function computeTeamDay(client: pg.PoolClient, teamId: string, day: string): Promise<ComputedMetric[]> {
-  const out: ComputedMetric[] = [];
-
-  // --- Coverage ---------------------------------------------------------------------------
-  const cov = await rows(client,
-    `SELECT r.*, (SELECT COUNT(DISTINCT r2.commit_sha) FROM coverage_reports r2 JOIN teams t ON t.id = r2.team_id
-                   WHERE r2.team_id = $1 AND r2.day = $2::date AND ${MAIN('r2')})::int AS commits
-       FROM coverage_reports r JOIN teams t ON t.id = r.team_id
-      WHERE r.team_id = $1 AND r.day = $2::date AND ${MAIN('r')}
-      ORDER BY r.created_at DESC, r.attempt DESC LIMIT 1`, [teamId, day]);
-  if (cov[0]) {
-    const c = cov[0];
-    const lowest = await rows(client,
-      `SELECT path, lines_found, lines_hit FROM coverage_files WHERE report_id = $1 AND lines_found > 0
-        ORDER BY lines_hit::float / lines_found, lines_found DESC LIMIT 10`, [c.id]);
-    const sources = { coverageReports: [c.id], commit: c.commit_sha, lowestFiles: lowest.map((f) => ({ path: f.path, linesFound: f.lines_found, linesHit: f.lines_hit })) };
-    const n = Number(c.commits) || 1;
-    if (c.lines_found > 0) {
-      out.push({ key: 'line_coverage', value: r2((c.lines_hit / c.lines_found) * 100), inputs: { linesHit: c.lines_hit, linesFound: c.lines_found, files: c.file_count, format: c.format }, sources, sampleSize: n, recordedAt: iso(c.created_at) });
-    }
-    if (c.branches_found > 0) {
-      out.push({ key: 'branch_coverage', value: r2((c.branches_hit / c.branches_found) * 100), inputs: { branchesHit: c.branches_hit, branchesFound: c.branches_found }, sources: { coverageReports: [c.id], commit: c.commit_sha }, sampleSize: n, recordedAt: iso(c.created_at) });
-    }
+/**
+ * The records the phase-1 values of one day depend on: the day's coverage reports (with the files of the report
+ * the values use), the test runs of the 7 days ending the day (with their results when the day has runs: flaky
+ * tests) and the day's pipeline runs with their stages.
+ */
+export async function loadCiDay(client: pg.PoolClient, teamId: string, day: string): Promise<CiData> {
+  const team = (await rows(client, 'SELECT main_branch FROM teams WHERE id = $1', [teamId]))[0];
+  const mainBranch: string | null = team?.main_branch || null;
+  const coverage = (await rows(client,
+    `SELECT id, commit_sha, branch, attempt, day::text AS day, created_at, format, lines_found, lines_hit, branches_found, branches_hit, file_count,
+            changed_lines_found, changed_lines_hit
+       FROM coverage_reports WHERE team_id = $1 AND day = $2::date ORDER BY created_at`, [teamId, day])).map((c) => ({
+    id: c.id, commit: c.commit_sha, branch: c.branch, attempt: c.attempt, day: c.day, createdAt: ms(c.created_at)!, format: c.format,
+    linesFound: Number(c.lines_found), linesHit: Number(c.lines_hit), branchesFound: Number(c.branches_found), branchesHit: Number(c.branches_hit), fileCount: Number(c.file_count),
+    changedLinesFound: c.changed_lines_found === null ? null : Number(c.changed_lines_found), changedLinesHit: c.changed_lines_hit === null ? null : Number(c.changed_lines_hit),
+  }));
+  const picked = pickCoverageReport(day, { coverage, mainBranch });
+  if (picked) {
+    (picked as CiData['coverage'][number]).files = (await rows(client, 'SELECT path, lines_found, lines_hit FROM coverage_files WHERE report_id = $1 AND lines_found > 0', [picked.id]))
+      .map((f) => ({ path: f.path, linesFound: Number(f.lines_found), linesHit: Number(f.lines_hit) }));
   }
-  const chg = await rows(client,
-    `SELECT r.* FROM coverage_reports r JOIN teams t ON t.id = r.team_id
-      WHERE r.team_id = $1 AND r.day = $2::date AND r.changed_lines_found > 0
-      ORDER BY r.created_at DESC LIMIT 1`, [teamId, day]);
-  if (chg[0]) {
-    const c = chg[0];
-    out.push({ key: 'changed_code_coverage', value: r2((c.changed_lines_hit / c.changed_lines_found) * 100), inputs: { changedLinesHit: c.changed_lines_hit, changedLinesFound: c.changed_lines_found, branch: c.branch }, sources: { coverageReports: [c.id], commit: c.commit_sha }, sampleSize: 1, recordedAt: iso(c.created_at) });
-  }
-
-  // --- Tests -------------------------------------------------------------------------------
-  const runs = await rows(client,
-    `SELECT tr.id, tr.commit_sha, tr.run_id, tr.attempt, tr.passed, tr.failed, tr.errored, tr.skipped, tr.duration_ms, tr.started_at, ${MAIN('tr')} AS is_main
-       FROM test_runs tr JOIN teams t ON t.id = tr.team_id
-      WHERE tr.team_id = $1 AND tr.day = $2::date ORDER BY tr.started_at`, [teamId, day]);
-  const lastRunAt = runs.length ? iso(runs[runs.length - 1].started_at) : null;
-  const main = runs.filter((r) => r.is_main);
-  if (main.length) {
-    const p = main.reduce((n, r) => n + r.passed, 0);
-    const f = main.reduce((n, r) => n + r.failed, 0);
-    const e = main.reduce((n, r) => n + r.errored, 0);
-    const s = main.reduce((n, r) => n + r.skipped, 0);
-    if (p + f + e > 0) {
-      out.push({ key: 'pass_rate', value: r2((p / (p + f + e)) * 100), inputs: { passed: p, failed: f, errors: e, skipped: s, runs: main.length }, sources: { testRuns: main.slice(-50).map((r) => r.id) }, sampleSize: main.length, recordedAt: iso(main[main.length - 1].started_at) });
-    }
-  }
-  if (runs.length) {
-    const durations = runs.map((r) => Number(r.duration_ms));
-    const med = median(durations)!;
-    out.push({ key: 'test_execution_time', value: r2(med / 60000), inputs: { medianMs: med, runs: runs.length, minMs: Math.min(...durations), maxMs: Math.max(...durations) }, sources: { testRuns: runs.slice(-50).map((r) => r.id) }, sampleSize: runs.length, recordedAt: lastRunAt! });
-
-    // Flaky tests over the 7 days ending today (on days with test runs).
-    const flaky = await rows(client,
-      `SELECT x.test_key, MAX(x.name) AS name, MAX(x.suite) AS suite, x.commit_sha,
-              array_agg(DISTINCT x.run) FILTER (WHERE x.status IN ('failed', 'error') OR x.retries > 0) AS failed_runs,
-              array_agg(DISTINCT x.run) FILTER (WHERE x.status = 'passed') AS passed_runs
-         FROM (SELECT r.test_key, r.name, r.suite, r.status, r.retries, tr.commit_sha, tr.id AS run
-                 FROM test_results r JOIN test_runs tr ON tr.id = r.test_run_id
-                WHERE tr.team_id = $1 AND tr.day BETWEEN $2::date - 6 AND $2::date) x
-        GROUP BY x.test_key, x.commit_sha
-       HAVING (bool_or(x.status = 'passed') AND bool_or(x.status IN ('failed', 'error'))) OR bool_or(x.status = 'passed' AND x.retries > 0)`,
-      [teamId, day]);
-    const distinct = await rows(client,
-      `SELECT COUNT(DISTINCT r.test_key)::int AS n, COUNT(DISTINCT tr.id)::int AS runs
+  const testRuns = (await rows(client,
+    `SELECT id, commit_sha, run_id, attempt, branch, day::text AS day, started_at, passed, failed, errored, skipped, duration_ms, format
+       FROM test_runs WHERE team_id = $1 AND day BETWEEN $2::date - 6 AND $2::date ORDER BY started_at`, [teamId, day])).map((r) => ({
+    id: r.id, commit: r.commit_sha, runId: r.run_id, attempt: r.attempt, branch: r.branch, day: r.day, startedAt: ms(r.started_at)!,
+    passed: Number(r.passed), failed: Number(r.failed), errored: Number(r.errored), skipped: Number(r.skipped), durationMs: Number(r.duration_ms), format: r.format,
+    cases: [] as NonNullable<CiData['testRuns'][number]['cases']>,
+  }));
+  if (testRuns.some((r) => r.day === day)) {
+    const byRun = new Map(testRuns.map((r) => [r.id, r]));
+    const results = await rows(client,
+      `SELECT r.test_run_id, r.test_key, r.suite, r.name, r.status, r.retries, r.duration_ms
          FROM test_results r JOIN test_runs tr ON tr.id = r.test_run_id
-        WHERE tr.team_id = $1 AND tr.day BETWEEN $2::date - 6 AND $2::date AND r.status <> 'skipped'`, [teamId, day]);
-    const keys = new Map<string, any>();
-    for (const f of flaky) if (!keys.has(f.test_key)) keys.set(f.test_key, f);
-    const total = distinct[0]?.n ?? 0;
-    const windowRuns = distinct[0]?.runs ?? 0;
-    if (total > 0) {
-      const list = Array.from(keys.values()).slice(0, 25).map((f) => ({ testKey: f.test_key, name: f.name, suite: f.suite, commit: f.commit_sha, failedRuns: (f.failed_runs ?? []).slice(0, 10), passedRuns: (f.passed_runs ?? []).slice(0, 10) }));
-      out.push({ key: 'flaky_tests', value: keys.size, inputs: { flakyTests: keys.size, distinctTests: total, windowDays: 7, runs: windowRuns }, sources: { flakyTests: list }, sampleSize: windowRuns, recordedAt: lastRunAt! });
-      out.push({ key: 'test_flakiness_rate', value: r2((keys.size / total) * 100), inputs: { flakyTests: keys.size, distinctTests: total, windowDays: 7, runs: windowRuns }, sources: { flakyTests: list }, sampleSize: windowRuns, recordedAt: lastRunAt! });
-    }
+        WHERE tr.team_id = $1 AND tr.day BETWEEN $2::date - 6 AND $2::date`, [teamId, day]);
+    for (const x of results) byRun.get(x.test_run_id)?.cases.push({ testKey: x.test_key, suite: x.suite, name: x.name, status: x.status, retries: Number(x.retries), durationMs: Number(x.duration_ms) });
   }
-
-  // --- Pipelines ---------------------------------------------------------------------------
   const pipes = await rows(client,
-    `SELECT id, external_id, attempt, result, duration_s, started_at, COALESCE(finished_at, started_at) AS at
+    `SELECT id, external_id, attempt, name, commit_sha, branch, day::text AS day, started_at, finished_at, duration_s, result, url
        FROM pipeline_runs_raw WHERE team_id = $1 AND day = $2::date ORDER BY started_at`, [teamId, day]);
-  const done = pipes.filter((p) => p.result !== 'cancelled');
-  if (done.length) {
-    const lastAt = iso(done.reduce((m, p) => (new Date(p.at) > new Date(m) ? p.at : m), done[0].at));
-    const ok = done.filter((p) => p.result === 'success').length;
-    out.push({ key: 'pipeline_success_rate', value: r2((ok / done.length) * 100), inputs: { successful: ok, failed: done.length - ok, cancelled: pipes.length - done.length }, sources: { pipelineRuns: done.slice(-50).map((p) => p.id) }, sampleSize: done.length, recordedAt: lastAt });
-    const ds = done.map((p) => p.duration_s).filter((d) => d !== null && d !== undefined).map(Number);
-    if (ds.length) {
-      const med = median(ds)!;
-      out.push({ key: 'build_time', value: r2(med / 60), inputs: { medianSeconds: med, runs: ds.length, minSeconds: Math.min(...ds), maxSeconds: Math.max(...ds) }, sources: { pipelineRuns: done.slice(-50).map((p) => p.id) }, sampleSize: ds.length, recordedAt: lastAt });
-    }
-  }
-  // First-time pass rate: pipelines (first attempt per run id), else test runs.
-  const firsts = new Map<string, any>();
-  for (const p of pipes) {
-    const prev = firsts.get(p.external_id);
-    if (!prev || p.attempt < prev.attempt) firsts.set(p.external_id, p);
-  }
-  const firstDone = Array.from(firsts.values()).filter((p) => p.result !== 'cancelled');
-  if (firstDone.length) {
-    const ok = firstDone.filter((p) => p.result === 'success').length;
-    out.push({ key: 'first_time_pass_rate', value: r2((ok / firstDone.length) * 100), inputs: { firstAttemptPassed: ok, runs: firstDone.length, basis: 'pipeline runs' }, sources: { pipelineRuns: firstDone.slice(-50).map((p) => p.id) }, sampleSize: firstDone.length, recordedAt: iso(firstDone[firstDone.length - 1].at) });
-  } else if (runs.length) {
-    const tfirst = new Map<string, any>();
-    for (const r of runs) {
-      const k = `${r.commit_sha}\u0000${r.run_id}`;
-      const prev = tfirst.get(k);
-      if (!prev || r.attempt < prev.attempt) tfirst.set(k, r);
-    }
-    const list = Array.from(tfirst.values());
-    const ok = list.filter((r) => r.failed + r.errored === 0).length;
-    out.push({ key: 'first_time_pass_rate', value: r2((ok / list.length) * 100), inputs: { firstAttemptPassed: ok, runs: list.length, basis: 'test runs' }, sources: { testRuns: list.slice(-50).map((r) => r.id) }, sampleSize: list.length, recordedAt: lastRunAt! });
-  }
-  // Parallel test efficiency: stages of a run in one parallel group (or overlapping test stages).
-  const groups = await rows(client,
-    `SELECT s.pipeline_run_id, COALESCE(s.parallel_group, '__tests') AS grp, COUNT(*)::int AS shards,
-            SUM(s.duration_s)::float AS total, MAX(s.duration_s)::float AS longest
+  const stages = pipes.length ? await rows(client,
+    `SELECT s.pipeline_run_id, s.name, s.kind, s.parallel_group, s.started_at, s.finished_at, s.duration_s, s.result
        FROM pipeline_stage_runs s JOIN pipeline_runs_raw p ON p.id = s.pipeline_run_id
-      WHERE p.team_id = $1 AND p.day = $2::date AND s.duration_s > 0 AND s.result <> 'skipped'
-        AND (s.parallel_group IS NOT NULL OR s.kind = 'test')
-      GROUP BY s.pipeline_run_id, COALESCE(s.parallel_group, '__tests')
-     HAVING COUNT(*) >= 2 AND (bool_and(s.parallel_group IS NOT NULL) OR MAX(s.started_at) < MIN(s.finished_at))`, [teamId, day]);
-  if (groups.length) {
-    const effs = groups.map((g) => (g.total / (g.shards * g.longest)) * 100);
-    const med = median(effs)!;
-    const last = groups[groups.length - 1];
-    out.push({ key: 'parallel_test_efficiency', value: r2(med), inputs: { runs: groups.length, example: { shards: last.shards, totalSeconds: last.total, longestSeconds: last.longest } }, sources: { pipelineRuns: Array.from(new Set(groups.map((g) => g.pipeline_run_id))).slice(-50) }, sampleSize: groups.length, recordedAt: pipes.length ? iso(pipes[pipes.length - 1].at) : `${day}T12:00:00.000Z` });
-  }
-  return out;
+      WHERE p.team_id = $1 AND p.day = $2::date`, [teamId, day]) : [];
+  const pipelines = pipes.map((p) => ({
+    id: p.id, externalId: p.external_id, attempt: p.attempt, name: p.name, commit: p.commit_sha, branch: p.branch, day: p.day,
+    startedAt: ms(p.started_at)!, finishedAt: ms(p.finished_at), durationS: p.duration_s === null ? null : Number(p.duration_s), result: p.result, url: p.url,
+    stages: stages.filter((s) => s.pipeline_run_id === p.id).map((s) => ({
+      name: s.name, kind: s.kind, parallelGroup: s.parallel_group, startedAt: ms(s.started_at), finishedAt: ms(s.finished_at),
+      durationS: s.duration_s === null ? null : Number(s.duration_s), result: s.result,
+    })),
+  }));
+  return { mainBranch, coverage, testRuns, pipelines };
+}
+
+/** Compute every phase-1 metric of a team for one day (UTC). Pure reads; the rules are the shared engine's. */
+export async function computeTeamDay(client: pg.PoolClient, teamId: string, day: string): Promise<ComputedMetric[]> {
+  return computeCiDay(day, await loadCiDay(client, teamId, day));
 }
 
 export interface RecomputeOptions {
@@ -246,21 +111,6 @@ export interface RecomputeOptions {
 }
 
 export interface DayResult { day: string; metrics: Array<{ key: string; value: number; sampleSize: number; confidence: Confidence; kpi: string | null; written: boolean }> }
-
-const todayUtc = () => new Date().toISOString().slice(0, 10);
-
-/** The days whose values depend on raw data of `day` for `kind` (flaky tests look back 7 days). */
-export function affectedDays(kind: 'tests' | 'coverage' | 'pipelines', day: string, today = todayUtc()): string[] {
-  if (kind !== 'tests') return [day];
-  const out: string[] = [];
-  const d = new Date(`${day}T00:00:00Z`);
-  for (let i = 0; i < 7; i++) {
-    const x = new Date(d.getTime() + i * 86_400_000).toISOString().slice(0, 10);
-    if (x > today) break;
-    out.push(x);
-  }
-  return out;
-}
 
 /** Recompute days of a team: metric_evidence upserted, changed KPI values written (source 'computed'). */
 export async function recomputeTeamDays(client: pg.PoolClient, teamId: string, days: string[], opts: RecomputeOptions = {}): Promise<DayResult[]> {

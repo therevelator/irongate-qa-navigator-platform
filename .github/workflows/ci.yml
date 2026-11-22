@@ -47,6 +47,13 @@ jobs:
       - name: Typecheck server
         run: npx tsc --noEmit -p tsconfig.server.json
 
+      - name: Calculation engine (typecheck, purity and unit tests)
+        run: npx tsc --noEmit -p packages/engine/tsconfig.json && node --import tsx --test packages/engine/test/*.test.ts
+
+      - name: QE Navigator Collector (typecheck, bundle, tests, allow-list drift)
+        working-directory: collector
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm run typecheck && npm test && npm run check-allow-list
+
       - name: Lint (report only, existing lint debt does not fail the build)
         run: |
           npx eslint . -f json -o eslint-report.json || true
@@ -78,6 +85,10 @@ jobs:
 
       - name: Set up database and API
         uses: ./.github/actions/setup-test-env
+
+      - name: Build the QE Navigator Collector (its end-to-end tests run the bundle)
+        working-directory: collector
+        run: npm ci --ignore-scripts --no-audit --no-fund && npm run build
 
       - name: API tests
         run: npx jest --config jest.config.cjs tests/api --ci
