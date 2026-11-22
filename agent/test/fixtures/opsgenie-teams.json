@@ -1,0 +1,15 @@
+{
+  "data": [
+    {
+      "id": "team-og-1",
+      "name": "Payments",
+      "description": "SECRET-TEAM-DESC"
+    },
+    {
+      "id": "team-og-9",
+      "name": "Unmapped"
+    }
+  ],
+  "took": 0.01,
+  "requestId": "r"
+}

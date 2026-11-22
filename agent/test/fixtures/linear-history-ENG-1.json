@@ -1,0 +1,40 @@
+{
+  "data": {
+    "issue": {
+      "history": {
+        "pageInfo": {
+          "hasNextPage": false,
+          "endCursor": null
+        },
+        "nodes": [
+          {
+            "createdAt": "2026-11-04T09:00:00.000Z",
+            "fromState": {
+              "name": "Backlog",
+              "type": "backlog"
+            },
+            "toState": {
+              "name": "In Progress",
+              "type": "started"
+            },
+            "fromCycle": null,
+            "toCycle": null
+          },
+          {
+            "createdAt": "2026-11-14T15:00:00.000Z",
+            "fromState": {
+              "name": "In Progress",
+              "type": "started"
+            },
+            "toState": {
+              "name": "Done",
+              "type": "completed"
+            },
+            "fromCycle": null,
+            "toCycle": null
+          }
+        ]
+      }
+    }
+  }
+}

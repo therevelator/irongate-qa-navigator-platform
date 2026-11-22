@@ -1,0 +1,173 @@
+{
+  "self": "x",
+  "maxResults": 100,
+  "startAt": 0,
+  "total": 7,
+  "isLast": true,
+  "values": [
+    {
+      "id": "1001",
+      "author": {
+        "displayName": "Alice Smith",
+        "emailAddress": "alice@example.com",
+        "accountId": "5b10ac8d82e05b22cc7d4ef5",
+        "timeZone": "Europe/Dublin"
+      },
+      "created": "2026-11-09T09:05:00.000+0000",
+      "items": [
+        {
+          "field": "Sprint",
+          "fieldtype": "custom",
+          "fieldId": "customfield_10020",
+          "from": "",
+          "fromString": "",
+          "to": "47",
+          "toString": "PAY Sprint 47"
+        }
+      ]
+    },
+    {
+      "id": "1002",
+      "author": {
+        "displayName": "Alice Smith",
+        "emailAddress": "alice@example.com",
+        "accountId": "5b10ac8d82e05b22cc7d4ef5",
+        "timeZone": "Europe/Dublin"
+      },
+      "created": "2026-11-10T09:00:00.000+0000",
+      "items": [
+        {
+          "field": "status",
+          "fieldtype": "jira",
+          "fieldId": "status",
+          "from": "1",
+          "fromString": "To Do",
+          "to": "2",
+          "toString": "In Progress"
+        }
+      ]
+    },
+    {
+      "id": "1003",
+      "author": {
+        "displayName": "Bob Jones",
+        "emailAddress": "bob@example.com",
+        "accountId": "5b10ac8d82e05b22cc7d4ef6"
+      },
+      "created": "2026-11-12T09:00:00.000+0000",
+      "items": [
+        {
+          "field": "Flagged",
+          "fieldtype": "custom",
+          "fieldId": "customfield_10021",
+          "from": null,
+          "fromString": null,
+          "to": "[10019]",
+          "toString": "Impediment"
+        },
+        {
+          "field": "description",
+          "fieldtype": "jira",
+          "fieldId": "description",
+          "from": null,
+          "fromString": "old SECRET-DESCRIPTION-HISTORY",
+          "to": null,
+          "toString": "new SECRET-DESCRIPTION-HISTORY bob@example.com"
+        }
+      ]
+    },
+    {
+      "id": "1004",
+      "author": {
+        "displayName": "Alice Smith",
+        "emailAddress": "alice@example.com",
+        "accountId": "5b10ac8d82e05b22cc7d4ef5",
+        "timeZone": "Europe/Dublin"
+      },
+      "created": "2026-11-12T15:00:00.000+0000",
+      "items": [
+        {
+          "field": "Flagged",
+          "fieldtype": "custom",
+          "fieldId": "customfield_10021",
+          "from": "[10019]",
+          "fromString": "Impediment",
+          "to": null,
+          "toString": null
+        }
+      ]
+    },
+    {
+      "id": "1005",
+      "author": {
+        "displayName": "Alice Smith",
+        "emailAddress": "alice@example.com",
+        "accountId": "5b10ac8d82e05b22cc7d4ef5",
+        "timeZone": "Europe/Dublin"
+      },
+      "created": "2026-11-14T10:00:00.000+0000",
+      "items": [
+        {
+          "field": "status",
+          "fieldtype": "jira",
+          "fieldId": "status",
+          "from": "1",
+          "fromString": "In Progress",
+          "to": "2",
+          "toString": "Blocked"
+        }
+      ]
+    },
+    {
+      "id": "1006",
+      "author": {
+        "displayName": "Alice Smith",
+        "emailAddress": "alice@example.com",
+        "accountId": "5b10ac8d82e05b22cc7d4ef5",
+        "timeZone": "Europe/Dublin"
+      },
+      "created": "2026-11-15T10:00:00.000+0000",
+      "items": [
+        {
+          "field": "status",
+          "fieldtype": "jira",
+          "fieldId": "status",
+          "from": "1",
+          "fromString": "Blocked",
+          "to": "2",
+          "toString": "In Review"
+        }
+      ]
+    },
+    {
+      "id": "1007",
+      "author": {
+        "displayName": "Alice Smith",
+        "emailAddress": "alice@example.com",
+        "accountId": "5b10ac8d82e05b22cc7d4ef5",
+        "timeZone": "Europe/Dublin"
+      },
+      "created": "2026-11-18T14:00:00.000+0000",
+      "items": [
+        {
+          "field": "status",
+          "fieldtype": "jira",
+          "fieldId": "status",
+          "from": "1",
+          "fromString": "In Review",
+          "to": "2",
+          "toString": "Verified"
+        },
+        {
+          "field": "resolution",
+          "fieldtype": "jira",
+          "fieldId": "resolution",
+          "from": null,
+          "fromString": null,
+          "to": "10000",
+          "toString": "Done"
+        }
+      ]
+    }
+  ]
+}

@@ -4,12 +4,14 @@
  *     HMAC-SHA256(customer salt, lower-cased stable id), first 32 hex, computed locally. QE Navigator
  *     never sees the salt, so it cannot reverse or recompute the hash.
  *   - titles: only with privacy.sendTitles; e-mail addresses and URLs inside a title are masked.
- *   - every record goes through the shared field allow-list (vendor/fieldAllowList.ts): any field
- *     that is not on it, at any depth, is dropped.
+ *   - every record goes through the shared field allow-list (vendor/fieldAllowList.ts, the same list
+ *     QE Navigator applies on its side) and then the agent's stricter send policy (policy.ts): any
+ *     field that is not on both, at any depth, is dropped.
  *   - a last check refuses a record that still contains an e-mail address anywhere.
  */
 import { createHmac } from 'node:crypto';
-import { minimise, type AllowKind } from './vendor/fieldAllowList';
+import { minimise } from './vendor/fieldAllowList';
+import { applyPolicy, type PolicyKind } from './policy';
 import type { Privacy } from './config';
 
 export interface PrivacyContext { privacy: Privacy; salt: string | null }
@@ -42,11 +44,13 @@ function scan(v: unknown, path: string): void {
   else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) scan(x, `${path}.${k}`);
 }
 
-/** The record exactly as it will be sent: allow-listed, opt-in fields per the config, checked. */
-export function finalRecord(kind: AllowKind, record: Record<string, unknown>, ctx: PrivacyContext): Record<string, unknown> {
+/** The record exactly as it will be sent: shared allow-list, then the agent's send policy, then checked. */
+export function finalRecord(kind: PolicyKind, record: Record<string, unknown>, ctx: PrivacyContext): Record<string, unknown> {
   const r = { ...record };
   if (typeof r.title === 'string') r.title = maskTitle(r.title);
-  const out = minimise(kind, r, { titles: ctx.privacy.sendTitles, links: ctx.privacy.sendLinks, people: ctx.privacy.people === 'hash' && !!ctx.salt });
+  // salt: null — a raw person field that reached this point is dropped, never hashed with a weak salt.
+  const shared = minimise(kind, r, { storeTitles: ctx.privacy.sendTitles, salt: null }).record;
+  const out = applyPolicy(kind, shared, { titles: ctx.privacy.sendTitles, links: ctx.privacy.sendLinks, people: ctx.privacy.people === 'hash' && !!ctx.salt });
   scan(out, kind);
   return out;
 }

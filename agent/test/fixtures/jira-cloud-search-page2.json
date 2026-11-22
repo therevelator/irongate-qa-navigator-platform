@@ -1,0 +1,157 @@
+{
+  "issues": [
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10010",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10010",
+      "key": "WEB-9",
+      "fields": {
+        "project": {
+          "self": "x",
+          "id": "10000",
+          "key": "WEB",
+          "name": "Payments (SECRET-PROJECT-NAME)"
+        },
+        "labels": [],
+        "environment": null,
+        "resolution": {
+          "name": "Won't Do"
+        },
+        "resolutiondate": "2026-11-21T10:00:00.000+0000",
+        "timeoriginalestimate": null,
+        "timespent": null,
+        "priority": {
+          "name": "High"
+        },
+        "components": [
+          {
+            "name": "SECRET-COMPONENT"
+          }
+        ],
+        "fixVersions": [
+          {
+            "name": "SECRET-VERSION"
+          }
+        ],
+        "duedate": "2026-12-01",
+        "description": {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SECRET-DESCRIPTION Customer Alice Smith alice@example.com +353 1 234 5678"
+                }
+              ]
+            }
+          ]
+        },
+        "comment": {
+          "comments": [
+            {
+              "id": "1",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "SECRET-COMMENT please call me"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "created": "2026-11-11T10:00:00.000+0000"
+            }
+          ],
+          "maxResults": 1,
+          "total": 1,
+          "startAt": 0
+        },
+        "attachment": [
+          {
+            "id": "1",
+            "filename": "SECRET-ATTACHMENT.png",
+            "author": {
+              "displayName": "Bob Jones",
+              "emailAddress": "bob@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef6"
+            },
+            "content": "https://acme.atlassian.net/secure/attachment/1/SECRET-ATTACHMENT.png"
+          }
+        ],
+        "customfield_10050": "SECRET-CUSTOM-TEXT VIP customer carol@example.com",
+        "worklog": {
+          "worklogs": [
+            {
+              "comment": "SECRET-WORKLOG",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "timeSpentSeconds": 3600
+            }
+          ]
+        },
+        "watches": {
+          "watchCount": 2
+        },
+        "creator": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "reporter": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "assignee": {
+          "displayName": "Alice Smith",
+          "emailAddress": "alice@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef5",
+          "timeZone": "Europe/Dublin"
+        },
+        "summary": "Button misaligned",
+        "issuetype": {
+          "name": "Bug",
+          "subtask": false
+        },
+        "status": {
+          "name": "Done",
+          "statusCategory": {
+            "key": "done"
+          }
+        },
+        "created": "2026-11-15T08:30:00.000+0000",
+        "updated": "2026-11-21T10:01:00.000+0000",
+        "customfield_10060": {
+          "self": "x",
+          "value": "Staging",
+          "id": "10100"
+        },
+        "customfield_10016": 1
+      },
+      "changelog": {
+        "startAt": 0,
+        "maxResults": 100,
+        "total": 0,
+        "histories": []
+      }
+    }
+  ],
+  "isLast": true
+}

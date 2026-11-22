@@ -1,0 +1,744 @@
+{
+  "issues": [
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10001",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10001",
+      "key": "PAY-101",
+      "fields": {
+        "project": {
+          "self": "x",
+          "id": "10000",
+          "key": "PAY",
+          "name": "Payments (SECRET-PROJECT-NAME)"
+        },
+        "labels": [
+          "backend"
+        ],
+        "environment": null,
+        "resolution": {
+          "name": "Done"
+        },
+        "resolutiondate": "2026-11-18T14:00:00.000+0000",
+        "timeoriginalestimate": 57600,
+        "timespent": 68400,
+        "priority": {
+          "name": "High"
+        },
+        "components": [
+          {
+            "name": "SECRET-COMPONENT"
+          }
+        ],
+        "fixVersions": [
+          {
+            "name": "SECRET-VERSION"
+          }
+        ],
+        "duedate": "2026-12-01",
+        "description": {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SECRET-DESCRIPTION Customer Alice Smith alice@example.com +353 1 234 5678"
+                }
+              ]
+            }
+          ]
+        },
+        "comment": {
+          "comments": [
+            {
+              "id": "1",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "SECRET-COMMENT please call me"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "created": "2026-11-11T10:00:00.000+0000"
+            }
+          ],
+          "maxResults": 1,
+          "total": 1,
+          "startAt": 0
+        },
+        "attachment": [
+          {
+            "id": "1",
+            "filename": "SECRET-ATTACHMENT.png",
+            "author": {
+              "displayName": "Bob Jones",
+              "emailAddress": "bob@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef6"
+            },
+            "content": "https://acme.atlassian.net/secure/attachment/1/SECRET-ATTACHMENT.png"
+          }
+        ],
+        "customfield_10050": "SECRET-CUSTOM-TEXT VIP customer carol@example.com",
+        "worklog": {
+          "worklogs": [
+            {
+              "comment": "SECRET-WORKLOG",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "timeSpentSeconds": 3600
+            }
+          ]
+        },
+        "watches": {
+          "watchCount": 2
+        },
+        "creator": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "reporter": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "assignee": {
+          "displayName": "Alice Smith",
+          "emailAddress": "alice@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef5",
+          "timeZone": "Europe/Dublin"
+        },
+        "summary": "Refund to card fails for alice@example.com",
+        "issuetype": {
+          "name": "Story",
+          "subtask": false
+        },
+        "status": {
+          "name": "Verified",
+          "statusCategory": {
+            "key": "done"
+          }
+        },
+        "created": "2026-11-03T10:00:00.000+0000",
+        "updated": "2026-11-18T14:05:00.000+0000",
+        "customfield_10016": 5,
+        "customfield_10020": [
+          {
+            "id": 47,
+            "name": "PAY Sprint 47",
+            "state": "closed",
+            "boardId": 3,
+            "goal": "SECRET-SPRINT-GOAL",
+            "startDate": "2026-11-09T09:00:00.000Z",
+            "endDate": "2026-11-20T09:00:00.000Z",
+            "completeDate": "2026-11-20T15:00:00.000Z"
+          }
+        ],
+        "customfield_10021": null
+      },
+      "changelog": {
+        "startAt": 0,
+        "maxResults": 3,
+        "total": 7,
+        "histories": [
+          {
+            "id": "1001",
+            "author": {
+              "displayName": "Alice Smith",
+              "emailAddress": "alice@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef5",
+              "timeZone": "Europe/Dublin"
+            },
+            "created": "2026-11-09T09:05:00.000+0000",
+            "items": [
+              {
+                "field": "Sprint",
+                "fieldtype": "custom",
+                "fieldId": "customfield_10020",
+                "from": "",
+                "fromString": "",
+                "to": "47",
+                "toString": "PAY Sprint 47"
+              }
+            ]
+          },
+          {
+            "id": "1002",
+            "author": {
+              "displayName": "Alice Smith",
+              "emailAddress": "alice@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef5",
+              "timeZone": "Europe/Dublin"
+            },
+            "created": "2026-11-10T09:00:00.000+0000",
+            "items": [
+              {
+                "field": "status",
+                "fieldtype": "jira",
+                "fieldId": "status",
+                "from": "1",
+                "fromString": "To Do",
+                "to": "2",
+                "toString": "In Progress"
+              }
+            ]
+          },
+          {
+            "id": "1003",
+            "author": {
+              "displayName": "Bob Jones",
+              "emailAddress": "bob@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef6"
+            },
+            "created": "2026-11-12T09:00:00.000+0000",
+            "items": [
+              {
+                "field": "Flagged",
+                "fieldtype": "custom",
+                "fieldId": "customfield_10021",
+                "from": null,
+                "fromString": null,
+                "to": "[10019]",
+                "toString": "Impediment"
+              },
+              {
+                "field": "description",
+                "fieldtype": "jira",
+                "fieldId": "description",
+                "from": null,
+                "fromString": "old SECRET-DESCRIPTION-HISTORY",
+                "to": null,
+                "toString": "new SECRET-DESCRIPTION-HISTORY bob@example.com"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10002",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10002",
+      "key": "PAY-102",
+      "fields": {
+        "project": {
+          "self": "x",
+          "id": "10000",
+          "key": "PAY",
+          "name": "Payments (SECRET-PROJECT-NAME)"
+        },
+        "labels": [
+          "customer-reported"
+        ],
+        "environment": {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Production, reported by customer carol@example.com"
+                }
+              ]
+            }
+          ]
+        },
+        "resolution": null,
+        "resolutiondate": null,
+        "timeoriginalestimate": null,
+        "timespent": null,
+        "priority": {
+          "name": "High"
+        },
+        "components": [
+          {
+            "name": "SECRET-COMPONENT"
+          }
+        ],
+        "fixVersions": [
+          {
+            "name": "SECRET-VERSION"
+          }
+        ],
+        "duedate": "2026-12-01",
+        "description": {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SECRET-DESCRIPTION Customer Alice Smith alice@example.com +353 1 234 5678"
+                }
+              ]
+            }
+          ]
+        },
+        "comment": {
+          "comments": [
+            {
+              "id": "1",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "SECRET-COMMENT please call me"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "created": "2026-11-11T10:00:00.000+0000"
+            }
+          ],
+          "maxResults": 1,
+          "total": 1,
+          "startAt": 0
+        },
+        "attachment": [
+          {
+            "id": "1",
+            "filename": "SECRET-ATTACHMENT.png",
+            "author": {
+              "displayName": "Bob Jones",
+              "emailAddress": "bob@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef6"
+            },
+            "content": "https://acme.atlassian.net/secure/attachment/1/SECRET-ATTACHMENT.png"
+          }
+        ],
+        "customfield_10050": "SECRET-CUSTOM-TEXT VIP customer carol@example.com",
+        "worklog": {
+          "worklogs": [
+            {
+              "comment": "SECRET-WORKLOG",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "timeSpentSeconds": 3600
+            }
+          ]
+        },
+        "watches": {
+          "watchCount": 2
+        },
+        "creator": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "reporter": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "assignee": {
+          "displayName": "Alice Smith",
+          "emailAddress": "alice@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef5",
+          "timeZone": "Europe/Dublin"
+        },
+        "summary": "Wrong fee on refunds",
+        "issuetype": {
+          "name": "Bug",
+          "subtask": false
+        },
+        "status": {
+          "name": "Open",
+          "statusCategory": {
+            "key": "new"
+          }
+        },
+        "created": "2026-11-19T08:30:00.000+0000",
+        "updated": "2026-11-19T08:31:00.000+0000",
+        "customfield_10016": null,
+        "customfield_10020": null
+      },
+      "changelog": {
+        "startAt": 0,
+        "maxResults": 100,
+        "total": 0,
+        "histories": []
+      }
+    },
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10003",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10003",
+      "key": "PAY-103",
+      "fields": {
+        "project": {
+          "self": "x",
+          "id": "10000",
+          "key": "PAY",
+          "name": "Payments (SECRET-PROJECT-NAME)"
+        },
+        "labels": [],
+        "environment": null,
+        "resolution": null,
+        "resolutiondate": null,
+        "timeoriginalestimate": null,
+        "timespent": null,
+        "priority": {
+          "name": "High"
+        },
+        "components": [
+          {
+            "name": "SECRET-COMPONENT"
+          }
+        ],
+        "fixVersions": [
+          {
+            "name": "SECRET-VERSION"
+          }
+        ],
+        "duedate": "2026-12-01",
+        "description": {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SECRET-DESCRIPTION Customer Alice Smith alice@example.com +353 1 234 5678"
+                }
+              ]
+            }
+          ]
+        },
+        "comment": {
+          "comments": [
+            {
+              "id": "1",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "SECRET-COMMENT please call me"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "created": "2026-11-11T10:00:00.000+0000"
+            }
+          ],
+          "maxResults": 1,
+          "total": 1,
+          "startAt": 0
+        },
+        "attachment": [
+          {
+            "id": "1",
+            "filename": "SECRET-ATTACHMENT.png",
+            "author": {
+              "displayName": "Bob Jones",
+              "emailAddress": "bob@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef6"
+            },
+            "content": "https://acme.atlassian.net/secure/attachment/1/SECRET-ATTACHMENT.png"
+          }
+        ],
+        "customfield_10050": "SECRET-CUSTOM-TEXT VIP customer carol@example.com",
+        "worklog": {
+          "worklogs": [
+            {
+              "comment": "SECRET-WORKLOG",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "timeSpentSeconds": 3600
+            }
+          ]
+        },
+        "watches": {
+          "watchCount": 2
+        },
+        "creator": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "reporter": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "assignee": {
+          "displayName": "Alice Smith",
+          "emailAddress": "alice@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef5",
+          "timeZone": "Europe/Dublin"
+        },
+        "summary": "Write the migration",
+        "issuetype": {
+          "name": "Sub-task",
+          "subtask": true
+        },
+        "status": {
+          "name": "In Review",
+          "statusCategory": {
+            "key": "indeterminate"
+          }
+        },
+        "created": "2026-11-10T08:30:00.000+0000",
+        "updated": "2026-11-20T08:31:00.000+0000",
+        "customfield_10016": null,
+        "customfield_10020": [
+          {
+            "id": 48,
+            "name": "PAY Sprint 48",
+            "state": "active",
+            "boardId": 3,
+            "startDate": "2026-11-20T09:00:00.000Z",
+            "endDate": "2026-12-04T09:00:00.000Z"
+          }
+        ]
+      },
+      "changelog": {
+        "startAt": 0,
+        "maxResults": 100,
+        "total": 2,
+        "histories": [
+          {
+            "id": "3001",
+            "author": {
+              "displayName": "Alice Smith",
+              "emailAddress": "alice@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef5",
+              "timeZone": "Europe/Dublin"
+            },
+            "created": "2026-11-12T08:00:00.000+0000",
+            "items": [
+              {
+                "field": "status",
+                "fieldtype": "jira",
+                "fieldId": "status",
+                "from": "1",
+                "fromString": "To Do",
+                "to": "2",
+                "toString": "In Progress"
+              }
+            ]
+          },
+          {
+            "id": "3002",
+            "author": {
+              "displayName": "Alice Smith",
+              "emailAddress": "alice@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef5",
+              "timeZone": "Europe/Dublin"
+            },
+            "created": "2026-11-20T08:00:00.000+0000",
+            "items": [
+              {
+                "field": "status",
+                "fieldtype": "jira",
+                "fieldId": "status",
+                "from": "1",
+                "fromString": "In Progress",
+                "to": "2",
+                "toString": "In Review"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "expand": "renderedFields,names,schema,operations,editmeta,changelog,versionedRepresentations",
+      "id": "10004",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10004",
+      "key": "OPS-7",
+      "fields": {
+        "project": {
+          "self": "x",
+          "id": "10000",
+          "key": "OPS",
+          "name": "Payments (SECRET-PROJECT-NAME)"
+        },
+        "labels": [],
+        "environment": null,
+        "resolution": null,
+        "resolutiondate": null,
+        "timeoriginalestimate": null,
+        "timespent": null,
+        "priority": {
+          "name": "High"
+        },
+        "components": [
+          {
+            "name": "SECRET-COMPONENT"
+          }
+        ],
+        "fixVersions": [
+          {
+            "name": "SECRET-VERSION"
+          }
+        ],
+        "duedate": "2026-12-01",
+        "description": {
+          "type": "doc",
+          "version": 1,
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "SECRET-DESCRIPTION Customer Alice Smith alice@example.com +353 1 234 5678"
+                }
+              ]
+            }
+          ]
+        },
+        "comment": {
+          "comments": [
+            {
+              "id": "1",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "body": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "SECRET-COMMENT please call me"
+                      }
+                    ]
+                  }
+                ]
+              },
+              "created": "2026-11-11T10:00:00.000+0000"
+            }
+          ],
+          "maxResults": 1,
+          "total": 1,
+          "startAt": 0
+        },
+        "attachment": [
+          {
+            "id": "1",
+            "filename": "SECRET-ATTACHMENT.png",
+            "author": {
+              "displayName": "Bob Jones",
+              "emailAddress": "bob@example.com",
+              "accountId": "5b10ac8d82e05b22cc7d4ef6"
+            },
+            "content": "https://acme.atlassian.net/secure/attachment/1/SECRET-ATTACHMENT.png"
+          }
+        ],
+        "customfield_10050": "SECRET-CUSTOM-TEXT VIP customer carol@example.com",
+        "worklog": {
+          "worklogs": [
+            {
+              "comment": "SECRET-WORKLOG",
+              "author": {
+                "displayName": "Bob Jones",
+                "emailAddress": "bob@example.com",
+                "accountId": "5b10ac8d82e05b22cc7d4ef6"
+              },
+              "timeSpentSeconds": 3600
+            }
+          ]
+        },
+        "watches": {
+          "watchCount": 2
+        },
+        "creator": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "reporter": {
+          "displayName": "Bob Jones",
+          "emailAddress": "bob@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef6"
+        },
+        "assignee": {
+          "displayName": "Alice Smith",
+          "emailAddress": "alice@example.com",
+          "accountId": "5b10ac8d82e05b22cc7d4ef5",
+          "timeZone": "Europe/Dublin"
+        },
+        "summary": "Unmapped project",
+        "issuetype": {
+          "name": "Task",
+          "subtask": false
+        },
+        "status": {
+          "name": "To Do",
+          "statusCategory": {
+            "key": "new"
+          }
+        },
+        "created": "2026-11-12T08:30:00.000+0000",
+        "updated": "2026-11-20T09:31:00.000+0000"
+      },
+      "changelog": {
+        "startAt": 0,
+        "maxResults": 100,
+        "total": 0,
+        "histories": []
+      }
+    }
+  ],
+  "nextPageToken": "CAEaAggD",
+  "isLast": false
+}

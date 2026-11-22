@@ -31,7 +31,18 @@ export interface IngestCaller {
   preview?: boolean;
   /** Upload: the teams the person may write to; any other team is refused (403). */
   teamScope?: ReadonlySet<string> | null;
+  /** The sending program when it identifies itself (the on-premises agent: "qe-agent/<version>"), shown in the log. */
+  client?: string | null;
 }
+
+/** "qe-agent/<version>" from a User-Agent header of the on-premises agent; null for anything else. */
+export function agentClient(userAgent: string | null | undefined): string | null {
+  const m = /^qe-agent\/(\d+\.\d+\.\d+[0-9A-Za-z.+-]{0,20})(?:\s|$)/.exec(String(userAgent ?? ''));
+  return m ? `qe-agent/${m[1]}` : null;
+}
+
+/** The response as stored in the log: with the sending program, when known (not part of the answer sent back). */
+const stored = (caller: IngestCaller, response: any) => (caller.client ? { ...response, client: caller.client } : response);
 
 export interface ItemSummary {
   index: number;
@@ -102,7 +113,7 @@ export async function logRejected(
                                   http_status, response, team_ids, department_ids, item_count, value_count)
        VALUES (?, ?, ?, ?, ?, 'rejected', ?::jsonb, ?::jsonb, ?, ?, ?, ?::jsonb, ?::varchar[], ?::varchar[], ?, 0) RETURNING id`,
       [caller.companyId, caller.apiKeyId ?? null, caller.actorId ?? null, caller.channel, outcome.source, JSON.stringify(outcome.items),
-        JSON.stringify(outcome.errors), KEY_LIMIT(meta.key), meta.hash, outcome.httpStatus, JSON.stringify(outcome.response),
+        JSON.stringify(outcome.errors), KEY_LIMIT(meta.key), meta.hash, outcome.httpStatus, JSON.stringify(stored(caller, outcome.response)),
         outcome.teamIds, departmentIds, outcome.items.length]
     );
     return row?.id ?? null;
@@ -145,7 +156,7 @@ export async function runLogged(
             WHERE id = ?`
         ),
         [outcome.status, outcome.source, JSON.stringify(outcome.items), JSON.stringify(outcome.errors), outcome.httpStatus,
-          JSON.stringify({ ...outcome.response, ingestionId }), outcome.teamIds, departmentIds, outcome.items.length, outcome.valueCount, ingestionId]
+          JSON.stringify(stored(caller, { ...outcome.response, ingestionId })), outcome.teamIds, departmentIds, outcome.items.length, outcome.valueCount, ingestionId]
       );
       return { outcome: { ...outcome, response: { ...outcome.response, ingestionId } }, ingestionId };
     });

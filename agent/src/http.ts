@@ -45,12 +45,21 @@ export function readCa(path: string | null | undefined): string | null {
   return caCache.get(path)!;
 }
 
-/** Whether a host is excluded from the proxy by NO_PROXY (comma list; *, host, .domain, host:port). */
+/** Whether a host is excluded from the proxy by NO_PROXY (comma list; *, host, .domain, *.domain, host:port, IPv4 CIDR). */
 export function noProxy(host: string, port: number, env: NodeJS.ProcessEnv = process.env): boolean {
   const list = (env.NO_PROXY ?? env.no_proxy ?? '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   const h = host.toLowerCase().replace(/^\[|\]$/g, '');
+  const ipv4 = (s: string) => { const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s); return m ? m.slice(1).reduce((n, x) => n * 256 + Number(x), 0) : null; };
+  const hostIp = ipv4(h);
   for (const e of list) {
     if (e === '*') return true;
+    const cidr = /^(\d{1,3}(?:\.\d{1,3}){3})\/(\d{1,2})$/.exec(e);
+    if (cidr) {
+      const base = ipv4(cidr[1]);
+      const bits = Number(cidr[2]);
+      if (hostIp !== null && base !== null && bits <= 32 && Math.floor(hostIp / 2 ** (32 - bits)) === Math.floor(base / 2 ** (32 - bits))) return true;
+      continue;
+    }
     const [eh, ep] = e.startsWith('[') ? [e.slice(1, e.indexOf(']')), e.split(']:')[1]] : e.split(':');
     if (ep && Number(ep) !== port) continue;
     const d = eh.replace(/^\*?\./, '');

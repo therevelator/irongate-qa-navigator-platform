@@ -30,7 +30,8 @@ function scopeWhere(actor: PolicyActor, params: any[]): string {
 
 const COLUMNS = `l.id, l.channel, l.source, l.received_at, l.status, l.idempotency_key, l.http_status, l.team_ids, l.department_ids,
   l.item_count, l.value_count, l.errors, l.items, l.api_key_id, k.name AS api_key_name, k.key_prefix AS api_key_prefix,
-  l.actor_id, NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS actor_name, l.response -> 'upload' AS upload`;
+  l.actor_id, NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS actor_name, l.response -> 'upload' AS upload,
+  l.response ->> 'client' AS client`;
 const FROM = `FROM ingestion_log l LEFT JOIN api_keys k ON k.id = l.api_key_id LEFT JOIN users u ON u.id = l.actor_id`;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;

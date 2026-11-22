@@ -12,7 +12,7 @@ import { PagerDutyAdapter } from './sources/pagerduty';
 import { OpsgenieAdapter } from './sources/opsgenie';
 import { SourceError, type Adapter } from './sources/client';
 import { QeClient, QeError, deliver, makeBatches, type Item, type Kind } from './sender';
-import { allowedFields } from './vendor/fieldAllowList';
+import { allowedFields } from './policy';
 import { VERSION } from './version';
 
 export const EXIT = { OK: 0, INTERNAL: 1, CONFIG: 2, SOURCE: 3, QE: 4, LOCKED: 5, PARTIAL: 6 } as const;

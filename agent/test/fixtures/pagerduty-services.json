@@ -1,0 +1,22 @@
+{
+  "services": [
+    {
+      "id": "PSVC001",
+      "summary": "payments-api",
+      "name": "payments-api"
+    },
+    {
+      "id": "PSVC002",
+      "summary": "checkout",
+      "name": "checkout"
+    },
+    {
+      "id": "PSVC999",
+      "summary": "unmapped-svc",
+      "name": "unmapped-svc"
+    }
+  ],
+  "limit": 100,
+  "offset": 0,
+  "more": false
+}

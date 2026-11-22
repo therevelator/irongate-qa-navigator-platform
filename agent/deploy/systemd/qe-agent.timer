@@ -1,0 +1,12 @@
+# /etc/systemd/system/qe-agent.timer — every 15 minutes, catching up after downtime.
+[Unit]
+Description=Run the QE Navigator on-premises agent every 15 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60
+Persistent=true
+
+[Install]
+WantedBy=timers.target

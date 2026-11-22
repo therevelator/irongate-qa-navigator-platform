@@ -1,0 +1,43 @@
+{
+  "log_entries": [
+    {
+      "id": "M1",
+      "type": "trigger_log_entry",
+      "created_at": "2026-10-01T08:00:00Z",
+      "agent": {
+        "type": "service_reference",
+        "id": "PSVC001"
+      },
+      "channel": {
+        "summary": "SECRET"
+      }
+    },
+    {
+      "id": "M2",
+      "type": "acknowledge_log_entry",
+      "created_at": "2026-10-01T08:30:00Z",
+      "agent": {
+        "id": "PUSER01",
+        "type": "user_reference",
+        "summary": "Dave Doe",
+        "self": "x",
+        "html_url": "https://acme.pagerduty.com/users/PUSER01"
+      }
+    },
+    {
+      "id": "M3",
+      "type": "resolve_log_entry",
+      "created_at": "2026-11-18T08:00:00Z",
+      "agent": {
+        "id": "PUSER01",
+        "type": "user_reference",
+        "summary": "Dave Doe",
+        "self": "x",
+        "html_url": "https://acme.pagerduty.com/users/PUSER01"
+      }
+    }
+  ],
+  "limit": 100,
+  "offset": 0,
+  "more": false
+}

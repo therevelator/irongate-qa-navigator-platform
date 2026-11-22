@@ -1,0 +1,84 @@
+# qe-agent as a Kubernetes CronJob: every 15 minutes, one run at a time, non-root, read-only root file
+# system, no capabilities, no service account token, egress only (see networkpolicy.yaml).
+#
+#   kubectl create namespace qe-agent
+#   kubectl -n qe-agent create secret generic qe-agent-secrets \
+#     --from-literal=QE_API_KEY=igk_... --from-literal=JIRA_TOKEN=... --from-literal=JIRA_EMAIL=svc@example.com
+#   kubectl -n qe-agent create configmap qe-agent-config --from-file=qe-agent.yaml
+#   kubectl -n qe-agent apply -f cronjob.yaml -f networkpolicy.yaml
+#   kubectl -n qe-agent create job --from=cronjob/qe-agent qe-agent-manual   # run once now
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: qe-agent-state
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 64Mi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: qe-agent
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid          # never two runs at once (the agent also takes a lock)
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0                # the next schedule retries; exit codes say why a run failed
+      activeDeadlineSeconds: 3000
+      template:
+        metadata:
+          labels:
+            app: qe-agent
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: qe-agent
+              image: qe-agent:0.1.0      # your registry copy, pinned by digest: registry.example.com/qe-agent@sha256:…
+              imagePullPolicy: IfNotPresent
+              args: ["sync", "--log-format", "json"]
+              envFrom:
+                - secretRef:
+                    name: qe-agent-secrets
+              env:
+                - name: QE_AGENT_CONFIG
+                  value: /etc/qe-agent/qe-agent.yaml
+                # Outbound proxy, if any (NO_PROXY: your internal Jira and the cluster):
+                # - name: HTTPS_PROXY
+                #   value: http://proxy.internal.example.com:3128
+                # - name: NO_PROXY
+                #   value: .internal.example.com,.svc.cluster.local
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests: { cpu: 50m, memory: 128Mi }
+                limits: { cpu: 500m, memory: 512Mi }
+              volumeMounts:
+                - name: config
+                  mountPath: /etc/qe-agent
+                  readOnly: true
+                - name: state
+                  mountPath: /var/lib/qe-agent
+          volumes:
+            - name: config
+              configMap:
+                name: qe-agent-config
+            - name: state
+              persistentVolumeClaim:
+                claimName: qe-agent-state

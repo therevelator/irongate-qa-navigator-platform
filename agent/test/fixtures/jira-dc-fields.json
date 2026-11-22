@@ -1,0 +1,29 @@
+[
+  {
+    "id": "customfield_10004",
+    "name": "Story Points",
+    "custom": true,
+    "schema": {
+      "type": "number",
+      "custom": "com.atlassian.jira.plugin.system.customfieldtypes:float"
+    }
+  },
+  {
+    "id": "customfield_10007",
+    "name": "Sprint",
+    "custom": true,
+    "schema": {
+      "type": "array",
+      "custom": "com.pyxis.greenhopper.jira:gh-sprint"
+    }
+  },
+  {
+    "id": "description",
+    "name": "Description",
+    "custom": false,
+    "schema": {
+      "type": "string",
+      "system": "description"
+    }
+  }
+]

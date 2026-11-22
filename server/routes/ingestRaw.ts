@@ -21,7 +21,7 @@ import { authenticateApiKey, ApiKeyRequest } from '../middleware/apiKey';
 import { ingestLimiter } from '../middleware/rateLimit';
 import { KpiValidationError, normaliseIdempotencyKey, notifyKpisUpdated } from '../lib/kpiIngest';
 import { afterIngestionRejected, afterKpiWrite } from '../lib/alerts';
-import { logRejected, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
+import { agentClient, logRejected, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 import { BodyError, maybeGunzip, parseMultipart, readBody, MAX_UPLOAD_BYTES, MAX_UNCOMPRESSED_BYTES } from '../lib/ingest/body';
 import { detectTestFormat, mergeTestReports, parseTestReport, ReportError, TEST_FORMATS, type TestFormat, type ParsedTestReport } from '../lib/ingest/testReports';
 import {
@@ -128,7 +128,7 @@ export function summaryItem(teamId: string | null, source: string | null, record
 /** The caller of an ingestion request: the API key (routes below) or, for file uploads, the person (server/routes/uploads.ts). */
 export function callerOf(req: ApiKeyRequest): IngestCaller {
   const given = (req as any).ingestCaller as IngestCaller | undefined;
-  return given ?? { companyId: req.apiKey!.companyId, channel: 'api', apiKeyId: req.apiKey!.id };
+  return given ?? { companyId: req.apiKey!.companyId, channel: 'api', apiKeyId: req.apiKey!.id, client: agentClient(req.get('user-agent')) };
 }
 
 /** The actor recorded on computed values: the API key, or the person who uploaded the files. */

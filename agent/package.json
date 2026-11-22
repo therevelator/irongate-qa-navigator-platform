@@ -11,7 +11,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --import tsx --test test/*.test.ts",
+    "test": "node scripts/build.mjs && node --import tsx --test --test-timeout=60000 test/*.test.ts",
     "sync-allow-list": "node scripts/sync-allow-list.mjs",
     "check-allow-list": "node scripts/sync-allow-list.mjs --check"
   },

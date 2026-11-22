@@ -274,6 +274,109 @@ const ISSUE_TOOLS: Array<{ id: IssueTool; label: string; file: string }> = [
   { id: 'json', label: 'Other tracker (JSON)', file: 'Any script or tool' },
 ];
 
+/** On-premises agent (agent/ in the QE Navigator repository): config file, container, Kubernetes and plain Node. */
+export type AgentTab = 'config' | 'docker' | 'kubernetes' | 'node';
+export const AGENT_TABS: Array<{ id: AgentTab; label: string; file: string }> = [
+  { id: 'config', label: 'Config file', file: 'qe-agent.yaml (no secrets in it; your team ids are filled in)' },
+  { id: 'docker', label: 'Docker', file: 'Container: non-root, read-only file system, no shell' },
+  { id: 'kubernetes', label: 'Kubernetes', file: 'CronJob every 15 minutes (agent/deploy/kubernetes/cronjob.yaml)' },
+  { id: 'node', label: 'Node 20 (no container)', file: 'One file, no dependencies: qe-agent.mjs, with a cron or systemd timer' },
+];
+export const AGENT_VERSION = '0.1.0';
+
+/** The fields the agent sends (its send policy, agent/src/policy.ts); everything else never leaves the customer's network. */
+export const AGENT_FIELDS = {
+  issues: 'key, team, type, status, status category, resolution, environment (production / pre-release only), story points, original estimate and time logged (hours), created / resolved / updated, sprints (id, state, dates), status / sprint / flagged changes with their times',
+  incidents: 'id, team, service, severity, status, opened / acknowledged / resolved, status changes with their times, linked deployment, category',
+  optIn: 'titles (sendTitles), links back to the tool (sendLinks), people as a salted hash computed on your side (people: hash)',
+  never: 'descriptions, comments, attachments, custom free-text fields, names and e-mail addresses, labels, priorities, notes and alert details',
+};
+
+const yamlKey = (k: string) => (/^[A-Za-z0-9_.-]+$/.test(k) ? k : JSON.stringify(k));
+
+export function agentConfigSnippet(origin: string, teams: Array<{ id: string; name: string }>, services: Array<{ service: string; teamId: string }> = []): string {
+  const list = teams.length ? teams : [{ id: '<team id>', name: 'your team' }];
+  const keyLines = (placeholder: string) => list.map((t, i) => `      ${i === 0 ? '' : '# '}${placeholder}${i === 0 ? '' : String(i + 1)}: ${t.id}   # ${t.name.replace(/[\r\n#]/g, ' ')}`).join('\n');
+  const svc = services.length
+    ? services.map((m) => `      ${yamlKey(m.service)}: ${m.teamId}`).join('\n')
+    : keyLines('payments-api');
+  return `# qe-agent ${AGENT_VERSION} configuration. Secrets are NOT in this file: set them as environment variables
+# QE_API_KEY (an igk_ key from Admin console → API keys), JIRA_TOKEN (+ JIRA_EMAIL for Jira Cloud),
+# LINEAR_API_KEY, PAGERDUTY_TOKEN, OPSGENIE_API_KEY. Keep only the sources you use.
+qeNavigator:
+  url: ${origin}
+privacy:
+  sendTitles: false   # key / id only
+  sendLinks: false
+  people: none        # or hash (salted on your side with QE_PEOPLE_SALT)
+state:
+  path: /var/lib/qe-agent/state.json
+backfillDays: 90
+sources:
+  - name: jira
+    type: jira
+    baseUrl: https://your-site.atlassian.net   # Server / Data Center: your Jira URL and auth: bearer
+    auth: basic
+    email: qe-agent@your-company.example
+    jql: project in (PAY)
+    teams:   # Jira project key → team id
+${keyLines('PAY')}
+  - name: linear
+    type: linear
+    teams:   # Linear team key → team id
+${keyLines('ENG')}
+  - name: pagerduty
+    type: pagerduty
+    services:   # PagerDuty service name → team id
+${svc}
+  - name: opsgenie
+    type: opsgenie
+    region: us   # or eu
+    teams:   # Opsgenie team name → team id
+${keyLines('Payments')}
+`;
+}
+
+export function agentRunSnippet(tab: AgentTab, origin: string): string {
+  let host = origin;
+  try { host = new URL(origin).host; } catch { /* keep as given */ }
+  if (tab === 'docker') return `# Build the image from the agent's source (agent/ of the QE Navigator repository), or load the image you were given:
+docker build -t qe-agent:${AGENT_VERSION} agent/
+
+# 1. Check the config, each source and QE Navigator (prints what would be read; never prints secrets)
+docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \\
+  -v "$PWD/qe-agent.yaml:/etc/qe-agent/qe-agent.yaml:ro" -v qe-agent-state:/var/lib/qe-agent \\
+  -e QE_API_KEY -e JIRA_TOKEN -e JIRA_EMAIL qe-agent:${AGENT_VERSION} check
+
+# 2. See exactly what would be sent (nothing is sent; --offline: no call to QE Navigator at all)
+docker run --rm --read-only ... qe-agent:${AGENT_VERSION} preview --out /var/lib/qe-agent/preview.json
+
+# 3. Send: the first run reads backfillDays (or --since 2026-01-01), then only what changed
+docker run --rm --read-only ... qe-agent:${AGENT_VERSION} sync`;
+  if (tab === 'kubernetes') return `kubectl create namespace qe-agent
+kubectl -n qe-agent create secret generic qe-agent-secrets \\
+  --from-literal=QE_API_KEY=igk_... --from-literal=JIRA_TOKEN=... --from-literal=JIRA_EMAIL=qe-agent@your-company.example
+kubectl -n qe-agent create configmap qe-agent-config --from-file=qe-agent.yaml
+kubectl -n qe-agent apply -f agent/deploy/kubernetes/cronjob.yaml   # every 15 min, non-root, read-only, no service account token
+
+# Egress: only TCP 443 to ${host} (and to your Jira / Linear / PagerDuty / Opsgenie); no ingress at all.
+kubectl -n qe-agent create job --from=cronjob/qe-agent qe-agent-first-run   # run once now
+kubectl -n qe-agent logs job/qe-agent-first-run`;
+  if (tab === 'node') return `# Node 20 or later; the agent is one file without dependencies. Verify it first:
+sha256sum -c SHA256SUMS            # qe-agent.mjs: OK
+node qe-agent.mjs --version
+
+export QE_API_KEY=igk_... JIRA_TOKEN=... JIRA_EMAIL=qe-agent@your-company.example
+node qe-agent.mjs check  -c qe-agent.yaml
+node qe-agent.mjs preview -c qe-agent.yaml --offline   # air-gapped review: reads your tools, sends nothing
+node qe-agent.mjs sync   -c qe-agent.yaml
+
+# Every 15 minutes (cron); exit codes: 0 ok, 2 config, 3 a source, 4 QE Navigator, 5 still running, 6 some records refused
+*/15 * * * * qe-agent  . /etc/qe-agent/env && node /opt/qe-agent/qe-agent.mjs sync -c /etc/qe-agent/qe-agent.yaml --log-format json >> /var/log/qe-agent.log 2>&1
+# or the systemd timer in agent/deploy/systemd/`;
+  return '';
+}
+
 /** Steps that send issues (QE Navigator calculates escape rate, density, velocity, commitment, carryover, blocked time, sizing accuracy). */
 export function issueSnippet(tool: IssueTool, base: string, team: string): string {
   if (tool === 'jira') {
@@ -396,6 +499,7 @@ const ConnectCi: React.FC = () => {
   const [deployTool, setDeployTool] = useState<Tool>('github');
   const [incidentTool, setIncidentTool] = useState<IncidentTool>('pagerduty');
   const [issueTool, setIssueTool] = useState<IssueTool>('jira');
+  const [agentTab, setAgentTab] = useState<AgentTab>('config');
   const [sarifTool, setSarifTool] = useState<QualityTool>('github');
   const [copiedBlock, setCopiedBlock] = useState<string | null>(null);
   const [testKind, setTestKind] = useState<TestKind>('tests');
@@ -459,6 +563,11 @@ const ConnectCi: React.FC = () => {
   const deployCode = useMemo(() => deliverySnippet(deployTool, base, team || 'YOUR_TEAM_ID'), [deployTool, base, team]);
   const incidentCode = useMemo(() => incidentSnippet(incidentTool, base, team || 'YOUR_TEAM_ID'), [incidentTool, base, team]);
   const issueCode = useMemo(() => issueSnippet(issueTool, base, team || 'YOUR_TEAM_ID'), [issueTool, base, team]);
+  const agentOrigin = base.replace(/\/api$/, '');
+  const agentCode = useMemo(
+    () => (agentTab === 'config' ? agentConfigSnippet(agentOrigin, teams.map((t) => ({ id: t.id, name: t.name })), mappings.map((m) => ({ service: m.service, teamId: m.teamId }))) : agentRunSnippet(agentTab, agentOrigin)),
+    [agentTab, agentOrigin, teams, mappings],
+  );
   const sarifCode = useMemo(() => sarifSnippet(sarifTool, base, team || 'YOUR_TEAM_ID'), [sarifTool, base, team]);
   const copyBlock = async (id: string, text: string) => {
     try { await navigator.clipboard.writeText(text); setCopiedBlock(id); setTimeout(() => setCopiedBlock((c) => (c === id ? null : c)), 2000); } catch { /* the code stays selectable */ }
@@ -708,6 +817,27 @@ const ConnectCi: React.FC = () => {
           <h5 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">2. Static analysis (SARIF), from the pipeline</h5>
           {toolTabs('sarif', 'Static analysis steps', TOOLS, sarifTool, setSarifTool, sarifCode, 'connect-ci-sarif-snippet')}
         </div>
+      </div>
+
+      <div className="space-y-4 border-t border-slate-200 p-5 dark:border-slate-800" data-testid="connect-ci-agent">
+        <div>
+          <h4 className="text-sm font-semibold text-slate-900 dark:text-white">On-premises agent</h4>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+            For Jira (Cloud, Server or Data Center), Linear, PagerDuty and Opsgenie that QE Navigator should not reach directly: a small program you run inside your network
+            reads them with your own read-only credentials and sends minimised records to this site over outbound HTTPS. Your credentials never leave your network, nothing
+            connects into it, and <span className="font-mono">qe-agent preview</span> shows exactly what would be sent before anything is. Its requests appear in the
+            ingestion log marked <span className="font-medium">agent</span>. Security review: <span className="font-mono">agent/SECURITY.md</span>.
+          </p>
+        </div>
+        <dl className="grid grid-cols-1 gap-2 text-xs md:grid-cols-2" data-testid="connect-ci-agent-fields">
+          {([['Issue fields sent', AGENT_FIELDS.issues], ['Incident fields sent', AGENT_FIELDS.incidents], ['Only if you enable them', AGENT_FIELDS.optIn], ['Never sent', AGENT_FIELDS.never]] as const).map(([k, v]) => (
+            <div key={k} className="rounded-md border border-slate-200 p-3 dark:border-slate-800">
+              <dt className="font-medium text-slate-700 dark:text-slate-300">{k}</dt>
+              <dd className="mt-1 text-slate-600 dark:text-slate-400">{v}</dd>
+            </div>
+          ))}
+        </dl>
+        {toolTabs('agent', 'Agent setup', AGENT_TABS, agentTab, setAgentTab, agentCode, 'connect-ci-agent-snippet')}
       </div>
 
       <div className="border-t border-slate-200 dark:border-slate-800">
