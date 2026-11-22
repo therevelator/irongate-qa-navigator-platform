@@ -46,7 +46,8 @@ jql: project = "PAY" AND labels != x
   });
   test('the example config parses', () => {
     const c = loadConfig(join(here, '..', 'config.example.yaml'));
-    assert.deepEqual(c.sources.map((s) => s.type), ['jira', 'linear', 'pagerduty', 'opsgenie']);
+    assert.deepEqual(c.sources.map((s) => s.type), ['github', 'jira', 'linear', 'pagerduty', 'opsgenie']);
+    assert.equal(c.privacy.mode, 'evidence', 'evidence is the default privacy mode');
     assert.equal(c.qeNavigator.url, 'https://app.irongate.ie');
     assert.equal(c.privacy.sendTitles, false);
   });
