@@ -107,13 +107,19 @@ fictional company (`sandbox-demo`, [`server/lib/sandbox.ts`](server/lib/sandbox.
 **API keys.** Ingestion keys (`igk_…`) are stored as a hash, shown once, scoped to one company, and
 revocable. A suspended company's keys are refused.
 
-**On-premises agent** ([`collector/`](collector/README.md)). For Jira, Linear, PagerDuty and Opsgenie a customer can run the agent
-inside their own network instead of giving QE Navigator their tool tokens: it reads with their read-only credentials, opens no
-port, connects out only to QE Navigator over HTTPS, applies the shared field allow-list
-([`server/lib/ingest/fieldAllowList.ts`](server/lib/ingest/fieldAllowList.ts), vendored into the agent) and a stricter send
-policy before anything leaves, and shows the exact payload with `qe-agent preview`. It has no runtime dependencies and ships as
-one reproducible file or a distroless non-root image. Its own security posture, for customers' security reviews:
-[collector/SECURITY.md](collector/SECURITY.md). Its requests are marked **agent** in the ingestion log.
+**QE Navigator Collector** ([`collector/`](collector/README.md)). A customer can run the Collector inside their own network
+instead of giving QE Navigator their CI or tool tokens: it reads GitHub Actions, GitLab CI, Jenkins, Azure DevOps, SonarQube, Jira,
+Linear, PagerDuty and Opsgenie with their read-only credentials, opens no port (the optional local evidence page binds to
+localhost or an internal address, refuses a wildcard address without basic auth, and serves no scripts), connects out only to
+their own tools and to QE Navigator over HTTPS, never sends a source's credentials to another host (artifact downloads follow a
+signed-URL redirect without them), and calculates with the shared engine ([`packages/engine`](packages/engine)). What leaves the
+network depends on `privacy.mode`: values with the allowed evidence lists (default), values and counts only, or minimised raw
+records after the shared field allow-list ([`server/lib/ingest/fieldAllowList.ts`](server/lib/ingest/fieldAllowList.ts), vendored
+into the Collector) and a stricter send policy. The server validates Collector values against the same allow-list per mode
+(`server/lib/collectorIngest.ts`: unknown metrics and fields, text in metrics mode, e-mail addresses are refused) and tenant-checks
+every team. `qe-collector preview` shows the exact payload. No runtime dependencies; one reproducible file or a distroless non-root
+image. Its own security posture, for customers' security reviews: [collector/SECURITY.md](collector/SECURITY.md). Its requests are
+marked **Collector** in the ingestion log; its heartbeat carries versions and per-source status only.
 
 **File uploads** ([`server/routes/uploads.ts`](server/routes/uploads.ts), Administration → Upload files). Session
 authentication and the same cookie (`SameSite`) and exact-origin CORS protection as the rest of the app; the sandbox refuses
@@ -130,7 +136,7 @@ plus the minimised copy `raw_uploads` keeps for the API (35 days). 60 previews a
 Tests, attacker paths included: `tests/api/upload.test.ts`, `tests/api/upload-parsers.test.ts`, `tests/api/upload-netlify.test.ts`.
 
 **Field allow-list** ([`server/lib/ingest/fieldAllowList.ts`](server/lib/ingest/fieldAllowList.ts)). Every issue and incident,
-on every path (ingestion API, uploads, the agent), is reduced to the fields the calculations need before it is stored; the
+on every path (ingestion API, uploads, the Collector), is reduced to the fields the calculations need before it is stored; the
 copy kept in `raw_uploads` for issues and incidents is the minimised records, never the body as received. Descriptions,
 comments, attachments, custom free-text fields, priority, other labels, names and e-mail addresses are never stored; people
 only as a salted hash (the commit-author hash). Titles only while the company setting "Store issue and incident titles" is on
