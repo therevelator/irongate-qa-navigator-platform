@@ -162,9 +162,9 @@ function build(y: number, mo: number, d: number, h: number, mi: number, s: numbe
   if (y < 100) y += 2000;
   if (mo < 0 || mo > 11 || d < 1 || d > 31 || h > 23 || mi > 59 || s > 60) return null;
   const ms = Date.UTC(y, mo, d, h, mi, s) - offsetMin * 60_000;
-  const dt = new Date(ms);
-  if (dt.getUTCDate() !== new Date(Date.UTC(y, mo, d)).getUTCDate()) return null;
-  return dt;
+  // 31/02 and the like do not roll over into the next month.
+  if (new Date(Date.UTC(y, mo, d)).getUTCMonth() !== mo) return null;
+  return new Date(ms);
 }
 
 const TIME = String.raw`(?:[ T,]+(\d{1,2})[:.h](\d{2})(?:[:.](\d{2}))?(?:[.,]\d+)?\s*([AaPp]\.?[Mm]\.?)?)?\s*(Z|[+-]\d{2}:?\d{2}|UTC|GMT)?`;

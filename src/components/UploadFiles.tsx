@@ -14,12 +14,12 @@ import { Badge, Card, CardHeader, Page, PageIntro, buttonClass, cx, inputClass, 
 
 interface Team { id: string; name: string; department: string | null }
 interface UploadType { value: string; kind: string; format: string; label: string }
-interface AllowedField { field: string; why: string; setting?: string; person?: boolean }
+interface FieldRule { type: string; why: string; optIn?: 'titles' | 'links' | 'people' }
 interface Context {
   teams: Team[];
   types: UploadType[];
   limits: { maxBytes: number; maxExpandedBytes: number; maxFilesPerRequest: number };
-  allowList: Record<'issue' | 'sprint' | 'incident', AllowedField[]>;
+  allowList: Record<'issue' | 'incident', Record<string, FieldRule>>;
   alwaysDropped: string[];
   storeTitles: boolean;
   canChangePrivacy: boolean;
@@ -304,10 +304,10 @@ const UploadFiles: React.FC = () => {
               <div className="space-y-3 text-xs text-slate-700 dark:text-slate-300" data-testid="upload-allow-list">
                 {(['issue', 'incident'] as const).map((k) => (
                   <details key={k}>
-                    <summary className="cursor-pointer text-sm font-medium text-slate-900 dark:text-white">{k === 'issue' ? 'Issues' : 'Incidents'}: {ctx.allowList[k].length} fields</summary>
+                    <summary className="cursor-pointer text-sm font-medium text-slate-900 dark:text-white">{k === 'issue' ? 'Issues' : 'Incidents'}: {Object.keys(ctx.allowList[k]).filter((f) => !(f === 'title' && !ctx.storeTitles)).length} fields</summary>
                     <ul className="mt-2 space-y-1">
-                      {ctx.allowList[k].filter((f) => !(f.setting === 'storeTitles' && !ctx.storeTitles)).map((f) => (
-                        <li key={f.field}><code className="font-mono text-slate-900 dark:text-slate-100">{f.person ? `${f.field}Hash` : f.field}</code>: {f.why}</li>
+                      {Object.entries(ctx.allowList[k]).filter(([f]) => !(f === 'title' && !ctx.storeTitles)).map(([f, r]) => (
+                        <li key={f}><code className="font-mono text-slate-900 dark:text-slate-100">{f}</code>: {r.why.replace(/ \(opt-in\)$/, '')}</li>
                       ))}
                     </ul>
                   </details>
