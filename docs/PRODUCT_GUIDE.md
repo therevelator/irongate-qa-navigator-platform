@@ -1104,6 +1104,26 @@ escape rate opens to the very bugs customers found, and a low code quality score
 - Sample data: every demo and filled team has a year of sample issues and weekly SonarQube reports made from its own KPI history,
   so the calculated values agree with what its pages show. Evidence only: never written as KPI values.
 
+### 4.2d On-premises agent (Jira, Linear, PagerDuty, Opsgenie)
+
+Why: many companies will not give a SaaS product their Jira or PagerDuty token, or cannot open their Jira Server to the internet.
+The agent turns "connect your tracker" into something a security team can approve: it runs inside the customer's network, with the
+customer's own read-only credentials, and only ever makes outbound HTTPS calls to QE Navigator.
+
+- What it is: a small command-line program ([`agent/`](../agent/README.md)): one Node 20 file without runtime dependencies, or a
+  distroless container, scheduled every 15 minutes (Kubernetes CronJob, systemd timer or cron). `check` validates the setup,
+  `preview` shows exactly what would be sent (nothing is sent; `--offline` for an air-gapped review), `sync` sends what changed,
+  `sync --since <date>` backfills.
+- What it sends: issues and incidents in QE Navigator's JSON (sections 4.2b and 4.2c), reduced first by the same field allow-list the
+  server applies and then by the agent's stricter policy: keys, types, statuses and status changes with times, story points, sprints,
+  estimates, environments (production or pre-release only), incident times, services, severities. Titles, links and (hashed) people
+  only if the customer turns them on. Never descriptions, comments, attachments, free text, names or e-mail addresses.
+- Where it shows: Admin console → Connect your CI → **On-premises agent** (the field list, a config file with the company's team ids,
+  Docker, Kubernetes and Node steps); its requests appear in the ingestion log marked **agent** ("via the on-premises agent
+  (qe-agent/<version>)"). Everything it sends is calculated exactly like data sent by the API (velocity, escape rate, MTTR, …).
+- Security posture for the customer's review: [`agent/SECURITY.md`](../agent/SECURITY.md) (data flow, fields per source, permissions,
+  network, verification of the bundle and the image).
+
 ### 4.3 Manual metrics
 
 **Administration → Manual metrics** (super admin, manager, team lead; team scope enforced by the server). Sections: current
@@ -1114,7 +1134,7 @@ member, technical-debt ROI impact per item, and CI/CD pipeline stages. Team KPIs
 ### 4.4 Ingestion log
 
 Every request (accepted, partial or rejected; API and Manual metrics) is recorded in `ingestion_log` with its items, errors and
-response: **Administration → Ingestion log** (super admins; managers see requests that touched their departments' teams), with a
+response (requests of the on-premises agent are marked **agent**): **Administration → Ingestion log** (super admins; managers see requests that touched their departments' teams), with a
 per-source "last received" overview. This is where you check whether CI integrations are still sending. Code:
 [`server/lib/ingestionLog.ts`](../server/lib/ingestionLog.ts).
 

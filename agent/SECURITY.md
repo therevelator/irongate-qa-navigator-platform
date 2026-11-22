@@ -12,7 +12,7 @@ checked against the code in this folder (`src/`, about 3,000 lines of TypeScript
 | Which credentials does it hold? | Your read-only tool tokens and one QE Navigator ingestion key (`igk_…`), from environment variables or secret files. Each credential is sent only to the host it belongs to; the QE Navigator key can only write ingestion data for your company (it cannot read anything). |
 | What does it send? | Only the fields in section 4, after two allow-lists. No descriptions, comments, attachments, free text, names or e-mail addresses. `qe-agent preview` prints the exact bodies. |
 | Runtime dependencies? | None. One bundled file (`qe-agent.mjs`, ~120 KB, not minified) using only Node's built-in modules (`http`, `https`, `tls`, `net`, `zlib`, `crypto`, `fs`, `path`). |
-| Container? | Distroless Node 20, non-root (65532), no shell, read-only root file system, base images pinned by digest. |
+| Container? | Distroless Node 20, non-root (65532), no shell, read-only root file system, base images pinned by digest (about 171 MB, 44 MB compressed; the agent itself is the one 120 KB file). |
 
 ## 2. Data flow
 
@@ -157,8 +157,8 @@ npm run build                    # prints the size and SHA-256, writes dist/SHA2
 sha256sum -c dist/SHA256SUMS     # or compare with the SHA256SUMS published with a release
 ```
 
-Reproduced for 0.1.0: `dist/qe-agent.mjs` 119,934 bytes, sha256
-`36757b6ebb7bee4b8082d3414a1ca3b17c0668ff948625fefbe2e3343405359a` (local build and inside `docker build`). The build
+Reproduced for 0.1.0: `dist/qe-agent.mjs` 119,994 bytes, sha256
+`fafb116a8bdc66b71b5a69d05fd8493c4cd98d104b2966a81c1259483a7198e2` (local build and inside `docker build`). The build
 script refuses to bundle any file from outside `agent/src` (so no third-party code can end up in it).
 
 The image: `docker build -t qe-agent:0.1.0 .` runs the type check, the build and the tests, then copies only

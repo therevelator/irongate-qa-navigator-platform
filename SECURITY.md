@@ -107,6 +107,14 @@ fictional company (`sandbox-demo`, [`server/lib/sandbox.ts`](server/lib/sandbox.
 **API keys.** Ingestion keys (`igk_…`) are stored as a hash, shown once, scoped to one company, and
 revocable. A suspended company's keys are refused.
 
+**On-premises agent** ([`agent/`](agent/README.md)). For Jira, Linear, PagerDuty and Opsgenie a customer can run the agent
+inside their own network instead of giving QE Navigator their tool tokens: it reads with their read-only credentials, opens no
+port, connects out only to QE Navigator over HTTPS, applies the shared field allow-list
+([`server/lib/ingest/fieldAllowList.ts`](server/lib/ingest/fieldAllowList.ts), vendored into the agent) and a stricter send
+policy before anything leaves, and shows the exact payload with `qe-agent preview`. It has no runtime dependencies and ships as
+one reproducible file or a distroless non-root image. Its own security posture, for customers' security reviews:
+[agent/SECURITY.md](agent/SECURITY.md). Its requests are marked **agent** in the ingestion log.
+
 **Rate limits** ([`server/middleware/rateLimit.ts`](server/middleware/rateLimit.ts)): general API
 (`API_RATE_LIMIT_MAX` per minute, default 300), sign-in (20 failed attempts per 15 minutes per IP), forgot password (per IP and per
 e-mail), reset password, invitations, ingestion (60 per minute), language-model routes and Recalculate.
