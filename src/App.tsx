@@ -32,6 +32,7 @@ import ParametersConfiguration from './components/ParametersConfiguration';
 import TeamTvView from './components/TeamTvView';
 import CompareTeams from './components/CompareTeams';
 import ExecutiveSummary from './components/ExecutiveSummary';
+import UploadFiles from './components/UploadFiles';
 import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
 import { useAnalyticsScope, URL_TEAM_PARAM } from './contexts/AnalyticsScopeContext';
@@ -53,6 +54,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'manual-metrics': '/manual-metrics',
   'metric-intervals': '/metric-intervals',
   'parameters-config': '/parameters-config',
+  'upload-files': '/upload-files',
   'flaky-test-intelligence': '/analytics/flaky-tests',
   'technical-debt': '/analytics/technical-debt',
   'pipeline-visualization': '/analytics/pipeline',
@@ -360,6 +362,7 @@ function App() {
   if (currentView === 'activity') return renderLayout(<ActivityLog />);
   if (currentView === 'user-activity') return renderLayout(<UserActivity />);
   if (currentView === 'ingestion-log') return renderLayout(<IngestionLog />);
+  if (currentView === 'upload-files') return renderLayout(<UploadFiles />);
   if (currentView === 'notifications') return renderLayout(<NotificationsCenter />);
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
   if (currentView === 'manual-metrics') return renderLayout(<ManualMetricsInput onBack={() => handleViewChange('dashboard')} />);

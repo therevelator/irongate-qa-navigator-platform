@@ -1,0 +1,2 @@
+Incident ID,Incident Number,Title,Service Name,Team Name,Urgency,Priority Name,Created At,Seconds To First Ack,Seconds To Resolve,Assigned To
+Q9XYZ001,1301,Search index lag,search,Platform,high,P2,2026-11-10 09:00:00,120,5400,ops@example.com

@@ -18,7 +18,9 @@ export const MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
 
 /** The raw ingestion paths (the app-wide JSON / form parsers skip them; they read the body here). */
 export const RAW_INGEST_PATH = /\/ingest\/(tests|coverage|pipelines|deployments|commits|incidents|issues|static-analysis)\/?$/;
-export const isRawIngestPath = (path: string) => RAW_INGEST_PATH.test(path);
+/** File uploads (server/routes/uploads.ts): multipart bodies read here too. */
+export const UPLOAD_BODY_PATH = /\/uploads\/(preview|commit)\/?$/;
+export const isRawIngestPath = (path: string) => RAW_INGEST_PATH.test(path) || UPLOAD_BODY_PATH.test(path);
 
 /** Read the whole body (or take the one serverless-http already holds), at most MAX_UPLOAD_BYTES. */
 export async function readBody(req: Request, limit = MAX_UPLOAD_BYTES): Promise<Buffer> {

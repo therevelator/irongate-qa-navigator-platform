@@ -23,9 +23,14 @@ export type IngestStatus = 'accepted' | 'partial' | 'rejected';
 
 export interface IngestCaller {
   companyId: string;
-  channel: 'api' | 'manual';
+  /** api: an API key; manual: Manual metrics; upload: Admin console → Upload files (a signed-in person). */
+  channel: 'api' | 'manual' | 'upload';
   apiKeyId?: string | null;
   actorId?: string | null;
+  /** Upload preview: a dry run that writes nothing at all (not even an ingestion log row). */
+  preview?: boolean;
+  /** Upload: the teams the person may write to; any other team is refused (403). */
+  teamScope?: ReadonlySet<string> | null;
 }
 
 export interface ItemSummary {

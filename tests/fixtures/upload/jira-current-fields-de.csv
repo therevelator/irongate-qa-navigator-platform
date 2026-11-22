@@ -1,0 +1,4 @@
+Vorgangstyp;Schlüssel;Zusammenfassung;Bearbeiter;Autor;Priorität;Status;Lösung;Erstellt;Aktualisiert;Erledigt;Sprint;Stichwörter;Benutzerdefiniertes Feld (Story Points);Umgebung;Beschreibung
+Bug;SHOP-7;Warenkorb leer nach Login;Jonas Becker;anna@example.de;Hoch;Erledigt;Fertig;03.11.2026 08:15;10.11.2026 17:40;09.11.2026 16:20;Sprint 12;prod;2,5;Produktion;"Kunde meldet; Telefon 0170 1234567"
+Story;SHOP-8;Gutscheine einlösen;;anna@example.de;Mittel;In Arbeit;;25.10.2026 10:00;12.11.2026 09:00;;Sprint 12;;5;;
+Bug;SHOP-9;Rechnung PDF falsch;Jonas Becker;qa@example.de;Niedrig;Offen;;13.11.2026 14:05;13.11.2026 14:05;;;staging;1;Test;

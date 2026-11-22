@@ -125,12 +125,33 @@ export function summaryItem(teamId: string | null, source: string | null, record
   return { index: 0, teamId, source, recordedAt, metrics: [], status, ...(errors ? { errors } : {}) };
 }
 
+/** The caller of an ingestion request: the API key (routes below) or, for file uploads, the person (server/routes/uploads.ts). */
+export function callerOf(req: ApiKeyRequest): IngestCaller {
+  const given = (req as any).ingestCaller as IngestCaller | undefined;
+  return given ?? { companyId: req.apiKey!.companyId, channel: 'api', apiKeyId: req.apiKey!.id };
+}
+
+/** The actor recorded on computed values: the API key, or the person who uploaded the files. */
+export const actorOf = (c: IngestCaller) => (c.apiKeyId ? `api_key:${c.apiKeyId}` : c.actorId ?? null);
+
+/** Teams outside the caller's upload scope (none for an API key: the key's company is the scope). */
+export const outOfScope = (c: IngestCaller, teamIds: string[]) => (c.teamScope ? teamIds.filter((t) => !c.teamScope!.has(t)) : []);
+
+/** The 403 message for teams the caller may not write to. */
+export function noAccess(c: IngestCaller, teamIds: string[]): string {
+  const list = teamIds.join(', ');
+  const many = teamIds.length > 1;
+  return c.channel === 'upload'
+    ? `Team${many ? 's' : ''} ${list} ${many ? 'are' : 'is'} not one of the teams you may upload to`
+    : `Team${many ? 's' : ''} ${list} ${many ? 'are' : 'is'} not accessible with this API key`;
+}
+
 export const computedOut = (days: DayResult[]) => days.filter((d) => d.metrics.length).map((d) => ({ day: d.day, metrics: d.metrics }));
 
 /** Shared request handling: auth done; reads, validates, logs, stores, computes. */
-function handler(kind: RawKind) {
+export function rawIngestHandler(kind: RawKind) {
   return async (req: ApiKeyRequest, res: express.Response) => {
-    const caller: IngestCaller = { companyId: req.apiKey!.companyId, channel: 'api', apiKeyId: req.apiKey!.id };
+    const caller = callerOf(req);
     let key: string | null = null;
     let hash: string | null = null;
     let teamId: string | null = null;
@@ -169,7 +190,7 @@ function handler(kind: RawKind) {
         throw new HttpError(415, `Unrecognised ${kind === 'tests' ? 'test report' : 'coverage report'} format. Supported: ${supported.join(', ')} (set format= to choose one)`, { supported });
       }
       source = `${kind} (${format})`;
-      if (!(await teamOwned(caller.companyId, c.teamId))) throw new HttpError(403, `Team ${c.teamId} is not accessible with this API key`);
+      if (!(await teamOwned(caller.companyId, c.teamId)) || outOfScope(caller, [c.teamId]).length) throw new HttpError(403, noAccess(caller, [c.teamId]));
 
       const t0 = Date.now();
       let parsedTests: ParsedTestReport | null = null;
@@ -203,9 +224,11 @@ function handler(kind: RawKind) {
 
       if (c.dryRun) {
         const testSource = `${kind} (${format}, test call)`;
+        const response = { status: 'dry-run', kind, format, team: c.teamId, parseMs, ...summary, message: 'Key, team and report are valid. Nothing was stored.' };
+        if (caller.preview) return res.status(200).json(response);
         const out = await runLogged(caller, { key: null, hash, source: testSource }, async () => ({
           status: 'accepted', httpStatus: 200,
-          response: { status: 'dry-run', kind, format, team: c.teamId, parseMs, ...summary, message: 'Key, team and report are valid. Nothing was stored.' },
+          response,
           items: [summaryItem(c.teamId, testSource, at.toISOString(), 'duplicate')], errors: [], teamIds: [c.teamId], valueCount: 0, source: testSource,
         }));
         if ('replay' in out) return sendReplay(res, out.replay, hash);
@@ -232,12 +255,12 @@ function handler(kind: RawKind) {
         if (parsedTests) {
           const { runId: testRunId, day } = await storeTestRun(client, meta, up.id, parsedTests, at);
           await refreshFlakyEvidence(client, c.teamId, [c.commit]);
-          days = await recomputeTeamDays(client, c.teamId, affectedDays('tests', day), { groups: ['ci'], ingestionId, actorId: `api_key:${caller.apiKeyId}` });
+          days = await recomputeTeamDays(client, c.teamId, affectedDays('tests', day), { groups: ['ci'], ingestionId, actorId: actorOf(caller) });
           extra = { testRunId, counts: parsedTests.counts, durationMs: parsedTests.durationMs };
           valueCount = parsedTests.cases.length;
         } else {
           const r = await storeCoverage(client, meta, up.id, parsedCov!, at, changed);
-          days = await recomputeTeamDays(client, c.teamId, affectedDays('coverage', r.day), { groups: ['ci'], ingestionId, actorId: `api_key:${caller.apiKeyId}` });
+          days = await recomputeTeamDays(client, c.teamId, affectedDays('coverage', r.day), { groups: ['ci'], ingestionId, actorId: actorOf(caller) });
           extra = { coverageReportId: r.reportId, totals: parsedCov!.totals, files: parsedCov!.files.length, changedLines: r.changed };
           valueCount = parsedCov!.files.length;
         }
@@ -271,6 +294,8 @@ export async function fail(res: express.Response, caller: IngestCaller, key: str
   if (status === 500) console.error('Raw ingest error:', e);
   const extra = e instanceof HttpError ? e.extra : {};
   const ownedTeam = teamId && status !== 403 ? teamId : null;
+  // An upload preview writes nothing, not even the rejection.
+  if (caller.preview) return res.status(status).json({ error: message, ...extra, status: 'rejected', ingestionId: null });
   const id = await logRejected(caller, { key, hash }, {
     httpStatus: status, response: { error: message, ...extra }, items: [summaryItem(teamId, source, null, 'error', [message])],
     errors: [{ index: null, errors: [message] }], teamIds: ownedTeam && (await teamOwned(caller.companyId, ownedTeam).catch(() => false)) ? [ownedTeam] : [], source,
@@ -298,7 +323,7 @@ async function handlePipelines(
     throw e;
   }
   for (const r of runs) checkTime(r.startedAt);
-  if (!(await teamOwned(caller.companyId, teamId))) throw new HttpError(403, `Team ${teamId} is not accessible with this API key`);
+  if (!(await teamOwned(caller.companyId, teamId)) || outOfScope(caller, [teamId]).length) throw new HttpError(403, noAccess(caller, [teamId]));
   const dryRun = q.dryRun === 'true' || q.dryRun === '1';
   const source = 'pipelines';
   if (dryRun) {
@@ -318,7 +343,7 @@ async function handlePipelines(
     }
     const stored = await storePipelineRuns(client, caller.companyId, teamId, up.id, runs);
     const fresh = stored.filter((s) => !s.duplicate);
-    const days = fresh.length ? await recomputeTeamDays(client, teamId, Array.from(new Set(fresh.map((s) => s.day))), { groups: ['ci'], ingestionId, actorId: `api_key:${caller.apiKeyId}` }) : [];
+    const days = fresh.length ? await recomputeTeamDays(client, teamId, Array.from(new Set(fresh.map((s) => s.day))), { groups: ['ci'], ingestionId, actorId: actorOf(caller) }) : [];
     if (!fresh.length) {
       // Every run was already stored: keep no upload row for this request.
       items[0].status = 'duplicate';
@@ -336,8 +361,8 @@ async function handlePipelines(
   return res.status(outcome.outcome.httpStatus).json(outcome.outcome.response);
 }
 
-router.post('/tests', ingestLimiter, authenticateApiKey, handler('tests'));
-router.post('/coverage', ingestLimiter, authenticateApiKey, handler('coverage'));
-router.post('/pipelines', ingestLimiter, authenticateApiKey, handler('pipelines'));
+router.post('/tests', ingestLimiter, authenticateApiKey, rawIngestHandler('tests'));
+router.post('/coverage', ingestLimiter, authenticateApiKey, rawIngestHandler('coverage'));
+router.post('/pipelines', ingestLimiter, authenticateApiKey, rawIngestHandler('pipelines'));
 
 export default router;

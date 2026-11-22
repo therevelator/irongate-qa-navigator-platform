@@ -82,6 +82,32 @@ export interface IssueEvent {
   updatedAt: Date | null;
   url: string | null;
   transitions: IssueTransition[];
+  /**
+   * People as sent (assignee, reporter: an e-mail, account id or name) or their hashes (assigneeHash,
+   * reporterHash). Never stored as such: only the salted hash reaches raw_uploads (minimiseStore.ts).
+   */
+  people?: Record<string, string | null>;
+}
+
+/** The identity of a person field: an e-mail address, an account id or a name. */
+export function personOf(v: unknown): string | null {
+  if (typeof v === 'string') return v.trim().slice(0, 320) || null;
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>;
+    for (const k of ['emailAddress', 'email', 'accountId', 'id', 'name', 'displayName']) if (typeof o[k] === 'string' && (o[k] as string).trim()) return (o[k] as string).trim().slice(0, 320);
+  }
+  return null;
+}
+
+const HASH_RE = /^[0-9a-f]{8,64}$/i;
+function peopleOf(pairs: Record<string, unknown>): Record<string, string | null> | undefined {
+  const out: Record<string, string | null> = {};
+  for (const [k, v] of Object.entries(pairs)) {
+    if (k.endsWith('Hash')) { if (typeof v === 'string' && HASH_RE.test(v)) out[k] = v.toLowerCase(); continue; }
+    const p = personOf(v);
+    if (p) out[k] = p;
+  }
+  return Object.keys(out).length ? out : undefined;
 }
 
 export interface ParsedIssues { issues: IssueEvent[]; sprints: SprintRef[]; ignored: Array<{ id: string | null; reason: string }> }
@@ -142,6 +168,8 @@ export function classifyEnvironment(v: string | null | undefined): FoundIn | nul
   const s = v.toLowerCase();
   if (/\b(pre-?prod(uction)?|non-?prod(uction)?)\b/.test(s)) return 'pre_release';
   if (/\b(prod|production|prd|live|customer[- ]?(reported|found)?|escaped|found[- ]in[- ]prod(uction)?|field)\b/.test(s)) return 'production';
+  // Production in the languages of localised trackers (German, Spanish, Italian, Dutch, Portuguese).
+  if (/\b(produktion|produktiv|produccion|producción|produzione|productie|producao|produção)\b/.test(s)) return 'production';
   if (/\b(dev|development|test|testing|qa|staging|stage|stg|uat|sit|ci|local|sandbox|review|integration|pre-?release|internal)\b/.test(s)) return 'pre_release';
   return null;
 }
@@ -326,6 +354,7 @@ function jiraIssue(raw: any, at: string, opts: IssueOptions, names: Record<strin
     environment, storyPoints: num(spRaw, `${at}.fields.${spField ?? 'story points'}`, 10000), estimateHours: estimate, timeLoggedHours: logged,
     sprints, labels, components: labelsOf(f.components).map((x) => x.slice(0, 200)), createdAt: time(f.created, `${at}.fields.created`, true)!,
     resolvedAt: time(f.resolutiondate, `${at}.fields.resolutiondate`), updatedAt: time(f.updated, `${at}.fields.updated`), url, transitions,
+    people: peopleOf({ assignee: f.assignee, reporter: f.reporter ?? f.creator }),
   });
 }
 
@@ -397,6 +426,7 @@ function linearIssue(raw: any, at: string, webhook?: { updatedFrom?: any; create
     sprints: dedupeSprints(cycles), labels, components: raw.project?.name ? [String(raw.project.name).slice(0, 200)] : [],
     createdAt: time(raw.createdAt, `${at}.createdAt`, true)!, resolvedAt: time(raw.completedAt ?? raw.canceledAt, `${at}.completedAt`),
     updatedAt: time(raw.updatedAt, `${at}.updatedAt`), url: typeof raw.url === 'string' && /^https?:\/\//.test(raw.url) ? raw.url.slice(0, 1000) : null, transitions,
+    people: peopleOf({ assignee: raw.assignee, reporter: raw.creator }),
   });
 }
 
@@ -461,6 +491,7 @@ function jsonIssue(raw: any, at: string, sprintsById: Map<string, SprintRef>): I
     sprints, labels, components: labelsOf(raw.components).map((x) => x.slice(0, 200)),
     createdAt: time(raw.createdAt ?? raw.created, `${at}.createdAt`, true)!, resolvedAt: time(raw.resolvedAt ?? raw.resolved, `${at}.resolvedAt`),
     updatedAt: time(raw.updatedAt ?? raw.updated, `${at}.updatedAt`), url: typeof raw.url === 'string' && /^https?:\/\//.test(raw.url) ? raw.url.slice(0, 1000) : null, transitions,
+    people: peopleOf({ assignee: raw.assignee, reporter: raw.reporter, assigneeHash: raw.assigneeHash, reporterHash: raw.reporterHash }),
   });
 }
 

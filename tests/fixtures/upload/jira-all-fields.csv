@@ -1,0 +1,11 @@
+﻿Summary,Issue key,Issue id,Issue Type,Status,Project key,Project name,Priority,Resolution,Assignee,Reporter,Creator,Created,Updated,Last Viewed,Resolved,Component/s,Component/s,Labels,Labels,Description,Environment,Original Estimate,Remaining Estimate,Time Spent,Sprint,Sprint,Custom field (Story Points),Custom field (Customer notes),Status Category,Status Category Changed,Comment,Comment,Attachment
+Card refund fails for partial amounts,PAY-101,10101,Bug,Done,PAY,Payments,High,Fixed,Dana Wright,sam.lee@example.com,sam.lee@example.com,02/Nov/26 9:15 AM,10/Nov/26 4:02 PM,,09/Nov/26 3:30 PM,Refunds,API,production,customer-acme,"Steps:
+1. Refund 5.00 of 20.00
+2. ""Amount invalid"" shown
+SECRET-TOKEN-abc123",Production,14400,0,18000,Sprint 41,,3,Acme asked to be called back on +44 20 7946 0000,Done,09/Nov/26 3:30 PM,"10/Nov/26 9:00 AM;dana.wright@example.com;Fixed in 4.2, please retest",10/Nov/26 4:00 PM;sam.lee@example.com;Verified,10/Nov/26 4:01 PM;sam.lee@example.com;screenshot.png;https://jira.example.com/secure/attachment/1/screenshot.png
+Ledger export times out,PAY-102,10102,Bug,In Review,PAY,Payments,Medium,,Dana Wright,ops@example.com,ops@example.com,05/Nov/26 11:40 AM,12/Nov/26 10:10 AM,,,Ledger,,staging,,Times out after 30s on 50k rows,Staging,,,3600,Sprint 41,Sprint 42,2,,In Progress,11/Nov/26 2:00 PM,,,
+Add Apple Pay to checkout,PAY-103,10103,Story,Done,PAY,Payments,Medium,Done,Lee Chan,pm@example.com,pm@example.com,20/Oct/26 10:00 AM,07/Nov/26 5:00 PM,,07/Nov/26 4:55 PM,Checkout,,,,As a customer I want to pay with Apple Pay,,28800,0,25200,Sprint 40,Sprint 41,5,,Done,07/Nov/26 4:55 PM,,,
+Write runbook for refunds,PAY-104,10104,Task,To Do,PAY,Payments,Low,,,pm@example.com,pm@example.com,08/Nov/26 8:30 AM,08/Nov/26 8:30 AM,,,,,,,,,,,,Sprint 42,,1,,To Do,,,,
+Duplicate of refund bug,PAY-105,10105,Bug,Done,PAY,Payments,Low,Duplicate,,qa@example.com,qa@example.com,03/Nov/26 1:00 PM,04/Nov/26 1:00 PM,,04/Nov/26 1:00 PM,,,production,,dup,Production,,,,,,,,Done,04/Nov/26 1:00 PM,,,
+Broken row without a key,,10106,Bug,Open,PAY,Payments,,,,,,06/Nov/26 1:00 PM,,,,,,,,,,,,,,,,,To Do,,,,
+"=HYPERLINK(""http://evil.example/"",""click"")",PAY-107,10107,Sub-task,Done,PAY,Payments,,Done,,,,06/Nov/26 2:00 PM,06/Nov/26 3:00 PM,,06/Nov/26 3:00 PM,,,,,,,,,,Sprint 41,,,,Done,06/Nov/26 3:00 PM,,,
