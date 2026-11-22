@@ -29,6 +29,8 @@ interface Entry {
   source: string | null;
   /** File uploads: the file this request came from (Admin console → Upload files). */
   upload?: { file: string; type: string | null; batch: string; part: number; parts: number } | null;
+  /** The sending program when it identifies itself: the on-premises agent ("qe-agent/<version>"). */
+  client?: string | null;
   received_at: string;
   status: 'accepted' | 'partial' | 'rejected';
   idempotency_key: string | null;
@@ -147,6 +149,7 @@ const IngestionLog: React.FC = () => {
                 { header: 'Received', value: (e) => when(e.received_at), raw: (e) => e.received_at },
                 { header: 'Channel', value: (e) => (e.channel === 'api' ? 'API' : e.channel === 'upload' ? 'Upload' : 'Manual') },
                 { header: 'File', value: (e) => e.upload?.file ?? '' },
+                { header: 'Client', value: (e) => e.client ?? '' },
                 { header: 'Source', value: (e) => e.source ?? '' },
                 { header: 'Sent by', value: (e) => e.api_key_name ? `API key ${e.api_key_name}${e.api_key_prefix ? ` (${e.api_key_prefix}…)` : ''}` : e.actor_name ?? '' },
                 { header: 'Status', value: (e) => STATUS[e.status]?.label ?? e.status },
@@ -261,6 +264,7 @@ const IngestionLog: React.FC = () => {
               const caller = e.channel === 'upload'
                 ? `${e.actor_name ?? 'Someone'} uploaded ${e.upload?.file ? `“${e.upload.file}”${e.upload.parts > 1 ? ` (part ${e.upload.part} of ${e.upload.parts})` : ''}` : 'a file'}`
                 : e.channel === 'manual' ? (e.actor_name ? `${e.actor_name} (Manual metrics)` : 'Manual metrics') : e.api_key_name ? `API key ${e.api_key_name}${e.api_key_prefix ? ` (${e.api_key_prefix}…)` : ''}` : 'API key (deleted)';
+              const sentBy = e.client ? `${caller} via the on-premises agent (${e.client})` : caller;
               const errorCount = e.errors?.length ?? 0;
               return (
                 <li key={e.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="ingestion-entry" data-entry-id={e.id}>
@@ -274,10 +278,11 @@ const IngestionLog: React.FC = () => {
                       <span className="flex flex-wrap items-center gap-2">
                         <Badge tone={st.tone}>{st.label}</Badge>
                         <span className="text-sm font-medium text-slate-900 dark:text-white">{e.source ?? 'unknown source'}</span>
+                        {e.client && <span data-testid="ingestion-entry-agent" title={e.client}><Badge tone="neutral">agent</Badge></span>}
                         <span className="text-xs text-slate-500 dark:text-slate-400">{when(e.received_at)}</span>
                       </span>
                       <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">
-                        {caller}
+                        {sentBy}
                         {e.teams.length > 0 && <> · {e.teams.map((t) => t.name).join(', ')}</>}
                       </span>
                     </span>
