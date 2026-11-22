@@ -1,0 +1,13 @@
+# Build context: the repository root. Only what the image build needs is sent.
+*
+!collector/package.json
+!collector/package-lock.json
+!collector/tsconfig.json
+!collector/config.example.yaml
+!collector/scripts
+!collector/src
+!collector/test
+!packages/engine/package.json
+!packages/engine/src
+!packages/engine/test
+!server/lib/ingest/fieldAllowList.ts
