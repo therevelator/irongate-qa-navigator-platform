@@ -19,7 +19,7 @@ import { afterKpiWrite } from '../lib/alerts';
 import { findReplay, requestHash, runLogged, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 import { BodyError, maybeGunzip, readBody } from '../lib/ingest/body';
 import { HttpError, callerOf, actorOf, fail, noAccess, text } from './ingestRaw';
-import { CollectorValidationError, storeCollectorValues, validateCollectorBody, validateHeartbeat } from '../lib/collectorIngest';
+import { CollectorValidationError, storeCollectorValues, validateCollectorBody, validateHeartbeat, type CollectorBody } from '../lib/collectorIngest';
 
 const router = express.Router();
 export const COLLECTOR_BODY_LIMIT = 5 * 1024 * 1024;
@@ -48,14 +48,14 @@ router.post('/collector/metrics', ingestLimiter, authenticateApiKey, async (req:
       const replay = await findReplay(caller, key);
       if (replay) return sendReplay(res, replay, hash);
     }
-    let parsed;
+    let parsed: CollectorBody;
     try { parsed = validateCollectorBody(body); } catch (e) {
       if (e instanceof CollectorValidationError) throw new HttpError(400, `Invalid Collector values: ${e.errors[0]}`, { details: e.errors });
       throw e;
     }
-    const ids = Array.from(new Set(parsed.teams.map((t) => t.teamId)));
+    const ids: string[] = Array.from(new Set<string>(parsed.teams.map((t) => t.teamId)));
     teamId = ids[0] ?? null;
-    const owned = new Set((await query<any[]>('SELECT id FROM teams WHERE company_id = ? AND id = ANY(?::text[])', [caller.companyId, ids])).map((r: any) => r.id));
+    const owned = new Set<string>((await query<any[]>('SELECT id FROM teams WHERE company_id = ? AND id = ANY(?::text[])', [caller.companyId, ids])).map((r: any) => String(r.id)));
     const foreign = ids.filter((t) => !owned.has(t));
     if (foreign.length) { teamId = null; throw new HttpError(403, noAccess(caller, foreign)); }
     const values = parsed.teams.reduce((n, t) => n + t.days.reduce((m, d) => m + d.metrics.length, 0), 0);
