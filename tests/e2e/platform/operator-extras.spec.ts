@@ -90,7 +90,8 @@ test.describe('Platform support panel', { tag: [TAG.area('operator')] }, () => {
 
   test('OPS-08 every module of a company in detail: all developer rows, single pulse answers, module data', async ({ page }) => {
     await operatorSignIn(page);
-    await page.getByRole('row', { name: /Northwind/ }).getByTestId('operator-open-company').click();
+    // By id: the demo sandbox company ("Northwind Bank — demo", created by the sandbox tests) also matches the name.
+    await page.getByTestId('op-company-row-demo-northwind').getByTestId('operator-open-company').click();
     await expect(page.getByTestId('op-organisation')).toBeVisible({ timeout: 30000 });
     await page.getByRole('button', { name: 'Data', exact: true }).click();
     await expect(page.getByTestId('op-developers')).toContainText('Opted in', { timeout: 30000 });
