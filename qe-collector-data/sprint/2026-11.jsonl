@@ -1,0 +1,4 @@
+{"t":"golden-team-empty","id":"47","w":1795356826511001,"r":{"id":"b07bc17893dc7b2927b914eaf90b5905","externalId":"47","state":"closed","startedAt":1794244422084,"endsAt":1795194822084,"completedAt":1795216422084}}
+{"t":"golden-team-empty","id":"48","w":1795356826511004,"r":{"id":"a8189cf65574d8933dfa66865e385773","externalId":"48","state":"active","startedAt":1795194822084,"endsAt":1796404422084,"completedAt":null}}
+{"t":"golden-team-small","id":"c7a1e7b2-0000-4000-8000-000000000007","w":1795356826511007,"r":{"id":"e8dac79d371b3c733fdbd3089b932398","externalId":"c7a1e7b2-0000-4000-8000-000000000007","state":"closed","startedAt":1793607222084,"endsAt":1794816822084,"completedAt":1794820422084}}
+{"t":"golden-team-small","id":"c7a1e7b2-0000-4000-8000-000000000008","w":1795356826511009,"r":{"id":"f516111c53762c6376c678c734434b1a","externalId":"c7a1e7b2-0000-4000-8000-000000000008","state":"active","startedAt":1794816822084,"endsAt":1796026422084,"completedAt":null}}

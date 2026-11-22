@@ -307,7 +307,7 @@ export const AGENT_FIELDS = {
   never: 'descriptions, comments, attachments, failure messages and logs, finding messages, commit messages, custom free-text fields, names and e-mail addresses, labels, priorities, notes and alert details',
 };
 
-const yamlKey = (k: string) => (/^[A-Za-z0-9_.\/-]+$/.test(k) ? k : JSON.stringify(k));
+const yamlKey = (k: string) => (/^[A-Za-z0-9_./-]+$/.test(k) ? k : JSON.stringify(k));
 
 /** qe-collector.yaml for a CI and a privacy mode, with the team ids filled in. */
 export function agentConfigSnippet(origin: string, teams: Array<{ id: string; name: string }>, services: Array<{ service: string; teamId: string }> = [], ci: CollectorCi = 'github', mode: CollectorMode = 'evidence'): string {
