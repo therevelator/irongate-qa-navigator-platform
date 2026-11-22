@@ -4,12 +4,13 @@ import {
   LayoutDashboard, BarChart3, LogOut, MonitorSmartphone, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, MonitorPlay, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
   CalendarClock, Trophy, FileText, ChevronRight, Smartphone, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints,
+  FileUp,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import API_URL from '../config/api';
 import toast, { Toaster } from 'react-hot-toast';
 import {
-  ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin,
+  ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canUploadFiles, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin,
   type PolicyActor,
 } from '../../server/lib/userPolicy';
 import { policyActorOf, ROLE_LABELS } from '../lib/policyActor';
@@ -97,6 +98,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
     items: [
       { view: 'admin-panel', label: 'Admin console', icon: Shield, can: canManageCompanyConfig },
       { view: 'manual-metrics', label: 'Manual metrics', icon: Calculator, can: canWriteSomeTeamData },
+      { view: 'upload-files', label: 'Upload files', icon: FileUp, can: canUploadFiles },
       { view: 'metric-intervals', label: 'Update frequency', icon: Clock, can: canManageCompanyConfig },
       { view: 'parameters-config', label: 'Parameters', icon: SlidersHorizontal, can: canManageCompanyConfig },
       { view: 'ingestion-log', label: 'Ingestion log', icon: Inbox, can: canViewIngestionLog },
@@ -133,6 +135,7 @@ export const PAGE_META: Record<string, { title: string; parent?: string }> = {
   'user-activity': { title: 'User activity', parent: 'Organisation' },
   'admin-panel': { title: 'Admin console', parent: 'Administration' },
   'manual-metrics': { title: 'Manual metrics', parent: 'Administration' },
+  'upload-files': { title: 'Upload files', parent: 'Administration' },
   'metric-intervals': { title: 'Expected update frequency', parent: 'Administration' },
   'parameters-config': { title: 'Parameters', parent: 'Administration' },
   'ingestion-log': { title: 'Ingestion log', parent: 'Administration' },

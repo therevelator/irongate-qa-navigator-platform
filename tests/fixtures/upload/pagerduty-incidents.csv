@@ -1,0 +1,4 @@
+id,incident_number,description,status,urgency,priority,service_name,service_id,escalation_policy_name,created_on,acknowledged_on,resolved_on,assigned_to,resolved_by_user_name,notes
+Q1ABCDEF,1201,Checkout API 5xx above 5%,resolved,high,P1,checkout-api,PSVC1,Payments on call,2026-11-03T10:00:00Z,2026-11-03T10:04:00Z,2026-11-03T10:50:00Z,Dana Wright,Dana Wright,Rolled back release 4.2.1; customer refunds pending
+Q2BCDEFG,1202,Disk 90% on ledger-db,resolved,low,,ledger-db,PSVC2,DB on call,2026-11-07T22:10:00Z,,2026-11-08T01:10:00Z,Sam Lee,Sam Lee,
+Q3CDEFGH,1203,Webhook latency,acknowledged,high,P2,webhooks,PSVC3,Payments on call,2026-11-20T08:00:00Z,2026-11-20T08:03:00Z,,Dana Wright,,

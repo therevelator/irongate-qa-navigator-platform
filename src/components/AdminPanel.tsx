@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, UserPlus, Shield, X, ArrowLeft, Building2, Edit2, Trash2, ChevronDown, ChevronRight, Key, UserCheck, UserX, Bot, Eye } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { canEditUser, canResetPassword, managedDepartmentIds, type PolicyActor } from '../../server/lib/userPolicy';
+import { canEditUser, canResetPassword, canUploadFiles, managedDepartmentIds, type PolicyActor } from '../../server/lib/userPolicy';
 import toast from 'react-hot-toast';
 import { confirmDelete, showCannotDeleteWarning, confirmDeactivate, showSuccess } from '../utils/alerts';
 
@@ -45,6 +45,7 @@ interface Department {
 import API_URL from '../config/api';
 import ApiKeysPanel from './ApiKeysPanel';
 import ConnectCi from './ConnectCi';
+import { UploadFilesCard } from './UploadFiles';
 import SampleDataPanel from './SampleDataPanel';
 import { policyActorOf } from '../lib/policyActor';
 import { passwordProblem, PASSWORD_MIN_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_RULES_TEXT } from '../lib/passwordPolicy';
@@ -1098,6 +1099,9 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
 
       {/* Connect your CI: raw test / coverage / pipeline ingestion (super admin only, like the keys) */}
       {user?.role === 'super_admin' && <ConnectCi />}
+
+      {/* Upload files ("Level 0"): next to Connect your CI; super admins and managers here (team leads: navigation) */}
+      {canUploadFiles(actor) && <UploadFilesCard />}
 
       {/* Sample (demo) data loader (super admin only; server must allow it) */}
       {user?.role === 'super_admin' && <SampleDataPanel />}

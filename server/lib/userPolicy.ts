@@ -305,6 +305,24 @@ export function canWriteTeamData(actor: PolicyActor, team: { id: string; departm
   return canManageTeam(actor, team) || ledTeamIds(actor).includes(team.id);
 }
 
+/**
+ * File uploads (Admin console → Upload files, server/routes/uploads.ts): super admins for every team,
+ * managers for the teams of their departments, team leads for the teams they lead: the same people who
+ * may write a team's data (canWriteTeamData).
+ */
+export function canUploadFiles(actor: PolicyActor): boolean {
+  return canWriteSomeTeamData(actor);
+}
+
+export function canUploadToTeam(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
+  return canWriteTeamData(actor, team);
+}
+
+/** The company setting "Store issue and incident titles" (data minimisation): super admins. */
+export function canChangeDataMinimisation(actor: PolicyActor): boolean {
+  return hasCompany(actor);
+}
+
 /** Company-level administration (departments, API keys, moving teams, assigning managers and leads). */
 export function isCompanyAdmin(actor: PolicyActor): boolean {
   return hasCompany(actor);

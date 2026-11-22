@@ -5,8 +5,9 @@ import { policyActor } from '../middleware/access';
 import { canViewIngestionLog, canViewIngestionEntry, isCompanyAdmin, managedDepartmentIds, type PolicyActor } from '../lib/userPolicy';
 
 /**
- * Ingestion log (Administration → Ingestion log): every KPI write request (ingestion API and
- * Manual metrics), with its status, per-item summary and errors (server/lib/ingestionLog.ts).
+ * Ingestion log (Administration → Ingestion log): every KPI write request (ingestion API, Manual
+ * metrics and file uploads: channel "upload", with the file in "upload"), with its status, per-item
+ * summary and errors (server/lib/ingestionLog.ts).
  *
  * GET /api/ingestion-log            entries, newest first; filters: status, channel, source, teamId,
  *                                   from / to (YYYY-MM-DD), before (cursor), limit (≤ 200)
@@ -29,7 +30,7 @@ function scopeWhere(actor: PolicyActor, params: any[]): string {
 
 const COLUMNS = `l.id, l.channel, l.source, l.received_at, l.status, l.idempotency_key, l.http_status, l.team_ids, l.department_ids,
   l.item_count, l.value_count, l.errors, l.items, l.api_key_id, k.name AS api_key_name, k.key_prefix AS api_key_prefix,
-  l.actor_id, NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS actor_name`;
+  l.actor_id, NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS actor_name, l.response -> 'upload' AS upload`;
 const FROM = `FROM ingestion_log l LEFT JOIN api_keys k ON k.id = l.api_key_id LEFT JOIN users u ON u.id = l.actor_id`;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -42,7 +43,7 @@ router.get('/', authenticateToken, async (req: any, res) => {
     const params: any[] = [req.user.companyId];
     let where = 'l.company_id = ?' + scopeWhere(actor, params);
     if (['accepted', 'partial', 'rejected'].includes(q.status)) { where += ' AND l.status = ?'; params.push(q.status); }
-    if (['api', 'manual'].includes(q.channel)) { where += ' AND l.channel = ?'; params.push(q.channel); }
+    if (['api', 'manual', 'upload'].includes(q.channel)) { where += ' AND l.channel = ?'; params.push(q.channel); }
     if (typeof q.source === 'string' && q.source) { where += ' AND ? = ANY(string_to_array(l.source, \', \'))'; params.push(q.source); }
     if (typeof q.teamId === 'string' && q.teamId) { where += ' AND ? = ANY(l.team_ids)'; params.push(q.teamId); }
     if (typeof q.from === 'string' && DATE_RE.test(q.from)) { where += ' AND l.received_at >= ?::date'; params.push(q.from); }

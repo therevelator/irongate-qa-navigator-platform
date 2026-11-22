@@ -33,7 +33,8 @@ import {
 import { storeCommitBatches, storeDeployments, storeIncidents, type StoredEvent } from '../lib/ingest/deliveryStore';
 import { recomputeTeamDays, type DayResult } from '../lib/calc/engine';
 import { deliveryAffectedDays } from '../lib/calc/delivery';
-import { HttpError, after, computedOut, fail, summaryItem, text } from './ingestRaw';
+import { HttpError, actorOf, after, callerOf, computedOut, fail, noAccess, outOfScope, summaryItem, text } from './ingestRaw';
+import { applyIncidentAllowList, minimisedIncidentPayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
 
 const router = express.Router();
 
@@ -79,9 +80,9 @@ const eventTimes = (kind: DeliveryKind, e: AnyEvent): Date[] => {
   return (e as CommitBatch).commits.flatMap((c) => [c.authoredAt, c.committedAt]).filter((x): x is Date => !!x);
 };
 
-function handler(kind: DeliveryKind) {
+export function deliveryIngestHandler(kind: DeliveryKind) {
   return async (req: ApiKeyRequest, res: express.Response) => {
-    const caller: IngestCaller = { companyId: req.apiKey!.companyId, channel: 'api', apiKeyId: req.apiKey!.id };
+    const caller: IngestCaller = callerOf(req);
     let key: string | null = null;
     let hash: string | null = null;
     let teamId: string | null = null;
@@ -137,7 +138,10 @@ function handler(kind: DeliveryKind) {
         throw e;
       }
       for (const e of events) for (const t of eventTimes(kind, e)) checkEventTime(t);
-      if (defaults.team && !(await teamsOwned(caller.companyId, [defaults.team]))) throw new HttpError(403, `Team ${defaults.team} is not accessible with this API key`);
+      // Field allow-list (server/lib/ingest/fieldAllowList.ts): only allowed incident fields are stored.
+      const storeTitles = kind === 'incidents' ? await storeTitlesOf(caller.companyId) : true;
+      if (kind === 'incidents') applyIncidentAllowList(events as IncidentEvent[], storeTitles);
+      if (defaults.team && (!(await teamsOwned(caller.companyId, [defaults.team])) || outOfScope(caller, [defaults.team]).length)) throw new HttpError(403, noAccess(caller, [defaults.team]));
       const teamOf = await resolveTeams(caller.companyId, kind, events);
       const teams = Array.from(new Set(teamOf.values()));
       teamId = teams[0] ?? teamId;
@@ -145,16 +149,20 @@ function handler(kind: DeliveryKind) {
         const owned = new Set((await query<any[]>('SELECT id FROM teams WHERE company_id = ? AND id = ANY(?::text[])', [caller.companyId, teams])).map((r: any) => r.id));
         const foreign = teams.filter((t) => !owned.has(t));
         teamId = null;
-        throw new HttpError(403, `Team${foreign.length > 1 ? 's' : ''} ${foreign.join(', ')} ${foreign.length > 1 ? 'are' : 'is'} not accessible with this API key`);
+        throw new HttpError(403, noAccess(caller, foreign));
       }
+      const outside = outOfScope(caller, teams);
+      if (outside.length) { teamId = null; throw new HttpError(403, noAccess(caller, outside)); }
       const count = kind === 'commits' ? (events as CommitBatch[]).reduce((n, b) => n + b.commits.length, 0) : events.length;
       const firstAt = events.length ? eventTimes(kind, events[0])[0]?.toISOString() ?? null : null;
 
       if (q.dryRun === 'true' || q.dryRun === '1') {
         const testSource = `${kind} (${format}, test call)`;
+        const response = { status: 'dry-run', kind, format, teams, events: count, ignored, message: 'Key, teams and events are valid. Nothing was stored.' };
+        if (caller.preview) return res.status(200).json(response);
         const out = await runLogged(caller, { key: null, hash, source: testSource }, async () => ({
           status: 'accepted', httpStatus: 200,
-          response: { status: 'dry-run', kind, format, teams, events: count, ignored, message: 'Key, teams and events are valid. Nothing was stored.' },
+          response,
           items: (teams.length ? teams : [defaults.team]).map((t) => summaryItem(t, testSource, firstAt, 'duplicate')), errors: [], teamIds: teams, valueCount: 0, source: testSource,
         }));
         if ('replay' in out) return sendReplay(res, out.replay, hash);
@@ -170,10 +178,12 @@ function handler(kind: DeliveryKind) {
           };
         }
         // One raw_uploads row per team of the request (the identity of the request: its body hash).
+        // Incidents: the copy kept is the minimised events of the team, never the body as received.
         const uploads = new Map<string, { id: string; fresh: boolean }>();
         for (const t of teams) {
+          const kept = kind === 'incidents' ? minimisedIncidentPayload(caller.companyId, (events as IncidentEvent[]).filter((e) => teamOf.get(e) === t), storeTitles) : payload;
           const up = await insertUpload(client, {
-            companyId: caller.companyId, teamId: t, kind, format, commit: '', branch: null, runId: `${kind}:${h.slice(0, 32)}`, attempt: 1, payload,
+            companyId: caller.companyId, teamId: t, kind, format, commit: '', branch: null, runId: `${kind}:${h.slice(0, 32)}`, attempt: 1, payload: kept,
             apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs: 0, summary: { events: count, format },
           });
           uploads.set(t, 'duplicateOf' in up ? { id: up.duplicateOf, fresh: false } : { id: up.id, fresh: true });
@@ -191,7 +201,7 @@ function handler(kind: DeliveryKind) {
           const mine = stored.filter((s) => s.team === t);
           const changed = mine.filter((s) => s.status !== 'duplicate');
           const days = deliveryAffectedDays(Array.from(new Set(changed.flatMap((s) => s.days))));
-          const result = days.length ? await recomputeTeamDays(client, t, days, { groups: ['delivery'], ingestionId, actorId: `api_key:${caller.apiKeyId}` }) : [];
+          const result = days.length ? await recomputeTeamDays(client, t, days, { groups: ['delivery'], ingestionId, actorId: actorOf(caller) }) : [];
           computed.push({ team: t, days: result });
           if (!changed.length && uploads.get(t)?.fresh) await client.query('DELETE FROM raw_uploads WHERE id = $1', [uploads.get(t)!.id]);
           const item = summaryItem(t, source, firstAt, changed.length ? 'written' : 'duplicate');
@@ -231,8 +241,8 @@ async function teamsOwned(companyId: string, teamIds: string[]): Promise<boolean
   return rows[0]?.n === teamIds.length;
 }
 
-router.post('/deployments', ingestLimiter, authenticateApiKey, handler('deployments'));
-router.post('/commits', ingestLimiter, authenticateApiKey, handler('commits'));
-router.post('/incidents', ingestLimiter, authenticateApiKey, handler('incidents'));
+router.post('/deployments', ingestLimiter, authenticateApiKey, deliveryIngestHandler('deployments'));
+router.post('/commits', ingestLimiter, authenticateApiKey, deliveryIngestHandler('commits'));
+router.post('/incidents', ingestLimiter, authenticateApiKey, deliveryIngestHandler('incidents'));
 
 export default router;

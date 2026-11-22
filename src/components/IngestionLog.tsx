@@ -25,8 +25,10 @@ interface Item {
 
 interface Entry {
   id: string;
-  channel: 'api' | 'manual';
+  channel: 'api' | 'manual' | 'upload';
   source: string | null;
+  /** File uploads: the file this request came from (Admin console → Upload files). */
+  upload?: { file: string; type: string | null; batch: string; part: number; parts: number } | null;
   received_at: string;
   status: 'accepted' | 'partial' | 'rejected';
   idempotency_key: string | null;
@@ -83,7 +85,10 @@ const IngestionLog: React.FC = () => {
   const [sources, setSources] = useState<Source[]>([]);
   const [next, setNext] = useState<string | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'forbidden'>('loading');
-  const [open, setOpen] = useState<Record<string, boolean>>({});
+  // ?entry=<id> (a link from Upload files' results) opens that entry.
+  const [open, setOpen] = useState<Record<string, boolean>>(() => {
+    try { const id = new URLSearchParams(window.location.search).get('entry'); return id ? { [id]: true } : {}; } catch { return {}; }
+  });
   const [filters, setFilters] = useState({ status: '', channel: '', source: '', from: '', to: '' });
 
   const query = useCallback((before?: string) => {
@@ -140,7 +145,8 @@ const IngestionLog: React.FC = () => {
               rows={entries}
               columns={[
                 { header: 'Received', value: (e) => when(e.received_at), raw: (e) => e.received_at },
-                { header: 'Channel', value: (e) => (e.channel === 'api' ? 'API' : 'Manual') },
+                { header: 'Channel', value: (e) => (e.channel === 'api' ? 'API' : e.channel === 'upload' ? 'Upload' : 'Manual') },
+                { header: 'File', value: (e) => e.upload?.file ?? '' },
                 { header: 'Source', value: (e) => e.source ?? '' },
                 { header: 'Sent by', value: (e) => e.api_key_name ? `API key ${e.api_key_name}${e.api_key_prefix ? ` (${e.api_key_prefix}…)` : ''}` : e.actor_name ?? '' },
                 { header: 'Status', value: (e) => STATUS[e.status]?.label ?? e.status },
@@ -215,6 +221,7 @@ const IngestionLog: React.FC = () => {
               <option value="">All</option>
               <option value="api">Ingestion API</option>
               <option value="manual">Manual metrics</option>
+              <option value="upload">File uploads</option>
             </select>
           </label>
           <label className="flex flex-col gap-1 text-xs text-slate-500 dark:text-slate-400">
@@ -251,10 +258,12 @@ const IngestionLog: React.FC = () => {
             {entries.map((e) => {
               const st = STATUS[e.status];
               const isOpen = !!open[e.id];
-              const caller = e.channel === 'manual' ? (e.actor_name ? `${e.actor_name} (Manual metrics)` : 'Manual metrics') : e.api_key_name ? `API key ${e.api_key_name}${e.api_key_prefix ? ` (${e.api_key_prefix}…)` : ''}` : 'API key (deleted)';
+              const caller = e.channel === 'upload'
+                ? `${e.actor_name ?? 'Someone'} uploaded ${e.upload?.file ? `“${e.upload.file}”${e.upload.parts > 1 ? ` (part ${e.upload.part} of ${e.upload.parts})` : ''}` : 'a file'}`
+                : e.channel === 'manual' ? (e.actor_name ? `${e.actor_name} (Manual metrics)` : 'Manual metrics') : e.api_key_name ? `API key ${e.api_key_name}${e.api_key_prefix ? ` (${e.api_key_prefix}…)` : ''}` : 'API key (deleted)';
               const errorCount = e.errors?.length ?? 0;
               return (
-                <li key={e.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="ingestion-entry">
+                <li key={e.id} className="rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900" data-testid="ingestion-entry" data-entry-id={e.id}>
                   <button
                     type="button"
                     onClick={() => setOpen((o) => ({ ...o, [e.id]: !o[e.id] }))}

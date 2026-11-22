@@ -1,6 +1,6 @@
 import {
   canInvite, canManageCompanyConfig, canManageSampleData, canOpenUserAdmin, canRequestExecutiveBriefing, canSetJobTitle,
-  canUseFormulaMode, canViewActivity, canViewIngestionLog, canViewRevenueRollup, canViewUserActivity, canWriteSomeTeamData,
+  canUseFormulaMode, canViewActivity, canViewIngestionLog, canViewRevenueRollup, canViewUserActivity, canWriteSomeTeamData, canUploadFiles,
   grantsOf, isCompanyAdmin, ledTeamIds, managedDepartmentIds, DEVELOPER_INSIGHT_ROLES, type PolicyActor,
 } from '../../server/lib/userPolicy';
 import { ROLE_LABELS } from '../../server/lib/roleLabels';
@@ -62,6 +62,7 @@ export function accessSummary(actor: PolicyActor, assignments: AssignmentLike[],
     'Change team data, acknowledge alerts or manage tracked actions (read-only).');
   add(canInvite(actor), 'Invite people and give or remove assignments within your scope.', 'Invite people or change anyone\'s access.');
   add(canOpenUserAdmin(actor), 'Open the Users and Teams pages for the people and teams you manage.');
+  add(canUploadFiles(actor), 'Upload exported files (test reports, coverage, Jira, Linear, PagerDuty, Opsgenie, CSV) for the teams whose data you may write, after a preview.');
   add(canManageCompanyConfig(actor),
     'Change settings: KPI targets, parameters, expected update frequency and alert rules.',
     'Change settings, KPI targets or alert rules.');

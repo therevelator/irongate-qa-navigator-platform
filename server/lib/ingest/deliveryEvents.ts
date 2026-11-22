@@ -80,6 +80,8 @@ export interface IncidentEvent {
   category: string | null;
   url: string | null;
   source: string;
+  /** The responder as sent (e-mail, id or name) or its hash: only the salted hash reaches raw_uploads (minimiseStore.ts). */
+  people?: Record<string, string | null>;
 }
 
 /** Names of computed values: refused on the raw endpoints (QE Navigator calculates them). */
@@ -411,7 +413,16 @@ export function normaliseIncident(raw: any, at: string, defaults: { team?: strin
     deployment: str(raw.deploymentId ?? raw.deployment_id ?? raw.deployment ?? raw.linkedDeployment, 200),
     outage: bool(raw.outage ?? raw.isOutage, f('outage')), category: str(raw.category ?? raw.kind ?? raw.type, 50)?.toLowerCase() ?? null,
     url: str(raw.url ?? raw.html_url, 1000), source: defaults.source ?? 'json',
+    people: responderOf(raw),
   };
+}
+
+function responderOf(raw: any): Record<string, string | null> | undefined {
+  const h = typeof raw.responderHash === 'string' && /^[0-9a-f]{8,64}$/i.test(raw.responderHash) ? raw.responderHash.toLowerCase() : null;
+  if (h) return { responderHash: h };
+  const v = raw.responder ?? raw.assignee ?? raw.owner;
+  const id = typeof v === 'string' ? v.trim() : v && typeof v === 'object' ? (v.email ?? v.emailAddress ?? v.id ?? v.summary ?? v.name ?? null) : null;
+  return typeof id === 'string' && id.trim() ? { responder: id.trim().slice(0, 320) } : undefined;
 }
 
 const PD_EVENT: Record<string, IncidentStatus> = {
@@ -429,6 +440,7 @@ function pdIncident(i: any, at: string, defaults: { team?: string | null; servic
     id: i.id, title: i.title ?? i.summary, severity: priority ?? (i.urgency === 'high' ? 'high' : i.urgency === 'low' ? 'low' : null),
     service: i.service?.summary ?? i.service?.name, status: st, openedAt: i.created_at, acknowledgedAt: acked, resolvedAt: resolved,
     at: occurred, url: i.html_url, deploymentId: i.custom_fields?.deployment_id ?? i.metadata?.deployment_id,
+    responder: i.assignments?.[0]?.assignee ?? i.last_status_change_by ?? null,
   }, at, { ...defaults, source: 'pagerduty' });
 }
 

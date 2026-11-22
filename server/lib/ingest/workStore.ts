@@ -27,21 +27,23 @@ export async function storeSprints(client: pg.PoolClient, companyId: string, tea
   const days: string[] = [];
   for (const s of sprints) {
     const state = s.state ?? (s.completedAt ? 'closed' : s.startedAt && s.startedAt.getTime() <= Date.now() ? 'active' : 'future');
+    // A sprint known by its name only (a Jira CSV names the sprints, without dates or state): its stored state is kept.
+    const unknown = !s.state && !s.startedAt && !s.endsAt && !s.completedAt;
     const r = await client.query(
       `INSERT INTO issue_sprints (company_id, team_id, upload_id, external_id, name, state, started_at, ends_at, completed_at, is_sample)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
        ON CONFLICT (team_id, external_id) DO UPDATE SET
          name = COALESCE(EXCLUDED.name, issue_sprints.name),
-         state = CASE WHEN issue_sprints.state = 'closed' AND EXCLUDED.completed_at IS NULL THEN issue_sprints.state ELSE EXCLUDED.state END,
+         state = CASE WHEN $11::boolean OR (issue_sprints.state = 'closed' AND EXCLUDED.completed_at IS NULL) THEN issue_sprints.state ELSE EXCLUDED.state END,
          started_at = COALESCE(EXCLUDED.started_at, issue_sprints.started_at), ends_at = COALESCE(EXCLUDED.ends_at, issue_sprints.ends_at),
          completed_at = COALESCE(EXCLUDED.completed_at, issue_sprints.completed_at), updated_at = now()
        WHERE issue_sprints.name IS DISTINCT FROM COALESCE(EXCLUDED.name, issue_sprints.name)
           OR issue_sprints.started_at IS DISTINCT FROM COALESCE(EXCLUDED.started_at, issue_sprints.started_at)
           OR issue_sprints.ends_at IS DISTINCT FROM COALESCE(EXCLUDED.ends_at, issue_sprints.ends_at)
           OR issue_sprints.completed_at IS DISTINCT FROM COALESCE(EXCLUDED.completed_at, issue_sprints.completed_at)
-          OR (issue_sprints.state <> EXCLUDED.state AND NOT (issue_sprints.state = 'closed' AND EXCLUDED.completed_at IS NULL))
+          OR (NOT $11::boolean AND issue_sprints.state <> EXCLUDED.state AND NOT (issue_sprints.state = 'closed' AND EXCLUDED.completed_at IS NULL))
        RETURNING completed_at, started_at`,
-      [companyId, teamId, uploadId, s.id, s.name, state, iso(s.startedAt), iso(s.endsAt), iso(s.completedAt), sample]
+      [companyId, teamId, uploadId, s.id, s.name, state, iso(s.startedAt), iso(s.endsAt), iso(s.completedAt), sample, unknown]
     );
     if (r.rows.length) {
       changed++;

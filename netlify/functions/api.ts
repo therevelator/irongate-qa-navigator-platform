@@ -30,6 +30,7 @@ import actionsRoutes from '../../server/routes/actions';
 import activityRoutes from '../../server/routes/activity';
 import operatorRoutes from '../../server/routes/operator';
 import ciRoutes from '../../server/routes/ci';
+import uploadsRoutes from '../../server/routes/uploads';
 import { isRawIngestPath } from '../../server/lib/ingest/body';
 import { requestContext } from '../../server/lib/requestContext';
 import '../../server/lib/userActivity'; // user activity log (request hook)
@@ -125,6 +126,7 @@ router.use('/actions', actionsRoutes);
 router.use('/activity', activityRoutes);
 router.use('/operator', operatorRoutes);
 router.use('/ci', ciRoutes);
+router.use('/uploads', uploadsRoutes);
 
 app.use('/api', router);
 app.use('/', router); // Also support without /api prefix

@@ -1,6 +1,6 @@
 import {
   ANALYTICS_ROLES, analyticsScopeLevelOf, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog,
-  canViewUserActivity, canWriteSomeTeamData, grantsOf, isCompanyAdmin, type PolicyActor,
+  canUploadFiles, canViewUserActivity, canWriteSomeTeamData, grantsOf, isCompanyAdmin, type PolicyActor,
 } from '../../server/lib/userPolicy';
 
 /**
@@ -54,6 +54,9 @@ export function canOpenView(actor: PolicyActor | null | undefined, view: string)
       return canManageCompanyConfig(actor);
     case 'manual-metrics':
       return canWriteSomeTeamData(actor);
+    case 'upload-files':
+      // Upload files: super admins, managers (their departments' teams), team leads (teams they lead).
+      return canUploadFiles(actor);
     default:
       return false;
   }
