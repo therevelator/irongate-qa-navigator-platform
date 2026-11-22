@@ -210,9 +210,13 @@ describe('Shared engine: the server path and the engine directly give the same v
     await withTransaction((c) => recomputeTeamDays(c, TEAM, days, { writeKpis: false }));
     const rows = (await db.query(
       `SELECT day::text AS day, metric_key, value::float8 AS value, sample_size, inputs, recorded_at FROM metric_evidence WHERE team_id = $1 AND day < $2::date ORDER BY day, metric_key`, [TEAM, today])).rows;
-    const server = rows.map((r: any) => ({ day: r.day, key: r.metric_key, value: r.value, sampleSize: r.sample_size, inputs: r.inputs, recordedAt: new Date(r.recorded_at).toISOString() }));
+    // Both sides sorted here with one comparator: the SQL ORDER BY follows the database collation
+    // (en_US in CI puts changed_code_coverage before change_failure_rate, C the other way round).
+    const byDayKey = (a: { day: string; key: string }, b: { day: string; key: string }) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0);
+    const server = rows.map((r: any) => ({ day: r.day, key: r.metric_key, value: r.value, sampleSize: r.sample_size, inputs: r.inputs, recordedAt: new Date(r.recorded_at).toISOString() }))
+      .sort(byDayKey);
     const engine = Array.from(engineDays(days).entries()).flatMap(([day, ms]) => ms.map((m) => ({ day, key: m.key, value: Math.round(m.value * 10000) / 10000, sampleSize: m.sampleSize, inputs: JSON.parse(JSON.stringify(m.inputs)), recordedAt: m.recordedAt })))
-      .sort((a, b) => a.day.localeCompare(b.day) || a.key.localeCompare(b.key));
+      .sort(byDayKey);
     // Every group is covered, on several days.
     const keys = new Set(server.map((s) => s.key));
     for (const k of ['line_coverage', 'branch_coverage', 'changed_code_coverage', 'pass_rate', 'first_time_pass_rate', 'flaky_tests', 'test_flakiness_rate', 'test_execution_time',
