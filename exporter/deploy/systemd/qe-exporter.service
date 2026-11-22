@@ -1,0 +1,45 @@
+# /etc/systemd/system/qe-exporter.service — one sync run (started by qe-exporter.timer).
+#   install -d -o qe-exporter -g qe-exporter -m 0700 /var/lib/qe-exporter
+#   install -m 0444 qe-exporter.mjs SHA256SUMS /opt/qe-exporter/
+#   /etc/qe-exporter/qe-exporter.yaml (0644) and /etc/qe-exporter/env (0600: QE_API_KEY=…, JIRA_TOKEN=…)
+#   systemctl daemon-reload && systemctl enable --now qe-exporter.timer
+#   journalctl -u qe-exporter        # structured JSON logs, no secrets
+[Unit]
+Description=QE Navigator Exporter (one sync run)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=qe-exporter
+Group=qe-exporter
+EnvironmentFile=/etc/qe-exporter/env
+Environment=QE_EXPORTER_CONFIG=/etc/qe-exporter/qe-exporter.yaml
+ExecStart=/usr/bin/node /opt/qe-exporter/qe-exporter.mjs sync --log-format json
+TimeoutStartSec=50min
+# Exit codes 2–6 are reported failures (config, source, QE Navigator, locked, partial): see README.
+SuccessExitStatus=0
+# Hardening: read-only system, only the state directory is writable, no privileges, outbound only.
+StateDirectory=qe-exporter
+StateDirectoryMode=0700
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077

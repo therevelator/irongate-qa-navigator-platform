@@ -50,8 +50,8 @@ jobs:
       - name: Calculation engine (typecheck, purity and unit tests)
         run: npx tsc --noEmit -p packages/engine/tsconfig.json && node --import tsx --test packages/engine/test/*.test.ts
 
-      - name: QE Navigator Collector (typecheck, bundle, tests, allow-list drift)
-        working-directory: collector
+      - name: QE Navigator Exporter (typecheck, bundle, tests, allow-list drift)
+        working-directory: exporter
         run: npm ci --ignore-scripts --no-audit --no-fund && npm run typecheck && npm test && npm run check-allow-list
 
       - name: Lint (report only, existing lint debt does not fail the build)
@@ -86,8 +86,8 @@ jobs:
       - name: Set up database and API
         uses: ./.github/actions/setup-test-env
 
-      - name: Build the QE Navigator Collector (its end-to-end tests run the bundle)
-        working-directory: collector
+      - name: Build the QE Navigator Exporter (its end-to-end tests run the bundle)
+        working-directory: exporter
         run: npm ci --ignore-scripts --no-audit --no-fund && npm run build
 
       - name: API tests

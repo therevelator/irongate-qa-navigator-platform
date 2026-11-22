@@ -1,4 +1,0 @@
-# Plain cron (e.g. /etc/cron.d/qe-collector): every 15 minutes as the unprivileged user qe-collector.
-# /etc/qe-collector/env (mode 0600, owner qe-collector) holds the secrets as `export QE_API_KEY=igk_…` lines.
-# flock keeps runs from overlapping (the Collector also takes its own lock and exits 5 if one is running).
-*/15 * * * * qe-collector . /etc/qe-collector/env && flock -n /var/lib/qe-collector/cron.lock /usr/bin/node /opt/qe-collector/qe-collector.mjs sync -c /etc/qe-collector/qe-collector.yaml --log-format json >> /var/log/qe-collector/qe-collector.log 2>&1

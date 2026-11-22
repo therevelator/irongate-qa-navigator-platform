@@ -1,0 +1,25 @@
+{
+  "name": "qe-exporter",
+  "version": "0.3.0",
+  "description": "QE Navigator Exporter: reads your CI, code quality, issue and incident tools inside your network with your own credentials and sends the raw data to QE Navigator as JSON over outbound HTTPS. QE Navigator calculates; the Exporter calculates nothing.",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "module",
+  "bin": { "qe-exporter": "dist/qe-exporter.mjs", "qe-collector": "dist/qe-exporter.mjs", "qe-agent": "dist/qe-exporter.mjs" },
+  "files": ["dist/qe-exporter.mjs", "dist/SHA256SUMS", "README.md", "SECURITY.md", "config.example.yaml"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node scripts/build.mjs && node --import tsx --test --test-timeout=60000 test/*.test.ts",
+    "sync-allow-list": "node scripts/sync-allow-list.mjs",
+    "check-allow-list": "node scripts/sync-allow-list.mjs --check"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "esbuild": "0.27.1",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,4 @@
+# Plain cron (e.g. /etc/cron.d/qe-exporter): every 15 minutes as the unprivileged user qe-exporter.
+# /etc/qe-exporter/env (mode 0600, owner qe-exporter) holds the secrets as `export QE_API_KEY=igk_…` lines.
+# flock keeps runs from overlapping (the Exporter also takes its own lock and exits 5 if one is running).
+*/15 * * * * qe-exporter . /etc/qe-exporter/env && flock -n /var/lib/qe-exporter/cron.lock /usr/bin/node /opt/qe-exporter/qe-exporter.mjs sync -c /etc/qe-exporter/qe-exporter.yaml --log-format json >> /var/log/qe-exporter/qe-exporter.log 2>&1

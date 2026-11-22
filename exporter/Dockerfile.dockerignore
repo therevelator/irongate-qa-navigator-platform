@@ -1,0 +1,10 @@
+# Build context: the repository root. Only what the image build needs is sent.
+*
+!exporter/package.json
+!exporter/package-lock.json
+!exporter/tsconfig.json
+!exporter/config.example.yaml
+!exporter/scripts
+!exporter/src
+!exporter/test
+!server/lib/ingest/fieldAllowList.ts

@@ -1,0 +1,172 @@
+# qe-exporter configuration (the QE Navigator Exporter). "qe-exporter setup" writes this file for you (as JSON,
+# which is also valid YAML); this file is for people who prefer to write it by hand. No secrets in it: they come
+# from environment variables (or VAR_FILE with the path of a file holding the value, for Docker / Kubernetes
+# secrets), or from the credentials file the setup page writes (0600, in a 0700 folder).
+#
+#   QE_API_KEY        igk_… key from QE Navigator → Admin console → API keys (your company admin creates it)
+#   GITHUB_TOKEN      GitHub fine-grained token (Actions, Contents, Deployments, Metadata: read)
+#                     or GITHUB_APP_PRIVATE_KEY with auth: app
+#   GITLAB_TOKEN      GitLab access token, scope read_api
+#   BITBUCKET_USERNAME, BITBUCKET_APP_PASSWORD   Bitbucket Cloud user and app password (Account, Repositories, Pipelines: Read)
+#   BITBUCKET_TOKEN   Bitbucket Data Center HTTP access token (Read)
+#   JENKINS_USER, JENKINS_TOKEN   Jenkins user and API token (Overall/Read, Job/Read)
+#   AZURE_DEVOPS_TOKEN  Azure DevOps PAT (Build, Test Management, Code, Environment: Read)
+#   SONAR_TOKEN       SonarQube / SonarCloud user token (Browse)
+#   JIRA_TOKEN        Jira Cloud API token, or a Jira Server / Data Center Personal Access Token
+#   JIRA_EMAIL        Jira Cloud only: the e-mail of the token's account (or `email:` below)
+#   LINEAR_API_KEY    Linear personal API key (read)
+#   PAGERDUTY_TOKEN   PagerDuty read-only REST API key
+#   OPSGENIE_API_KEY  Opsgenie API integration key (read access)
+#   QE_PEOPLE_SALT    only with privacy.people: hash (at least 16 characters; keep it in your network)
+
+qeNavigator:
+  url: https://app.irongate.ie          # outbound 443 only; nothing connects to you
+  companyId: your-company-id            # Admin console → Connect your CI (or the setup page fills it in)
+  # caFile: /etc/qe-exporter/proxy-ca.pem  # if a TLS-inspecting proxy re-signs traffic
+  # requestsPerMinute: 50               # below the API's 60 per minute per key
+
+# Every request names the company, the department and the team; QE Navigator refuses any id that is not yours.
+teams:                 # QE Navigator team id → the id of its department
+  team-payments: dept-platform
+  team-web: dept-platform
+
+privacy:               # issues and incidents: what may be sent besides the fields the calculations need
+  sendTitles: false    # issue / incident titles (default: key / id only)
+  sendLinks: false     # links back to your tools (they name your internal hosts)
+  people: none         # none: no person is sent; hash: salted HMAC computed here (QE_PEOPLE_SALT)
+
+state:
+  path: /var/lib/qe-exporter/state.json   # cursor per source + fingerprints of what was delivered (no data)
+
+# credentials:
+#   path: /var/lib/qe-exporter/qe-exporter-credentials/credentials.json   # the setup page's credentials file
+# hostLabel: build-server-1   # a short name of this machine, shown to QE Navigator's operators (default: host name)
+# setup:
+#   port: 8788                 # qe-exporter setup (always on 127.0.0.1)
+
+backfillDays: 90       # first run: read this many days back (or: qe-exporter sync --since 2026-01-01)
+overlapMinutes: 10     # each run re-reads this much before the cursor (nothing is sent twice)
+
+# http:
+#   timeoutSeconds: 30
+#   maxRetries: 5
+#   caFile: /etc/qe-exporter/corporate-ca.pem   # extra CA for every source (added to the system roots)
+
+sources:
+  # GitHub Actions: workflow runs, jobs and steps, test / coverage / SARIF artifacts, deployments, commits.
+  - name: github
+    type: github
+    repos:                       # owner/name → QE Navigator team id
+      acme/payments: team-payments
+      acme/web: team-web
+    environments: [production]   # deployment environments that are production
+    # apiUrl: https://github.example.com/api/v3   # GitHub Enterprise Server
+    # auth: app                  # a GitHub App instead of a token:
+    # appId: "123456"
+    # installationId: "7890123"
+    # workflows: [ci.yml]        # only these workflows (name or file); default all
+    # branches: [main]           # only runs of these branches; default all
+    # artifacts:                 # artifact names (globs) to read; files are recognised by content
+    #   tests: ["*test*", "*junit*"]
+    #   coverage: ["*coverage*", "*lcov*"]
+    #   sarif: ["*sarif*", "*codeql*"]
+    #   maxMB: 50
+
+  # GitLab CI: pipelines, jobs, the test report API, job artifacts, deployments.
+  # - name: gitlab
+  #   type: gitlab
+  #   apiUrl: https://gitlab.example.com/api/v4   # default https://gitlab.com/api/v4
+  #   projects: { acme/web: team-web }
+  #   environments: [production]
+
+  # Bitbucket Cloud: pipelines with their steps and timings, step test reports, deployments, commits.
+  # - name: bitbucket
+  #   type: bitbucket
+  #   auth: app-password          # or oauth (your own OAuth consumer, connected on the setup page)
+  #   username: qe-exporter       # or BITBUCKET_USERNAME
+  #   repos: { acme/payments: team-payments }
+  #   environments: [production]  # environments of type Production count too
+
+  # Bitbucket Data Center: builds your CI reports on commits, deployments, commits.
+  # - name: bitbucket-dc
+  #   type: bitbucket-dc
+  #   baseUrl: https://bitbucket.example.com
+  #   repos: { PAY/payments: team-payments }
+
+  # KPI values no tool records as raw data (automation coverage, automation ROI, …), from a file your scripts write:
+  #   { "items": [ { "team": "payments", "recordedAt": "2026-11-20T00:00:00Z", "metrics": { "automation_coverage": 61.5 } } ] }
+  # - name: kpis
+  #   type: kpis
+  #   path: /var/lib/qe-exporter/kpis.json
+  #   teams: { payments: team-payments }
+
+  # Jenkins: builds, Pipeline stages (wfapi), the JUnit test report, archived artifacts, deployment jobs.
+  # - name: jenkins
+  #   type: jenkins
+  #   baseUrl: https://jenkins.example.com
+  #   user: qe-exporter
+  #   jobs: { payments/main: team-payments }
+  #   deployJobs: { payments/deploy-production: team-payments }
+
+  # Azure DevOps: builds, timelines, test runs, code coverage, artifacts, environment deployments.
+  # - name: azure
+  #   type: azure-devops
+  #   orgUrl: https://dev.azure.com/acme
+  #   project: Payments
+  #   pipelines: { payments-ci: team-payments }
+  #   environments: [Production]
+  #   releases: false            # true: classic release pipelines too (Release: Read)
+
+  # SonarQube / SonarCloud: open issues as findings, lines of code, quality gate.
+  # - name: sonarqube
+  #   type: sonarqube
+  #   baseUrl: https://sonarqube.example.com     # default https://sonarcloud.io
+  #   projects: { acme_payments: team-payments }
+
+  # Jira Cloud: e-mail + API token (Basic auth).
+  - name: jira
+    type: jira
+    baseUrl: https://your-site.atlassian.net
+    auth: basic
+    email: qe-exporter@example.com
+    jql: project in (PAY, WEB)
+    teams:                       # Jira project key → QE Navigator team id
+      PAY: team-payments
+      WEB: team-web
+    # fields:                    # auto-detected by name; set to override
+    #   storyPoints: customfield_10016
+    #   sprint: customfield_10020
+    #   environment: customfield_10050   # a "Found in" select field
+    #   flagged: customfield_10021
+
+  # Jira Server / Data Center: Personal Access Token (Bearer), internal CA.
+  # - name: jira-dc
+  #   type: jira
+  #   baseUrl: https://jira.internal.example.com
+  #   auth: bearer
+  #   tokenEnv: JIRA_DC_TOKEN
+  #   caFile: /etc/qe-exporter/internal-ca.pem
+  #   jql: project = OPS
+  #   teams: { OPS: team-platform }
+
+  - name: linear
+    type: linear
+    teams:                       # Linear team key → QE Navigator team id
+      ENG: team-web
+
+  - name: pagerduty
+    type: pagerduty
+    services:                    # PagerDuty service name (or id) → team id
+      payments-api: team-payments
+      checkout: team-web
+    categories:                  # optional: service → category (infrastructure failures)
+      k8s-cluster: infrastructure
+    # teams: { Payments: team-payments }   # PagerDuty team name → team id (fallback)
+
+  - name: opsgenie
+    type: opsgenie
+    region: eu                   # us (api.opsgenie.com) or eu (api.eu.opsgenie.com)
+    teams:                       # Opsgenie team name → team id
+      Payments: team-payments
+    # services: { payments-api: team-payments }   # alert tag service:<name> → team id
+    # query: "priority:(P1 OR P2 OR P3)"
