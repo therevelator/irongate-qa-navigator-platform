@@ -4,8 +4,8 @@
  *              (source 'computed') of a team with raw data, and writes nothing again when nothing changed;
  *   RAWDB-002  sample (is_sample) raw data is left to the sample refresh, which records evidence and
  *              never writes KPI values;
- *   RAWDB-003  retention (cleanupRawData): payloads and per-test rows after 35 days, raw rows after
- *              13 months; the latest coverage report keeps its files.
+ *   RAWDB-003  retention (cleanupRawData): everything raw, payloads and per-test / per-file rows included,
+ *              is kept 13 months (rows 40 and 300 days old stay, 400 days old go); calculated KPI values stay.
  * Runs against DATABASE_URL (local only).
  */
 import { pool } from '../../src/lib/db';
@@ -72,31 +72,42 @@ describe('Raw store: nightly recalculation and retention', () => {
     expect((await pool.query(`SELECT COUNT(*)::int AS n FROM metric_values WHERE team_id = $1`, [S])).rows[0].n).toBe(0);
   });
 
-  it('RAWDB-003 retention: 35 days for payloads and per-test rows, 13 months for the rest', async () => {
+  it('RAWDB-003 retention: 13 months for everything raw, payloads and per-test / per-file rows included', async () => {
     if (!local) return;
-    const old = new Date(Date.now() - 40 * 86_400_000).toISOString();
-    const ancient = new Date(Date.now() - 400 * 86_400_000).toISOString();
-    await addRun(T, `${T}-old`, old);
-    await addRun(T, `${T}-ancient`, ancient);
-    await pool.query(
-      `INSERT INTO raw_uploads (id, company_id, team_id, kind, format, run_id, payload, received_at)
-       SELECT $2::text, company_id, id, 'tests', 'junit', $2::text, '\\x1f8b'::bytea, $3::timestamptz FROM teams WHERE id = $1`, [T, `${T}-up-old`, old]);
-    for (const [id, at] of [[`${T}-cov-old`, old], [`${T}-cov-new`, `${today}T00:00:00Z`]]) {
+    const ago = (d: number) => new Date(Date.now() - d * 86_400_000).toISOString();
+    const AGES = [40, 300, 400];
+    for (const d of AGES) {
+      await addRun(T, `${T}-run${d}`, ago(d));
+      await pool.query(
+        `INSERT INTO raw_uploads (id, company_id, team_id, kind, format, run_id, payload, received_at)
+         SELECT $2::text, company_id, id, 'tests', 'junit', $2::text, '\\x1f8b'::bytea, $3::timestamptz FROM teams WHERE id = $1`, [T, `${T}-up${d}`, ago(d)]);
+    }
+    for (const [id, at] of [...AGES.map((d) => [`${T}-cov${d}`, ago(d)]), [`${T}-cov-new`, `${today}T00:00:00Z`]]) {
       await pool.query(
         `INSERT INTO coverage_reports (id, company_id, team_id, created_at, day, lines_found, lines_hit)
          SELECT $2, company_id, id, $3::timestamptz, ($3::timestamptz)::date, 10, 5 FROM teams WHERE id = $1`, [T, id, at]);
       await pool.query(`INSERT INTO coverage_files (report_id, team_id, path, lines_found, lines_hit) VALUES ($1, $2, 'a.ts', 10, 5)`, [id, T]);
     }
+    const kpiBefore = (await pool.query(`SELECT COUNT(*)::int AS n FROM metric_values WHERE team_id = $1`, [T])).rows[0].n;
+    expect(kpiBefore).toBeGreaterThan(0);
     const r = await cleanupRawData();
     expect(r.testResults).toBeGreaterThanOrEqual(2);
-    expect(r.payloads).toBeGreaterThanOrEqual(1);
     const left = async (sql: string, p: any[]) => (await pool.query(sql, p)).rows[0].n;
-    expect(await left(`SELECT COUNT(*)::int AS n FROM test_results WHERE test_run_id = $1`, [`${T}-old`])).toBe(0);
-    expect(await left(`SELECT COUNT(*)::int AS n FROM test_runs WHERE id = $1`, [`${T}-old`])).toBe(1);
-    expect(await left(`SELECT COUNT(*)::int AS n FROM test_runs WHERE id = $1`, [`${T}-ancient`])).toBe(0);
+    for (const d of [40, 300]) {
+      expect(await left(`SELECT COUNT(*)::int AS n FROM test_runs WHERE id = $1`, [`${T}-run${d}`])).toBe(1);
+      expect(await left(`SELECT COUNT(*)::int AS n FROM test_results WHERE test_run_id = $1`, [`${T}-run${d}`])).toBe(2);
+      expect(await left(`SELECT COUNT(*)::int AS n FROM raw_uploads WHERE id = $1 AND payload IS NOT NULL`, [`${T}-up${d}`])).toBe(1);
+      expect(await left(`SELECT COUNT(*)::int AS n FROM coverage_reports WHERE id = $1`, [`${T}-cov${d}`])).toBe(1);
+      expect(await left(`SELECT COUNT(*)::int AS n FROM coverage_files WHERE report_id = $1`, [`${T}-cov${d}`])).toBe(1);
+    }
+    expect(await left(`SELECT COUNT(*)::int AS n FROM test_runs WHERE id = $1`, [`${T}-run400`])).toBe(0);
+    expect(await left(`SELECT COUNT(*)::int AS n FROM test_results WHERE test_run_id = $1`, [`${T}-run400`])).toBe(0);
+    expect(await left(`SELECT COUNT(*)::int AS n FROM raw_uploads WHERE id = $1`, [`${T}-up400`])).toBe(0);
+    expect(await left(`SELECT COUNT(*)::int AS n FROM coverage_reports WHERE id = $1`, [`${T}-cov400`])).toBe(0);
+    expect(await left(`SELECT COUNT(*)::int AS n FROM coverage_files WHERE report_id = $1`, [`${T}-cov400`])).toBe(0);
     expect(await left(`SELECT COUNT(*)::int AS n FROM test_results WHERE test_run_id = $1`, [`${T}-r1`])).toBe(2);
-    expect(await left(`SELECT COUNT(*)::int AS n FROM raw_uploads WHERE id = $1 AND payload IS NULL`, [`${T}-up-old`])).toBe(1);
-    expect(await left(`SELECT COUNT(*)::int AS n FROM coverage_files WHERE report_id = $1`, [`${T}-cov-old`])).toBe(0);
     expect(await left(`SELECT COUNT(*)::int AS n FROM coverage_files WHERE report_id = $1`, [`${T}-cov-new`])).toBe(1);
+    // Calculated KPI values are never deleted by the cleanup.
+    expect(await left(`SELECT COUNT(*)::int AS n FROM metric_values WHERE team_id = $1`, [T])).toBe(kpiBefore);
   });
 });

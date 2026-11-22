@@ -105,7 +105,7 @@ const OperatorPanel: React.FC = () => {
           } />
           {screen === 'overview' && <Overview onOpen={(c) => setCompany(c)} />}
           {screen === 'sign-ins' && <Section title="Sign-in events" subtitle="Every company, including failed sign-ins with an e-mail that belongs to nobody. Kept 180 days."><AuthEventsList base="" /></Section>}
-          {screen === 'exporter' && <Section title="Exporter deliveries" subtitle="Every batch a QE Navigator Exporter sent, accepted or rejected (a bad key with its prefix only). Open a row for the summary and the sanitised preview. Kept 30 days." testId="op-exporter-section"><ExporterDeliveries /></Section>}
+          {screen === 'exporter' && <Section title="Exporter deliveries" subtitle="Every batch a QE Navigator Exporter sent, accepted or rejected (a bad key with its prefix only). Open a row for the summary and the sanitised preview. Kept 13 months; the preview is cleared after 30 days." testId="op-exporter-section"><ExporterDeliveries /></Section>}
           {screen === 'errors' && <ErrorSearch />}
         </>
       )}

@@ -11,7 +11,8 @@ import { fmtDate } from './format';
  * POST /api/ingest/exporter/batch, accepted or rejected (a bad key too, with the key prefix only), with the
  * company, department and team, the key, the Exporter's version and host, the kind, the item count, the date range
  * of the records, the size, the result and the records stored. A row opens its detail with the sanitised preview
- * (the first 20 items after the field allow-list). Filters, paging and CSV export. Kept 30 days.
+ * (the first 20 items after the field allow-list). Filters, paging and CSV export. Rows are kept 13 months;
+ * the preview is cleared after 30 days.
  */
 
 interface Filters { companyId: string; teamId: string; result: string; from: string; to: string }
@@ -101,7 +102,7 @@ const ExporterDeliveries: React.FC = () => {
             ] as Array<[string, string]>).map(([k, v]) => <div key={k} className="flex justify-between gap-3 border-b border-slate-100 py-1 dark:border-slate-800"><dt className="text-slate-500">{k}</dt><dd className="break-all text-right">{v}</dd></div>)}
           </dl>
           <h5 className="mt-3 mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Sanitised preview{detail.preview ? ` (${detail.preview.shown} of ${detail.preview.total} items)` : ''}</h5>
-          <pre className="max-h-96 overflow-auto rounded-md bg-slate-50 p-3 text-xs dark:bg-slate-900" data-testid="ed-preview">{detail.preview ? JSON.stringify(detail.preview.items, null, 2) : 'No items.'}</pre>
+          <pre className="max-h-96 overflow-auto rounded-md bg-slate-50 p-3 text-xs dark:bg-slate-900" data-testid="ed-preview">{detail.preview ? JSON.stringify(detail.preview.items, null, 2) : Date.now() - new Date(detail.received_at).getTime() > 30 * 86_400_000 ? 'Cleared after 30 days.' : 'No items.'}</pre>
         </div>
       )}
     </div>

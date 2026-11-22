@@ -259,6 +259,6 @@ Short form; each item has the full rule in the Product guide section given.
 | Nightly recompute of the last 8 days | `CALC_RECOMPUTE_CRON` (default `41 3 * * *`), `server/jobs/cleanupCron.ts` | `netlify/functions/calc-recompute.ts`, 03:41 UTC |
 | Forecasts and recommendations of due teams | with the hourly alert evaluation, `server/jobs/alertsCron.ts` | `netlify/functions/alerts-evaluate.ts`, hourly at :15 |
 | Alert evaluation and action outcomes | `ALERTS_EVALUATE_CRON` (default `15 * * * *`) | `netlify/functions/alerts-evaluate.ts` |
-| Raw payload retention | daily cleanup; gzipped payloads dropped after `RAW_PAYLOAD_DAYS` (default 35) | `netlify/functions/db-keepalive.ts` |
+| Raw payload retention | daily cleanup; gzipped payloads, per-test / per-file rows and findings kept 13 months (396 days), with the rest of the raw store | `netlify/functions/db-keepalive.ts` |
 
 Times are UTC.

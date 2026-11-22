@@ -232,17 +232,23 @@ export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CA
   return { teams: done, values, skipped: teams.length - done };
 }
 
-/** Days the gzipped payloads are kept (RAW_PAYLOAD_DAYS, default 35); per-test and per-file rows are kept 35 days. */
-export const RAW_PAYLOAD_DAYS = Number(process.env.RAW_PAYLOAD_DAYS) || 35;
-export const RAW_DETAIL_DAYS = 35;
 export const RAW_RETENTION_DAYS = 396; // 13 months
+/** Per-test results, per-file coverage and static-analysis findings: 13 months, like the rest of the raw store. */
+export const RAW_DETAIL_DAYS = RAW_RETENTION_DAYS;
+/**
+ * Days the gzipped payloads are kept: 13 months by default (RAW_PAYLOAD_DAYS may raise it; a value below 396 is
+ * ignored, so a stale setting can never delete a payload younger than 13 months). The raw_uploads row itself goes
+ * after RAW_RETENTION_DAYS, so in practice payloads are kept 13 months.
+ */
+export const RAW_PAYLOAD_DAYS = Math.max(RAW_RETENTION_DAYS, Number(process.env.RAW_PAYLOAD_DAYS) || 0);
 
 /**
- * Retention of the raw store (db-keepalive): payloads after RAW_PAYLOAD_DAYS, per-test results and
- * per-file coverage after 35 days (the latest coverage report of each team keeps its files), and
- * everything raw (uploads, runs, reports, deployments, commits, incidents with their updates,
- * evidence) after 13 months. Phase 3: static-analysis findings after 35 days (the latest report of each
- * repository and tool keeps them), reports, closed sprints and resolved issues after 13 months.
+ * Retention of the raw store (db-keepalive, daily): everything raw is kept 13 months (396 days) so teams keep a
+ * year of history: uploads with their gzipped payloads, test runs with their per-test results, coverage reports
+ * with their per-file rows, pipeline runs, deployments, commits, incidents with their updates, static-analysis
+ * reports with their findings, closed sprints, resolved issues and the evidence. Nothing younger than 396 days is
+ * deleted. The latest coverage report of each team and the latest static-analysis report of each repository and
+ * tool keep their files / findings. Calculated KPI values (metric_values) and snapshots are never deleted here.
  */
 export async function cleanupRawData(): Promise<Record<string, number>> {
   const n = async (sql: string, params: any[] = []) => (await pool.query(`WITH d AS (${sql} RETURNING 1) SELECT COUNT(*)::int AS n FROM d`, params)).rows[0]?.n ?? 0;

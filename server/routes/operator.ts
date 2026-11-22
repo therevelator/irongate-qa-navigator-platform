@@ -37,6 +37,7 @@ import targetsRoutes from './targets';
 import alertsRoutes from './alerts';
 import settingsRoutes from './settings';
 import { ACTIVITY_CSV_COLUMNS } from './activity';
+import { DELIVERY_PREVIEW_DAYS, DELIVERY_RETENTION_DAYS } from '../lib/exporterDeliveries';
 
 /**
  * Platform operator panel API (server/lib/operator.ts has the security design). IronGate platform
@@ -488,7 +489,7 @@ router.get('/exporter-deliveries', ...op, async (req: OperatorRequest, res) => {
     const limit = intParam(req.query.limit, 50, 1, 200);
     const rows = await query<any[]>(`SELECT ${DELIVERY_COLUMNS} ${DELIVERY_FROM} ${where} ORDER BY d.received_at DESC LIMIT ?`, [...params, limit + 1]);
     const companies = await query<any[]>(`SELECT DISTINCT d.company_id AS id, c.name FROM exporter_deliveries d LEFT JOIN companies c ON c.id = d.company_id WHERE d.company_id IS NOT NULL ORDER BY c.name`);
-    res.json({ entries: rows.slice(0, limit), more: rows.length > limit, companies, retentionDays: 30 });
+    res.json({ entries: rows.slice(0, limit), more: rows.length > limit, companies, retentionDays: DELIVERY_RETENTION_DAYS, previewDays: DELIVERY_PREVIEW_DAYS });
   } catch (e) {
     console.error('Operator exporter deliveries error:', e);
     res.status(500).json({ error: 'Failed to load the Exporter deliveries' });

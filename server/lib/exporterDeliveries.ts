@@ -9,13 +9,17 @@
  * the date range of the records, the size (as received and uncompressed), the Idempotency-Key, dry run or not, the
  * result with a reason code, the records stored, and a sanitised preview: the first 20 items after the field
  * allow-list, with file contents reduced to name, size and hash, people and links dropped, at most 64 KB.
- * Kept 30 days (cleanupOperationalLogs, server/lib/opsLog.ts). Writing a row never fails a request.
+ * Rows are kept 13 months (396 days); the preview, a copy of customer data, is cleared after 30 days while the row
+ * stays (cleanupOperationalLogs, server/lib/opsLog.ts). Writing a row never fails a request.
  */
 import { createHash } from 'crypto';
 import { query } from '../../src/lib/db';
 import { minimise } from './ingest/fieldAllowList';
 
-export const DELIVERY_RETENTION_DAYS = 30;
+/** Days a delivery row is kept (13 months, like the raw store). */
+export const DELIVERY_RETENTION_DAYS = 396;
+/** Days the sanitised preview of a row is kept; after that it is cleared and the row stays. */
+export const DELIVERY_PREVIEW_DAYS = 30;
 export const PREVIEW_ITEMS = 20;
 export const PREVIEW_MAX_BYTES = 64 * 1024;
 
@@ -143,13 +147,17 @@ export async function recordDelivery(r: DeliveryRow): Promise<void> {
   }
 }
 
-/** Retention: rows older than DELIVERY_RETENTION_DAYS are deleted (0 when the table does not exist yet). */
-export async function cleanupDeliveries(days = DELIVERY_RETENTION_DAYS): Promise<number> {
+/**
+ * Retention: previews older than DELIVERY_PREVIEW_DAYS are cleared (the row stays), rows older than
+ * DELIVERY_RETENTION_DAYS are deleted. Zeros when the table does not exist yet.
+ */
+export async function cleanupDeliveries(days = DELIVERY_RETENTION_DAYS, previewDays = DELIVERY_PREVIEW_DAYS): Promise<{ removed: number; previewsCleared: number }> {
   try {
+    const p = await query<any[]>(`WITH d AS (UPDATE exporter_deliveries SET preview = NULL WHERE preview IS NOT NULL AND received_at < now() - make_interval(days => ?) RETURNING 1) SELECT COUNT(*)::int AS n FROM d`, [previewDays]);
     const r = await query<any[]>(`WITH d AS (DELETE FROM exporter_deliveries WHERE received_at < now() - make_interval(days => ?) RETURNING 1) SELECT COUNT(*)::int AS n FROM d`, [days]);
-    return r[0]?.n ?? 0;
+    return { removed: r[0]?.n ?? 0, previewsCleared: p[0]?.n ?? 0 };
   } catch {
-    return 0;
+    return { removed: 0, previewsCleared: 0 };
   }
 }
 

@@ -6,10 +6,12 @@ import { cleanupOperationalLogs, recordJobOutcome, recordServerError, flushBackg
 /**
  * Database keep-alive (Netlify Scheduled Function, 06:00 and 18:00 UTC): one `SELECT 1`, so a
  * free-tier database that pauses when idle stays awake. Also the retention cleanup of the
- * operations logs (server_errors older than 30 days, user_activity older than 90 days, job_runs
- * older than 90 days) and of the raw CI data (server/lib/calc/engine.ts cleanupRawData: payloads and
- * per-test / per-file rows after 35 days, everything raw, deployments and incidents included, after 13 months). Logs only ok / failed, counts and the duration; never the connection
- * string or any other secret.
+ * operations logs (server_errors older than 30 days, user_activity and job_runs older than 90 days,
+ * sign-in events and sessions older than 180 days, Exporter deliveries older than 13 months with their
+ * preview cleared after 30 days) and of the raw CI data (server/lib/calc/engine.ts cleanupRawData:
+ * everything raw, gzipped payloads and per-test / per-file rows and findings included, after 13 months;
+ * calculated KPI values and snapshots are never deleted). Logs only ok / failed, counts and the duration;
+ * never the connection string or any other secret.
  */
 export default async () => {
   const started = Date.now();
@@ -17,7 +19,7 @@ export default async () => {
     await pool.query('SELECT 1');
     const removed = await cleanupOperationalLogs();
     const raw = await cleanupRawData();
-    const summary = `ok in ${Date.now() - started} ms; removed ${removed.serverErrors} errors, ${removed.userActivity} activity rows, ${removed.jobRuns} job runs, ${removed.authEvents} sign-in events, ${removed.sessions} sessions; raw store: ${raw.payloads} payloads, ${raw.testResults} test results, ${raw.coverageFiles} coverage files, ${raw.deployments} deployments, ${raw.incidents} incidents, ${raw.uploads} uploads`;
+    const summary = `ok in ${Date.now() - started} ms; removed ${removed.serverErrors} errors, ${removed.userActivity} activity rows, ${removed.jobRuns} job runs, ${removed.authEvents} sign-in events, ${removed.sessions} sessions, ${removed.exporterDeliveries} exporter deliveries, ${removed.exporterPreviews} exporter previews cleared; raw store: ${raw.payloads} payloads, ${raw.testResults} test results, ${raw.coverageFiles} coverage files, ${raw.deployments} deployments, ${raw.incidents} incidents, ${raw.uploads} uploads`;
     console.log(`[db-keepalive] ${summary}`);
     await recordJobOutcome('db-keepalive', true, summary, new Date(started));
     return new Response('ok');

@@ -127,7 +127,7 @@ prefixed `VITE_` ends up in the browser bundle.
 | `CALC_RECOMPUTE_BUDGET_MS` | Time budget of the nightly recompute |
 | `CHANGE_FAILURE_WINDOW_HOURS` | Hotfix window that marks a deploy as a failed change (default 72) |
 | `WORK_RECOMPUTE_DAYS` | Days of issue history recalculated on arrival (default 190) |
-| `RAW_UPLOAD_MAX_MB`, `RAW_PAYLOAD_MAX_KB`, `RAW_PAYLOAD_DAYS` | Raw upload size limit (20 MB), largest gzipped payload kept (512 KB), days payloads are kept (35) |
+| `RAW_UPLOAD_MAX_MB`, `RAW_PAYLOAD_MAX_KB`, `RAW_PAYLOAD_DAYS` | Raw upload size limit (20 MB), largest gzipped payload kept (512 KB), days payloads are kept (396, 13 months; a lower value is ignored) |
 | `PLATFORM_OPERATOR_ALLOWED_IPS` | Client IPs allowed to use `/operator` (comma-separated) |
 | `OPERATOR_PASSWORD` | Read by `npm run operator:create` when `--password` is not given; not used by the running app |
 | `ENABLE_SYNTHETIC_DATA` | `true` enables the sample-data generators; off by default |

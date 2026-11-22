@@ -110,7 +110,7 @@ other companies. `GET /api/ingest/exporter/context` lists only the key's own com
 item is then checked by the same handler as the rest of the ingestion API (a dry run that writes nothing); one refused item
 refuses the batch. A dry run (`?dryRun=true`) writes nothing at all. Each batch is logged in your company's ingestion log
 (channel Exporter) and, for QE Navigator's platform operators, in an operator log with a sanitised preview (no file
-contents, no credentials, kept 30 days).
+contents, no credentials; the preview is cleared after 30 days, the row without it is kept 13 months).
 
 ## 6. Network requirements
 

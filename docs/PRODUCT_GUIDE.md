@@ -1060,7 +1060,8 @@ number is traceable to the runs it came from (docs/V2_PLAN.md, phase 1).
   dashboards, alerts, targets and the QA score use them; a late file recalculates the days it affects, and a nightly job
   (`calc-recompute`) the last 8 days.
 - Evidence (`metric_evidence`): for every computed value its formula, the values used and the source runs, reports and tests.
-- Storage: runs, reports and evidence 13 months; per-test and per-file rows and the gzipped files 35 days.
+- Storage: everything received is kept 13 months (a year of history): runs, reports, per-test and per-file rows, the gzipped
+  files (at most 512 KB each) and the evidence. Calculated KPI values and snapshots are never deleted.
 - Sample data: demo and filled teams get 14 days of sample raw CI data that follows their story (healthier teams: higher
   coverage, fewer flaky tests, greener and faster pipelines). Its evidence is shown; it is never written as KPI values.
 
@@ -1132,7 +1133,8 @@ only ever makes outbound HTTPS calls to QE Navigator. **QE Navigator calculates 
   version with an outdated warning, each source's last success and failed runs, from the heartbeat each run sends: no data). Its
   data is used everywhere exactly like any other raw data (dashboards, "How this was calculated", the evidence panels, KPI history,
   alerts, targets, forecasts, recommendations, TV mode). Its requests appear in the ingestion log as channel **Exporter**, and the
-  platform operator sees every batch (accepted or rejected) in Operator → **Exporter deliveries**.
+  platform operator sees every batch (accepted or rejected) in Operator → **Exporter deliveries** (kept 13 months; the
+  sanitised preview is cleared after 30 days).
 - Security posture for the customer's review: [`exporter/SECURITY.md`](../exporter/SECURITY.md) (data flow and exact fields, how
   the ids are validated, where credentials live, permissions per vendor, network, verification of the bundle and the image).
 - Try it with made-up data: [`deploy/exporter-test/`](../deploy/exporter-test/README.md).
@@ -1660,8 +1662,10 @@ admins) sends yours immediately.
 ### Database keep-alive
 
 `netlify/functions/db-keepalive.ts` runs `SELECT 1` at 06:00 and 18:00 UTC (`0 6,18 * * *`), logging only ok / failed, so a hosted database on a
-plan that pauses idle projects stays available. It also deletes `server_errors` older than 30 days and
-`user_activity` and `job_runs` older than 90 days. Every scheduled job records its runs in `job_runs`
+plan that pauses idle projects stays available. It also deletes `server_errors` older than 30 days,
+`user_activity` and `job_runs` older than 90 days, sign-in events and sessions older than 180 days, and Exporter
+deliveries older than 13 months (their sanitised preview is cleared after 30 days), and trims the raw store after 13 months
+(`cleanupRawData`: nothing younger than 396 days is deleted; KPI values and snapshots are never deleted). Every scheduled job records its runs in `job_runs`
 (shown in the platform support panel).
 
 ### Nightly demo refresh
@@ -1717,7 +1721,7 @@ Only names and purposes are listed here. Never commit real values; `.env` is git
 | `ALERTS_EVALUATE_CRON`, `DIGEST_CRON` | no | Local schedules in UTC (defaults `15 * * * *` hourly and `0 7 * * 1` Monday 07:00) |
 | `NOTIFY_SLACK_ALLOW_LOCAL` | tests only | Accepts a local `http://127.0.0.1:<port>/` webhook; ignored in production |
 | `PLATFORM_OPERATOR_ALLOWED_IPS` | no | Optional comma-separated client IPs allowed to use the platform support panel |
-| `LOG_CLEANUP_CRON` | no | Long-running server: retention of `server_errors` (30 days), `user_activity` and `job_runs` (90 days); default `7 3 * * *`, `off` turns it off. On Netlify `db-keepalive` does it |
+| `LOG_CLEANUP_CRON` | no | Long-running server: retention of `server_errors` (30 days), `user_activity` and `job_runs` (90 days), sign-in events and sessions (180 days), Exporter deliveries (13 months, preview 30 days) and the raw store (13 months); default `7 3 * * *`, `off` turns it off. On Netlify `db-keepalive` does it |
 
 The Slack webhook is entered in **Parameters → Notification channels**, not in the environment.
 

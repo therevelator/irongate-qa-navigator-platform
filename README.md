@@ -534,7 +534,7 @@ Actions, GitLab CI, Jenkins and Azure DevOps).
   `server/routes/ci.ts` (evidence, "How this was calculated", Connect your CI status). Migration
   `supabase/migrations/20261129000000_raw_ingestion_phase1.sql`.
 - Jobs: `netlify/functions/calc-recompute.ts` (nightly, last 8 days of the teams with real CI data, 25 s budget; locally `CALC_RECOMPUTE_CRON`; sample teams are refreshed by demo-refresh), raw-store retention in
-  `db-keepalive` (payloads and per-test / per-file rows 35 days, the rest 13 months).
+  `db-keepalive` (everything raw, payloads and per-test / per-file rows included, 13 months).
 - UI: team page → **Evidence from CI** and **How this was calculated**; Admin console → **Connect your CI**.
 - Sample data: demo and filled teams get 14 days of sample raw CI data (`server/seeds/demoRaw.ts`; evidence only, never KPI
   values; off with `SAMPLE_RAW_DATA=false`).
@@ -608,8 +608,8 @@ the steps per tool).
   `analysis_reports`, `analysis_findings`; `raw_uploads.kind` extended).
 - Values go to the KPI columns `defect_escape_rate`, `defect_density`, `sprint_velocity`, `sprint_commitment_rate`,
   `sprint_carryover`, `blocked_time_hours`, `sizing_accuracy`, `code_quality_score` (source `computed`) with `metric_evidence`;
-  the nightly `calc-recompute` includes teams with issues or reports. Retention: findings 35 days (the latest report keeps
-  them), reports, sprints and resolved issues 13 months.
+  the nightly `calc-recompute` includes teams with issues or reports. Retention: reports with their findings, sprints and resolved
+  issues 13 months.
 - UI: team page → Evidence → **Work & code quality** (sprint and defect tiles, last closed sprints, escaped defects, blocked
   and carried-over issues, sizing, code quality tiles, latest reports, findings by rule, new and fixed findings; every tile
   opens How this was calculated); Admin console → Connect your CI → **Issues and code quality**. Recommendations use the

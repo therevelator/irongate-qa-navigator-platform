@@ -169,15 +169,16 @@ export async function recordJobOutcome(job: JobName, ok: boolean, summary: strin
 
 /**
  * Retention: server_errors 30 days, user_activity 90 days, job_runs 90 days, sign-in events
- * (auth_events) and sessions (user_sessions, by issue date) 180 days (daily cleanup in db-keepalive).
+ * (auth_events) and sessions (user_sessions, by issue date) 180 days; Exporter deliveries 13 months with
+ * their preview cleared after 30 days (daily cleanup in db-keepalive).
  */
-export async function cleanupOperationalLogs(): Promise<{ serverErrors: number; userActivity: number; jobRuns: number; authEvents: number; sessions: number; exporterDeliveries: number }> {
+export async function cleanupOperationalLogs(): Promise<{ serverErrors: number; userActivity: number; jobRuns: number; authEvents: number; sessions: number; exporterDeliveries: number; exporterPreviews: number }> {
   const se = await query<any[]>(`WITH d AS (DELETE FROM server_errors WHERE created_at < now() - interval '30 days' RETURNING 1) SELECT COUNT(*)::int AS n FROM d`);
   const ua = await query<any[]>(`WITH d AS (DELETE FROM user_activity WHERE created_at < now() - interval '90 days' RETURNING 1) SELECT COUNT(*)::int AS n FROM d`);
   const jr = await query<any[]>(`WITH d AS (DELETE FROM job_runs WHERE started_at < now() - interval '90 days' RETURNING 1) SELECT COUNT(*)::int AS n FROM d`);
   const ae = await query<any[]>(`WITH d AS (DELETE FROM auth_events WHERE created_at < now() - interval '180 days' RETURNING 1) SELECT COUNT(*)::int AS n FROM d`);
   const us = await query<any[]>(`WITH d AS (DELETE FROM user_sessions WHERE issued_at < now() - interval '180 days' RETURNING 1) SELECT COUNT(*)::int AS n FROM d`);
-  // The operator log of Exporter deliveries (server/lib/exporterDeliveries.ts): 30 days.
+  // The operator log of Exporter deliveries (server/lib/exporterDeliveries.ts): rows 13 months, previews 30 days.
   const ed = await cleanupDeliveries();
-  return { serverErrors: se[0]?.n ?? 0, userActivity: ua[0]?.n ?? 0, jobRuns: jr[0]?.n ?? 0, authEvents: ae[0]?.n ?? 0, sessions: us[0]?.n ?? 0, exporterDeliveries: ed };
+  return { serverErrors: se[0]?.n ?? 0, userActivity: ua[0]?.n ?? 0, jobRuns: jr[0]?.n ?? 0, authEvents: ae[0]?.n ?? 0, sessions: us[0]?.n ?? 0, exporterDeliveries: ed.removed, exporterPreviews: ed.previewsCleared };
 }

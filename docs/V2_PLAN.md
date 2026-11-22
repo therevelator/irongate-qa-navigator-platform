@@ -71,7 +71,8 @@ teams.main_branch; the v1 `pipeline_runs` table is a per-stage status table and 
 `server/lib/calc/engine.ts` (on arrival, recalculation of affected days, nightly `calc-recompute`, KPI values with source
 `computed`), evidence and "How this was calculated" on the team page, Connect your CI in the Admin console (super admins, like
 API keys), sample raw data for demo and filled teams (`server/seeds/demoRaw.ts`; evidence only). Storage: per-test and
-per-file rows and payloads 35 days, the rest 13 months. Tests: `tests/api/ingest-parsers.test.ts`, `raw-ingestion.test.ts`,
+per-file rows and payloads 35 days, the rest 13 months (since changed: everything raw is now kept 13 months, see the
+retention note at the end). Tests: `tests/api/ingest-parsers.test.ts`, `raw-ingestion.test.ts`,
 `tests/database/rawStore.test.ts`, UI `team/ci-evidence.spec.ts`, manual cases TC-ADM-045 … TC-ADM-050. Not in phase 1: forecasts on top
 of the new data (phase 4).
 
@@ -119,7 +120,8 @@ reports, findings by rule, new and fixed findings, score history), Connect your 
 JSON steps, SARIF per CI tool, test calls), recommendations wired to the new evidence (escaped defects with their components,
 mis-sized and blocked issues of the latest sprint, high-severity findings by rule), a year of sample issues and weekly SonarQube
 reports derived from each team's KPI history (`server/seeds/demoWork.ts`) and a live-company SQL (`raw-sample-sql.ts
---work-only`). Retention: findings 35 days (the latest report keeps them), reports, closed sprints and resolved issues 13 months.
+--work-only`). Retention: findings 35 days (the latest report keeps them), reports, closed sprints and resolved issues 13 months (since
+changed: findings are now kept 13 months too, see the retention note at the end).
 Tests: `tests/api/work-parsers.test.ts`, `work-ingestion.test.ts`, `tests/database/workStore.test.ts`, UI
 `team/work-evidence.spec.ts` (WRK-01 … 05, CI-04, A11Y-46 … 49), manual cases TC-ADM-061 … TC-ADM-066.
 
@@ -264,3 +266,12 @@ No database change. Slack / Teams digests remain for later.
 3. Phase 3 — done (issues and SARIF, work and code-quality metrics, work evidence, recommendations wired).
 4. Phases 4 and 5 (they need phases 1–3 data to be credible; forecasts can start after phase 1).
 5. Phase 6 — done (executive phone summary and wall-screen TV mode); Slack / Teams digests later.
+
+## Retention note (November 2026)
+
+The 35-day periods above are history. To keep a year of history for insights, everything raw is now kept **13 months
+(396 days)**: per-test results, per-file coverage, static-analysis findings and the gzipped payloads, like the runs,
+reports, deployments, incidents, issues and evidence already were (`server/lib/calc/engine.ts` `cleanupRawData`; the latest
+coverage report and the latest report of each repository and tool still keep their files / findings). Calculated KPI values
+and snapshots are never deleted. The Exporter deliveries operator log keeps its rows 13 months and clears the sanitised
+preview after 30 days. Storage estimate: docs/INTEGRATION_GUIDE.md, "Storage estimate".

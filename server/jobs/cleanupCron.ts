@@ -5,7 +5,8 @@ import { cleanupRawData, recomputeRecent } from '../lib/calc/engine';
 /**
  * Local schedule of the operations-log retention (on Netlify netlify/functions/db-keepalive.ts
  * does the same twice a day): server_errors older than 30 days, user_activity and job_runs older
- * than 90 days are deleted; the raw CI data store is trimmed too (cleanupRawData). LOG_CLEANUP_CRON (default '7 3 * * *', 03:07 UTC); LOG_CLEANUP_CRON=off
+ * than 90 days are deleted (cleanupOperationalLogs); the raw CI data store is trimmed after 13 months
+ * (cleanupRawData). LOG_CLEANUP_CRON (default '7 3 * * *', 03:07 UTC); LOG_CLEANUP_CRON=off
  * turns it off.
  */
 if (process.env.LOG_CLEANUP_CRON !== 'off' && !process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {

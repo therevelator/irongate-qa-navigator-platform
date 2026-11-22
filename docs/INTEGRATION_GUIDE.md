@@ -584,10 +584,24 @@ test calls `tests (junit, test call)`).
   (Supabase) expect two to three times that, so on Netlify keep one upload under about **50,000 test cases** (send a large
   suite as several uploads, one per shard, `run` = the shard's job id, which also keeps flaky detection per commit); coverage
   and pipeline uploads are far below the limit. No background function is needed below that size.
-- **Storage** (Supabase size): the gzipped file is kept for 35 days when at most 512 KB (`RAW_PAYLOAD_MAX_KB`, `0` keeps
-  none; `RAW_PAYLOAD_DAYS`); per-test results and per-file coverage for 35 days (the latest coverage report of each team
-  keeps its files); runs, reports, pipeline runs, flaky-test and metric evidence for **13 months**. Cleaned up twice a day
-  by `db-keepalive`.
+- **Storage** (Supabase size): everything received is kept for **13 months** (396 days), so a team has a year of history:
+  the gzipped file when it is at most 512 KB (`RAW_PAYLOAD_MAX_KB`, `0` keeps none; a larger file is parsed but its copy is
+  not kept), per-test results, per-file coverage, runs, reports, pipeline runs, flaky-test and metric evidence. Nothing
+  younger than 13 months is deleted (`RAW_PAYLOAD_DAYS` can only lengthen the payload period); calculated KPI values and
+  snapshots are never deleted. Cleaned up twice a day by `db-keepalive`.
+- **Storage estimate** per team per year (Postgres 16, row plus indexes, measured locally): a per-test result is about
+  0.55 KB, a per-file coverage row about 0.37 KB, a gzipped payload what was sent, at most 512 KB (a JUnit file of 1,000
+  cases is about 4 KB gzipped; larger files are parsed but their copy is not kept).
+
+  | Team | Test results a year | Coverage rows a year | Payloads a year | About |
+  |---|---|---|---|---|
+  | Small: 5 test reports a day of 500 cases, 1 coverage report of 300 files | 0.9 M ≈ 0.5 GB | 110 k ≈ 40 MB | 1,800 ≈ 5 MB | **0.55 GB** |
+  | Typical: 10 test reports a day of 1,000 cases, 2 coverage reports of 500 files | 3.65 M ≈ 2 GB | 365 k ≈ 135 MB | 3,650 ≈ 15 MB | **2.2 GB** |
+  | Worst case for payloads: every payload at the 512 KB limit, 10 a day | | | 3,650 ≈ 1.8 GB | +1.8 GB |
+
+  Runs, pipelines, deployments, issues, findings and evidence add a few MB a year. Per-test results dominate: size the
+  database at about 0.55 KB × test cases × test reports a day × 396 days per team. The 500 MB of a free Supabase database
+  does not hold one typical team for a year; plan a paid database (8 GB and up) before real customers send data daily.
 - **Safe XML**: entity declarations are refused (no external entities, no entity expansion), a DTD is never fetched,
   nesting depth and attribute counts are limited.
 
@@ -880,8 +894,8 @@ curl -sS --fail-with-body -X POST "$IRONGATE_URL/api/ingest/static-analysis?team
 | `415` | Issues: a non-JSON `Content-Type`, an unknown `format`; static analysis: not SARIF 2.1.0 JSON, an unknown `format` (the answer lists `sarif`) |
 
 Ingestion log sources: `issues (jira)`, `issues (linear)`, `issues (json)`, `static-analysis (sarif)`; test calls `… test call`.
-Issues are kept until 13 months after they were resolved (open issues are kept), sprints and reports 13 months, the findings
-of a report 35 days (the latest report of each repository and tool keeps them).
+Issues are kept until 13 months after they were resolved (open issues are kept), sprints, reports and their findings 13
+months.
 
 ## 4D. QE Navigator Exporter: your CI and tools read from inside your network, no pipeline changes
 
@@ -1152,7 +1166,7 @@ issues resolved that day count. Upload it with or after the Jira CSV; the order 
 | Dates | Incidents, deployments and commits older than 365 days or in the future, and issues with a time in the future, are left out and listed (the API refuses them). |
 | Rate | 60 previews and uploads per company per 10 minutes (`UPLOAD_RATE_LIMIT`); then `429`. |
 | Auth | The session cookie (`SameSite`) and the exact-origin CORS of the rest of the app; the demo sandbox refuses every upload. |
-| Storage | No file is kept. What is stored is the parsed rows and, for 35 days, the minimised copy `raw_uploads` keeps for the API (`RAW_PAYLOAD_DAYS`; issues and incidents: the minimised records, never the file as received; `raw_uploads` rows 13 months). |
+| Storage | No file is kept. What is stored is the parsed rows and, for 13 months, the minimised copy `raw_uploads` keeps for the API (issues and incidents: the minimised records, never the file as received). |
 
 Errors: `400` (no file, a bad option, a damaged zip, a zip-slip name), `403` (a team the person may not upload to; another
 company's team), `413` (over a size limit, a zip bomb), `415` (not `multipart/form-data`), `429` (rate). Per file in a `200`

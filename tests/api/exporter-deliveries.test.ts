@@ -17,7 +17,7 @@ import { pool } from '../../src/lib/db';
  *            key has no company and keeps the key prefix only; no row holds a full key or a secret
  *   EXD-003  only the operator reads the list, the detail and the CSV: a company admin, an API key and nobody are refused
  *   EXD-004  the company's own ingestion log shows its batches (channel Exporter); another company's admin never sees them
- *   EXD-005  retention: rows older than 30 days are deleted by the cleanup, newer rows stay
+ *   EXD-005  retention: previews older than 30 days are cleared (the row stays), rows older than 13 months are deleted
  */
 const TEAM = 'golden-team-empty';
 const DEPT = 'golden-dept-b';
@@ -174,11 +174,21 @@ describe('Exporter deliveries (operator log)', () => {
     expect((theirs.body.entries ?? theirs.body).some((e: any) => ids.has(e.id))).toBe(false);
   });
 
-  it('EXD-005 rows older than 30 days are removed by the cleanup', async () => {
+  it('EXD-005 cleanup: previews older than 30 days are cleared and the row stays; rows older than 13 months are removed', async () => {
     if (!up) return;
-    const old = (await db.query(`INSERT INTO exporter_deliveries (received_at, company_id, result, http_status) VALUES (now() - interval '31 days', $1, 'accepted', 201) RETURNING id`, [GOLDEN_COMPANY])).rows[0].id;
-    const recent = (await db.query(`INSERT INTO exporter_deliveries (received_at, company_id, result, http_status) VALUES (now() - interval '29 days', $1, 'accepted', 201) RETURNING id`, [GOLDEN_COMPANY])).rows[0].id;
-    expect(await cleanupDeliveries()).toBeGreaterThanOrEqual(1);
-    expect((await db.query(`SELECT id FROM exporter_deliveries WHERE id = ANY($1::text[])`, [[old, recent]])).rows.map((r: any) => r.id)).toEqual([recent]);
+    const add = async (days: number) => (await db.query(
+      `INSERT INTO exporter_deliveries (received_at, company_id, result, http_status, preview) VALUES (now() - make_interval(days => $2), $1, 'accepted', 201, '{"shown":1,"total":1,"items":[{"key":"X-1"}]}'::jsonb) RETURNING id`,
+      [GOLDEN_COMPANY, days])).rows[0].id;
+    const ids = { d29: await add(29), d31: await add(31), d300: await add(300), d400: await add(400) };
+    const r = await cleanupDeliveries();
+    expect(r.removed).toBeGreaterThanOrEqual(1);
+    expect(r.previewsCleared).toBeGreaterThanOrEqual(2);
+    const rows = (await db.query(`SELECT id, preview IS NOT NULL AS has_preview FROM exporter_deliveries WHERE id = ANY($1::text[])`, [Object.values(ids)])).rows;
+    const byId = new Map(rows.map((x: any) => [x.id, x.has_preview]));
+    expect(byId.get(ids.d29)).toBe(true);
+    expect(byId.get(ids.d31)).toBe(false);
+    expect(byId.get(ids.d300)).toBe(false);
+    expect(byId.has(ids.d400)).toBe(false);
+    expect(rows.length).toBe(3);
   });
 });

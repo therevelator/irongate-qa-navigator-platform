@@ -8,8 +8,8 @@
  *            velocity, commitment and carryover equal its sprint_velocity rows, the code quality score its
  *            snapshot, blocked time and sizing accuracy its snapshot of the sprint's last day, escape rate
  *            and density stay close; re-running adds nothing; evidence only, never KPI values
- *   WDB-004  retention (cleanupRawData): resolved issues, closed sprints and reports after 13 months, the
- *            findings of older reports after 35 days (the latest report keeps them); open issues are kept
+ *   WDB-004  retention (cleanupRawData): resolved issues, closed sprints, reports and their findings after
+ *            13 months (findings of reports 40 and 300 days old stay, 400 days old go); open issues are kept
  * Runs against DATABASE_URL (local only).
  */
 import fs from 'node:fs';
@@ -148,7 +148,7 @@ describe('Work and code-quality store: migration, nightly recalculation, sample 
     expect(await n(`SELECT COUNT(*) AS n FROM analysis_reports WHERE team_id = $1 AND new_findings IS NOT NULL`, [S])).toBe(first[3] - 1);
   });
 
-  it('WDB-004 retention: old resolved issues, closed sprints and reports go; findings of older reports after 35 days; open issues stay', async () => {
+  it('WDB-004 retention: old resolved issues, closed sprints and reports go; findings kept 13 months like their reports; open issues stay', async () => {
     if (!local) return;
     const co = (await pool.query(`SELECT company_id FROM teams WHERE id = $1`, [T])).rows[0].company_id;
     await pool.query(
@@ -160,8 +160,9 @@ describe('Work and code-quality store: migration, nightly recalculation, sample 
       await pool.query(`INSERT INTO analysis_findings (report_id, team_id, fingerprint, rule_id, severity) VALUES ($1, $2, 'fp', 'no-unused-vars', 'low')`, [id, T]);
     };
     await rep(`${T}-r400`, 400);
-    await rep(`${T}-r60`, 60);
-    await rep(`${T}-r50`, 50);
+    await rep(`${T}-r300`, 300);
+    await rep(`${T}-r40`, 40);
+    await rep(`${T}-r30`, 30);
     const r = await cleanupRawData();
     expect(r.issues).toBeGreaterThanOrEqual(1);
     expect(r.analysisReports).toBeGreaterThanOrEqual(1);
@@ -170,7 +171,11 @@ describe('Work and code-quality store: migration, nightly recalculation, sample 
     expect(await n(`SELECT COUNT(*) AS n FROM issues WHERE team_id = $1 AND external_id = 'W-1'`, [T])).toBe(1);
     expect(await n(`SELECT COUNT(*) AS n FROM issue_sprints WHERE team_id = $1 AND external_id = 'S-OLD'`, [T])).toBe(0);
     expect(await n(`SELECT COUNT(*) AS n FROM analysis_reports WHERE id = $1`, [`${T}-r400`])).toBe(0);
-    expect(await n(`SELECT COUNT(*) AS n FROM analysis_findings WHERE report_id = $1`, [`${T}-r60`])).toBe(0);
-    expect(await n(`SELECT COUNT(*) AS n FROM analysis_findings WHERE report_id = $1`, [`${T}-r50`])).toBe(1); // the latest of its repository and tool
+    expect(await n(`SELECT COUNT(*) AS n FROM analysis_findings WHERE report_id = $1`, [`${T}-r400`])).toBe(0);
+    // Older reports keep their findings for 13 months too, not only the latest of its repository and tool.
+    for (const id of [`${T}-r300`, `${T}-r40`, `${T}-r30`]) {
+      expect(await n(`SELECT COUNT(*) AS n FROM analysis_reports WHERE id = $1`, [id])).toBe(1);
+      expect(await n(`SELECT COUNT(*) AS n FROM analysis_findings WHERE report_id = $1`, [id])).toBe(1);
+    }
   });
 });

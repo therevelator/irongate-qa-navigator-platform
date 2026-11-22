@@ -121,7 +121,7 @@ id and a non-existent one, never maps by service or project key for this endpoin
 ingestion handlers. `qe-exporter preview` shows the exact payload and sends nothing. No runtime dependencies; one reproducible file
 or a distroless non-root image. Its own security posture: [exporter/SECURITY.md](exporter/SECURITY.md). Its requests are logged as
 channel **Exporter**; the platform operator log of Exporter deliveries keeps a sanitised preview (no file contents, no
-credentials, key prefix only) for 30 days; its heartbeat carries the version and per-source status only.
+credentials, key prefix only) for 30 days, after which the preview is cleared and the row (no customer content) is kept 13 months; its heartbeat carries the version and per-source status only.
 
 **File uploads** ([`server/routes/uploads.ts`](server/routes/uploads.ts), Administration → Upload files). Session
 authentication and the same cookie (`SameSite`) and exact-origin CORS protection as the rest of the app; the sandbox refuses
@@ -134,7 +134,7 @@ key" nor a team id written into the file reaches another team. Server-side limit
 (bounded while inflating), encryption and ZIP64 are refused; nested zips are not opened, symbolic links are skipped. Content is
 detected, never executed; XML uses the hardened reader of the API; CSV cells are text and a value a spreadsheet would run as a
 formula is stored with a leading apostrophe. The preview writes nothing (not even a log row). No file is kept: the parsed rows,
-plus the minimised copy `raw_uploads` keeps for the API (35 days). 60 previews and uploads per company per 10 minutes.
+plus the minimised copy `raw_uploads` keeps for the API (13 months, like the parsed rows). 60 previews and uploads per company per 10 minutes.
 Tests, attacker paths included: `tests/api/upload.test.ts`, `tests/api/upload-parsers.test.ts`, `tests/api/upload-netlify.test.ts`.
 
 **Field allow-list** ([`server/lib/ingest/fieldAllowList.ts`](server/lib/ingest/fieldAllowList.ts)). Every issue and incident,
