@@ -115,7 +115,7 @@ export async function runSetup(o: SetupOptions): Promise<number> {
     const names = new Set(credentialNames());
     return {
       version: VERSION, configPath, credentialsPath: cfg.credentialsPath, url: cfg.qeNavigator.url, companyId: cfg.qeNavigator.companyId, teams: cfg.teams,
-      apiKeySet: names.has(cfg.qeNavigator.apiKeyEnv) || !!env[cfg.qeNavigator.apiKeyEnv], context,
+      apiKeySet: names.has(cfg.qeNavigator.apiKeyEnv) || !!env[cfg.qeNavigator.apiKeyEnv], context, fakeVendors: !!env.QE_EXPORTER_FAKE_VENDORS,
       types: SOURCE_TYPES.filter((t) => t !== 'kpis').map((t) => ({ type: t, mapKey: MAP_KEY[t] ?? 'teams', oauth: !!providerFor({ type: t }) })),
       sources: (raw.sources ?? []).map((s: any) => {
         const auth = s.auth ?? null;
@@ -147,7 +147,7 @@ export async function runSetup(o: SetupOptions): Promise<number> {
 
   const upsertSource = (body: any) => {
     const type = String(body?.type ?? '') as SourceType;
-    if (!SOURCE_TYPES.includes(type) || type === 'kpis') throw new ConfigError('Choose a tool');
+    if (!SOURCE_TYPES.includes(type)) throw new ConfigError('Choose a tool');
     const name = String(body?.name || type).toLowerCase();
     const settings = body?.settings && typeof body.settings === 'object' ? body.settings : {};
     const mapKey = MAP_KEY[type] ?? 'teams';
@@ -166,7 +166,7 @@ export async function runSetup(o: SetupOptions): Promise<number> {
     raw = next;
     // The department of every team the mappings use, from the key's context.
     raw.teams = { ...(raw.teams ?? {}) };
-    if (context) for (const t of Object.values(entry[mapKey] ?? {}) as string[]) {
+    if (context) for (const t of [...Object.values(entry[mapKey] ?? {}), ...Object.values((entry.services as Record<string, string>) ?? {})] as string[]) {
       const dep = context.departments.find((d) => d.teams.some((x) => x.id === t));
       if (dep) raw.teams[t] = dep.id;
     }
@@ -213,6 +213,16 @@ export async function runSetup(o: SetupOptions): Promise<number> {
       if (req.method === 'POST' && u.pathname === '/api/source') {
         const name = upsertSource(await readJson(req));
         return send(res, 200, { ok: true, name, state: stateOf() });
+      }
+      if (req.method === 'POST' && u.pathname === '/api/demo') {
+        // Test only: every source, pointing at the fake vendors (QE_EXPORTER_FAKE_VENDORS), with fake credentials.
+        const fv = env.QE_EXPORTER_FAKE_VENDORS;
+        if (!fv) return send(res, 404, { error: 'Not available' });
+        if (!context) return send(res, 400, { error: 'Save the API key first: the fake sources are mapped to your teams' });
+        for (const body of demoSources(fv, context, env.QE_EXPORTER_FAKE_KPIS ?? '/shared/kpis.json')) upsertSource(body);
+        raw.backfillDays = 180;
+        save();
+        return send(res, 200, stateOf());
       }
       if (req.method === 'POST' && u.pathname === '/api/source/delete') {
         const b = await readJson(req);
@@ -276,6 +286,28 @@ export async function runSetup(o: SetupOptions): Promise<number> {
   return 0;
 }
 
+/**
+ * The test preset (fake vendors only): GitHub (two repositories), GitLab, Bitbucket, Jira, PagerDuty, SonarQube and the
+ * KPI file, with fake credentials, each data set mapped to the team whose name fits (Payments, Mobile, Data,
+ * Reporting), else to the company's teams in order. Every mapping can be changed on the page afterwards.
+ */
+export function demoSources(fv: string, ctx: ExporterContext, kpiFile: string): any[] {
+  const teams = ctx.departments.flatMap((d) => d.teams);
+  if (!teams.length) throw new ConfigError('Your company has no active team to map the fake data to');
+  const pick = (re: RegExp, i: number) => (teams.find((t) => re.test(t.name)) ?? teams[i % teams.length]).id;
+  const T = { payments: pick(/payment/i, 0), mobile: pick(/mobile/i, 1), data: pick(/data|pipeline/i, 2), reporting: pick(/report/i, 3) };
+  const base = fv.replace(/\/+$/, '');
+  return [
+    { type: 'github', name: 'github', settings: { apiUrl: `${base}/github`, auth: 'token', environments: ['production'] }, secrets: { GITHUB_TOKEN: 'fake-github-token' }, mapping: { 'acme/payments-api': T.payments, 'acme/mobile-app': T.mobile } },
+    { type: 'gitlab', name: 'gitlab', settings: { apiUrl: `${base}/gitlab/api/v4`, environments: ['production'] }, secrets: { GITLAB_TOKEN: 'fake-gitlab-token' }, mapping: { 'analytics/data-pipeline': T.data } },
+    { type: 'bitbucket', name: 'bitbucket', settings: { apiUrl: `${base}/bitbucket/2.0`, auth: 'app-password', environments: ['production'] }, secrets: { BITBUCKET_USERNAME: 'fake-user', BITBUCKET_APP_PASSWORD: 'fake-app-password' }, mapping: { 'analytics/reporting': T.reporting } },
+    { type: 'jira', name: 'jira', settings: { baseUrl: `${base}/jira`, deployment: 'cloud', auth: 'basic', allowHttp: true, jql: 'project in (PAY, MOB, DATA, REP)', fields: { environment: 'customfield_10060' } }, secrets: { JIRA_EMAIL: 'fake-account', JIRA_TOKEN: 'fake-jira-token' }, mapping: { PAY: T.payments, MOB: T.mobile, DATA: T.data, REP: T.reporting } },
+    { type: 'pagerduty', name: 'pagerduty', settings: { apiUrl: `${base}/pagerduty`, services: { 'payments-api': T.payments, 'mobile-backend': T.mobile, 'data-pipeline': T.data, 'reporting-service': T.reporting }, categories: { 'mobile-backend': 'infrastructure', 'data-pipeline': 'infrastructure', 'payments-api': 'application', 'reporting-service': 'application' } }, secrets: { PAGERDUTY_TOKEN: 'fake-pagerduty-token' } },
+    { type: 'sonarqube', name: 'sonarqube', settings: { baseUrl: `${base}/sonar`, allowHttp: true }, secrets: { SONAR_TOKEN: 'fake-sonar-token' }, mapping: { 'payments-api': T.payments, 'mobile-app': T.mobile, 'data-pipeline': T.data, reporting: T.reporting } },
+    { type: 'kpis', name: 'kpis', settings: { path: kpiFile }, mapping: { payments: T.payments, mobile: T.mobile, data: T.data, reporting: T.reporting } },
+  ];
+}
+
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]!));
 
 function page(body: string): string {
@@ -293,6 +325,7 @@ const APP = `<p><small>Everything you enter stays on this machine: secrets go to
 <label for="url">QE Navigator address</label><input id="url" placeholder="https://app.irongate.ie">
 <label for="apikey">API key (Admin console → API keys → Create)</label><input id="apikey" type="password" autocomplete="off" placeholder="igk_…">
 <button id="savekey">Save key and load my company</button><div id="keymsg"></div><div id="ctx"></div></section>
+<section id="demo" style="display:none"><h2>Test data</h2><p>This Exporter runs next to the fake vendors (made-up GitHub, GitLab, Bitbucket, Jira, PagerDuty and SonarQube data, with fake credentials). One click adds every one of them, mapped to your teams by name (Payments, Mobile, Data, Reporting; else in order). You can change each mapping below.</p><button id="demobtn">Connect the fake vendors</button><div id="demomsg"></div></section>
 <section id="add"><h2>2. Connect a tool</h2>
 <label for="type">Tool</label><select id="type"></select>
 <label for="name">Name (letters, digits, - or _)</label><input id="name" placeholder="github">
@@ -330,7 +363,8 @@ function renderState(){$('url').value=S.url||'';$('keymsg').innerHTML=S.apiKeySe
  document.querySelectorAll('[data-test]').forEach(b=>b.onclick=async()=>{const n=b.dataset.test;$('t-'+n).textContent='Testing…';try{const r=await api('/api/test',{name:n});$('t-'+n).innerHTML=r.ok?'<span class="ok">'+r.lines.map(esc).join('<br>')+'</span>':'<span class="bad">'+esc(r.error)+'</span>';}catch(e){$('t-'+n).innerHTML='<span class="bad">'+esc(e.message)+'</span>';}});
  document.querySelectorAll('[data-del]').forEach(b=>b.onclick=async()=>{S=await api('/api/source/delete',{name:b.dataset.del});renderState();});
  document.querySelectorAll('[data-oauth]').forEach(b=>b.onclick=async()=>{const n=b.dataset.oauth;const id=prompt('Your OAuth app client id');if(!id)return;const sec=prompt('Your OAuth app client secret (kept in the credentials file only)');if(!sec)return;try{const r=await api('/api/oauth/start',{name:n,clientId:id,clientSecret:sec});location.href=r.url;}catch(e){alert(e.message);}});}
-async function load(){S=await api('/api/state');$('type').innerHTML=S.types.map(t=>'<option>'+t.type+'</option>').join('');renderFields();renderState();}
+$('demobtn').onclick=async()=>{$('demomsg').textContent='Adding…';try{S=await api('/api/demo',{});$('demomsg').innerHTML='<span class="ok">Added. Test each connection below, then run preview and sync.</span>';renderState();}catch(e){$('demomsg').innerHTML='<span class="bad">'+esc(e.message)+'</span>';}};
+async function load(){S=await api('/api/state');$('demo').style.display=S.fakeVendors?'':'none';$('type').innerHTML=S.types.map(t=>'<option>'+t.type+'</option>').join('');renderFields();renderState();}
 $('type').onchange=()=>{$('name').value=$('type').value;renderFields();};$('addrow').onclick=()=>addRow();
 $('savekey').onclick=async()=>{$('keymsg').textContent='Checking…';try{S=await api('/api/key',{apiKey:$('apikey').value,url:$('url').value});$('apikey').value='';renderState();document.querySelectorAll('.mt').forEach(s=>{const v=s.value;s.innerHTML=teamOptions(v);});}catch(e){$('keymsg').innerHTML='<span class="bad">'+esc(e.message)+'</span>';}};
 $('savesrc').onclick=async()=>{const t=$('type').value;const settings={};document.querySelectorAll('[data-f]').forEach(i=>{const v=i.value.trim();if(!v)return;if(i.dataset.f==='environments')settings.environments=v.split(',').map(x=>x.trim()).filter(Boolean);else if(i.dataset.f==='auth'&&t==='linear'){}else settings[i.dataset.f]=v;});

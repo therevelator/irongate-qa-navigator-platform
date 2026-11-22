@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
-import { runSync, runPreview, runCheck, EXIT } from '../src/run';
+import { runSync, runPreview, runCheck, batchesOf, SPAN_DAYS, EXIT, type Collected } from '../src/run';
 import { makeBatches, LIMITS, keyOf } from '../src/sender';
 import { configureLog } from '../src/log';
 import { fixture, MockServer, config, shift, SHIFT_TO_NOW, tmpDir, allStrings, type Recorded } from './helpers';
@@ -278,14 +278,35 @@ describe('batching', () => {
   test('within the item and size limits; the Idempotency-Key from the body; every envelope with the three ids', () => {
     const base = { companyId: COMPANY, departmentId: 'dep-eng', teamId: 'team-pay', source: 'jira' };
     const parts = Array.from({ length: 2101 }, (_, i) => ({ id: `K-${i}`, fp: '', item: { key: `K-${i}`, createdAt: '2026-11-01T00:00:00.000Z' } }));
-    assert.deepEqual(makeBatches({ ...base, kind: 'issues' }, parts).map((b) => b.parts.length), [1000, 1000, 101]);
-    assert.deepEqual(makeBatches({ ...base, kind: 'incidents' }, parts.slice(0, 1200)).map((b) => b.parts.length), [500, 500, 200]);
+    const issues = makeBatches({ ...base, kind: 'issues' }, parts).map((b) => b.parts.length);
+    assert.equal(issues.reduce((n, x) => n + x, 0), 2101);
+    assert.ok(issues.every((n) => n <= LIMITS.issues.items) && issues[0] === LIMITS.issues.items);
+    assert.deepEqual(makeBatches({ ...base, kind: 'incidents' }, parts.slice(0, 1200), { items: 500, bytes: LIMITS.incidents.bytes }).map((b) => b.parts.length), [500, 500, 200]);
     const big = Array.from({ length: 30 }, (_, i) => ({ id: `B-${i}`, fp: '', item: { id: `B-${i}`, x: 'x'.repeat(400_000) } }));
     for (const b of makeBatches({ ...base, kind: 'incidents' }, big)) assert.ok(Buffer.byteLength(b.json) <= LIMITS.incidents.bytes + 1000);
     const b = makeBatches({ ...base, kind: 'issues' }, parts.slice(0, 2))[0];
     assert.deepEqual(JSON.parse(b.json), { ...base, kind: 'issues', items: parts.slice(0, 2).map((p) => p.item) });
     assert.match(b.idempotencyKey, /^qe-exporter:[0-9a-f]{48}$/);
     assert.equal(b.idempotencyKey, keyOf(b.json));
+  });
+});
+
+describe('envelopes in time order', () => {
+  test('oldest first, at most SPAN_DAYS of records per envelope (QE Navigator recalculates few days per request)', () => {
+    const DAYMS = 86_400_000;
+    const parts = Array.from({ length: 60 }, (_, i) => ({ id: `I-${i}`, fp: '', item: { key: `I-${i}`, updatedAt: new Date(Date.UTC(2026, 9, 1) + (59 - i) * DAYMS).toISOString() } }));
+    const c: Collected = { source: 'jira', since: new Date(), until: new Date(), read: 60, unchanged: 0, skipped: [], groups: new Map([['k', { team: 'team-pay', kind: 'issues', parts }]]), cursor: '', requests: 0 };
+    const batches = batchesOf(cfg, c);
+    assert.ok(batches.length >= 4);
+    let prev = '';
+    for (const b of batches) {
+      const times = b.envelope.items.map((x) => String(x.updatedAt));
+      assert.ok(times[0] >= prev, 'oldest first');
+      assert.ok(Date.parse(times.at(-1)!) - Date.parse(times[0]) <= SPAN_DAYS * DAYMS);
+      assert.deepEqual([b.envelope.companyId, b.envelope.departmentId, b.envelope.teamId], [COMPANY, 'dep-eng', 'team-pay']);
+      prev = times.at(-1)!;
+    }
+    assert.equal(batches.reduce((n, b) => n + b.parts.length, 0), 60);
   });
 });
 

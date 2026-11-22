@@ -179,11 +179,47 @@ export function reportItem(kind: 'test-report' | 'coverage' | 'sarif', team: str
   return { kind, team, id: `${kind}:${m.run}#${m.attempt}`, item, at: m.startedAt };
 }
 
+/**
+ * The lines a commit added or changed, per file, from the hunks of its patches (line numbers only: the code itself is
+ * never sent). QE Navigator uses them for the coverage of changed code.
+ */
+export function changedLinesOf(files: Array<{ filename?: string; patch?: string }>): Record<string, Array<number | string>> | null {
+  const out: Record<string, Array<number | string>> = {};
+  for (const f of files.slice(0, 300)) {
+    if (!f.filename || typeof f.patch !== 'string') continue;
+    const lines: number[] = [];
+    let n = 0;
+    for (const l of f.patch.split('\n')) {
+      const h = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(l);
+      if (h) { n = Number(h[1]); continue; }
+      if (!n) continue;
+      if (l.startsWith('+')) lines.push(n++);
+      else if (l.startsWith('-') || l.startsWith('\\')) continue;
+      else n++;
+    }
+    if (!lines.length) continue;
+    // Ranges keep it short: [3, 4, 5, 9] → ["3-5", 9].
+    const ranges: Array<number | string> = [];
+    for (let i = 0; i < lines.length; i++) {
+      let j = i;
+      while (j + 1 < lines.length && lines[j + 1] === lines[j] + 1) j++;
+      ranges.push(j > i ? `${lines[i]}-${lines[j]}` : lines[i]);
+      i = j;
+    }
+    out[f.filename.slice(0, 1000)] = ranges.slice(0, 5000);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
 /** The report items of one run: one test report (all its test files), one coverage report, one per SARIF file. */
-export function reportItems(team: string, found: { tests: ReportFile[]; coverage: ReportFile[]; sarif: ReportFile[] }, m: ReportMeta, repo: string | null): CiRecord[] {
+export function reportItems(team: string, found: { tests: ReportFile[]; coverage: ReportFile[]; sarif: ReportFile[] }, m: ReportMeta, repo: string | null, changed: Record<string, Array<number | string>> | null = null): CiRecord[] {
   const out: CiRecord[] = [];
   if (found.tests.length) out.push(reportItem('test-report', team, found.tests.slice(0, 50), m));
-  if (found.coverage.length) out.push(reportItem('coverage', team, found.coverage.slice(0, 50), m));
+  if (found.coverage.length) {
+    const c = reportItem('coverage', team, found.coverage.slice(0, 50), m);
+    if (changed) c.item.changedLines = JSON.stringify(changed);
+    out.push(c);
+  }
   found.sarif.forEach((f, i) => out.push(reportItem('sarif', team, [f], { ...m, run: found.sarif.length > 1 ? `${m.run}:sarif-${i + 1}` : m.run }, { repo })));
   return out;
 }

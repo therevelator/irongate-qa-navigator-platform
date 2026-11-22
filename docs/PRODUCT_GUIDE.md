@@ -517,8 +517,9 @@ QE Navigator calculates the metric itself (source `computed`; formulas in
 [metrics_and_calculations.md](metrics_and_calculations.md)).
 
 **Where they come from today:** the KPI ingestion API (`POST /api/ingest/kpis`, any source label) or Manual
-metrics (source `manual`), generated sample data (source `synthetic`), values calculated from raw data (source `computed`) or by
-a customer's QE Navigator Collector (source `collector`, section 4.2d).
+metrics (source `manual`), generated sample data (source `synthetic`), values calculated from raw data (source `computed`: also
+the raw data a customer's QE Navigator Exporter sends, section 4.2d) or KPI values an Exporter sends for metrics with no raw source
+(source `exporter.<source>`).
 **Where they should come from in production:** the systems in the last column, via a small job or CI step
 that reads them and pushes to the ingestion API.
 
@@ -1105,39 +1106,36 @@ escape rate opens to the very bugs customers found, and a low code quality score
 - Sample data: every demo and filled team has a year of sample issues and weekly SonarQube reports made from its own KPI history,
   so the calculated values agree with what its pages show. Evidence only: never written as KPI values.
 
-### 4.2d QE Navigator Collector (your CI and tools, read from inside your network)
+### 4.2d QE Navigator Exporter (your CI and tools, read from inside your network)
 
 Why: many companies will not give a SaaS product their CI, Jira or PagerDuty tokens, cannot open their Jenkins or Jira Server to
-the internet, and do not want to add a step to every pipeline. The Collector turns "connect your CI" into something a security
-team can approve: it runs inside the customer's network with the customer's own read-only credentials, calculates the metrics
-there with QE Navigator's own engine, and only ever makes outbound HTTPS calls to QE Navigator. Pipelines do not change.
+the internet, and do not want to add a step to every pipeline. The Exporter turns "connect your CI" into something a security
+team can approve: it runs inside the customer's network with the customer's own read-only credentials, reads the raw data, and
+only ever makes outbound HTTPS calls to QE Navigator. **QE Navigator calculates everything; the Exporter calculates nothing.**
 
-- What it is: a second piece of software ([`collector/`](../collector/README.md), command `qe-collector`; `qe-agent` still works
-  as an alias of the earlier on-premises agent): one Node 20 file without runtime dependencies, or a distroless container,
-  scheduled every 15 minutes (Kubernetes CronJob, systemd timer or cron). `check` validates the setup, `preview` shows exactly what
-  would be sent (nothing is sent; `--offline` for an air-gapped review), `sync` reads what changed and sends, `recalc --since <date>`
-  recalculates history after an update, `serve` is the local evidence page, `diagnose` writes a redacted support file.
-- What it reads: GitHub Actions (runs, jobs and steps, test / coverage / SARIF artifacts, deployments and the commits between
-  them; token or GitHub App), GitLab CI, Jenkins, Azure DevOps, SonarQube, and Jira, Linear, PagerDuty and Opsgenie as before.
-- The engine: the calculations (tests, coverage, pipelines, DORA, reliability, work, code quality, and the evidence each metric
-  shows) are one shared, dependency-free package ([`packages/engine`](../packages/engine)) that the server and the Collector both
-  run; a test proves both give identical values for the same data. Every value the Collector sends carries the engine version.
-- What it sends, by privacy mode (the customer chooses; default evidence):
-  - **evidence**: the values per team and day with the evidence lists the app shows (flaky test names, lowest-coverage files,
-    slowest and failing stages, failed deployments, escaped issue keys). No raw records.
-  - **metrics**: values and counts only, no names at all. "How this was calculated" says the details stay in the customer's
-    network and links to the customer's local evidence page.
-  - **full**: the minimised raw records to the ingestion API (as a team that uploads from its pipeline); QE Navigator calculates.
-  The raw records stay in a local copy on the customer's side (JSON lines with retention), which is what makes recalculation
-  and the local evidence page possible.
-- Where it shows: Admin console → Connect your CI → **QE Navigator Collector**: the privacy mode, a config file per CI with the
-  company's team ids, Docker, Kubernetes and Node steps, and **Collector status** (last seen, Collector and engine versions with an
-  outdated warning, each source's last success and failed runs, from the heartbeat each run sends: no data). Values it calculated
-  are used everywhere exactly like values calculated here (dashboards, KPI history, alerts, targets, forecasts, recommendations,
-  Business impact, TV mode; KPI source `collector`); "How this was calculated" says "Calculated by your QE Navigator Collector
-  (engine x.y.z) on <date>". Its requests appear in the ingestion log marked **Collector**.
-- Security posture for the customer's review: [`collector/SECURITY.md`](../collector/SECURITY.md) (data flow and exact fields per
-  mode, permissions per vendor, network, verification of the bundle and the image).
+- What it is: a small program ([`exporter/`](../exporter/README.md), command `qe-exporter`; `qe-collector` and `qe-agent` still
+  work as aliases of its earlier releases): one Node 20 file without runtime dependencies, or a distroless container, scheduled
+  every 15 minutes. `setup` opens a local page (127.0.0.1 only, one-time token) where the customer enters the API key (the page
+  loads the company, departments and teams), connects each tool (token, service account, username + app password, or OAuth with
+  their own OAuth app), tests each connection and maps each repository / project / pipeline / service to a department and team;
+  credentials go to a 0600 file in a 0700 folder and are never sent to QE Navigator. `check` validates the setup, `preview` shows
+  the exact JSON that would be sent (nothing is sent), `sync` sends, `diagnose` writes a redacted support file.
+- What it reads: GitHub Actions, GitLab CI, Bitbucket Cloud and Data Center, Jenkins, Azure DevOps, SonarQube, Jira, Linear,
+  PagerDuty, Opsgenie, and a KPI file for values no tool records (automation coverage, automation ROI).
+- What it sends: JSON envelopes `{ companyId, departmentId, teamId, source, kind, items }` to `POST /api/ingest/exporter/batch`:
+  test and coverage report files as files (without failure messages and output), SARIF without messages, pipeline runs,
+  deployments with their commits (sha and times), incidents and issues through the field allow-list, KPI values. QE Navigator
+  checks the three ids against the API key (a wrong id is refused and nothing is written; "not yours" and "does not exist" get the
+  same answer), then parses, stores and calculates with the same code as for every other ingestion path.
+- Where it shows: Admin console → Connect your CI → **QE Navigator Exporter**: the setup steps, a config file with the company,
+  department and team ids for people who prefer files, Docker, Kubernetes and Node steps, and **Exporter status** (last seen, the
+  version with an outdated warning, each source's last success and failed runs, from the heartbeat each run sends: no data). Its
+  data is used everywhere exactly like any other raw data (dashboards, "How this was calculated", the evidence panels, KPI history,
+  alerts, targets, forecasts, recommendations, TV mode). Its requests appear in the ingestion log as channel **Exporter**, and the
+  platform operator sees every batch (accepted or rejected) in Operator → **Exporter deliveries**.
+- Security posture for the customer's review: [`exporter/SECURITY.md`](../exporter/SECURITY.md) (data flow and exact fields, how
+  the ids are validated, where credentials live, permissions per vendor, network, verification of the bundle and the image).
+- Try it with made-up data: [`deploy/exporter-test/`](../deploy/exporter-test/README.md).
 
 ### 4.2e Upload files ("Level 0": no token, no network access, no CI step)
 
@@ -1158,7 +1156,7 @@ connection from an agent. They can still export files. Upload files is the zero-
 - Honest limits: a Jira CSV has no status-change history (blocked time is not calculated; only the last status-category change is
   known) and no sprint dates (velocity, commitment and carryover need the sprints template or the sprints sent once by API);
   escape rate, density and sizing accuracy are calculated when the export carries the environment and the estimates.
-- Data minimisation: one **field allow-list** for every path (API, uploads, the Collector): only the fields the calculations need, people
+- Data minimisation: one **field allow-list** for every path (API, uploads, the Exporter): only the fields the calculations need, people
   as a salted hash, never descriptions, comments, attachments or free text. Titles are kept for the evidence lists unless a super
   admin turns off **Store issue and incident titles** (default on, for backward compatibility; off deletes the stored titles too).
   Details: [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) section 4E.
@@ -1173,7 +1171,7 @@ member, technical-debt ROI impact per item, and CI/CD pipeline stages. Team KPIs
 ### 4.4 Ingestion log
 
 Every request (accepted, partial or rejected; API and Manual metrics) is recorded in `ingestion_log` with its items, errors and
-response (requests of the QE Navigator Collector are marked **Collector**): **Administration → Ingestion log** (super admins; managers see requests that touched their departments' teams), with a
+response (requests of the QE Navigator Exporter are marked **Exporter**): **Administration → Ingestion log** (super admins; managers see requests that touched their departments' teams), with a
 per-source "last received" overview. This is where you check whether CI integrations are still sending. Code:
 [`server/lib/ingestionLog.ts`](../server/lib/ingestionLog.ts).
 
@@ -1780,7 +1778,7 @@ negative cases, accessibility, phone layouts) in four shards on pull requests, `
 ### Data sources
 
 - **Connectors run on the customer's side.** QE Navigator does not pull from Jenkins, Jira, SonarQube, GitHub, GitLab, Azure DevOps or
-  PagerDuty over the internet; the QE Navigator Collector (section 4.2d) reads them inside the customer's network. TestRail and Datadog
+  PagerDuty over the internet; the QE Navigator Exporter (section 4.2d) reads them inside the customer's network. TestRail and Datadog
   have no connector; their KPIs are pushed to the ingestion API or entered by hand. The metric catalog lists, per KPI, the exact field or
   API to read in each system.
 - **Only team KPIs can be ingested.** Developer metrics, technical-debt items, pipeline runs and stages, test cases and executions, flaky tests and

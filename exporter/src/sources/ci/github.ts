@@ -14,6 +14,7 @@
  *   GET /repos/{r}/deployments?environment=<production env>                 deployments, newest first
  *   GET /repos/{r}/deployments/{id}/statuses                                final state and time
  *   GET /repos/{r}/compare/{previous}...{sha}                               the commits a deployment shipped (author dates)
+ *   GET /repos/{r}/commits/{sha}                                            the lines a run's commit changed (line numbers only)
  * Test, coverage and SARIF files are read from the artifacts whose names match `artifacts.*`.
  */
 import { createSign } from 'node:crypto';
@@ -21,7 +22,7 @@ import type { GitHubSource, HttpSettings } from '../../config';
 import { requireSecret, ConfigError } from '../../config';
 import { SourceClient, SourceError, nextLink } from '../client';
 import { log } from '../../log';
-import { kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
+import { changedLinesOf, kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
 
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled' | null> = {
   success: 'success', failure: 'failed', timed_out: 'failed', startup_failure: 'failed', cancelled: 'cancelled', skipped: null, neutral: null, action_required: null, stale: null,
@@ -182,7 +183,15 @@ export class GitHubAdapter implements CiAdapter {
     if (files.length) {
       const found = findReports(files);
       page.skipped.push(...found.skipped.map((x) => ({ id: `${repo}#${run.id}/${x.id}`, reason: x.reason })));
-      out.push(...reportItems(team, found, { commit, branch, run: String(run.id), attempt, startedAt }, repo));
+      // The lines the run's commit changed (line numbers from the patch hunks; the code is not sent): coverage of changed code.
+      let changed: Record<string, Array<number | string>> | null = null;
+      if (found.coverage.length && commit) {
+        try { changed = changedLinesOf(((await this.client.getOptional(`/repos/${repo}/commits/${commit}`))?.files ?? []) as any[]); } catch (e) {
+          if (e instanceof SourceError && e.auth) throw e;
+          page.skipped.push({ id: `${repo}@${commit.slice(0, 12)}`, reason: `changed lines not read: ${(e as Error).message}` });
+        }
+      }
+      out.push(...reportItems(team, found, { commit, branch, run: String(run.id), attempt, startedAt }, repo, changed));
       log.debug('artifacts read', { source: this.src.name, repo, run: run.id, files: found.files, tests: found.tests.length, coverage: found.coverage.length, sarif: found.sarif.length });
     }
     return out;

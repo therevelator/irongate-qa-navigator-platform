@@ -12,7 +12,9 @@
 # digests deliberately (see SECURITY.md, "Verifying the image").
 
 # --- build: compile and test the bundle --------------------------------------------------------------
-FROM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS build
+# The bundle is plain JavaScript, the same for every CPU: it is built on the build machine's platform, so an arm64
+# image (docker buildx build --platform linux/arm64 …) needs no emulation; only the runtime stage is per platform.
+FROM --platform=$BUILDPLATFORM node:20-alpine@sha256:fb4cd12c85ee03686f6af5362a0b0d56d50c58a04632e6c0fb8363f609372293 AS build
 WORKDIR /src/exporter
 COPY exporter/package.json exporter/package-lock.json ./
 # Dev dependencies only (esbuild, typescript, tsx, @types/node); no install scripts are run. Behind a

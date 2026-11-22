@@ -10,7 +10,7 @@
  * Server: issue/{key}?expand=changelog).
  */
 import type { JiraSource, HttpSettings } from '../config';
-import { requireSecret, teamFor } from '../config';
+import { requireSecret, secret, teamFor } from '../config';
 import { SourceClient, SourceError, type Adapter, type Page } from './client';
 import { BLOCKED, classifyEnvironment, environmentFromLabels, hours, iso, jiraSprint, normaliseType, plainText, statusCategoryOf, type Sprint } from '../normalise';
 import { maskTitle, person, type PrivacyContext } from '../privacy';
@@ -139,7 +139,7 @@ export class JiraAdapter implements Adapter {
     const token = requireSecret(src.tokenEnv, `sources.${src.name}`, env);
     let auth: string;
     if (src.deployment === 'cloud') {
-      const email = src.email ?? env[src.emailEnv]?.trim() ?? null;
+      const email = src.email ?? secret(src.emailEnv, env);
       if (!email) throw new SourceError(`sources.${src.name}: Jira Cloud needs the e-mail of the API token's account (email: in the config or ${src.emailEnv})`);
       auth = 'Basic ' + Buffer.from(`${email}:${token}`).toString('base64');
     } else {

@@ -20,7 +20,7 @@ with real data.
    - 4A. [Raw ingestion: tests, coverage, pipelines (v2)](#4a-raw-ingestion-tests-coverage-pipelines-v2)
    - 4B. [Raw ingestion: deployments, commits, incidents (v2)](#4b-raw-ingestion-deployments-commits-incidents-v2)
    - 4C. [Raw ingestion: issues and static analysis (v2)](#4c-raw-ingestion-issues-and-static-analysis-v2)
-   - 4D. [QE Navigator Collector: your CI and tools read from inside your network, no pipeline changes](#4d-qe-navigator-collector-your-ci-and-tools-read-from-inside-your-network-no-pipeline-changes)
+   - 4D. [QE Navigator Exporter: your CI and tools read from inside your network, no pipeline changes](#4d-qe-navigator-exporter-your-ci-and-tools-read-from-inside-your-network-no-pipeline-changes)
    - 4E. [Upload files: no API key, no network access, no CI step ("Level 0")](#4e-upload-files-no-api-key-no-network-access-no-ci-step-level-0) (4E.6: the field allow-list)
 5. [All other data: how it can be sent today](#5-all-other-data-how-it-can-be-sent-today)
 6. [Code: curl, Node.js, Python, retries, batching, backfill](#6-code-curl-nodejs-python-retries-batching-backfill)
@@ -44,9 +44,9 @@ arrive. Everything else is entered in the app, written by internal (browser-sess
 pulse survey, or **has no write path at all yet** (section 12).
 
 IronGate never pulls from your Jira, Jenkins and so on from the internet. Either a small job or a CI step reads your tools and
-pushes to IronGate, or you run the **QE Navigator Collector** (section 4D) inside your network: it reads GitHub Actions,
-GitLab CI, Jenkins, Azure DevOps, SonarQube, Jira, Linear, PagerDuty and Opsgenie with your read-only credentials, calculates
-there with QE Navigator's engine and sends the results (no pipeline changes).
+pushes to IronGate, or you run the **QE Navigator Exporter** (section 4D) inside your network: it reads GitHub Actions,
+GitLab CI, Bitbucket, Jenkins, Azure DevOps, SonarQube, Jira, Linear, PagerDuty and Opsgenie with your read-only credentials
+and sends the raw data as JSON; IronGate calculates (no pipeline changes).
 
 Legend for "How to send it": **API** = `POST /api/ingest/kpis` with an API key (supported, versioned behaviour,
 logged); **UI** = entered by a person in the app; **Session** = an internal endpoint the web app uses, callable
@@ -883,100 +883,118 @@ Ingestion log sources: `issues (jira)`, `issues (linear)`, `issues (json)`, `sta
 Issues are kept until 13 months after they were resolved (open issues are kept), sprints and reports 13 months, the findings
 of a report 35 days (the latest report of each repository and tool keeps them).
 
-## 4D. QE Navigator Collector: your CI and tools read from inside your network, no pipeline changes
+## 4D. QE Navigator Exporter: your CI and tools read from inside your network, no pipeline changes
 
-The **QE Navigator Collector** (`collector/` in this repository; `collector/README.md`, `collector/SECURITY.md`) is a second
-piece of software that you run in your own environment. It reads your CI and tools **from the inside** with **your own
-read-only credentials**, runs **QE Navigator's calculation engine** there (the same code the server runs:
-`packages/engine`), and sends the results to QE Navigator over **outbound HTTPS only**. Nothing connects into your
-network; no credential of yours leaves it; your pipelines do not change. It replaces the earlier on-premises agent
-(`qe-agent` keeps working as an alias of `qe-collector`; old config and state file names are still found).
+The **QE Navigator Exporter** (`exporter/` in this repository; `exporter/README.md`, `exporter/SECURITY.md`) is a small
+program you run in your own network (a Docker container or one file). You connect your tools in it with whatever
+authentication each tool supports (a token, a service account, username + app password, or OAuth with **your own** OAuth
+app). It reads the **raw** data (CI runs, test and coverage report files, SARIF, deployments, commits, incidents, issues)
+and sends it to QE Navigator as **JSON** with an API key your company admin creates (Admin console → API keys).
+**QE Navigator calculates everything; the Exporter calculates nothing.** Every request names the company, the
+department and the team the data is for, and QE Navigator refuses it when any of the three is not the key's.
+
+It replaces the QE Navigator Collector (releases up to 0.2.0, which calculated values locally): `qe-collector` and
+`qe-agent` still run it, and the old config, state and environment variable names are still found. The privacy modes,
+`recalc`, `serve` and the local copy of the records are gone; their settings in an old config are ignored with a warning.
 
 | | |
 |---|---|
-| Form | One file `qe-collector.mjs` (Node 20+, no runtime dependencies, about 390 KB, reproducible esbuild bundle of `collector/src` and `packages/engine/src` only) or a distroless container (non-root 65532, read-only file system, no shell; `docker build -f collector/Dockerfile .` from the repository root). Examples: Kubernetes CronJob + NetworkPolicy, systemd timer, cron (`collector/deploy/`). |
-| Sources | **GitHub Actions** (github.com or Enterprise Server; fine-grained PAT or a GitHub App): workflow runs, jobs and steps with timings, artifacts (test, coverage and SARIF files found by name patterns and recognised by content), deployments to production environments with their statuses, the commits between deployments (compare). **GitLab CI** (access token, `read_api`): pipelines, jobs (retries included), the test report API, job artifacts, deployments, compare. **Jenkins** (user + API token): builds, Pipeline stages (`wfapi`), the JUnit plugin's test report, archived artifacts, deployment jobs with their change sets. **Azure DevOps** (PAT): builds and timelines, test runs and results, code coverage, artifacts, environment deployment records, classic releases (optional). **SonarQube / SonarCloud** (user token): open issues as findings, lines of code, quality gate. **Jira** (Cloud, Server, Data Center), **Linear**, **PagerDuty**, **Opsgenie** as before. |
-| Calculation | Every metric of sections 4A.3, 4B.4 and 4C.3, per team and UTC day, by the shared engine over a **local copy** of the records (JSON lines in the state folder, one file per month, retention `state.retentionDays`, default 400; per-test and per-file detail kept `state.detailDays`, default 35, as QE Navigator keeps them). Each value is sent with the **engine version** (`ENGINE_VERSION`, now 1.0.0). After a Collector update, `qe-collector recalc --since <date>` recalculates the history from the local copy and sends what changed. A test (`tests/api/engine-crosscheck.test.ts`) proves that the same fixtures give identical values through the server and through the engine directly. |
-| Privacy modes | `privacy.mode` decides what leaves your network (default **evidence**): **full** sends the minimised raw records to the existing endpoints (4A, 4B, 4C) and QE Navigator calculates (test results without failure messages, coverage per file, pipeline runs with stages, deployments with commit times, findings without messages, issues and incidents through the field allow-list); **evidence** sends the calculated values per team and day with the evidence lists the app shows (flaky test names, lowest-coverage files, slowest and failing stages, failed deployments, escaped issue keys) and no raw record; **metrics** sends the values and counts only (no names, keys, paths, titles or commits), and "How this was calculated" links to the customer's local evidence page instead. The exact fields per mode: `collector/SECURITY.md`. |
-| Endpoints | full mode: `POST /api/ingest/tests`, `/coverage`, `/pipelines`, `/deployments`, `/static-analysis`, `/issues`, `/incidents` as documented above. evidence / metrics modes: `POST /api/ingest/collector/metrics` (below). Every run: `POST /api/ingest/collector/heartbeat` (below). |
-| Commands | `check` (config, each source, a QE Navigator dry run with your team ids; never prints secrets) · `preview` (every request exactly as `sync` would send it in your mode, validated by `dryRun=true`; `--offline` contacts QE Navigator not at all; stores nothing) · `sync` (incremental; `--since` backfills) · `recalc --since <date>` · `serve` (the local evidence page) · `diagnose` (a redacted diagnostics file you can choose to send). |
-| Config | One YAML file without secrets (`collector/config.example.yaml`; Admin console → Connect your CI → *QE Navigator Collector* generates one per CI and privacy mode with your team ids). Secrets only as environment variables or `VAR_FILE`: `QE_API_KEY`, `GITHUB_TOKEN` (or `GITHUB_APP_PRIVATE_KEY`), `GITLAB_TOKEN`, `JENKINS_USER` + `JENKINS_TOKEN`, `AZURE_DEVOPS_TOKEN`, `SONAR_TOKEN`, `JIRA_TOKEN` (+ `JIRA_EMAIL`), `LINEAR_API_KEY`, `PAGERDUTY_TOKEN`, `OPSGENIE_API_KEY`, `QE_PEOPLE_SALT`, `QE_SERVE_USER` + `QE_SERVE_PASSWORD`. A secret-looking key in the file is refused. |
-| Team mapping | In the Collector: repository / project / job / pipeline / project key / Linear team / PagerDuty service / Opsgenie team → team id (`repos`, `projects`, `jobs`, `pipelines`, `teams`, `services`); unmapped records are skipped and reported (or go to `defaultTeam`). `mainBranches` sets a team's main branch when it is not main / master. |
-| Reading | Incremental cursors per source (with `overlapMinutes`), pagination (`Link`, `X-Next-Page`, `x-ms-continuationtoken`, page numbers), rate limits (429 / 5xx and GitHub's secondary limits retried with `Retry-After` and jittered backoff; `X-RateLimit-Remaining: 0` waits for the reset), timeouts on every request, `HTTPS_PROXY` / `NO_PROXY`, extra CA bundles. Artifacts: the size declared by the API and the bytes downloaded are capped (`artifacts.maxMB`, default 50), expired artifacts are reported, zip bombs and XML entities are refused, and a redirect to a signed storage URL on another host is followed **without** the credentials (https only). A source's credentials are never sent to another host. |
-| Exit codes | `0` ok, `2` config, `3` a source could not be read, `4` QE Navigator refused or unreachable, `5` another run is in progress, `6` some records or values refused. |
-| Ingestion log | Requests carry `User-Agent: qe-collector/<version>`; the log marks them **Collector** ("via the QE Navigator Collector (qe-collector/0.2.0)"); Collector values appear as `collector values (evidence, engine 1.0.0)`. The heartbeat is not logged (it carries no data). |
-| Status | Admin console → Connect your CI → *Collector status*: per API key the last heartbeat, the Collector and engine versions (an older one is shown as outdated), the privacy mode, each source's last success and failed runs. |
+| Form | One file `qe-exporter.mjs` (Node 20+, no runtime dependencies, built only from `exporter/src`) or a distroless container (`docker build -f exporter/Dockerfile .` from the repository root: non-root 65532, read-only file system, no shell). Examples: `exporter/deploy/` (Kubernetes CronJob + NetworkPolicy, systemd timer, cron); a local trial with made-up data: `deploy/exporter-test/`. |
+| Sources | GitHub Actions, GitLab CI, **Bitbucket Cloud** (Pipelines with steps, test reports, deployments, commits) and **Bitbucket Data Center** (builds reported on commits, deployments, commits), Jenkins, Azure DevOps, SonarQube / SonarCloud, Jira (Cloud, Server, Data Center), Linear, PagerDuty, Opsgenie, and a KPI file for values no tool records as raw data (automation coverage, automation ROI). |
+| What it sends | Test reports and coverage reports as **files** (the text of the JUnit / TRX / Cucumber, lcov / Cobertura / JaCoCo / Istanbul file, recognised by content; a CI that gives results only as JSON is written out as a JUnit file), with failure messages, stack traces, output and properties stripped; SARIF without messages; pipeline runs with their stages; deployments with the commits they shipped (sha and times); incidents and issues through the field allow-list (4E.6) and the Exporter's stricter send policy; the lines a commit changed (line numbers only) for the coverage of changed code. Never: credentials, descriptions, comments, logs, commit messages, names or e-mail addresses. |
+| Endpoints | `POST /api/ingest/exporter/batch` (4D.1), `GET /api/ingest/exporter/context` (4D.2), `POST /api/ingest/exporter/heartbeat` (4D.3). The endpoints of 4A–4C keep working for pipelines that send directly. |
+| Commands | `setup` (a page on 127.0.0.1 with a one-time token: API key, connect each tool, test it, map each source to a department and team) · `check` (config, each source, the key's company, departments and teams, a dry run per team) · `preview` (every envelope exactly as `sync` would send it, with the three ids; **nothing is sent**, not even to QE Navigator) · `sync` (incremental; `--since` backfills) · `diagnose` (a redacted diagnostics file). |
+| Ingestion log | Each part of a batch is logged with channel **Exporter** (the request carries `User-Agent: qe-exporter/<version>`). The platform operator also sees one row per batch, accepted or rejected (Operator → Exporter deliveries). |
 
-### 4D.1 POST /api/ingest/collector/metrics
+### 4D.1 POST /api/ingest/exporter/batch
 
-Values calculated by a Collector (privacy modes evidence and metrics). API key as in section 3, JSON (gzip accepted), at
-most 5 MB, 50 teams, 400 days per team, 40 metrics per day and 5,000 values per request; `Idempotency-Key` (a retried request
-is answered from the ingestion log); `?dryRun=true` validates the key, the teams and the body and stores nothing.
+API key as in section 3 (`Authorization: Bearer igk_…`). JSON, gzip accepted (`Content-Encoding: gzip`), at most 20 MB as
+received (100 MB uncompressed). `Idempotency-Key` header: a re-sent batch is answered from the log and writes nothing again.
+`?dryRun=true` checks the key, the ids and every item through its handler and writes nothing at all.
 
 ```json
 {
-  "collector": "qe-collector/0.2.0", "engineVersion": "1.0.0", "mode": "evidence",
-  "teams": [{
-    "teamId": "team-payments",
-    "days": [{ "day": "2026-11-20", "metrics": [
-      { "key": "line_coverage", "value": 81.25, "sampleSize": 3, "recordedAt": "2026-11-20T14:02:11.000Z",
-        "inputs": { "linesHit": 1300, "linesFound": 1600, "files": 42 },
-        "evidence": { "lowestFiles": [{ "path": "src/checkout/pay.ts", "linesFound": 120, "linesHit": 30 }] } },
-      { "key": "test_flakiness_rate", "value": 2.5, "sampleSize": 18, "recordedAt": "2026-11-20T16:40:00.000Z",
-        "inputs": { "flakyTests": 1, "distinctTests": 40, "windowDays": 7, "runs": 18 } }
-    ] }],
-    "evidence": { "asOf": "2026-11-20", "flakyTests": [], "lowestFiles": [], "slowestStages": [], "failingStages": [] }
-  }]
+  "companyId": "TH6PD7J19747",
+  "departmentId": "dep-platform-engineering",
+  "teamId": "team-payments-api",
+  "source": "github",
+  "kind": "test-report",
+  "items": [
+    {
+      "commit": "3f2a9c1e5b7d4a6f8e0c2b4d6f8a0c2e4b6d8f0a",
+      "branch": "main",
+      "run": "19922780",
+      "attempt": 1,
+      "startedAt": "2026-11-20T09:00:00.000Z",
+      "files": [
+        { "name": "test-results/junit.xml", "content": "<?xml version=\"1.0\"?><testsuites><testsuite name=\"checkout\" tests=\"2\"><testcase classname=\"checkout\" name=\"pays with a saved card\" time=\"6.5\"><failure/></testcase><testcase classname=\"checkout\" name=\"declines an expired card\" time=\"0.4\"/></testsuite></testsuites>" }
+      ]
+    }
+  ]
 }
 ```
 
-Rules (an unknown field anywhere is refused with its path): `key` is one of the 30 metric keys of the engine (4A.3, 4B.4,
-4C.3: `line_coverage`, `pass_rate`, `deployment_frequency`, `mttr`, `velocity`, `code_quality`, …); `value` finite (a `%`
-value 0 to 100); `sampleSize` a whole number; `recordedAt` an ISO 8601 UTC time, not in the future; `day` within 400 days and
-not in the future; `inputs` numbers only (no text, in either mode). `evidence` only in evidence mode and only these lists:
-`flakyTests` (name, suite, commit, failedRuns, passedRuns: counts) on `flaky_tests` / `test_flakiness_rate`; `lowestFiles`
-(path, linesFound, linesHit) on `line_coverage`; `failedDeployments` (deploymentId, reasons: type rolled_back / rollback /
-hotfix / incident, ref, at) on `change_failure_rate`; `escaped` (issue keys) on `escape_rate` / `defect_density`; per team
-`evidence` (asOf, flakyTests, lowestFiles, slowestStages, failingStages). A text containing an e-mail address is refused. A
-team must belong to the key's company (`403` otherwise).
+| Field | |
+|---|---|
+| `companyId` | Your company id (Connect your CI, or 4D.2). Must be the API key's company, else `403` and nothing is written. |
+| `departmentId` | A department of that company. |
+| `teamId` | An **active** team of that department and company. The only team the items may write to: an item naming another team is refused, and no service or project-key mapping is used. |
+| `source` | The Exporter source's name (`github`, `jira`, …): shown in the logs. |
+| `kind` | One of `test-report`, `coverage`, `sarif`, `pipeline-runs`, `deployments`, `commits`, `incidents`, `issues`, `kpis`. |
+| `items` | At most 50 report items (`test-report`, `coverage`, `sarif`), 100 `pipeline-runs` or `kpis`, 500 `deployments`, `commits` or `incidents`, 1,000 `issues`. |
 
-Stored as `metric_evidence` rows with `origin = 'collector'`, the engine and Collector versions, the privacy mode and (metrics
-mode) `localEvidenceUrl`; a day's set replaces the Collector values of that day. The values with a KPI column are written
-through the one KPI write path as source **collector**, so dashboards, KPI history, alerts, targets, the QA score, forecasts,
-recommendations, Business impact and TV mode use them exactly as values calculated here. Answers: `201`
-`{"status":"accepted","values":…,"changed":…,"kpis":{team:[columns]}}`, the same body again `200` `"duplicate"`, `400` with
-`details` (every problem found), `401`, `403`, `413`.
+Items per kind (each goes through the existing ingestion handler of 4A–4C, with its parsers, limits and storage):
 
-"How this was calculated" (`GET /api/ci/teams/:id/metrics/:metric`) returns `collector: {engineVersion, collectorVersion,
-mode, calculatedAt, localEvidenceUrl, failedDeployments?, escaped?}` for such a value; the app shows "Calculated by your QE
-Navigator Collector (engine x.y.z) on <date>" with the evidence, or in metrics mode "Details stay in your network" with a link
-to the local evidence page. `GET /api/ci/teams/:id/evidence` shows the evidence panel the Collector sent when there is no raw
-data. Recommendations use the evidence lists in evidence mode and the counts in metrics mode (they then name no test, file
-or issue).
+- `test-report`: `{ files: [{ name, content }] (1–50, merged into one run), format?, commit?, branch?, run?, attempt?, startedAt? }` (JUnit, TRX, Cucumber JSON: 4A.1).
+- `coverage`: the same, plus `diff` (a unified diff) or `changedLines` (`{"path": [12, "20-24"]}` as a string) for the coverage of changed code (lcov, Cobertura, JaCoCo, Istanbul: 4A.2).
+- `sarif`: `{ files: [one SARIF 2.1.0 file], repo?, loc?, commit?, branch?, run?, attempt?, startedAt? }` (4C.2).
+- `pipeline-runs`: pipeline run JSON (4A.4): `id, attempt, name, commit, branch, startedAt, finishedAt, durationSeconds, result, url?, stages: [{ name, kind?, parallelGroup?, startedAt, finishedAt, durationSeconds, result }]`.
+- `deployments`: deployment JSON (4B.1): `id, environment, production, service, commit, previousCommit?, startedAt, finishedAt, result, rollbackOf?, hotfix?, commits: [{ sha, authoredAt, committedAt }]`.
+- `commits`: commit batches (4B.2): `{ deployment?, branch?, commits: [{ sha, authoredAt, committedAt, author? }] }` (an author becomes a salted hash on our side).
+- `incidents`: incident JSON (4B.3); `issues`: issue JSON (4C.1); both through the field allow-list.
+- `kpis`: `{ recordedAt?, metrics: { <KPI column>: number } }` (section 7: for values with no raw source, such as `automation_coverage` and `automation_roi`); stored with source `exporter.<source>`.
 
-### 4D.2 POST /api/ingest/collector/heartbeat
+Checks, in this order, before anything is read further: the key (valid, not revoked: `401`); a missing `companyId`,
+`departmentId` or `teamId` (`400`); `companyId` not the key's (`403 companyId does not match this API key`); the department
+not in the company (`403 departmentId is not a department of your company`); the team not active, not in that department
+or not in the company (`403 teamId is not an active team of this department`). **Another company's id and an id that does
+not exist get exactly the same answer.** Then every item is checked by its handler (a dry run that writes nothing); one
+refused item refuses the batch (its status and `error` name the item: `items[3]: …`), and nothing is written. Only then are
+the items written, part by part (a report item is one part; the other kinds are one part).
 
-Sent at the end of every run: `collector`, `version`, `engineVersion`, `mode`, `localEvidenceUrl`, `node`, `platform`,
-`teams` (a count), `store` (records, files, bytes of the local copy) and per source `name`, `type`, `lastSuccessAt`, `errors`
-(failed runs since the last success), `lastErrorAt`, `lastErrorKind` (`auth`, `network`, `http <status>`, …). No data, no error
-message. Kept per API key (`collector_heartbeats`), shown in Connect your CI → *Collector status* (`GET /api/ci/status` →
-`collectors[]` with `outdated` and `stale`).
+Answers: `201 {"status":"accepted", companyId, departmentId, teamId, source, kind, written, duplicate, rejected, recordsStored, items: [{ index, status, httpStatus, result }]}`
+(`result` is the handler's answer, with the values QE Navigator calculated); `200 "duplicate"` when nothing was new; the
+same request with the same `Idempotency-Key` again: the stored answer with `Idempotent-Replayed: true`; `200 "dry-run"`;
+`400` (shape, a missing id, a bad kind, an item refused), `401`, `403` (ids), `413` (size), `415` (not JSON, or an
+unrecognised report), `422` (an `Idempotency-Key` used for another body).
+
+### 4D.2 GET /api/ingest/exporter/context
+
+The key's company only: `{ "company": { "id", "name" }, "apiKey": { "name" }, "departments": [{ "id", "name", "teams": [{ "id", "name" }] }] }`
+(active teams only). The setup page uses it to pick the department and team of each source; `qe-exporter check` uses it
+to verify the config.
+
+### 4D.3 POST /api/ingest/exporter/heartbeat
+
+Sent at the end of every run: `exporter` (`qe-exporter/<version>`), `version`, `node`, `platform`, `teams` (a count) and per
+source `name`, `type`, `lastSuccessAt`, `errors` (failed runs since the last success), `lastErrorAt`, `lastErrorKind`. No
+data, no error message. Kept per API key (`exporter_heartbeats`), shown in Connect your CI → *Exporter status*.
+`/api/ingest/collector/heartbeat` is the same endpoint for releases before 0.3.0.
 
 ```bash
-# The five-minute path (details and one example per CI: collector/README.md)
-cd collector && npm ci --ignore-scripts && npm run build        # or: docker build -f collector/Dockerfile -t qe-collector:0.2.0 .
-export QE_API_KEY=igk_... GITHUB_TOKEN=github_pat_...
-node dist/qe-collector.mjs check   -c qe-collector.yaml
-node dist/qe-collector.mjs preview -c qe-collector.yaml --out preview.json
-node dist/qe-collector.mjs sync    -c qe-collector.yaml          # then every 15 minutes (collector/deploy/)
+# The five-minute path (details per tool: exporter/README.md)
+docker build -f exporter/Dockerfile -t qe-exporter:0.3.0 .
+docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 setup   # open the printed link
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 preview
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 sync                                 # then every 15 minutes
 ```
 
-Verified against a local instance by `tests/api/collector-e2e.test.ts` (issues and incidents in full mode) and
-`tests/api/collector-modes-e2e.test.ts` (each privacy mode with a GitHub stand-in: the raw store in full mode, the
-Collector's values with their engine version in evidence and metrics mode, KPI history, team detail, TV mode, "How this was
-calculated", the heartbeat, idempotent re-runs, recalculation with a newer engine, the endpoint's refusals). The connectors
-are tested against stand-ins of each vendor API (`collector/test/ci.test.ts`); they have not been run against the real
-GitHub, GitLab, Jenkins, Azure DevOps or SonarQube services.
+Verified against a local instance by `tests/api/exporter-batch.test.ts` (the envelope: every id check, dry run, idempotency,
+size, kinds), `tests/api/exporter-netlify.test.ts` (the same through the Netlify function), `tests/api/exporter-deliveries.test.ts`
+(the operator log) and `tests/api/exporter-e2e.test.ts` (the bundle against the fake vendors of `deploy/exporter-test`: data
+lands in exactly the mapped teams and the dashboards show the values QE Navigator calculated). The connectors are tested
+against stand-ins of each vendor API built from their documented responses (`exporter/test/`); they have not been run
+against the real services.
 
 ## 4E. Upload files: no API key, no network access, no CI step ("Level 0")
 
@@ -1141,12 +1159,12 @@ company's team), `413` (over a size limit, a zip bomb), `415` (not `multipart/fo
 answer: `status: error` with the reason (type not recognised, a required column not mapped, nothing storable, a team out of
 scope, the API's own refusal of the dry run).
 
-### 4E.6 Field allow-list (every path: API, uploads, the Collector)
+### 4E.6 Field allow-list (every path: API, uploads, the Exporter)
 
 The only fields of an issue, a sprint or an incident QE Navigator keeps, applied to every path that receives them: the
-ingestion API (`POST /api/ingest/issues`, `/incidents`), file uploads and the QE Navigator Collector (4D). One file,
+ingestion API (`POST /api/ingest/issues`, `/incidents`), file uploads and the QE Navigator Exporter (4D). One file,
 `server/lib/ingest/fieldAllowList.ts`: plain data and a pure `minimise(kind, record)`, no server dependency (Node's `crypto`
-only); the Collector vendors it byte for byte (`collector/scripts/sync-allow-list.mjs`, checked by a test).
+only); the Exporter vendors it byte for byte (`exporter/scripts/sync-allow-list.mjs`, checked by a test).
 
 | Issues | Used for |
 |---|---|
@@ -2086,12 +2104,14 @@ run it against a test team, or overwrite the values with real ones (the latest v
   ingestion log records the key id, name and prefix, never the key.
 - One key per integration, least privilege for session accounts (3.6), rotation (3.3), HTTPS only (3.5).
 
-**QE Navigator Collector**
+**QE Navigator Exporter**
 
-- The Collector of section 4D keeps your tool credentials and your raw data inside your network, needs no inbound access,
-  calculates there with QE Navigator's engine, sends by privacy mode (full, evidence, metrics) after the shared field
-  allow-list and a strict allow-list per mode, and shows the exact payload with `qe-collector preview` (`--offline` for an
-  air-gapped review). Its security posture for your review: `collector/SECURITY.md`.
+- The Exporter of section 4D keeps your tool credentials inside your network (a 0600 credentials file or environment
+  variables; never sent to IronGate), needs no inbound access (its setup page listens on 127.0.0.1 only, behind a one-time
+  token), sends the raw data after the shared field allow-list and its own stricter send policy (no messages, names or
+  authors), names the company, department and team in every request (IronGate refuses any id that is not the key's), and
+  shows the exact payload with `qe-exporter preview` (which sends nothing). Its security posture for your review:
+  `exporter/SECURITY.md`.
 
 **Upload files and the field allow-list**
 

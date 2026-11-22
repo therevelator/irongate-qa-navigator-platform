@@ -1,257 +1,206 @@
-# qe-collector: the QE Navigator Collector
+# qe-exporter: the QE Navigator Exporter
 
-A small program you run **inside your own network**. It reads your CI (GitHub Actions, GitLab CI, Jenkins, Azure
-DevOps), SonarQube, Jira, Linear, PagerDuty and Opsgenie with **your own read-only credentials**, calculates the metrics
-there with **QE Navigator's own calculation engine** (the code the QE Navigator server runs, `packages/engine`), and sends
-the results to QE Navigator over **outbound HTTPS only**. Your pipelines do not change.
+A small program you run **inside your own network**: a Docker container, or one JavaScript file for Node 20+. You connect
+your tools in it (GitHub Actions, GitLab CI, Bitbucket Cloud or Data Center, Jenkins, Azure DevOps, SonarQube, Jira, Linear,
+PagerDuty, Opsgenie) with whatever authentication each tool supports. It reads the **raw** data and sends it to QE
+Navigator as **JSON** over outbound HTTPS, with an API key your company admin creates in QE Navigator.
 
-- Your credentials never leave your network: they live in environment variables and are sent only to the tool they
-  belong to (an artifact download that redirects to a storage host follows the redirect without them).
-- Nothing connects into your network. The only optional listener is the local evidence page (`serve`), bound to
-  localhost or an internal address.
-- You choose what leaves (`privacy.mode`): **evidence** (default: calculated values with the evidence lists the app
-  shows), **metrics** (values and counts only, no names at all) or **full** (minimised raw records; QE Navigator
-  calculates). The raw records stay in a local copy on your side, so history can be recalculated after an update.
-- `qe-collector preview` prints exactly what would be sent before anything is sent.
-- One JavaScript file of about 390 KB, no runtime dependencies, Node 20 or later; or a distroless container image.
-- `qe-agent` is the same program under its earlier name (the on-premises agent): the command, the old config file name
-  `qe-agent.yaml`, `QE_AGENT_CONFIG` and an old state file keep working.
+- **QE Navigator calculates everything. The Exporter calculates nothing.** It sends test and coverage report files as
+  files, pipeline runs, deployments with their commits, incidents and issues; QE Navigator parses, stores and calculates
+  (the dashboards, "How this was calculated" and the evidence panels show QE Navigator's values).
+- **Every request names your company, the department and the team** (`companyId`, `departmentId`, `teamId`). QE Navigator
+  checks all three against the API key and refuses the request if any of them is not yours, so no data can land in the
+  wrong team.
+- **Your credentials stay with you**: in environment variables or a credentials file with mode 0600 in a 0700 folder.
+  They are never logged, never sent to QE Navigator, and `diagnose` and `preview` never show them. Each credential goes
+  only to the tool it belongs to.
+- **Nothing connects into your network.** The only listener is the setup page while you use it, on 127.0.0.1, behind a
+  one-time token.
+- **No free text leaves**: failure messages, stack traces, logs, descriptions, comments, commit messages, names and
+  e-mail addresses are stripped (details: [SECURITY.md](SECURITY.md)).
+- `qe-exporter preview` prints exactly the JSON that would be sent, with the three ids, and sends nothing.
 
-Security review: [SECURITY.md](SECURITY.md): data flow per mode, the exact fields per mode, permissions per vendor,
-network requirements, verification of the bundle and the image.
+`qe-collector` and `qe-agent` are the same program under its earlier names: those commands, the old config file names
+(`qe-collector.yaml`, `qe-agent.yaml`), `QE_COLLECTOR_CONFIG` / `QE_AGENT_CONFIG` and old state files keep working.
+Settings of the earlier releases that no longer apply (`privacy.mode`, the local copy, `recalcDays`, `serve`,
+`mainBranches`) are ignored with a warning. `recalc` and `serve` were removed: there is nothing to calculate here.
 
-## Quick start (5 minutes)
+## Five-minute start
 
-**1. Get the Collector.** The container image, built from the repository root (it bundles this folder and the shared engine):
+**1. Create an API key in QE Navigator** (company admin): Admin console → API keys → Create (name it after the machine,
+e.g. `exporter-build-1`). Copy the `igk_…` key: it is shown once.
 
-```bash
-docker build -f collector/Dockerfile -t qe-collector:0.2.0 .
-```
-
-or the single file, built with Node 20+ (dev tools only; no runtime dependencies):
-
-```bash
-cd collector && npm ci --ignore-scripts && npm run build      # dist/qe-collector.mjs and dist/SHA256SUMS
-```
-
-**2. Create a QE Navigator API key**: QE Navigator → Admin console → API keys → Create (name it `qe-collector`).
-Admin console → Connect your CI → *QE Navigator Collector* generates a config file per CI and privacy mode with your
-team ids filled in, and shows the Collector status once it runs.
-
-**3. Write `qe-collector.yaml`** for your CI (no secrets in it; [config.example.yaml](config.example.yaml) has every option),
-then set the secrets and run `check`, `preview`, `sync` (step 4).
-
-### GitHub Actions
-
-Token: a fine-grained personal access token with repository permissions **Actions: read, Contents: read, Deployments:
-read, Metadata: read** on the repositories (or a GitHub App with the same permissions: `auth: app`, `appId`,
-`installationId`, key in `GITHUB_APP_PRIVATE_KEY`).
-
-```yaml
-qeNavigator:
-  url: https://app.irongate.ie
-privacy:
-  mode: evidence
-state:
-  path: /var/lib/qe-collector/state.json
-sources:
-  - type: github
-    repos:                              # owner/name → QE Navigator team id
-      acme/payments: team-payments
-      acme/web: team-web
-    environments: [production]          # deployments to these environments count
-    # apiUrl: https://github.example.com/api/v3   (GitHub Enterprise Server)
-    # artifacts: { tests: ["*test*"], coverage: ["*coverage*"], sarif: ["*sarif*"], maxMB: 50 }
-```
+**2. Get the Exporter**, as a container image (built from the repository root):
 
 ```bash
-export QE_API_KEY=igk_... GITHUB_TOKEN=github_pat_...
+docker build -f exporter/Dockerfile -t qe-exporter:0.3.0 .
 ```
 
-The Collector reads workflow runs, their jobs and steps, and the artifacts whose names match the patterns (JUnit / TRX /
-Cucumber test reports, lcov / Cobertura / JaCoCo / Istanbul coverage, SARIF, recognised by content); keep uploading
-your reports as artifacts (`actions/upload-artifact`) and nothing else changes.
-
-### GitLab CI
-
-Token: a personal, group or project access token with the **read_api** scope (role Reporter or above).
-
-```yaml
-sources:
-  - type: gitlab
-    projects:                           # group/project → team id
-      acme/web: team-web
-    environments: [production]
-    # apiUrl: https://gitlab.example.com/api/v4   (self-managed)
-```
+or the single file (Node 20+, no runtime dependencies):
 
 ```bash
-export QE_API_KEY=igk_... GITLAB_TOKEN=glpat-...
+cd exporter && npm ci --ignore-scripts && npm run build      # dist/qe-exporter.mjs and dist/SHA256SUMS
 ```
 
-Tests come from GitLab's test report API (your `artifacts:reports:junit`); coverage and SARIF from job artifacts whose job
-or archive names match the patterns.
-
-### Jenkins
-
-User and API token of a dedicated user with **Overall/Read** and **Job/Read** on the jobs.
-
-```yaml
-sources:
-  - type: jenkins
-    baseUrl: https://jenkins.example.com
-    user: qe-collector                  # or JENKINS_USER
-    jobs:                               # folder/job → team id
-      payments/main: team-payments
-    deployJobs:                         # each build of these jobs is a production deployment
-      payments/deploy-production: team-payments
-```
+**3. Open the setup page:**
 
 ```bash
-export QE_API_KEY=igk_... JENKINS_TOKEN=11a2b3...
+docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 setup
+#   or: node dist/qe-exporter.mjs setup -c ./qe-exporter.json
 ```
 
-Stages come from the Pipeline Stage View API (`wfapi`), tests from the JUnit plugin, coverage and SARIF from archived
-artifacts (`archiveArtifacts`).
+It prints a link such as `http://127.0.0.1:8788/?token=…`. Open it in a browser on the same machine (the link works once;
+the page then keeps a session cookie). On the page:
 
-### Azure DevOps
+1. **API key**: paste the key. The page loads your company, its departments and teams from QE Navigator.
+2. **Connect a tool**: choose it, enter its address and credentials (or connect with OAuth, below), and map each
+   repository / project / pipeline / service to a department and team. **Test connection** shows what the Exporter can
+   read with those credentials.
+3. Repeat for each tool. **Save** writes the config file (`qe-exporter.json`, no secrets in it) and the credentials file.
 
-A personal access token with **Build (Read), Test Management (Read), Code (Read), Environment (Read)** (and **Release
-(Read)** with `releases: true`).
-
-```yaml
-sources:
-  - type: azure-devops
-    orgUrl: https://dev.azure.com/acme
-    project: Payments
-    pipelines:                          # pipeline name (or definition id) → team id
-      payments-ci: team-payments
-    environments: [Production]
-    # releases: true                    # classic release pipelines (vsrm.dev.azure.com)
-```
+**4. Preview, then sync:**
 
 ```bash
-export QE_API_KEY=igk_... AZURE_DEVOPS_TOKEN=...
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 check     # every source and QE Navigator
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 preview   # the exact JSON; nothing is sent
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 sync      # first run: the last 90 days
 ```
 
-### SonarQube, Jira, Linear, PagerDuty, Opsgenie
+Then run `sync` every 15 minutes: a [Kubernetes CronJob](deploy/kubernetes/cronjob.yaml) with a
+[NetworkPolicy](deploy/kubernetes/networkpolicy.yaml), a [systemd timer](deploy/systemd/) or [cron](deploy/crontab.example).
+Admin console → Connect your CI → *Exporter status* shows the last heartbeat and each source's last success.
 
-Add them to the same file (one `sources` entry each; see [config.example.yaml](config.example.yaml)): `type: sonarqube`
-(`projects:` key → team, `SONAR_TOKEN`), `type: jira` (`JIRA_TOKEN`, `JIRA_EMAIL`), `type: linear` (`LINEAR_API_KEY`),
-`type: pagerduty` (`PAGERDUTY_TOKEN`), `type: opsgenie` (`OPSGENIE_API_KEY`).
+To try it with made-up data and no real tools: [deploy/exporter-test/README.md](../deploy/exporter-test/README.md).
 
-**4. Check, preview, sync:**
+## The setup page
 
-```bash
-node dist/qe-collector.mjs check   -c qe-collector.yaml   # config, each source, QE Navigator; what would be read
-node dist/qe-collector.mjs preview -c qe-collector.yaml   # exactly what would be sent in your mode; nothing is sent or stored
-node dist/qe-collector.mjs sync    -c qe-collector.yaml   # first run: the last 90 days; then only what changed
-```
+- Listens on **127.0.0.1** only (also `::1` or `localhost`); any other address is refused. In the container it listens on
+  the container's own interface, and `-p 127.0.0.1:8788:8788` publishes it to 127.0.0.1 on your machine only.
+- Protected by a **one-time token** printed in the terminal; without it (or with a wrong one) every page and API answers
+  401 / 403. Requests for another host name and writes from another site are refused.
+- Secrets typed on the page go **only** to the credentials file (0600, in a 0700 folder next to the config:
+  `qe-exporter-credentials/credentials.json`). The page shows "set", never a value.
+- **OAuth** uses **your own OAuth app**: register an app with the vendor, set its redirect URI to
+  `http://127.0.0.1:8788/oauth/callback`, and enter its client id and secret on the page. QE Navigator has no OAuth app,
+  never sees your client secret or tokens, and is not part of the redirect. Tokens are refreshed before a run when they
+  expire.
+- Prefer files? Everything the page does can be written by hand: [config.example.yaml](config.example.yaml) has every
+  option, and secrets come from environment variables (or `VAR_FILE`).
 
-With Docker:
+## Authentication and read-only permissions per tool
 
-```bash
-docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges \
-  -v "$PWD/qe-collector.yaml:/etc/qe-collector/qe-collector.yaml:ro" -v qe-collector-state:/var/lib/qe-collector \
-  -e QE_API_KEY -e GITHUB_TOKEN qe-collector:0.2.0 check     # then preview, sync
-```
+| Tool | Authentication | Read-only permissions |
+|---|---|---|
+| GitHub Actions (github.com, Enterprise Server) | Fine-grained token (`GITHUB_TOKEN`); a GitHub App (`auth: app`, `appId`, `installationId`, key in `GITHUB_APP_PRIVATE_KEY`); or OAuth with your own OAuth app (`auth: oauth`) | Repository permissions **Actions: read, Contents: read, Deployments: read, Metadata: read**. GitHub's OAuth scopes for private repositories (`repo`) include write: prefer the GitHub App or a fine-grained token. |
+| GitLab CI (gitlab.com, self-managed) | Personal, group or project access token (`GITLAB_TOKEN`); or OAuth with your own GitLab application (`auth: oauth`) | Scope **read_api**, role Reporter on the projects. |
+| Bitbucket Cloud | Username + app password or API token (`BITBUCKET_USERNAME`, `BITBUCKET_APP_PASSWORD`); or OAuth with your own OAuth consumer (`auth: oauth`) | **Account: Read, Repositories: Read, Pipelines: Read** (on the app password, or the consumer's permissions). |
+| Bitbucket Data Center | HTTP access token (`BITBUCKET_TOKEN`, Bearer): personal, project or repository token | **Read** (repository read). |
+| Jenkins | User + API token (`JENKINS_USER`, `JENKINS_TOKEN`) of a dedicated user | **Overall/Read**, **Job/Read**. |
+| Azure DevOps | Personal access token (`AZURE_DEVOPS_TOKEN`) of a service account | **Build, Test Management, Code, Environment: Read** (and **Release: Read** with `releases: true`). |
+| SonarQube / SonarCloud | User token (`SONAR_TOKEN`; `auth: basic` for older servers) | **Browse** on the projects. |
+| Jira Cloud | Service account e-mail + API token (`JIRA_EMAIL`, `JIRA_TOKEN`) | **Browse projects** on the projects of the JQL. |
+| Jira Server / Data Center | Personal access token (`JIRA_TOKEN`, `auth: bearer`) | **Browse projects**. |
+| Linear | Personal API key (`LINEAR_API_KEY`); or OAuth with your own OAuth application | Scope **read**. |
+| PagerDuty | REST API key (`PAGERDUTY_TOKEN`) | A **read-only** API key. |
+| Opsgenie | API key (`OPSGENIE_API_KEY`) | An API integration key with **Read** access only. |
+| KPI file | none (a local file your scripts write) | — |
 
-Then schedule `sync` every 15 minutes: [Kubernetes CronJob](deploy/kubernetes/cronjob.yaml) (with a
-[NetworkPolicy](deploy/kubernetes/networkpolicy.yaml)), [systemd timer](deploy/systemd/) or [cron](deploy/crontab.example).
-Admin console → Connect your CI → *Collector status* shows the last heartbeat, the versions and each source's last success.
+OAuth sign-in is offered where the vendor supports an authorization-code flow for an app you register yourself: GitHub,
+GitLab, Bitbucket Cloud and Linear. Jira Cloud's OAuth (3LO) is not offered yet: use a service account's API token.
+
+## What is read and what is sent
+
+| Source | Read | Sent (envelope kind) |
+|---|---|---|
+| GitHub Actions | workflow runs, jobs and steps, artifacts whose names match `artifacts.*` (zip archives opened in memory), deployments to production environments with their statuses, the commits between deployments, the lines a run's commit changed | `pipeline-runs`, `test-report` and `coverage` (the files), `sarif`, `deployments` with `commits` |
+| GitLab CI | pipelines, jobs (retries included), the test report API (written out as a JUnit file), job artifacts, deployments, compare | the same |
+| Bitbucket Cloud | pipelines with their steps and timings, step test reports (written out as a JUnit file), environments, deployments, commits | `pipeline-runs`, `test-report`, `deployments` with `commits` |
+| Bitbucket Data Center | commits, the builds your CI reports on them, deployments | `pipeline-runs`, `deployments` with `commits` (Data Center keeps only test counts, so no test report is sent) |
+| Jenkins | builds, Pipeline stages (`wfapi`), the JUnit plugin's results (written out as a JUnit file), archived artifacts, deployment jobs | `pipeline-runs`, `test-report`, `coverage`, `sarif`, `deployments` |
+| Azure DevOps | builds and timelines, test runs (written out as a JUnit file), code coverage, artifacts, environment deployments, releases | the same |
+| SonarQube | the latest analysis, open issues (written out as one SARIF file), lines of code | `sarif` |
+| Jira, Linear | issues with their changelog, sprints | `issues` |
+| PagerDuty, Opsgenie | incidents / alerts with their status changes | `incidents` |
+| KPI file | `{ "items": [{ "team", "recordedAt", "metrics": { "automation_coverage": 61.5 } }] }` | `kpis` |
+
+The exact fields: [SECURITY.md](SECURITY.md). The JSON envelope: QE Navigator's docs/INTEGRATION_GUIDE.md, section 4D.
 
 ## Commands
 
 | Command | What it does |
 |---|---|
-| `qe-collector check` | Validates the config; shows the privacy mode and which secrets are set (never their values); for each source authenticates and shows what will be read and what was found (repositories, environments, field ids, teams); calls QE Navigator with a dry run that validates the key and every team id. |
-| `qe-collector preview` | Reads the sources and prints a JSON report: per source the window, what is new, skipped records with the reason, and **every request exactly as `sync` would send it in your mode** (URL, headers with the key redacted, body), each validated by QE Navigator's `dryRun=true`; and the heartbeat. `--offline`: no call to QE Navigator at all. `--all`: include what was already delivered. `--out FILE`. Writes no state and no local copy. |
-| `qe-collector sync` | Reads what changed since the last run (the cursor minus `overlapMinutes`), keeps it in the local copy, then sends by privacy mode (evidence / metrics: the values of the last `recalcDays` days and of any day touched by new data that changed since they were sent; full: the new raw records), and ends with a heartbeat. Re-running sends nothing already delivered. |
-| `qe-collector sync --since 2026-01-01` | Backfill from a date (QE Navigator keeps 13 months; incidents older than 364 days are skipped). |
-| `qe-collector recalc --since 2026-01-01` | Recalculates from the local copy without reading any source, e.g. after a Collector update with a new engine version, and sends the values that changed (each recorded with the engine version). evidence and metrics modes. |
-| `qe-collector serve` | The local evidence page (read-only): per team the values and the evidence behind them (flaky tests, lowest-coverage files, slowest and failing stages, failed deployments, escaped issues), from the local copy. `serve.host` (default 127.0.0.1) and `serve.port` (8787); basic auth when `QE_SERVE_USER` and `QE_SERVE_PASSWORD` are set (required for a wildcard address). Set `privacy.localEvidenceUrl` to its URL and QE Navigator links to it in metrics mode. |
-| `qe-collector diagnose` | Writes a diagnostics file (`--out FILE`): versions, runtime, the config without secrets (which secret variables are set), per source the cursor, last success and error counts, the local copy's size. No record and no name. Nothing is sent: read it, then send it to support if you choose to. |
+| `qe-exporter setup` | The setup page (above). `--port`, `--host` (loopback only). |
+| `qe-exporter check` | Validates the config; shows which secrets are set (never their values); for each source authenticates and shows what will be read; loads your company, departments and teams from QE Navigator, checks every mapped team and its department, and sends one dry run per team (nothing is stored). |
+| `qe-exporter preview` | Reads the sources and prints a JSON report: per source the window, what is new per team and kind, skipped records with the reason, and **every request exactly as `sync` would send it** (URL, headers with the key redacted, the body with `companyId`, `departmentId`, `teamId`). **Nothing is sent** (no request to QE Navigator at all) and nothing is stored. `--all`: include what was already delivered. `--out FILE`. |
+| `qe-exporter sync` | Reads what changed since the last run (the cursor minus `overlapMinutes`) and sends it, then a heartbeat. Re-running sends nothing already delivered. |
+| `qe-exporter sync --since 2026-01-01` | Backfill from a date (QE Navigator keeps 13 months; incidents older than 364 days are skipped). |
+| `qe-exporter diagnose` | Writes a diagnostics file (`--out FILE`): versions, the config without secrets (which secrets are set and where from), per source the cursor, last success and error counts. No record and no name. Nothing is sent. |
 
-Options: `-c FILE` (default `$QE_COLLECTOR_CONFIG`, `$QE_AGENT_CONFIG` or `./qe-collector.yaml`), `--source NAME`,
-`--state FILE`, `--log-format json|text`, `-v / --verbose` (requests, retries, timings; never secrets).
+Options: `-c FILE` (default `$QE_EXPORTER_CONFIG`, else `./qe-exporter.yaml`, `./qe-exporter.json`, or an earlier release's
+file), `--source NAME`, `--state FILE`, `--log-format json|text`, `-v / --verbose` (requests, retries, timings; never
+secrets). `QE_NAVIGATOR_URL` overrides `qeNavigator.url`.
 
-**Exit codes** (for schedulers): `0` ok · `1` internal error · `2` configuration or usage · `3` a source could not be read
-(auth, network, API error) · `4` QE Navigator refused or could not be reached · `5` another run holds the lock · `6` some
-records or values were refused by QE Navigator (the others were delivered).
+**Exit codes** (for schedulers): `0` ok · `1` internal error · `2` configuration or usage (also: company or a team's
+department missing) · `3` a source could not be read · `4` QE Navigator refused (an id that is not yours: 403) or could not
+be reached · `5` another run holds the lock · `6` some items were refused (the others were delivered).
 
 ## Configuration
 
-One YAML (or JSON) file; secrets only from the environment. Unknown keys and anything that looks like a secret
-(`token`, `apiKey`, `password`, `salt`, …) are refused, so a typo never silently changes behaviour.
+One JSON or YAML file (the setup page writes JSON, which is valid YAML too); secrets only from the environment or the
+credentials file. Unknown keys and anything that looks like a secret (`token`, `apiKey`, `password`, `salt`, …) are refused.
 
 | Setting | Default | |
 |---|---|---|
-| `qeNavigator.url` | `https://app.irongate.ie` | https only (http only for localhost). |
-| `qeNavigator.apiKeyEnv` | `QE_API_KEY` | Env var of the `igk_` key. |
+| `qeNavigator.url` | `https://app.irongate.ie` | https only (http only for localhost). `QE_NAVIGATOR_URL` overrides it. |
+| `qeNavigator.companyId` | | Your company id (Admin console → Connect your CI; the setup page fills it in). |
+| `teams` | | QE Navigator team id → the id of its department. Every mapped team needs one. |
+| `qeNavigator.apiKeyEnv` | `QE_API_KEY` | Name of the key's variable (or credentials file entry). |
 | `qeNavigator.caFile` / `http.caFile` | | Extra CA (PEM) added to the system roots, e.g. a TLS-inspecting proxy. Verification is never turned off. |
 | `qeNavigator.requestsPerMinute` | `50` | Client-side limit (the API allows 60 per minute per key). |
-| `privacy.mode` | `evidence` | `full`, `evidence` or `metrics` (what each sends: [SECURITY.md](SECURITY.md)). |
-| `privacy.localEvidenceUrl` | | metrics mode: the URL of your `serve` page, linked from "How this was calculated". |
-| `privacy.sendTitles` / `sendLinks` / `people` | `false` / `false` / `none` | full mode: issue / incident titles, links back to your tools (also CI run links), people as `HMAC-SHA256(QE_PEOPLE_SALT, id)`. |
-| `state.path` | `./qe-collector-state.json` | Cursors and fingerprints; written atomically. |
-| `state.dataDir` | `<state folder>/qe-collector-data` | The local copy of the records (JSON lines, one file per month; files 0600, folders 0700). |
-| `state.retentionDays` / `detailDays` | `400` / `35` | How long the local copy keeps records, and per-test results and per-file coverage. |
-| `recalcDays` | `35` | Days recalculated on every sync (values change while late data arrives). |
-| `mainBranches` | | `team id: branch` when a team's main branch is not main or master. |
-| `serve.host` / `port` / `userEnv` / `passwordEnv` | `127.0.0.1` / `8787` / `QE_SERVE_USER` / `QE_SERVE_PASSWORD` | The local evidence page. |
-| `heartbeat` | `true` | Send the heartbeat (versions and per-source status; no data). |
+| `privacy.sendTitles` / `sendLinks` / `people` | `false` / `false` / `none` | Issue and incident titles, links back to your tools, people as `HMAC-SHA256(QE_PEOPLE_SALT, id)`. |
+| `state.path` | `./qe-exporter-state.json` | Cursors and fingerprints only (no data); written atomically. |
+| `credentials.path` | `<config folder>/qe-exporter-credentials/credentials.json` | The setup page's credentials file (0600, folder 0700). |
+| `hostLabel` | the host name | A short name of this machine, sent as `X-Exporter-Host` (shown to QE Navigator's operators). |
+| `heartbeat` | `true` | Send the heartbeat (version and per-source status; no data). |
 | `backfillDays` | `90` | First run window. |
-| `overlapMinutes` | `10` | Re-read before the cursor each run (clock skew; nothing is sent twice). |
+| `overlapMinutes` | `10` | Re-read before the cursor each run. |
 | `http.timeoutSeconds` / `maxRetries` / `maxRetryWaitSeconds` | `30` / `5` / `120` | Every request has a timeout; 429 / 5xx / rate-limit 403 / network errors are retried with jitter and Retry-After. |
 
-Per source (`sources[]`): `type`, `name` (keys the state; default the type), `tokenEnv`, the team mapping (below),
-`defaultTeam` (used when a record's repository / project / service is not mapped; else it is skipped and reported),
-`caFile`, `enabled`. CI sources: `artifacts` (`tests`, `coverage`, `sarif` name globs; `maxMB`, default 50), `maxRunsPerRepo`
-(default 500 per run).
+Per source (`sources[]`): `type`, `name`, `tokenEnv`, the team mapping, `defaultTeam`, `caFile`, `enabled`. CI sources:
+`artifacts` (`tests`, `coverage`, `sarif` name globs; `maxMB`, default 50), `maxRunsPerRepo` (default 500).
 
-| Source | Team mapping | Settings | Secrets (default names) |
-|---|---|---|---|
-| `github` | `repos` (owner/name → team) | `apiUrl`, `auth: token \| app`, `appId`, `installationId`, `privateKeyEnv`, `workflows`, `branches`, `environments` | `GITHUB_TOKEN` or `GITHUB_APP_PRIVATE_KEY` |
-| `gitlab` | `projects` (group/project or id → team) | `apiUrl`, `environments` | `GITLAB_TOKEN` |
-| `jenkins` | `jobs` (folder/job → team) | `baseUrl`, `user` / `userEnv`, `deployJobs`, `deployEnvironment`, `allowHttp` | `JENKINS_TOKEN`, `JENKINS_USER` |
-| `azure-devops` | `pipelines` (name or definition id → team) | `orgUrl`, `project`, `environments`, `releases`, `releasesUrl` | `AZURE_DEVOPS_TOKEN` |
-| `sonarqube` | `projects` (project key → team) | `baseUrl`, `auth: bearer \| basic`, `branch`, `allowHttp` | `SONAR_TOKEN` |
-| `jira` | `teams` (project key → team) | `baseUrl`, `auth: basic` (Cloud) or `bearer` (Server / DC), `email` / `emailEnv`, `jql`, `fields`, `pageSize`, `allowHttp` | `JIRA_TOKEN`, `JIRA_EMAIL` |
-| `linear` | `teams` (team key → team) | `teamKeys`, `apiUrl` | `LINEAR_API_KEY` |
-| `pagerduty` | `services` (service → team), `teams` (PagerDuty team → team) | `categories`, `serviceIds`, `apiUrl` | `PAGERDUTY_TOKEN` |
-| `opsgenie` | `teams` (Opsgenie team → team), `services` (tag `service:<name>` → team) | `region: us \| eu`, `categories`, `query` | `OPSGENIE_API_KEY` |
+| Source | Team mapping | Settings |
+|---|---|---|
+| `github` | `repos` (owner/name → team) | `apiUrl`, `auth: token \| app \| oauth`, `appId`, `installationId`, `privateKeyEnv`, `workflows`, `branches`, `environments` |
+| `gitlab` | `projects` (group/project or id → team) | `apiUrl`, `auth: token \| oauth`, `environments` |
+| `bitbucket` | `repos` (workspace/repo → team) | `apiUrl`, `auth: app-password \| oauth`, `username` / `usernameEnv`, `environments` |
+| `bitbucket-dc` | `repos` (PROJECT/repo → team) | `baseUrl`, `environments`, `allowHttp` |
+| `jenkins` | `jobs` (folder/job → team) | `baseUrl`, `user` / `userEnv`, `deployJobs`, `deployEnvironment`, `allowHttp` |
+| `azure-devops` | `pipelines` (name or definition id → team) | `orgUrl`, `project`, `environments`, `releases`, `releasesUrl` |
+| `sonarqube` | `projects` (project key → team) | `baseUrl`, `auth: bearer \| basic`, `branch`, `allowHttp` |
+| `jira` | `teams` (project key → team) | `baseUrl`, `auth: basic` (Cloud) or `bearer` (Server / DC), `email` / `emailEnv`, `jql`, `fields`, `pageSize`, `allowHttp` |
+| `linear` | `teams` (team key → team) | `teamKeys`, `apiUrl` |
+| `pagerduty` | `services` (service → team), `teams` (PagerDuty team → team) | `categories`, `serviceIds`, `apiUrl` |
+| `opsgenie` | `teams`, `services` (tag `service:<name>`) | `region: us \| eu`, `categories`, `query` |
+| `kpis` | `teams` (the file's team key → team) | `path` |
 
 Proxy: `HTTPS_PROXY` (with optional `user:password@`) and `NO_PROXY` (hosts, `.domain`, `*.domain`, `host:port`, IPv4 CIDR).
-
-## How the values are calculated
-
-With the shared engine (`packages/engine`), the code the QE Navigator server runs: tests (pass rate, first-time pass
-rate, flaky tests and flakiness, execution time), coverage (line, branch, changed code), pipelines (build time, success
-rate, parallel efficiency), DORA (deployment frequency, lead time, change failure rate), reliability (MTTR, MTBF,
-availability, incidents per deploy, infrastructure failures), work (escape rate, defect density, velocity, commitment,
-carryover, blocked time, sizing accuracy) and code quality (score, findings, new and fixed), per team and UTC day. The
-rules are in QE Navigator's docs/INTEGRATION_GUIDE.md (4A.3, 4B.4, 4C.3). Every value is sent with the engine version;
-QE Navigator shows "Calculated by your QE Navigator Collector (engine x.y.z)" in "How this was calculated". A test in the
-QE Navigator repository (`tests/api/engine-crosscheck.test.ts`) proves the server and the engine give identical values for
-the same data.
 
 ## Development
 
 ```bash
 npm ci --ignore-scripts
 npm run typecheck
-npm test                    # builds the bundle, then unit, vendor stand-in, privacy-mode and bundle tests (node:test)
+npm test                    # builds the bundle, then the unit, vendor stand-in, setup page and bundle tests (node:test)
 npm run sync-allow-list     # vendor server/lib/ingest/fieldAllowList.ts (the shared allow-list) into src/vendor/
 ```
 
-Layout: `src/sources/*` read the issue and incident tools, `src/sources/ci/*` the CI and SonarQube connectors (with
-`common.ts`: artifact reading), `src/store.ts` the local copy, `src/calc.ts` the engine over it, `src/modes.ts` what
-evidence and metrics modes send, `src/rawPayloads.ts` what full mode sends for CI records, `src/vendor/fieldAllowList.ts`
-the shared allow-list (a byte-for-byte copy of QE Navigator's), `src/policy.ts` the stricter send policy for issues and
-incidents, `src/sender.ts` delivery, `src/serve.ts` the local evidence page, `src/diagnose.ts` the diagnostics file,
-`src/http.ts` HTTP with proxy, CA, timeouts and retries, `src/yaml.ts` a strict YAML subset parser (no YAML dependency).
-The bundle contains only `collector/src` and `packages/engine/src` (the build refuses anything else). End-to-end tests
-against a real QE Navigator: `tests/api/collector-e2e.test.ts` and `tests/api/collector-modes-e2e.test.ts` in the QE
-Navigator repository.
+Layout: `src/sources/*` the issue and incident tools, `src/sources/ci/*` the CI and code-quality connectors (with
+`common.ts`: the items they produce and the report files found in artifacts), `src/minimise.ts` what is stripped from report
+files, `src/zip.ts` the ZIP reader (a copy of the server's, with its limits), `src/sender.ts` the envelopes and delivery,
+`src/setup.ts` the setup page, `src/credentials.ts` the credentials file, `src/oauth.ts` OAuth with your own app,
+`src/policy.ts` the send policy for issues and incidents, `src/vendor/fieldAllowList.ts` the shared allow-list,
+`src/diagnose.ts`, `src/http.ts`, `src/yaml.ts`. The bundle contains only `exporter/src` (the build refuses anything else).
+End-to-end tests against a real QE Navigator: `tests/api/exporter-e2e.test.ts` in the QE Navigator repository.
 
 Choose a licence before publishing (`package.json` says UNLICENSED).

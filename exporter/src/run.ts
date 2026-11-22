@@ -197,13 +197,28 @@ export async function collect(adapter: AnyAdapter, src: SourceConfig, cfg: Confi
   return c;
 }
 
-/** The envelopes of what a source gave, per team and kind, with the company and the team's department. */
+/** The longest period of records one envelope covers. */
+export const SPAN_DAYS = 14;
+
+/** The time an item is about (for ordering: each envelope then covers a short period, so QE Navigator recalculates few days per request). */
+const timeOf = (it: Record<string, unknown>): string => String(it.updatedAt ?? it.createdAt ?? it.finishedAt ?? it.startedAt ?? it.openedAt ?? it.recordedAt ?? '');
+
+/** The envelopes of what a source gave, per team and kind (oldest first), with the company and the team's department. */
 export function batchesOf(cfg: Config, c: Collected): Batch[] {
   const out: Batch[] = [];
   for (const g of c.groups.values()) {
     const departmentId = cfg.teams[g.team];
     if (!cfg.qeNavigator.companyId || !departmentId) throw new ConfigError(targetProblems(cfg).join('; ') || `team ${g.team} has no department in "teams"`);
-    out.push(...makeBatches({ companyId: cfg.qeNavigator.companyId, departmentId, teamId: g.team, source: c.source, kind: g.kind }, g.parts));
+    const parts = [...g.parts].sort((a, b) => timeOf(a.item).localeCompare(timeOf(b.item)));
+    // At most SPAN_DAYS of records per envelope: QE Navigator recalculates the days a request touches while it answers.
+    let start = 0;
+    for (let i = 1; i <= parts.length; i++) {
+      const t0 = Date.parse(timeOf(parts[start].item));
+      const ti = i < parts.length ? Date.parse(timeOf(parts[i].item)) : NaN;
+      if (i < parts.length && !(Number.isFinite(t0) && Number.isFinite(ti) && ti - t0 > SPAN_DAYS * DAY)) continue;
+      out.push(...makeBatches({ companyId: cfg.qeNavigator.companyId, departmentId, teamId: g.team, source: c.source, kind: g.kind }, parts.slice(start, i)));
+      start = i;
+    }
   }
   return out;
 }

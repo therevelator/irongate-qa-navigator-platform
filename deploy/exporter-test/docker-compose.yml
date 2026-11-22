@@ -1,0 +1,55 @@
+# Try the QE Navigator Exporter on your own machine with made-up data (deploy/exporter-test/README.md).
+#
+#   docker compose up -d                 # the fake vendors and the Exporter's setup page
+#   docker compose logs exporter         # the setup page link with its one-time token
+#   docker compose run --rm exporter preview
+#   docker compose run --rm exporter sync
+#   docker compose down -v               # stop and wipe everything (config, credentials, state)
+#
+# The Exporter sends to https://app.irongate.ie unless QE_NAVIGATOR_URL says otherwise. It shares the network of the
+# fake-vendors container, so it reaches them at http://localhost:8080 (plain http is allowed for localhost only) and
+# the setup page is published on your machine at http://127.0.0.1:8788 only.
+name: qe-exporter-test
+
+services:
+  fake-vendors:
+    image: qe-fake-vendors:0.3.0
+    build: ./fake-vendors
+    restart: unless-stopped
+    environment:
+      HISTORY_DAYS: "180"
+    volumes:
+      - fake-data:/shared
+    ports:
+      - "127.0.0.1:8788:8788"     # the Exporter's setup page (the Exporter uses this container's network)
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  exporter:
+    image: qe-exporter:0.3.0
+    build:
+      context: ../..
+      dockerfile: exporter/Dockerfile
+    depends_on:
+      fake-vendors:
+        condition: service_healthy
+    network_mode: "service:fake-vendors"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      QE_NAVIGATOR_URL: ${QE_NAVIGATOR_URL:-https://app.irongate.ie}
+      QE_EXPORTER_FAKE_VENDORS: http://localhost:8080
+      QE_EXPORTER_FAKE_KPIS: /shared/kpis.json
+      QE_EXPORTER_SETUP_IN_CONTAINER: "1"
+    volumes:
+      - qe-exporter:/var/lib/qe-exporter
+      - fake-data:/shared:ro
+    command: ["setup", "--port", "8788"]
+
+volumes:
+  qe-exporter:
+  fake-data:

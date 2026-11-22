@@ -24,16 +24,20 @@ export type EnvelopeKind = 'test-report' | 'coverage' | 'pipeline-runs' | 'deplo
 
 export interface Envelope { companyId: string; departmentId: string; teamId: string; source: string; kind: EnvelopeKind; items: Array<Record<string, unknown>> }
 
-/** Items and uncompressed bytes per envelope, below what QE Navigator takes for each kind. */
+/**
+ * Items and uncompressed bytes per envelope, below what QE Navigator takes for each kind, and small enough that one
+ * request makes QE Navigator recalculate only a few weeks (items are sent oldest first): a long backfill becomes many
+ * short requests rather than a few long ones.
+ */
 export const LIMITS: Record<EnvelopeKind, { items: number; bytes: number }> = {
-  'test-report': { items: 10, bytes: 15 * 1024 * 1024 },
-  coverage: { items: 10, bytes: 15 * 1024 * 1024 },
-  sarif: { items: 10, bytes: 15 * 1024 * 1024 },
+  'test-report': { items: 25, bytes: 15 * 1024 * 1024 },
+  coverage: { items: 25, bytes: 15 * 1024 * 1024 },
+  sarif: { items: 25, bytes: 15 * 1024 * 1024 },
   'pipeline-runs': { items: 100, bytes: 900 * 1024 },
-  deployments: { items: 500, bytes: 4.5 * 1024 * 1024 },
-  commits: { items: 500, bytes: 4.5 * 1024 * 1024 },
-  incidents: { items: 500, bytes: 4.5 * 1024 * 1024 },
-  issues: { items: 1000, bytes: 9 * 1024 * 1024 },
+  deployments: { items: 100, bytes: 4.5 * 1024 * 1024 },
+  commits: { items: 200, bytes: 4.5 * 1024 * 1024 },
+  incidents: { items: 100, bytes: 4.5 * 1024 * 1024 },
+  issues: { items: 50, bytes: 9 * 1024 * 1024 },
   kpis: { items: 100, bytes: 1024 * 1024 },
 };
 
