@@ -36,8 +36,8 @@ export const LIMITS: Record<EnvelopeKind, { items: number; bytes: number }> = {
   'pipeline-runs': { items: 100, bytes: 900 * 1024 },
   deployments: { items: 100, bytes: 4.5 * 1024 * 1024 },
   commits: { items: 200, bytes: 4.5 * 1024 * 1024 },
-  incidents: { items: 100, bytes: 4.5 * 1024 * 1024 },
-  issues: { items: 50, bytes: 9 * 1024 * 1024 },
+  incidents: { items: 50, bytes: 4.5 * 1024 * 1024 },
+  issues: { items: 25, bytes: 9 * 1024 * 1024 },
   kpis: { items: 100, bytes: 1024 * 1024 },
 };
 

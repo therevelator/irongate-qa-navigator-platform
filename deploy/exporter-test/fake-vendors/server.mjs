@@ -359,6 +359,9 @@ function gitlab(path, q) {
     const pg = page(list, q);
     return { headers: { 'x-next-page': pg.more ? String(pg.p + 1) : '' }, body: pg.items.map((d) => ({ id: d.num, status: d.ok ? 'success' : 'failed', sha: d.sha, ref: d.hotfix ? 'hotfix/data' : 'main', created_at: iso(d.start), updated_at: iso(d.at), finished_at: iso(d.at), environment: { name: 'production' } })) };
   }
+  if ((m = /^\/projects\/77\/repository\/commits\/([0-9a-f]+)\/diff$/.exec(path))) {
+    return { body: ['core', 'api', 'util'].filter((_, i) => rnd(m[1], 'file', i) < 0.6).map((f, i) => ({ old_path: `src/${f}/${f}.ts`, new_path: `src/${f}/${f}.ts`, diff: `@@ -${10 + i},3 +${10 + i},6 @@\n context\n+made-up line one\n+made-up line two\n+made-up line three\n context` })) };
+  }
   if (path === '/projects/77/repository/compare') {
     const to = q.get('to'); const d = deploymentsOf(team).find((x) => x.sha === to);
     return { body: { commits: commitsBetween(team, q.get('from'), to, d?.at ?? Date.now()).map((c) => ({ id: c.sha, authored_date: iso(c.authored), committed_date: iso(c.committed), author_email: 'someone@example.com', title: 'Made-up' })) } };
@@ -381,7 +384,8 @@ function bitbucket(path, q, base) {
     if (!r) return { status: 404, body: { type: 'error' } };
     return { body: { pagelen: 100, values: [
       { uuid: `{${r.id}-1}`, name: 'Build', started_on: iso(r.start), completed_on: iso(r.start + r.build * 1000), duration_in_seconds: r.build, state: { name: 'COMPLETED', result: { name: 'SUCCESSFUL' } } },
-      { uuid: `{${r.id}-2}`, name: 'Tests', started_on: iso(r.start + r.build * 1000), completed_on: iso(r.end), duration_in_seconds: r.test, state: { name: 'COMPLETED', result: { name: r.failed ? 'FAILED' : 'SUCCESSFUL' } } },
+      { uuid: `{${r.id}-2}`, name: 'Tests 1/2', started_on: iso(r.start + r.build * 1000), completed_on: iso(r.end), duration_in_seconds: r.test, state: { name: 'COMPLETED', result: { name: r.failed ? 'FAILED' : 'SUCCESSFUL' } } },
+      { uuid: `{${r.id}-3}`, name: 'Tests 2/2', started_on: iso(r.start + r.build * 1000), completed_on: iso(r.end - 60_000), duration_in_seconds: r.test - 60, state: { name: 'COMPLETED', result: { name: 'SUCCESSFUL' } } },
     ] } };
   }
   if ((m = new RegExp(`^${R}/pipelines/%7B(\\d+)%7D/steps/%7B(\\d+)-(\\d)%7D/test_reports/test_cases$`).exec(path))) {

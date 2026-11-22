@@ -69,11 +69,13 @@ export async function coverageReport(o: { url: string; cookie: string; teamId: s
   const metricKeys = new Set([...(ev?.metrics ?? []), ...(delivery?.metrics ?? []), ...(work?.metrics ?? [])].map((m: any) => m.key));
   const fieldStored: Record<string, boolean> = {
     'changedLines or diff (coverage of changed code)': metricKeys.has('changed_code_coverage'), 'stages[].parallelGroup': metricKeys.has('parallel_test_efficiency'),
-    hotfix: (delivery?.failedChanges ?? delivery?.deployments ?? []).length > 0, 'rollbackOf': true, 'deploymentId (linked deployment)': metricKeys.has('incidents_per_deploy') || metricKeys.has('change_failure_rate'),
+    hotfix: [...(delivery?.deployments ?? []), ...(delivery?.notCounted ?? []), ...(delivery?.failedChanges ?? [])].some((d: any) => d.hotfix),
+    rollbackOf: [...(delivery?.notCounted ?? []), ...(delivery?.deployments ?? [])].some((d: any) => d.rollbackOf) || (delivery?.failedChanges ?? []).some((d: any) => (d.failedBecause ?? []).some((r: any) => r.type === 'rollback')),
+    'commits[] (sha, authoredAt, committedAt)': (delivery?.deployments ?? []).some((d: any) => d.commitCount > 0 && d.leadTimeHours !== null), 'deploymentId (linked deployment)': metricKeys.has('incidents_per_deploy') || metricKeys.has('change_failure_rate'),
     'category (infrastructure)': snap.infrastructure_failures !== null && snap.infrastructure_failures !== undefined, 'environment (found in production / before)': metricKeys.has('escape_rate'),
     'transitions[] (status changes, blocked)': metricKeys.has('blocked_time'), 'estimateHours': metricKeys.has('sizing_accuracy'), 'timeLoggedHours': metricKeys.has('sizing_accuracy'),
     'storyPoints': metricKeys.has('velocity'), 'sprints[] (id, state, dates)': metricKeys.has('commitment'), 'loc (lines of code)': metricKeys.has('defect_density') || metricKeys.has('code_quality'),
-    'attempt': metricKeys.has('first_time_pass_rate') || true,
+    attempt: metricKeys.has('first_time_pass_rate') || metricKeys.has('pipeline_success_rate'),
   };
   const parameters: Parameter[] = [];
   for (const [kind, fields] of Object.entries(FIELDS)) {

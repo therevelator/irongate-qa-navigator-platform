@@ -21,7 +21,7 @@ import type { BitbucketSource, HttpSettings } from '../../config';
 import { requireSecret, secret, ConfigError } from '../../config';
 import { credentialEntry } from '../../credentials';
 import { SourceClient, SourceError } from '../client';
-import { ms, secondsBetween, pipelineRun, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord, type StructuredCase } from './common';
+import { ms, parallelGroupOf, secondsBetween, pipelineRun, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord, type StructuredCase } from './common';
 
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled'> = { SUCCESSFUL: 'success', FAILED: 'failed', ERROR: 'failed', STOPPED: 'cancelled', EXPIRED: 'cancelled' };
 const STEP: Record<string, string> = { SUCCESSFUL: 'success', FAILED: 'failed', ERROR: 'failed', STOPPED: 'cancelled', NOT_RUN: 'skipped', SKIPPED: 'skipped' };
@@ -136,10 +136,10 @@ export class BitbucketAdapter implements CiAdapter {
       id: runId, attempt, name: p.target?.selector?.pattern ?? p.target?.selector?.type ?? 'pipeline', commit, branch, startedAt, finishedAt,
       durationS: typeof p.duration_in_seconds === 'number' ? p.duration_in_seconds : secondsBetween(startedAt, finishedAt), result,
       url: this.opts.links ? p.links?.html?.href ?? null : null,
-      stages: steps.filter((s) => s.started_on).map((s) => {
+      stages: steps.filter((s) => s.started_on).map((s, _i, all) => {
         const a = ms(s.started_on);
         const b = ms(s.completed_on);
-        return { name: String(s.name ?? 'step'), startedAt: a, finishedAt: b, durationS: typeof s.duration_in_seconds === 'number' ? s.duration_in_seconds : secondsBetween(a, b), result: STEP[String(s.state?.result?.name ?? s.state?.name ?? '')] ?? 'skipped' };
+        return { name: String(s.name ?? 'step'), parallelGroup: parallelGroupOf(String(s.name ?? ''), all.map((x) => String(x.name ?? ''))), startedAt: a, finishedAt: b, durationS: typeof s.duration_in_seconds === 'number' ? s.duration_in_seconds : secondsBetween(a, b), result: STEP[String(s.state?.result?.name ?? s.state?.name ?? '')] ?? 'skipped' };
       }),
     })];
     // Test reports of the steps that have one (404 or an empty list: none).

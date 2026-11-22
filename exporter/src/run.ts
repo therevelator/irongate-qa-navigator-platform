@@ -197,8 +197,9 @@ export async function collect(adapter: AnyAdapter, src: SourceConfig, cfg: Confi
   return c;
 }
 
-/** The longest period of records one envelope covers. */
+/** The longest period of records one envelope covers (issues and incidents: shorter, their calculation reads more days). */
 export const SPAN_DAYS = 14;
+const SPAN_OF: Partial<Record<EnvelopeKind, number>> = { issues: 7, incidents: 7 };
 
 /** The time an item is about (for ordering: each envelope then covers a short period, so QE Navigator recalculates few days per request). */
 const timeOf = (it: Record<string, unknown>): string => String(it.updatedAt ?? it.createdAt ?? it.finishedAt ?? it.startedAt ?? it.openedAt ?? it.recordedAt ?? '');
@@ -215,7 +216,7 @@ export function batchesOf(cfg: Config, c: Collected): Batch[] {
     for (let i = 1; i <= parts.length; i++) {
       const t0 = Date.parse(timeOf(parts[start].item));
       const ti = i < parts.length ? Date.parse(timeOf(parts[i].item)) : NaN;
-      if (i < parts.length && !(Number.isFinite(t0) && Number.isFinite(ti) && ti - t0 > SPAN_DAYS * DAY)) continue;
+      if (i < parts.length && !(Number.isFinite(t0) && Number.isFinite(ti) && ti - t0 > (SPAN_OF[g.kind] ?? SPAN_DAYS) * DAY)) continue;
       out.push(...makeBatches({ companyId: cfg.qeNavigator.companyId, departmentId, teamId: g.team, source: c.source, kind: g.kind }, parts.slice(start, i)));
       start = i;
     }

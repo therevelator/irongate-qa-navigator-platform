@@ -17,7 +17,7 @@
 import type { GitLabSource, HttpSettings } from '../../config';
 import { requireSecret } from '../../config';
 import { SourceClient, SourceError } from '../client';
-import { kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
+import { changedLinesOf, kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
 
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled' | undefined> = { success: 'success', failed: 'failed', canceled: 'cancelled' };
 const JOB_RESULT: Record<string, 'success' | 'failed' | 'cancelled' | 'skipped'> = { success: 'success', failed: 'failed', canceled: 'cancelled', skipped: 'skipped', manual: 'skipped' };
@@ -148,7 +148,18 @@ export class GitLabAdapter implements CiAdapter {
     page.skipped.push(...found.skipped.map((x) => ({ id: `${path}!${pid}/${x.id}`, reason: x.reason })));
     // GitLab gives its parsed JUnit results as JSON only: written out as a JUnit file (form, not content).
     if (cases.length) out.push(reportItem('test-report', team, [junitOf(cases, Math.round(Number(tr?.total_time ?? 0) * 1000) || undefined)], meta, { format: 'junit' }));
-    out.push(...reportItems(team, { ...found, tests: cases.length ? [] : found.tests }, meta, path));
+    // The lines the pipeline's commit changed (line numbers from the diff hunks; the code is not sent): coverage of changed code.
+    let changed: Record<string, Array<number | string>> | null = null;
+    if (found.coverage.length && commit) {
+      try {
+        const diff = (await this.client.getOptional<any[]>(`/projects/${id}/repository/commits/${commit}/diff`, { per_page: 100 })) ?? [];
+        changed = changedLinesOf(diff.map((d: any) => ({ filename: d.new_path, patch: d.diff })));
+      } catch (e) {
+        if (e instanceof SourceError && e.auth) throw e;
+        page.skipped.push({ id: `${path}@${commit.slice(0, 12)}`, reason: `changed lines not read: ${(e as Error).message}` });
+      }
+    }
+    out.push(...reportItems(team, { ...found, tests: cases.length ? [] : found.tests }, meta, path, changed));
     return out;
   }
 
