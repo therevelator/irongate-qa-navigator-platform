@@ -370,6 +370,8 @@ export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CA
   }
   // The developer metrics calculated from pull requests and calendars follow the same nightly run (their window moves on).
   await refreshRecentDeveloperMetrics(pool, Math.max(2_000, budgetMs - (Date.now() - started))).catch((e) => console.error('[developer-metrics] nightly refresh failed:', (e as Error).message));
+  // Hours lost per week follow too (their 12 windows end today).
+  await import('../lostHours').then((m) => m.refreshRecentLostHours(Math.max(2_000, budgetMs - (Date.now() - started)))).catch((e) => console.error('[lost-hours] nightly refresh failed:', (e as Error).message));
   return { teams: done, values, skipped: teams.length - done };
 }
 

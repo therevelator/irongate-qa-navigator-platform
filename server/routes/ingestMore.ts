@@ -31,12 +31,12 @@ import { HttpError, actorOf, after, afterCommit, callerOf, checkTime, computedOu
 
 const router = express.Router();
 
-export type MoreKind = 'performance' | 'test-management' | 'pull-requests' | 'calendar';
+export type MoreKind = 'performance' | 'test-management' | 'pull-requests' | 'calendar' | 'discovery';
 
 const BODY_LIMIT = 10 * 1024 * 1024;
-const MAX_ITEMS: Record<MoreKind, number> = { performance: 20, 'test-management': 2000, 'pull-requests': 1000, calendar: 2000 };
+const MAX_ITEMS: Record<MoreKind, number> = { performance: 20, 'test-management': 2000, 'pull-requests': 1000, calendar: 2000, discovery: 1 };
 const LIST_KEY: Record<MoreKind, string[]> = {
-  performance: ['runs', 'performance'], 'test-management': ['items', 'records'], 'pull-requests': ['pullRequests', 'pull-requests'], calendar: ['days', 'calendar'],
+  performance: ['runs', 'performance'], 'test-management': ['items', 'records'], 'pull-requests': ['pullRequests', 'pull-requests'], calendar: ['days', 'calendar'], discovery: ['reports', 'discovery'],
 };
 
 const isObj = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -291,6 +291,51 @@ async function storeCalendar(client: pg.PoolClient, companyId: string, teamId: s
 }
 
 // ---------------------------------------------------------------------------------------------
+// Discovery: what the Exporter found in a tool on its last run (no records of the customer, only counts and names
+// of jobs / projects it could not map). One report per team and source; the latest replaces the one before.
+// ---------------------------------------------------------------------------------------------
+
+const DISCOVERY_COUNTS = ['pipelineRuns', 'testReports', 'coverageReports', 'sarifReports', 'deployments', 'commits', 'pullRequests', 'performanceRuns', 'issues', 'incidents'];
+
+export interface Discovery { from: string | null; to: string | null; counts: Record<string, number>; runsWithoutTests: number | null; runsWithoutCoverage: number | null; unmapped: string[]; notes: string[] }
+
+export function parseDiscovery(items: unknown[]): Discovery {
+  const raw = items[0];
+  if (!isObj(raw)) throw new HttpError(400, 'items[0] must be an object');
+  only(raw, ['from', 'to', 'counts', 'runsWithoutTests', 'runsWithoutCoverage', 'unmapped', 'notes'], 'items[0]');
+  const whole = (v: unknown, at: string): number | null => {
+    if (v === null || v === undefined) return null;
+    if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > 1e7) throw new HttpError(400, `${at} must be a whole number`);
+    return v as number;
+  };
+  const counts: Record<string, number> = {};
+  if (raw.counts !== undefined) {
+    if (!isObj(raw.counts)) throw new HttpError(400, 'items[0].counts must be an object');
+    only(raw.counts, DISCOVERY_COUNTS, 'items[0].counts');
+    for (const k of Object.keys(raw.counts)) counts[k] = whole(raw.counts[k], `items[0].counts.${k}`) ?? 0;
+  }
+  const list = (v: unknown, at: string, max: number): string[] => {
+    if (v === undefined || v === null) return [];
+    if (!Array.isArray(v) || v.length > max) throw new HttpError(400, `${at} must be a list of at most ${max} names`);
+    return v.map((x, i) => str(x, `${at}[${i}]`, 200, true) as string);
+  };
+  const from = time(raw.from, 'items[0].from');
+  const to = time(raw.to, 'items[0].to');
+  return {
+    from: from ? from.toISOString() : null, to: to ? to.toISOString() : null, counts,
+    runsWithoutTests: whole(raw.runsWithoutTests, 'items[0].runsWithoutTests'), runsWithoutCoverage: whole(raw.runsWithoutCoverage, 'items[0].runsWithoutCoverage'),
+    unmapped: list(raw.unmapped, 'items[0].unmapped', 50), notes: list(raw.notes, 'items[0].notes', 20),
+  };
+}
+
+async function storeDiscovery(client: pg.PoolClient, companyId: string, teamId: string, source: string, d: Discovery, version: string | null): Promise<void> {
+  await client.query(
+    `INSERT INTO exporter_discovery (team_id, source, company_id, exporter_version, reported_at, report) VALUES ($1, $2, $3, $4, now(), $5::jsonb)
+     ON CONFLICT (team_id, source) DO UPDATE SET report = EXCLUDED.report, reported_at = now(), exporter_version = EXCLUDED.exporter_version, company_id = EXCLUDED.company_id`,
+    [teamId, source, companyId, version, JSON.stringify(d)]);
+}
+
+// ---------------------------------------------------------------------------------------------
 // The handler
 // ---------------------------------------------------------------------------------------------
 
@@ -321,7 +366,7 @@ export function moreIngestHandler(kind: MoreKind) {
       const items: unknown = Array.isArray(body) ? body : isObj(body) ? LIST_KEY[kind].map((k) => body[k]).find(Array.isArray) ?? [body] : null;
       if (!Array.isArray(items) || items.length === 0 || items.length > MAX_ITEMS[kind]) throw new HttpError(400, `Send 1 to ${MAX_ITEMS[kind]} ${kind} records`);
 
-      const parsed = kind === 'performance' ? parsePerformance(items) : kind === 'test-management' ? parseTestManagement(items)
+      const parsed = kind === 'discovery' ? parseDiscovery(items) : kind === 'performance' ? parsePerformance(items) : kind === 'test-management' ? parseTestManagement(items)
         : kind === 'pull-requests' ? parsePullRequests(items) : parseCalendar(items);
       if (!(await teamOwned(caller.companyId, teamId, caller)) || outOfScope(caller, [teamId]).length) throw new HttpError(403, noAccess(caller, [teamId]));
       if (q.dryRun === 'true' || q.dryRun === '1') {
@@ -333,7 +378,12 @@ export function moreIngestHandler(kind: MoreKind) {
       const outcome = await runLogged(caller, { key, hash: hashOf, source }, async (client, ingestionId): Promise<LoggedOutcome> => {
         let changed = 0;
         let response: Record<string, unknown> = {};
-        if (kind === 'performance') {
+        if (kind === 'discovery') {
+          const version = /qe-exporter\/([0-9][0-9A-Za-z.+-]*)/.exec(String(req.get('User-Agent') ?? ''))?.[1] ?? null;
+          await storeDiscovery(client, caller.companyId, team, source, parsed as Discovery, version);
+          changed = 1;
+          response = { report: 'stored' };
+        } else if (kind === 'performance') {
           const runs = await storePerformance(client, caller.companyId, team, parsed as PerfRun[]);
           changed = runs.filter((r) => r.status === 'written').length;
           response = { runs };
@@ -382,5 +432,6 @@ router.post('/performance', ingestLimiter, authenticateApiKey, moreIngestHandler
 router.post('/test-management', ingestLimiter, authenticateApiKey, moreIngestHandler('test-management'));
 router.post('/pull-requests', ingestLimiter, authenticateApiKey, moreIngestHandler('pull-requests'));
 router.post('/calendar', ingestLimiter, authenticateApiKey, moreIngestHandler('calendar'));
+router.post('/discovery', ingestLimiter, authenticateApiKey, moreIngestHandler('discovery'));
 
 export default router;

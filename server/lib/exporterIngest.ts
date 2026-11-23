@@ -19,20 +19,20 @@ export class EnvelopeError extends Error {
 
 /** The envelope kinds and the ingestion handler each one goes through. */
 export const EXPORTER_KINDS = ['test-report', 'coverage', 'pipeline-runs', 'deployments', 'commits', 'incidents', 'issues', 'sarif', 'kpis',
-  'performance', 'test-management', 'pull-requests', 'calendar'] as const;
+  'performance', 'test-management', 'pull-requests', 'calendar', 'discovery'] as const;
 export type ExporterKind = (typeof EXPORTER_KINDS)[number];
 export type HandlerKind = 'tests' | 'coverage' | 'pipelines' | 'deployments' | 'commits' | 'incidents' | 'issues' | 'static-analysis' | 'kpis'
-  | 'performance' | 'test-management' | 'pull-requests' | 'calendar';
+  | 'performance' | 'test-management' | 'pull-requests' | 'calendar' | 'discovery';
 export const HANDLER_OF: Record<ExporterKind, HandlerKind> = {
   'test-report': 'tests', coverage: 'coverage', 'pipeline-runs': 'pipelines', deployments: 'deployments', commits: 'commits',
   incidents: 'incidents', issues: 'issues', sarif: 'static-analysis', kpis: 'kpis',
-  performance: 'performance', 'test-management': 'test-management', 'pull-requests': 'pull-requests', calendar: 'calendar',
+  performance: 'performance', 'test-management': 'test-management', 'pull-requests': 'pull-requests', calendar: 'calendar', discovery: 'discovery',
 };
 
 /** Items per envelope (the limits of the handler each kind goes through). */
 export const MAX_ITEMS: Record<ExporterKind, number> = {
   'test-report': 50, coverage: 50, sarif: 50, 'pipeline-runs': 100, deployments: 500, commits: 500, incidents: 500, issues: 1000, kpis: 100,
-  performance: 20, 'test-management': 2000, 'pull-requests': 1000, calendar: 2000,
+  performance: 20, 'test-management': 2000, 'pull-requests': 1000, calendar: 2000, discovery: 1,
 };
 export const MAX_FILES_PER_REPORT = 50;
 
@@ -162,7 +162,7 @@ export function submissionsOf(env: Envelope): Submission[] {
   }
   // Load-test results, test management records, pull requests and calendar days (server/routes/ingestMore.ts): the items go
   // to the handler as one list; it checks every field of every item (an unknown field is refused there).
-  if (env.kind === 'performance' || env.kind === 'test-management' || env.kind === 'pull-requests' || env.kind === 'calendar') {
+  if (env.kind === 'performance' || env.kind === 'test-management' || env.kind === 'pull-requests' || env.kind === 'calendar' || env.kind === 'discovery') {
     env.items.forEach((raw, i) => { if (!isObj(raw)) throw new EnvelopeError(400, `items[${i}] must be an object`); });
     return [{ handler, index: null, body: Buffer.from(JSON.stringify(env.items), 'utf8'), contentType: 'application/json', query: { team, source: env.source } }];
   }
@@ -238,6 +238,6 @@ export function validateHeartbeat(body: unknown): HeartbeatBody {
 }
 
 /** The latest Exporter release this server knows (an older Exporter is shown as outdated). */
-export const LATEST_EXPORTER_VERSION = '0.4.0';
+export const LATEST_EXPORTER_VERSION = '0.5.0';
 const cmp = (a: string, b: string) => { const x = a.split('.').map(Number); const y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0); return 0; };
 export const isOutdated = (version: string) => cmp(version, LATEST_EXPORTER_VERSION) < 0;

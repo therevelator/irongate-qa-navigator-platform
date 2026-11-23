@@ -13,6 +13,7 @@ export * from './calc/delivery';
 export * from './calc/work';
 export * from './calc/quality';
 export * from './calc/automation';
+export * from './calc/lostHours';
 export * from './calc/evidence';
 export * from './store/records';
 

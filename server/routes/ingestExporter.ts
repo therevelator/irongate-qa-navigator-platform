@@ -60,6 +60,7 @@ const HANDLERS: Record<HandlerKind, IngestHandler> = {
   'test-management': moreIngestHandler('test-management'),
   'pull-requests': moreIngestHandler('pull-requests'),
   calendar: moreIngestHandler('calendar'),
+  discovery: moreIngestHandler('discovery'),
 };
 
 /** The one answer for an id that is not the caller's to write to, whether it exists elsewhere or not at all. */

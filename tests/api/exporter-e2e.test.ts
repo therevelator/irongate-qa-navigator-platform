@@ -138,7 +138,7 @@ describe('QE Navigator Exporter end to end', () => {
     const rows = (await db.query(`SELECT * FROM exporter_deliveries WHERE company_id = $1 ORDER BY received_at`, [GOLDEN_COMPANY])).rows.slice(deliveriesBefore);
     expect(rows.length).toBeGreaterThan(8);
     for (const r of rows) {
-      expect(r).toMatchObject({ company_id: GOLDEN_COMPANY, result: 'accepted', exporter_version: '0.4.0', host_label: 'e2e-host', api_key_name: 'Exporter e2e key' });
+      expect(r).toMatchObject({ company_id: GOLDEN_COMPANY, result: 'accepted', exporter_version: '0.5.0', host_label: 'e2e-host', api_key_name: 'Exporter e2e key' });
       expect([A, B]).toContain(r.team_id);
       expect(r.item_count).toBeGreaterThan(0);
       expect(r.records_stored).toBeGreaterThan(0);
@@ -146,7 +146,7 @@ describe('QE Navigator Exporter end to end', () => {
     }
     // A heartbeat for Connect your CI.
     const status = await get('/api/ci/status', cookie);
-    expect(status.body.exporters[0]).toMatchObject({ apiKeyName: 'Exporter e2e key', version: '0.4.0' });
+    expect(status.body.exporters[0]).toMatchObject({ apiKeyName: 'Exporter e2e key', version: '0.5.0' });
     expect(status.body.exporters[0].sources.map((x: any) => x.name).sort()).toEqual(['bitbucket', 'github', 'gitlab', 'jira', 'pagerduty', 'sonarqube']);
     // A second run right away: nothing new to send (at most a run that the fake vendors just finished).
     const n = rows.length;
