@@ -68,13 +68,20 @@ async function jsonBody(req: ApiKeyRequest, size: { received: number | null; raw
     if (e instanceof BodyError && e.status === 413) throw new BodyError(413, `Body too large: at most ${EXPORTER_BODY_LIMIT / 1024 / 1024} MB per request as received (send gzip, or fewer items per batch)`);
     throw e;
   }
+  // JSON, or the gzipped JSON sent as a binary type. On Netlify a gzipped body labelled as text (application/json)
+  // arrives re-encoded as text and broken, so the Exporter sends gzip as application/gzip.
   const ct = String(req.headers['content-type'] ?? '');
-  if (ct && !/^application\/json/i.test(ct)) throw new EnvelopeError(415, `Content-Type "${ct.split(';')[0]}" is not supported: send the envelope as JSON (Content-Type: application/json)`);
+  if (ct && !/^application\/(json|gzip|x-gzip|octet-stream)/i.test(ct)) throw new EnvelopeError(415, `Content-Type "${ct.split(';')[0]}" is not supported: send the envelope as JSON (Content-Type: application/json), or gzipped as Content-Type: application/gzip`);
   size.received = raw.length;
   const payload = maybeGunzip(raw, req.headers['content-encoding'] as string | undefined);
   size.raw = payload.length;
   if (!payload.length) throw new EnvelopeError(400, 'Empty body: send the envelope as JSON');
-  try { return JSON.parse(text(payload)); } catch { throw new EnvelopeError(400, 'The body must be JSON (Content-Type: application/json)'); }
+  try { return JSON.parse(text(payload)); } catch {
+    const gz = /gzip/i.test(String(req.headers['content-encoding'] ?? ''));
+    throw new EnvelopeError(400, gz && /^application\/json/i.test(ct)
+      ? 'The body is not valid gzipped JSON. Send gzip with Content-Type: application/gzip (a gzipped body labelled application/json can be altered in transit)'
+      : 'The body must be JSON (Content-Type: application/json)');
+  }
 }
 
 /** companyId = the key's company; the department in it; the team active, in that department and company. */

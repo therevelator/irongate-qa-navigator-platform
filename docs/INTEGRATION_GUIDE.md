@@ -922,7 +922,7 @@ It replaces the QE Navigator Collector (releases up to 0.2.0, which calculated v
 
 ### 4D.1 POST /api/ingest/exporter/batch
 
-API key as in section 3 (`Authorization: Bearer igk_…`). JSON, gzip accepted (`Content-Encoding: gzip`), at most 20 MB as
+API key as in section 3 (`Authorization: Bearer igk_…`). JSON (`Content-Type: application/json`), or gzipped JSON sent as `Content-Type: application/gzip` with `Content-Encoding: gzip` (on Netlify a gzipped body labelled `application/json` arrives altered), at most 20 MB as
 received (100 MB uncompressed). `Idempotency-Key` header: a re-sent batch is answered from the log and writes nothing again.
 `?dryRun=true` checks the key, the ids and every item through its handler and writes nothing at all.
 

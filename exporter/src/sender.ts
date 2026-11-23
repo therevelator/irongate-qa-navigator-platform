@@ -94,7 +94,7 @@ export class QeClient {
   /** The headers of a batch as the preview shows them (the key as [redacted]). */
   displayHeaders(b: Batch, dryRun: boolean): Record<string, string> {
     return {
-      Authorization: 'Bearer [redacted]', 'Content-Type': 'application/json', 'Content-Encoding': 'gzip', 'User-Agent': USER_AGENT, 'X-Exporter-Host': this.host,
+      Authorization: 'Bearer [redacted]', 'Content-Type': 'application/gzip', 'Content-Encoding': 'gzip', 'User-Agent': USER_AGENT, 'X-Exporter-Host': this.host,
       ...(dryRun ? {} : { 'Idempotency-Key': b.idempotencyKey }),
     };
   }
@@ -119,7 +119,7 @@ export class QeClient {
           method, url, ...(body !== null ? { body: gzipSync(Buffer.from(body)) } : {}), timeoutMs: this.cfg.qeNavigator.timeoutSeconds * 1000, ca: this.ca,
           headers: {
             Authorization: `Bearer ${this.apiKey}`, 'User-Agent': USER_AGENT, 'X-Exporter-Host': this.host,
-            ...(body !== null ? { 'Content-Type': 'application/json', 'Content-Encoding': 'gzip' } : {}), ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+            ...(body !== null ? { 'Content-Type': 'application/gzip', 'Content-Encoding': 'gzip' } : {}), ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
           },
         },
         { maxRetries: this.cfg.http.maxRetries, maxWaitMs: this.cfg.http.maxRetryWaitSeconds * 1000, ...this.retry },

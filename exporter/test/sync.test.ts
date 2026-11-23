@@ -29,6 +29,7 @@ function mockQe(s: MockServer, opts: { refuse?: (item: any) => string | null; st
     if (opts.status) return { status: opts.status, body: { error: 'Invalid or revoked API key' } };
     assert.equal(r.headers.authorization, `Bearer ${API_KEY}`);
     assert.equal(r.headers['content-encoding'], 'gzip');
+    assert.equal(r.headers['content-type'], 'application/gzip');
     assert.match(String(r.headers['user-agent']), /^qe-exporter\/0\.3\.0 /);
     assert.ok(r.headers['x-exporter-host']);
     const e = r.json;

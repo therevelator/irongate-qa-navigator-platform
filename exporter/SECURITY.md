@@ -67,7 +67,7 @@ salted hash by QE Navigator and never stored as names.
 
 ### 4.1 The envelope
 
-`POST /api/ingest/exporter/batch` with `Authorization: Bearer igk_…`, `Content-Encoding: gzip`, `User-Agent: qe-exporter/<version>`,
+`POST /api/ingest/exporter/batch` with `Authorization: Bearer igk_…`, `Content-Type: application/gzip`, `Content-Encoding: gzip`, `User-Agent: qe-exporter/<version>`,
 `X-Exporter-Host: <hostLabel>`, `Idempotency-Key: qe-exporter:<sha256 of the body>`:
 
 ```json
