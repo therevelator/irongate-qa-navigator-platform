@@ -1,0 +1,60 @@
+/* =====================================================================
+   Top light ("Rim and haze") on the Overview's Company status card.
+
+   The card is lit from a source above it that is never shown: a thin rim lights the top edge and
+   runs down the left and right edges, brightest at the top corners and fading out going down (no
+   bottom rim), and a soft haze spills down from the top. The colour is the hero battery's band
+   colour, set on the card as --tl ("r g b", topLightRgb() in src/lib/batteryScale.ts); with no
+   score the card has no .top-light class and no light, like the battery's empty shell.
+
+   Decorative only: two pseudo-elements inside the card's own stacking context (isolation), no
+   pointer events, absolutely positioned (no layout change). The haze sits behind the content; the
+   1.5px rim lies on the card's border. No animation.
+   ===================================================================== */
+.top-light {
+  position: relative;
+  isolation: isolate;
+  --tl-k: 1; /* strength: full in the dark themes (Dark, Graphite) */
+}
+html:not(.dark) .top-light { --tl-k: 0.7; } /* Light and Porcelain: toned down */
+.top-light > * { position: relative; z-index: 1; }
+.top-light::before,
+.top-light::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* The rim: a 1.5px ring on the card's edge (it follows the rounded corners), lit from above. */
+.top-light::after {
+  z-index: 2;
+  padding: 1.5px;
+  background: linear-gradient(to bottom,
+    rgb(var(--tl) / calc(0.95 * var(--tl-k))) 0,
+    rgb(var(--tl) / calc(0.70 * var(--tl-k))) 24px,
+    rgb(var(--tl) / calc(0.36 * var(--tl-k))) 130px,
+    rgb(var(--tl) / calc(0.12 * var(--tl-k))) 260px,
+    transparent 380px);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+
+/* The haze: light spilling down from the top, and a glow hugging each side edge, anchored at the
+   top corners so it fades inward and downward like the rim. */
+.top-light::before {
+  z-index: 0;
+  background:
+    linear-gradient(to bottom, rgb(var(--tl) / calc(0.28 * var(--tl-k))), transparent 12px),
+    radial-gradient(ellipse 16px 320px at 0 0, rgb(var(--tl) / calc(0.26 * var(--tl-k))), transparent 100%),
+    radial-gradient(ellipse 16px 320px at 100% 0, rgb(var(--tl) / calc(0.26 * var(--tl-k))), transparent 100%),
+    radial-gradient(ellipse 45% 70px at 50% 0, rgb(var(--tl) / calc(0.20 * var(--tl-k))), transparent 100%),
+    linear-gradient(to bottom, rgb(var(--tl) / calc(0.13 * var(--tl-k))) 0, rgb(var(--tl) / calc(0.05 * var(--tl-k))) 150px, transparent 360px);
+}
+
+/* Flat 2D appearance: the rim only, a little softer, with no haze or glow. */
+html[data-score-depth="2d"] .top-light { --tl-k: 0.8; }
+html[data-score-depth="2d"]:not(.dark) .top-light { --tl-k: 0.6; }
+html[data-score-depth="2d"] .top-light::before { content: none; }

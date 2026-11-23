@@ -1,6 +1,6 @@
 # Manual test cases
 
-473 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+474 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -11,7 +11,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Forgot / reset password](#forgot--reset-password) (9)
 - [Navigation, routes and the app frame](#navigation-routes-and-the-app-frame) (30)
 - [Accessibility](#accessibility) (35)
-- [Theme and phone layout](#theme-and-phone-layout) (31)
+- [Theme and phone layout](#theme-and-phone-layout) (32)
 - [Overview (dashboard)](#overview-dashboard) (17)
 - [Executive briefing](#executive-briefing) (3)
 - [Team detail](#team-detail) (22)
@@ -3859,6 +3859,32 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **After the test:** Choose Depth '3D'; restore the teams' values if you changed them.
 
 *Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance: battery style › APR-08 Cell fill and colour follow the value (10, 45, 81, 100; band edges 29/30 and 89/90), in 3D and 2D, vertical and horizontal`
+
+### TC-AUTH-138: Overview: the Company status card is lit from above in its battery's band colour; no light without a score; rim only in 2D
+
+**Type:** Positive · **Priority:** Low · **Role:** Super admin · **Flow:** F4.10
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Browser signed out (no IronGate session: use a fresh private window or sign out first)
+- Company QA scores of about 94, 52 and 24 to compare, and one with no score (set them with Manual metrics or the ingestion API; the automated test replaces the score in the company summary response).
+
+**Test data**
+
+- Super admin: admin@irongate.com / demo123
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as Super admin with a company QA score of 94 and look at the Company status card on the Overview (Appearance: Theme 'Dark', Depth '3D'). | A thin green line of light runs along the top edge of the card and down its left and right edges, brightest at the top corners and fading out going down; there is no line along the bottom. A soft green haze spills down from the top. The green is the battery's green. Text keeps its normal colour and everything in the card stays clickable. |
+| 2 | Repeat with a score of 52, then 24 (reload the Overview after each change). | The light turns amber at 52 and red at 24, always the same colour as the hero battery's charge. |
+| 3 | Choose Theme 'Light', then 'Graphite' and 'Porcelain'. | The light is there in every theme, softer in Light and Porcelain; no other card on the page is lit. |
+| 4 | Choose Depth '2D'. | Only the thin rim stays (top and sides, same colour and fade), with no haze or glow. |
+| 5 | Use a company with no QA score. | The battery is empty (no colour) and the card has no light at all. |
+
+**After the test:** Choose Theme 'Light' and Depth '3D'; restore the scores if you changed them.
+
+*Automated:* `tests/e2e/ux/appearance.spec.ts › Appearance: top light › APR-09 the Company status card is lit in its battery band colour, follows the score (94, 52, 24), has no light without a score, and keeps only the rim in 2D`
 
 ## Overview (dashboard)
 

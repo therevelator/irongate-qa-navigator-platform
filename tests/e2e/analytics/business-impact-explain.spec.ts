@@ -44,7 +44,10 @@ async function expectFullyPopulated(page: Page, opts: { rollup: boolean }) {
     const roll = page.getByTestId('revenue-rollup');
     await expect(roll.getByText('Teams with a figure')).toBeVisible();
     await expect(roll).not.toContainText(EMPTY);
-    await expect(roll.locator('tbody td:nth-child(2)').filter({ hasText: /^—$/ })).toHaveCount(0);
+    // Other specs add temporary fixture teams ("UI Team …", tests/e2e/support/data.ts createFixtureTeam) to the demo
+    // company while they run; they have no business figures by design, so only the demo's own teams are checked.
+    const demoRows = roll.locator('tbody tr').filter({ hasNot: page.locator('td:first-child', { hasText: /^UI Team / }) });
+    await expect(demoRows.locator('td:nth-child(2)').filter({ hasText: /^—$/ })).toHaveCount(0);
   }
 }
 
