@@ -30,6 +30,11 @@ export const DEMO = {
 const ANALYTICS = ['nav-dashboard', 'nav-analytics', 'nav-compare', 'nav-tv', 'nav-flaky-test-intelligence', 'nav-test-execution-timeline',
   'nav-technical-debt', 'nav-performance-metrics', 'nav-pipeline-visualization', 'nav-developer-productivity', 'nav-team-pulse',
   'nav-business-impact', 'nav-team-gamification', 'nav-pdf-report-generator'];
+/**
+ * Compare teams needs two or more teams to compare (src/lib/viewAccess.ts canCompareTeams): a company or department
+ * scope, or grants on 2+ teams. lead@, engineer@ and viewer@ each have one team in the demo data, so it is hidden for them.
+ */
+const ONE_TEAM = ANALYTICS.filter((id) => id !== 'nav-compare');
 /** The executive summary is in the navigation of super admins and managers (after the overview). */
 const WITH_SUMMARY = ['nav-dashboard', 'nav-summary', ...ANALYTICS.slice(1)];
 export const NAV_BY_ROLE: Record<Role, string[]> = {
@@ -37,14 +42,16 @@ export const NAV_BY_ROLE: Record<Role, string[]> = {
     'nav-manual-metrics', 'nav-upload-files', 'nav-metric-intervals', 'nav-parameters-config', 'nav-ingestion-log'],
   manager: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-activity', 'nav-admin', 'nav-manual-metrics', 'nav-upload-files', 'nav-metric-intervals',
     'nav-parameters-config', 'nav-ingestion-log'],
-  lead: [...ANALYTICS, 'nav-users', 'nav-teams', 'nav-manual-metrics', 'nav-upload-files'],
-  engineer: [...ANALYTICS],
-  viewer: [...ANALYTICS],
+  lead: [...ONE_TEAM, 'nav-users', 'nav-teams', 'nav-manual-metrics', 'nav-upload-files'],
+  engineer: [...ONE_TEAM],
+  viewer: [...ONE_TEAM],
 };
 export const ALL_NAV = NAV_BY_ROLE.admin;
 
 /** Restricted pages: path -> roles that may open it. Others are sent to the overview. */
 export const RESTRICTED_PAGES: Array<{ path: string; title: string; allowed: Role[] }> = [
+  // Only with two or more teams to compare: lead@, engineer@ and viewer@ have one team each.
+  { path: '/compare', title: 'Compare teams', allowed: ['admin', 'manager'] },
   { path: '/users', title: 'Users', allowed: ['admin', 'manager', 'lead'] },
   { path: '/teams', title: 'Teams', allowed: ['admin', 'manager', 'lead'] },
   { path: '/departments', title: 'Departments', allowed: ['admin'] },
@@ -62,7 +69,6 @@ export const RESTRICTED_PAGES: Array<{ path: string; title: string; allowed: Rol
 export const OPEN_PAGES: Array<{ path: string; title: string }> = [
   { path: '/', title: 'Overview' },
   { path: '/analytics', title: 'Analytics' },
-  { path: '/compare', title: 'Compare teams' },
   { path: '/analytics/flaky-tests', title: 'Flaky tests' },
   { path: '/analytics/timeline', title: 'Test execution' },
   { path: '/analytics/technical-debt', title: 'Technical debt' },

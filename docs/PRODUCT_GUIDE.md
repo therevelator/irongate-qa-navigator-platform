@@ -1398,6 +1398,9 @@ Why: a manager or executive reads the state of quality on a phone in one minute,
 Why: side-by-side evidence for coaching and resourcing decisions (`/compare`, [`server/lib/compare.ts`](../server/lib/compare.ts)).
 
 - Two to four teams of your analytics scope; window 7 to 90 days (default 30).
+- Offered only to people with two or more teams to compare: super admins, managers (department scope) and anyone assigned to 2+ teams
+  ([`canCompareTeams`](../src/lib/viewAccess.ts)). Someone on a single team (typically a software engineer, viewer or team lead of one team)
+  does not see it in the navigation or in "What you can do here", and `/compare` opens the overview with "You don't have access to Compare teams."
 - Per metric (QA score, technical debt score and every KPI with a target): latest value, target valid at its date, status, change over the
   window with a sparkline, stale values greyed (not judged, not compared), sample-data markers; QA score with "based on n of 4 inputs".
 - Best value marked per row. A row is **highlighted** when the teams are in different status bands, or the gap between the best and worst

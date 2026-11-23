@@ -22,8 +22,20 @@ export function canUseAnalytics(actor: PolicyActor): boolean {
   return grantsOf(actor).some((g) => ANALYTICS_ROLES.includes(g.role)) && analyticsScopeLevelOf(actor) !== 'none';
 }
 
+/**
+ * Compare teams needs at least two teams to compare: a company or department scope, or grants on two or more
+ * teams. Someone on a single team (e.g. a software engineer on one team) is not offered it.
+ */
+export function canCompareTeams(actor: PolicyActor): boolean {
+  const level = analyticsScopeLevelOf(actor);
+  if (level === 'company' || level === 'department') return true;
+  const teams = new Set(grantsOf(actor).filter((g) => g.scopeType === 'team' && ANALYTICS_ROLES.includes(g.role)).map((g) => g.scopeId));
+  return teams.size >= 2;
+}
+
 export function canOpenView(actor: PolicyActor | null | undefined, view: string): boolean {
   if (!actor || !actor.id) return view === 'dashboard';
+  if (view === 'compare') return canUseAnalytics(actor) && canCompareTeams(actor);
   if ((ANALYTICS_VIEWS as readonly string[]).includes(view)) return canUseAnalytics(actor);
   switch (view) {
     case 'dashboard':

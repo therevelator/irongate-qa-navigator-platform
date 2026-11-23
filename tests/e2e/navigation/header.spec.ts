@@ -30,7 +30,9 @@ test.describe('Top bar', { tag: [TAG.area('navigation')] }, () => {
     await expect(button).toHaveAttribute('aria-expanded', 'true');
     await expect(page.getByTestId('access-help-roles')).toContainText(`Viewer · ${DEMO.leadTeam.name}`);
     await expect(page.getByTestId('access-help-scope')).toHaveText(`You see ${DEMO.leadTeam.name}. Other teams are not shown to you.`);
-    await expect(page.getByTestId('access-help-can')).toContainText('TV mode, Compare teams and the Analytics modules for the teams in your scope');
+    // One team: nothing to compare, so Compare teams is not mentioned (as in the navigation).
+    await expect(page.getByTestId('access-help-can')).toContainText('team dashboards, TV mode and the Analytics modules for the teams in your scope');
+    await expect(page.getByTestId('access-help-can')).not.toContainText('Compare teams');
     await expect(page.getByTestId('access-help-cannot')).toContainText('Change settings, KPI targets or alert rules.');
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);

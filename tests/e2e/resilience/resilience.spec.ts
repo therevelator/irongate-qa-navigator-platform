@@ -53,7 +53,7 @@ test.describe('Resilience', { tag: [TAG.area('resilience'), TAG.negative] }, () 
 
   test('RES-05 a request that never answers (timeout) leaves the rest of the app usable', async ({ signInAs, page, app }) => {
     await page.route(`${API_URL}/analytics/company-summary`, () => new Promise(() => undefined));
-    await signInAs('lead');
+    await signInAs('manager');
     await expect(page.getByTestId('team-card').first()).toBeVisible();
     await app.go('nav-compare', 'Compare teams');
     await expect(page.getByTestId('compare-teams')).toBeVisible();

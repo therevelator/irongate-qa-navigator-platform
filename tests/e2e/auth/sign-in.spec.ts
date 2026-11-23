@@ -193,7 +193,7 @@ test.describe('Sign-in', { tag: [TAG.area('auth')] }, () => {
 test.describe('Sign out and sessions', { tag: [TAG.area('auth')] }, () => {
   test('AUTH-20 signing out returns to the sign-in screen; Back and reload do not show the app', { tag: [TAG.smoke] }, async ({ signInAs, page, app }) => {
     await signInAs('engineer');
-    await app.go('nav-compare', 'Compare teams');
+    await app.go('nav-team-pulse', 'Wellbeing pulse');
     await app.signOut();
     await page.goBack();
     await expect(page.getByRole('heading', { name: 'Sign in' })).toBeVisible();
@@ -216,7 +216,7 @@ test.describe('Sign out and sessions', { tag: [TAG.area('auth')] }, () => {
     try {
       await page.goto('/');
       await signInWithForm(page, user);
-      await app.go('nav-compare', 'Compare teams');
+      await app.go('nav-team-pulse', 'Wellbeing pulse');
       // Every session issued before this moment is refused from now on (what "Sign out everywhere" does).
       await sql(`UPDATE users SET sessions_valid_after = now() + interval '2 seconds' WHERE id = $1`, [user.id]);
       await app.go('nav-technical-debt');
