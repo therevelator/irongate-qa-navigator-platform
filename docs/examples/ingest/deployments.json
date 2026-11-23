@@ -1,0 +1,138 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "github-actions",
+  "kind": "deployments",
+  "items": [
+    {
+      "service": "payments-api",
+      "id": "rel-2026.11.10-1",
+      "team": "<teamId>",
+      "environment": "production",
+      "production": true,
+      "commit": "1a2b3c4d5e6f",
+      "previousCommit": "0f9e8d7c6b5a",
+      "commits": [
+        {
+          "sha": "1a2b3c4d5e6f",
+          "authoredAt": "2026-11-07T15:20:00Z",
+          "committedAt": "2026-11-07T15:25:00Z",
+          "authorEmail": "dev.one@acme.example"
+        },
+        {
+          "sha": "2b3c4d5e6f7a",
+          "authoredAt": "2026-11-06T10:00:00Z",
+          "committedAt": "2026-11-06T10:02:00Z",
+          "authorHash": "5d41402abc4b2a76b9719d911017c592"
+        }
+      ],
+      "startedAt": "2026-11-10T14:00:00Z",
+      "finishedAt": "2026-11-10T14:06:30Z",
+      "result": "success",
+      "hotfix": false,
+      "url": "https://github.com/acme/payments-api/deployments/1880011"
+    },
+    {
+      "service": "payments-api",
+      "id": "rel-2026.11.12-1",
+      "environment": "production",
+      "commit": "7a8b9c0d1e2f",
+      "commits": [
+        {
+          "sha": "7a8b9c0d1e2f",
+          "authoredAt": "2026-11-11T09:10:00Z",
+          "committedAt": "2026-11-11T09:12:00Z",
+          "authorEmail": "dev.two@acme.example"
+        }
+      ],
+      "startedAt": "2026-11-12T15:00:00Z",
+      "finishedAt": "2026-11-12T15:07:00Z",
+      "result": "success",
+      "url": "https://github.com/acme/payments-api/deployments/1880102"
+    },
+    {
+      "service": "payments-api",
+      "id": "rel-2026.11.13-hf1",
+      "environment": "production",
+      "commit": "8b9c0d1e2f3a",
+      "commits": [
+        {
+          "sha": "8b9c0d1e2f3a",
+          "authoredAt": "2026-11-13T08:40:00Z",
+          "committedAt": "2026-11-13T08:41:00Z",
+          "authorEmail": "dev.two@acme.example"
+        }
+      ],
+      "startedAt": "2026-11-13T09:30:00Z",
+      "finishedAt": "2026-11-13T09:34:00Z",
+      "result": "success",
+      "hotfix": true,
+      "url": "https://github.com/acme/payments-api/deployments/1880150"
+    },
+    {
+      "service": "payments-api",
+      "id": "rel-2026.11.17-1",
+      "environment": "production",
+      "commit": "9c0d1e2f3a4b",
+      "commits": [
+        {
+          "sha": "9c0d1e2f3a4b",
+          "authoredAt": "2026-11-14T16:00:00Z",
+          "committedAt": "2026-11-14T16:05:00Z",
+          "authorEmail": "dev.one@acme.example"
+        }
+      ],
+      "startedAt": "2026-11-17T09:50:00Z",
+      "finishedAt": "2026-11-17T09:56:00Z",
+      "result": "rolled_back",
+      "url": "https://github.com/acme/payments-api/deployments/1880301"
+    },
+    {
+      "service": "payments-api",
+      "id": "rel-2026.11.17-2",
+      "environment": "production",
+      "commit": "8b9c0d1e2f3a",
+      "rollbackOf": "rel-2026.11.17-1",
+      "startedAt": "2026-11-17T10:40:00Z",
+      "finishedAt": "2026-11-17T10:44:00Z",
+      "result": "success",
+      "url": "https://github.com/acme/payments-api/deployments/1880309"
+    },
+    {
+      "service": "payments-api",
+      "id": "stg-2026.11.18-4",
+      "environment": "staging",
+      "commitRange": "9c0d1e2f3a4b..4e1f0c9a7b2d",
+      "startedAt": "2026-11-18T08:10:00Z",
+      "finishedAt": "2026-11-18T08:14:00Z",
+      "result": "success",
+      "url": "https://github.com/acme/payments-api/deployments/1880355"
+    },
+    {
+      "service": "payments-api",
+      "id": "rel-2026.11.19-1",
+      "environment": "prod-eu",
+      "production": true,
+      "commit": "4e1f0c9a7b2d",
+      "commits": [
+        "4e1f0c9a7b2d",
+        "3c4d5e6f7a8b"
+      ],
+      "startedAt": "2026-11-19T13:00:00Z",
+      "finishedAt": "2026-11-19T13:08:00Z",
+      "result": "success",
+      "url": "https://github.com/acme/payments-api/deployments/1880420"
+    },
+    {
+      "service": "payments-api",
+      "id": "rel-2026.11.20-1",
+      "environment": "production",
+      "commit": "9f3c2a1b7d4e",
+      "startedAt": "2026-11-20T12:00:00Z",
+      "finishedAt": "2026-11-20T12:03:00Z",
+      "result": "failure",
+      "url": "https://github.com/acme/payments-api/deployments/1880477"
+    }
+  ]
+}

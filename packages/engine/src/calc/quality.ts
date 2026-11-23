@@ -27,7 +27,7 @@ const DAY = 86_400_000;
 
 export const QUALITY_METRICS: Record<string, MetricSpec> = {
   code_quality: { key: 'code_quality', label: 'Code quality score', unit: '/100', kpi: 'code_quality_score', group: 'quality',
-    formula: 'round(100 × e^(−weighted findings per 1,000 lines of code ÷ 20)); weights critical 10, high 5, medium 2, low 0.5, info 0; the latest main-branch report of each repository and tool; lines of code sent with the report, else lines found of the latest main-branch coverage report' },
+    formula: 'round(100 × e^(−weighted findings per 1,000 lines of code ÷ 20)); weights critical 10, high 5, medium 2, low 0.5, info 0; the latest main-branch report of each repository and tool; lines of code sent with the report, else the loc (or lines found) of the latest main-branch coverage report' },
   findings: { key: 'findings', label: 'Static-analysis findings', unit: 'findings', kpi: null, group: 'quality',
     formula: 'open findings in the latest main-branch report of each repository and tool (suppressed findings not counted)' },
   new_findings: { key: 'new_findings', label: 'New findings', unit: 'findings', kpi: null, group: 'quality',

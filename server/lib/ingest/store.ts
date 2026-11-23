@@ -30,6 +30,10 @@ export interface UploadMeta {
   ingestionId: string | null;
   parseMs: number;
   summary: Record<string, unknown>;
+  /** The repository of a test or coverage report (a dimension of the evidence; null when not sent). */
+  repo?: string | null;
+  /** Lines of code sent with a coverage report (defect density and code quality denominator). */
+  loc?: number | null;
 }
 
 export const sha256 = (b: Buffer | string) => createHash('sha256').update(b).digest('hex');
@@ -63,11 +67,11 @@ export async function storeTestRun(client: pg.PoolClient, m: UploadMeta, uploadI
   const id = opts.id;
   const r = await client.query(
     `INSERT INTO test_runs (${id ? 'id, ' : ''}company_id, team_id, upload_id, format, commit_sha, branch, run_id, attempt, started_at, day,
-                            total, passed, failed, errored, skipped, duration_ms, tests_duration_ms, is_sample)
-     VALUES (${id ? '$18, ' : ''}$1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::date, $11, $12, $13, $14, $15, $16, $17, ${id ? '$19' : '$18'}) RETURNING id`,
+                            total, passed, failed, errored, skipped, duration_ms, tests_duration_ms, is_sample, repo)
+     VALUES (${id ? '$18, ' : ''}$1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::date, $11, $12, $13, $14, $15, $16, $17, ${id ? '$19, $20' : '$18, $19'}) RETURNING id`,
     [m.companyId, m.teamId, uploadId, rep.format, m.commit, m.branch, m.runId, m.attempt, at.toISOString(), dayOf(at),
       rep.counts.total, rep.counts.passed, rep.counts.failed, rep.counts.errored, rep.counts.skipped, rep.durationMs, rep.testsDurationMs,
-      ...(id ? [id] : []), !!opts.sample]
+      ...(id ? [id] : []), !!opts.sample, m.repo ?? null]
   );
   const runId: string = r.rows[0].id;
   await insertTestResults(client, runId, m.teamId, rep);
@@ -92,11 +96,11 @@ export async function storeCoverage(client: pg.PoolClient, m: UploadMeta, upload
   const ch = changed ? changedCoverage(cov, changed) : null;
   const r = await client.query(
     `INSERT INTO coverage_reports (${opts.id ? 'id, ' : ''}company_id, team_id, upload_id, format, commit_sha, branch, run_id, attempt, created_at, day,
-                                   lines_found, lines_hit, branches_found, branches_hit, file_count, changed_lines_found, changed_lines_hit, is_sample)
-     VALUES (${opts.id ? '$19, ' : ''}$1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::date, $11, $12, $13, $14, $15, $16, $17, $18) RETURNING id`,
+                                   lines_found, lines_hit, branches_found, branches_hit, file_count, changed_lines_found, changed_lines_hit, is_sample, repo, lines_of_code)
+     VALUES (${opts.id ? '$21, ' : ''}$1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::date, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20) RETURNING id`,
     [m.companyId, m.teamId, uploadId, cov.format, m.commit, m.branch, m.runId, m.attempt, at.toISOString(), dayOf(at),
       cov.totals.linesFound, cov.totals.linesHit, cov.totals.branchesFound, cov.totals.branchesHit, cov.files.length,
-      ch ? ch.found : null, ch ? ch.hit : null, !!opts.sample, ...(opts.id ? [opts.id] : [])]
+      ch ? ch.found : null, ch ? ch.hit : null, !!opts.sample, m.repo ?? null, m.loc ?? null, ...(opts.id ? [opts.id] : [])]
   );
   const reportId: string = r.rows[0].id;
   const CHUNK = 5000;

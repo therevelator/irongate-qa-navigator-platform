@@ -53,20 +53,6 @@ export const showError = (message: string) => {
   });
 };
 
-export const showInfo = (message: string) => {
-  return Toast.fire({
-    icon: 'info',
-    titleText: message
-  });
-};
-
-export const showWarning = (message: string) => {
-  return Toast.fire({
-    icon: 'warning',
-    titleText: message
-  });
-};
-
 /**
  * Confirm a deletion. itemName and detail are plain text (escaped here). detail is an
  * optional extra line, e.g. "This will affect 3 teams and 12 users".
@@ -125,38 +111,6 @@ export const confirmDeactivateTeam = async (teamName: string) => {
     reverseButtons: true
   });
   return { isConfirmed: result.isConfirmed === true };
-};
-
-/** title, message and confirmText are plain text. */
-export const confirmAction = async (title: string, message: string, confirmText: string = 'Confirm') => {
-  const result = await swalWithStyledButtons.fire({
-    titleText: title,
-    text: message,
-    icon: 'question',
-    showCancelButton: true,
-    confirmButtonText: escapeHtml(confirmText), // SweetAlert2 renders button text as HTML
-    cancelButtonText: 'Cancel',
-    reverseButtons: true,
-    customClass: {
-      confirmButton: 'px-5 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white font-medium rounded-lg transition-colors'
-    }
-  });
-
-  if (result.isConfirmed) {
-    return { isConfirmed: true };
-  } else if (result.dismiss === Swal.DismissReason.cancel) {
-    swalWithStyledButtons.fire({
-      titleText: 'Cancelled',
-      text: 'Action was cancelled.',
-      icon: 'info',
-      confirmButtonText: 'OK',
-      timer: 2000,
-      timerProgressBar: true
-    });
-    return { isConfirmed: false };
-  }
-  
-  return { isConfirmed: false };
 };
 
 /** title and message are plain text. */

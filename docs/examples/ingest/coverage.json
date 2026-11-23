@@ -1,0 +1,88 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "github-actions",
+  "kind": "coverage",
+  "items": [
+    {
+      "run": "8812345678",
+      "attempt": 1,
+      "commit": "9f3c2a1b7d4e",
+      "branch": "main",
+      "startedAt": "2026-11-20T09:20:00Z",
+      "format": "lcov",
+      "repo": "acme/payments-web",
+      "loc": 42800,
+      "files": [
+        {
+          "name": "lcov.info",
+          "content": "TN:\nSF:src/payments/refund.ts\nFN:8,refund\nFNF:1\nFNH:1\nFNDA:5,refund\nDA:9,5\nDA:10,5\nDA:11,0\nDA:12,0\nDA:13,5\nDA:20,2\nDA:21,2\nDA:22,0\nBRDA:10,0,0,1\nBRDA:10,0,1,4\nBRDA:21,1,0,0\nBRDA:21,1,1,2\nBRF:4\nBRH:3\nLF:8\nLH:5\nend_of_record\nSF:src/payments/charge.ts\nDA:3,12\nDA:4,12\nDA:5,12\nDA:9,7\nDA:10,0\nBRDA:9,0,0,7\nBRDA:9,0,1,0\nBRF:2\nBRH:1\nLF:5\nLH:4\nend_of_record\n"
+        }
+      ],
+      "diff": "diff --git a/src/payments/refund.ts b/src/payments/refund.ts\nindex 3b18e51..a9c4f2d 100644\n--- a/src/payments/refund.ts\n+++ b/src/payments/refund.ts\n@@ -9,3 +9,6 @@ export function refund(amount: number) {\n   const limit = maxRefund();\n+  if (amount > limit) {\n+    throw new RefundLimitError(limit);\n+  }\n   return gateway.refund(amount);\n }\n"
+    },
+    {
+      "run": "8812345999",
+      "attempt": 1,
+      "commit": "b71d3e5a90c4",
+      "branch": "feature/refund-limits",
+      "startedAt": "2026-11-20T11:10:00Z",
+      "format": "cobertura",
+      "repo": "acme/payments-web",
+      "files": [
+        {
+          "name": "coverage.xml",
+          "content": "<?xml version=\"1.0\" ?>\n<coverage line-rate=\"0.6667\" branch-rate=\"0.5\" lines-covered=\"4\" lines-valid=\"6\" branches-covered=\"1\" branches-valid=\"2\" version=\"7.4.0\" timestamp=\"1763636400000\">\n  <sources><source>/builds/acme/payments-api</source></sources>\n  <packages>\n    <package name=\"src.payments\" line-rate=\"0.6667\" branch-rate=\"0.5\">\n      <classes>\n        <class name=\"refund.ts\" filename=\"src/payments/refund.ts\" line-rate=\"0.6667\" branch-rate=\"0.5\">\n          <methods/>\n          <lines>\n            <line number=\"12\" hits=\"3\"/>\n            <line number=\"13\" hits=\"0\"/>\n            <line number=\"20\" hits=\"3\" branch=\"true\" condition-coverage=\"50% (1/2)\"/>\n            <line number=\"21\" hits=\"3\"/>\n            <line number=\"22\" hits=\"0\"/>\n            <line number=\"30\" hits=\"1\"/>\n          </lines>\n        </class>\n      </classes>\n    </package>\n  </packages>\n</coverage>\n"
+        }
+      ],
+      "changedLines": "{\"src/payments/refund.ts\":[12,13,\"20-22\"]}"
+    },
+    {
+      "run": "jenkins-payments-core-1520",
+      "attempt": 1,
+      "commit": "4e1f0c9a7b2d",
+      "branch": "main",
+      "startedAt": "2026-11-18T14:00:00Z",
+      "format": "jacoco",
+      "repo": "acme/payments-core",
+      "loc": 61250,
+      "files": [
+        {
+          "name": "jacoco.xml",
+          "content": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>\n<report name=\"payments-core\">\n  <sessioninfo id=\"ci-1520\" start=\"1763474400000\" dump=\"1763474460000\"/>\n  <package name=\"com/acme/payments\">\n    <sourcefile name=\"Ledger.java\">\n      <line nr=\"10\" mi=\"0\" ci=\"4\" mb=\"0\" cb=\"0\"/>\n      <line nr=\"11\" mi=\"0\" ci=\"6\" mb=\"1\" cb=\"1\"/>\n      <line nr=\"12\" mi=\"3\" ci=\"0\" mb=\"0\" cb=\"0\"/>\n      <line nr=\"15\" mi=\"0\" ci=\"2\" mb=\"0\" cb=\"2\"/>\n      <counter type=\"LINE\" missed=\"1\" covered=\"3\"/>\n      <counter type=\"BRANCH\" missed=\"1\" covered=\"3\"/>\n    </sourcefile>\n  </package>\n</report>\n"
+        }
+      ]
+    },
+    {
+      "run": "8812300001",
+      "attempt": 1,
+      "commit": "4e1f0c9a7b2d",
+      "branch": "main",
+      "startedAt": "2026-11-18T15:00:00Z",
+      "format": "istanbul",
+      "repo": "acme/payments-web",
+      "files": [
+        {
+          "name": "coverage-final.json",
+          "content": "{\n  \"/home/runner/work/payments-web/src/cart.js\": {\n    \"path\": \"/home/runner/work/payments-web/src/cart.js\",\n    \"statementMap\": {\n      \"0\": {\n        \"start\": {\n          \"line\": 1,\n          \"column\": 0\n        },\n        \"end\": {\n          \"line\": 1,\n          \"column\": 30\n        }\n      },\n      \"1\": {\n        \"start\": {\n          \"line\": 2,\n          \"column\": 2\n        },\n        \"end\": {\n          \"line\": 2,\n          \"column\": 20\n        }\n      },\n      \"2\": {\n        \"start\": {\n          \"line\": 5,\n          \"column\": 2\n        },\n        \"end\": {\n          \"line\": 5,\n          \"column\": 18\n        }\n      }\n    },\n    \"fnMap\": {},\n    \"branchMap\": {},\n    \"s\": {\n      \"0\": 4,\n      \"1\": 4,\n      \"2\": 0\n    },\n    \"f\": {},\n    \"b\": {\n      \"0\": [\n        3,\n        1\n      ]\n    }\n  }\n}"
+        }
+      ]
+    },
+    {
+      "run": "8812300002",
+      "attempt": 1,
+      "commit": "4e1f0c9a7b2d",
+      "branch": "release/2026.11",
+      "startedAt": "2026-11-17T15:00:00Z",
+      "format": "istanbul-summary",
+      "repo": "acme/payments-web",
+      "files": [
+        {
+          "name": "coverage-summary.json",
+          "content": "{\n  \"total\": {\n    \"lines\": {\n      \"total\": 120,\n      \"covered\": 96,\n      \"skipped\": 0,\n      \"pct\": 80\n    },\n    \"branches\": {\n      \"total\": 40,\n      \"covered\": 28,\n      \"skipped\": 0,\n      \"pct\": 70\n    }\n  },\n  \"src/checkout/basket.ts\": {\n    \"lines\": {\n      \"total\": 70,\n      \"covered\": 60,\n      \"skipped\": 0,\n      \"pct\": 85.71\n    },\n    \"branches\": {\n      \"total\": 24,\n      \"covered\": 18,\n      \"skipped\": 0,\n      \"pct\": 75\n    }\n  },\n  \"src/checkout/voucher.ts\": {\n    \"lines\": {\n      \"total\": 50,\n      \"covered\": 36,\n      \"skipped\": 0,\n      \"pct\": 72\n    },\n    \"branches\": {\n      \"total\": 16,\n      \"covered\": 10,\n      \"skipped\": 0,\n      \"pct\": 62.5\n    }\n  }\n}"
+        }
+      ]
+    }
+  ]
+}

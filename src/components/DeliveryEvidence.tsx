@@ -43,9 +43,11 @@ const hours = (h: number) => (h >= 48 ? `${(h / 24).toFixed(1)} days` : h >= 1 ?
 
 export function fmtDelivery(key: string, v: number, unit: string | null): string {
   if (unit === '/week') return `${v.toFixed(1)} per week`;
-  if (unit === 'days') return hours(v * 24);
+  // In the KPI's unit and precision, as the team page shows it.
+  if (unit === 'days') return `${v.toFixed(1)} days`;
+  if (key === 'mtbf') return `${Math.round(v)} h`;
   if (unit === 'h') return hours(v);
-  if (unit === '%') return `${v.toFixed(key === 'availability' ? 2 : 1)} %`;
+  if (unit === '%') return `${v.toFixed(key === 'availability' ? 3 : 1)} %`;
   if (unit === 'per deploy') return v.toFixed(2);
   if (unit === 'incidents') return `${Math.round(v)}`;
   return `${v}${unit ? ` ${unit}` : ''}`;
@@ -144,7 +146,7 @@ export const DeliveryEvidenceSection: React.FC<{ delivery: ReturnType<typeof use
           <Card>
             <CardHeader
               title="Delivery and reliability (DORA)"
-              subtitle={`Calculated by QE Navigator from the raw deployment, commit and incident events over the last 28 days${data!.sample ? ' (sample data: shown as evidence, not written to the team’s KPIs)' : ''}; open one to see the formula and the deploys or incidents it counts.`}
+              subtitle={`Calculated by QE Navigator from the raw deployment, commit and incident events over the last 28 days${data!.sample ? ' (sample data: the team’s KPIs show these values)' : ''}; open one to see the formula and the deploys or incidents it counts.`}
             />
             {tiles.length === 0 ? (
               <p className="text-sm text-slate-500 dark:text-slate-400" data-testid="delivery-not-calculated">The events are stored; the values appear after the next calculation.</p>

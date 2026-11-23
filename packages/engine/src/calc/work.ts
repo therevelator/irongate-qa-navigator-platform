@@ -43,7 +43,7 @@ export const WORK_METRICS: Record<string, MetricSpec> = {
   escape_rate: { key: 'escape_rate', label: 'Defect escape rate', unit: '%', kpi: 'defect_escape_rate', group: 'work',
     formula: 'bugs found in production ÷ bugs with a known environment found in × 100, over the bugs opened in the 28 days ending the day (bugs resolved as won’t do, duplicate or cannot reproduce left out)' },
   defect_density: { key: 'defect_density', label: 'Defect density', unit: 'defects/KLOC', kpi: 'defect_density', group: 'work',
-    formula: 'bugs found in production in the 28 days ending the day ÷ (lines of code ÷ 1,000); lines of code = lines found of the latest main-branch coverage report' },
+    formula: 'bugs found in production in the 28 days ending the day ÷ (lines of code ÷ 1,000); lines of code = the loc sent with the latest main-branch coverage report, else its lines found' },
   velocity: { key: 'velocity', label: 'Sprint velocity', unit: 'points', kpi: 'sprint_velocity', group: 'work',
     formula: 'story points of the issues completed in the latest closed sprint (done before the sprint closed; epics and sub-tasks not counted)' },
   commitment: { key: 'commitment', label: 'Sprint commitment rate', unit: '%', kpi: 'sprint_commitment_rate', group: 'work',
@@ -62,6 +62,8 @@ export interface IssueRow {
   id: string; key: string; title: string | null; type: string; statusCategory: string; resolution: string | null; foundIn: string | null; environment: string | null;
   points: number | null; estimate: number | null; logged: number | null; sprintIds: string[]; openedAt: number; resolvedAt: number | null; url: string | null;
   components: string[]; transitions: TransitionRow[];
+  /** The issue's priority name (evidence only; no calculation uses it). */
+  priority?: string | null;
 }
 export interface WorkData { sprints: SprintRow[]; issues: IssueRow[]; coverage: Array<{ id: string; at: number; linesFound: number }>; hasSprints: boolean }
 

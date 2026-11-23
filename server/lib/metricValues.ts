@@ -17,6 +17,18 @@ import type pg from 'pg';
 import { randomUUID } from 'crypto';
 import { toPgPlaceholders } from '../../src/lib/db';
 
+/** The KPI columns the monthly quality side of Business impact is derived from (business_impact_quality_metrics). */
+export const BUSINESS_QUALITY_KPIS = new Set(['test_coverage', 'defect_density', 'defect_escape_rate', 'mttr_hours', 'deployment_frequency_per_week',
+  'lead_time_days', 'code_quality_score', 'change_failure_rate']);
+
+let businessQualitySeen = false;
+/** The derivation function exists (a deploy before the migration writes the KPI values without it). */
+async function businessQualityReady(client: pg.PoolClient): Promise<boolean> {
+  if (businessQualitySeen) return true;
+  businessQualitySeen = !!(await client.query(`SELECT to_regprocedure('public.refresh_business_quality_month(text, text)') IS NOT NULL AS ok`)).rows[0]?.ok;
+  return businessQualitySeen;
+}
+
 export interface MetricValueInput {
   teamId: string;
   companyId: string;
@@ -65,5 +77,9 @@ export async function writeMetricValues(client: pg.PoolClient, input: MetricValu
   // The UTC day of recordedAt, as (recordedAt AT TIME ZONE 'UTC')::date.
   const day = new Date(input.recordedAt).toISOString().slice(0, 10);
   await q(client, 'SELECT public.refresh_kpi_snapshots(?, ?::date, ?::text[])', [input.teamId, day, metrics]);
+  // The month's quality side of Business impact follows the KPI values (migration 20261207000000; sample data never).
+  if (input.source.toLowerCase() !== 'synthetic' && metrics.some((m) => BUSINESS_QUALITY_KPIS.has(m)) && (await businessQualityReady(client))) {
+    await q(client, 'SELECT public.refresh_business_quality_month(?, ?)', [input.teamId, day.slice(0, 7)]);
+  }
   return { day, valueIds };
 }

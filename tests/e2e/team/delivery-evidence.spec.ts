@@ -163,7 +163,7 @@ test.describe('Connect your CI: deployments and incidents', { tag: [TAG.area('ad
     await expect(dl.getByTestId('delivery-failed-change')).toContainText('Incident INC-1 linked to it');
     await expect(dl.getByTestId('delivery-incident')).toContainText('resolved after 30 min');
     await expect(dl.getByTestId('delivery-incident-deploy')).toContainText('rel-1');
-    await expect(page.getByTestId('kpi-source-change_failure_rate')).toContainText('computed');
+    await expect(page.getByTestId('kpi-source-change_failure_rate')).toContainText('Calculated from CI data');
     await page.getByTestId('how-calculated-change_failure_rate').click();
     await expect(page.getByRole('dialog')).toContainText('Written to the team’s KPI as source “computed”');
     await expect(page.getByRole('dialog').getByTestId('how-calculated-value')).toHaveText('50.0 %');

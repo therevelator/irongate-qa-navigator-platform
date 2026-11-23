@@ -5,6 +5,9 @@
  * Auth: a user token of a user with Browse on the projects (no Administer, no Execute Analysis), as a
  * Bearer token (SonarQube 10+, SonarCloud) or, for older servers, as the Basic user name (auth: basic).
  *
+ * Each issue carries its remediation effort (SonarQube's "effort", the minutes its technical debt, sqale_index,
+ * adds up): QE Navigator derives the team's technical debt items from it.
+ *
  * Read per project (projects: project key → team):
  *   GET /api/project_analyses/search?project=<key>&ps=1        the latest analysis (date, revision): read again only when it changed
  *   GET /api/issues/search?componentKeys=<key>&resolved=false&ps=500&p=<n>   open issues (at most 10,000: SonarQube's limit)
@@ -31,8 +34,18 @@ export function findingOf(i: any): Finding {
   return {
     fingerprint: createHash('sha256').update(`sonarqube\u0000${i.key}`).digest('hex').slice(0, 40), ruleId: String(i.rule ?? 'unknown').slice(0, 255), severity,
     category: type === 'VULNERABILITY' || type === 'SECURITY_HOTSPOT' ? 'security' : type === 'BUG' ? 'reliability' : type === 'CODE_SMELL' ? 'maintainability' : null,
-    path: path ? path.slice(0, 1000) : null, line: typeof i.line === 'number' ? i.line : null,
+    path: path ? path.slice(0, 1000) : null, line: typeof i.line === 'number' ? i.line : null, effortMinutes: effortMinutes(i.effort ?? i.debt),
   };
+}
+
+/** SonarQube's effort ("2d 1h 30min", "45min"; a day is 8 hours) in minutes, or null. */
+export function effortMinutes(v: unknown): number | null {
+  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 ? Math.round(v) : null;
+  if (typeof v !== 'string' || !v.trim()) return null;
+  const re = /(\d+(?:\.\d+)?)\s*(d|h|min)\b/g;
+  let total = 0; let any = false; let m: RegExpExecArray | null;
+  while ((m = re.exec(v.toLowerCase()))) { any = true; total += Number(m[1]) * (m[2] === 'd' ? 480 : m[2] === 'h' ? 60 : 1); }
+  return any ? Math.round(total) : null;
 }
 
 export class SonarQubeAdapter implements CiAdapter {
@@ -53,7 +66,7 @@ export class SonarQubeAdapter implements CiAdapter {
   describe(): string[] {
     return [
       `${this.src.baseUrl} (${this.src.auth} token), projects: ${Object.entries(this.src.teams).map(([p, t]) => `${p} → ${t}`).join(', ')}${this.src.branch ? `, branch ${this.src.branch}` : ''}`,
-      'the latest analysis, open issues (rule, severity, file; no messages), lines of code (ncloc), sent as one SARIF file',
+      'the latest analysis, open issues (rule, severity, file, remediation effort; no messages), lines of code (ncloc), sent as one SARIF file',
     ];
   }
 

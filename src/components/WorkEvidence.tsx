@@ -178,7 +178,7 @@ export const WorkEvidenceSection: React.FC<{ work: ReturnType<typeof useTeamWork
             <Card>
               <CardHeader
                 title="Sprints and defects"
-                subtitle={`Calculated by QE Navigator from the team’s raw issues: defects over the last ${data!.defects.windowDays} days, sprint values from the latest closed sprint${data!.sample.work ? ' (sample data: shown as evidence, not written to the team’s KPIs)' : ''}; open one to see the formula and the issues it counts.`}
+                subtitle={`Calculated by QE Navigator from the team’s raw issues: defects over the last ${data!.defects.windowDays} days, sprint values from the latest closed sprint${data!.sample.work ? ' (sample data: the team’s KPIs show these values)' : ''}; open one to see the formula and the issues it counts.`}
               />
               <Tiles metrics={workMetrics} keys={WORK_KEYS} onExplain={onExplain} testId="work-metrics" />
             </Card>
@@ -290,7 +290,7 @@ export const WorkEvidenceSection: React.FC<{ work: ReturnType<typeof useTeamWork
               <Card>
                 <CardHeader
                   title="Code quality (static analysis)"
-                  subtitle={`Calculated from the latest main-branch SARIF report of each repository and tool${data!.sample.quality ? ' (sample data: shown as evidence, not written to the team’s KPIs)' : ''}. Score = 100 × e^(−weighted findings per 1,000 lines ÷ 20); weights critical 10, high 5, medium 2, low 0.5.`}
+                  subtitle={`Calculated from the latest main-branch SARIF report of each repository and tool${data!.sample.quality ? ' (sample data: the team’s KPIs show these values)' : ''}. Score = 100 × e^(−weighted findings per 1,000 lines ÷ 20); weights critical 10, high 5, medium 2, low 0.5.`}
                   action={<Gauge size={16} className="text-slate-400" aria-hidden="true" />}
                 />
                 <Tiles metrics={qualityMetrics} keys={QUALITY_KEYS} onExplain={onExplain} testId="quality-metrics" />

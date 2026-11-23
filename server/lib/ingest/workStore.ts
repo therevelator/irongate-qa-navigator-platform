@@ -236,12 +236,12 @@ export async function storeAnalysis(client: pg.PoolClient, m: AnalysisMeta, a: P
   for (let i = 0; i < a.findings.length; i += CHUNK) {
     const part = a.findings.slice(i, i + CHUNK);
     await client.query(
-      `INSERT INTO analysis_findings (report_id, team_id, fingerprint, rule_id, rule_name, severity, level, category, message, path, line)
-       SELECT $1, $2, x.fp, x.rule, x.rn, x.sev, x.lvl, x.cat, x.msg, x.path, x.line
-         FROM unnest($3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::int[]) AS x(fp, rule, rn, sev, lvl, cat, msg, path, line)
+      `INSERT INTO analysis_findings (report_id, team_id, fingerprint, rule_id, rule_name, severity, level, category, message, path, line, effort_minutes)
+       SELECT $1, $2, x.fp, x.rule, x.rn, x.sev, x.lvl, x.cat, x.msg, x.path, x.line, x.eff
+         FROM unnest($3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[], $10::text[], $11::int[], $12::int[]) AS x(fp, rule, rn, sev, lvl, cat, msg, path, line, eff)
        ON CONFLICT (report_id, fingerprint) DO NOTHING`,
       [reportId, m.teamId, part.map((f) => f.fingerprint), part.map((f) => f.ruleId), part.map((f) => f.ruleName), part.map((f) => f.severity), part.map((f) => f.level),
-        part.map((f) => f.category), part.map((f) => f.message), part.map((f) => f.path), part.map((f) => f.line)]
+        part.map((f) => f.category), part.map((f) => f.message), part.map((f) => f.path), part.map((f) => f.line), part.map((f) => f.effortMinutes ?? null)]
     );
   }
   const linked = await relinkSeries(client, m.teamId, reportId);

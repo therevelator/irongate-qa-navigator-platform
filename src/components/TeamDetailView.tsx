@@ -31,7 +31,7 @@ import { FormulaSwitch } from './FormulaNote';
 import { useShowFormulas } from '../hooks/useShowFormulas';
 import { SIZING_ACCURACY_TOLERANCE } from '../data/metricCatalog';
 import type { MetricCatalogKey } from '../data/metricCatalog';
-import { changeOverDays, describeChange, lastDays, type HistoryPoint } from '../data/kpiTrend';
+import { changeOverDays, describeChange, historyToValueDay, lastDays, type HistoryPoint } from '../data/kpiTrend';
 import { ConfidenceNote, SampleMarker, StaleNote, type ConfidenceInfo } from './MetricQuality';
 import SampleDataBanner from './SampleDataBanner';
 import { PulseTeamSummary } from './PulseSurveyResults';
@@ -65,10 +65,15 @@ const INTERVAL_UNIT_MS: Record<string, number> = {
   months: 30 * 86_400_000,
 };
 
-/** "manual · as of 17 Nov 2026" caption for a KPI, or null when no provenance is recorded. */
+/** Caption label of a KPI's source (field_sources source). */
+const SOURCE_CAPTION: Record<string, string> = {
+  manual: 'Manual entry', unknown: 'Source not recorded', computed: 'Calculated from CI data', synthetic: 'Sample data',
+};
+
+/** "Manual entry · as of 17 Nov 2026" caption for a KPI, or null when no provenance is recorded. */
 const sourceCaption = (fs?: { source?: string; recorded_at?: string }): string | null => {
   if (!fs?.source) return null;
-  const label = fs.source === 'manual' ? 'Manual entry' : fs.source === 'unknown' ? 'Source not recorded' : fs.source;
+  const label = SOURCE_CAPTION[fs.source] ?? fs.source;
   const asOf = formatAsOf(fs.recorded_at);
   return asOf ? `${label} · as of ${asOf}` : label;
 };
@@ -305,7 +310,11 @@ const STATUS_BADGE: Record<KPIStatus, { tone: Tone; label: string }> = {
   'no-data': { tone: 'neutral', label: 'No data' },
 };
 
-const DIGITS: Partial<Record<string, number>> = { defectDensity: 2, systemAvailability: 3, infrastructureFailures: 0, sprintVelocity: 0, deploymentFrequencyPerWeek: 1 };
+// Columns stored as whole numbers (code quality, build and test time, blocked time, MTBF, …) are shown without decimals.
+const DIGITS: Partial<Record<string, number>> = {
+  defectDensity: 2, systemAvailability: 3, infrastructureFailures: 0, sprintVelocity: 0, deploymentFrequencyPerWeek: 1,
+  codeQualityScore: 0, avgBuildTimeMinutes: 0, testExecutionTimeMinutes: 0, blockedTimeHours: 0, mtbfHours: 0,
+};
 
 const statusTone = (s: KPIStatus): Tone => STATUS_BADGE[s].tone;
 
@@ -844,7 +853,7 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {detailedKPIs.filter(k => k.category === category.id).map(k => {
               const history = kpiHistory[k.historyKey] || [];
-              const change = describeChange(history, k.lowerIsBetter, !!k.threshold);
+              const change = describeChange(historyToValueDay(history, team.kpiFieldSources?.[k.historyKey]?.recorded_at), k.lowerIsBetter, !!k.threshold);
               const target = thresholdText(k.threshold, k.unit);
               const stale = k.value == null ? null : staleOf(k);
               return info(k.historyKey as MetricCatalogKey, (

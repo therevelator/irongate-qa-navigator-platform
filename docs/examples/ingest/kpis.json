@@ -1,0 +1,39 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "qe-metrics-job",
+  "kind": "kpis",
+  "items": [
+    {
+      "recordedAt": "2026-11-20T18:00:00Z",
+      "idempotencyKey": "payments-kpis-2026-11-20",
+      "sourceRef": "https://ci.acme.example/job/qe-kpis/412",
+      "metrics": {
+        "test_coverage": 81.4,
+        "test_flakiness_rate": 2.6,
+        "defect_density": 0.42,
+        "defect_escape_rate": 9.5,
+        "code_quality_score": 87,
+        "avg_build_time_minutes": 16,
+        "test_execution_time_minutes": 7,
+        "deployment_frequency_per_week": 4.25,
+        "lead_time_days": 2.3,
+        "mttr_hours": 2.5,
+        "parallel_test_efficiency": 83.5,
+        "sprint_velocity": 9,
+        "sprint_commitment_rate": 112.5,
+        "sprint_carryover": 37.5,
+        "first_time_pass_rate": 66.67,
+        "blocked_time_hours": 30,
+        "automation_coverage": 72.5,
+        "automation_roi": 185.4,
+        "change_failure_rate": 25,
+        "mtbf_hours": 68,
+        "system_availability": 99.62,
+        "infrastructure_failures": 1,
+        "sizing_accuracy": 1.1
+      }
+    }
+  ]
+}

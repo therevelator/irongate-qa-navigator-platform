@@ -32,12 +32,17 @@ import { looksLikeSarif, parseSarif, severityCounts, STATIC_ANALYSIS_FORMATS, ty
 import { storeAnalysis, storeIssues, storeSprints, type StoredIssue } from '../lib/ingest/workStore';
 import type { DayResult } from '../lib/calc/engine';
 import { calcOrQueue } from '../lib/calc/queue';
-import { workAffectedDays } from '../lib/calc/work';
+import { workAffectedDays, WORK_RECOMPUTE_DAYS } from '../lib/calc/work';
+import { daysBack, evidenceDaysFrom, firstDay, teamFact } from '../lib/calc/dependents';
+import { refreshTechDebtFromAnalysis } from '../lib/techDebtFromAnalysis';
 import { qualityAffectedDays } from '../lib/calc/quality';
 import { HttpError, actorOf, after, afterCommit, callerOf, checkTime, commonFields, computedOut, fail, noAccess, outOfScope, readInput, summaryItem, teamOwned, text } from './ingestRaw';
 import { applyIssueAllowList, minimisedIssuePayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
 
 const router = express.Router();
+
+/** The fields (query parameters or multipart fields) a SARIF request may carry; any other is refused. */
+const SARIF_REQUEST_FIELDS = ['team', 'teamId', 'commit', 'sha', 'branch', 'run', 'runId', 'attempt', 'format', 'startedAt', 'dryRun', 'repo', 'repository', 'loc', 'linesOfCode', 'report', 'file'];
 
 export const ISSUES_BODY_LIMIT = 10 * 1024 * 1024;
 const NOT_JSON = /^(multipart\/|application\/(xml|x-ndjson|zip|gzip)|text\/(xml|html|csv))/i;
@@ -168,6 +173,9 @@ export async function handleIssues(req: ApiKeyRequest, res: express.Response) {
         uploads.set(t, 'duplicateOf' in up ? { id: up.duplicateOf, fresh: false } : { id: up.id, fresh: true });
       }
       const uploadOf = (t: string) => uploads.get(t)?.id || null;
+      // Whether each team had sprints before this request (its first sprint switches every day from Kanban metrics).
+      const hadSprints = new Map<string, boolean>();
+      for (const t of teams) hadSprints.set(t, await teamFact(client, t, 'sprints'));
       const sprintDays = new Map<string, string[]>();
       let sprintChanges = 0;
       for (const t of teams) {
@@ -181,7 +189,15 @@ export async function handleIssues(req: ApiKeyRequest, res: express.Response) {
       let queued = false;
       for (const t of teams) {
         const changed = stored.filter((s) => s.team === t && s.status !== 'duplicate');
-        const days = workAffectedDays([...changed.flatMap((s) => s.days), ...(sprintDays.get(t) ?? [])]);
+        const eventDays = [...changed.flatMap((s) => s.days), ...(sprintDays.get(t) ?? [])];
+        // Order independence (server/lib/calc/dependents.ts): the work days already calculated from the first event day
+        // on (every one of them when the team's first sprint arrived), within the recalculation limit.
+        const flipped = !hadSprints.get(t) && (sprintDays.get(t) ?? []).length > 0;
+        const floor = daysBack(WORK_RECOMPUTE_DAYS);
+        const days = Array.from(new Set([
+          ...workAffectedDays(eventDays),
+          ...(eventDays.length ? await evidenceDaysFrom(client, t, ['work'], flipped ? floor : firstDay(eventDays), floor) : []),
+        ])).sort();
         const calc = await calcOrQueue(client, caller.companyId, t, days, { groups: ['work'], ingestionId, actorId: actorOf(caller) });
         queued ||= calc.queued;
         const result = calc.days;
@@ -243,6 +259,8 @@ export async function handleStaticAnalysis(req: ApiKeyRequest, res: express.Resp
     let reports: ParsedAnalysis[];
     try { reports = parseSarif(content); } catch (e) { if (e instanceof ReportError) throw new HttpError(400, e.message); throw e; }
     const parseMs = Date.now() - t0;
+    const sarifExtra = Object.keys(input.fields).filter((k) => !SARIF_REQUEST_FIELDS.includes(k));
+    if (sarifExtra.length) throw new HttpError(400, `Unknown field(s): ${sarifExtra.slice(0, 5).join(', ')} (accepted: ${SARIF_REQUEST_FIELDS.join(', ')})`);
     const repo = ((input.fields.repo ?? input.fields.repository ?? '').trim() || reports[0].repo || '').slice(0, 255);
     const commit = c.commit || reports[0].commit || '';
     if (commit.length > 80) throw new HttpError(400, 'commit must be at most 80 characters');
@@ -290,7 +308,12 @@ export async function handleStaticAnalysis(req: ApiKeyRequest, res: express.Resp
         days.push(s.day);
         out.push({ id: s.reportId, tool: r.tool, toolVersion: r.toolVersion, findings: r.findings.length, bySeverity: severityCounts(r.findings), suppressed: r.suppressed, rules: r.rules, newFindings: s.newFindings, fixedFindings: s.fixedFindings, duplicate: s.duplicate });
       }
-      const calc = await calcOrQueue(client, caller.companyId, c.teamId, qualityAffectedDays(days), { groups: ['quality'], ingestionId, actorId: actorOf(caller) });
+      // Order independence (server/lib/calc/dependents.ts): a report re-links the next one of its series, so the quality
+      // days already calculated from its day on are recalculated too.
+      const qDays = Array.from(new Set([...qualityAffectedDays(days), ...(await evidenceDaysFrom(client, c.teamId, ['quality'], firstDay(days)))])).sort();
+      const calc = await calcOrQueue(client, caller.companyId, c.teamId, qDays, { groups: ['quality'], ingestionId, actorId: actorOf(caller) });
+      // The team's technical debt items follow its latest main-branch reports (server/lib/techDebtFromAnalysis.ts).
+      await refreshTechDebtFromAnalysis(client, caller.companyId, c.teamId);
       const result = calc.days;
       items[0].metrics = Array.from(new Set(result.flatMap((d) => d.metrics.filter((m) => m.written).map((m) => m.kpi as string))));
       return {

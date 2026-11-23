@@ -350,6 +350,30 @@
     "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
   },
   {
+    "path": "summary.pipelineHealthBasis.definition",
+    "before": "Successful pipeline runs / (successful + failed) runs, last 30 days",
+    "after": "Successful pipeline runs / (successful + failed) runs, last 30 days (the runs your CI sent, as the engine counted them; cancelled runs left out)",
+    "reason": "Pipeline health from the ingested runs (docs/DATA_FLOW.md gap G1): the runs the engine counted from pipeline_runs_raw, with the build time over the same days; the golden company sends no pipeline runs, so it stays without data"
+  },
+  {
+    "path": "summary.pipelineHealthBasis.teams",
+    "before": "<absent>",
+    "after": 0,
+    "reason": "Pipeline health from the ingested runs (docs/DATA_FLOW.md gap G1): the runs the engine counted from pipeline_runs_raw, with the build time over the same days; the golden company sends no pipeline runs, so it stays without data"
+  },
+  {
+    "path": "summary.pipelineHealthBasis.avgBuildTimeMinutes",
+    "before": "<absent>",
+    "after": null,
+    "reason": "Pipeline health from the ingested runs (docs/DATA_FLOW.md gap G1): the runs the engine counted from pipeline_runs_raw, with the build time over the same days; the golden company sends no pipeline runs, so it stays without data"
+  },
+  {
+    "path": "summary.pipelineHealthBasis.source",
+    "before": "<absent>",
+    "after": "pipeline_runs_raw",
+    "reason": "Pipeline health from the ingested runs (docs/DATA_FLOW.md gap G1): the runs the engine counted from pipeline_runs_raw, with the build time over the same days; the golden company sends no pipeline runs, so it stays without data"
+  },
+  {
     "path": "summary.workloadBalanceIndex",
     "before": "<absent>",
     "after": null,
