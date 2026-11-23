@@ -237,13 +237,12 @@ describe('Analytics scope by role', () => {
     expect((await get(`/api/metrics/developer/${peerId}`, c.manager)).status).toBe(403);
   });
 
-  it('SCOPE-006: developer recommendations return only the engineer\'s own row', async () => {
+  it('SCOPE-006: developer recommendations are not offered to software engineers', async () => {
     if (skip()) return;
     const res = await get(`/api/teams/${testTeamId}/developer-ai-suggestions`, c.engineer);
     if (res.status === 429) return; // AI rate limit (10/min) reached by other suites
-    expect(res.status).toBe(200);
-    expect((res.body.developers || []).every((d: any) => d.developerId === u.engineer.id)).toBe(true);
-    expect((res.body.metrics || []).every((m: any) => m.developerId === u.engineer.id)).toBe(true);
+    expect(res.status).toBe(403);
+    expect(res.body.developers).toBeUndefined();
     const other = await get(`/api/teams/${leadTeamId}/developer-ai-suggestions`, c.engineer);
     if (other.status !== 429) expect(other.status).toBe(403);
   });

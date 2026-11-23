@@ -206,6 +206,13 @@ test.describe('Configuration values and sign-in lifetime', { tag: [TAG.area('par
     await expect(page.getByText('Reset to default')).toBeVisible();
     await expect(row.getByText('Default')).toBeVisible();
   });
+
+  test('PAR-15 a manager sees the expected update frequencies read-only (company-wide values)', { tag: [TAG.negative, TAG.role('manager')] }, async ({ signInAs, page }) => {
+    await signInAs('manager', '/metric-intervals');
+    await expect(page.getByTestId('intervals-read-only')).toHaveText('These are company-wide values: only a super admin can change them.');
+    await expect(page.getByLabel(/ interval$/).first()).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Save changes' })).toHaveCount(0);
+  });
 });
 
 test.describe('Alert rules, Slack and the digest', { tag: [TAG.area('alerts'), TAG.area('slack')] }, () => {

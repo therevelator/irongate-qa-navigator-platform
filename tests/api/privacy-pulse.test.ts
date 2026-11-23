@@ -241,10 +241,10 @@ describe('k-anonymity of developer aggregates (2 vs 3 contributors, opt-out)', (
     const b = await get(`/api/teams/${B}/developer-ai-suggestions`, c['priv-admin']);
     expect(b.body.teamSummaryPrivacy.suppressed).toBe(true);
     expect(b.body.teamInsight).toBe('Team summary not shown: fewer than 3 contributors.');
-    // An engineer sees only their own recommendation and no team summary.
+    // Software engineers get no developer recommendations at all (docs/ROLE_ACCESS.md: "—").
     const own = await get(`/api/teams/${A}/developer-ai-suggestions`, c['priv-a1']);
-    expect(own.body.developers.map((d: any) => d.developerId)).toEqual(['priv-a1']);
-    expect(own.body.teamInsight).toBeNull();
+    expect(own.status).toBe(403);
+    expect(own.body.developers).toBeUndefined();
   });
 
   it('PRIV-007: company summary: workload balance only from teams that reach 3 (team B left out); it is not wellbeing', async () => {
