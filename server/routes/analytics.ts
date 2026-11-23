@@ -7,7 +7,7 @@ import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
 import { runDemoSeed, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
 import { demoSummary, todayUtc, DEMO_COMPANY_ID } from '../seeds/demoData';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues, teamKpiTrack } from '../../src/config/metricsConfig';
 import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT, techDebtRoi } from '../lib/metricFormulas';
@@ -2140,6 +2140,17 @@ const ENGINEERING_HEALTH_WEIGHTS = {
  * for a company-wide scope (super admins), else the ids of the active teams of the caller's
  * analytics scope (canViewTeamAnalytics: a QA manager's departments, everyone else's teams).
  */
+/**
+ * Key of the executive-briefing snapshots of a caller's scope (company_kpi_snapshots.scope_key):
+ * 'company' for the whole company, else 'teams:' + a hash of the sorted team ids in scope, so callers
+ * with the same teams share their history and different scopes never mix.
+ */
+export function briefingScopeKey(teamIds: string[] | null): string {
+  if (teamIds === null) return 'company';
+  const ids = [...new Set(teamIds.map(String))].sort();
+  return `teams:${createHash('sha256').update(ids.join('\n')).digest('hex').slice(0, 32)}`;
+}
+
 export async function summaryTeamIds(req: AuthRequest): Promise<{ teamIds: string[] | null; level: string; companyTeamCount: number }> {
   const actor = policyActor(req);
   const rows = await query<any>('SELECT id, department_id FROM teams WHERE company_id = ? AND is_active = TRUE', [req.companyId]);
@@ -2205,7 +2216,7 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
     JOIN teams t ON t.id = ks.team_id
     WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))
       AND ks.snapshot_date >= CURRENT_DATE - 14
-      AND ks.snapshot_date < CURRENT_DATE - 7
+      AND ks.snapshot_date <= CURRENT_DATE - 7
     ORDER BY ks.team_id, ks.snapshot_date DESC
   `, [companyId, teamIds, teamIds]);
   const prevDist = distributionOf(prevRows.map((r: any) => ({
@@ -2224,9 +2235,10 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
     else riskLevel = 'stable';
   }
 
-  // Averages over teams that have a current value (stale and missing values excluded, never
-  // counted as 0), weighted by team size; the unweighted means are in kpiAveragesUnweighted.
-  const avgDist = (field: string) => distributionOf(teamsWithData.map((t: any) => ({ value: fresh(t, field), weight: weightOf(t.team_id) })));
+  // Averages over every active team that has a current value of that KPI (stale and missing values
+  // excluded, never counted as 0), whether or not the team has a current QA score; weighted by team
+  // size; the unweighted means are in kpiAveragesUnweighted.
+  const avgDist = (field: string) => distributionOf(evaluated.map((x: any) => ({ value: fresh(x.t, field), weight: weightOf(x.t.team_id) })));
   const avgField = (field: string) => roundTo(avgDist(field).weightedMean, 1);
   const avgTestCoverage = avgField('test_coverage');
   const avgDefectEscapeRate = avgField('defect_escape_rate');
@@ -2319,10 +2331,13 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
   const developerWellnessIndex = wellbeing.value !== null ? Math.round(wellbeing.value) : null;
 
   // Delivery performance (DORA): mean of per-team level scores over classified teams, weighted
-  // by team size. A team with a stale DORA input is 'Unknown' (left out), like a missing one.
+  // by team size. Every active team with DORA inputs is classified, whether or not it has a QA
+  // score; a team with a stale or missing DORA input (or no snapshot at all) is 'Unknown' (left
+  // out). The confidence is "n of m" over all active teams.
   const doraLevels: Record<DoraLevelOrUnknown, number> = { Elite: 0, High: 0, Medium: 0, Low: 0, Unknown: 0 };
   const doraScores: Array<{ value: number; weight: number }> = [];
-  for (const t of teamsWithData) {
+  doraLevels.Unknown += Math.max(0, activeTeams.length - evaluated.length);
+  for (const { t } of evaluated as Array<{ t: any }>) {
     const level = classifyDoraLevel({
       deployment_frequency_per_week: fresh(t, 'deployment_frequency_per_week'),
       lead_time_days: fresh(t, 'lead_time_days'),
@@ -2369,7 +2384,7 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
   const healthIncluded = (Object.keys(healthParts) as Array<keyof typeof healthParts>).filter(k => healthParts[k] !== null);
   const healthMissing = (Object.keys(healthParts) as Array<keyof typeof healthParts>).filter(k => healthParts[k] === null);
   const engineeringHealthConfidence = composite(engineeringHealthScore, healthIncluded.length, Object.keys(healthParts).length);
-  const deliveryPerformanceConfidence = composite(deliveryPerformanceScore, doraScores.length, teamsWithData.length);
+  const deliveryPerformanceConfidence = composite(deliveryPerformanceScore, doraScores.length, activeTeams.length);
   // Any current KPI value of an active team comes from generated sample data.
   const sampleData = evaluated.some((x: any) => x.ev.sampleData);
   const round1 = (v: number | null) => roundTo(v, 1);
@@ -2528,12 +2543,15 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
     const m = await computeCompanyMetrics(companyId, scope.teamIds);
     const companyWide = scope.teamIds === null;
 
-    // 2. Store Snapshot (nulls stay null): company-wide figures only
-    if (companyWide) await query(`
+    // 2. Store today's snapshot of the figures this caller sees (nulls stay null), under the key of
+    // the caller's scope: 'company' for company-wide callers, else the set of teams in scope
+    // (briefingScopeKey). A scoped caller never reads or writes another scope's snapshots.
+    const scopeKey = briefingScopeKey(scope.teamIds);
+    await query(`
       INSERT INTO company_kpi_snapshots 
-      (company_id, snapshot_date, engineering_health_score, delivery_performance_score, developer_wellness_index, tech_debt_status_score, pipeline_health_score, avg_qa_score, avg_test_coverage, avg_defect_escape_rate, avg_flakiness_rate, automation_coverage)
-      VALUES (?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (company_id, snapshot_date) DO UPDATE SET
+      (company_id, scope_key, snapshot_date, engineering_health_score, delivery_performance_score, developer_wellness_index, tech_debt_status_score, pipeline_health_score, avg_qa_score, avg_test_coverage, avg_defect_escape_rate, avg_flakiness_rate, automation_coverage)
+      VALUES (?, ?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (company_id, scope_key, snapshot_date) DO UPDATE SET
       engineering_health_score = EXCLUDED.engineering_health_score,
       delivery_performance_score = EXCLUDED.delivery_performance_score,
       developer_wellness_index = EXCLUDED.developer_wellness_index,
@@ -2545,19 +2563,19 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
       avg_flakiness_rate = EXCLUDED.avg_flakiness_rate,
       automation_coverage = EXCLUDED.automation_coverage
     `, [
-      companyId,
+      companyId, scopeKey,
       m.engineeringHealthScore, m.deliveryPerformanceScore, m.developerWellnessIndex, m.techDebtStatusScore, m.pipelineHealthScore,
       m.globalQaScore, m.avgTestCoverage, m.avgDefectEscapeRate, m.avgFlakinessRate, m.automationCoverage
     ]);
 
-    // 3. History: company snapshots from the last 30 days (company-wide callers only; the stored
-    // snapshots are company aggregates and would show other teams' figures to a scoped caller)
-    const history = companyWide ? await query<any>(`
+    // 3. History: the snapshots of the same scope from the last 30 days (a scoped caller never
+    // sees the company aggregates, which hold other teams' figures)
+    const history = await query<any>(`
       SELECT * FROM company_kpi_snapshots 
-      WHERE company_id = ? 
+      WHERE company_id = ? AND scope_key = ?
         AND snapshot_date >= CURRENT_DATE - 30
       ORDER BY snapshot_date ASC
-    `, [companyId]) : [];
+    `, [companyId, scopeKey]);
 
     // 4. Generate AI Analysis (retries + smaller-model fallback)
     let aiAnalysis = isGroqConfigured()
@@ -2588,7 +2606,7 @@ Provide a concise executive summary (3-4 sentences) highlighting the biggest ris
             },
             {
               role: 'user',
-              content: `Here are the company snapshots from the last 30 days (${history.length} snapshot${history.length === 1 ? '' : 's'}): ${JSON.stringify(history.map((h: any) => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
+              content: `Here are the ${companyWide ? 'company' : 'scope'} snapshots from the last 30 days (${history.length} snapshot${history.length === 1 ? '' : 's'}): ${JSON.stringify(history.map((h: any) => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
             }
           ]
         });
