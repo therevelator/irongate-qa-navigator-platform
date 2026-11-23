@@ -141,7 +141,7 @@ beforeAll(async () => {
   const other = await one(`SELECT t.id, t.company_id FROM teams t WHERE t.company_id <> $1 AND t.is_active ORDER BY t.id LIMIT 1`, [S]);
   otherTeam = other.id; otherCompany = other.company_id;
   otherUser = (await one(`SELECT id FROM users WHERE company_id = $1 LIMIT 1`, [otherCompany])).id;
-}, 120_000);
+}, 600_000); // the sandbox build (above): the same budget as the tests, it takes over two minutes on a CI runner
 
 afterAll(async () => {
   // The analytics routes schedule their daily job on import: stop it so Jest can exit.
