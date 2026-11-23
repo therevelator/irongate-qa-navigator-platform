@@ -12,7 +12,7 @@
 import { KPI_COLUMN_NAMES } from './kpiIngest';
 import { qaScoreComposite, type QaScoreComposite } from './metricFormulas';
 import { query } from '../../src/lib/db';
-import { hasSampleData, loadIntervals, referenceFor, valueInfo, type IntervalMap, type ValueInfo } from './staleness';
+import { hasSampleData, loadIntervals, referenceFor, referenceForRow, valueInfo, type IntervalMap, type ValueInfo } from './staleness';
 import { loadTargetBook, TARGET_METRICS, TARGET_METRIC_KEYS, type TargetBook, type TargetMetric, type TeamRef } from './targets';
 import { KPI_TARGET_KEYS, KPI_TARGETS, type KpiTargetCheck } from '../../src/config/metricsConfig';
 
@@ -139,11 +139,22 @@ export async function loadDataClock(companyId: string, intervals: IntervalMap): 
  * history uses the same rule) and flagged `outdated`, with the team's own `lastUpdated`, so the
  * screens say "Last updated <date>". Nothing is invented: the values are the stored ones.
  */
+/**
+ * Reference time for a current snapshot that holds generated sample data: the start of today (UTC), not now.
+ * Sample records exist for complete days only (server/seeds/demoRaw.ts: the nightly refresh adds yesterday), so
+ * the newest sample value is from yesterday evening. Measured at now it would pass a 24-hour interval in the
+ * evening and the QA score would read "no data" until the next refresh; measured at the start of today it is
+ * what it is: the latest complete day. A snapshot without sample data is measured at now, as before.
+ */
+export function sampleReference(row: Record<string, any>, now = Date.now()): number {
+  return referenceForRow(row, null, now);
+}
+
 export function latestReference(row: Record<string, any>, intervals: IntervalMap, now = Date.now(), clock?: number | null): { reference: number; lastUpdated: string | null; outdated: boolean } {
   const lastUpdated = latestRecordedAt(row, intervals);
   const own = lastUpdated ? Date.parse(lastUpdated) : NaN;
   const t = clock === undefined || clock === null ? own : Math.max(clock, Number.isFinite(own) ? own : clock);
-  if (!Number.isFinite(t) || now - t <= OUTDATED_AFTER_MS) return { reference: now, lastUpdated, outdated: false };
+  if (!Number.isFinite(t) || now - t <= OUTDATED_AFTER_MS) return { reference: sampleReference(row, now), lastUpdated, outdated: false };
   return { reference: referenceFor(new Date(t).toISOString().slice(0, 10), now), lastUpdated, outdated: true };
 }
 
@@ -210,7 +221,7 @@ export async function kpiHistoryFor(companyId: string, team: { id: string; depar
       }
     }
     // What was current on that day: staleness measured at the end of the day.
-    const ev = evaluateSnapshot(row, team, ctx, referenceFor(date, now));
+    const ev = evaluateSnapshot(row, team, ctx, referenceForRow(row, date, now));
     if (ev.qa.value !== null) metricHistory.qa_score.push({ date, value: ev.qa.value });
     qaConfidence.push({ date, inputsUsed: ev.qa.inputsUsed, inputsTotal: ev.qa.inputsTotal, confidence: ev.qa.confidence, staleInputs: ev.qa.staleInputs });
   }

@@ -55,6 +55,17 @@ export function referenceFor(day: string | null | undefined, now = Date.now()): 
   return Number.isFinite(end) ? Math.min(end, now) : now;
 }
 
+/**
+ * Reference time for evaluating a snapshot row of `day`: referenceFor(day), except that a row holding generated
+ * sample data is never measured later than the start of today (UTC). Sample records exist for complete days only
+ * (the nightly refresh adds yesterday), so today's sample snapshot carries yesterday evening's values; measured at
+ * now they would pass a 24-hour interval in the evening, hours before the next refresh.
+ */
+export function referenceForRow(row: Record<string, any> | null | undefined, day: string | null | undefined, now = Date.now()): number {
+  const r = referenceFor(day, now);
+  return row && hasSampleData(row.field_sources) ? Math.min(r, Math.max(Math.floor(now / 86_400_000) * 86_400_000, day ? Date.parse(`${String(day).slice(0, 10)}T00:00:00Z`) || 0 : 0)) : r;
+}
+
 export interface ValueInfo {
   /** ISO time the value is for (field_sources recorded_at, else the snapshot day). */
   recordedAt: string | null;

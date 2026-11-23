@@ -27,7 +27,7 @@ import {
   distributionOf,
 } from '../lib/metricFormulas';
 import { evaluateLatestSnapshot, evaluateSnapshot, loadDataClock, type EvalContext, type LatestEvaluation, type SnapshotEvaluation } from '../lib/kpiEvaluation';
-import { loadIntervals, referenceFor, STALENESS_RULE_TEXT } from '../lib/staleness';
+import { loadIntervals, referenceFor, STALENESS_RULE_TEXT, referenceForRow } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 
 /** Round a DB numeric (often a string) to `digits` decimals; null stays null. */
@@ -110,7 +110,7 @@ router.get('/analytics/history', authenticateToken, async (req: any, res) => {
       byDay.get(day)!.push(r);
     }
     const chartData = [...byDay.entries()].map(([day, list]) => {
-      const evs = list.map((r) => ({ r, ev: evaluateSnapshot(r, { id: String(r.team_id), department_id: r.department_id }, ctx, referenceFor(day)) }));
+      const evs = list.map((r) => ({ r, ev: evaluateSnapshot(r, { id: String(r.team_id), department_id: r.department_id }, ctx, referenceForRow(r, day)) }));
       const out: Record<string, any> = { date: day };
       for (const [col, key, digits] of HISTORY_COLUMNS) {
         const vals = evs.filter((x) => x.ev.values[col] && !x.ev.values[col].stale).map((x) => toNum(x.r[col])).filter((v): v is number => v !== null);

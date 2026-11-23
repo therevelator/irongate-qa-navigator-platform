@@ -17,7 +17,7 @@ import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
 import { evaluateLatestSnapshot, evaluateSnapshot, loadDataClock, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
-import { loadIntervals, referenceFor } from '../lib/staleness';
+import { loadIntervals, referenceFor, referenceForRow } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 import { teamMemberCountSql } from '../lib/teamMembership';
 import { multiTeamDeveloperSummary, teamDeveloperSummary } from '../lib/developerAggregates';
@@ -2239,7 +2239,7 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
     ORDER BY ks.team_id, ks.snapshot_date DESC
   `, [companyId, teamIds, teamIds]);
   const prevDist = distributionOf(prevRows.map((r: any) => ({
-    value: evaluateSnapshot(r, { id: r.team_id, department_id: r.department_id }, evalCtx, referenceFor(r.snapshot_day, now)).qa.value,
+    value: evaluateSnapshot(r, { id: r.team_id, department_id: r.department_id }, evalCtx, referenceForRow(r, r.snapshot_day, now)).qa.value,
     weight: weightOf(r.team_id),
   })));
   const prevScore = prevDist.weightedMean;

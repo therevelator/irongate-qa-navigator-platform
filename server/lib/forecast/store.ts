@@ -17,7 +17,7 @@ import { SIZING_ACCURACY_TOLERANCE } from '../../../src/data/metricCatalog';
 import { KPI_COLUMNS, KPI_COLUMN_NAMES } from '../kpiIngest';
 import { QA_SCORE_THRESHOLDS } from '../metricFormulas';
 import { evaluateSnapshot, type EvalContext } from '../kpiEvaluation';
-import { loadIntervals, referenceFor } from '../staleness';
+import { loadIntervals, referenceFor, referenceForRow } from '../staleness';
 import { isTargetMetric, loadTargetBook, TARGET_METRICS, type TargetBook } from '../targets';
 import { metricLabel } from '../alerts';
 import {
@@ -122,7 +122,7 @@ export async function loadObservations(team: TeamRefLite, asOf: string, ctx?: Ev
     const now = Date.now();
     const qa: Obs[] = [];
     for (const s of snaps) {
-      const ev = evaluateSnapshot(s, { id: team.id, department_id: team.department_id }, c, referenceFor(s.snapshot_day, now));
+      const ev = evaluateSnapshot(s, { id: team.id, department_id: team.department_id }, c, referenceForRow(s, s.snapshot_day, now));
       if (ev.qa.value !== null) qa.push({ day: s.snapshot_day, value: ev.qa.value });
     }
     if (qa.length) out.set('qa_score', qa);

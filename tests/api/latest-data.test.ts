@@ -18,7 +18,8 @@
 import request from 'supertest';
 import type { Client } from 'pg';
 import { API_URL, NEW_PW, backendUp, cookieFrom, get, localDb, post } from './helpers/http';
-import { latestReference, OUTDATED_AFTER_MS } from '../../server/lib/kpiEvaluation';
+import { latestReference, sampleReference, OUTDATED_AFTER_MS } from '../../server/lib/kpiEvaluation';
+import { referenceForRow, valueInfo } from '../../server/lib/staleness';
 import { defaultIntervals } from '../../server/lib/staleness';
 
 let up = true;
@@ -70,6 +71,32 @@ afterAll(async () => {
   if (!up) return;
   await db.query('DELETE FROM kpi_snapshots WHERE team_id = ANY($1::text[])', [[teamA, teamB]]);
   await db?.end();
+});
+
+describe('Sample data is measured at the start of today, not now', () => {
+  // Sample records exist for complete days only: at 21:00 the newest sample value is from yesterday evening.
+  const now = Date.parse('2026-11-23T21:00:00Z');
+  const day = 86_400_000;
+  const sample = { snapshot_date: '2026-11-23', test_coverage: 80, automation_roi: 12,
+    field_sources: { test_coverage: { source: 'computed', recorded_at: '2026-11-22T19:43:00.000Z', carried_forward: true }, automation_roi: { source: 'synthetic' } } };
+  const real = { ...sample, field_sources: { test_coverage: sample.field_sources.test_coverage } };
+
+  test('LD-010 a sample snapshot: yesterday evening\'s value is not stale in the evening; a real one is', () => {
+    expect(new Date(referenceForRow(sample, '2026-11-23', now)).toISOString()).toBe('2026-11-23T00:00:00.000Z');
+    expect(referenceForRow(real, '2026-11-23', now)).toBe(now);
+    expect(sampleReference(sample, now)).toBe(Date.parse('2026-11-23T00:00:00Z'));
+    expect(latestReference(sample, { test_coverage: day }, now)).toMatchObject({ outdated: false, reference: Date.parse('2026-11-23T00:00:00Z') });
+    expect(valueInfo(sample, ['test_coverage'], { test_coverage: day }, referenceForRow(sample, '2026-11-23', now)).test_coverage.stale).toBe(false);
+    expect(valueInfo(real, ['test_coverage'], { test_coverage: day }, referenceForRow(real, '2026-11-23', now)).test_coverage.stale).toBe(true);
+  });
+
+  test('LD-011 past days are unchanged, and sample data that was not refreshed still goes stale', () => {
+    // A past day is measured at its end, sample or not.
+    expect(new Date(referenceForRow(sample, '2026-11-20', now)).toISOString()).toBe('2026-11-21T00:00:00.000Z');
+    // No refresh for two days: the value of the 22nd is older than a day at the start of the 25th.
+    const later = Date.parse('2026-11-25T09:00:00Z');
+    expect(valueInfo(sample, ['test_coverage'], { test_coverage: day }, referenceForRow(sample, '2026-11-25', later)).test_coverage.stale).toBe(true);
+  });
 });
 
 describe('Latest data shown when nothing new arrived for over a day (FI-22)', () => {

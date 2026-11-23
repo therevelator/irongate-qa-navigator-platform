@@ -27,7 +27,7 @@ import type pg from 'pg';
 import { pool, query, toPgPlaceholders } from '../../src/lib/db';
 import { KPI_COLUMNS, KPI_COLUMN_NAMES, onKpiWritten } from './kpiIngest';
 import { evaluateSnapshot, KPI_CAMEL, type EvalContext } from './kpiEvaluation';
-import { loadIntervals, referenceFor } from './staleness';
+import { loadIntervals, referenceFor, referenceForRow } from './staleness';
 import { loadTargetBook, TARGET_METRIC_KEYS, TARGET_METRICS, type TargetMetric } from './targets';
 import { statusFor } from '../../src/data/detailedKPIs';
 
@@ -207,7 +207,7 @@ export async function qaScoreOn(team: TeamRow, ctx: EvalContext, day: string, to
   );
   if (!rows.length) return null;
   const d = String(rows[0].snapshot_date).slice(0, 10);
-  const ev = evaluateSnapshot(rows[0], team, ctx, referenceFor(d, ctx.now ?? Date.now()));
+  const ev = evaluateSnapshot(rows[0], team, ctx, referenceForRow(rows[0], d, ctx.now ?? Date.now()));
   return { value: ev.qa.value, day: d };
 }
 
@@ -219,7 +219,7 @@ async function teamConditions(team: TeamRow, companyId: string, latest: any | nu
   if (!latest) return out;
   const now = ctx.now ?? Date.now();
   const ref = { companyId, departmentId: team.department_id, teamId: team.id };
-  const ev = evaluateSnapshot(latest, team, ctx, now);
+  const ev = evaluateSnapshot(latest, team, ctx, referenceForRow(latest, null, now));
 
   const threshold = book.resolve('threshold_breach', ref);
   if (threshold.enabled) {
