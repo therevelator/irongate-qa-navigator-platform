@@ -75,7 +75,7 @@ describe('R2 Phase 4 fixes', () => {
     // An explicit null clears one field.
     expect((await post('/api/metrics/developer', c.admin, { teamId: T.A1, developerId: ids.dev, happinessScore: null })).status).toBe(200);
     // Ranges and types: 400 with a message, never a database error.
-    for (const bad of [{ focusTimeHours: 25 }, { contextSwitchesPerDay: 2.5 }, { prMergeTimeAvg: 'abc' }, { happinessScore: 101 }, { codeReviewTimeAvg: 1e12 }]) {
+    for (const bad of [{ focusTimeHours: 25 }, { contextSwitchesPerDay: -1 }, { prMergeTimeAvg: 'abc' }, { happinessScore: 101 }, { codeReviewTimeAvg: 1e12 }]) {
       const r = await post('/api/metrics/developer', c.admin, { teamId: T.A1, developerId: ids.dev, ...bad });
       expect({ bad, status: r.status }).toEqual({ bad, status: 400 });
       expect(typeof r.body.error).toBe('string');
