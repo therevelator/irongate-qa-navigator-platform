@@ -18,7 +18,7 @@
 import type { AzureDevOpsSource, HttpSettings } from '../../config';
 import { requireSecret } from '../../config';
 import { SourceClient, SourceError } from '../client';
-import { kindsOf, findReports, parallelGroupOf, rollbackTracker, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, lcovTotalsOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
+import { pullRequest, kindsOf, findReports, parallelGroupOf, rollbackTracker, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, lcovTotalsOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
 
 const V = '7.1';
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled' | undefined> = { succeeded: 'success', partiallySucceeded: 'failed', failed: 'failed', canceled: 'cancelled' };
@@ -34,7 +34,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
   private vsrm: SourceClient | null = null;
   private defs = new Map<string, { id: number; name: string }>();
 
-  constructor(private src: AzureDevOpsSource, http: HttpSettings, private opts: { links: boolean }, env: NodeJS.ProcessEnv = process.env) {
+  constructor(private src: AzureDevOpsSource, http: HttpSettings, private opts: import('./common').CiOptions, env: NodeJS.ProcessEnv = process.env) {
     const token = requireSecret(src.tokenEnv, `sources.${src.name} (an Azure DevOps personal access token)`, env);
     const headers = { Authorization: 'Basic ' + Buffer.from(`:${token}`).toString('base64') };
     const authHint = 'Use a personal access token with Build (Read), Test Management (Read), Code (Read) and Environment (Read)' + (src.releases ? ' and Release (Read)' : '') + ' on the organisation.';
@@ -116,6 +116,46 @@ export class AzureDevOpsAdapter implements CiAdapter {
     }
     yield await this.environmentDeployments(since, until);
     if (this.vsrm) yield await this.releaseDeployments(since, until);
+    if (this.src.pullRequests) yield await this.pullRequests(since, until);
+  }
+
+  /**
+   * The project's pull requests created or closed in the window (or still open): created and closed times, the first
+   * comment or vote by someone other than the author (from the threads), and (developer metrics only) the author's
+   * sign-in address, sent as a pseudonym. The team is the one mapped to the repository's name (or defaultTeam).
+   */
+  private async pullRequests(since: Date, until: Date): Promise<CiPage> {
+    const page: CiPage = { records: [], skipped: [], changedAt: null };
+    for (let skip = 0; skip < this.src.maxRunsPerRepo; skip += 100) {
+      const list: any[] = (await this.client.get(this.p('/git/pullrequests'), { 'searchCriteria.status': 'all', $top: 100, $skip: skip, 'api-version': V }))?.value ?? [];
+      for (const pr of list) {
+        const opened = ms(pr.creationDate);
+        const closed = ms(pr.closedDate);
+        if (opened === null || opened >= until.getTime()) continue;
+        if (pr.status !== 'active' && (closed ?? opened) < since.getTime() && opened < since.getTime()) continue;
+        const repo = String(pr.repository?.name ?? '');
+        const team = this.src.teams[repo] ?? this.src.defaultTeam;
+        if (!team) { page.skipped.push({ id: `pull request ${pr.pullRequestId}`, reason: `repository ${repo || '?'} is not mapped to a team (pipelines / defaultTeam)` }); continue; }
+        try {
+          const author = String(pr.createdBy?.id ?? '');
+          const threads: any[] = (await this.client.getOptional(this.p(`/git/repositories/${pr.repository?.id}/pullRequests/${pr.pullRequestId}/threads`), { 'api-version': V }))?.value ?? [];
+          const reviews = threads.flatMap((t) => (t.comments ?? []).filter((c: any) => String(c.author?.id ?? '') !== author
+            && (c.commentType !== 'system' || t.properties?.CodeReviewThreadType?.$value === 'VoteUpdate')).map((c: any) => ms(c.publishedDate))).filter((t: number | null): t is number => t !== null);
+          const state = pr.status === 'completed' ? 'merged' : pr.status === 'abandoned' ? 'closed' : 'open';
+          page.records.push(pullRequest(team, {
+            id: String(pr.pullRequestId), repo, authorEmail: this.opts.person ? String(pr.createdBy?.uniqueName ?? '') : null, state,
+            openedAt: opened, firstReviewAt: reviews.length ? Math.min(...reviews) : null, mergedAt: state === 'merged' ? closed : null, closedAt: state === 'closed' ? closed : null,
+          }, this.opts));
+        } catch (e) {
+          if (e instanceof SourceError && e.auth) throw e;
+          page.skipped.push({ id: `pull request ${pr.pullRequestId}`, reason: (e as Error).message });
+        }
+        const at = closed ?? opened;
+        if (!page.changedAt || new Date(at).toISOString() > page.changedAt) page.changedAt = new Date(at).toISOString();
+      }
+      if (list.length < 100) break;
+    }
+    return page;
   }
 
   private async build(team: string, b: any, result: 'success' | 'failed' | 'cancelled', page: CiPage): Promise<CiRecord[]> {
@@ -155,7 +195,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
       }
     }
     // Artifacts (coverage per file, SARIF; test files when there are no test runs).
-    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: Array<'tests' | 'coverage' | 'sarif'> }> = [];
+    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: import('./common').ArtifactKind[] }> = [];
     for (const a of (await this.client.get(this.p(`/build/builds/${b.id}/artifacts`), { 'api-version': V })).value ?? []) {
       const kinds = kindsOf(String(a.name), this.src.artifacts).filter((k) => k !== 'tests' || !cases.length);
       const url = a.resource?.downloadUrl;
@@ -165,7 +205,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
       if (!d.ok) { page.skipped.push({ id: `build ${b.id}/${a.name}`, reason: `artifact ${d.reason}: ${d.message}` }); continue; }
       files.push({ artifact: String(a.name), name: `${a.name}.zip`, data: d.body, kinds });
     }
-    const found = files.length ? findReports(files) : { tests: [], coverage: [], sarif: [], files: 0, skipped: [] };
+    const found = files.length ? findReports(files) : { tests: [], coverage: [], sarif: [], performance: [], files: 0, skipped: [] };
     page.skipped.push(...found.skipped.map((x) => ({ id: `build ${b.id}/${x.id}`, reason: x.reason })));
     // Azure DevOps gives test results as JSON only: written out as a JUnit file (form, not content).
     if (cases.length) out.push(reportItem('test-report', team, [junitOf(cases)], meta, { format: 'junit' }));

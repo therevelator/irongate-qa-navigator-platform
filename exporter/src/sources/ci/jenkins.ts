@@ -30,7 +30,7 @@ export class JenkinsAdapter implements CiAdapter {
   kind = 'ci' as const;
   private client: SourceClient;
 
-  constructor(private src: JenkinsSource, http: HttpSettings, private opts: { links: boolean }, env: NodeJS.ProcessEnv = process.env) {
+  constructor(private src: JenkinsSource, http: HttpSettings, private opts: import('./common').CiOptions, env: NodeJS.ProcessEnv = process.env) {
     const token = requireSecret(src.tokenEnv, `sources.${src.name} (a Jenkins API token)`, env);
     const user = src.user ?? secret(src.userEnv, env);
     if (!user) throw new ConfigError(`sources.${src.name}: set user (or the environment variable ${src.userEnv}): the Jenkins user of the API token`);
@@ -135,7 +135,7 @@ export class JenkinsAdapter implements CiAdapter {
     const cases = (tr?.suites ?? []).flatMap((s: any) => (s.cases ?? []).map((c: any) => ({
       suite: String(c.className ?? s.name ?? ''), name: String(c.name ?? ''), status: CASE[String(c.status)] ?? 'skipped', durationMs: Math.round(Number(c.duration ?? 0) * 1000),
     })));
-    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: Array<'tests' | 'coverage' | 'sarif'> }> = [];
+    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: import('./common').ArtifactKind[] }> = [];
     for (const a of b.artifacts ?? []) {
       const rel = String(a.relativePath ?? a.fileName);
       const kinds = Array.from(new Set([...kindsOf(String(a.fileName), this.src.artifacts), ...kindsOf(rel, this.src.artifacts)])).filter((k) => k !== 'tests' || !cases.length);
@@ -144,7 +144,7 @@ export class JenkinsAdapter implements CiAdapter {
       if (!d.ok) { page.skipped.push({ id: `${runId}/${rel}`, reason: `artifact ${d.reason}: ${d.message}` }); continue; }
       files.push({ artifact: rel, name: String(a.fileName), data: d.body, kinds });
     }
-    const found = files.length ? findReports(files) : { tests: [], coverage: [], sarif: [], files: 0, skipped: [] };
+    const found = files.length ? findReports(files) : { tests: [], coverage: [], sarif: [], performance: [], files: 0, skipped: [] };
     page.skipped.push(...found.skipped.map((x) => ({ id: `${runId}/${x.id}`, reason: x.reason })));
     // The JUnit plugin gives its results as JSON only: written out as a JUnit file (form, not content).
     if (cases.length) out.push(reportItem('test-report', team, [junitOf(cases, tr?.duration ? Math.round(Number(tr.duration) * 1000) : undefined)], meta, { format: 'junit' }));

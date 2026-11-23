@@ -41,7 +41,7 @@ export function detectFields(list: any[], configured: JiraFields): JiraFields & 
 }
 
 export interface JiraMapContext {
-  src: Pick<JiraSource, 'teams' | 'defaultTeam' | 'baseUrl'>;
+  src: Pick<JiraSource, 'teams' | 'defaultTeam' | 'baseUrl'> & { automationLabels?: string[] };
   fields: JiraFields;
   /** lower-cased status name → Jira status category key (new / indeterminate / done). */
   statusCategories: Map<string, string>;
@@ -113,6 +113,8 @@ export function mapJiraIssue(raw: any, ctx: JiraMapContext): { id: string; recor
     storyPoints: typeof sp === 'number' ? sp : typeof sp === 'string' && sp.trim() && Number.isFinite(Number(sp)) ? Number(sp) : null,
     estimateHours: hours(f.timeoriginalestimate), timeLoggedHours: hours(f.timespent),
     createdAt, resolvedAt: iso(f.resolutiondate), updatedAt: changedAt, sprints, transitions,
+    // Test-automation work (sources[].automationLabels): classified here; the label itself is not sent.
+    labels: (ctx.src.automationLabels ?? []).length && labels.some((l) => (ctx.src.automationLabels as string[]).includes(l.toLowerCase())) ? ['test-automation'] : undefined,
     title: ctx.privacy.privacy.sendTitles ? maskTitle(f.summary) : undefined,
     url: ctx.privacy.privacy.sendLinks ? `${ctx.src.baseUrl}/browse/${encodeURIComponent(key)}` : undefined,
     assigneeHash: person(ctx.privacy, f.assignee?.accountId ?? f.assignee?.key ?? f.assignee?.name ?? null),

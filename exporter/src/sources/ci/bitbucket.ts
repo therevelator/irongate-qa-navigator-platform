@@ -21,7 +21,7 @@ import type { BitbucketSource, HttpSettings } from '../../config';
 import { requireSecret, secret, ConfigError } from '../../config';
 import { credentialEntry } from '../../credentials';
 import { SourceClient, SourceError } from '../client';
-import { ms, parallelGroupOf, secondsBetween, pipelineRun, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord, type StructuredCase } from './common';
+import { pullRequest, emailOf, ms, parallelGroupOf, secondsBetween, pipelineRun, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord, type StructuredCase } from './common';
 
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled'> = { SUCCESSFUL: 'success', FAILED: 'failed', ERROR: 'failed', STOPPED: 'cancelled', EXPIRED: 'cancelled' };
 const STEP: Record<string, string> = { SUCCESSFUL: 'success', FAILED: 'failed', ERROR: 'failed', STOPPED: 'cancelled', NOT_RUN: 'skipped', SKIPPED: 'skipped' };
@@ -39,7 +39,7 @@ export class BitbucketAdapter implements CiAdapter {
   kind = 'ci' as const;
   private client: SourceClient;
 
-  constructor(private src: BitbucketSource, http: HttpSettings, private opts: { links: boolean }, env: NodeJS.ProcessEnv = process.env) {
+  constructor(private src: BitbucketSource, http: HttpSettings, private opts: import('./common').CiOptions, env: NodeJS.ProcessEnv = process.env) {
     const secretValue = requireSecret(src.tokenEnv, `sources.${src.name} (${src.auth === 'oauth' ? 'the OAuth token from the setup page' : 'a Bitbucket app password'})`, env);
     const oauth = src.auth === 'oauth' || (credentialEntry(src.tokenEnv) as any)?.type === 'oauth';
     let header: string;
@@ -93,6 +93,56 @@ export class BitbucketAdapter implements CiAdapter {
     for (const [repo, team] of Object.entries(this.src.teams)) {
       yield* this.pipelines(repo, team, since, until);
       yield await this.deployments(repo, team, since, until);
+      if (this.src.pullRequests) yield* this.pullRequests(repo, team, since, until);
+    }
+  }
+
+  /**
+   * The pull requests updated in the window, from the list and each one's activity: created; merged (the update that set
+   * MERGED); the first approval or comment by someone other than the author; and (developer metrics only) the author's
+   * e-mail address from a commit, sent as a pseudonym.
+   */
+  private async *pullRequests(repo: string, team: string, since: Date, until: Date): AsyncGenerator<CiPage> {
+    let count = 0;
+    const q = `state=OPEN&state=MERGED&state=DECLINED&state=SUPERSEDED&sort=-updated_on`;
+    for await (const list of this.pages(`/repositories/${repo}/pullrequests?${q}`, { pagelen: 50 }, this.src.maxRunsPerRepo)) {
+      const page: CiPage = { records: [], skipped: [], changedAt: null };
+      let older = false;
+      for (const pr of list) {
+        const updated = ms(pr.updated_on);
+        if (updated !== null && updated < since.getTime()) { older = true; break; }
+        const opened = ms(pr.created_on);
+        if (opened === null || opened >= until.getTime() || count++ >= this.src.maxRunsPerRepo) continue;
+        try {
+          const author = String(pr.author?.uuid ?? pr.author?.account_id ?? '');
+          const who = (x: any) => String(x?.user?.uuid ?? x?.user?.account_id ?? '');
+          let merged: number | null = null;
+          const reviews: number[] = [];
+          for await (const acts of this.pages(`/repositories/${repo}/pullrequests/${pr.id}/activity`, { pagelen: 50 }, 500)) {
+            for (const a of acts) {
+              if (a.update?.state === 'MERGED') { const t = ms(a.update.date); if (t !== null && (merged === null || t < merged)) merged = t; }
+              const r = a.approval ? { at: ms(a.approval.date), by: who(a.approval) } : a.comment ? { at: ms(a.comment.created_on), by: who(a.comment) } : null;
+              if (r && r.at !== null && r.by !== author) reviews.push(r.at);
+            }
+          }
+          const state = pr.state === 'MERGED' ? 'merged' : pr.state === 'OPEN' ? 'open' : 'closed';
+          let email: string | null = null;
+          if (this.opts.person) {
+            const first = ((await this.client.getOptional<any>(`/repositories/${repo}/pullrequests/${pr.id}/commits`, { pagelen: 1 }))?.values ?? [])[0];
+            email = emailOf(first?.author?.raw);
+          }
+          page.records.push(pullRequest(team, {
+            id: String(pr.id), repo, authorEmail: email, state, openedAt: opened, firstReviewAt: reviews.length ? Math.min(...reviews) : null,
+            mergedAt: state === 'merged' ? merged ?? updated : null, closedAt: state === 'closed' ? updated : null,
+          }, this.opts));
+        } catch (e) {
+          if (e instanceof SourceError && e.auth) throw e;
+          page.skipped.push({ id: `${repo}#${pr.id}`, reason: (e as Error).message });
+        }
+        if (updated && (!page.changedAt || new Date(updated).toISOString() > page.changedAt)) page.changedAt = new Date(updated).toISOString();
+      }
+      yield page;
+      if (older) break;
     }
   }
 

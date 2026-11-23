@@ -9,7 +9,7 @@
  *     field that is not on both, at any depth, is dropped.
  *   - a last check refuses a record that still contains an e-mail address anywhere.
  */
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { minimise } from './vendor/fieldAllowList';
 import { applyPolicy, type PolicyKind } from './policy';
 import type { Privacy } from './config';
@@ -53,4 +53,15 @@ export function finalRecord(kind: PolicyKind, record: Record<string, unknown>, c
   const out = applyPolicy(kind, shared, { titles: ctx.privacy.sendTitles, links: ctx.privacy.sendLinks, people: ctx.privacy.people === 'hash' && !!ctx.salt });
   scan(out, kind);
   return out;
+}
+
+/**
+ * The pseudonym of a person for the developer metrics (privacy.developerMetrics): sha256(lower(e-mail) + ':' + company id).
+ * Unlike the salted hash above, QE Navigator can compute it for its own users, to match a pull request author or a
+ * calendar to a user who enabled developer insights (and to no one else). The e-mail address itself never leaves.
+ */
+export function matchablePerson(email: string | null | undefined, companyId: string | null | undefined): string | null {
+  const e = String(email ?? '').trim().toLowerCase();
+  if (!companyId || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)) return null;
+  return createHash('sha256').update(`${e}:${companyId}`).digest('hex');
 }

@@ -20,7 +20,8 @@ import type { Config } from './config';
 import { log, redact } from './log';
 import { USER_AGENT } from './version';
 
-export type EnvelopeKind = 'test-report' | 'coverage' | 'pipeline-runs' | 'deployments' | 'commits' | 'incidents' | 'issues' | 'sarif' | 'kpis';
+export type EnvelopeKind = 'test-report' | 'coverage' | 'pipeline-runs' | 'deployments' | 'commits' | 'incidents' | 'issues' | 'sarif' | 'kpis'
+  | 'performance' | 'test-management' | 'pull-requests' | 'calendar';
 
 export interface Envelope { companyId: string; departmentId: string; teamId: string; source: string; kind: EnvelopeKind; items: Array<Record<string, unknown>> }
 
@@ -42,6 +43,10 @@ export const LIMITS: Record<EnvelopeKind, { items: number; bytes: number }> = {
   incidents: { items: 50, bytes: 4.5 * 1024 * 1024 },
   issues: { items: 25, bytes: 9 * 1024 * 1024 },
   kpis: { items: 10, bytes: 1024 * 1024 },
+  performance: { items: 10, bytes: 4.5 * 1024 * 1024 },
+  'test-management': { items: 500, bytes: 900 * 1024 },
+  'pull-requests': { items: 500, bytes: 900 * 1024 },
+  calendar: { items: 500, bytes: 900 * 1024 },
 };
 
 export interface Part { id: string; fp: string; item: Record<string, unknown> }

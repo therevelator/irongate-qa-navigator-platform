@@ -13,7 +13,7 @@ import type { Config, KpisSource, SourceConfig } from './config';
 import { ConfigError, isCiSource, mappedTeams, requireSecret, secret, targetProblems } from './config';
 import { log } from './log';
 import { acquireLock, fingerprint, loadState, saveState, sourceState, emptyState, type State } from './state';
-import { finalRecord, PrivacyViolation, type PrivacyContext } from './privacy';
+import { finalRecord, matchablePerson, PrivacyViolation, type PrivacyContext } from './privacy';
 import { JiraAdapter } from './sources/jira';
 import { LinearAdapter } from './sources/linear';
 import { PagerDutyAdapter } from './sources/pagerduty';
@@ -26,7 +26,12 @@ import { BitbucketDcAdapter } from './sources/ci/bitbucketDc';
 import { JenkinsAdapter } from './sources/ci/jenkins';
 import { AzureDevOpsAdapter } from './sources/ci/azure';
 import { SonarQubeAdapter } from './sources/ci/sonarqube';
-import type { CiAdapter } from './sources/ci/common';
+import type { CiAdapter, CiOptions } from './sources/ci/common';
+import { TestRailAdapter } from './sources/tm/testrail';
+import { XrayAdapter } from './sources/tm/xray';
+import { ZephyrAdapter } from './sources/tm/zephyr';
+import { GoogleCalendarAdapter } from './sources/calendar/google';
+import { Microsoft365Adapter } from './sources/calendar/microsoft';
 import { QeClient, QeError, deliver, makeBatches, type Batch, type EnvelopeKind, type Part } from './sender';
 import { allowedFields } from './policy';
 import { refreshOAuth } from './oauth';
@@ -49,7 +54,10 @@ export interface RunOptions {
 type AnyAdapter = Adapter | CiAdapter | KpisAdapter;
 
 export function adapterFor(src: SourceConfig, cfg: Config, privacy: PrivacyContext, env: NodeJS.ProcessEnv): AnyAdapter {
-  const links = { links: cfg.privacy.sendLinks };
+  // Developer metrics (privacy.developerMetrics): a person becomes a pseudonym QE Navigator can match to its own users.
+  const person = cfg.privacy.developerMetrics && cfg.qeNavigator.companyId ? (email: string | null | undefined) => matchablePerson(email, cfg.qeNavigator.companyId) : undefined;
+  const links: CiOptions = { links: cfg.privacy.sendLinks, person };
+  const calendarPerson = (email: string) => (person ? person(email) : null);
   switch (src.type) {
     case 'jira': return new JiraAdapter(src, cfg.http, privacy, env);
     case 'linear': return new LinearAdapter(src, cfg.http, privacy, env);
@@ -63,6 +71,11 @@ export function adapterFor(src: SourceConfig, cfg: Config, privacy: PrivacyConte
     case 'azure-devops': return new AzureDevOpsAdapter(src, cfg.http, links, env);
     case 'sonarqube': return new SonarQubeAdapter(src, cfg.http, env);
     case 'kpis': return new KpisAdapter(src);
+    case 'testrail': return new TestRailAdapter(src, cfg.http, env);
+    case 'xray': return new XrayAdapter(src, cfg.http, env);
+    case 'zephyr': return new ZephyrAdapter(src, cfg.http, env);
+    case 'google-calendar': return new GoogleCalendarAdapter(src, cfg.http, calendarPerson, env);
+    case 'microsoft-365': return new Microsoft365Adapter(src, cfg.http, calendarPerson, env);
   }
 }
 
