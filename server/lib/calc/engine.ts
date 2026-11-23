@@ -20,7 +20,7 @@ import { computeDeliveryDays, WINDOW_DAYS, CHANGE_FAILURE_WINDOW_HOURS } from '.
 import { computeWorkDays, phase3Tables, SPRINT_STALE_DAYS } from './work';
 import { computeQualityDays, REPORT_STALE_DAYS } from './quality';
 import { automationTables, computeAutomationDays } from './automation';
-import { refreshRecentDeveloperMetrics } from '../developerFromRaw';
+import { forgetOptedOutPeople, refreshRecentDeveloperMetrics } from '../developerFromRaw';
 import { buildMetrics, ALL_GROUPS, confidenceFor, type ComputedMetric, type Confidence, type MetricGroup, type MetricSpec } from '../../../packages/engine/src/index';
 import { computeCiDay, pickCoverageReport, type CiData } from '../../../packages/engine/src/calc/ci';
 
@@ -414,6 +414,16 @@ export async function cleanupRawData(): Promise<Record<string, number>> {
     analysisReports: await n(`DELETE FROM analysis_reports WHERE analyzed_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     issues: await n(`DELETE FROM issues WHERE resolved_at IS NOT NULL AND resolved_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     issueSprints: await n(`DELETE FROM issue_sprints WHERE completed_at IS NOT NULL AND completed_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    } : {}),
+    // Load-test results, test executions, pull requests and calendar days (migration 20261209000000): the same 13 months.
+    // Test cases are the tool's current list, not history: they stay. A person who turned developer insights off keeps
+    // no pseudonym: their pull requests lose the author and their calendar days go.
+    ...(await (async () => { const c = await pool.connect(); try { return await automationTables(c); } finally { c.release(); } })() ? {
+    performanceRuns: await n(`DELETE FROM performance_runs WHERE started_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    testExecutions: await n(`DELETE FROM tm_executions WHERE executed_at < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
+    pullRequests: await n(`DELETE FROM pull_requests_raw WHERE opened_at < now() - make_interval(days => $1) AND state <> 'open'`, [RAW_RETENTION_DAYS]),
+    calendarDays: await n(`DELETE FROM calendar_days WHERE day < CURRENT_DATE - $1::int`, [RAW_RETENTION_DAYS]),
+    ...(await forgetOptedOutPeople(pool)),
     } : {}),
     flakyEvidence: await n(`DELETE FROM flaky_test_evidence WHERE last_seen < now() - make_interval(days => $1)`, [RAW_RETENTION_DAYS]),
     metricEvidence: await n(`DELETE FROM metric_evidence WHERE day < CURRENT_DATE - $1::int`, [RAW_RETENTION_DAYS]),

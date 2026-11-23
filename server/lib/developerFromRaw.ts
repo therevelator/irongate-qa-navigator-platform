@@ -229,3 +229,24 @@ export async function refreshRecentDeveloperMetrics(pool: pg.Pool, budgetMs = 10
   }
   return { teams: done, developers };
 }
+
+/**
+ * A pseudonym is kept only while it is that of an active user who enabled developer insights. When someone turns
+ * developer insights off (or leaves), their pull requests lose the author and their calendar days are deleted.
+ */
+export async function forgetOptedOutPeople(pool: pg.Pool): Promise<{ authorsCleared: number; calendarDaysForgotten: number }> {
+  const client = await pool.connect();
+  try {
+    if (!(await developerRawTables(client))) return { authorsCleared: 0, calendarDaysForgotten: 0 };
+    const companies = (await client.query(
+      `SELECT DISTINCT company_id FROM pull_requests_raw WHERE author_hash IS NOT NULL UNION SELECT DISTINCT company_id FROM calendar_days`)).rows.map((r: any) => r.company_id as string);
+    let authorsCleared = 0;
+    let calendarDaysForgotten = 0;
+    for (const companyId of companies) {
+      const keep = Array.from((await optedInHashes(client, companyId)).keys());
+      authorsCleared += (await client.query(`UPDATE pull_requests_raw SET author_hash = NULL WHERE company_id = $1 AND author_hash IS NOT NULL AND NOT (author_hash = ANY($2::text[]))`, [companyId, keep])).rowCount ?? 0;
+      calendarDaysForgotten += (await client.query(`DELETE FROM calendar_days WHERE company_id = $1 AND NOT (person_hash = ANY($2::text[]))`, [companyId, keep])).rowCount ?? 0;
+    }
+    return { authorsCleared, calendarDaysForgotten };
+  } finally { client.release(); }
+}
