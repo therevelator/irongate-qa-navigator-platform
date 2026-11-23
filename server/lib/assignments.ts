@@ -81,6 +81,13 @@ export const isTeamMemberSql = (userAlias: string, teamExpr: string) => `EXISTS 
    WHERE ${ACTIVE} AND ra.user_id = ${userAlias}.id AND ra.scope_type = 'team' AND ra.scope_id = ${teamExpr}
 )`;
 
+/** SQL condition: user `<userAlias>` holds an active assignment on team `<teamExpr>` with one of the roles `<rolesExpr>` (a text[] expression). */
+export const assignedOnTeamAsSql = (userAlias: string, teamExpr: string, rolesExpr: string) => `EXISTS (
+  SELECT 1 FROM role_assignments ra
+   WHERE ${ACTIVE} AND ra.user_id = ${userAlias}.id AND ra.scope_type = 'team' AND ra.scope_id = ${teamExpr}
+     AND ra.role = ANY(${rolesExpr})
+)`;
+
 /** SQL expression: array of team ids user `<userAlias>` is assigned to. */
 export const userTeamIdsSql = (userAlias = 'u') => `ARRAY(
   SELECT ra.scope_id FROM role_assignments ra

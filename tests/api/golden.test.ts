@@ -154,7 +154,8 @@ describe('Golden outputs for a fixed dataset', () => {
     expect(o.summary.globalQaScoreDistribution).toMatchObject({ weightedMean: 88.3, unweightedMean: 86.3, median: 85, p25: 83, min: 81, count: 3 });
     expect(o.summary.engineeringHealthConfidence).toMatchObject({ inputsTotal: 4 });
     expect(o.summary.companyKpiTargets).toEqual({ coverage: 80, automation: 70, flakiness: 2, escapeRate: 5 });
-    expect(o.summary.kpiAveragesUnweighted).toEqual({ avgTestCoverage: 82, avgDefectEscapeRate: 8, automationCoverage: 71.3, avgFlakinessRate: 2.7 });
+    // Every active team with a current value of the KPI, also one without a current QA score (Stale Team's automation and flakiness).
+    expect(o.summary.kpiAveragesUnweighted).toEqual({ avgTestCoverage: 82, avgDefectEscapeRate: 8, automationCoverage: 70, avgFlakinessRate: 2.8 });
     // History: the QA score basis per day and the target periods (no stored targets: defaults).
     const hist = o.history['golden-team-stale'];
     // Coverage (daily) is stale from D-11, the escape rate (weekly) from D-5: staleness as of each day.

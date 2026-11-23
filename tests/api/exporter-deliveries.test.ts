@@ -72,8 +72,12 @@ describe('Exporter deliveries (operator log)', () => {
     if (!up) return;
     const issues = Array.from({ length: 25 }, (_, i) => ({
       key: `EXD-${i + 1}`, type: 'bug', status: 'Done', statusCategory: 'done', createdAt: at(10 - (i % 5)), resolvedAt: at(2),
-      description: 'customer secret text', assignee: 'someone@example.com', title: 'Login fails for jane@example.com',
+      assignee: 'someone@example.com', title: 'Login fails for jane@example.com',
     }));
+    // A description is refused (not stored or used); the refused batch's logged preview does not keep it either.
+    const refused = await send(envelope('issues', issues.map((x) => ({ ...x, description: 'customer secret text' }))));
+    expect(refused.status).toBe(400);
+    expect(JSON.stringify((await latest()).preview ?? null)).not.toMatch(/customer secret text|someone@example|jane@example/);
     const r = await send(envelope('issues', issues));
     expect(r.status).toBe(201);
     const row = await latest();

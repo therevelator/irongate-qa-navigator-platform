@@ -40,7 +40,8 @@
     "test:coverage": "jest --config jest.config.cjs --coverage",
     "test:watch": "jest --config jest.config.cjs --watch",
     "playwright:install": "playwright install chromium",
-    "playwright:report": "playwright show-report"
+    "playwright:report": "playwright show-report",
+    "secrets:reencrypt": "tsx server/scripts/reencryptSecrets.ts"
   },
   "dependencies": {
     "@netlify/functions": "^5.1.0",

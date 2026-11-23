@@ -6,6 +6,7 @@ import type { Exec } from './assignments';
 import { requestFacts } from './authEvents';
 import { inBackground } from './opsLog';
 import { isSandboxCompany } from './sandboxConfig';
+import { sessionCookieFlags } from './runtimeEnv';
 
 // No runtime import of assignments.ts (it imports this file): the default runs on the pool.
 const onPool: Exec = (sql, params) => query<never[]>(sql, params);
@@ -128,8 +129,11 @@ export function refuseSession(res: express.Response, problem: SessionProblem): v
   res.status(problem.status ?? 401).json({ error: problem.message, code: problem.code });
 }
 
-const isProduction = () => process.env.NODE_ENV === 'production';
-const cookieOptions = () => ({ httpOnly: true, secure: isProduction(), sameSite: (isProduction() ? 'strict' : 'lax') as 'strict' | 'lax' });
+// Secure and SameSite=Strict in production (NODE_ENV=production, Netlify or AWS Lambda;
+// server/lib/runtimeEnv.ts). Strict does not break single sign-on, e-mail links or invitations:
+// the app is a single-page app whose API calls are same-site fetches, which carry a Strict cookie
+// even when the page itself was opened from another site; the SSO state cookie is Lax (authSso.ts).
+const cookieOptions = () => sessionCookieFlags();
 /** Options of the session cookie (a browser-session cookie; add maxAge for a persistent one). */
 export const sessionCookieOptions = cookieOptions;
 

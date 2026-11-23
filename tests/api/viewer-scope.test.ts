@@ -130,8 +130,9 @@ describe('A viewer scoped to one team sees that team only', () => {
     const teams = (await get('/api/metrics/analytics/teams', c.vone)).body.teams.map((t: any) => t.id);
     expect(teams).toEqual([PARTIAL]);
     expect((await get('/api/metrics/dashboard', c.vone)).body.stats.totalTeams).toBe(1);
-    const dept = (await get('/api/departments/golden-dept-a', c.vone)).body.department;
-    expect(dept.teams).toEqual([]);
+    // A department with none of her teams is not in her scope (docs/ROLE_ACCESS.md scope rule).
+    expect((await get('/api/departments/golden-dept-a', c.vone)).status).toBe(403);
+    expect(((await get('/api/departments', c.vone)).body.departments as any[]).map((d) => d.id)).not.toContain('golden-dept-a');
   });
 
   it('SCOPE-005: a viewer cannot request the executive briefing (company or scoped)', async () => {

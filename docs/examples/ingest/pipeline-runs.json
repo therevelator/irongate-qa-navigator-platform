@@ -1,0 +1,174 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "github-actions",
+  "kind": "pipeline-runs",
+  "items": [
+    {
+      "id": "8812345678",
+      "attempt": 1,
+      "name": "CI",
+      "commit": "9f3c2a1b7d4e",
+      "branch": "main",
+      "startedAt": "2026-11-20T09:00:00Z",
+      "finishedAt": "2026-11-20T09:18:00Z",
+      "durationSeconds": 1080,
+      "result": "failure",
+      "url": "https://github.com/acme/payments-api/actions/runs/8812345678/attempts/1",
+      "stages": [
+        {
+          "name": "build",
+          "kind": "build",
+          "startedAt": "2026-11-20T09:00:30Z",
+          "finishedAt": "2026-11-20T09:04:30Z",
+          "durationSeconds": 240,
+          "result": "success"
+        },
+        {
+          "name": "unit-tests (1/3)",
+          "kind": "test",
+          "parallelGroup": "unit-tests",
+          "startedAt": "2026-11-20T09:04:40Z",
+          "finishedAt": "2026-11-20T09:12:40Z",
+          "durationSeconds": 480,
+          "result": "failure"
+        },
+        {
+          "name": "unit-tests (2/3)",
+          "kind": "test",
+          "parallelGroup": "unit-tests",
+          "startedAt": "2026-11-20T09:04:40Z",
+          "finishedAt": "2026-11-20T09:11:10Z",
+          "durationSeconds": 390,
+          "result": "success"
+        },
+        {
+          "name": "unit-tests (3/3)",
+          "kind": "test",
+          "parallelGroup": "unit-tests",
+          "startedAt": "2026-11-20T09:04:40Z",
+          "finishedAt": "2026-11-20T09:10:40Z",
+          "durationSeconds": 360,
+          "result": "success"
+        },
+        {
+          "name": "deploy to staging",
+          "kind": "deploy",
+          "result": "skipped"
+        }
+      ]
+    },
+    {
+      "id": "8812345678",
+      "attempt": 2,
+      "name": "CI",
+      "commit": "9f3c2a1b7d4e",
+      "branch": "main",
+      "startedAt": "2026-11-20T09:25:00Z",
+      "finishedAt": "2026-11-20T09:41:00Z",
+      "durationSeconds": 960,
+      "result": "success",
+      "url": "https://github.com/acme/payments-api/actions/runs/8812345678/attempts/2",
+      "stages": [
+        {
+          "name": "build",
+          "kind": "build",
+          "startedAt": "2026-11-20T09:25:30Z",
+          "finishedAt": "2026-11-20T09:29:10Z",
+          "durationSeconds": 220,
+          "result": "success"
+        },
+        {
+          "name": "unit-tests (1/3)",
+          "kind": "test",
+          "parallelGroup": "unit-tests",
+          "startedAt": "2026-11-20T09:29:20Z",
+          "finishedAt": "2026-11-20T09:36:20Z",
+          "durationSeconds": 420,
+          "result": "success"
+        },
+        {
+          "name": "unit-tests (2/3)",
+          "kind": "test",
+          "parallelGroup": "unit-tests",
+          "startedAt": "2026-11-20T09:29:20Z",
+          "finishedAt": "2026-11-20T09:35:50Z",
+          "durationSeconds": 390,
+          "result": "success"
+        },
+        {
+          "name": "unit-tests (3/3)",
+          "kind": "test",
+          "parallelGroup": "unit-tests",
+          "startedAt": "2026-11-20T09:29:20Z",
+          "finishedAt": "2026-11-20T09:35:20Z",
+          "durationSeconds": 360,
+          "result": "success"
+        },
+        {
+          "name": "deploy to staging",
+          "kind": "deploy",
+          "startedAt": "2026-11-20T09:36:30Z",
+          "finishedAt": "2026-11-20T09:41:00Z",
+          "durationSeconds": 270,
+          "result": "success"
+        }
+      ]
+    },
+    {
+      "id": "8812346001",
+      "attempt": 1,
+      "name": "CI",
+      "commit": "b71d3e5a90c4",
+      "branch": "feature/refund-limits",
+      "startedAt": "2026-11-20T10:30:00Z",
+      "finishedAt": "2026-11-20T10:33:00Z",
+      "durationSeconds": 180,
+      "result": "cancelled",
+      "url": "https://github.com/acme/payments-api/actions/runs/8812346001",
+      "stages": [
+        {
+          "name": "build",
+          "kind": "build",
+          "startedAt": "2026-11-20T10:30:20Z",
+          "finishedAt": "2026-11-20T10:33:00Z",
+          "durationSeconds": 160,
+          "result": "cancelled"
+        }
+      ]
+    },
+    {
+      "id": "8812346050",
+      "attempt": 1,
+      "name": "Nightly e2e",
+      "commit": "9f3c2a1b7d4e",
+      "branch": "main",
+      "startedAt": "2026-11-20T02:00:00Z",
+      "finishedAt": "2026-11-20T02:40:00Z",
+      "durationSeconds": 2400,
+      "result": "success",
+      "url": "https://github.com/acme/payments-api/actions/runs/8812346050",
+      "stages": [
+        {
+          "name": "e2e chrome",
+          "kind": "test",
+          "parallelGroup": "e2e",
+          "startedAt": "2026-11-20T02:01:00Z",
+          "finishedAt": "2026-11-20T02:39:00Z",
+          "durationSeconds": 2280,
+          "result": "success"
+        },
+        {
+          "name": "e2e firefox",
+          "kind": "test",
+          "parallelGroup": "e2e",
+          "startedAt": "2026-11-20T02:01:00Z",
+          "finishedAt": "2026-11-20T02:31:00Z",
+          "durationSeconds": 1800,
+          "result": "success"
+        }
+      ]
+    }
+  ]
+}

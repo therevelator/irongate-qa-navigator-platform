@@ -4,7 +4,7 @@
  *
  *   applyIssueAllowList / applyIncidentAllowList  the parsed events keep only allowed values before
  *     they are stored: titles dropped when the company setting "Store issue and incident titles" is off,
- *     priority dropped, labels reduced to the ones the calculations read;
+ *     labels reduced to the ones the calculations read;
  *   minimisedIssuePayload / minimisedIncidentPayload  the copy kept in raw_uploads.payload is the
  *     minimised JSON of the parsed events (never the body as received, which may hold descriptions,
  *     comments and e-mail addresses);
@@ -39,11 +39,10 @@ export async function storeTitlesOf(companyId: string): Promise<boolean> {
   }
 }
 
-/** The parsed issues keep only allowed values before they are stored (fieldAllowList.ts): no priority, only the labels the calculations read, titles per the setting. */
+/** The parsed issues keep only allowed values before they are stored (fieldAllowList.ts): only the labels the calculations read, titles per the setting. */
 export function applyIssueAllowList(events: IssueEvent[], storeTitles: boolean): void {
   for (const e of events) {
     if (!storeTitles) e.title = null;
-    e.priority = null;
     e.labels = e.labels.filter(usefulLabel);
   }
 }
@@ -62,7 +61,7 @@ export function issueRecord(e: IssueEvent): Record<string, unknown> {
   return {
     key: e.key, team: e.team, project: e.project, title: e.title, type: e.typeLabel ?? e.type, status: e.status, statusCategory: e.statusCategory,
     resolution: e.resolution, environment: e.environment, storyPoints: e.storyPoints, estimateHours: e.estimateHours, timeLoggedHours: e.timeLoggedHours,
-    sprints: e.sprints.map(sprintRecord), labels: e.labels, components: e.components, createdAt: iso(e.createdAt), resolvedAt: iso(e.resolvedAt),
+    sprints: e.sprints.map(sprintRecord), labels: e.labels, components: e.components, priority: e.priority, createdAt: iso(e.createdAt), resolvedAt: iso(e.resolvedAt),
     updatedAt: iso(e.updatedAt), url: e.url,
     transitions: e.transitions.map((t) => ({ field: t.field, from: t.from, to: t.to, toCategory: t.toCategory, at: iso(t.at) })),
     ...people,

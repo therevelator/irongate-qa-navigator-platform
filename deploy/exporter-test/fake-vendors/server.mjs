@@ -190,6 +190,7 @@ function issuesOf(team, now = Date.now()) {
           resolution: resolvedAt ? { name: 'Done' } : null, resolutiondate: resolvedAt ? jiraTime(resolvedAt) : null,
           created: jiraTime(created), updated: jiraTime(Math.max(...histories.map((h) => Date.parse(h.created.replace('+0000', 'Z'))), created)),
           labels: bug ? ['bug'] : ['feature'], environment: null, customfield_10060: found ? { value: found } : null,
+          priority: { name: ['Highest', 'High', 'Medium', 'Low'][Math.floor(rnd(team, 'prio', s, i) * 4)] },
           timeoriginalestimate: est, timespent: resolvedAt ? Math.round(est * (0.6 + rnd(team, 'spent', s, i) * 0.9)) : null,
           customfield_10016: bug ? null : [1, 2, 3, 5, 8][Math.floor(rnd(team, 'sp', s, i) * 5)], customfield_10020: [sprint], customfield_10021: null,
           summary: `Made-up ${bug ? 'bug' : 'story'} ${n}`, description: 'Made-up text the Exporter never sends',
@@ -203,7 +204,7 @@ function issuesOf(team, now = Date.now()) {
 
 /** SonarQube: the latest analysis (today 06:00) and its open issues. */
 function sonarIssues(project) {
-  return Array.from({ length: 40 }, (_, i) => ({ key: `AX-${project}-${i}`, rule: `typescript:S${1000 + i}`, severity: ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'][i % 5], type: ['BUG', 'VULNERABILITY', 'CODE_SMELL'][i % 3], component: `${project}:src/file${i % 9}.ts`, line: 10 + i, message: 'Made-up message', author: 'someone@example.com' }))
+  return Array.from({ length: 40 }, (_, i) => ({ key: `AX-${project}-${i}`, rule: `typescript:S${1000 + i}`, severity: ['BLOCKER', 'CRITICAL', 'MAJOR', 'MINOR', 'INFO'][i % 5], type: ['BUG', 'VULNERABILITY', 'CODE_SMELL'][i % 3], component: `${project}:src/file${i % 9}.ts`, line: 10 + i, effort: ['5min', '1h', '2h30min', '1d', '15min'][i % 5], debt: ['5min', '1h', '2h30min', '1d', '15min'][i % 5], message: 'Made-up message', author: 'someone@example.com' }))
     .filter((_, i) => rnd(project, 'sonar', i, Math.floor(Date.now() / (7 * DAY))) < 0.7);
 }
 

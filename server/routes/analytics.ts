@@ -2,12 +2,12 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor, type OwnedTeam } from '../middleware/access';
-import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageSampleData, canManageTeam, isCompanyAdmin, canRequestExecutiveBriefing, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
+import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageSampleData, canManageTeam, canWriteTeamData, canWriteSomeTeamData, isCompanyAdmin, canRequestExecutiveBriefing, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
 import { runDemoSeed, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
 import { demoSummary, todayUtc, DEMO_COMPANY_ID } from '../seeds/demoData';
-import { randomUUID } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { groqChatCompletion, isGroqConfigured } from '../lib/groq';
 import { KPI_TARGETS, METRICS_CONFIG, teamAttentionIssues, teamKpiTrack } from '../../src/config/metricsConfig';
 import { toNum, QA_SCORE_THRESHOLDS, TECH_DEBT_OPEN_WEIGHT_SQL, computeDdps, computeBottleneckScores, composite, distributionOf, COMPANY_AGGREGATE_TEXT, techDebtRoi } from '../lib/metricFormulas';
@@ -27,6 +27,15 @@ import { benjaminiHochberg, studentTTwoSidedP } from '../lib/stats';
 import { getFinancialConfig } from '../lib/financialConfig';
 import { correlationSummaryHtml } from '../lib/correlationSummary';
 import { BI_CONTEXT_RANGES, BI_KPI_RANGES, BI_QUALITY_RANGES, DEBT_IMPACT_FIELDS, bulkMonthErrors, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
+import { markValueSources } from '../lib/businessImpactSources';
+
+/** The monthly Business impact columns of each table (the values whose source is recorded). */
+const BI_QUALITY_COLS = BI_QUALITY_RANGES.map((r) => r.column);
+const BI_KPI_COLS = BI_KPI_RANGES.map((r) => r.column);
+const BI_CONTEXT_COLS = BI_CONTEXT_RANGES.map((r) => r.column);
+/** The given columns of a body, as numbers (null when absent). */
+const pickNums = (body: any, cols: string[]): Record<string, number | null> =>
+  Object.fromEntries(cols.map((c) => { const v = body?.[c]; const n = v === null || v === undefined || v === '' ? null : Number(v); return [c, Number.isFinite(n as number) ? n : null]; }));
 
 const router = express.Router();
 
@@ -590,7 +599,8 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
 router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    if (!canManageCompanyData(req)) {
+    // Permission before validation (FI-15): someone who may write no team's data at all gets 403.
+    if (!canWriteSomeTeamData(policyActor(req))) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     const { id } = req.params;
@@ -612,9 +622,15 @@ router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res
     if (!existing) {
       return res.status(404).json({ error: 'Technical debt item not found' });
     }
-    // A qa_manager may only edit items of teams in their department (canManageTeam).
-    if (existing.team_id && !canManageTeam(policyActor(req), { department_id: existing.department_id })) {
-      return res.status(403).json({ error: 'Can only manage teams in your department' });
+    // Technical-debt ROI inputs are team data (docs/ADMIN_PANEL_GUIDE.md, Manual metrics): super
+    // admins any item, managers the items of their departments' teams, team leads the items of the
+    // teams they lead (canWriteTeamData). An item of no team is company data: super admins only.
+    const actor = policyActor(req);
+    const allowed = existing.team_id
+      ? canWriteTeamData(actor, { id: existing.team_id, department_id: existing.department_id })
+      : isCompanyAdmin(actor);
+    if (!allowed) {
+      return res.status(403).json({ error: 'You can only edit the technical debt of the teams you manage or lead' });
     }
 
     await query(
@@ -1392,6 +1408,7 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
       ]
     );
 
+    await markValueSources('business_impact_quality_metrics', teamId, month_year, pickNums(metrics, BI_QUALITY_COLS), 'manual');
     res.json({ success: true, message: 'Quality metrics saved' });
   } catch (error) {
     if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
@@ -1450,6 +1467,7 @@ router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, asyn
       ]
     );
 
+    await markValueSources('business_impact_business_kpis', teamId, month_year, pickNums(kpis, BI_KPI_COLS), 'manual');
     res.json({ success: true, message: 'Business KPIs saved' });
   } catch (error) {
     if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
@@ -1514,6 +1532,7 @@ router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req
       ]
     );
 
+    await markValueSources('business_impact_context', teamId, month_year, pickNums(context, BI_CONTEXT_COLS), 'manual');
     res.json({ success: true, message: 'Context data saved' });
   } catch (error) {
     if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
@@ -1690,6 +1709,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
             manuallyEdited, dataSource
           ]
         );
+        await markValueSources('business_impact_quality_metrics', teamId, month_year, pickNums(quality, BI_QUALITY_COLS), isSyntheticPayload ? 'synthetic' : 'manual');
       }
 
       // Save business KPIs
@@ -1718,6 +1738,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
             manuallyEdited, dataSource
           ]
         );
+        await markValueSources('business_impact_business_kpis', teamId, month_year, pickNums(kpis, BI_KPI_COLS), isSyntheticPayload ? 'synthetic' : 'manual');
       }
 
       // Save context
@@ -1746,6 +1767,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
             manuallyEdited
           ]
         );
+        await markValueSources('business_impact_context', teamId, month_year, pickNums(context, BI_CONTEXT_COLS), isSyntheticPayload ? 'synthetic' : 'manual');
       }
 
       saved++;
@@ -1765,6 +1787,8 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
   try {
     const { teamId } = req.params;
     if (!(await assertTeamWrite(req, res, teamId))) return;
+    // Sample data is the super admin's (canManageSampleData; docs/ROLE_ACCESS.md "Sample (synthetic) data").
+    if (!canManageSampleData(policyActor(req))) return res.status(403).json({ error: 'Only a super admin can generate sample data' });
     // Generated values are never shown for a real company's team, even unsaved (sample companies only).
     if (!isSampleCompanyId(req.user.companyId)) return res.status(403).json({ error: SAMPLE_ONLY_MESSAGE });
     if (!isSyntheticDataEnabled()) {
@@ -2085,6 +2109,17 @@ const ENGINEERING_HEALTH_WEIGHTS = {
  * for a company-wide scope (super admins), else the ids of the active teams of the caller's
  * analytics scope (canViewTeamAnalytics: a QA manager's departments, everyone else's teams).
  */
+/**
+ * Key of the executive-briefing snapshots of a caller's scope (company_kpi_snapshots.scope_key):
+ * 'company' for the whole company, else 'teams:' + a hash of the sorted team ids in scope, so callers
+ * with the same teams share their history and different scopes never mix.
+ */
+export function briefingScopeKey(teamIds: string[] | null): string {
+  if (teamIds === null) return 'company';
+  const ids = [...new Set(teamIds.map(String))].sort();
+  return `teams:${createHash('sha256').update(ids.join('\n')).digest('hex').slice(0, 32)}`;
+}
+
 export async function summaryTeamIds(req: AuthRequest): Promise<{ teamIds: string[] | null; level: string; companyTeamCount: number }> {
   const actor = policyActor(req);
   const rows = await query<any>('SELECT id, department_id FROM teams WHERE company_id = ? AND is_active = TRUE', [req.companyId]);
@@ -2150,7 +2185,7 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
     JOIN teams t ON t.id = ks.team_id
     WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))
       AND ks.snapshot_date >= CURRENT_DATE - 14
-      AND ks.snapshot_date < CURRENT_DATE - 7
+      AND ks.snapshot_date <= CURRENT_DATE - 7
     ORDER BY ks.team_id, ks.snapshot_date DESC
   `, [companyId, teamIds, teamIds]);
   const prevDist = distributionOf(prevRows.map((r: any) => ({
@@ -2169,9 +2204,10 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
     else riskLevel = 'stable';
   }
 
-  // Averages over teams that have a current value (stale and missing values excluded, never
-  // counted as 0), weighted by team size; the unweighted means are in kpiAveragesUnweighted.
-  const avgDist = (field: string) => distributionOf(teamsWithData.map((t: any) => ({ value: fresh(t, field), weight: weightOf(t.team_id) })));
+  // Averages over every active team that has a current value of that KPI (stale and missing values
+  // excluded, never counted as 0), whether or not the team has a current QA score; weighted by team
+  // size; the unweighted means are in kpiAveragesUnweighted.
+  const avgDist = (field: string) => distributionOf(evaluated.map((x: any) => ({ value: fresh(x.t, field), weight: weightOf(x.t.team_id) })));
   const avgField = (field: string) => roundTo(avgDist(field).weightedMean, 1);
   const avgTestCoverage = avgField('test_coverage');
   const avgDefectEscapeRate = avgField('defect_escape_rate');
@@ -2264,10 +2300,13 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
   const developerWellnessIndex = wellbeing.value !== null ? Math.round(wellbeing.value) : null;
 
   // Delivery performance (DORA): mean of per-team level scores over classified teams, weighted
-  // by team size. A team with a stale DORA input is 'Unknown' (left out), like a missing one.
+  // by team size. Every active team with DORA inputs is classified, whether or not it has a QA
+  // score; a team with a stale or missing DORA input (or no snapshot at all) is 'Unknown' (left
+  // out). The confidence is "n of m" over all active teams.
   const doraLevels: Record<DoraLevelOrUnknown, number> = { Elite: 0, High: 0, Medium: 0, Low: 0, Unknown: 0 };
   const doraScores: Array<{ value: number; weight: number }> = [];
-  for (const t of teamsWithData) {
+  doraLevels.Unknown += Math.max(0, activeTeams.length - evaluated.length);
+  for (const { t } of evaluated as Array<{ t: any }>) {
     const level = classifyDoraLevel({
       deployment_frequency_per_week: fresh(t, 'deployment_frequency_per_week'),
       lead_time_days: fresh(t, 'lead_time_days'),
@@ -2280,24 +2319,33 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
   const doraMean = distributionOf(doraScores).weightedMean;
   const deliveryPerformanceScore = doraMean !== null ? Math.round(doraMean) : null;
 
-  // Pipeline health: successful / (successful + failed) pipeline runs in the last
-  // 30 days, for company-level pipelines (team_id NULL) and active teams.
-  // Running and cancelled runs are excluded. Null when no completed runs.
+  // Pipeline health: successful / (successful + failed) pipeline runs of the active teams in the last 30 days (today
+  // and the 29 days before), as the engine counted them: the inputs of its daily pipeline success rate
+  // (metric_evidence, from the runs ingested into pipeline_runs_raw; every attempt is a run, cancelled runs are left
+  // out). The same evidence feeds the team tiles; sample companies' sample runs go through the same calculation.
   const pipe = await queryOne<any>(`
-    SELECT COUNT(*) FILTER (WHERE pr.status = 'success') AS successful_runs,
-           COUNT(*) FILTER (WHERE pr.status IN ('success', 'failed')) AS total_runs
-    FROM pipeline_runs pr
-    LEFT JOIN teams t ON t.id = pr.team_id
-    WHERE pr.company_id = ?
-      AND pr.started_at >= NOW() - INTERVAL '30 days'
-      AND (pr.team_id IS NULL OR t.is_active = TRUE)
-      AND (?::text[] IS NULL OR pr.team_id = ANY(?::text[]))
+    SELECT COALESCE(SUM((e.inputs->>'successful')::int), 0) AS successful_runs,
+           COALESCE(SUM((e.inputs->>'successful')::int + (e.inputs->>'failed')::int), 0) AS total_runs,
+           COUNT(DISTINCT e.team_id) AS teams,
+           MAX(e.day) AS last_day
+      FROM metric_evidence e JOIN teams t ON t.id = e.team_id
+     WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))
+       AND e.metric_key = 'pipeline_success_rate' AND e.day >= CURRENT_DATE - 29
   `, [companyId, teamIds, teamIds]);
   const pipelineSuccessfulRuns = num(pipe?.successful_runs) ?? 0;
   const pipelineTotalRuns = num(pipe?.total_runs) ?? 0;
   const pipelineHealthScore = pipelineTotalRuns > 0
     ? roundTo((pipelineSuccessfulRuns / pipelineTotalRuns) * 100, 1)
     : null;
+  // Build time beside it, over the same runs: the engine's daily median build time (build_time evidence), weighted by
+  // the runs of each day.
+  const build = await queryOne<any>(`
+    SELECT SUM(e.value * (e.inputs->>'runs')::int) / NULLIF(SUM((e.inputs->>'runs')::int), 0) AS minutes
+      FROM metric_evidence e JOIN teams t ON t.id = e.team_id
+     WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))
+       AND e.metric_key = 'build_time' AND e.day >= CURRENT_DATE - 29
+  `, [companyId, teamIds, teamIds]);
+  const pipelineBuildMinutes = roundTo(num(build?.minutes), 1);
 
   // Engineering health: weighted mean over the components that have data
   const healthParts = {
@@ -2314,7 +2362,7 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
   const healthIncluded = (Object.keys(healthParts) as Array<keyof typeof healthParts>).filter(k => healthParts[k] !== null);
   const healthMissing = (Object.keys(healthParts) as Array<keyof typeof healthParts>).filter(k => healthParts[k] === null);
   const engineeringHealthConfidence = composite(engineeringHealthScore, healthIncluded.length, Object.keys(healthParts).length);
-  const deliveryPerformanceConfidence = composite(deliveryPerformanceScore, doraScores.length, teamsWithData.length);
+  const deliveryPerformanceConfidence = composite(deliveryPerformanceScore, doraScores.length, activeTeams.length);
   // Any current KPI value of an active team comes from generated sample data.
   const sampleData = evaluated.some((x: any) => x.ev.sampleData);
   const round1 = (v: number | null) => roundTo(v, 1);
@@ -2427,10 +2475,13 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
       burnoutRisk: devSummary.burnoutOfAverages
     },
     pipelineHealthBasis: {
-      definition: 'Successful pipeline runs / (successful + failed) runs, last 30 days',
+      definition: 'Successful pipeline runs / (successful + failed) runs, last 30 days (the runs your CI sent, as the engine counted them; cancelled runs left out)',
       successfulRuns: pipelineSuccessfulRuns,
       totalRuns: pipelineTotalRuns,
-      windowDays: 30
+      windowDays: 30,
+      teams: num(pipe?.teams) ?? 0,
+      avgBuildTimeMinutes: pipelineBuildMinutes,
+      source: 'pipeline_runs_raw'
     },
     techDebtBasis: { openItems: techDebtOpenItems, totalItems: techDebtTotalItems }
   };
@@ -2473,12 +2524,15 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
     const m = await computeCompanyMetrics(companyId, scope.teamIds);
     const companyWide = scope.teamIds === null;
 
-    // 2. Store Snapshot (nulls stay null): company-wide figures only
-    if (companyWide) await query(`
+    // 2. Store today's snapshot of the figures this caller sees (nulls stay null), under the key of
+    // the caller's scope: 'company' for company-wide callers, else the set of teams in scope
+    // (briefingScopeKey). A scoped caller never reads or writes another scope's snapshots.
+    const scopeKey = briefingScopeKey(scope.teamIds);
+    await query(`
       INSERT INTO company_kpi_snapshots 
-      (company_id, snapshot_date, engineering_health_score, delivery_performance_score, developer_wellness_index, tech_debt_status_score, pipeline_health_score, avg_qa_score, avg_test_coverage, avg_defect_escape_rate, avg_flakiness_rate, automation_coverage)
-      VALUES (?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (company_id, snapshot_date) DO UPDATE SET
+      (company_id, scope_key, snapshot_date, engineering_health_score, delivery_performance_score, developer_wellness_index, tech_debt_status_score, pipeline_health_score, avg_qa_score, avg_test_coverage, avg_defect_escape_rate, avg_flakiness_rate, automation_coverage)
+      VALUES (?, ?, CURRENT_DATE, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (company_id, scope_key, snapshot_date) DO UPDATE SET
       engineering_health_score = EXCLUDED.engineering_health_score,
       delivery_performance_score = EXCLUDED.delivery_performance_score,
       developer_wellness_index = EXCLUDED.developer_wellness_index,
@@ -2490,19 +2544,19 @@ router.post('/company-insights', aiLimiter, authenticateToken, async (req: AuthR
       avg_flakiness_rate = EXCLUDED.avg_flakiness_rate,
       automation_coverage = EXCLUDED.automation_coverage
     `, [
-      companyId,
+      companyId, scopeKey,
       m.engineeringHealthScore, m.deliveryPerformanceScore, m.developerWellnessIndex, m.techDebtStatusScore, m.pipelineHealthScore,
       m.globalQaScore, m.avgTestCoverage, m.avgDefectEscapeRate, m.avgFlakinessRate, m.automationCoverage
     ]);
 
-    // 3. History: company snapshots from the last 30 days (company-wide callers only; the stored
-    // snapshots are company aggregates and would show other teams' figures to a scoped caller)
-    const history = companyWide ? await query<any>(`
+    // 3. History: the snapshots of the same scope from the last 30 days (a scoped caller never
+    // sees the company aggregates, which hold other teams' figures)
+    const history = await query<any>(`
       SELECT * FROM company_kpi_snapshots 
-      WHERE company_id = ? 
+      WHERE company_id = ? AND scope_key = ?
         AND snapshot_date >= CURRENT_DATE - 30
       ORDER BY snapshot_date ASC
-    `, [companyId]) : [];
+    `, [companyId, scopeKey]);
 
     // 4. Generate AI Analysis (retries + smaller-model fallback)
     let aiAnalysis = isGroqConfigured()
@@ -2533,7 +2587,7 @@ Provide a concise executive summary (3-4 sentences) highlighting the biggest ris
             },
             {
               role: 'user',
-              content: `Here are the company snapshots from the last 30 days (${history.length} snapshot${history.length === 1 ? '' : 's'}): ${JSON.stringify(history.map((h: any) => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
+              content: `Here are the ${companyWide ? 'company' : 'scope'} snapshots from the last 30 days (${history.length} snapshot${history.length === 1 ? '' : 's'}): ${JSON.stringify(history.map((h: any) => ({ date: h.snapshot_date, health: h.engineering_health_score, dora: h.delivery_performance_score })))}`
             }
           ]
         });

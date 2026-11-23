@@ -1,0 +1,79 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "pagerduty",
+  "kind": "incidents",
+  "items": [
+    {
+      "id": "INC-2041",
+      "team": "<teamId>",
+      "title": "Refund API returns 500 for partial refunds",
+      "severity": "SEV2",
+      "service": "payments-api",
+      "status": "resolved",
+      "openedAt": "2026-11-12T16:10:00Z",
+      "acknowledgedAt": "2026-11-12T16:18:00Z",
+      "resolvedAt": "2026-11-12T18:40:00Z",
+      "at": "2026-11-12T18:40:00Z",
+      "updates": [
+        {
+          "status": "open",
+          "at": "2026-11-12T16:10:00Z"
+        },
+        {
+          "status": "acknowledged",
+          "at": "2026-11-12T16:18:00Z"
+        },
+        {
+          "status": "resolved",
+          "at": "2026-11-12T18:40:00Z"
+        }
+      ],
+      "deploymentId": "rel-2026.11.12-1",
+      "outage": true,
+      "category": "application",
+      "url": "https://acme.pagerduty.com/incidents/Q1R2S3T4",
+      "responder": "oncall.lead@acme.example"
+    },
+    {
+      "id": "INC-2047",
+      "title": "Payments database failover",
+      "severity": "critical",
+      "service": "payments-api",
+      "status": "resolved",
+      "openedAt": "2026-11-17T10:05:00Z",
+      "acknowledgedAt": "2026-11-17T10:07:00Z",
+      "resolvedAt": "2026-11-17T10:50:00Z",
+      "at": "2026-11-17T10:50:00Z",
+      "deploymentId": "rel-2026.11.17-1",
+      "outage": true,
+      "category": "infrastructure",
+      "url": "https://acme.pagerduty.com/incidents/Q5U6V7W8",
+      "responderHash": "9a0364b9e99bb480dd25e1f0284c8555"
+    },
+    {
+      "id": "INC-2052",
+      "title": "Slow refund confirmation e-mails",
+      "severity": "low",
+      "service": "payments-api",
+      "status": "acknowledged",
+      "openedAt": "2026-11-19T13:00:00Z",
+      "acknowledgedAt": "2026-11-19T13:20:00Z",
+      "at": "2026-11-19T13:20:00Z",
+      "updates": [
+        {
+          "status": "open",
+          "at": "2026-11-19T13:00:00Z"
+        },
+        {
+          "status": "acknowledged",
+          "at": "2026-11-19T13:20:00Z"
+        }
+      ],
+      "outage": false,
+      "category": "application",
+      "url": "https://acme.pagerduty.com/incidents/Q9X0Y1Z2"
+    }
+  ]
+}

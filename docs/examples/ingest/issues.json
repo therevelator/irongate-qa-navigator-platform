@@ -1,0 +1,277 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "jira",
+  "kind": "issues",
+  "items": [
+    {
+      "key": "PAY-101",
+      "priority": "High",
+      "team": "<teamId>",
+      "project": "PAY",
+      "title": "Partial refunds respect the card network limit",
+      "type": "Story",
+      "status": "Done",
+      "statusCategory": "done",
+      "resolution": "Done",
+      "createdAt": "2026-10-28T10:00:00Z",
+      "resolvedAt": "2026-11-10T15:30:00Z",
+      "updatedAt": "2026-11-10T15:31:00Z",
+      "storyPoints": 5,
+      "estimateHours": 16,
+      "timeLoggedHours": 20,
+      "sprints": [
+        {
+          "id": "1046",
+          "name": "PAY Sprint 46",
+          "state": "closed",
+          "startedAt": "2026-11-02T09:00:00Z",
+          "endsAt": "2026-11-13T17:00:00Z",
+          "completedAt": "2026-11-13T16:30:00Z"
+        }
+      ],
+      "environment": "staging",
+      "labels": [
+        "feature"
+      ],
+      "components": [
+        "refunds"
+      ],
+      "url": "https://acme.atlassian.net/browse/PAY-101",
+      "assignee": "dev.one@acme.example",
+      "reporter": "po.lead@acme.example",
+      "transitions": [
+        {
+          "field": "status",
+          "from": "To Do",
+          "to": "In Progress",
+          "toCategory": "in_progress",
+          "at": "2026-11-03T09:15:00Z"
+        },
+        {
+          "field": "status",
+          "from": "In Progress",
+          "to": "Blocked",
+          "at": "2026-11-05T10:00:00Z"
+        },
+        {
+          "field": "status",
+          "from": "Blocked",
+          "to": "In Progress",
+          "toCategory": "in_progress",
+          "at": "2026-11-06T10:00:00Z"
+        },
+        {
+          "field": "flagged",
+          "to": "on",
+          "at": "2026-11-07T09:00:00Z"
+        },
+        {
+          "field": "flagged",
+          "to": "off",
+          "at": "2026-11-07T13:00:00Z"
+        },
+        {
+          "field": "status",
+          "from": "In Progress",
+          "to": "Done",
+          "toCategory": "done",
+          "at": "2026-11-10T15:30:00Z"
+        }
+      ]
+    },
+    {
+      "key": "PAY-102",
+      "priority": "Medium",
+      "project": "PAY",
+      "title": "Retry refunds after gateway timeouts",
+      "type": "Task",
+      "status": "In Progress",
+      "statusCategory": "in_progress",
+      "createdAt": "2026-10-30T11:00:00Z",
+      "updatedAt": "2026-11-18T10:00:00Z",
+      "storyPoints": 3,
+      "estimateHours": 8,
+      "sprints": [
+        "1046",
+        {
+          "id": "1047",
+          "name": "PAY Sprint 47",
+          "state": "active",
+          "startedAt": "2026-11-16T09:00:00Z",
+          "endsAt": "2026-11-27T17:00:00Z"
+        }
+      ],
+      "components": [
+        "refunds"
+      ],
+      "url": "https://acme.atlassian.net/browse/PAY-102",
+      "assigneeHash": "1f3870be274f6c49b3e31a0c6728957f",
+      "reporterHash": "8f14e45fceea167a5a36dedd4bea2543",
+      "blocked": [
+        {
+          "from": "2026-11-11T09:00:00Z",
+          "to": "2026-11-12T15:00:00Z"
+        }
+      ],
+      "transitions": [
+        {
+          "field": "status",
+          "from": "To Do",
+          "to": "In Progress",
+          "toCategory": "in_progress",
+          "at": "2026-11-04T09:00:00Z"
+        },
+        {
+          "field": "blocked",
+          "blocked": true,
+          "at": "2026-11-17T10:00:00Z"
+        },
+        {
+          "field": "blocked",
+          "blocked": false,
+          "at": "2026-11-17T16:00:00Z"
+        },
+        {
+          "field": "sprint",
+          "from": "1046",
+          "to": "1047",
+          "at": "2026-11-13T16:30:00Z"
+        }
+      ]
+    },
+    {
+      "key": "PAY-103",
+      "priority": "Highest",
+      "project": "PAY",
+      "title": "Refund of a split payment is booked twice",
+      "type": "Bug",
+      "status": "Done",
+      "statusCategory": "done",
+      "resolution": "Fixed",
+      "createdAt": "2026-11-06T08:00:00Z",
+      "resolvedAt": "2026-11-08T12:00:00Z",
+      "updatedAt": "2026-11-08T12:00:00Z",
+      "storyPoints": 2,
+      "estimateHours": 4,
+      "timeLoggedHours": 3.5,
+      "sprints": [
+        "1046"
+      ],
+      "environment": "production",
+      "labels": [
+        "bug",
+        "customer-reported"
+      ],
+      "components": [
+        "refunds",
+        "ledger"
+      ],
+      "url": "https://acme.atlassian.net/browse/PAY-103",
+      "assignee": "dev.two@acme.example",
+      "reporter": "support.agent@acme.example",
+      "transitions": [
+        {
+          "field": "status",
+          "from": "To Do",
+          "to": "Done",
+          "toCategory": "done",
+          "at": "2026-11-08T12:00:00Z"
+        }
+      ]
+    },
+    {
+      "key": "PAY-104",
+      "priority": "Low",
+      "project": "PAY",
+      "title": "Voucher total wrong on the staging checkout",
+      "type": "Bug",
+      "status": "To Do",
+      "statusCategory": "todo",
+      "createdAt": "2026-11-12T14:00:00Z",
+      "updatedAt": "2026-11-12T14:00:00Z",
+      "sprints": [
+        "1047"
+      ],
+      "environment": "staging",
+      "labels": [
+        "bug",
+        "env:staging"
+      ],
+      "url": "https://acme.atlassian.net/browse/PAY-104"
+    },
+    {
+      "key": "PAY-105",
+      "priority": "High",
+      "project": "PAY",
+      "title": "Refund booked twice (duplicate report)",
+      "type": "Bug",
+      "status": "Closed",
+      "statusCategory": "done",
+      "resolution": "Duplicate",
+      "createdAt": "2026-11-09T09:00:00Z",
+      "resolvedAt": "2026-11-09T15:00:00Z",
+      "updatedAt": "2026-11-09T15:00:00Z",
+      "environment": "production",
+      "url": "https://acme.atlassian.net/browse/PAY-105"
+    },
+    {
+      "key": "PAY-106",
+      "priority": "Medium",
+      "project": "PAY",
+      "title": "Show the refund limit on the payment page",
+      "type": "Story",
+      "status": "Done",
+      "statusCategory": "done",
+      "resolution": "Done",
+      "createdAt": "2026-11-04T10:00:00Z",
+      "resolvedAt": "2026-11-12T11:00:00Z",
+      "updatedAt": "2026-11-12T11:00:00Z",
+      "storyPoints": 2,
+      "estimateHours": 6,
+      "timeLoggedHours": 5,
+      "sprints": [
+        {
+          "id": "1046",
+          "name": "PAY Sprint 46",
+          "state": "closed",
+          "startedAt": "2026-11-02T09:00:00Z",
+          "endsAt": "2026-11-13T17:00:00Z",
+          "completedAt": "2026-11-13T16:30:00Z"
+        }
+      ],
+      "url": "https://acme.atlassian.net/browse/PAY-106"
+    },
+    {
+      "key": "PAY-107",
+      "priority": "Medium",
+      "project": "PAY",
+      "title": "Refunds 2.0",
+      "type": "Epic",
+      "status": "In Progress",
+      "statusCategory": "in_progress",
+      "createdAt": "2026-10-01T09:00:00Z",
+      "updatedAt": "2026-11-10T15:31:00Z",
+      "url": "https://acme.atlassian.net/browse/PAY-107"
+    },
+    {
+      "key": "PAY-108",
+      "priority": "Low",
+      "project": "PAY",
+      "title": "Add the limit to the refund API schema",
+      "type": "Sub-task",
+      "status": "Done",
+      "statusCategory": "done",
+      "resolution": "Done",
+      "createdAt": "2026-11-03T09:00:00Z",
+      "resolvedAt": "2026-11-05T17:00:00Z",
+      "updatedAt": "2026-11-05T17:00:00Z",
+      "storyPoints": 1,
+      "sprints": [
+        "1046"
+      ],
+      "url": "https://acme.atlassian.net/browse/PAY-108"
+    }
+  ]
+}

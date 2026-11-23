@@ -53,6 +53,11 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
     const team = await assertTeamAnalytics(req, res, req.params.id as string);
     if (!team) return;
     const teamId = team.id;
+    // ?repo= narrows the runs, the coverage report and the slowest tests to one repository (test_runs.repo, coverage_reports.repo).
+    const repo = typeof req.query.repo === 'string' && req.query.repo.trim() ? req.query.repo.trim().slice(0, 255) : null;
+    const repos = (await query<any[]>(
+      `SELECT repo FROM test_runs WHERE team_id = ? AND repo IS NOT NULL UNION SELECT repo FROM coverage_reports WHERE team_id = ? AND repo IS NOT NULL ORDER BY 1 LIMIT 100`, [teamId, teamId]))
+      .map((r: any) => r.repo as string);
 
     const flakyRows = await query<any[]>(
       `SELECT test_key, suite, name, commit_sha, failed_run_ids, passed_run_ids, failure_message, first_seen, last_seen
@@ -71,10 +76,11 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
       .slice(0, 20);
     const runIds = Array.from(new Set(flaky.flatMap((f) => [...Array.from(f.failedRuns as Set<string>).slice(0, 5), ...Array.from(f.passedRuns as Set<string>).slice(0, 5)])));
     const runs = runIds.length
-      ? await query<any[]>(`SELECT id, run_id, attempt, commit_sha, branch, started_at FROM test_runs WHERE team_id = ? AND id = ANY(?::text[])`, [teamId, runIds])
+      ? await query<any[]>(`SELECT id, run_id, attempt, commit_sha, branch, started_at, repo FROM test_runs WHERE team_id = ? AND id = ANY(?::text[])`, [teamId, runIds])
       : [];
-    const runOf = new Map(runs.map((r: any) => [r.id, { id: r.id, runId: r.run_id, attempt: r.attempt, commit: r.commit_sha, branch: r.branch, startedAt: r.started_at }]));
-    const flakyTests = flaky.map((f) => ({
+    const runOf = new Map(runs.map((r: any) => [r.id, { id: r.id, runId: r.run_id, attempt: r.attempt, commit: r.commit_sha, branch: r.branch, startedAt: r.started_at, repo: r.repo }]));
+    const inRepo = (ids: Set<string>) => !repo || Array.from(ids).some((id) => runOf.get(id)?.repo === repo);
+    const flakyTests = flaky.filter((f) => inRepo(f.failedRuns) || inRepo(f.passedRuns)).map((f) => ({
       testKey: f.testKey, suite: f.suite, name: f.name, commits: f.commits.slice(0, 5), failureMessage: f.failureMessage, lastSeen: f.lastSeen,
       failedRunCount: f.failedRuns.size, passedRunCount: f.passedRuns.size,
       failedRuns: Array.from(f.failedRuns as Set<string>).slice(0, 5).map((id) => runOf.get(id) ?? { id }),
@@ -82,10 +88,10 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
     }));
 
     const report = await queryOne<any>(
-      `SELECT r.id, r.commit_sha, r.branch, r.format, r.created_at, r.lines_found, r.lines_hit, r.file_count
+      `SELECT r.id, r.commit_sha, r.branch, r.format, r.created_at, r.lines_found, r.lines_hit, r.file_count, r.repo, r.lines_of_code
          FROM coverage_reports r JOIN teams t ON t.id = r.team_id
-        WHERE r.team_id = ?
-        ORDER BY (r.branch IS NULL OR r.branch = '' OR (t.main_branch IS NULL AND r.branch IN ('main', 'master')) OR r.branch = t.main_branch) DESC, r.created_at DESC LIMIT 1`, [teamId]);
+        WHERE r.team_id = ? AND (?::text IS NULL OR r.repo = ?)
+        ORDER BY (r.branch IS NULL OR r.branch = '' OR (t.main_branch IS NULL AND r.branch IN ('main', 'master')) OR r.branch = t.main_branch) DESC, r.created_at DESC LIMIT 1`, [teamId, repo, repo]);
     const files = report
       ? await query<any[]>(
         `SELECT path, lines_found, lines_hit, branches_found, branches_hit FROM coverage_files
@@ -96,8 +102,8 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
       `SELECT r.test_key, MAX(r.suite) AS suite, MAX(r.name) AS name, COUNT(*)::int AS runs,
               percentile_cont(0.5) WITHIN GROUP (ORDER BY r.duration_ms)::float AS median_ms, MAX(r.duration_ms)::int AS max_ms
          FROM test_results r JOIN test_runs tr ON tr.id = r.test_run_id
-        WHERE tr.team_id = ? AND tr.day >= CURRENT_DATE - 6 AND r.status <> 'skipped'
-        GROUP BY r.test_key ORDER BY median_ms DESC LIMIT 15`, [teamId]);
+        WHERE tr.team_id = ? AND tr.day >= CURRENT_DATE - 6 AND r.status <> 'skipped' AND (?::text IS NULL OR tr.repo = ?)
+        GROUP BY r.test_key ORDER BY median_ms DESC LIMIT 15`, [teamId, repo, repo]);
 
     const stages = await query<any[]>(
       `SELECT s.name, COUNT(*)::int AS runs, COUNT(*) FILTER (WHERE s.result = 'failed')::int AS failed,
@@ -117,11 +123,12 @@ router.get('/teams/:id/evidence', authenticateToken, async (req: AuthRequest, re
     res.json({
       teamId,
       lastReceived: await lastReceived(teamId),
+      repo, repos,
       metrics: latest.map((m: any) => ({ key: m.metric_key, label: METRICS[m.metric_key]?.label ?? m.metric_key, day: dayStr(m.day), value: m.value, unit: m.unit, sampleSize: m.sample_size, confidence: m.confidence })),
       flakyTests,
       coverage: report ? {
-        reportId: report.id, commit: report.commit_sha, branch: report.branch, format: report.format, createdAt: report.created_at,
-        linesFound: report.lines_found, linesHit: report.lines_hit, fileCount: report.file_count,
+        reportId: report.id, commit: report.commit_sha, branch: report.branch, format: report.format, createdAt: report.created_at, repo: report.repo,
+        linesFound: report.lines_found, linesHit: report.lines_hit, fileCount: report.file_count, linesOfCode: report.lines_of_code,
         lowestFiles: files.map((f: any) => ({ path: f.path, linesFound: f.lines_found, linesHit: f.lines_hit, branchesFound: f.branches_found, branchesHit: f.branches_hit, coverage: Math.round((f.lines_hit / f.lines_found) * 10000) / 100 })),
       } : null,
       slowestTests: slowest.map((s: any) => ({ testKey: s.test_key, suite: s.suite, name: s.name, runs: s.runs, medianMs: Math.round(s.median_ms), maxMs: s.max_ms })),
@@ -177,13 +184,13 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
     const flakyRunIds = Array.isArray(s.flakyTests) ? s.flakyTests.flatMap((f: any) => [...ids(f.failedRuns), ...ids(f.passedRuns)]) : [];
     const testRunIds = Array.from(new Set([...ids(s.testRuns), ...flakyRunIds]));
     const testRuns = testRunIds.length
-      ? await query<any[]>(`SELECT id, run_id, attempt, commit_sha, branch, started_at, passed, failed, errored, skipped, duration_ms, format FROM test_runs WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY started_at DESC`, [team.id, testRunIds])
+      ? await query<any[]>(`SELECT id, run_id, attempt, commit_sha, branch, started_at, passed, failed, errored, skipped, duration_ms, format, repo FROM test_runs WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY started_at DESC`, [team.id, testRunIds])
       : [];
     const pipelineRuns = ids(s.pipelineRuns).length
       ? await query<any[]>(`SELECT id, external_id, attempt, name, commit_sha, branch, started_at, duration_s, result, url FROM pipeline_runs_raw WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY started_at DESC`, [team.id, ids(s.pipelineRuns)])
       : [];
     const coverageReports = ids(s.coverageReports).length
-      ? await query<any[]>(`SELECT id, commit_sha, branch, format, created_at, lines_found, lines_hit, branches_found, branches_hit, file_count, changed_lines_found, changed_lines_hit FROM coverage_reports WHERE team_id = ? AND id = ANY(?::text[])`, [team.id, ids(s.coverageReports)])
+      ? await query<any[]>(`SELECT id, commit_sha, branch, format, created_at, lines_found, lines_hit, branches_found, branches_hit, file_count, changed_lines_found, changed_lines_hit, repo, lines_of_code FROM coverage_reports WHERE team_id = ? AND id = ANY(?::text[])`, [team.id, ids(s.coverageReports)])
       : [];
     const failedDeployments: Array<{ id: string; externalId: string; reasons: Array<{ type: string; ref: string | null; at: string }> }> = Array.isArray(s.failedDeployments) ? s.failedDeployments.slice(0, 50) : [];
     const deployIds = Array.from(new Set([...ids(s.deployments), ...failedDeployments.map((f) => f.id).filter((x) => typeof x === 'string')]));
@@ -209,7 +216,7 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
     if (key === 'escape_rate') for (const k of Array.isArray(s.issues) ? s.issues : []) addRole(k, 'bug');
     const issueKeys = Array.from(roles.keys()).slice(0, 80);
     const issueRows = issueKeys.length
-      ? await query<any[]>(`SELECT external_id, title, issue_type, status, found_in, environment, story_points::float8 AS points, estimate_hours::float8 AS estimate, time_logged_hours::float8 AS logged, opened_at, resolved_at, url FROM issues WHERE team_id = ? AND external_id = ANY(?::text[]) ORDER BY opened_at DESC`, [team.id, issueKeys])
+      ? await query<any[]>(`SELECT external_id, title, issue_type, status, priority, found_in, environment, story_points::float8 AS points, estimate_hours::float8 AS estimate, time_logged_hours::float8 AS logged, opened_at, resolved_at, url FROM issues WHERE team_id = ? AND external_id = ANY(?::text[]) ORDER BY opened_at DESC`, [team.id, issueKeys])
       : [];
     const reportRows = ids(s.analysisReports).length
       ? await query<any[]>(`SELECT id, tool, repo, branch, commit_sha, analyzed_at, lines_of_code, findings, critical, high, medium, low, info, new_findings, fixed_findings FROM analysis_reports WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY analyzed_at DESC`, [team.id, ids(s.analysisReports)])
@@ -230,12 +237,12 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
       flakyTests: Array.isArray(s.flakyTests) ? s.flakyTests : undefined,
       lowestFiles: Array.isArray(s.lowestFiles) ? s.lowestFiles : undefined,
       sources: {
-        testRuns: testRuns.map((r: any) => ({ id: r.id, runId: r.run_id, attempt: r.attempt, commit: r.commit_sha, branch: r.branch, startedAt: r.started_at, passed: r.passed, failed: r.failed, errors: r.errored, skipped: r.skipped, durationMs: Number(r.duration_ms), format: r.format })),
+        testRuns: testRuns.map((r: any) => ({ id: r.id, runId: r.run_id, attempt: r.attempt, commit: r.commit_sha, branch: r.branch, startedAt: r.started_at, passed: r.passed, failed: r.failed, errors: r.errored, skipped: r.skipped, durationMs: Number(r.duration_ms), format: r.format, repo: r.repo })),
         pipelineRuns: pipelineRuns.map((p: any) => ({ id: p.id, runId: p.external_id, attempt: p.attempt, name: p.name, commit: p.commit_sha, branch: p.branch, startedAt: p.started_at, durationSeconds: p.duration_s, result: p.result, url: p.url })),
-        coverageReports: coverageReports.map((c: any) => ({ id: c.id, commit: c.commit_sha, branch: c.branch, format: c.format, createdAt: c.created_at, linesFound: c.lines_found, linesHit: c.lines_hit, branchesFound: c.branches_found, branchesHit: c.branches_hit, files: c.file_count, changedLinesFound: c.changed_lines_found, changedLinesHit: c.changed_lines_hit })),
+        coverageReports: coverageReports.map((c: any) => ({ id: c.id, commit: c.commit_sha, branch: c.branch, format: c.format, createdAt: c.created_at, linesFound: c.lines_found, linesHit: c.lines_hit, branchesFound: c.branches_found, branchesHit: c.branches_hit, files: c.file_count, changedLinesFound: c.changed_lines_found, changedLinesHit: c.changed_lines_hit, repo: c.repo, linesOfCode: c.lines_of_code })),
         deployments: deployments.map((d: any) => ({ id: d.id, deploymentId: d.external_id, service: d.service, environment: d.environment, commit: d.commit_sha, startedAt: d.started_at, finishedAt: d.finished_at, result: d.result, rollbackOf: d.rollback_of, hotfix: d.is_hotfix, url: d.url, failedBecause: reasonsOf.get(d.id) ?? [] })),
         incidents: incidents.map((i: any) => ({ id: i.id, incidentId: i.external_id, title: i.title, severity: i.severity, service: i.service, outage: isOutage(i.severity, i.outage), status: i.status, openedAt: i.opened_at, resolvedAt: i.resolved_at, deploymentId: i.deployment_external_id, url: i.url })),
-        issues: issueRows.map((i: any) => ({ key: i.external_id, title: i.title, type: i.issue_type, status: i.status, foundIn: i.found_in, environment: i.environment, points: i.points, estimateHours: i.estimate, loggedHours: i.logged, openedAt: i.opened_at, resolvedAt: i.resolved_at, url: i.url, roles: roles.get(i.external_id) ?? [] })),
+        issues: issueRows.map((i: any) => ({ key: i.external_id, title: i.title, type: i.issue_type, status: i.status, priority: i.priority, foundIn: i.found_in, environment: i.environment, points: i.points, estimateHours: i.estimate, loggedHours: i.logged, openedAt: i.opened_at, resolvedAt: i.resolved_at, url: i.url, roles: roles.get(i.external_id) ?? [] })),
         analysisReports: reportRows.map((r: any) => ({ id: r.id, tool: r.tool, repo: r.repo, branch: r.branch, commit: r.commit_sha, analyzedAt: r.analyzed_at, linesOfCode: r.lines_of_code, findings: r.findings, critical: r.critical, high: r.high, medium: r.medium, low: r.low, info: r.info, newFindings: r.new_findings, fixedFindings: r.fixed_findings })),
       },
       sprint: s.sprint && typeof s.sprint === 'object' ? s.sprint : undefined,
@@ -408,7 +415,7 @@ router.get('/teams/:id/work', authenticateToken, async (req: AuthRequest, res) =
     } finally { client.release(); }
     const iso = (t: number | null) => (t === null ? null : new Date(t).toISOString());
     const r1 = (n: number) => Math.round(n * 10) / 10;
-    const issueOut = (i: (typeof work.issues)[number]) => ({ key: i.key, title: i.title, type: i.type, url: i.url, points: i.points, openedAt: iso(i.openedAt), resolvedAt: iso(i.resolvedAt), environment: i.environment, foundIn: i.foundIn, components: i.components });
+    const issueOut = (i: (typeof work.issues)[number]) => ({ key: i.key, title: i.title, type: i.type, url: i.url, points: i.points, openedAt: iso(i.openedAt), resolvedAt: iso(i.resolvedAt), environment: i.environment, foundIn: i.foundIn, components: i.components, priority: i.priority ?? null });
 
     // Sprints: the last 6 closed (newest first).
     const byId = new Map(work.sprints.map((x) => [x.externalId, x]));

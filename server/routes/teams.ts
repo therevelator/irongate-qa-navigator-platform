@@ -478,26 +478,34 @@ router.get('/:id', authenticateToken, async (req: AuthRequest, res) => {
     // Team members (names, emails, roles): only for callers who may see the people of this team
     // (canViewTeamMembers in server/lib/userPolicy.ts: super_admin, the QA manager of its
     // department, people assigned to the team). Others get the team and its KPIs only.
+    // The members table itself (names, e-mails, roles, developer-insights flag) lists every member
+    // only for those who see individual developer rows (canViewIndividualDevelopers: super admin,
+    // the department's managers, the team's leads); software engineers and viewers get their own
+    // row only (docs/ROLE_ACCESS.md, "Team detail: members table").
+    let allMembers: any[] = [];
     if (canViewTeamMembers(actor, { id: team.id, department_id: team.department_id })) {
       // Active users with an active role assignment on the team (server/lib/assignments.ts).
-      team.members = await teamMembers(req.params.id);
+      allMembers = await teamMembers(req.params.id);
+      const seeAll = canViewIndividualDevelopers(actor, { id: team.id, department_id: team.department_id });
+      team.members = seeAll ? allMembers : allMembers.filter((m: any) => String(m.id) === String(actor.id));
       team.membersHidden = false;
     } else {
       team.members = [];
       team.membersHidden = true;
     }
     // People of the team per role (from the members' assignments on this team) and its leads.
-    // Same definition as the overview card (teamMemberCountSql).
+    // Same definition as the overview card (teamMemberCountSql). Counts and the leads' / Product
+    // Owners' names (no e-mail) are part of the team header, shown to everyone with the team in scope.
     team.memberCount = Number(team.member_count) || 0;
-    team.memberRoles = team.members.reduce((acc: Record<string, number>, m: any) => {
+    team.memberRoles = allMembers.reduce((acc: Record<string, number>, m: any) => {
       const role = String(m.assignment_role ?? m.role ?? 'qa_engineer');
       acc[role] = (acc[role] ?? 0) + 1;
       return acc;
     }, {});
     const personOf = (m: any) => ({ name: [m.first_name, m.last_name].filter(Boolean).join(' ').trim() || m.email, jobTitle: m.job_title ?? null });
-    team.teamLeads = team.members.filter((m: any) => m.assignment_role === 'team_lead').map(personOf);
+    team.teamLeads = allMembers.filter((m: any) => m.assignment_role === 'team_lead').map(personOf);
     // Product Owners: members whose job title says so (users.job_title); none when not recorded.
-    team.productOwners = team.members.filter((m: any) => /product owner/i.test(String(m.job_title ?? ''))).map(personOf);
+    team.productOwners = allMembers.filter((m: any) => /product owner/i.test(String(m.job_title ?? ''))).map(personOf);
 
     // Rank of the current QA score among the teams of the caller's analytics scope (only when the
     // scope holds at least two scored teams); scope 'company' when that is every team of the company.
@@ -742,13 +750,20 @@ ${benchmarkText}`
 });
 
 // Get AI suggestions for developers in a team.
-// Scope: the team must be in the caller's analytics scope (assertTeamAnalytics). Rows:
-// super_admin / qa_manager / team_lead get every developer of the team who has not opted
-// out; qa_engineer / viewer get only their own row (canViewIndividualDevelopers).
+// Scope: the team must be in the caller's analytics scope (assertTeamAnalytics), and the caller
+// one who may request the team's insights (canRequestTeamInsights: super admins, the managers of
+// its department, its leads). Software engineers and viewers get 403 (docs/ROLE_ACCESS.md, "AI
+// insights and developer recommendations": —). Rows: every developer who opted in.
 router.get('/:id/developer-ai-suggestions', aiLimiter, authenticateToken, async (req: AuthRequest, res) => {
   try {
     const scopedTeam = await assertTeamAnalytics(req, res, req.params.id);
     if (!scopedTeam) return;
+    if (!canRequestTeamInsights(policyActor(req), scopedTeam)) {
+      return res.status(403).json({
+        error: 'Developer recommendations are available to the team’s leads, its department’s managers and administrators',
+        restricted: true,
+      });
+    }
     const seeAll = canViewIndividualDevelopers(policyActor(req), scopedTeam);
 
     const team = await queryOne<any>(

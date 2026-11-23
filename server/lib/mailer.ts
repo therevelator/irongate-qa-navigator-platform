@@ -21,6 +21,7 @@ import { appendFileSync } from 'fs';
 import { createHash } from 'crypto';
 import { recordServerError } from './opsLog';
 import { isSandboxEmail } from './sandboxConfig';
+import { isProductionRuntime } from './runtimeEnv';
 
 export type MailChannel = 'resend' | 'smtp' | 'log';
 
@@ -145,7 +146,7 @@ export function createSmtpMailer(cfg: SmtpConfig): Mailer {
 export const logMailer: Mailer = {
   channel: 'log',
   async send(message) {
-    const dev = process.env.NODE_ENV !== 'production';
+    const dev = !isProductionRuntime();
     // Links carry one-time tokens: only printed in development.
     console.log(`[mailer] e-mail not configured (RESEND_API_KEY / SMTP_HOST); email to ${message.to} not sent: "${message.subject}"${dev ? `\n${message.text}` : ''}`);
     const capture = process.env.MAIL_CAPTURE_FILE;

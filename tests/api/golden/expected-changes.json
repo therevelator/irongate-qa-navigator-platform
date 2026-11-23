@@ -38,14 +38,14 @@
   {
     "path": "summary.automationCoverage",
     "before": 70,
-    "after": 75.7,
-    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+    "after": 73.7,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate ; PRODUCT_GUIDE: company KPI averages cover every active team with a current value of that KPI, also a team without a current QA score (Stale Team's current automation and flakiness count)"
   },
   {
     "path": "summary.avgFlakinessRate",
     "before": 2.8,
-    "after": 2.3,
-    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate"
+    "after": 2.4,
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate ; PRODUCT_GUIDE: company KPI averages cover every active team with a current value of that KPI, also a team without a current QA score (Stale Team's current automation and flakiness count)"
   },
   {
     "path": "summary.topImproving[1].score",
@@ -238,8 +238,8 @@
   {
     "path": "summary.aiSummary",
     "before": "Quality improved by 1 points vs. 7-14 days ago. 2 teams below 80% coverage. Automation coverage at 70%. Based on KPI snapshots as of D+0.",
-    "after": "Quality unchanged vs. 7-14 days ago. 1 team below their test coverage target. Automation coverage at 75.7%. Based on KPI snapshots as of D+0.",
-    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members) (trend 88.3 now vs 88.0 on D-8 = 0); coverage is judged against each team's target valid at the value's date (target history), so the text names the team target"
+    "after": "Quality unchanged vs. 7-14 days ago. 1 team below their test coverage target. Automation coverage at 73.7%. Based on KPI snapshots as of D+0.",
+    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members) (trend 88.3 now vs 88.0 on D-8 = 0); coverage is judged against each team's target valid at the value's date (target history), so the text names the team target ; PRODUCT_GUIDE: company KPI averages cover every active team with a current value of that KPI, also a team without a current QA score (Stale Team's current automation and flakiness count)"
   },
   {
     "path": "summary.teamsWithKpiData",
@@ -272,16 +272,10 @@
     "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate (its DORA level is not counted)"
   },
   {
-    "path": "summary.deliveryPerformanceBasis.teamsClassified",
-    "before": 4,
-    "after": 3,
-    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate (its DORA level is not counted)"
-  },
-  {
-    "path": "summary.deliveryPerformanceBasis.levels.High",
-    "before": 1,
-    "after": 0,
-    "reason": "Weighted aggregate: company values are team-size weighted means of current values (Big 6, Small 2, Partial 4 members); Staleness: Stale Team's test coverage (last recorded D-12, expected daily) and escape rate are stale, so it has no current QA score (coverage is required) and leaves every company aggregate (its DORA level is not counted)"
+    "path": "summary.deliveryPerformanceBasis.levels.Unknown",
+    "before": 0,
+    "after": 1,
+    "reason": "PRODUCT_GUIDE Delivery (DORA): every active team with DORA inputs is classified whether or not it has a QA score (Stale Team is classified again, as in the baseline); an active team that cannot be classified counts as Unknown, so 'n of m' is over all active teams"
   },
   {
     "path": "summary.developerWellnessBasis.method",
@@ -354,6 +348,30 @@
     "before": "<absent>",
     "after": 3,
     "reason": "Wellbeing (phase 3C): developerWellnessIndex / developerWellnessBasis now describe Wellbeing (survey), the anonymous pulse survey (teams with at least 3 responses in their latest closed period); the fixture has no survey answers"
+  },
+  {
+    "path": "summary.pipelineHealthBasis.definition",
+    "before": "Successful pipeline runs / (successful + failed) runs, last 30 days",
+    "after": "Successful pipeline runs / (successful + failed) runs, last 30 days (the runs your CI sent, as the engine counted them; cancelled runs left out)",
+    "reason": "Pipeline health from the ingested runs (docs/DATA_FLOW.md gap G1): the runs the engine counted from pipeline_runs_raw, with the build time over the same days; the golden company sends no pipeline runs, so it stays without data"
+  },
+  {
+    "path": "summary.pipelineHealthBasis.teams",
+    "before": "<absent>",
+    "after": 0,
+    "reason": "Pipeline health from the ingested runs (docs/DATA_FLOW.md gap G1): the runs the engine counted from pipeline_runs_raw, with the build time over the same days; the golden company sends no pipeline runs, so it stays without data"
+  },
+  {
+    "path": "summary.pipelineHealthBasis.avgBuildTimeMinutes",
+    "before": "<absent>",
+    "after": null,
+    "reason": "Pipeline health from the ingested runs (docs/DATA_FLOW.md gap G1): the runs the engine counted from pipeline_runs_raw, with the build time over the same days; the golden company sends no pipeline runs, so it stays without data"
+  },
+  {
+    "path": "summary.pipelineHealthBasis.source",
+    "before": "<absent>",
+    "after": "pipeline_runs_raw",
+    "reason": "Pipeline health from the ingested runs (docs/DATA_FLOW.md gap G1): the runs the engine counted from pipeline_runs_raw, with the build time over the same days; the golden company sends no pipeline runs, so it stays without data"
   },
   {
     "path": "summary.workloadBalanceIndex",

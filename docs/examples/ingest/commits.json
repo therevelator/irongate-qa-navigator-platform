@@ -1,0 +1,41 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "github",
+  "kind": "commits",
+  "items": [
+    {
+      "deployment": "rel-2026.11.19-1",
+      "team": "<teamId>",
+      "service": "payments-api",
+      "branch": "main",
+      "commits": [
+        {
+          "sha": "4e1f0c9a7b2d",
+          "authoredAt": "2026-11-17T16:40:00Z",
+          "committedAt": "2026-11-18T08:05:00Z",
+          "authorEmail": "dev.two@acme.example"
+        },
+        {
+          "sha": "3c4d5e6f7a8b",
+          "authoredAt": "2026-11-16T11:00:00Z",
+          "committedAt": "2026-11-16T11:30:00Z",
+          "authorHash": "7d793037a0760186574b0282f2f435e7"
+        }
+      ]
+    },
+    {
+      "service": "payments-api",
+      "branch": "main",
+      "commits": [
+        {
+          "sha": "9f3c2a1b7d4e",
+          "authoredAt": "2026-11-19T17:00:00Z",
+          "committedAt": "2026-11-20T08:50:00Z",
+          "authorEmail": "dev.three@acme.example"
+        }
+      ]
+    }
+  ]
+}

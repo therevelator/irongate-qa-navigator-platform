@@ -34,6 +34,7 @@ import { storeCommitBatches, storeDeployments, storeIncidents, type StoredEvent 
 import type { DayResult } from '../lib/calc/engine';
 import { calcOrQueue } from '../lib/calc/queue';
 import { deliveryAffectedDays } from '../lib/calc/delivery';
+import { daysBack, evidenceDaysFrom, firstDay, teamFact } from '../lib/calc/dependents';
 import { HttpError, actorOf, after, afterCommit, callerOf, computedOut, fail, noAccess, outOfScope, summaryItem, text } from './ingestRaw';
 import { applyIncidentAllowList, minimisedCommitPayload, minimisedDeploymentPayload, minimisedIncidentPayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
 
@@ -196,6 +197,9 @@ export function deliveryIngestHandler(kind: DeliveryKind) {
         }
         const uploadOf = (t: string) => uploads.get(t)?.id || null;
         const tOf = (e: AnyEvent) => teamOf.get(e)!;
+        // Whether each team's incidents carried a category before this request (infrastructure failures start then).
+        const hadCategories = new Map<string, boolean>();
+        if (kind === 'incidents') for (const t of teams) hadCategories.set(t, await teamFact(client, t, 'incidentCategories'));
         let stored: Array<StoredEvent & { commits?: number }>;
         if (kind === 'deployments') stored = await storeDeployments(client, caller.companyId, events as DeploymentEvent[], tOf, uploadOf);
         else if (kind === 'commits') stored = await storeCommitBatches(client, caller.companyId, events as CommitBatch[], tOf, uploadOf);
@@ -207,7 +211,14 @@ export function deliveryIngestHandler(kind: DeliveryKind) {
         for (const t of teams) {
           const mine = stored.filter((s) => s.team === t);
           const changed = mine.filter((s) => s.status !== 'duplicate');
-          const days = deliveryAffectedDays(Array.from(new Set(changed.flatMap((s) => s.days))));
+          const eventDays = Array.from(new Set(changed.flatMap((s) => s.days)));
+          // Order independence (server/lib/calc/dependents.ts): the delivery days already calculated from the first
+          // event day on; every one of them when the team's first incident category arrived.
+          const flipped = kind === 'incidents' && changed.length > 0 && hadCategories.get(t) === false && (await teamFact(client, t, 'incidentCategories'));
+          const days = Array.from(new Set([
+            ...deliveryAffectedDays(eventDays),
+            ...(changed.length ? await evidenceDaysFrom(client, t, ['delivery'], flipped ? daysBack(366) : firstDay(eventDays)) : []),
+          ])).sort();
           const calc = await calcOrQueue(client, caller.companyId, t, days, { groups: ['delivery'], ingestionId, actorId: actorOf(caller) });
           queued ||= calc.queued;
           const result = calc.days;

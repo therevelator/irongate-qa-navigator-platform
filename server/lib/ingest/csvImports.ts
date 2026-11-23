@@ -59,6 +59,7 @@ export const CSV_SPECS: Record<CsvFormat, CsvSpec> = {
       T('statusCategory', 'Status category', 'text', ['statuscategory', 'statuskategorie', 'categoriedetat', 'categoriedestatut', 'categoriadeestado', 'categoriadistato', 'statuscategorie']),
       T('statusCategoryChanged', 'Status category changed', 'date', ['statuscategorychanged', 'statuskategoriegeandert', 'categoriedetatmodifiee', 'categoriadeestadocambiada', 'categoriadistatomodificata']),
       T('resolution', 'Resolution', 'text', ['resolution', 'losung', 'resolucion', 'risoluzione', 'oplossing', 'resolucao']),
+      T('priority', 'Priority', 'text', ['priority', 'prioritat', 'priorite', 'prioridad', 'priorita', 'prioriteit', 'prioridade', 'priorytet']),
       T('project', 'Project key', 'text', ['projectkey', 'projektschlussel', 'cledeprojet', 'cleduprojet', 'clavedeproyecto', 'clavedelproyecto', 'chiavedelprogetto', 'chiaveprogetto', 'projectsleutel', 'chavedoprojeto']),
       T('created', 'Created', 'date', ['created', 'erstellt', 'creation', 'cree', 'creee', 'creado', 'creada', 'fechadecreacion', 'creato', 'aangemaakt', 'criado', 'utworzone'], { required: true }),
       T('updated', 'Updated', 'date', ['updated', 'aktualisiert', 'miseajour', 'misajour', 'actualizado', 'actualizada', 'aggiornato', 'bijgewerkt', 'atualizado']),
@@ -82,6 +83,7 @@ export const CSV_SPECS: Record<CsvFormat, CsvSpec> = {
       T('team', 'Team', 'text', ['team', 'teamkey']),
       T('status', 'Status', 'text', ['status', 'state', 'workflowstate'], { required: true }),
       T('estimate', 'Estimate (points)', 'number', ['estimate', 'points', 'storypoints']),
+      T('priority', 'Priority', 'text', ['priority']),
       T('labels', 'Labels', 'list', ['labels', 'label']),
       T('project', 'Project', 'text', ['project', 'projectname']),
       T('parent', 'Parent issue', 'text', ['parentissue', 'parent', 'parentid']),
@@ -362,7 +364,7 @@ function jiraRow(one: One, many: Many, date: DateF, number: NumF, hours: (k: str
   const changed = date('statusCategoryChanged');
   const sprints = many('sprint').map((name) => ({ id: sprintIdOf(name), name: name.slice(0, 255) }));
   const rec: Record<string, unknown> = {
-    key, title: one('title'), type: need(one('type'), 'Issue type'), status, statusCategory: hint, resolution: one('resolution'),
+    key, title: one('title'), type: need(one('type'), 'Issue type'), status, statusCategory: hint, resolution: one('resolution'), priority: one('priority'),
     project: one('project') ?? (key.includes('-') ? key.split('-')[0] : null), createdAt: created, updatedAt: date('updated'), resolvedAt,
     storyPoints: number('storyPoints'), sprints, labels: many('labels', true), components: many('components'), environment: one('environment'),
     estimateHours: hours('estimate'), timeLoggedHours: hours('timeSpent'), assignee: one('assignee'), reporter: one('reporter'),
@@ -398,7 +400,7 @@ function linearRow(one: One, many: Many, date: DateF, number: NumF, now: number)
   return {
     key, title: one('title'), type, status, statusCategory: category, resolution: canceled ? 'Canceled' : completed ? 'Done' : null,
     project: key.includes('-') ? key.split('-')[0] : one('team'), createdAt: created, updatedAt: date('updated'), resolvedAt: completed ?? canceled,
-    storyPoints: number('estimate'), sprints, labels, components: one('project') ? [one('project')] : [],
+    storyPoints: number('estimate'), sprints, labels, components: one('project') ? [one('project')] : [], priority: one('priority'),
     assignee: one('assignee'), reporter: one('reporter'), transitions,
   };
 }

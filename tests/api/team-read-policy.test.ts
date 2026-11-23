@@ -17,6 +17,7 @@ import { createGolden, removeGolden, GOLDEN_ADMIN_EMAIL, GOLDEN_COMPANY } from '
 let up = true;
 let db: Client;
 const c: Record<string, string> = {};
+const u: Record<string, string> = {};
 
 beforeAll(async () => {
   up = await backendUp();
@@ -39,8 +40,12 @@ beforeAll(async () => {
   c.admin = (await login(GOLDEN_ADMIN_EMAIL)).cookie;
   c.manager = (await login('mgr@golden.example')).cookie;
   c.lead = (await login('partial-1@golden.example')).cookie;
-  c.engineer = (await login('partial-2@golden.example')).cookie;
-  c.viewer = (await login('viewer@golden.example')).cookie;
+  const eng = await login('partial-2@golden.example');
+  c.engineer = eng.cookie;
+  u.engineer = eng.user?.id;
+  const vw = await login('viewer@golden.example');
+  c.viewer = vw.cookie;
+  u.viewer = vw.user?.id;
   c.foreign = (await login('alex.morgan@northwind.example')).cookie;
 });
 
@@ -74,13 +79,14 @@ describe('GET /api/teams/:id — members only for people allowed to see them', (
     expect(other.body.team).toBeUndefined();
   });
 
-  it('TRP-003: lead, engineer and viewer: their own team (with members); any other team 403', async () => {
+  it('TRP-003: lead, engineer and viewer: their own team (the lead with every member, engineer and viewer their own row); any other team 403', async () => {
     if (!up) return;
     for (const who of ['lead', 'engineer', 'viewer']) {
       const own = await team('golden-team-partial', who);
       expect(own.status).toBe(200);
       expect(own.body.team.membersHidden).toBe(false);
-      expect(own.body.team.members.some((m: any) => m.email === 'partial-1@golden.example')).toBe(true);
+      if (who === 'lead') expect(own.body.team.members.some((m: any) => m.email === 'partial-1@golden.example')).toBe(true);
+      else expect(own.body.team.members.map((m: any) => m.id)).toEqual([String(u[who])]); // docs/ROLE_ACCESS.md: own row
       const other = await team('golden-team-big', who);
       expect(other.status).toBe(403);
       expect(other.body.team).toBeUndefined();

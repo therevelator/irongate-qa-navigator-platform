@@ -38,6 +38,7 @@ import alertsRoutes from './alerts';
 import settingsRoutes from './settings';
 import { ACTIVITY_CSV_COLUMNS } from './activity';
 import { DELIVERY_PREVIEW_DAYS, DELIVERY_RETENTION_DAYS } from '../lib/exporterDeliveries';
+import { isProductionRuntime } from '../lib/runtimeEnv';
 
 /**
  * Platform operator panel API (server/lib/operator.ts has the security design). IronGate platform
@@ -105,7 +106,7 @@ const tokenOf = (req: express.Request): string | null => {
 
 const cookieOptions = (req: express.Request) => ({
   httpOnly: true,
-  secure: req.secure || req.headers['x-forwarded-proto'] === 'https' || process.env.NODE_ENV === 'production',
+  secure: req.secure || req.headers['x-forwarded-proto'] === 'https' || isProductionRuntime(),
   sameSite: 'lax' as const,
   path: '/',
 });

@@ -109,6 +109,7 @@ export function mapJiraIssue(raw: any, ctx: JiraMapContext): { id: string; recor
   const record: Record<string, unknown> = {
     key, team, type: normaliseType(f.issuetype?.name, !!f.issuetype?.subtask), status, statusCategory,
     resolution: typeof f.resolution?.name === 'string' ? f.resolution.name : null, environment,
+    priority: typeof f.priority?.name === 'string' ? f.priority.name.slice(0, 50) : null,
     storyPoints: typeof sp === 'number' ? sp : typeof sp === 'string' && sp.trim() && Number.isFinite(Number(sp)) ? Number(sp) : null,
     estimateHours: hours(f.timeoriginalestimate), timeLoggedHours: hours(f.timespent),
     createdAt, resolvedAt: iso(f.resolutiondate), updatedAt: changedAt, sprints, transitions,
@@ -156,7 +157,7 @@ export class JiraAdapter implements Adapter {
 
   private fieldList(): string[] {
     const f = this.fields!;
-    const list = ['issuetype', 'status', 'resolution', 'resolutiondate', 'created', 'updated', 'project', 'labels', 'environment', 'timeoriginalestimate', 'timespent'];
+    const list = ['issuetype', 'status', 'resolution', 'resolutiondate', 'created', 'updated', 'project', 'labels', 'environment', 'timeoriginalestimate', 'timespent', 'priority'];
     for (const x of [f.storyPoints, f.sprint, f.environment, f.flagged]) if (x) list.push(x);
     if (!f.storyPoints) list.push(...SP_DEFAULTS);
     if (!f.sprint) list.push(...SPRINT_DEFAULTS);
@@ -171,7 +172,7 @@ export class JiraAdapter implements Adapter {
       `Jira ${this.src.deployment === 'cloud' ? 'Cloud' : 'Server / Data Center'} at ${this.src.baseUrl} (${this.src.deployment === 'cloud' ? 'e-mail + API token' : 'Personal Access Token'})`,
       `GET ${api}/myself (time zone only), ${api}/field, ${api}/status`,
       `GET ${api}/${this.src.deployment === 'cloud' ? 'search/jql' : 'search'} jql=(${this.src.jql}) AND updated >= <cursor> ORDER BY updated ASC, expand=changelog`,
-      `fields: ${this.fields ? this.fieldList().join(', ') : 'issuetype, status, resolution, resolutiondate, created, updated, project, labels, environment, timeoriginalestimate, timespent, <story points>, <sprint>, <found in>, <flagged>' + (this.privacy.privacy.sendTitles ? ', summary' : '') + (this.privacy.privacy.people === 'hash' ? ', assignee' : '')}`,
+      `fields: ${this.fields ? this.fieldList().join(', ') : 'issuetype, status, resolution, resolutiondate, created, updated, project, labels, environment, timeoriginalestimate, timespent, priority, <story points>, <sprint>, <found in>, <flagged>' + (this.privacy.privacy.sendTitles ? ', summary' : '') + (this.privacy.privacy.people === 'hash' ? ', assignee' : '')}`,
       `teams: ${Object.entries(this.src.teams).map(([k, t]) => `${k} → ${t}`).join(', ') || '(none)'}${this.src.defaultTeam ? `; default ${this.src.defaultTeam}` : ''}`,
     ];
   }

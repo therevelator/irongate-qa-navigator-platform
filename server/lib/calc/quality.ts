@@ -37,8 +37,8 @@ export async function loadQualityData(client: pg.PoolClient, teamId: string, fro
        FROM analysis_reports r JOIN teams t ON t.id = r.team_id
       WHERE r.team_id = $1 AND r.analyzed_at >= $2::date - ${REPORT_STALE_DAYS + 1} AND r.analyzed_at < $3::date + 1 ORDER BY r.analyzed_at`, [teamId, from, to])).rows;
   const coverage = (await client.query(
-    `SELECT r.id, r.created_at, r.lines_found FROM coverage_reports r JOIN teams t ON t.id = r.team_id
-      WHERE r.team_id = $1 AND r.created_at < $2::date + 1 AND r.lines_found > 0 AND ${MAIN('r')} ORDER BY r.created_at`, [teamId, to])).rows;
+    `SELECT r.id, r.created_at, COALESCE(r.lines_of_code, r.lines_found) AS lines_found FROM coverage_reports r JOIN teams t ON t.id = r.team_id
+      WHERE r.team_id = $1 AND r.created_at < $2::date + 1 AND COALESCE(r.lines_of_code, r.lines_found) > 0 AND ${MAIN('r')} ORDER BY r.created_at`, [teamId, to])).rows;
   return {
     reports: reports.map((r: any) => ({
       id: r.id, tool: r.tool, repo: r.repo, branch: r.branch, commit: r.commit_sha, analyzedAt: ms(r.analyzed_at)!, linesOfCode: r.lines_of_code, findings: r.findings,

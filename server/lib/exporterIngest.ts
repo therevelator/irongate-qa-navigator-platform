@@ -35,6 +35,27 @@ export const MAX_FILES_PER_REPORT = 50;
 const ENVELOPE_FIELDS = ['companyId', 'departmentId', 'teamId', 'source', 'kind', 'items'];
 const REPORT_FIELDS = ['files', 'format', 'commit', 'branch', 'run', 'attempt', 'startedAt', 'diff', 'changedLines', 'repo', 'loc'];
 const ID = /^[A-Za-z0-9_.:-]{1,36}$/;
+
+/** The item fields of each event kind: the names its parser reads, with their aliases (docs/DATA_FLOW.md 4.4–4.8). */
+type EventKind = 'pipeline-runs' | 'deployments' | 'commits' | 'incidents' | 'issues';
+const ITEM_FIELDS: Record<EventKind, string[]> = {
+  'pipeline-runs': ['id', 'runId', 'run', 'attempt', 'name', 'workflow', 'pipeline', 'commit', 'sha', 'branch', 'ref', 'startedAt', 'start', 'finishedAt', 'end',
+    'durationSeconds', 'duration', 'result', 'status', 'conclusion', 'url', 'stages', 'jobs'],
+  deployments: ['id', 'deploymentId', 'deployment_id', 'team', 'teamId', 'environment', 'env', 'production', 'isProduction', 'service', 'application', 'app',
+    'commit', 'sha', 'headCommit', 'previousCommit', 'previous_commit', 'commitRange', 'commit_range', 'commits', 'startedAt', 'started_at', 'start',
+    'finishedAt', 'finished_at', 'end', 'deployedAt', 'result', 'status', 'conclusion', 'rollbackOf', 'rollback_of', 'rollbackOfDeploymentId', 'hotfix', 'isHotfix', 'url'],
+  commits: ['deployment', 'deploymentId', 'deployment_id', 'team', 'teamId', 'service', 'branch', 'ref', 'commits',
+    // a single commit as an item
+    'sha', 'id', 'hash', 'authoredAt', 'authored_at', 'authorDate', 'author', 'timestamp', 'committedAt', 'committed_at', 'commitDate', 'committer', 'authorHash', 'authorEmail', 'author_email'],
+  incidents: ['id', 'incidentId', 'incident_id', 'team', 'teamId', 'title', 'summary', 'name', 'severity', 'priority', 'sev', 'service', 'serviceName', 'status', 'state',
+    'openedAt', 'opened_at', 'createdAt', 'created_at', 'startedAt', 'started_at', 'acknowledgedAt', 'acknowledged_at', 'resolvedAt', 'resolved_at', 'closedAt', 'closed_at',
+    'at', 'updatedAt', 'updated_at', 'occurredAt', 'updates', 'statusUpdates', 'deploymentId', 'deployment_id', 'deployment', 'linkedDeployment', 'outage', 'isOutage',
+    'category', 'kind', 'type', 'url', 'html_url', 'responder', 'responderHash', 'assignee', 'owner'],
+  issues: ['key', 'id', 'team', 'teamId', 'project', 'title', 'summary', 'type', 'issueType', 'status', 'statusCategory', 'resolution', 'priority', 'environment', 'foundIn',
+    'storyPoints', 'story_points', 'points', 'estimateHours', 'estimateSeconds', 'timeLoggedHours', 'timeSpentHours', 'timeSpentSeconds', 'sprints', 'sprint', 'labels',
+    'components', 'createdAt', 'created', 'resolvedAt', 'resolved', 'updatedAt', 'updated', 'url', 'transitions', 'blocked', 'assignee', 'reporter', 'assigneeHash', 'reporterHash'],
+};
+const STAGE_FIELDS = ['name', 'kind', 'parallelGroup', 'group', 'startedAt', 'start', 'finishedAt', 'end', 'durationSeconds', 'duration', 'result', 'status', 'conclusion'];
 const SOURCE = /^[a-z0-9][a-z0-9_-]{0,49}$/;
 
 export interface Envelope { companyId: string; departmentId: string; teamId: string; source: string; kind: ExporterKind; items: unknown[] }
@@ -109,7 +130,9 @@ export function submissionsOf(env: Envelope): Submission[] {
         const v = str(raw[k], `${at}.${k}`, max);
         if (v !== undefined) query[k] = v;
       }
-      if (env.kind !== 'sarif') { delete query.repo; delete query.loc; }
+      // repo: every report kind (a dimension of the evidence). loc: coverage and sarif (lines of code, the denominator of
+      // defect density and the code quality score); a test report has no use for it, so it is refused, not ignored.
+      if (env.kind === 'test-report' && query.loc !== undefined) throw new EnvelopeError(400, `${at}.loc is not accepted on a test-report item: send the lines of code with the coverage (or sarif) item`);
       if (env.kind === 'sarif') return { handler, index, body: Buffer.from(files[0].content, 'utf8'), contentType: 'application/json', query };
       const fields: Record<string, string> = {};
       if (env.kind === 'coverage') {
@@ -133,8 +156,20 @@ export function submissionsOf(env: Envelope): Submission[] {
     });
     return [{ handler, index: null, body: Buffer.from(JSON.stringify(list), 'utf8'), contentType: 'application/json', query: {} }];
   }
-  // Event kinds: the items go to the handler as one list, in its QE Navigator JSON format.
-  for (const [i, raw] of env.items.entries()) if (!isObj(raw)) throw new EnvelopeError(400, `items[${i}] must be an object`);
+  // Event kinds: the items go to the handler as one list, in its QE Navigator JSON format. No field is silently
+  // ignored: a field the parser does not read (or an alias of one) is refused.
+  for (const [i, raw] of env.items.entries()) {
+    if (!isObj(raw)) throw new EnvelopeError(400, `items[${i}] must be an object`);
+    const allowed = ITEM_FIELDS[env.kind as EventKind];
+    const extra = Object.keys(raw).filter((k) => !allowed.includes(k));
+    if (extra.length) throw new EnvelopeError(400, `items[${i}]: unknown field(s) ${extra.slice(0, 5).join(', ')}: not stored or used by QE Navigator, so not accepted (docs/DATA_FLOW.md, section 4)`);
+    if (env.kind === 'pipeline-runs') {
+      for (const [j, st] of (Array.isArray(raw.stages) ? raw.stages : Array.isArray(raw.jobs) ? raw.jobs : []).entries()) {
+        const bad = isObj(st) ? Object.keys(st).filter((k) => !STAGE_FIELDS.includes(k)) : [];
+        if (bad.length) throw new EnvelopeError(400, `items[${i}].stages[${j}]: unknown field(s) ${bad.slice(0, 5).join(', ')} (accepted: ${STAGE_FIELDS.join(', ')})`);
+      }
+    }
+  }
   const listKey = env.kind === 'pipeline-runs' ? 'runs' : env.kind;
   // commits: the items are commit batches ({ deployment?, branch?, commits: [...] }) or commits; sent as the list itself.
   const body = Buffer.from(JSON.stringify(env.kind === 'commits' ? env.items : { [listKey]: env.items }), 'utf8');

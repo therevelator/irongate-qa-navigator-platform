@@ -5,13 +5,14 @@
  * company summary (workload balance).
  *
  * Contributors of a team: developers with a developer_metrics row recorded for the team, who are
- * assigned to it, hold an engineering role (qa_engineer / team_lead), are active, opted in to
+ * assigned to it with an engineering role ON THAT TEAM (an active qa_engineer / team_lead
+ * assignment; not the display column users.role), are active, opted in to
  * developer insights, and have all five inputs recorded (PR merge, review, focus, meetings,
  * context switches), the same rows the Developer productivity page scores. With fewer than 3
  * contributors every value is null and the summary says it is not shown.
  */
 import { query } from '../../src/lib/db';
-import { isTeamMemberSql } from './assignments';
+import { assignedOnTeamAsSql } from './assignments';
 import { computeBurnoutRisk, computeDdps, burnoutRiskLabel, toNum } from './metricFormulas';
 import { K_ANONYMITY_MIN, meetsKAnonymity, optedInDeveloperSql, privacyInfo, type PrivacyInfo } from './privacy';
 
@@ -60,8 +61,7 @@ async function contributingRows(companyId: string, teamIds: string[]): Promise<D
        JOIN teams t ON t.id = dm.team_id
       WHERE t.company_id = ? AND u.company_id = ? AND dm.team_id = ANY(?::varchar[])
         AND ${optedInDeveloperSql('u')}
-        AND u.role = ANY(?::text[])
-        AND ${isTeamMemberSql('u', 'dm.team_id')}
+        AND ${assignedOnTeamAsSql('u', 'dm.team_id', '?::text[]')}
         AND dm.pr_merge_time_avg IS NOT NULL AND dm.code_review_time_avg IS NOT NULL AND dm.focus_time_hours IS NOT NULL
         AND dm.meeting_time_hours IS NOT NULL AND dm.context_switches_per_day IS NOT NULL`,
     [companyId, companyId, teamIds, DEVELOPER_AGGREGATE_ROLES]

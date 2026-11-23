@@ -36,6 +36,7 @@ import { requestContext } from '../../server/lib/requestContext';
 import '../../server/lib/userActivity'; // user activity log (request hook)
 import { apiErrorHandler } from '../../server/middleware/errorHandler';
 import { flushBackgroundWrites } from '../../server/lib/opsLog';
+import { isProductionRuntime } from '../../server/lib/runtimeEnv';
 
 const app = express();
 
@@ -54,8 +55,9 @@ const allowedOrigins = [
   process.env.DEPLOY_PRIME_URL,       // Netlify branch deploy URL
   process.env.DEPLOY_URL,             // This deploy's unique URL
   process.env.FRONTEND_URL,           // Custom domain, if any
-  'http://localhost:5173',            // Local dev
-  'http://localhost:3000',
+  // Local dev origins only outside production (server/lib/runtimeEnv.ts): on the live site a page
+  // served from someone's localhost must not make credentialed calls.
+  ...(isProductionRuntime() ? [] : ['http://localhost:5173', 'http://localhost:3000']),
 ].filter(Boolean);
 
 // Manual CORS handling to ensure proper origin reflection with credentials

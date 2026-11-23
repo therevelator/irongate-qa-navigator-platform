@@ -59,6 +59,7 @@ export const FIELD_ALLOW_LIST: Record<MinimiseKind, AllowedField[]> = {
     { field: 'environment', why: 'found in production or before release: escape rate, density' },
     { field: 'labels', why: 'only labels naming an environment (production, env:staging, …) or a type (bug, feature, …)' },
     { field: 'components', why: 'shown with the defects in the evidence lists' },
+    { field: 'priority', why: 'priority name (e.g. High, P1): shown with the defects in the evidence lists' },
     { field: 'estimateHours', why: 'original estimate: sizing accuracy' },
     { field: 'timeLoggedHours', why: 'time logged: sizing accuracy' },
     { field: 'url', why: 'link back to the issue in the evidence lists' },
@@ -98,7 +99,7 @@ export const FIELD_ALLOW_LIST: Record<MinimiseKind, AllowedField[]> = {
 export const ALWAYS_DROPPED = [
   'descriptions', 'comments', 'attachments', 'custom free-text fields', 'work-log text', 'watchers and voters',
   'names and e-mail addresses of people (assignee, reporter, creator, responder: a salted hash instead)',
-  'priority', 'due dates', 'fix versions', 'other labels', 'alert / incident notes and details',
+  'due dates', 'fix versions', 'other labels', 'alert / incident notes and details',
 ];
 
 /** Source names of people, per kind, mapped to the allowed person field. */

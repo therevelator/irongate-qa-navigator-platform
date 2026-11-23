@@ -44,6 +44,7 @@ import { isRawIngestPath } from './lib/ingest/body';
 import { requestContext } from './lib/requestContext';
 import './lib/userActivity'; // user activity log (request hook)
 import { apiErrorHandler } from './middleware/errorHandler';
+import { isProductionRuntime } from './lib/runtimeEnv';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -69,7 +70,8 @@ jobEvents.on('job-notification', (payload) => {
 app.use(requestContext);
 
 // Middleware
-const allowedOrigins = [
+// Local development origins only outside production (server/lib/runtimeEnv.ts).
+const LOCAL_DEV_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
@@ -80,6 +82,9 @@ const allowedOrigins = [
   // src/config/api.ts treats 127.0.0.1 as local dev too (exact origins, with port)
   'http://127.0.0.1:5173',
   'http://127.0.0.1:3000',
+];
+const allowedOrigins = [
+  ...(isProductionRuntime() ? [] : LOCAL_DEV_ORIGINS),
   process.env.FRONTEND_URL
 ].filter(Boolean);
 

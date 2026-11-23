@@ -12,6 +12,7 @@ import {
   providerConfig, enabledProviders, beginSignIn, checkState, completeSignIn, appBaseUrl, SsoError, PROVIDER_LABEL, type ProviderId,
 } from '../lib/sso';
 import { acceptInvitation, findByToken, openInvitationForEmail, statusMessage, InvitationError, ROLE_NAMES } from '../lib/invitations';
+import { isProductionRuntime } from '../lib/runtimeEnv';
 
 /**
  * Public sign-in routes (mounted inside /api/auth):
@@ -31,7 +32,7 @@ import { acceptInvitation, findByToken, openInvitationForEmail, statusMessage, I
  */
 const router = express.Router();
 
-const isProduction = () => process.env.NODE_ENV === 'production';
+const isProduction = () => isProductionRuntime();
 
 /** The session cookie (same for password, invitation and SSO sign-in). */
 /** Lifetime (JWT exp) = the company's "Sign-in lasts" setting; the cookie is persistent only with
@@ -49,8 +50,10 @@ export async function setSessionCookie(res: express.Response, userId: string, op
  * exist and are active are offered (none after the demo data is removed).
  */
 export function demoModeEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  // In production only an explicit DEMO_MODE=true turns the chips (and the shared demo password) on.
+  if (isProductionRuntime(env)) return env.DEMO_MODE === 'true';
   if (env.DEMO_MODE !== undefined && env.DEMO_MODE !== '') return env.DEMO_MODE === 'true' || env.DEMO_MODE === '1';
-  return env.NODE_ENV !== 'production' && !env.NETLIFY && !env.AWS_LAMBDA_FUNCTION_NAME;
+  return true;
 }
 
 const DEMO_ACCOUNTS = [

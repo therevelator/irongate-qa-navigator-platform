@@ -3,7 +3,7 @@ import { Users, UserPlus, Shield, X, ArrowLeft, Building2, Edit2, Trash2, Chevro
 import { useAuth } from '../contexts/AuthContext';
 import { canEditUser, canResetPassword, canUploadFiles, managedDepartmentIds, type PolicyActor } from '../../server/lib/userPolicy';
 import toast from 'react-hot-toast';
-import { confirmDelete, showCannotDeleteWarning, confirmDeactivate, showSuccess } from '../utils/alerts';
+import { confirmDelete, confirmDeactivateTeam, showCannotDeleteWarning, confirmDeactivate, showSuccess } from '../utils/alerts';
 
 interface User {
   id: string;
@@ -831,18 +831,6 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                     <Bot className="w-4 h-4" />
                                   </button>
                                   <button
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setSelectedTeam(team);
-                                      // TODO: Open edit team modal
-                                      toast('Edit team functionality - Coming soon!', { icon: 'ℹ️' });
-                                    }}
-                                    className="p-1.5 text-gray-400 dark:text-slate-400 hover:text-cyan-600 dark:hover:text-cyan-400 transition-colors rounded hover:bg-gray-100 dark:hover:bg-slate-700"
-                                    title="Edit Team"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                  <button
                                     onClick={async (e) => {
                                       e.stopPropagation();
                                       try {
@@ -874,7 +862,7 @@ const AdminPanel: React.FC<AdminPanelProps> = () => {
                                   <button
                                     onClick={async (e) => {
                                       e.stopPropagation();
-                                      const result = await confirmDelete(team.name, 'team');
+                                      const result = await confirmDeactivateTeam(team.name);
                                       if (result.isConfirmed) {
                                         try {
                                           const response = await fetch(`${API_URL}/admin/teams/${team.id}`, {
