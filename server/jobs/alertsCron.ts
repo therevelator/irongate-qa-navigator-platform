@@ -3,6 +3,7 @@ import { runScheduledEvaluation } from '../lib/alerts';
 import { refreshDueTeams } from '../lib/recommendations/store';
 import { runWeeklyDigest } from '../lib/digest';
 import { withJobRun } from '../lib/opsLog';
+import { kickPendingCalc } from '../lib/calc/queue';
 
 /**
  * Local schedule of the long-running server (on Netlify the Scheduled Functions in
@@ -22,6 +23,8 @@ if (process.env.ALERTS_CRON !== 'false' && !process.env.NETLIFY && !process.env.
   const evaluate = async () => {
     if (running) return;
     running = true;
+    // Calculations queued with INGEST_CALC=queued that no drain picked up (safety net; normally drained after each request).
+    await kickPendingCalc();
     try {
       const x = await withJobRun('alerts-evaluate', async () => ({ companies: await runScheduledEvaluation(), improve: await refreshDueTeams(Number(process.env.IMPROVE_REFRESH_BUDGET_MS) || 20_000) }),
         (y) => `${y.companies.length} companies, ${y.companies.reduce((n, c) => n + c.opened, 0)} alerts opened; forecasts and recommendations of ${y.improve.teams} teams recalculated${y.improve.skipped ? `, ${y.improve.skipped} left for the next run` : ''}`);

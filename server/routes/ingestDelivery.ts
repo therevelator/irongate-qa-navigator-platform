@@ -31,9 +31,10 @@ import {
   type CommitBatch, type DeliveryKind, type DeploymentEvent, type IncidentEvent,
 } from '../lib/ingest/deliveryEvents';
 import { storeCommitBatches, storeDeployments, storeIncidents, type StoredEvent } from '../lib/ingest/deliveryStore';
-import { recomputeTeamDays, type DayResult } from '../lib/calc/engine';
+import type { DayResult } from '../lib/calc/engine';
+import { calcOrQueue } from '../lib/calc/queue';
 import { deliveryAffectedDays } from '../lib/calc/delivery';
-import { HttpError, actorOf, after, callerOf, computedOut, fail, noAccess, outOfScope, summaryItem, text } from './ingestRaw';
+import { HttpError, actorOf, after, afterCommit, callerOf, computedOut, fail, noAccess, outOfScope, summaryItem, text } from './ingestRaw';
 import { applyIncidentAllowList, minimisedIncidentPayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
 
 const router = express.Router();
@@ -197,11 +198,14 @@ export function deliveryIngestHandler(kind: DeliveryKind) {
 
         const computed: Array<{ team: string; days: DayResult[] }> = [];
         const items: ItemSummary[] = [];
+        let queued = false;
         for (const t of teams) {
           const mine = stored.filter((s) => s.team === t);
           const changed = mine.filter((s) => s.status !== 'duplicate');
           const days = deliveryAffectedDays(Array.from(new Set(changed.flatMap((s) => s.days))));
-          const result = days.length ? await recomputeTeamDays(client, t, days, { groups: ['delivery'], ingestionId, actorId: actorOf(caller) }) : [];
+          const calc = await calcOrQueue(client, caller.companyId, t, days, { groups: ['delivery'], ingestionId, actorId: actorOf(caller) });
+          queued ||= calc.queued;
+          const result = calc.days;
           computed.push({ team: t, days: result });
           if (!changed.length && uploads.get(t)?.fresh) await client.query('DELETE FROM raw_uploads WHERE id = $1', [uploads.get(t)!.id]);
           const item = summaryItem(t, source, firstAt, changed.length ? 'written' : 'duplicate');
@@ -216,12 +220,14 @@ export function deliveryIngestHandler(kind: DeliveryKind) {
             events: stored.map((s) => ({ id: s.id, team: s.team, status: s.status, ...(s.commits !== undefined ? { commits: s.commits } : {}) })),
             ...(ignored.length ? { ignored } : {}),
             computed: computed.map((c) => ({ team: c.team, days: computedOut(c.days) })).filter((c) => c.days.length),
+            ...(queued ? { calculation: 'queued' } : {}),
             ...(anyWritten ? {} : { message: 'These events were already received; nothing changed.' }),
           },
           items, errors: [], teamIds: teams, valueCount: stored.filter((s) => s.status !== 'duplicate').length, source,
         };
       });
       if ('replay' in outcome) return sendReplay(res, outcome.replay, hash);
+      await afterCommit(caller, outcome.outcome);
       for (const item of outcome.outcome.items) if (item.teamId) await after(caller.companyId, item.teamId, [item]);
       return res.status(outcome.outcome.httpStatus).json(outcome.outcome.response);
     } catch (e) {

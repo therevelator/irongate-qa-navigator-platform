@@ -181,6 +181,8 @@ export interface RecordOptions {
   sourceRef?: string | null;
   /** ingestion_log row of the request (links the stored values to it). */
   ingestionId?: string | null;
+  /** The team's company when the caller already read it (saves a round trip; the calculation engine). */
+  companyId?: string;
 }
 
 export interface RecordResult {
@@ -263,7 +265,7 @@ async function recordInTransaction(
   // Serialise writers for this team so the derived snapshots see a consistent state.
   await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`kpi_snapshots:${teamId}`]);
 
-  const [team] = await q<{ company_id: string }>(client, 'SELECT company_id FROM teams WHERE id = ?', [teamId]);
+  const [team] = options.companyId ? [{ company_id: options.companyId }] : await q<{ company_id: string }>(client, 'SELECT company_id FROM teams WHERE id = ?', [teamId]);
   if (!team) throw new KpiValidationError([`Unknown team ${teamId}`]);
   const updated = Object.keys(values) as KpiColumn[];
   const key = options.idempotencyKey ?? null;

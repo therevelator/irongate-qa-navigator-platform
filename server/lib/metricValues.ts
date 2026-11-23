@@ -43,30 +43,27 @@ export async function existingForKey(client: pg.PoolClient, teamId: string, key:
 /** Insert the values and refresh the derived snapshots. Caller holds the team lock. Returns the snapshot day. */
 export async function writeMetricValues(client: pg.PoolClient, input: MetricValueInput): Promise<{ day: string; valueIds: string[] }> {
   const metrics = Object.keys(input.values);
-  const valueIds: string[] = [];
-  for (const metric of metrics) {
-    const id = randomUUID();
-    await q(
-      client,
-      `INSERT INTO metric_values (id, company_id, team_id, metric_key, value, recorded_at, source, source_ref, idempotency_key, actor_id, ingestion_id)
-       VALUES (?, ?, ?, ?, ?, ?::timestamptz, ?, ?, ?, ?, ?)`,
-      [id, input.companyId, input.teamId, metric, input.values[metric], input.recordedAt, input.source, input.sourceRef ?? null,
-        input.idempotencyKey ?? null, input.actorId, input.ingestionId ?? null]
-    );
-    // A second value for the same moment is a correction of the first.
-    await q(
-      client,
-      `UPDATE metric_values SET superseded_by = ?
-        WHERE team_id = ? AND metric_key = ? AND recorded_at = ?::timestamptz AND superseded_by IS NULL AND id <> ?`,
-      [id, input.teamId, metric, input.recordedAt, id]
-    );
-    valueIds.push(id);
-  }
-  const [{ day }] = await q<{ day: string }>(
+  const valueIds = metrics.map(() => randomUUID());
+  // One INSERT for every value, then one UPDATE: a second value for the same moment is a correction of the first.
+  // Values are sent as text, as a single-row insert sends them, so the stored numbers are identical.
+  await q(
     client,
-    `SELECT to_char((?::timestamptz AT TIME ZONE 'UTC')::date, 'YYYY-MM-DD') AS day`,
-    [input.recordedAt]
+    `INSERT INTO metric_values (id, company_id, team_id, metric_key, value, recorded_at, source, source_ref, idempotency_key, actor_id, ingestion_id)
+     SELECT x.id, ?, ?, x.metric, x.value::numeric, ?::timestamptz, ?, ?, ?, ?, ?
+       FROM unnest(?::text[], ?::text[], ?::text[]) WITH ORDINALITY AS x(id, metric, value, o)
+      ORDER BY x.o`,
+    [input.companyId, input.teamId, input.recordedAt, input.source, input.sourceRef ?? null, input.idempotencyKey ?? null, input.actorId, input.ingestionId ?? null,
+      valueIds, metrics, metrics.map((m) => (input.values[m] === null || input.values[m] === undefined ? null : String(input.values[m])))]
   );
+  await q(
+    client,
+    `UPDATE metric_values mv SET superseded_by = x.id
+       FROM unnest(?::text[], ?::text[]) AS x(id, metric)
+      WHERE mv.team_id = ? AND mv.metric_key = x.metric AND mv.recorded_at = ?::timestamptz AND mv.superseded_by IS NULL AND mv.id <> x.id`,
+    [valueIds, metrics, input.teamId, input.recordedAt]
+  );
+  // The UTC day of recordedAt, as (recordedAt AT TIME ZONE 'UTC')::date.
+  const day = new Date(input.recordedAt).toISOString().slice(0, 10);
   await q(client, 'SELECT public.refresh_kpi_snapshots(?, ?::date, ?::text[])', [input.teamId, day, metrics]);
   return { day, valueIds };
 }

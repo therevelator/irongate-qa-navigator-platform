@@ -113,37 +113,55 @@ export async function storeCoverage(client: pg.PoolClient, m: UploadMeta, upload
   return { reportId, day: dayOf(at), changed: ch ? { found: ch.found, hit: ch.hit } : null };
 }
 
-/** Insert pipeline runs; a run (team, id, attempt) already stored is skipped. Returns the new ones. */
+/**
+ * Insert pipeline runs; a run (team, id, attempt) already stored is skipped. Returns every run with its status.
+ * Multi-row: one INSERT for the runs, one SELECT for the ids of the runs already stored (only when there are any)
+ * and one INSERT for the stages of the new runs, whatever the number of runs (each round trip costs ~80 ms in
+ * production, where the functions and the database are in different regions).
+ */
 export async function storePipelineRuns(client: pg.PoolClient, companyId: string, teamId: string, uploadId: string | null, runs: PipelineRunEvent[], opts: { idPrefix?: string; sample?: boolean } = {}): Promise<Array<{ id: string; externalId: string; attempt: number; day: string; duplicate: boolean }>> {
-  const out: Array<{ id: string; externalId: string; attempt: number; day: string; duplicate: boolean }> = [];
-  for (const [i, run] of runs.entries()) {
-    const day = dayOf(run.startedAt);
-    const params: any[] = [companyId, teamId, uploadId, run.id, run.attempt, run.name, run.commit, run.branch, run.startedAt.toISOString(),
-      run.finishedAt?.toISOString() ?? null, run.durationS, run.result, run.url, day, !!opts.sample];
-    if (opts.idPrefix) params.push(`${opts.idPrefix}-${i}`);
-    const r = await client.query(
-      `INSERT INTO pipeline_runs_raw (${opts.idPrefix ? 'id, ' : ''}company_id, team_id, upload_id, external_id, attempt, name, commit_sha, branch, started_at, finished_at, duration_s, result, url, day, is_sample)
-       VALUES (${opts.idPrefix ? '$16, ' : ''}$1, $2, $3, $4, $5, $6, $7, $8, $9::timestamptz, $10::timestamptz, $11, $12, $13, $14::date, $15)
-       ON CONFLICT (team_id, external_id, attempt) DO NOTHING RETURNING id`,
-      params
-    );
-    if (!r.rows.length) {
-      const ex = await client.query('SELECT id FROM pipeline_runs_raw WHERE team_id = $1 AND external_id = $2 AND attempt = $3', [teamId, run.id, run.attempt]);
-      out.push({ id: ex.rows[0]?.id ?? '', externalId: run.id, attempt: run.attempt, day, duplicate: true });
-      continue;
-    }
-    const id: string = r.rows[0].id;
-    if (run.stages.length) {
-      const s = run.stages;
-      await client.query(
-        `INSERT INTO pipeline_stage_runs (pipeline_run_id, team_id, name, kind, parallel_group, started_at, finished_at, duration_s, result)
-         SELECT $1, $2, x.n, x.k, x.g, x.st, x.fi, x.d, x.r
-           FROM unnest($3::text[], $4::text[], $5::text[], $6::timestamptz[], $7::timestamptz[], $8::int[], $9::text[]) AS x(n, k, g, st, fi, d, r)`,
-        [id, teamId, s.map((x) => x.name), s.map((x) => x.kind), s.map((x) => x.parallelGroup), s.map((x) => x.startedAt?.toISOString() ?? null),
-          s.map((x) => x.finishedAt?.toISOString() ?? null), s.map((x) => x.durationS), s.map((x) => x.result)]
-      );
-    }
-    out.push({ id, externalId: run.id, attempt: run.attempt, day, duplicate: false });
+  if (!runs.length) return [];
+  // The same run twice in one request: the first one is stored, the next ones are duplicates of it.
+  const keyOf = (r: PipelineRunEvent) => `${r.id}\u0000${r.attempt}`;
+  const first = new Map<string, number>();
+  runs.forEach((r, i) => { if (!first.has(keyOf(r))) first.set(keyOf(r), i); });
+  const fresh = runs.map((r, i) => ({ r, i })).filter(({ r, i }) => first.get(keyOf(r)) === i);
+  const col = <T>(f: (r: PipelineRunEvent, i: number) => T) => fresh.map(({ r, i }) => f(r, i));
+  const ins = await client.query(
+    `INSERT INTO pipeline_runs_raw (${opts.idPrefix ? 'id, ' : ''}company_id, team_id, upload_id, external_id, attempt, name, commit_sha, branch, started_at, finished_at, duration_s, result, url, day, is_sample)
+     SELECT ${opts.idPrefix ? 'x.id, ' : ''}$1, $2, $3, x.ext, x.att, x.nm, x.sha, x.br, x.st, x.fi, x.dur, x.res, x.url, x.day, $4
+       FROM unnest($5::text[], $6::int[], $7::text[], $8::text[], $9::text[], $10::timestamptz[], $11::timestamptz[], $12::int[], $13::text[], $14::text[], $15::date[], $16::text[])
+            AS x(ext, att, nm, sha, br, st, fi, dur, res, url, day, id)
+     ON CONFLICT (team_id, external_id, attempt) DO NOTHING RETURNING id, external_id, attempt`,
+    [companyId, teamId, uploadId, !!opts.sample, col((r) => r.id), col((r) => r.attempt), col((r) => r.name), col((r) => r.commit), col((r) => r.branch),
+      col((r) => r.startedAt.toISOString()), col((r) => r.finishedAt?.toISOString() ?? null), col((r) => r.durationS), col((r) => r.result), col((r) => r.url),
+      col((r) => dayOf(r.startedAt)), col((_r, i) => (opts.idPrefix ? `${opts.idPrefix}-${i}` : null))]
+  );
+  const inserted = new Map<string, string>(ins.rows.map((x: any) => [`${x.external_id}\u0000${x.attempt}`, x.id as string]));
+  const existing = new Map<string, string>();
+  const missing = fresh.filter(({ r }) => !inserted.has(keyOf(r)));
+  if (missing.length) {
+    const ex = await client.query(
+      `SELECT p.id, p.external_id, p.attempt FROM pipeline_runs_raw p JOIN unnest($2::text[], $3::int[]) AS x(ext, att) ON p.external_id = x.ext AND p.attempt = x.att
+        WHERE p.team_id = $1`, [teamId, missing.map(({ r }) => r.id), missing.map(({ r }) => r.attempt)]);
+    for (const x of ex.rows) existing.set(`${x.external_id}\u0000${x.attempt}`, x.id);
   }
-  return out;
+  const stages = fresh.filter(({ r }) => inserted.has(keyOf(r))).flatMap(({ r }) => r.stages.map((s) => ({ run: inserted.get(keyOf(r))!, s })));
+  if (stages.length) {
+    await client.query(
+      `INSERT INTO pipeline_stage_runs (pipeline_run_id, team_id, name, kind, parallel_group, started_at, finished_at, duration_s, result)
+       SELECT x.run, $1, x.n, x.k, x.g, x.st, x.fi, x.d, x.r
+         FROM unnest($2::text[], $3::text[], $4::text[], $5::text[], $6::timestamptz[], $7::timestamptz[], $8::int[], $9::text[]) WITH ORDINALITY AS x(run, n, k, g, st, fi, d, r, o)
+        ORDER BY x.o`,
+      [teamId, stages.map((x) => x.run), stages.map((x) => x.s.name), stages.map((x) => x.s.kind), stages.map((x) => x.s.parallelGroup),
+        stages.map((x) => x.s.startedAt?.toISOString() ?? null), stages.map((x) => x.s.finishedAt?.toISOString() ?? null), stages.map((x) => x.s.durationS), stages.map((x) => x.s.result)]
+    );
+  }
+  return runs.map((r, i) => {
+    const k = keyOf(r);
+    const own = first.get(k) === i ? inserted.get(k) : undefined;
+    return own
+      ? { id: own, externalId: r.id, attempt: r.attempt, day: dayOf(r.startedAt), duplicate: false }
+      : { id: inserted.get(k) ?? existing.get(k) ?? '', externalId: r.id, attempt: r.attempt, day: dayOf(r.startedAt), duplicate: true };
+  });
 }

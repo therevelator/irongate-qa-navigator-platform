@@ -533,6 +533,11 @@ Actions, GitLab CI, Jenkins and Azure DevOps).
   `server/lib/calc/engine.ts` (calculation rules; writes KPI values with source `computed` and `metric_evidence`),
   `server/routes/ci.ts` (evidence, "How this was calculated", Connect your CI status). Migration
   `supabase/migrations/20261129000000_raw_ingestion_phase1.sql`.
+- Calculation queue (`server/lib/calc/queue.ts`, migration `supabase/migrations/20261206000000_calc_queue.sql`): on Netlify an
+  ingestion request stores the raw records and queues the affected team-days (merged per team) instead of recalculating them
+  while it waits (the answer says `"calculation": "queued"`); `netlify/functions/calc-drain-background.ts` recalculates them
+  (chunks of 14 days, FOR UPDATE SKIP LOCKED, 5 tries, job `calc-queue`). The Node service calculates in the request unless
+  `INGEST_CALC=queued` (then in the process, after the answer).
 - Jobs: `netlify/functions/calc-recompute.ts` (nightly, last 8 days of the teams with real CI data, 25 s budget; locally `CALC_RECOMPUTE_CRON`; sample teams are refreshed by demo-refresh), raw-store retention in
   `db-keepalive` (everything raw, payloads and per-test / per-file rows included, 13 months).
 - UI: team page → **Evidence from CI** and **How this was calculated**; Admin console → **Connect your CI**.

@@ -402,7 +402,7 @@ describe('Platform operator', () => {
     const ov = await call('get', '/api/operator/overview?limit=2', opCookie, token);
     expect(ov.status).toBe(200);
     expect(ov.body.companies.length).toBeLessThanOrEqual(2);
-    expect(ov.body.platform.jobs.map((j: any) => j.job)).toEqual(['alerts-evaluate', 'weekly-digest', 'pulse-auto-send', 'db-keepalive', 'demo-refresh', 'demo-refresh-background', 'demo-data', 'calc-recompute', 'sandbox-reset', 'sandbox-reset-background']);
+    expect(ov.body.platform.jobs.map((j: any) => j.job)).toEqual(['alerts-evaluate', 'weekly-digest', 'pulse-auto-send', 'db-keepalive', 'demo-refresh', 'demo-refresh-background', 'demo-data', 'calc-recompute', 'calc-queue', 'sandbox-reset', 'sandbox-reset-background']);
     expect(typeof ov.body.platform.dbSizeBytes).toBe('number');
     const big = await call('get', '/api/operator/overview?limit=100000', opCookie, token);
     expect(big.body.limit).toBe(500);

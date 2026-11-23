@@ -23,6 +23,8 @@ interface TeamStatus {
   id: string; name: string; department: string | null; departmentId?: string | null; mainBranch: string | null;
   tests: Received; coverage: Received; pipelines: Received;
   deployments?: Received; commits?: Received; incidents?: Received; issues?: Received; staticAnalysis?: Received;
+  /** Metrics queued for calculation in the background after the last data (server/lib/calc/queue.ts). */
+  calculation?: { pending: boolean; from: string | null; to: string | null; since: string | null; failed: number };
 }
 interface ServiceMapping { service: string; teamId: string; teamName: string; updatedAt: string }
 type Received = { at: string; uploads: number; format: string | null; sample?: boolean } | null;
@@ -966,7 +968,15 @@ const ConnectCi: React.FC = () => {
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {teams.map((t) => (
                 <tr key={t.id} data-testid="connect-ci-row">
-                  <td className="px-5 py-2"><p className="font-medium text-slate-900 dark:text-white">{t.name}</p><p className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{t.id}</p></td>
+                  <td className="px-5 py-2">
+                    <p className="font-medium text-slate-900 dark:text-white">{t.name}</p><p className="font-mono text-[11px] text-slate-500 dark:text-slate-400">{t.id}</p>
+                    {t.calculation?.pending && (
+                      <span data-testid="connect-ci-calc-pending" title={t.calculation.from && t.calculation.to ? `Days ${t.calculation.from} to ${t.calculation.to} are being recalculated` : undefined}>
+                        <Badge tone="warn" className="mt-1">Calculation pending</Badge>
+                      </span>
+                    )}
+                    {!t.calculation?.pending && (t.calculation?.failed ?? 0) > 0 && <Badge tone="bad" className="mt-1">Calculation failed</Badge>}
+                  </td>
                   <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{cell(t.tests)}</td>
                   <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{cell(t.coverage)}</td>
                   <td className="px-3 py-2 text-xs text-slate-700 dark:text-slate-300">{cell(t.pipelines)}</td>
