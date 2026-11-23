@@ -20,8 +20,8 @@ import {
   teamDefFor, demoDevelopersFor, TEAM_GROUPS, realDataExists, recentSnapshotSql, KPI_COLUMNS,
   DEMO_COMPANY_ID, DemoSummary, Dataset, CompanyInput, TeamCtx, Group, TeamGroup, Member, DEMO_LOGIN_EMAILS, type SampleShape,
 } from './demoData';
-import { sampleHealthSeries } from './demoData';
-import { RAW_SAMPLE_CLEAR, SAMPLE_HEALTH_DAYS, computeSampleEvidence, rawSampleSqlForTeam } from './demoRaw';
+import { DEMO_PREFIX, NORTHWIND_TEAM_IDS, type ComputedKpis } from './demoData';
+import { RAW_SAMPLE_CLEAR, RAW_SAMPLE_PREFIX, SAMPLE_WARMUP_DAYS, computeSampleEvidence, pruneSampleDetailSql, rawSampleSqlForTeam } from './demoRaw';
 import { WORK_SAMPLE_CLEAR, workSampleSqlForTeam } from './demoWork';
 import { DEMO_ACTION_HISTORY_SQL } from './actionHistory';
 
@@ -69,11 +69,31 @@ export interface ApplyOptions {
   after?: string[];
 }
 
-/** Run a dataset in one transaction (advisory-locked) and report the demo rows it added. */
-async function apply(ds: Dataset, opts: ApplyOptions = {}): Promise<SeedRunResult & { statements: number }> {
+/**
+ * The tables the sample raw data refers to (or is derived from: the sprints), written before it in the same
+ * transaction; the rest of the dataset is written after the engine has calculated the sample's values.
+ */
+const RAW_PREREQUISITES = new Set(['companies', 'departments', 'teams', 'sprint_velocity']);
+
+interface SampleRun {
+  /** The dataset, without (story values only) or with the values calculated from the sample raw data (and the first day they were added for). */
+  build: (computed?: ComputedKpis, updateFrom?: string) => Dataset;
+  /** The teams that get sample raw data (their KPIs are calculated from it). */
+  teamIds: string[];
+}
+
+/**
+ * Run a sample dataset in one transaction (advisory-locked) and report the demo rows it added:
+ *   1. the rows the sample raw data refers to (company, departments, teams, sprints);
+ *   2. the sample raw data of the teams' missing complete days (CI runs, coverage, pipelines, deployments,
+ *      incidents, issues, static analysis; server/seeds/demoRaw.ts, demoWork.ts) and the values the engine
+ *      calculates from it (metric_evidence);
+ *   3. the dataset built with those values: every KPI the engine calculates is its value (KPI snapshots,
+ *      metric values, alerts, business impact, company snapshots), so every screen shows one number.
+ */
+async function apply(run: SampleRun, opts: ApplyOptions = {}): Promise<SeedRunResult & { statements: number }> {
   const started = Date.now();
-  // Last: the status history of sample actions that have none yet (server/seeds/actionHistory.ts).
-  const statements = [...renderScript(ds).map(r => r.sql), ...(opts.after ?? []), DEMO_ACTION_HISTORY_SQL];
+  const ds0 = run.build();
   const counts = opts.counts !== false;
   const client = await pool.connect();
   try {
@@ -81,6 +101,17 @@ async function apply(ds: Dataset, opts: ApplyOptions = {}): Promise<SeedRunResul
     // Two seeds against the same database (CLI + app) wait for each other.
     await client.query("SELECT pg_advisory_xact_lock(hashtext('irongate-demo-seed'))");
     const before = counts ? await demoCounts(client) : null;
+    let rawAdded = 0;
+    let ds = ds0;
+    if (run.teamIds.length && process.env.SAMPLE_RAW_DATA !== 'false') {
+      for (const st of renderScript(ds0, undefined, RAW_PREREQUISITES)) await client.query(st.sql);
+      const raw = await addRawSampleData(client, run.teamIds, ds0);
+      rawAdded = raw.added;
+      const computed = await loadComputedKpis(client, run.teamIds);
+      if (computed.size) ds = run.build(computed, raw.from ?? undefined);
+    }
+    // Last: the status history of sample actions that have none yet (server/seeds/actionHistory.ts).
+    const statements = [...renderScript(ds).map(r => r.sql), ...(opts.after ?? []), DEMO_ACTION_HISTORY_SQL];
     for (const [i, sql] of statements.entries()) {
       await client.query(sql);
       await opts.onProgress?.(i + 1, statements.length);
@@ -95,6 +126,7 @@ async function apply(ds: Dataset, opts: ApplyOptions = {}): Promise<SeedRunResul
     const after = counts ? await demoCounts(client) : null;
     await client.query('COMMIT');
     if (before && after) for (const t of ALL_TABLES) { if (after[t] - before[t]) inserted[t] = after[t] - before[t]; }
+    if (counts && rawAdded) inserted.sample_raw_data = rawAdded;
     return { inserted, insertedTotal: Object.values(inserted).reduce((a, b) => a + b, 0), durationMs: Date.now() - started, statements: statements.length };
   } catch (e) {
     await client.query('ROLLBACK').catch(() => undefined);
@@ -107,44 +139,83 @@ async function apply(ds: Dataset, opts: ApplyOptions = {}): Promise<SeedRunResul
 export function runDemoSeed(opts: { today?: string } = {}): Promise<DemoSeedResult> {
   return exclusive(async () => {
     const today = opts.today ?? todayUtc();
-    const r = await apply(buildDemoDataset({ today }));
-    const raw = await addRawSampleData((await pool.query(`SELECT id FROM teams WHERE company_id = $1 AND is_active IS NOT FALSE`, [DEMO_COMPANY_ID])).rows.map((x) => x.id));
-    return { ...demoSummary(today), ...r, insertedTotal: r.insertedTotal + raw };
+    const inactive = new Set((await pool.query(`SELECT id FROM teams WHERE company_id = $1 AND is_active IS FALSE`, [DEMO_COMPANY_ID])).rows.map((x) => x.id));
+    const r = await apply({ build: (computed, updateFrom) => buildDemoDataset({ today, computed, updateFrom }), teamIds: NORTHWIND_TEAM_IDS.filter((id) => !inactive.has(id)) });
+    return { ...demoSummary(today), ...r };
   });
 }
 
 /**
- * Sample raw CI data (v2: test runs, coverage reports, pipeline runs, deployments with commits,
- * incidents; server/seeds/demoRaw.ts) for
- * teams with sample data, the last RAW_SAMPLE_DAYS days (only the missing days are added), and the
- * evidence calculated from it (never KPI values). A team with real raw data gets none. Returns the
- * rows added. Off with SAMPLE_RAW_DATA=false.
+ * Sample raw data (v2: test runs, coverage reports, pipeline runs, deployments with commits, incidents, issues,
+ * static-analysis reports; server/seeds/demoRaw.ts and demoWork.ts) for the given teams: every complete day
+ * after the last one present (a new team: its whole KPI history and SAMPLE_WARMUP_DAYS before it), up to
+ * yesterday, following the team's story (the dataset's health and story values), and the values the engine
+ * calculates from it for those days (metric_evidence). Per-test results older than SAMPLE_DETAIL_DAYS are not
+ * kept. A team with real raw data in a group gets none there. Runs on the seed's transaction. Returns the rows added.
  */
-export async function addRawSampleData(teamIds: string[], stories?: Record<string, Array<[number, number]>>): Promise<number> {
-  if (process.env.SAMPLE_RAW_DATA === 'false' || !teamIds.length) return 0;
-  const teams = (await pool.query(`SELECT id, company_id, name, platform FROM teams WHERE id = ANY($1::text[]) AND is_active IS NOT FALSE ORDER BY id`, [teamIds])).rows;
-  const client = await pool.connect();
-  let added = 0;
-  try {
-    for (const t of teams) {
-      await client.query('BEGIN');
-      try {
-        await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`raw-sample:${t.id}`]);
-        const sql = rawSampleSqlForTeam({ id: t.id, companyId: t.company_id, name: t.name, health: sampleHealthSeries(t, SAMPLE_HEALTH_DAYS, stories) });
-        for (const st of sql) added += (await client.query(st)).rowCount ?? 0;
-        // v2 phase 3: a year of issues and static-analysis reports derived from the team's KPI history (server/seeds/demoWork.ts).
-        for (const st of workSampleSqlForTeam({ id: t.id, companyId: t.company_id, name: t.name })) await client.query(st);
-        await computeSampleEvidence(client, [t.id]);
-        await client.query('COMMIT');
-      } catch (e) {
-        await client.query('ROLLBACK').catch(() => undefined);
-        throw e;
-      }
-    }
-  } finally {
-    client.release();
+export async function addRawSampleData(client: pg.PoolClient, teamIds: string[], ds: Dataset): Promise<{ added: number; from: string | null }> {
+  if (!teamIds.length) return { added: 0, from: null };
+  const teams = (await client.query(`SELECT id, company_id, name FROM teams WHERE id = ANY($1::text[]) AND is_active IS NOT FALSE ORDER BY id`, [teamIds])).rows;
+  if (!teams.length) return { added: 0, from: null };
+  const today = ds.today;
+  const day = (n: number) => new Date(Date.parse(`${today}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+  const yesterday = day(-1);
+  // The story's values the sample is shaped by (bugs, blocked time and sizing of sprints, code quality).
+  await client.query(`CREATE TEMP TABLE IF NOT EXISTS sample_kpi_targets (team_id text, snapshot_date date, defect_escape_rate float8, defect_density float8,
+                        code_quality_score float8, blocked_time_hours float8, sizing_accuracy float8) ON COMMIT DROP`);
+  await client.query('TRUNCATE sample_kpi_targets');
+  const ids = new Set(teams.map((t) => t.id));
+  const targets = ds.targets.filter((x) => ids.has(x.teamId));
+  for (let i = 0; i < targets.length; i += 5000) {
+    const b = targets.slice(i, i + 5000);
+    const col = (c: string) => b.map((x) => x.values[c] ?? null);
+    await client.query(
+      `INSERT INTO sample_kpi_targets SELECT * FROM unnest($1::text[], $2::date[], $3::float8[], $4::float8[], $5::float8[], $6::float8[], $7::float8[])`,
+      [b.map((x) => x.teamId), b.map((x) => x.date), col('defect_escape_rate'), col('defect_density'), col('code_quality_score'), col('blocked_time_hours'), col('sizing_accuracy')]);
   }
-  return added;
+  let added = 0;
+  let first: string | null = null;
+  for (const t of teams) {
+    const health = ds.health.get(t.id);
+    if (!health) continue;
+    const last = (await client.query(`SELECT MAX(day)::text AS d FROM test_runs WHERE team_id = $1 AND is_sample AND id LIKE '${RAW_SAMPLE_PREFIX}%'`, [t.id])).rows[0]?.d as string | null;
+    const from = last ? day(Math.round((Date.parse(`${last}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000) + 1) : day(-(ds.historyDays + SAMPLE_WARMUP_DAYS));
+    const team = { id: t.id, companyId: t.company_id, name: t.name, health };
+    const tick = (label: string) => { if (process.env.SAMPLE_TIMING) console.error(`[sample] ${t.id} ${label} ${Date.now() - t0} ms`); };
+    const t0 = Date.now();
+    if (from <= yesterday) {
+      for (const [i, st] of rawSampleSqlForTeam(team, { today, from }).entries()) { added += (await client.query(st)).rowCount ?? 0; tick(`raw ${i}`); }
+    }
+    // Issues and static-analysis reports of the same days (and the fix of bugs whose time has come).
+    for (const st of workSampleSqlForTeam(team, { from, to: yesterday, targets: 'sample_kpi_targets' })) await client.query(st);
+    tick('work');
+    if (from <= yesterday) {
+      const days: string[] = [];
+      for (let d = from; d <= yesterday; d = new Date(Date.parse(`${d}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)) days.push(d);
+      await computeSampleEvidence(client, [t.id], days);
+      tick('evidence');
+      await client.query(pruneSampleDetailSql(t.id, today));
+      tick('prune');
+      if (!first || from < first) first = from;
+    }
+  }
+  return { added, from: first };
+}
+
+/** The values the engine calculated for the teams (metric_evidence with a KPI column), per team and KPI column, oldest first. */
+export async function loadComputedKpis(client: pg.PoolClient, teamIds: string[]): Promise<ComputedKpis> {
+  const out: ComputedKpis = new Map();
+  const rows = (await client.query(
+    `SELECT team_id, kpi_column, day::text AS day, value::float8 AS value, recorded_at FROM metric_evidence
+      WHERE team_id = ANY($1::text[]) AND kpi_column IS NOT NULL ORDER BY team_id, kpi_column, day`, [teamIds])).rows;
+  for (const r of rows) {
+    let team = out.get(r.team_id);
+    if (!team) { team = new Map(); out.set(r.team_id, team); }
+    let list = team.get(r.kpi_column);
+    if (!list) { list = []; team.set(r.kpi_column, list); }
+    list.push({ day: r.day, value: Number(r.value), at: new Date(r.recorded_at).toISOString() });
+  }
+  return out;
 }
 
 // ============================================================================
@@ -359,14 +430,13 @@ const planSummary = (plan: CompanyInput[]) =>
 
 export function runFillExisting(opts: FillOptions & ApplyOptions & { afterPlan?: (plan: CompanyInput[]) => string[] } = {}): Promise<FillResult & { plan: CompanyInput[]; statements: number }> {
   return exclusive(async () => {
-    const { today, plan, ds } = await buildFill(pool, opts);
-    const r = await apply(ds, { counts: opts.counts, onProgress: opts.onProgress, after: opts.afterPlan?.(plan) ?? opts.after });
-    // Sample raw CI data for the teams that hold sample data now (filled teams of these companies).
-    const sample = await teamsWithSampleData(pool);
-    const only = opts.onlyTeamIds ? new Set(opts.onlyTeamIds) : null;
-    const teamIds = plan.flatMap((c) => sample.get(c.id) ?? []).filter((id) => !only || only.has(id));
-    const raw = await addRawSampleData(teamIds, opts.shape?.stories);
-    return { today, companies: planSummary(plan), plan, ...r, insertedTotal: r.insertedTotal + raw };
+    const today = opts.today ?? todayUtc();
+    const plan = await planFillExisting(pool, { today, companyIds: opts.companyIds, onlyTeamIds: opts.onlyTeamIds, noNewPeople: opts.noNewPeople });
+    // Sample raw data (and KPIs calculated from it) for the teams whose KPIs are sample KPIs.
+    const teamIds = plan.flatMap((c) => c.teams.filter((t) => t.groups?.has('kpi') && !t.id.startsWith(DEMO_PREFIX)).map((t) => t.id));
+    const r = await apply({ build: (computed, updateFrom) => buildFillDataset(plan, { today, shape: opts.shape, computed, updateFrom }), teamIds },
+      { counts: opts.counts, onProgress: opts.onProgress, after: opts.afterPlan?.(plan) ?? opts.after });
+    return { today, companies: planSummary(plan), plan, ...r };
   });
 }
 

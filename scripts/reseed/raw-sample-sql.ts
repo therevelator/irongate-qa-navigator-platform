@@ -1,8 +1,10 @@
 /**
  * Standalone SQL that adds the v2 phase-1 sample raw CI data (test runs with per-test results,
  * coverage reports with per-file coverage, pipeline runs with stages, flaky-test evidence; the last
- * 14 days, following each team's story) to teams of an existing company WITHOUT wiping anything:
- * every statement skips rows that exist (re-running adds only the missing days), and a team with
+ * 35 complete days, following each team's story) to teams of an existing company WITHOUT wiping anything.
+ * It adds raw rows only: the company's existing KPI snapshots are not recalculated from them, so for a
+ * sample company whose tiles must agree with the evidence, reseed it instead (scripts/reseed/README.md).
+ * Every statement skips rows that exist (re-running adds only the missing days), and a team with
  * real raw CI data gets none. For a SQL console or the Supabase Management API (plain SQL text).
  *
  * The calculated metrics behind "How this was calculated" (metric_evidence) are filled by the

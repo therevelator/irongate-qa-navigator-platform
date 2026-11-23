@@ -174,6 +174,117 @@ export async function recomputeTeamDays(client: pg.PoolClient, teamId: string, d
   return results;
 }
 
+/**
+ * The phase-1 records of a range of days in one pass (six queries): the coverage reports of the days (with the
+ * files of each day's report that the values use), the test runs of the range and the 6 days before it with
+ * their results, and the pipeline runs with their stages. computeCiDay selects each day's records from them
+ * exactly as loadCiDay does for one day.
+ */
+export async function loadCiRange(client: pg.PoolClient, teamId: string, from: string, to: string): Promise<CiData> {
+  const team = (await rows(client, 'SELECT main_branch FROM teams WHERE id = $1', [teamId]))[0];
+  const mainBranch: string | null = team?.main_branch || null;
+  const coverage = (await rows(client,
+    `SELECT id, commit_sha, branch, attempt, day::text AS day, created_at, format, lines_found, lines_hit, branches_found, branches_hit, file_count,
+            changed_lines_found, changed_lines_hit
+       FROM coverage_reports WHERE team_id = $1 AND day BETWEEN $2::date AND $3::date ORDER BY created_at`, [teamId, from, to])).map((c) => ({
+    id: c.id, commit: c.commit_sha, branch: c.branch, attempt: c.attempt, day: c.day, createdAt: ms(c.created_at)!, format: c.format,
+    linesFound: Number(c.lines_found), linesHit: Number(c.lines_hit), branchesFound: Number(c.branches_found), branchesHit: Number(c.branches_hit), fileCount: Number(c.file_count),
+    changedLinesFound: c.changed_lines_found === null ? null : Number(c.changed_lines_found), changedLinesHit: c.changed_lines_hit === null ? null : Number(c.changed_lines_hit),
+  })) as CiData['coverage'];
+  const picked = new Map<string, CiData['coverage'][number]>();
+  for (const day of new Set(coverage.map((c) => c.day))) {
+    const p = pickCoverageReport(day, { coverage, mainBranch });
+    if (p) picked.set(p.id, p as CiData['coverage'][number]);
+  }
+  if (picked.size) {
+    for (const p of picked.values()) p.files = [];
+    for (const f of await rows(client, 'SELECT report_id, path, lines_found, lines_hit FROM coverage_files WHERE report_id = ANY($1::text[]) AND lines_found > 0', [Array.from(picked.keys())])) {
+      picked.get(f.report_id)!.files!.push({ path: f.path, linesFound: Number(f.lines_found), linesHit: Number(f.lines_hit) });
+    }
+  }
+  const testRuns = (await rows(client,
+    `SELECT id, commit_sha, run_id, attempt, branch, day::text AS day, started_at, passed, failed, errored, skipped, duration_ms, format
+       FROM test_runs WHERE team_id = $1 AND day BETWEEN $2::date - 6 AND $3::date ORDER BY started_at`, [teamId, from, to])).map((r) => ({
+    id: r.id, commit: r.commit_sha, runId: r.run_id, attempt: r.attempt, branch: r.branch, day: r.day, startedAt: ms(r.started_at)!,
+    passed: Number(r.passed), failed: Number(r.failed), errored: Number(r.errored), skipped: Number(r.skipped), durationMs: Number(r.duration_ms), format: r.format,
+    cases: [] as NonNullable<CiData['testRuns'][number]['cases']>,
+  }));
+  if (testRuns.length) {
+    const byRun = new Map(testRuns.map((r) => [r.id, r]));
+    const results = await rows(client,
+      `SELECT r.test_run_id, r.test_key, r.suite, r.name, r.status, r.retries, r.duration_ms
+         FROM test_results r JOIN test_runs tr ON tr.id = r.test_run_id
+        WHERE tr.team_id = $1 AND tr.day BETWEEN $2::date - 6 AND $3::date`, [teamId, from, to]);
+    for (const x of results) byRun.get(x.test_run_id)?.cases.push({ testKey: x.test_key, suite: x.suite, name: x.name, status: x.status, retries: Number(x.retries), durationMs: Number(x.duration_ms) });
+  }
+  const pipes = await rows(client,
+    `SELECT id, external_id, attempt, name, commit_sha, branch, day::text AS day, started_at, finished_at, duration_s, result, url
+       FROM pipeline_runs_raw WHERE team_id = $1 AND day BETWEEN $2::date AND $3::date ORDER BY started_at`, [teamId, from, to]);
+  const stages = pipes.length ? await rows(client,
+    `SELECT s.pipeline_run_id, s.name, s.kind, s.parallel_group, s.started_at, s.finished_at, s.duration_s, s.result
+       FROM pipeline_stage_runs s JOIN pipeline_runs_raw p ON p.id = s.pipeline_run_id
+      WHERE p.team_id = $1 AND p.day BETWEEN $2::date AND $3::date`, [teamId, from, to]) : [];
+  const stagesOf = new Map<string, any[]>();
+  for (const st of stages) stagesOf.set(st.pipeline_run_id, [...(stagesOf.get(st.pipeline_run_id) ?? []), st]);
+  const pipelines = pipes.map((p) => ({
+    id: p.id, externalId: p.external_id, attempt: p.attempt, name: p.name, commit: p.commit_sha, branch: p.branch, day: p.day,
+    startedAt: ms(p.started_at)!, finishedAt: ms(p.finished_at), durationS: p.duration_s === null ? null : Number(p.duration_s), result: p.result, url: p.url,
+    stages: (stagesOf.get(p.id) ?? []).map((s) => ({
+      name: s.name, kind: s.kind, parallelGroup: s.parallel_group, startedAt: ms(s.started_at), finishedAt: ms(s.finished_at),
+      durationS: s.duration_s === null ? null : Number(s.duration_s), result: s.result,
+    })),
+  }));
+  return { mainBranch, coverage, testRuns, pipelines };
+}
+
+/**
+ * Recompute a range of days of a team in one pass and store the evidence in batches (a few queries for any number
+ * of days: a year of sample data). The values are those of recomputeTeamDays (the same engine on the same records);
+ * no KPI value is written (the sample KPI snapshots are built from this evidence: server/seeds/demoSeed.ts).
+ */
+export async function recomputeTeamRange(client: pg.PoolClient, teamId: string, days: string[], opts: { groups?: MetricGroup[] } = {}): Promise<DayResult[]> {
+  const [team] = await rows(client, 'SELECT company_id FROM teams WHERE id = $1', [teamId]);
+  const list = Array.from(new Set(days)).sort();
+  if (!team || !list.length) return [];
+  const groups: MetricGroup[] = opts.groups ?? ALL_GROUPS;
+  const none = new Map<string, ComputedMetric[]>();
+  const ci = groups.includes('ci') ? await loadCiRange(client, teamId, list[0], list[list.length - 1]) : null;
+  const delivery = groups.includes('delivery') ? await computeDeliveryDays(client, teamId, list) : none;
+  const work = groups.includes('work') ? await computeWorkDays(client, teamId, list) : none;
+  const quality = groups.includes('quality') ? await computeQualityDays(client, teamId, list) : none;
+  const groupKeys = Object.keys(METRICS).filter((k) => groups.includes(groupOf(k)));
+  const results: DayResult[] = [];
+  const out: unknown[][] = [];
+  for (const day of list) {
+    const computed = [...(ci ? computeCiDay(day, ci) : []), ...(delivery.get(day) ?? []), ...(work.get(day) ?? []), ...(quality.get(day) ?? [])];
+    const res: DayResult = { day, metrics: [] };
+    for (const m of computed) {
+      const spec = METRICS[m.key];
+      const conf = confidenceFor(m.sampleSize);
+      out.push([team.company_id, teamId, day, m.key, m.value, spec.unit, spec.formula, JSON.stringify(m.inputs), JSON.stringify(m.sources), m.sampleSize, conf, spec.kpi, m.recordedAt]);
+      res.metrics.push({ key: m.key, value: m.value, sampleSize: m.sampleSize, confidence: conf, kpi: spec.kpi, written: false });
+    }
+    results.push(res);
+  }
+  const COLS = 13;
+  const cast = (c: number) => (c === 2 ? '::date' : c === 7 || c === 8 ? '::jsonb' : c === 12 ? '::timestamptz' : '');
+  for (let i = 0; i < out.length; i += 400) {
+    const batch = out.slice(i, i + 400);
+    const values = batch.map((_, k) => `(${Array.from({ length: COLS }, (__, c) => `$${k * COLS + c + 1}${cast(c)}`).join(', ')}, now())`).join(', ');
+    await client.query(
+      `INSERT INTO metric_evidence (company_id, team_id, day, metric_key, value, unit, formula, inputs, sources, sample_size, confidence, kpi_column, recorded_at, computed_at)
+       VALUES ${values}
+       ON CONFLICT (team_id, day, metric_key) DO UPDATE SET value = EXCLUDED.value, unit = EXCLUDED.unit, formula = EXCLUDED.formula,
+         inputs = EXCLUDED.inputs, sources = EXCLUDED.sources, sample_size = EXCLUDED.sample_size, confidence = EXCLUDED.confidence,
+         kpi_column = EXCLUDED.kpi_column, recorded_at = EXCLUDED.recorded_at, computed_at = now()`, batch.flat());
+  }
+  // A metric that has no data any more on a day loses its evidence row.
+  await client.query(
+    `DELETE FROM metric_evidence WHERE team_id = $1 AND day = ANY($2::date[]) AND metric_key = ANY($3::text[]) AND NOT ((day::text || '|' || metric_key) = ANY($4::text[]))`,
+    [teamId, list, groupKeys, out.map((r) => `${r[2]}|${r[3]}`)]);
+  return results;
+}
+
 /** Record flaky-test evidence for the commits given (tests that failed and passed on the same commit within 7 days). */
 export async function refreshFlakyEvidence(client: pg.PoolClient, teamId: string, commits: string[]): Promise<number> {
   const list = commits.filter((c) => c);
