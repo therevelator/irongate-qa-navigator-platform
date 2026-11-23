@@ -2,7 +2,7 @@
 
 A small program you run **inside your own network**: a Docker container, or one JavaScript file for Node 20+. You connect
 your tools in it (GitHub Actions, GitLab CI, Bitbucket Cloud or Data Center, Jenkins, Azure DevOps, SonarQube, Jira, Linear,
-PagerDuty, Opsgenie) with whatever authentication each tool supports. It reads the **raw** data and sends it to QE
+PagerDuty, Opsgenie, TestRail, Xray, Zephyr Scale, Google Calendar, Microsoft 365) with whatever authentication each tool supports. It reads the **raw** data and sends it to QE
 Navigator as **JSON** over outbound HTTPS, with an API key your company admin creates in QE Navigator.
 
 - **QE Navigator calculates everything. The Exporter calculates nothing.** It sends test and coverage report files as
@@ -18,6 +18,11 @@ Navigator as **JSON** over outbound HTTPS, with an API key your company admin cr
   one-time token.
 - **No free text leaves**: failure messages, stack traces, logs, descriptions, comments, commit messages, names and
   e-mail addresses are stripped (details: [SECURITY.md](SECURITY.md)).
+- **People are not sent**, with one exception you switch on yourself: developer metrics (`privacy.developerMetrics: true`).
+  Then the author of a pull request and the person of a calendar day are sent as a pseudonym,
+  `sha256(lower(e-mail) + ":" + company id)`, which QE Navigator can match to its own users. QE Navigator keeps it only
+  for a user who enabled developer insights; for anyone else the pull request is stored without an author and the
+  calendar day is not stored. The e-mail address itself never leaves.
 - `qe-exporter preview` prints exactly the JSON that would be sent, with the three ids, and sends nothing.
 
 `qe-collector` and `qe-agent` are the same program under its earlier names: those commands, the old config file names
@@ -103,6 +108,11 @@ To try it with made-up data and no real tools: [deploy/exporter-test/README.md](
 | Linear | Personal API key (`LINEAR_API_KEY`); or OAuth with your own OAuth application | Scope **read**. |
 | PagerDuty | REST API key (`PAGERDUTY_TOKEN`) | A **read-only** API key. |
 | Opsgenie | API key (`OPSGENIE_API_KEY`) | An API integration key with **Read** access only. |
+| TestRail | User e-mail + API key (`TESTRAIL_USER`, `TESTRAIL_API_KEY`) of a dedicated user | A role with **read-only** access to the projects. The API must be enabled. |
+| Xray Cloud | Xray API key: client id + secret (`XRAY_CLIENT_ID`, `XRAY_CLIENT_SECRET`) | Of a user who can **browse** the projects. Xray Server / Data Center is not read. |
+| Zephyr Scale Cloud | API access token (`ZEPHYR_TOKEN`) | Of a user who can **browse** the projects. |
+| Google Calendar | Service account with domain-wide delegation; its private key (PEM) in `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` | The scope **`https://www.googleapis.com/auth/calendar.freebusy`** only: free/busy, no event details. |
+| Microsoft 365 | App registration of your tenant (`tenantId`, `clientId`), client secret in `MS365_CLIENT_SECRET` | The application permission **Calendars.ReadBasic.All** only, with admin consent. |
 | KPI file | none (a local file your scripts write) | — |
 
 OAuth sign-in is offered where the vendor supports an authorization-code flow for an app you register yourself: GitHub,
@@ -121,7 +131,11 @@ GitLab, Bitbucket Cloud and Linear. Jira Cloud's OAuth (3LO) is not offered yet:
 | SonarQube | the latest analysis, open issues (written out as one SARIF file), lines of code; with `coverage: true` also the coverage totals (lines and conditions to cover, uncovered), written out as a coverage file of totals | `sarif`, `coverage` (optional) |
 | Jira, Linear | issues with their changelog, sprints | `issues` |
 | PagerDuty, Opsgenie | incidents / alerts with their status changes | `incidents` |
-| KPI file | `{ "items": [{ "team", "recordedAt", "metrics": { "automation_coverage": 61.5 } }] }` | `kpis` |
+| GitHub, GitLab, Jenkins, Azure DevOps (artifacts) | load-test result files among the artifacts (`artifacts.performance`): a k6 summary export, JMeter's `statistics.json`, Gatling's `stats.json`, reduced to the numbers per request name | `performance` |
+| GitHub, GitLab, Bitbucket Cloud, Azure DevOps (`pullRequests: true`) | pull requests: opened, the first review by someone other than the author, merged, closed; with developer metrics on, the author's e-mail address from a commit (sent as a pseudonym) | `pull-requests` |
+| TestRail, Xray Cloud, Zephyr Scale | test cases (key, automated or not, manual estimate) and test executions (case, automated or not, status, time, duration) | `test-management` |
+| Google Calendar, Microsoft 365 | free/busy only: per person and working day the busy intervals (start, end) and the working hours; only with developer metrics on | `calendar` |
+| KPI file (for companies not in live operation) | `{ "items": [{ "team", "recordedAt", "metrics": { … } }] }`: finished values. QE Navigator calculates all 23 KPIs from raw data; a company in live operation refuses finished values. | `kpis` |
 
 The exact fields: [SECURITY.md](SECURITY.md). The JSON envelope: QE Navigator's docs/INTEGRATION_GUIDE.md, section 4D.
 
@@ -158,6 +172,7 @@ credentials file. Unknown keys and anything that looks like a secret (`token`, `
 | `qeNavigator.caFile` / `http.caFile` | | Extra CA (PEM) added to the system roots, e.g. a TLS-inspecting proxy. Verification is never turned off. |
 | `qeNavigator.requestsPerMinute` | `50` | Client-side limit (the API allows 60 per minute per key). |
 | `privacy.sendTitles` / `sendLinks` / `people` | `false` / `false` / `none` | Issue and incident titles, links back to your tools, people as `HMAC-SHA256(QE_PEOPLE_SALT, id)`. |
+| `privacy.developerMetrics` | `false` | Developer metrics: pull request authors and calendar persons as a pseudonym QE Navigator can match to its users (above). Off: pull requests go without an author and calendars are not sent. |
 | `state.path` | `./qe-exporter-state.json` | Cursors and fingerprints only (no data); written atomically. |
 | `credentials.path` | `<config folder>/qe-exporter-credentials/credentials.json` | The setup page's credentials file (0600, folder 0700). |
 | `hostLabel` | the host name | A short name of this machine, sent as `X-Exporter-Host` (shown to QE Navigator's operators). |
@@ -167,7 +182,10 @@ credentials file. Unknown keys and anything that looks like a secret (`token`, `
 | `http.timeoutSeconds` / `maxRetries` / `maxRetryWaitSeconds` | `30` / `5` / `120` | Every request has a timeout; 429 / 5xx / rate-limit 403 / network errors are retried with jitter and Retry-After. |
 
 Per source (`sources[]`): `type`, `name`, `tokenEnv`, the team mapping, `defaultTeam`, `caFile`, `enabled`. CI sources:
-`artifacts` (`tests`, `coverage`, `sarif` name globs; `maxMB`, default 50), `maxRunsPerRepo` (default 500).
+`artifacts` (`tests`, `coverage`, `sarif`, `performance` name globs; `maxMB`, default 50), `maxRunsPerRepo` (default 500).
+`github`, `gitlab`, `bitbucket` and `azure-devops` also take `pullRequests: true` (default `false`); `jira` takes
+`automationLabels` (your labels that mark test-automation work: such an issue is sent with the label `test-automation`, its
+time logged is the time invested of automation ROI; your own labels are not sent).
 
 | Source | Team mapping | Settings |
 |---|---|---|
@@ -177,6 +195,11 @@ Per source (`sources[]`): `type`, `name`, `tokenEnv`, the team mapping, `default
 | `bitbucket-dc` | `repos` (PROJECT/repo → team) | `baseUrl`, `environments`, `allowHttp` |
 | `jenkins` | `jobs` (folder/job → team) | `baseUrl`, `user` / `userEnv`, `deployJobs`, `deployEnvironment`, `allowHttp` |
 | `azure-devops` | `pipelines` (name or definition id → team) | `orgUrl`, `project`, `environments`, `releases`, `releasesUrl` |
+| `testrail` | `projects` (TestRail project id → team) | `baseUrl`, `user` / `userEnv`, `automatedField` (default `custom_automation_type`; a case of a type named "Automated" counts too), `allowHttp` |
+| `xray` | `projects` (Jira project key → team) | `apiUrl`, `clientId` / `clientIdEnv`, `manualTypes` (default `Manual`: every other test type is automated) |
+| `zephyr` | `projects` (Jira project key → team) | `apiUrl`, `automatedField` (custom field, default `Automated`), `automatedValues`, `automatedLabels` |
+| `google-calendar` | `people` (e-mail address → team; the address stays here) | `serviceAccount`, `subject`, `workStart`, `workEnd`, `timeZone`, `lookbackDays` (default 35) |
+| `microsoft-365` | `people` (e-mail address → team) | `tenantId`, `clientId`, `workStart`, `workEnd`, `timeZone`, `lookbackDays` |
 | `sonarqube` | `projects` (project key → team) | `baseUrl`, `auth: bearer \| basic`, `branch`, `coverage` (default `false`: turn it on for teams whose CI keeps no coverage report, e.g. Bitbucket; leave it off when your CI already sends coverage files), `allowHttp` |
 | `jira` | `teams` (project key → team) | `baseUrl`, `auth: basic` (Cloud) or `bearer` (Server / DC), `email` / `emailEnv`, `jql`, `fields`, `pageSize`, `allowHttp` |
 | `linear` | `teams` (team key → team) | `teamKeys`, `apiUrl` |
