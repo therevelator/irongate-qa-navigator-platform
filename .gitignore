@@ -44,10 +44,12 @@ coverage/
 
 # Database snapshots (keep only latest)
 db_snapshots/snapshot_*.sql
-!db_snapshots/latest_snapshot.sql
 
 # Local Netlify folder
 .netlify
 
 # Golden test scratch output
 tests/api/golden/*.local.json
+
+# Local output of the old Collector (0.2.x) when run in the repo root
+qe-collector-data/

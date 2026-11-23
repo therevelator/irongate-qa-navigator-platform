@@ -1,5 +1,7 @@
 node_modules/
 dist/
 *.tsbuildinfo
+qe-exporter-state.json
+qe-exporter-state.json.lock
 qe-collector-state.json
 qe-collector-state.json.lock

@@ -247,12 +247,6 @@ export const hasPermission = (user: User | null, permission: keyof typeof ROLE_P
   return ROLE_PERMISSIONS[user.role].permissions[permission];
 };
 
-// Helper function to check if user can access feature
-export const canAccessFeature = (user: User | null, feature: keyof typeof ROLE_PERMISSIONS['super_admin']['features']): boolean => {
-  if (!user) return false;
-  return ROLE_PERMISSIONS[user.role].features[feature] !== false;
-};
-
 // Helper function to check if user can manage another user
 export const canManageUser = (currentUser: User | null, targetUser: User): boolean => {
   if (!currentUser) return false;
@@ -287,16 +281,4 @@ export const getRoleBadgeColor = (role: UserRole): string => {
     viewer: 'bg-gray-100 text-gray-800 border-gray-300',
   };
   return colors[role];
-};
-
-// Helper function to get role icon
-export const getRoleIcon = (role: UserRole): string => {
-  const icons: Record<UserRole, string> = {
-    super_admin: '👑',
-    qa_manager: '📊',
-    team_lead: '👥',
-    qa_engineer: '🧪',
-    viewer: '👁️',
-  };
-  return icons[role];
 };

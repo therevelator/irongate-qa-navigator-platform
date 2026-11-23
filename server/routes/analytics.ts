@@ -231,52 +231,6 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
 // FLAKY TEST INTELLIGENCE
 // ============================================================================
 
-// ============================================================================
-// PRODUCTION: Auto-Classification Engine
-// ============================================================================
-// When ready for production, uncomment this section and integrate with your
-// CI/CD pipeline to automatically classify failure patterns from test logs.
-//
-// const PATTERN_KEYWORDS = {
-//   timing: [
-//     'timeout', 'timed out', 'TimeoutError', 'async', 'await', 'Promise',
-//     'race condition', 'flaky wait', 'sleep', 'delay exceeded', 'Exceeded timeout'
-//   ],
-//   environment: [
-//     'environment', 'config', 'configuration', 'docker', 'container',
-//     'service unavailable', 'connection refused', 'port already in use',
-//     'permission denied', 'file not found', 'ENOENT', 'health check'
-//   ],
-//   data: [
-//     'assertion failed', 'expected', 'but got', 'duplicate key', 'constraint',
-//     'null', 'undefined', 'NaN', 'fixture', 'seed data', 'database state',
-//     'data mismatch', 'stale data'
-//   ],
-//   network: [
-//     'ECONNREFUSED', 'ETIMEDOUT', 'ENOTFOUND', 'fetch failed', 'request timeout',
-//     'HTTP 5', 'API error', 'socket hang up', 'SSL', 'certificate', 'network error'
-//   ]
-// };
-//
-// function classifyFailurePattern(errorMessage: string): string {
-//   const lowerError = errorMessage.toLowerCase();
-//   for (const [pattern, keywords] of Object.entries(PATTERN_KEYWORDS)) {
-//     if (keywords.some(kw => lowerError.includes(kw.toLowerCase()))) {
-//       return pattern;
-//     }
-//   }
-//   return 'unknown';
-// }
-//
-// Endpoint to ingest test results from Jenkins/CI:
-// router.post('/flaky-tests/ingest', authenticateToken, async (req: any, res) => {
-//   const { testCaseId, status, errorMessage, buildNumber, jenkinsJobUrl } = req.body;
-//   const pattern = classifyFailurePattern(errorMessage || '');
-//   // Update flaky_tests with new execution and auto-classified pattern
-//   // Store errorMessage in last_error_message column for audit
-// });
-// ============================================================================
-
 router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
   try {
     const { companyId, role, primaryTeamId } = req.user;
