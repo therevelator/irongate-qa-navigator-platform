@@ -33,7 +33,7 @@ e.g. `exporter-build-1`). Copy the `igk_…` key: it is shown once.
 **2. Get the Exporter**, as a container image (built from the repository root):
 
 ```bash
-docker build -f exporter/Dockerfile -t qe-exporter:0.3.0 .
+docker build -f exporter/Dockerfile -t qe-exporter:0.4.0 .
 ```
 
 or the single file (Node 20+, no runtime dependencies):
@@ -45,7 +45,7 @@ cd exporter && npm ci --ignore-scripts && npm run build      # dist/qe-exporter.
 **3. Open the setup page:**
 
 ```bash
-docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 setup
+docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.4.0 setup
 #   or: node dist/qe-exporter.mjs setup -c ./qe-exporter.json
 ```
 
@@ -61,9 +61,9 @@ the page then keeps a session cookie). On the page:
 **4. Preview, then sync:**
 
 ```bash
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 check     # every source and QE Navigator
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 preview   # the exact JSON; nothing is sent
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 sync      # first run: the last 90 days
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.4.0 check     # every source and QE Navigator
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.4.0 preview   # the exact JSON; nothing is sent
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.4.0 sync      # first run: the last 90 days
 ```
 
 Then run `sync` every 15 minutes: a [Kubernetes CronJob](deploy/kubernetes/cronjob.yaml) with a

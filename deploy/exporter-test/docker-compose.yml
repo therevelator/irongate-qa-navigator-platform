@@ -29,7 +29,7 @@ services:
       retries: 20
 
   exporter:
-    image: qe-exporter:0.3.0
+    image: qe-exporter:0.4.0
     build:
       context: ../..
       dockerfile: exporter/Dockerfile

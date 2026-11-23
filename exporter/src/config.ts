@@ -370,7 +370,7 @@ export const DEFAULT_TOKEN_ENV: Record<SourceType, string> = {
   jira: 'JIRA_TOKEN', linear: 'LINEAR_API_KEY', pagerduty: 'PAGERDUTY_TOKEN', opsgenie: 'OPSGENIE_API_KEY',
   github: 'GITHUB_TOKEN', gitlab: 'GITLAB_TOKEN', bitbucket: 'BITBUCKET_APP_PASSWORD', 'bitbucket-dc': 'BITBUCKET_TOKEN', jenkins: 'JENKINS_TOKEN', 'azure-devops': 'AZURE_DEVOPS_TOKEN', sonarqube: 'SONAR_TOKEN',
   kpis: 'QE_KPIS_UNUSED',
-  testrail: 'TESTRAIL_API_KEY', xray: 'XRAY_CLIENT_SECRET', zephyr: 'ZEPHYR_TOKEN', 'google-calendar': 'GOOGLE_SERVICE_ACCOUNT_KEY', 'microsoft-365': 'MS365_CLIENT_SECRET',
+  testrail: 'TESTRAIL_API_KEY', xray: 'XRAY_CLIENT_SECRET', zephyr: 'ZEPHYR_TOKEN', 'google-calendar': 'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY', 'microsoft-365': 'MS365_CLIENT_SECRET',
 };
 /** The key a source's team mapping is written under in the config (stored as `teams`). */
 export const MAP_KEY: Partial<Record<SourceType, string>> = { github: 'repos', gitlab: 'projects', bitbucket: 'repos', 'bitbucket-dc': 'repos', jenkins: 'jobs', 'azure-devops': 'pipelines', sonarqube: 'projects',
@@ -418,7 +418,7 @@ function source(raw: unknown, i: number, names: Set<string>): SourceConfig {
   const maxRuns = () => int(o.maxRunsPerRepo, `${where}.maxRunsPerRepo`, 500, 1, 10000);
   const envs = () => list(o.environments, `${where}.environments`, ['production', 'prod', 'live']);
   // Pull requests (opened, first review, merged) of the mapped repositories, for the developer metrics (default: not read).
-  const prs = () => bool(o.pullRequests, `${where}.pullRequests`, false);
+  const prs = () => (o.pullRequests === 'yes' ? true : o.pullRequests === 'no' ? false : bool(o.pullRequests, `${where}.pullRequests`, false));
   if (type === 'github') {
     only(o, [...ciCommon, 'apiUrl', 'auth', 'appId', 'installationId', 'privateKeyEnv', 'workflows', 'branches', 'environments', 'pullRequests'], where);
     const auth = str(o.auth, `${where}.auth`, 'token');

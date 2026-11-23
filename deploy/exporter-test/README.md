@@ -48,11 +48,11 @@ git clone https://github.com/therevelator/irongate-qa-navigator-platform.git
 cd irongate-qa-navigator-platform
 git checkout claude/wonderful-lamport-0a1h9w        # until the Exporter is on main
 cd deploy/exporter-test
-docker compose build                                 # builds qe-exporter:0.3.0 and qe-fake-vendors:0.3.0
+docker compose build                                 # builds qe-exporter:0.4.0 and qe-fake-vendors:0.3.0
 ```
 
 The Exporter's build runs its type check and tests; it needs to reach registry.npmjs.org. Behind a TLS-inspecting proxy
-pass its CA: `docker build --secret id=ca,src=/path/to/ca.pem -f exporter/Dockerfile -t qe-exporter:0.3.0 .` from the
+pass its CA: `docker build --secret id=ca,src=/path/to/ca.pem -f exporter/Dockerfile -t qe-exporter:0.4.0 .` from the
 repository root.
 
 ## 3. Start

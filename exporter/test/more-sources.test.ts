@@ -337,7 +337,7 @@ describe('Calendars (free/busy only)', () => {
     });
     const cfg = src<any>({ type: 'google-calendar', name: 'gcal', apiUrl: s.url, tokenUrl: `${s.url}/token`, serviceAccount: 'qe@proj.iam.gserviceaccount.com', subject: 'admin@example.com',
       people: { 'grace.hopper@example.com': 'team-pay', 'gone@example.com': 'team-pay' }, lookbackDays: 3 });
-    const a = new GoogleCalendarAdapter(cfg, http, (e) => person(e), { GOOGLE_SERVICE_ACCOUNT_KEY: pem });
+    const a = new GoogleCalendarAdapter(cfg, http, (e) => person(e), { GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: pem });
     const r = await collect(a, 3);
     const days = r.of('calendar');
     assert.ok(days.length >= 1 && days.every((d) => d.person === hash('grace.hopper@example.com')));
@@ -349,7 +349,7 @@ describe('Calendars (free/busy only)', () => {
     assert.ok(r.skipped.some((x) => /not readable/.test(x.reason)), 'a calendar that cannot be read is not a day without meetings');
     noPeople(r.records);
     // Developer metrics off: nothing is sent.
-    const off = await collect(new GoogleCalendarAdapter(cfg, http, () => null, { GOOGLE_SERVICE_ACCOUNT_KEY: pem }), 3);
+    const off = await collect(new GoogleCalendarAdapter(cfg, http, () => null, { GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY: pem }), 3);
     assert.equal(off.of('calendar').length, 0);
     await s.stop();
   });
