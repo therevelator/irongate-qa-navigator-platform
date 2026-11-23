@@ -18,12 +18,15 @@
 import type { AzureDevOpsSource, HttpSettings } from '../../config';
 import { requireSecret } from '../../config';
 import { SourceClient, SourceError } from '../client';
-import { kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, lcovTotalsOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
+import { kindsOf, findReports, parallelGroupOf, rollbackTracker, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, lcovTotalsOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
 
 const V = '7.1';
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled' | undefined> = { succeeded: 'success', partiallySucceeded: 'failed', failed: 'failed', canceled: 'cancelled' };
 const STEP: Record<string, 'success' | 'failed' | 'cancelled' | 'skipped'> = { succeeded: 'success', succeededWithIssues: 'success', failed: 'failed', canceled: 'cancelled', abandoned: 'cancelled', skipped: 'skipped' };
 const OUTCOME: Record<string, 'passed' | 'failed' | 'error' | 'skipped'> = { Passed: 'passed', Failed: 'failed', Error: 'error', Aborted: 'error', Timeout: 'error' };
+
+/** How far before the window deployments are read to recognise a rollback (a redeploy of an earlier build). */
+const ROLLBACK_LOOKBACK_DAYS = 30;
 
 export class AzureDevOpsAdapter implements CiAdapter {
   kind = 'ci' as const;
@@ -189,11 +192,19 @@ export class AzureDevOpsAdapter implements CiAdapter {
     const envs = ((await this.client.get(this.p('/distributedtask/environments'), { 'api-version': `${V}-preview.1` })).value ?? [])
       .filter((e: any) => this.src.environments.some((x) => x.toLowerCase() === String(e.name).toLowerCase()));
     for (const env of envs) {
-      for await (const recs of this.pages<any>(this.client, this.p(`/distributedtask/environments/${env.id}/environmentdeploymentrecords`), { top: 100, 'api-version': `${V}-preview.1` }, 2000)) {
-        for (const r of recs) {
+      // The records are read 30 days further back than the window and taken in the order they finished: a
+      // redeploy of a build that an earlier record already deployed (not the previous one) is the rollback of the previous one.
+      const all: any[] = [];
+      for await (const recs of this.pages<any>(this.client, this.p(`/distributedtask/environments/${env.id}/environmentdeploymentrecords`), { top: 100, 'api-version': `${V}-preview.1` }, 2000)) all.push(...recs);
+      const rollback = rollbackTracker();
+      const lookback = since.getTime() - ROLLBACK_LOOKBACK_DAYS * 86_400_000;
+      {
+        for (const r of all.filter((x) => (ms(x.finishTime) ?? 0) >= lookback).sort((a, b) => (ms(a.finishTime) ?? 0) - (ms(b.finishTime) ?? 0))) {
           const at = ms(r.finishTime);
-          if (!at || at < since.getTime() || at >= until.getTime()) continue;
+          if (!at || at >= until.getTime()) continue;
           if (!['succeeded', 'failed'].includes(String(r.result))) continue;
+          const rollbackOf = rollback(String(r.definition?.id ?? r.definition?.name ?? ''), `env-${env.id}-${r.id}`, String(r.owner?.id ?? ''), r.result === 'succeeded');
+          if (at < since.getTime()) continue;
           const team = this.teamOf(r.definition);
           if (!team) { page.skipped.push({ id: `deployment ${r.id}`, reason: `pipeline ${r.definition?.name ?? '?'} is not mapped` }); continue; }
           const build = r.owner?.id ? await this.client.getOptional(this.p(`/build/builds/${r.owner.id}`), { 'api-version': V }) : null;
@@ -201,7 +212,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
           const commits = r.result === 'succeeded' && r.owner?.id ? await this.changes(r.owner.id) : [];
           page.records.push(deployment(team, {
             id, environment: String(env.name), service: String(r.definition?.name ?? env.name), commit: String(build?.sourceVersion ?? '').slice(0, 80),
-            startedAt: ms(r.startTime), finishedAt: at, result: r.result === 'succeeded' ? 'success' : 'failure', hotfix: /hotfix/i.test(String(build?.sourceBranch ?? '')), commits,
+            startedAt: ms(r.startTime), finishedAt: at, result: r.result === 'succeeded' ? 'success' : 'failure', rollbackOf, hotfix: /hotfix/i.test(String(build?.sourceBranch ?? '')), commits,
           }));
           const iso = new Date(at).toISOString();
           if (!page.changedAt || iso > page.changedAt) page.changedAt = iso;
@@ -213,11 +224,17 @@ export class AzureDevOpsAdapter implements CiAdapter {
 
   private async releaseDeployments(since: Date, until: Date): Promise<CiPage> {
     const page: CiPage = { records: [], skipped: [], changedAt: null };
-    for await (const list of this.pages<any>(this.vsrm!, this.p('/release/deployments'), { minStartedTime: since.toISOString(), maxStartedTime: until.toISOString(), queryOrder: 'ascending', $top: 100, 'api-version': V }, 5000)) {
+    // Read 30 days further back than the window (ascending), so a redeploy of an earlier build is recognised as a rollback.
+    const rollback = rollbackTracker();
+    const from = new Date(since.getTime() - ROLLBACK_LOOKBACK_DAYS * 86_400_000);
+    for await (const list of this.pages<any>(this.vsrm!, this.p('/release/deployments'), { minStartedTime: from.toISOString(), maxStartedTime: until.toISOString(), queryOrder: 'ascending', $top: 100, 'api-version': V }, 5000)) {
       for (const d of list) {
         if (!this.src.environments.some((x) => x.toLowerCase() === String(d.releaseEnvironment?.name ?? '').toLowerCase())) continue;
         const status = String(d.deploymentStatus);
         if (!['succeeded', 'failed', 'partiallySucceeded'].includes(status)) continue;
+        const shipped = (d.release?.artifacts ?? [])[0]?.definitionReference ?? {};
+        const rollbackOf = rollback(`${d.releaseDefinition?.id ?? d.releaseDefinition?.name ?? ''}:${d.releaseEnvironment?.name ?? ''}`, `release-${d.id}`, String(shipped.version?.id ?? shipped.sourceVersion?.id ?? ''), status === 'succeeded');
+        if ((ms(d.startedOn) ?? ms(d.completedOn) ?? 0) < since.getTime()) continue;
         const team = this.teamOf(d.releaseDefinition);
         if (!team) { page.skipped.push({ id: `release deployment ${d.id}`, reason: `release ${d.releaseDefinition?.name ?? '?'} is not mapped` }); continue; }
         const art = (d.release?.artifacts ?? [])[0]?.definitionReference ?? {};
@@ -227,7 +244,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
         const commits = status === 'succeeded' && Number.isInteger(buildId) && buildId > 0 ? await this.changes(buildId) : [];
         page.records.push(deployment(team, {
           id: `release-${d.id}`, environment: String(d.releaseEnvironment?.name), service: String(d.releaseDefinition?.name ?? ''), commit: String(art.sourceVersion?.id ?? '').slice(0, 80),
-          startedAt: ms(d.startedOn), finishedAt: at, result: status === 'succeeded' ? 'success' : 'failure', hotfix: /hotfix/i.test(String(art.branch?.name ?? '')), commits,
+          startedAt: ms(d.startedOn), finishedAt: at, result: status === 'succeeded' ? 'success' : 'failure', rollbackOf, hotfix: /hotfix/i.test(String(art.branch?.name ?? '')), commits,
         }));
         const iso = new Date(at).toISOString();
         if (!page.changedAt || iso > page.changedAt) page.changedAt = iso;

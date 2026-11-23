@@ -11,13 +11,15 @@
  * Read per project (projects: project key → team):
  *   GET /api/project_analyses/search?project=<key>&ps=1        the latest analysis (date, revision): read again only when it changed
  *   GET /api/issues/search?componentKeys=<key>&resolved=false&ps=500&p=<n>   open issues (at most 10,000: SonarQube's limit)
- *   GET /api/measures/component?component=<key>&metricKeys=ncloc            lines of code (code quality score per KLOC)
+ *   GET /api/measures/component?component=<key>&metricKeys=ncloc            lines of code (code quality score per KLOC);
+ *                                                                           with coverage: true also lines_to_cover, uncovered_lines,
+ *                                                                           conditions_to_cover, uncovered_conditions
  */
 import { createHash } from 'node:crypto';
 import type { HttpSettings, SonarQubeSource } from '../../config';
 import { requireSecret } from '../../config';
 import { SourceClient, SourceError } from '../client';
-import { ms, reportItem, sarifOf, type CiAdapter, type CiPage, type Finding } from './common';
+import { ms, reportItem, sarifOf, type CiAdapter, type CiPage, type Finding, lcovTotalsOf } from './common';
 
 type FindingSeverity = Finding['severity'];
 
@@ -48,6 +50,9 @@ export function effortMinutes(v: unknown): number | null {
   return any ? Math.round(total) : null;
 }
 
+/** The measures the coverage totals are read from. */
+const COVERAGE_MEASURES = ['lines_to_cover', 'uncovered_lines', 'conditions_to_cover', 'uncovered_conditions'];
+
 export class SonarQubeAdapter implements CiAdapter {
   kind = 'ci' as const;
   private client: SourceClient;
@@ -67,6 +72,7 @@ export class SonarQubeAdapter implements CiAdapter {
     return [
       `${this.src.baseUrl} (${this.src.auth} token), projects: ${Object.entries(this.src.teams).map(([p, t]) => `${p} → ${t}`).join(', ')}${this.src.branch ? `, branch ${this.src.branch}` : ''}`,
       'the latest analysis, open issues (rule, severity, file, remediation effort; no messages), lines of code (ncloc), sent as one SARIF file',
+      ...(this.src.coverage ? ['coverage totals of the latest analysis (lines and conditions to cover, uncovered), sent as a coverage report'] : []),
     ];
   }
 
@@ -97,12 +103,28 @@ export class SonarQubeAdapter implements CiAdapter {
           if ((r.issues ?? []).length < 500 || findings.length >= MAX_ISSUES) break;
         }
         if (total > findings.length) page.skipped.push({ id: key, reason: `${total} open issues: SonarQube returns at most ${MAX_ISSUES}; the score uses the first ${findings.length}` });
-        const ncloc = await this.client.getOptional('/api/measures/component', { component: key, metricKeys: 'ncloc', ...branch });
-        const loc = Number((ncloc?.component?.measures ?? []).find((m: any) => m.metric === 'ncloc')?.value);
+        const ncloc = await this.client.getOptional('/api/measures/component', { component: key, metricKeys: this.src.coverage ? `ncloc,${COVERAGE_MEASURES.join(',')}` : 'ncloc', ...branch });
+        const measure = (name: string) => Number((ncloc?.component?.measures ?? []).find((m: any) => m.metric === name)?.value);
+        const loc = measure('ncloc');
         // SonarQube gives its findings through its API only: written out as a SARIF file (rule, severity, file, fingerprint; no messages).
         page.records.push(reportItem('sarif', team, [sarifOf('SonarQube', findings)], {
           commit: String(latest.revision ?? latest.key ?? '').slice(0, 80), branch: this.src.branch, run: String(latest.key ?? at), attempt: 1, startedAt: at,
         }, { repo: key, loc: Number.isFinite(loc) && loc > 0 ? loc : null }));
+        // Coverage (optional): SonarQube's totals of the latest analysis, written out as an lcov file of totals. QE Navigator
+        // calculates the percentage; no per-file coverage comes this way.
+        if (this.src.coverage) {
+          const [toCover, uncovered, conditions, uncoveredConditions] = COVERAGE_MEASURES.map(measure);
+          if (Number.isFinite(toCover) && toCover > 0 && Number.isFinite(uncovered)) {
+            const branches = Number.isFinite(conditions) && conditions > 0 && Number.isFinite(uncoveredConditions);
+            page.records.push(reportItem('coverage', team, [lcovTotalsOf({
+              linesFound: toCover, linesHit: Math.max(0, toCover - uncovered),
+              branchesFound: branches ? conditions : 0, branchesHit: branches ? Math.max(0, conditions - uncoveredConditions) : 0,
+            })], { commit: String(latest.revision ?? latest.key ?? '').slice(0, 80), branch: this.src.branch, run: String(latest.key ?? at), attempt: 1, startedAt: at },
+            { repo: key, loc: Number.isFinite(loc) && loc > 0 ? loc : null, format: 'lcov' }));
+          } else {
+            page.skipped.push({ id: `${key} coverage`, reason: 'the latest analysis has no coverage measures (lines_to_cover)' });
+          }
+        }
         page.changedAt = new Date(at).toISOString();
       } catch (e) {
         if (e instanceof SourceError && e.auth) throw e;

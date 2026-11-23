@@ -10,12 +10,13 @@
  *   GET <job>/<n>/testReport/api/json?tree=duration,suites[…]     the JUnit plugin's test report
  *   GET <job>/<n>/artifact/<path>                                 archived coverage / SARIF / test files
  * A deployment job's builds are deployments to deployEnvironment (production), with the commits of their
- * change sets.
+ * change sets. A successful build of a commit that an earlier successful build already deployed (not the
+ * previous one) is sent as the rollback of the previous one (rollbackOf).
  */
 import type { HttpSettings, JenkinsSource } from '../../config';
 import { requireSecret, secret, ConfigError } from '../../config';
 import { SourceClient, SourceError } from '../client';
-import { globMatch, kindsOf, findReports, secondsBetween, pipelineRun, reportItems, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
+import { globMatch, kindsOf, findReports, parallelGroupOf, rollbackTracker, secondsBetween, pipelineRun, reportItems, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
 
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled' | undefined> = { SUCCESS: 'success', FAILURE: 'failed', UNSTABLE: 'failed', ABORTED: 'cancelled' };
 const STAGE: Record<string, 'success' | 'failed' | 'cancelled' | 'skipped'> = { SUCCESS: 'success', FAILED: 'failed', UNSTABLE: 'failed', ABORTED: 'cancelled', NOT_EXECUTED: 'skipped', SKIPPED: 'skipped' };
@@ -58,9 +59,10 @@ export class JenkinsAdapter implements CiAdapter {
     return out;
   }
 
-  private async builds(job: string, since: Date, until: Date): Promise<any[]> {
+  /** The finished builds of a job, oldest first: those started in the window, or (all) every one Jenkins returns. */
+  private async builds(job: string, since: Date, until: Date, all = false): Promise<any[]> {
     const r = await this.client.get(`${jobUrl(job)}/api/json`, { tree: `builds[${BUILD_TREE}]{0,${this.src.maxRunsPerRepo}}` });
-    return (r.builds ?? []).filter((b: any) => !b.building && b.timestamp >= since.getTime() && b.timestamp < until.getTime()).sort((a: any, b: any) => a.timestamp - b.timestamp);
+    return (r.builds ?? []).filter((b: any) => !b.building && (all || (b.timestamp >= since.getTime() && b.timestamp < until.getTime()))).sort((a: any, b: any) => a.timestamp - b.timestamp);
   }
 
   async *collect(since: Date, until: Date): AsyncIterable<CiPage> {
@@ -81,16 +83,20 @@ export class JenkinsAdapter implements CiAdapter {
     for (const [job, team] of Object.entries(this.src.deployJobs)) {
       const page: CiPage = { records: [], skipped: [], changedAt: null };
       const service = job.split('/').pop()!;
-      for (const b of await this.builds(job, since, until)) {
+      // Every build Jenkins still lists is read (not only the window), so a redeploy of an earlier commit is recognised as a rollback.
+      const rollback = rollbackTracker();
+      for (const b of await this.builds(job, since, until, true)) {
         const r = RESULT[String(b.result)];
         if (r !== 'success' && r !== 'failed') continue;
         const rev = this.revision(b);
         const finished = b.timestamp + (b.duration ?? 0);
+        const rollbackOf = rollback(job, `${job}#${b.number}`, rev.sha, r === 'success');
+        if (b.timestamp < since.getTime() || b.timestamp >= until.getTime()) continue;
         const commits = r === 'success' ? (b.changeSets ?? []).flatMap((c: any) => c.items ?? []).filter((i: any) => i.commitId)
           .map((i: any) => ({ sha: String(i.commitId), authoredAt: typeof i.timestamp === 'number' && i.timestamp > 0 ? i.timestamp : null, committedAt: null })) : [];
         page.records.push(deployment(team, {
           id: `${job}#${b.number}`, environment: this.src.deployEnvironment, service, commit: rev.sha, startedAt: b.timestamp, finishedAt: finished,
-          result: r === 'success' ? 'success' : 'failure', hotfix: /hotfix/i.test(rev.branch ?? ''), url: this.opts.links ? b.url ?? null : null, commits,
+          result: r === 'success' ? 'success' : 'failure', rollbackOf, hotfix: /hotfix/i.test(rev.branch ?? ''), url: this.opts.links ? b.url ?? null : null, commits,
         }));
         const at = new Date(finished).toISOString();
         if (!page.changedAt || at > page.changedAt) page.changedAt = at;
@@ -111,10 +117,13 @@ export class JenkinsAdapter implements CiAdapter {
     const startedAt = Number(b.timestamp);
     const finishedAt = startedAt + Number(b.duration ?? 0);
     const wf = await this.client.getOptional(`${base}/wfapi/describe`);
-    const stages = (wf?.stages ?? []).filter((x: any) => x.startTimeMillis).map((x: any) => {
+    const wfStages = (wf?.stages ?? []).filter((x: any) => x.startTimeMillis);
+    const stageNames = wfStages.map((x: any) => String(x.name));
+    const stages = wfStages.map((x: any) => {
       const a = Number(x.startTimeMillis);
       const d = Number(x.durationMillis ?? 0);
-      return { name: String(x.name), startedAt: a, finishedAt: a + d, durationS: Math.round(d / 1000), result: STAGE[String(x.status)] ?? 'skipped' };
+      // Sharded stages ("tests 1/3", "tests (chrome)") are one parallel group; other parallel test stages are recognised by their overlap in time.
+      return { name: String(x.name), parallelGroup: parallelGroupOf(String(x.name), stageNames), startedAt: a, finishedAt: a + d, durationS: Math.round(d / 1000), result: STAGE[String(x.status)] ?? 'skipped' };
     });
     const runId = `${job}#${b.number}`;
     const out: CiRecord[] = [pipelineRun(team, {

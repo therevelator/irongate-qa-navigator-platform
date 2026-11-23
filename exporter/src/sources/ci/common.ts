@@ -242,6 +242,26 @@ export function deployment(team: string, d: DeploymentIn): CiRecord {
   return { kind: 'deployments', team, id: `deployment:${d.id}`, item, at: d.finishedAt };
 }
 
+/**
+ * Rollbacks among the deployments of one service and environment, fed in the order they finished:
+ * a successful deployment of a version that an earlier successful deployment already shipped (and that is
+ * not the version of the previous one) rolls the previous one back. Returns the id of the deployment
+ * it rolls back, else null. `version` is what identifies the shipped code: the commit, or the build id
+ * when the CI redeploys builds. A fact about the records (which deployment replaced which), not a metric.
+ */
+export function rollbackTracker(): (group: string, id: string, version: string, ok: boolean) => string | null {
+  const state = new Map<string, { prev: { id: string; version: string } | null; shipped: Array<{ id: string; version: string }> }>();
+  return (group, id, version, ok) => {
+    const st = state.get(group) ?? { prev: null, shipped: [] };
+    state.set(group, st);
+    if (!ok || !version) return null;
+    const rollbackOf = st.prev && st.prev.version !== version && st.shipped.slice(0, -1).some((x) => x.version === version) ? st.prev.id : null;
+    st.prev = { id, version };
+    st.shipped.push({ id, version });
+    return rollbackOf;
+  };
+}
+
 /** A matrix / sharded job name ("test (ubuntu, 18)", "rspec 2/4", "Job 1 of 3") → its group, else null (the CI's own grouping). */
 export function parallelGroupOf(name: string, siblings: string[]): string | null {
   const base = (n: string) => n.replace(/\s*\([^)]*\)\s*$/, '').replace(/\s+\d+\s*(\/|of)\s*\d+\s*$/i, '').trim();

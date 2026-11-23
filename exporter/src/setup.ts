@@ -341,7 +341,7 @@ bitbucket:[['auth','Sign-in','app-password|oauth'],['environments','Production e
 'bitbucket-dc':[['baseUrl','Bitbucket Data Center URL','https://bitbucket.example.com'],['environments','Production environments','production']],
 jenkins:[['baseUrl','Jenkins URL','https://jenkins.example.com']],
 'azure-devops':[['orgUrl','Organization URL','https://dev.azure.com/your-org'],['project','Project',''],['environments','Production environments','Production']],
-sonarqube:[['baseUrl','SonarQube URL','https://sonarcloud.io'],['auth','Token type','bearer|basic']],
+sonarqube:[['baseUrl','SonarQube URL','https://sonarcloud.io'],['auth','Token type','bearer|basic'],['coverage','Also read coverage (when your CI keeps no coverage report)','no|yes']],
 jira:[['baseUrl','Jira URL','https://your-site.atlassian.net'],['auth','Sign-in','basic|bearer'],['jql','JQL (which issues)','project in (PAY)']],
 linear:[['auth','Sign-in','key|oauth']],pagerduty:[],opsgenie:[['region','Region','us|eu']]};
 const SECRETS={github:{token:[['GITHUB_TOKEN','Fine-grained token (Actions, Contents, Deployments, Metadata: read)']],app:[['GITHUB_APP_PRIVATE_KEY','GitHub App private key (PEM)']],oauth:[]},

@@ -180,6 +180,12 @@ export interface SonarQubeSource extends SourceBase {
   auth: 'bearer' | 'basic';
   /** Branch to read (empty: the main branch). */
   branch: string | null;
+  /**
+   * Also read the project's coverage totals (lines and conditions to cover and uncovered) and send them as a
+   * coverage report. For teams whose CI keeps no coverage report (Bitbucket). Off by default: a team whose CI
+   * already sends coverage files would get two reports of the same code.
+   */
+  coverage: boolean;
   allowHttp: boolean;
 }
 
@@ -396,11 +402,13 @@ function source(raw: unknown, i: number, names: Set<string>): SourceConfig {
     };
   }
   if (type === 'sonarqube') {
-    only(o, [...common, 'baseUrl', 'auth', 'branch', 'allowHttp'], where);
+    only(o, [...common, 'baseUrl', 'auth', 'branch', 'coverage', 'allowHttp'], where);
     const auth = str(o.auth, `${where}.auth`, 'bearer');
     if (auth !== 'bearer' && auth !== 'basic') throw new ConfigError(`${where}.auth must be bearer (SonarQube 10+, SonarCloud) or basic (older SonarQube: the token as user name)`);
     const allowHttp = bool(o.allowHttp, `${where}.allowHttp`, false);
-    return { ...base, type, baseUrl: httpsUrl(o.baseUrl, `${where}.baseUrl`, 'https://sonarcloud.io', allowHttp), auth, branch: str(o.branch, `${where}.branch`), allowHttp };
+    // The setup page writes yes / no; a config file may say true / false.
+    const coverage = o.coverage === 'yes' ? true : o.coverage === 'no' ? false : bool(o.coverage, `${where}.coverage`, false);
+    return { ...base, type, baseUrl: httpsUrl(o.baseUrl, `${where}.baseUrl`, 'https://sonarcloud.io', allowHttp), auth, branch: str(o.branch, `${where}.branch`), coverage, allowHttp };
   }
   if (type === 'jira') {
     only(o, [...common, 'baseUrl', 'deployment', 'auth', 'email', 'emailEnv', 'jql', 'fields', 'pageSize', 'allowHttp'], where);

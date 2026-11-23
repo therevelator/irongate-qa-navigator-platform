@@ -122,6 +122,8 @@ sources:
   #   type: sonarqube
   #   baseUrl: https://sonarqube.example.com     # default https://sonarcloud.io
   #   projects: { acme_payments: team-payments }
+  #   coverage: true                              # also send SonarQube's coverage totals (for teams whose CI keeps
+  #                                               # no coverage report, e.g. Bitbucket); default false
 
   # Jira Cloud: e-mail + API token (Basic auth).
   - name: jira
