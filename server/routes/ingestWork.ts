@@ -35,7 +35,7 @@ import { calcOrQueue } from '../lib/calc/queue';
 import { workAffectedDays } from '../lib/calc/work';
 import { qualityAffectedDays } from '../lib/calc/quality';
 import { HttpError, actorOf, after, afterCommit, callerOf, checkTime, commonFields, computedOut, fail, noAccess, outOfScope, readInput, summaryItem, teamOwned, text } from './ingestRaw';
-import { applyIssueAllowList, minimisedIssuePayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
+import { applyIssueAllowList, minimisedAnalysisPayload, minimisedIssuePayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
 
 const router = express.Router();
 
@@ -162,7 +162,7 @@ export async function handleIssues(req: ApiKeyRequest, res: express.Response) {
       for (const t of teams) {
         const kept = minimisedIssuePayload(caller.companyId, parsed.issues.filter((e) => teamOf.get(e) === t), sprintsOf.get(t) ?? [], storeTitles);
         const up = await insertUpload(client, {
-          companyId: caller.companyId, teamId: t, kind: 'issues', format, commit: '', branch: null, runId: `issues:${h.slice(0, 32)}`, attempt: 1, payload: kept,
+          companyId: caller.companyId, teamId: t, kind: 'issues', format, commit: '', branch: null, runId: `issues:${h.slice(0, 32)}`, attempt: 1, payload, kept,
           apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs: 0, summary: { issues: parsed.issues.filter((e) => teamOf.get(e) === t).length, format },
         });
         uploads.set(t, 'duplicateOf' in up ? { id: up.duplicateOf, fresh: false } : { id: up.id, fresh: true });
@@ -271,7 +271,7 @@ export async function handleStaticAnalysis(req: ApiKeyRequest, res: express.Resp
     const outcome = await runLogged(caller, { key, hash, source }, async (client, ingestionId) => {
       const up = await insertUpload(client, {
         companyId: caller.companyId, teamId: c.teamId, kind: 'static-analysis', format: 'sarif', commit, branch, runId, attempt: c.attempt, payload: input.payload,
-        apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs, summary: { repo, reports: summary },
+        kept: minimisedAnalysisPayload(reports), apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs, summary: { repo, reports: summary },
       });
       if ('duplicateOf' in up) {
         items[0].status = 'duplicate';

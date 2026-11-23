@@ -204,7 +204,10 @@ export async function storeIncidents(client: pg.PoolClient, companyId: string, e
     const st = state.get(key);
     const prev = st?.row;
     const at = e.at ?? null;
-    const opened = minDate(prev?.opened_at ?? null, e.openedAt);
+    let opened = minDate(prev?.opened_at ?? null, e.openedAt);
+    // A status update (open / triggered / reopened with its time "at") for an incident not seen before creates it,
+    // opened at that time.
+    if (!opened && !prev && e.status === 'open' && at) opened = at;
     if (!opened) throw new ReportError(`incidents[${i}].openedAt is required: incident ${e.id} is new (send openedAt with its first event)`);
     let ack = minDate(prev?.acknowledged_at ?? null, e.acknowledgedAt);
     let resolved = prev?.resolved_at ?? null;

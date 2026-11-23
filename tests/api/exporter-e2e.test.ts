@@ -57,7 +57,7 @@ beforeAll(async () => {
   db = await localDb();
   await createGolden(db);
   cookie = (await login(GOLDEN_ADMIN_EMAIL)).cookie;
-  apiKey = (await post('/api/admin/api-keys', cookie, { name: 'Exporter e2e key' })).body.plaintextKey;
+  apiKey = (await post('/api/admin/api-keys', cookie, { name: 'Exporter e2e key', scope: 'exporter' })).body.plaintextKey;
   dir = mkdtempSync(join(tmpdir(), 'qe-exporter-e2e-'));
   fake = spawn(process.execPath, [FAKE], { env: { ...process.env, PORT: String(PORT), HISTORY_DAYS: '20', KPI_FILE: join(dir, 'kpis.json') }, stdio: 'ignore' });
   for (let i = 0; i < 50; i++) {

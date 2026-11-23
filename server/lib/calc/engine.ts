@@ -368,11 +368,15 @@ export const RAW_RETENTION_DAYS = 396; // 13 months
 /** Per-test results, per-file coverage and static-analysis findings: 13 months, like the rest of the raw store. */
 export const RAW_DETAIL_DAYS = RAW_RETENTION_DAYS;
 /**
- * Days the gzipped payloads are kept: 13 months by default (RAW_PAYLOAD_DAYS may raise it; a value below 396 is
- * ignored, so a stale setting can never delete a payload younger than 13 months). The raw_uploads row itself goes
- * after RAW_RETENTION_DAYS, so in practice payloads are kept 13 months.
+ * Days the gzipped payloads (raw_uploads.payload, a minimised copy) are kept: RAW_PAYLOAD_DAYS, at most 396 (13 months,
+ * the default). A lower value clears the payloads earlier; the raw_uploads row itself (and every parsed row) stays
+ * RAW_RETENTION_DAYS. A value that is not a whole number from 1 is ignored (396). Read at each cleanup.
  */
-export const RAW_PAYLOAD_DAYS = Math.max(RAW_RETENTION_DAYS, Number(process.env.RAW_PAYLOAD_DAYS) || 0);
+export function rawPayloadDays(env: string | undefined = process.env.RAW_PAYLOAD_DAYS): number {
+  const n = Number(env);
+  return env !== undefined && env.trim() !== '' && Number.isInteger(n) && n >= 1 ? Math.min(n, RAW_RETENTION_DAYS) : RAW_RETENTION_DAYS;
+}
+export const RAW_PAYLOAD_DAYS = rawPayloadDays();
 
 /**
  * Retention of the raw store (db-keepalive, daily): everything raw is kept 13 months (396 days) so teams keep a
@@ -385,7 +389,7 @@ export const RAW_PAYLOAD_DAYS = Math.max(RAW_RETENTION_DAYS, Number(process.env.
 export async function cleanupRawData(): Promise<Record<string, number>> {
   const n = async (sql: string, params: any[] = []) => (await pool.query(`WITH d AS (${sql} RETURNING 1) SELECT COUNT(*)::int AS n FROM d`, params)).rows[0]?.n ?? 0;
   return {
-    payloads: await n(`UPDATE raw_uploads SET payload = NULL WHERE payload IS NOT NULL AND received_at < now() - make_interval(days => $1)`, [RAW_PAYLOAD_DAYS]),
+    payloads: await n(`UPDATE raw_uploads SET payload = NULL WHERE payload IS NOT NULL AND received_at < now() - make_interval(days => $1)`, [rawPayloadDays()]),
     testResults: await n(`DELETE FROM test_results r USING test_runs tr WHERE tr.id = r.test_run_id AND tr.started_at < now() - make_interval(days => $1)`, [RAW_DETAIL_DAYS]),
     coverageFiles: await n(`DELETE FROM coverage_files f USING coverage_reports r WHERE r.id = f.report_id AND r.created_at < now() - make_interval(days => $1)
                               AND r.id <> (SELECT r2.id FROM coverage_reports r2 WHERE r2.team_id = r.team_id ORDER BY r2.created_at DESC LIMIT 1)`, [RAW_DETAIL_DAYS]),

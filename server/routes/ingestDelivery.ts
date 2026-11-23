@@ -35,7 +35,7 @@ import type { DayResult } from '../lib/calc/engine';
 import { calcOrQueue } from '../lib/calc/queue';
 import { deliveryAffectedDays } from '../lib/calc/delivery';
 import { HttpError, actorOf, after, afterCommit, callerOf, computedOut, fail, noAccess, outOfScope, summaryItem, text } from './ingestRaw';
-import { applyIncidentAllowList, minimisedIncidentPayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
+import { applyIncidentAllowList, minimisedCommitPayload, minimisedDeploymentPayload, minimisedIncidentPayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
 
 const router = express.Router();
 
@@ -174,17 +174,22 @@ export function deliveryIngestHandler(kind: DeliveryKind) {
       const outcome = await runLogged(caller, { key, hash, source }, async (client, ingestionId) => {
         if (!events.length) {
           return {
-            status: 'accepted', httpStatus: 200, response: { status: 'ignored', kind, format, events: [], ignored, message: 'Nothing to record: the event is not a finished deployment.' },
+            status: 'accepted', httpStatus: 200,
+            response: { status: 'ignored', kind, format, events: [], ignored, message: kind === 'commits' ? 'Nothing to record: the list has no commits.' : 'Nothing to record: the event is not a finished deployment.' },
             items: [summaryItem(defaults.team, source, null, 'duplicate')], errors: [], teamIds: defaults.team ? [defaults.team] : [], valueCount: 0, source,
           };
         }
         // One raw_uploads row per team of the request (the identity of the request: its body hash).
-        // Incidents: the copy kept is the minimised events of the team, never the body as received.
+        // The copy kept is the minimised events of the team (no names, e-mail addresses or commit messages; commit
+        // authors as the salted hash), never the body as received.
         const uploads = new Map<string, { id: string; fresh: boolean }>();
         for (const t of teams) {
-          const kept = kind === 'incidents' ? minimisedIncidentPayload(caller.companyId, (events as IncidentEvent[]).filter((e) => teamOf.get(e) === t), storeTitles) : payload;
+          const mine = events.filter((e) => teamOf.get(e) === t);
+          const kept = kind === 'incidents' ? minimisedIncidentPayload(caller.companyId, mine as IncidentEvent[], storeTitles)
+            : kind === 'deployments' ? minimisedDeploymentPayload(caller.companyId, mine as DeploymentEvent[])
+              : minimisedCommitPayload(caller.companyId, mine as CommitBatch[]);
           const up = await insertUpload(client, {
-            companyId: caller.companyId, teamId: t, kind, format, commit: '', branch: null, runId: `${kind}:${h.slice(0, 32)}`, attempt: 1, payload: kept,
+            companyId: caller.companyId, teamId: t, kind, format, commit: '', branch: null, runId: `${kind}:${h.slice(0, 32)}`, attempt: 1, payload, kept,
             apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs: 0, summary: { events: count, format },
           });
           uploads.set(t, 'duplicateOf' in up ? { id: up.duplicateOf, fresh: false } : { id: up.id, fresh: true });

@@ -33,6 +33,7 @@ import { insertUpload, sha256, storeCoverage, storePipelineRuns, storeTestRun, t
 import { affectedDays, refreshFlakyEvidence, type DayResult } from '../lib/calc/engine';
 import { calcOrQueue, kickCalc } from '../lib/calc/queue';
 import { flushBackgroundWrites } from '../lib/opsLog';
+import { minimisedCoveragePayload, minimisedPipelinePayload, minimisedTestPayload } from '../lib/ingest/minimiseStore';
 
 const router = express.Router();
 
@@ -216,7 +217,9 @@ export function rawIngestHandler(kind: RawKind) {
       if (parsedTests && parsedTests.cases.length === 0) throw new HttpError(400, 'The report has no test cases');
       if (parsedCov && parsedCov.files.length === 0 && parsedCov.totals.linesFound === 0) throw new HttpError(400, 'The coverage report has no files');
 
-      const at = c.startedAt ?? parsedTests?.startedAt ?? new Date();
+      // The run time: startedAt, else the report's own timestamp (JUnit / TRX start, Cobertura timestamp, JaCoCo
+      // session start), else the time received.
+      const at = c.startedAt ?? parsedTests?.startedAt ?? parsedCov?.startedAt ?? new Date();
       checkTime(at);
       const runId = c.run ?? `sha:${hash.slice(0, 16)}`;
       const summary = parsedTests
@@ -240,7 +243,8 @@ export function rawIngestHandler(kind: RawKind) {
       const outcome = await runLogged(caller, { key, hash, source }, async (client, ingestionId) => {
         const meta: UploadMeta = {
           companyId: caller.companyId, teamId: c.teamId, kind, format: format!, commit: c.commit, branch: c.branch, runId, attempt: c.attempt,
-          payload: input.payload, apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs, summary,
+          // Kept: the minimised parsed report (no failure messages, output, properties, host or user names).
+          payload: input.payload, kept: parsedTests ? minimisedTestPayload(parsedTests) : minimisedCoveragePayload(parsedCov!), apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs, summary,
         };
         const up = await insertUpload(client, meta);
         if ('duplicateOf' in up) {
@@ -343,7 +347,7 @@ async function handlePipelines(
     const single = runs.length === 1;
     const up = await insertUpload(client, {
       companyId: caller.companyId, teamId, kind: 'pipelines', format: 'json', commit: single ? runs[0].commit : '', branch: single ? runs[0].branch : null,
-      runId: single ? runs[0].id : `batch:${hash.slice(0, 16)}`, attempt: single ? runs[0].attempt : 1, payload, apiKeyId: caller.apiKeyId ?? null,
+      runId: single ? runs[0].id : `batch:${hash.slice(0, 16)}`, attempt: single ? runs[0].attempt : 1, payload, kept: minimisedPipelinePayload(runs), apiKeyId: caller.apiKeyId ?? null,
       ingestionId, parseMs: 0, summary: { runs: runs.length },
     });
     if ('duplicateOf' in up) {

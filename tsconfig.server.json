@@ -13,6 +13,6 @@
     "outDir": "./dist",
     "rootDir": "."
   },
-  "include": ["server/**/*", "src/lib/db.ts"],
+  "include": ["server/**/*", "src/lib/db.ts", "scripts/privacy/**/*"],
   "exclude": ["node_modules", "dist"]
 }

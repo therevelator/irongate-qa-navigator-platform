@@ -3,14 +3,14 @@ import { cleanupOperationalLogs, recordJobOutcome, withJobRun } from '../lib/ops
 import { cleanupRawData, recomputeRecent } from '../lib/calc/engine';
 
 /**
- * Local schedule of the operations-log retention (on Netlify netlify/functions/db-keepalive.ts
- * does the same twice a day): server_errors older than 30 days, user_activity and job_runs older
- * than 90 days are deleted (cleanupOperationalLogs); the raw CI data store is trimmed after 13 months
- * (cleanupRawData). LOG_CLEANUP_CRON (default '7 3 * * *', 03:07 UTC); LOG_CLEANUP_CRON=off
- * turns it off.
+ * Local schedule of the operations-log retention, twice a day like netlify/functions/db-keepalive.ts on Netlify
+ * (06:00 and 18:00 UTC): server_errors older than 30 days, user_activity and job_runs older than 90 days are deleted
+ * (cleanupOperationalLogs); the raw CI data store is trimmed (cleanupRawData). LOG_CLEANUP_CRON (default
+ * '7 6,18 * * *', 06:07 and 18:07 UTC); LOG_CLEANUP_CRON=off turns it off.
  */
+export const LOG_CLEANUP_DEFAULT_CRON = '7 6,18 * * *';
 if (process.env.LOG_CLEANUP_CRON !== 'off' && !process.env.NETLIFY && !process.env.AWS_LAMBDA_FUNCTION_NAME) {
-  const at = process.env.LOG_CLEANUP_CRON || '7 3 * * *';
+  const at = process.env.LOG_CLEANUP_CRON || LOG_CLEANUP_DEFAULT_CRON;
   cron.schedule(at, async () => {
     const started = new Date();
     try {

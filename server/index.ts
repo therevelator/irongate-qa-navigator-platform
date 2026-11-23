@@ -132,6 +132,9 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/ingest', ingestRoutes);
+// IRONGATE_URL is documented as ending in /api and the raw-ingestion examples add /api/ingest to it: the doubled
+// prefix answers too (as on Netlify, where the function serves the routes with and without /api).
+app.use('/api/api/ingest', ingestRoutes);
 app.use('/api/tv', tvRoutes);
 app.use('/api/summary', summaryRoutes);
 app.use('/api/improve', improveRoutes);
@@ -150,8 +153,8 @@ app.use('/api/operator', operatorRoutes);
 app.use('/api/ci', ciRoutes);
 app.use('/api/uploads', uploadsRoutes);
 
-// Health check
-app.get('/health', (req, res) => {
+// Health check (also /api/health, the path that reaches the API on every deployment)
+app.get(['/health', '/api/health'], (req, res) => {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),

@@ -448,8 +448,9 @@ function planReport(plan: FilePlan, file: InFile, text: string, type: UploadType
     const r = parseCoverageReport(text, type.format as CoverageFormat);
     plan.records = r.files.length || (r.totals.linesFound ? 1 : 0);
     if (!plan.records) throw new PlanError(400, 'The coverage report has no files');
-    plan.dateRange = { from: new Date(now).toISOString(), to: new Date(now).toISOString() };
-    plan.warnings.push('A coverage file carries no time: it is recorded at the time of the upload.');
+    const at = r.startedAt ?? new Date(now);
+    plan.dateRange = { from: at.toISOString(), to: at.toISOString() };
+    if (!r.startedAt) plan.warnings.push('A coverage file carries no time: it is recorded at the time of the upload.');
     plan.sample = r.files.slice(0, 3).map((f) => ({ path: f.path, linesFound: f.linesFound, linesHit: f.linesHit, branchesFound: f.branchesFound, branchesHit: f.branchesHit }));
   } else if (type.kind === 'static-analysis') {
     const reps = parseSarif(text);

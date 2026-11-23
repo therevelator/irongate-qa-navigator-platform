@@ -895,7 +895,7 @@ const ConnectCi: React.FC = () => {
           <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
             No pipeline changes: a small program you run inside your network (a Docker container or one file) reads GitHub Actions, GitLab CI, Bitbucket, Jenkins or
             Azure DevOps (runs, jobs, test, coverage and SARIF files, deployments), SonarQube, Jira, Linear, PagerDuty and Opsgenie with your own read-only credentials,
-            and sends the raw data to this site as JSON over outbound HTTPS with an API key from Admin console → API keys. QE Navigator calculates every value; the
+            and sends the raw data to this site as JSON over outbound HTTPS with an API key from Admin console → API keys (use “QE Navigator Exporter”: it also reads your departments and teams). QE Navigator calculates every value; the
             Exporter calculates nothing. Each request names your company, the department and the team, and is refused if any of them is not yours. Your credentials
             stay in your network and <span className="font-mono">qe-exporter preview</span> shows exactly what would be sent. Security review: <span className="font-mono">exporter/SECURITY.md</span>.
           </p>

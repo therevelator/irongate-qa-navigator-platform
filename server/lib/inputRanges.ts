@@ -18,12 +18,14 @@ export interface RangedField {
   min: number;
   max: number;
   integer?: boolean;
+  /** Round to a whole number before the range check (instead of refusing a fraction). */
+  round?: boolean;
 }
 
 const INT_MAX = 2147483647;
 
-export const f = (key: string, column: string, label: string, min: number, max: number, integer = false): RangedField =>
-  ({ key, column, label, min, max, integer });
+export const f = (key: string, column: string, label: string, min: number, max: number, integer = false, round = false): RangedField =>
+  ({ key, column, label, min, max, integer, ...(round ? { round } : {}) });
 
 /** Largest value a NUMERIC(p, s) column accepts (rounded to its scale). */
 export const numericMax = (p: number, s: number) => Number((10 ** (p - s) - 10 ** -s).toFixed(s));
@@ -35,8 +37,9 @@ export function parseRangedFields(body: Record<string, unknown> | null | undefin
     if (!body || !(fld.key in body)) { values[fld.key] = undefined; continue; }
     const raw = body[fld.key];
     if (raw === null || raw === '') { values[fld.key] = null; continue; }
-    const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN;
-    if (!Number.isFinite(n)) { errors.push(`${fld.label} must be a number`); continue; }
+    const given = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : NaN;
+    if (!Number.isFinite(given)) { errors.push(`${fld.label} must be a number`); continue; }
+    const n = fld.round ? Math.round(given) : given;
     if (fld.integer && !Number.isInteger(n)) { errors.push(`${fld.label} must be a whole number`); continue; }
     if (n < fld.min || n > fld.max) { errors.push(`${fld.label} must be between ${fld.min} and ${fld.max}`); continue; }
     values[fld.key] = n;
@@ -68,7 +71,8 @@ export const DEVELOPER_METRIC_FIELDS: RangedField[] = [
   f('codeReviewTimeAvg', 'code_review_time_avg', 'Code review time (hours)', 0, 10000),
   f('focusTimeHours', 'focus_time_hours', 'Focus time (hours per day)', 0, 24),
   f('meetingTimeHours', 'meeting_time_hours', 'Meeting time (hours per day)', 0, 24),
-  f('contextSwitchesPerDay', 'context_switches_per_day', 'Context switches per day', 0, 1000, true),
+  // A whole number per day: an average such as 3.6 is rounded (to 4).
+  f('contextSwitchesPerDay', 'context_switches_per_day', 'Context switches per day', 0, 1000, true, true),
   f('happinessScore', 'happiness_score', 'Workload balance score', 0, 100),
 ];
 

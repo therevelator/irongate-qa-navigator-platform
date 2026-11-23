@@ -35,6 +35,8 @@ test.describe('QE Navigator Exporter', { tag: [TAG.area('admin'), TAG.area('ci-e
     await expect(page.getByTestId('connect-ci-exporter-status')).toContainText('No Exporter has reported yet');
 
     await page.getByPlaceholder('Key name, e.g. Jenkins production').fill('Exporter UI key');
+    // An Exporter key: it may also read the company context (a plain ingest key gets 403 there).
+    await page.getByTestId('api-key-scope').selectOption('exporter');
     await page.getByRole('button', { name: 'Create key' }).click();
     const key = (await page.getByTestId('api-key-created').locator('code').innerText()).trim();
     await page.getByRole('button', { name: 'Done' }).click();
@@ -48,6 +50,8 @@ test.describe('QE Navigator Exporter', { tag: [TAG.area('admin'), TAG.area('ci-e
     expect(sent.status(), await sent.text()).toBe(201);
     const wrong = await request.post(`${API_URL}/ingest/exporter/batch`, { headers, data: { ...envelope, teamId: 'not-a-team-of-yours' } });
     expect(wrong.status()).toBe(403);
+    const ctx = await request.get(`${API_URL}/ingest/exporter/context`, { headers });
+    expect(ctx.status(), await ctx.text()).toBe(200);
     const hb = await request.post(`${API_URL}/ingest/exporter/heartbeat`, { headers, data: { exporter: 'qe-exporter/0.3.0', version: '0.3.0', sources: [{ name: 'github', type: 'github', lastSuccessAt: new Date().toISOString(), errors: 0 }] } });
     expect(hb.status()).toBe(200);
 

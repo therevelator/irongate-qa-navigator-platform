@@ -263,10 +263,29 @@ export function detectTestFormat(text: string): TestFormat | null {
   return null;
 }
 
+/**
+ * Several XML documents one after the other in one body, e.g. `gzip -c results/*.trx` (gzip members are
+ * decompressed as one stream) or `cat reports/*.xml`: split at each XML declaration after the first. A body with
+ * one declaration (or none) is returned as it is.
+ */
+export function splitXmlDocuments(text: string): string[] {
+  const body = text.replace(/^\uFEFF/, '');
+  const starts: number[] = [];
+  const re = /(?:\uFEFF)?<\?xml[\s?]/g;
+  for (let m = re.exec(body); m; m = re.exec(body)) starts.push(m.index);
+  if (starts.length < 2) return [text];
+  const head = body.slice(0, starts[0]);
+  if (head.trim()) return [text];
+  return starts.map((at, i) => body.slice(at, starts[i + 1] ?? body.length).replace(/^\uFEFF/, '')).filter((d) => d.trim());
+}
+
 export function parseTestReport(text: string, format: TestFormat): ParsedTestReport {
   try {
-    if (format === 'junit') return parseJUnit(text);
-    if (format === 'trx') return parseTrx(text);
+    if (format === 'junit' || format === 'trx') {
+      const parse = format === 'junit' ? parseJUnit : parseTrx;
+      const docs = splitXmlDocuments(text);
+      return docs.slice(1).reduce((acc, d) => mergeTestReports(acc, parse(d)), parse(docs[0]));
+    }
     return parseCucumber(text);
   } catch (e) {
     if (e instanceof XmlError) throw new ReportError(`Invalid XML: ${e.message}`);

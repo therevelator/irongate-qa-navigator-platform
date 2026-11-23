@@ -4,7 +4,7 @@
  * (or a changed-lines list) for the coverage of changed code.
  */
 import { parseXml, rootElementName, XmlError } from './xml';
-import { ReportError } from './testReports';
+import { ReportError, splitXmlDocuments } from './testReports';
 
 export const COVERAGE_FORMATS = ['lcov', 'cobertura', 'jacoco', 'istanbul', 'istanbul-summary'] as const;
 export type CoverageFormat = typeof COVERAGE_FORMATS[number];
@@ -23,6 +23,16 @@ export interface ParsedCoverage {
   format: CoverageFormat;
   files: CoverageFile[];
   totals: { linesFound: number; linesHit: number; branchesFound: number; branchesHit: number };
+  /** The time the report says it was made (Cobertura timestamp, JaCoCo session start); absent when it does not say (lcov, Istanbul). */
+  startedAt?: Date | null;
+}
+
+/** An epoch time of a report attribute: milliseconds (Cobertura from coverage.py / Istanbul, JaCoCo) or seconds (older Cobertura). */
+export function reportEpoch(v: string | undefined): Date | null {
+  if (!v || !/^\d{9,14}(\.\d+)?$/.test(v.trim())) return null;
+  const n = Number(v.trim());
+  const d = new Date(n > 1e11 ? n : n * 1000);
+  return Number.isNaN(d.getTime()) || n <= 0 ? null : d;
 }
 
 export const MAX_COVERAGE_FILES = 100_000;
@@ -97,9 +107,14 @@ export function parseCobertura(xml: string): ParsedCoverage {
   let root = '';
   let cls: string | null = null;
   let inMethod = 0;
+  let startedAt: Date | null = null;
   parseXml(xml, {
     open(name, a) {
-      if (!root) { root = name; if (name !== 'coverage') throw new ReportError(`Not a Cobertura report: the root element is <${name}>`); }
+      if (!root) {
+        root = name;
+        if (name !== 'coverage') throw new ReportError(`Not a Cobertura report: the root element is <${name}>`);
+        startedAt = reportEpoch(a.timestamp);
+      }
       if (name === 'class') {
         cls = normPath(a.filename ?? a.name ?? '');
         if (!byFile.has(cls)) { byFile.set(cls, { lines: new Map(), bf: 0, bh: 0, branchLines: new Map() }); guardCount(byFile.size); }
@@ -130,7 +145,7 @@ export function parseCobertura(xml: string): ParsedCoverage {
     for (const [cov, tot] of f.branchLines.values()) { bh += cov; bf += tot; }
     files.push(fromLineMap(path, f.lines, bf, bh));
   }
-  return { format: 'cobertura', files, totals: totalsOf(files) };
+  return { format: 'cobertura', files, totals: totalsOf(files), ...(startedAt ? { startedAt } : {}) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -141,10 +156,14 @@ export function parseJaCoCo(xml: string): ParsedCoverage {
   let root = '';
   let pkg = '';
   let src: { path: string; lines: Map<number, number>; bf: number; bh: number; counters: Record<string, [number, number]> } | null = null;
+  let startedAt: Date | null = null;
   parseXml(xml, {
     open(name, a) {
       if (!root) { root = name; if (name !== 'report') throw new ReportError(`Not a JaCoCo report: the root element is <${name}>`); }
-      if (name === 'package') pkg = a.name ?? '';
+      if (name === 'sessioninfo') {
+        const t = reportEpoch(a.start);
+        if (t && (!startedAt || t < startedAt)) startedAt = t;
+      } else if (name === 'package') pkg = a.name ?? '';
       else if (name === 'sourcefile') src = { path: pkg ? `${pkg}/${a.name ?? ''}` : a.name ?? '', lines: new Map(), bf: 0, bh: 0, counters: {} };
       else if (name === 'line' && src) {
         const n = Number(a.nr), mi = Number(a.mi) || 0, ci = Number(a.ci) || 0, mb = Number(a.mb) || 0, cb = Number(a.cb) || 0;
@@ -170,7 +189,7 @@ export function parseJaCoCo(xml: string): ParsedCoverage {
       } else if (name === 'package') pkg = '';
     },
   });
-  return { format: 'jacoco', files, totals: totalsOf(files) };
+  return { format: 'jacoco', files, totals: totalsOf(files), ...(startedAt ? { startedAt } : {}) };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -245,8 +264,12 @@ export function detectCoverageFormat(text: string): CoverageFormat | null {
 export function parseCoverageReport(text: string, format: CoverageFormat): ParsedCoverage {
   try {
     if (format === 'lcov') return parseLcov(text);
-    if (format === 'cobertura') return parseCobertura(text);
-    if (format === 'jacoco') return parseJaCoCo(text);
+    if (format === 'cobertura' || format === 'jacoco') {
+      // Several reports one after the other in one body (e.g. gzip -c of several files): one report.
+      const parse = format === 'cobertura' ? parseCobertura : parseJaCoCo;
+      const docs = splitXmlDocuments(text);
+      return docs.slice(1).reduce((acc, d) => mergeCoverage(acc, parse(d)), parse(docs[0]));
+    }
     let doc: unknown;
     try { doc = JSON.parse(text); } catch { throw new ReportError('Istanbul report is not valid JSON'); }
     if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new ReportError('Istanbul report must be a JSON object keyed by file');
@@ -346,5 +369,6 @@ export function changedCoverage(cov: ParsedCoverage, changed: ChangedLines): { f
 export function mergeCoverage(a: ParsedCoverage, b: ParsedCoverage): ParsedCoverage {
   const files = a.files.concat(b.files);
   guardCount(files.length);
-  return { format: a.format, files, totals: totalsOf(files) };
+  const startedAt = a.startedAt && b.startedAt ? (a.startedAt < b.startedAt ? a.startedAt : b.startedAt) : a.startedAt ?? b.startedAt ?? null;
+  return { format: a.format, files, totals: totalsOf(files), ...(startedAt ? { startedAt } : {}) };
 }

@@ -110,6 +110,8 @@ router.use('/admin', adminRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/settings', settingsRoutes);
 router.use('/ingest', ingestRoutes);
+// IRONGATE_URL ends in /api and the documented raw-ingestion URLs add /api/ingest: /api/api/ingest/… answers too.
+router.use('/api/ingest', ingestRoutes);
 router.use('/tv', tvRoutes);
 router.use('/summary', summaryRoutes);
 router.use('/improve', improveRoutes);
@@ -128,17 +130,17 @@ router.use('/operator', operatorRoutes);
 router.use('/ci', ciRoutes);
 router.use('/uploads', uploadsRoutes);
 
-app.use('/api', router);
-app.use('/', router); // Also support without /api prefix
-
-// Health check
-app.get('/health', (req, res) => {
+// Health check: /health (netlify.toml sends it to this function) and /api/health
+app.get(['/health', '/api/health'], (req, res) => {
   res.json({ 
     status: 'ok', 
     timestamp: new Date().toISOString(),
     environment: 'netlify-functions'
   });
 });
+
+app.use('/api', router);
+app.use('/', router); // Also support without /api prefix
 
 // Error handling (server/middleware/errorHandler.ts): never returns the detail to the client.
 app.use(apiErrorHandler);

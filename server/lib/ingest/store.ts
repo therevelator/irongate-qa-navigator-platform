@@ -1,5 +1,6 @@
 /**
- * Raw store writes (migration 20261129000000): raw_uploads plus the parsed rows of each kind.
+ * Raw store writes (migration 20261129000000): raw_uploads plus the parsed rows of each kind. raw_uploads.payload
+ * holds the minimised copy of the request (UploadMeta.kept), never the body as received.
  * All inside the caller's transaction. Idempotent by team + kind + commit + run id + attempt:
  * a second upload with the same identity writes nothing and returns the first one's id.
  */
@@ -25,7 +26,13 @@ export interface UploadMeta {
   branch: string | null;
   runId: string;
   attempt: number;
+  /** The body as received: only its size and hash are recorded (raw_uploads.size_bytes, sha256). */
   payload: Buffer;
+  /**
+   * The copy kept in raw_uploads.payload: always a minimised copy built from the parsed data (minimiseStore.ts:
+   * no names, e-mail addresses, messages or other free text naming a person), never the body as received.
+   */
+  kept: Buffer;
   apiKeyId: string | null;
   ingestionId: string | null;
   parseMs: number;
@@ -38,7 +45,7 @@ export const sha256 = (b: Buffer | string) => createHash('sha256').update(b).dig
 export async function insertUpload(client: pg.PoolClient, m: UploadMeta): Promise<{ id: string } | { duplicateOf: string }> {
   let stored: Buffer | null = null;
   if (RAW_PAYLOAD_MAX_BYTES > 0) {
-    const gz = gzipSync(m.payload);
+    const gz = gzipSync(m.kept);
     if (gz.length <= RAW_PAYLOAD_MAX_BYTES) stored = gz;
   }
   const r = await client.query(

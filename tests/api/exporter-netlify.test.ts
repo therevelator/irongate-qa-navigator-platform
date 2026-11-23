@@ -33,7 +33,7 @@ beforeAll(async () => {
   db = await localDb();
   await createGolden(db);
   const cookie = (await login(GOLDEN_ADMIN_EMAIL)).cookie;
-  apiKey = (await post('/api/admin/api-keys', cookie, { name: 'Exporter Netlify test key' })).body.plaintextKey;
+  apiKey = (await post('/api/admin/api-keys', cookie, { name: 'Exporter Netlify test key', scope: 'exporter' })).body.plaintextKey;
   ({ handler } = await import('../../netlify/functions/api'));
 });
 

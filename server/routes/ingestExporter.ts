@@ -15,7 +15,8 @@
  *                                        received; Idempotency-Key (a re-sent batch replays every part); ?dryRun=true
  *                                        checks everything and writes nothing at all. Logged as channel Exporter.
  *   GET  /api/ingest/exporter/context    the key's company: its id and name, its departments and their active teams
- *                                        (ids and names). Only the key's own company, ever.
+ *                                        (ids and names). Only the key's own company, ever, and only for a key with the
+ *                                        scope 'exporter' (api_keys.scope); a plain ingest key gets 403.
  *   POST /api/ingest/exporter/heartbeat  the Exporter's version and its sources' status (no data); kept per API key
  *                                        for Connect your CI → Exporter status. /collector/heartbeat is the same, for
  *                                        releases before 0.3.0.
@@ -95,6 +96,31 @@ async function checkIds(companyId: string, env: Envelope): Promise<void> {
 }
 
 const itemLabel = (s: Submission) => (s.index === null ? 'items' : `items[${s.index}]`);
+
+/**
+ * The refused item of a list kind (pipeline-runs, deployments, commits, incidents, issues, kpis: one request for the
+ * whole list): its index in the envelope's items, from the handler's answer. The kpis handler lists the refused
+ * items with their index; the event handlers name it in the message ("runs[3].result …", "deployments[2] …"); else
+ * the item whose id or key the message names. null when the answer names no single item.
+ */
+export function refusedItem(env: Envelope, body: any): { index: number; error: string } | null {
+  const error = String(body?.error ?? 'refused');
+  const details = Array.isArray(body?.details) ? body.details.filter((d: any) => Number.isInteger(d?.index)) : [];
+  if (details.length) return { index: details[0].index, error: Array.isArray(details[0].errors) && details[0].errors.length ? details[0].errors.join('; ') : error };
+  const items = env.items as any[];
+  const batches = env.kind === 'commits' && items.length > 0 && items.every((x) => x && typeof x === 'object' && Array.isArray(x.commits));
+  const m = /\b(runs|deployments|incidents|issues|data|batches|commits)\[(\d+)\]/.exec(error);
+  if (m) {
+    const n = Number(m[2]);
+    // commits: a list of batches names "batches[n]" (one batch: its own "commits[j]", the batch is item 0); a list of commits "commits[n]".
+    const index = env.kind === 'commits' ? (batches ? (m[1] === 'batches' ? n : items.length === 1 ? 0 : -1) : m[1] === 'commits' ? n : -1) : m[1] === 'batches' ? -1 : n;
+    if (index >= 0 && index < items.length) return { index, error };
+  }
+  const ids = items.map((x) => (x && typeof x === 'object' ? String(x.id ?? x.key ?? x.sha ?? '') : ''));
+  const named = ids.map((id, i) => ({ id, i })).filter(({ id }) => id && new RegExp(`(^|[^A-Za-z0-9_.-])${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^A-Za-z0-9_.-]|$)`).test(error));
+  if (named.length === 1) return { index: named[0].i, error };
+  return null;
+}
 
 /**
  * The batch's own key check (the same rule as authenticateApiKey), so that a refused key is in the operator log too:
@@ -193,6 +219,9 @@ router.post('/exporter/batch', ingestLimiter, batchAuth, async (req: ApiKeyReque
       const r = await invokeHandler(HANDLERS[s.handler], { caller: { ...caller, preview: true }, body: s.body, contentType: s.contentType, query: { ...s.query, dryRun: 'true' } });
       if (r.status >= 400) {
         const { status: _s, ingestionId: _i, ...detail } = r.body ?? {};
+        // A list kind is one request: the refused item is found in the handler's answer, so the error names it too.
+        const one = s.index === null ? refusedItem(env, r.body) : null;
+        if (one) return await reject(r.status, `items[${one.index}]: ${one.error}`, { ...ids, item: one.index, detail });
         return await reject(r.status, `${itemLabel(s)}: ${r.body?.error ?? 'refused'}`, { ...ids, item: s.index, detail });
       }
       checks.push({ index: s.index, result: r.body });
@@ -231,8 +260,19 @@ router.post('/exporter/batch', ingestLimiter, batchAuth, async (req: ApiKeyReque
   }
 });
 
+/** The message of a plain ingest key on the context endpoint. */
+export const CONTEXT_SCOPE_REQUIRED = 'This API key can only send data: reading the company, its departments and teams needs a key with the scope "QE Navigator Exporter" (Admin console → API keys)';
+
+/** The key's scope (api_keys.scope); 'exporter' where the column does not exist yet (every key could read the context before it). */
+async function keyScope(apiKeyId: string): Promise<'ingest' | 'exporter'> {
+  const r = await queryOne<any>(`SELECT to_jsonb(k)->>'scope' AS scope FROM api_keys k WHERE id = ?`, [apiKeyId]);
+  return r?.scope === 'ingest' ? 'ingest' : 'exporter';
+}
+
 router.get('/exporter/context', ingestLimiter, authenticateApiKey, async (req: ApiKeyRequest, res) => {
   try {
+    // API keys are write-only; only an Exporter key may read the company's departments and teams (the Exporter's check and setup).
+    if ((await keyScope(req.apiKey!.id)) !== 'exporter') return res.status(403).json({ error: CONTEXT_SCOPE_REQUIRED, code: 'exporter_scope_required' });
     const companyId = req.apiKey!.companyId;
     const company = await queryOne<any>('SELECT id, name FROM companies WHERE id = ?', [companyId]);
     const deps = await query<any[]>('SELECT id, name FROM departments WHERE company_id = ? ORDER BY name, id', [companyId]);

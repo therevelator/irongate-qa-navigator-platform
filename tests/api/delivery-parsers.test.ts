@@ -109,7 +109,8 @@ describe('Commits', () => {
     expect(arr[0]).toMatchObject({ team: 't-1', deployment: 'd-2' });
     expect(arr[0].commits[0].authorHash).toBe('abcdef0123456789');
     expect(err(() => parseCommitBody([{ sha: 'bbbb222', authorHash: 'not-hex' }], 'json'))).toMatch(/authorHash must be a hex hash/);
-    expect(err(() => parseCommitBody({ commits: [] }, 'json'))).toMatch(/between 1 and 500 commits/);
+    // An empty commit list (git log PREV..SHA printed nothing) records nothing; it is not an error.
+    expect(parseCommitBody({ commits: [] }, 'json')).toEqual([]);
     const push = {
       ref: 'refs/heads/main', before: '000', after: 'cccc333', pusher: { name: 'dev' }, repository: { name: 'payments-api' },
       commits: [{ id: 'cccc333', timestamp: '2026-11-17T10:00:00+01:00', author: { name: 'Dev One', email: 'one@acme.example' } }],

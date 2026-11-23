@@ -52,7 +52,7 @@ beforeAll(async () => {
   await createGolden(db);
   adminCookie = (await login(GOLDEN_ADMIN_EMAIL)).cookie;
   otherCookie = (await login('admin@irongate.com')).cookie;
-  apiKey = (await post('/api/admin/api-keys', adminCookie, { name: 'Deliveries test key' })).body.plaintextKey;
+  apiKey = (await post('/api/admin/api-keys', adminCookie, { name: 'Deliveries test key', scope: 'exporter' })).body.plaintextKey;
   await upsertOperator(opEmail, 'Deliveries Operator', OP_PW);
   const s = await request(API_URL).post('/api/operator/login').send({ email: opEmail, password: OP_PW });
   opToken = s.body.token;

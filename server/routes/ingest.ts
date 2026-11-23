@@ -99,28 +99,33 @@ export async function handleKpis(req: ApiKeyRequest, res: express.Response) {
     metrics: item && item.metrics && typeof item.metrics === 'object' && !Array.isArray(item.metrics) ? Object.keys(item.metrics).slice(0, 40) : [],
     status: 'error',
   }));
+  // Every problem of every item is listed (not only the first of an item).
   items.forEach((item, index) => {
-    try {
-      if (!item || typeof item !== 'object' || Array.isArray(item)) throw new KpiValidationError(['item must be an object']);
-      if (typeof item.teamId !== 'string' || !item.teamId) throw new KpiValidationError(['teamId is required']);
-      const source = normaliseSource(item.source);
-      if (source === 'manual') throw new KpiValidationError(['source "manual" is reserved for entries made in the app']);
+    const problems: string[] = [];
+    const check = <T>(f: () => T): T | undefined => {
+      try { return f(); } catch (error) {
+        if (error instanceof KpiValidationError) { problems.push(...error.errors); return undefined; }
+        throw error;
+      }
+    };
+    if (!item || typeof item !== 'object' || Array.isArray(item)) problems.push('item must be an object');
+    else {
+      if (typeof item.teamId !== 'string' || !item.teamId) problems.push('teamId is required');
+      const source = check(() => normaliseSource(item.source));
+      if (source === 'manual') problems.push('source "manual" is reserved for entries made in the app');
       const extra = Object.keys(item).filter((k) => !ITEM_FIELDS.includes(k));
-      if (extra.length) throw new KpiValidationError([`Unexpected field(s): ${extra.join(', ')} (metric values go inside "metrics")`]);
-      prepared.push({
-        index,
-        teamId: item.teamId,
-        source,
-        recordedAt: parseRecordedAt(item.recordedAt),
-        metrics: validateKpiValues(item.metrics) as Record<string, number>,
-        idempotencyKey: normaliseIdempotencyKey(item.idempotencyKey),
-        sourceRef: normaliseSourceRef(item.sourceRef),
-      });
-    } catch (error) {
-      if (error instanceof KpiValidationError) {
-        errors.push({ index, errors: error.errors });
-        summaries[index].errors = error.errors;
-      } else throw error;
+      if (extra.length) problems.push(`Unexpected field(s): ${extra.join(', ')} (metric values go inside "metrics")`);
+      const recordedAt = check(() => parseRecordedAt(item.recordedAt));
+      const metrics = check(() => validateKpiValues(item.metrics) as Record<string, number>);
+      const idempotencyKey = check(() => normaliseIdempotencyKey(item.idempotencyKey));
+      const sourceRef = check(() => normaliseSourceRef(item.sourceRef));
+      if (!problems.length) {
+        prepared.push({ index, teamId: item.teamId, source: source!, recordedAt: recordedAt!, metrics: metrics!, idempotencyKey: idempotencyKey ?? null, sourceRef: sourceRef ?? null });
+      }
+    }
+    if (problems.length) {
+      errors.push({ index, errors: problems });
+      summaries[index].errors = problems;
     }
   });
 

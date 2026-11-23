@@ -238,7 +238,8 @@ export function parseCommitBody(body: unknown, format: string, defaults: { team?
     const at = batches.length > 1 ? `batches[${bi}]` : '';
     if (!x || typeof x !== 'object') throw new ReportError(`${at || 'body'} must be an object`);
     rejectComputed(x, at);
-    const items = list(x.commits ?? (x.sha ? [x] : undefined), ['commits'], 'commit');
+    // An empty list (git log PREV..SHA printed nothing: a redeploy of the same commit) is a no-op, not an error.
+    const items = Array.isArray(x.commits) && x.commits.length === 0 ? [] : list(x.commits ?? (x.sha ? [x] : undefined), ['commits'], 'commit');
     total += items.length;
     if (total > MAX_EVENTS) throw new ReportError(`Too many commits in one request: at most ${MAX_EVENTS} (send several requests with the same deployment)`);
     return {
@@ -249,7 +250,8 @@ export function parseCommitBody(body: unknown, format: string, defaults: { team?
       commits: items.map((c, i) => commitOf(c, `${at ? `${at}.` : ''}commits[${i}]`)),
     };
   });
-  return out;
+  // Batches without commits record nothing.
+  return out.filter((x) => x.commits.length > 0);
 }
 
 // ---------------------------------------------------------------------------------------------

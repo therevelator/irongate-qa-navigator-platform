@@ -75,7 +75,7 @@ beforeAll(async () => {
   db = await localDb();
   await createGolden(db);
   const cookie = (await login(GOLDEN_ADMIN_EMAIL)).cookie;
-  apiKey = (await post('/api/admin/api-keys', cookie, { name: 'Exporter batch test key' })).body.plaintextKey;
+  apiKey = (await post('/api/admin/api-keys', cookie, { name: 'Exporter batch test key', scope: 'exporter' })).body.plaintextKey;
   const o = (await db.query(`SELECT t.id AS team, t.department_id AS dept, t.company_id AS company FROM teams t WHERE t.company_id <> $1 AND t.is_active ORDER BY t.id LIMIT 1`, [GOLDEN_COMPANY])).rows[0];
   other = { company: o.company, dept: o.dept, team: o.team };
 });

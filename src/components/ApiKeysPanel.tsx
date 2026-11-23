@@ -7,6 +7,8 @@ interface ApiKey {
   id: string;
   name: string;
   keyPrefix: string;
+  /** ingest: sends data only. exporter: also lets the QE Navigator Exporter read the company, departments and teams. */
+  scope?: 'ingest' | 'exporter';
   createdAt: string;
   createdBy: string | null;
   lastUsedAt: string | null;
@@ -24,6 +26,7 @@ const ApiKeysPanel: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState('');
+  const [scope, setScope] = useState<'ingest' | 'exporter'>('ingest');
   const [creating, setCreating] = useState(false);
   const [newKey, setNewKey] = useState<{ name: string; value: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -55,13 +58,14 @@ const ApiKeysPanel: React.FC = () => {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() }),
+        body: JSON.stringify({ name: name.trim(), scope }),
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || 'Failed to create API key');
       setNewKey({ name: data.key?.name ?? name.trim(), value: data.plaintextKey });
       setCopied(false);
       setName('');
+      setScope('ingest');
       setError(null);
       load();
     } catch (err) {
@@ -97,7 +101,7 @@ const ApiKeysPanel: React.FC = () => {
       <div className="px-5 pt-5">
         <CardHeader
           title="API keys"
-          subtitle={<>Keys let external systems (CI, issue tracker, code analysis) send data to every ingestion route: raw reports (<code className="font-mono">/api/ingest/tests</code>, <code className="font-mono">coverage</code>, <code className="font-mono">pipelines</code>, <code className="font-mono">deployments</code>, <code className="font-mono">commits</code>, <code className="font-mono">incidents</code>, <code className="font-mono">issues</code>, <code className="font-mono">static-analysis</code>) and computed KPIs (<code className="font-mono">POST /api/ingest/kpis</code>). A key can write any team in this company. Only a hash is stored; the key is shown once.</>}
+          subtitle={<>Keys let external systems (CI, issue tracker, code analysis) send data to every ingestion route: raw reports (<code className="font-mono">/api/ingest/tests</code>, <code className="font-mono">coverage</code>, <code className="font-mono">pipelines</code>, <code className="font-mono">deployments</code>, <code className="font-mono">commits</code>, <code className="font-mono">incidents</code>, <code className="font-mono">issues</code>, <code className="font-mono">static-analysis</code>) and computed KPIs (<code className="font-mono">POST /api/ingest/kpis</code>). A key can write any team in this company and reads nothing; a key for the QE Navigator Exporter may also read the company's departments and teams (its check and setup). Only a hash is stored; the key is shown once.</>}
         />
         <form onSubmit={create} className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center">
           <label htmlFor="api-key-name" className="sr-only">Key name</label>
@@ -109,6 +113,11 @@ const ApiKeysPanel: React.FC = () => {
             maxLength={100}
             onChange={(e) => setName(e.target.value)}
           />
+          <label htmlFor="api-key-scope" className="sr-only">Key use</label>
+          <select id="api-key-scope" data-testid="api-key-scope" className={cx(inputClass, 'sm:w-72')} value={scope} onChange={(e) => setScope(e.target.value === 'exporter' ? 'exporter' : 'ingest')}>
+            <option value="ingest">Send data (CI, scripts, webhooks)</option>
+            <option value="exporter">QE Navigator Exporter (send data, read teams)</option>
+          </select>
           <button type="submit" className={buttonClass.primary} disabled={creating || !name.trim()}>
             {creating ? 'Creating…' : 'Create key'}
           </button>
@@ -147,6 +156,7 @@ const ApiKeysPanel: React.FC = () => {
               <tr>
                 <th className="px-5 py-2.5">Name</th>
                 <th className="px-5 py-2.5">Key</th>
+                <th className="px-5 py-2.5">Use</th>
                 <th className="px-5 py-2.5">Created</th>
                 <th className="px-5 py-2.5">Last used</th>
                 <th className="px-5 py-2.5">Status</th>
@@ -158,6 +168,7 @@ const ApiKeysPanel: React.FC = () => {
                 <tr key={k.id} className="text-slate-700 dark:text-slate-300">
                   <td className="px-5 py-3 font-medium text-slate-900 dark:text-white">{k.name}</td>
                   <td className="px-5 py-3 font-mono text-xs">{k.keyPrefix}…</td>
+                  <td className="px-5 py-3">{k.scope === 'ingest' ? 'Send data' : 'Exporter'}</td>
                   <td className="px-5 py-3">
                     {fmtTime(k.createdAt)}
                     {k.createdBy && <span className="block text-xs text-slate-500 dark:text-slate-400">by {k.createdBy}</span>}

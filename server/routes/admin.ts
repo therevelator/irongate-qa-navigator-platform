@@ -1429,10 +1429,19 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
 // The plaintext key is returned once, on creation; only its sha256 hash is stored.
 // ============================================================================
 
+/**
+ * The scope of a key (api_keys.scope, migration 20261208100000): 'ingest' writes data only; 'exporter' may also read
+ * GET /api/ingest/exporter/context (company, departments, teams) for the QE Navigator Exporter. Read through
+ * to_jsonb(k) so a database without the column yet answers too (every key is 'exporter' there, as before).
+ */
+export const API_KEY_SCOPES = ['ingest', 'exporter'] as const;
+const scopeOf = (k: any) => (k?.scope === 'ingest' ? 'ingest' : 'exporter');
+
 const apiKeyRow = (k: any) => ({
   id: k.id,
   name: k.name,
   keyPrefix: k.key_prefix,
+  scope: scopeOf(k),
   createdAt: k.created_at,
   createdBy: k.created_by_name ?? null,
   lastUsedAt: k.last_used_at ?? null,
@@ -1443,7 +1452,7 @@ router.get('/api-keys', authenticateToken, async (req: any, res) => {
   try {
     if (!isCompanyAdmin(actorOf(req))) return res.status(403).json({ error: 'Super admin access required' });
     const keys = await query<any>(
-      `SELECT k.id, k.name, k.key_prefix, k.created_at, k.last_used_at, k.revoked_at,
+      `SELECT k.id, k.name, k.key_prefix, k.created_at, k.last_used_at, k.revoked_at, to_jsonb(k)->>'scope' AS scope,
               NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS created_by_name
          FROM api_keys k
          LEFT JOIN users u ON u.id = k.created_by
@@ -1463,16 +1472,34 @@ router.post('/api-keys', authenticateToken, async (req: any, res) => {
     if (!isCompanyAdmin(actorOf(req))) return res.status(403).json({ error: 'Super admin access required' });
     const name = typeof req.body?.name === 'string' ? req.body.name.trim() : '';
     if (!name || name.length > 100) return res.status(400).json({ error: 'Name is required (max 100 characters)' });
+    const given = req.body?.scope;
+    if (given !== undefined && given !== null && given !== '' && !(API_KEY_SCOPES as readonly string[]).includes(given)) {
+      return res.status(400).json({ error: 'scope must be "ingest" (sends data) or "exporter" (sends data and lets the QE Navigator Exporter read the company\'s departments and teams)' });
+    }
+    const scope: (typeof API_KEY_SCOPES)[number] = given === 'exporter' ? 'exporter' : 'ingest';
     const { key, prefix, hash } = generateApiKey();
-    const row = await queryOne<any>(
-      `INSERT INTO api_keys (company_id, name, key_prefix, key_hash, created_by)
-       VALUES (?, ?, ?, ?, ?)
-       RETURNING id, name, key_prefix, created_at, last_used_at, revoked_at`,
-      [req.user.companyId, name, prefix, hash, req.user.id]
-    );
+    let row: any;
+    try {
+      row = await queryOne<any>(
+        `INSERT INTO api_keys (company_id, name, key_prefix, key_hash, created_by, scope)
+         VALUES (?, ?, ?, ?, ?, ?)
+         RETURNING id, name, key_prefix, created_at, last_used_at, revoked_at, scope`,
+        [req.user.companyId, name, prefix, hash, req.user.id, scope]
+      );
+    } catch (e: any) {
+      // The scope column does not exist yet (migration 20261208100000 not applied): every key is an Exporter key there,
+      // so only an Exporter key can be created until the migration runs.
+      if (e?.code !== '42703' || scope !== 'exporter') throw e;
+      row = await queryOne<any>(
+        `INSERT INTO api_keys (company_id, name, key_prefix, key_hash, created_by)
+         VALUES (?, ?, ?, ?, ?)
+         RETURNING id, name, key_prefix, created_at, last_used_at, revoked_at`,
+        [req.user.companyId, name, prefix, hash, req.user.id]
+      );
+    }
     await recordAudit({
       companyId: req.user.companyId, actorId: req.user.id, action: 'api_key.create', entityType: 'api_key', entityId: row.id,
-      summary: `Created API key ${name} (${prefix}…)`, after: { name, keyPrefix: prefix }, subjectIds: [row.id],
+      summary: `Created API key ${name} (${prefix}…, ${scope})`, after: { name, keyPrefix: prefix, scope }, subjectIds: [row.id],
     });
     res.status(201).json({ key: apiKeyRow(row), plaintextKey: key });
   } catch (error) {
@@ -1487,7 +1514,7 @@ router.post('/api-keys/:id/revoke', authenticateToken, async (req: any, res) => 
     const row = await queryOne<any>(
       `UPDATE api_keys SET revoked_at = COALESCE(revoked_at, now())
         WHERE id = ? AND company_id = ?
-        RETURNING id, name, key_prefix, created_at, last_used_at, revoked_at`,
+        RETURNING id, name, key_prefix, created_at, last_used_at, revoked_at, to_jsonb(api_keys)->>'scope' AS scope`,
       [req.params.id, req.user.companyId]
     );
     if (!row) return res.status(404).json({ error: 'API key not found' });

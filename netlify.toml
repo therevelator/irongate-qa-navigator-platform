@@ -31,6 +31,14 @@
   status = 200
   force = true
 
+# Health check: GET /health (no /api, as documented) answers from the API function, not the app's HTML
+# (/api/health already reaches the function through the rule above).
+[[redirects]]
+  from = "/health"
+  to = "/.netlify/functions/api/health"
+  status = 200
+  force = true
+
 # SPA fallback - serve index.html for all routes
 [[redirects]]
   from = "/*"

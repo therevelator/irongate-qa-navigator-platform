@@ -36,16 +36,22 @@ export const MAX_STAGES = 200;
 
 const RESULT: Record<string, PipelineResult> = {
   success: 'success', succeeded: 'success', passed: 'success', ok: 'success',
+  // Azure DevOps SucceededWithIssues (Agent.JobStatus): the run succeeded with warnings, counted as a success (as on
+  // /ingest/deployments).
+  succeededwithissues: 'success', succeeded_with_issues: 'success',
   failure: 'failed', failed: 'failed', unstable: 'failed', error: 'failed', errored: 'failed', timed_out: 'failed', timedout: 'failed',
   partiallysucceeded: 'failed', partially_succeeded: 'failed',
   cancelled: 'cancelled', canceled: 'cancelled', aborted: 'cancelled', skipped: 'cancelled',
+  // Jenkins NOT_BUILT (currentBuild.currentResult): the run did not build, so it is not counted (like a cancelled run:
+  // left out of the success-rate denominators).
+  not_built: 'cancelled', notbuilt: 'cancelled',
 };
 
 export function normaliseResult(v: unknown, field: string, allowSkipped = false): StageResult {
-  const s = typeof v === 'string' ? v.trim().toLowerCase() : '';
+  const s = typeof v === 'string' ? v.trim().toLowerCase().replace(/[\s-]+/g, '_') : '';
   if (allowSkipped && s === 'skipped') return 'skipped';
   const r = RESULT[s];
-  if (!r) throw new ReportError(`${field} must be one of success, failed, cancelled (also: succeeded, failure, unstable, aborted, canceled, timed_out)`);
+  if (!r) throw new ReportError(`${field} must be one of success, failed, cancelled (also: succeeded, SucceededWithIssues, failure, unstable, aborted, canceled, timed_out, NOT_BUILT)`);
   return r;
 }
 

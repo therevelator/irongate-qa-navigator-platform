@@ -149,13 +149,14 @@ export function parseRecordedAt(value: unknown, now = Date.now()): Date {
   return d;
 }
 
-const KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.:\-]{0,199}$/;
+/** Also "/": Jenkins JOB_NAME in folders and multibranch jobs is "<project>/<branch>" (e.g. jenkins:payments/main:42). */
+export const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9][A-Za-z0-9_.:\/-]{0,199}$/;
 
-/** Validate an idempotency key (header or per item): 1–200 characters, letters, digits, "_", "-", ".", ":". */
+/** Validate an idempotency key (header or per item): 1–200 characters, letters, digits, "_", "-", ".", ":", "/". */
 export function normaliseIdempotencyKey(value: unknown, field = 'idempotencyKey'): string | null {
   if (value === undefined || value === null || value === '') return null;
-  if (typeof value !== 'string' || !KEY_RE.test(value.trim())) {
-    throw new KpiValidationError([`${field} must be 1–200 characters: letters, digits, "_", "-", "." or ":"`]);
+  if (typeof value !== 'string' || !IDEMPOTENCY_KEY_RE.test(value.trim())) {
+    throw new KpiValidationError([`${field} must be 1–200 characters: letters, digits, "_", "-", ".", ":" or "/"`]);
   }
   return value.trim();
 }
