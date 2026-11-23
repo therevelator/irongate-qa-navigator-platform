@@ -83,7 +83,13 @@ test.describe('QE Navigator Exporter', { tag: [TAG.area('admin'), TAG.area('ci-e
       companyId: freshCompany.id, departmentId: freshCompany.departmentId, teamId: freshCompany.teamId, source: 'jira', kind: 'issues',
       items: [{ key: 'EXP-1', type: 'bug', status: 'Done', statusCategory: 'done', createdAt: new Date(Date.now() - 5 * 86_400_000).toISOString(), resolvedAt: new Date(Date.now() - 86_400_000).toISOString(), description: 'a secret description' }],
     };
-    const sent = await request.post(`${API_URL}/ingest/exporter/batch`, { headers: { Authorization: `Bearer ${key}`, 'User-Agent': 'qe-exporter/0.3.0 (ui test)', 'X-Exporter-Host': 'ui-host' }, data: envelope });
+    const headers = { Authorization: `Bearer ${key}`, 'User-Agent': 'qe-exporter/0.3.0 (ui test)', 'X-Exporter-Host': 'ui-host' };
+    // A field QE Navigator does not store (a description) is refused with a message, never silently dropped.
+    const refused = await request.post(`${API_URL}/ingest/exporter/batch`, { headers, data: envelope });
+    expect(refused.status()).toBe(400);
+    expect(await refused.text()).toContain('unknown field(s) description');
+    const { description: _d, ...item } = envelope.items[0];
+    const sent = await request.post(`${API_URL}/ingest/exporter/batch`, { headers, data: { ...envelope, items: [item] } });
     expect(sent.status(), await sent.text()).toBe(201);
 
     await operatorSignIn(page);
