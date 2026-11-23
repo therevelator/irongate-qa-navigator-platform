@@ -22,6 +22,9 @@ invented: a metric without data shows "—" or "No data recorded".
 8. [Recommendations (v2 phase 4)](#8-recommendations-v2-phase-4)
 9. [Company and module metrics](#9-company-and-module-metrics)
 10. [When calculations run](#10-when-calculations-run)
+11. [Hours lost per week](#11-hours-lost-per-week)
+
+Then, each with its own headings: [CI/CD pipeline metrics and the pipeline page](#cicd-pipeline-metrics-and-the-pipeline-page), [Flaky test intelligence](#flaky-test-intelligence), [Business impact: correlations and revenue impact](#business-impact-correlations-and-revenue-impact).
 
 ## 1. Where values are stored
 
@@ -284,3 +287,326 @@ Short form; each item has the full rule in the Product guide section given.
 | Raw payload retention | daily cleanup; gzipped payloads, per-test / per-file rows and findings kept 13 months (396 days), with the rest of the raw store | `netlify/functions/db-keepalive.ts` |
 
 Times are UTC.
+
+## 11. Hours lost per week
+
+Code: [`packages/engine/src/calc/lostHours.ts`](../packages/engine/src/calc/lostHours.ts) (pure),
+[`server/lib/lostHours.ts`](../server/lib/lostHours.ts) (reads and stores). Tables `lost_hours_weekly`,
+`lost_hours_state`. Pages: Time lost, Findings, Outcomes ([NEXT_MOVE.md](NEXT_MOVE.md)).
+
+Twelve rolling 7-day windows ending at the end of the current day (UTC). Per team, week and cause:
+
+| Cause | Hours |
+|---|---|
+| `slow_stage` | Σ over stages: (median duration of the week − the stage's lowest weekly median in the 12 weeks) × runs of the week ÷ 3600, when the difference ≥ 30 s and ≥ 10 % of the best. Successful stage runs; a weekly median needs 5 runs; a stage needs 2 such weeks |
+| `flaky_rerun` | Σ duration of pipeline runs that failed and were followed by a successful run of the same pipeline on the same commit |
+| `blocked` | Σ over issues and weekdays: hours in a blocked status or flagged that day × 8 ÷ 24 |
+| `failed_change` | Σ over failed production changes (the change-failure definition of section 5): min(24, hours from the deploy to its rollback, hotfix or the linked incident's resolution) |
+| `review_wait` | Σ over pull requests first reviewed that week: max(0, working hours from opened to first review − the team's lowest weekly median in the 12 weeks) |
+
+Working hours between two instants: 8 for every 24 h on a weekday (UTC). Company figure: the sum over the teams in the
+caller's scope. Team state: mean of the last four weeks against the mean of the first four; a move of at least one hour
+and 15 % is *slipping* or *improving*. Refresh: when a page asks and the team's rows are older than 6 hours or from an
+earlier day, and after the nightly recalculation. The limits of each rule are listed in
+[NEXT_MOVE.md, section 3.1](NEXT_MOVE.md#31-hours-lost-per-week-the-calculation).
+
+---
+
+## CI/CD pipeline metrics and the pipeline page
+
+What QE Navigator shows about CI/CD pipelines, where each number comes from and how it is calculated.
+Formulas are shared with [metrics_and_calculations.md](metrics_and_calculations.md).
+
+There are two sources of pipeline data:
+
+1. **Raw pipeline runs** (v2 phase 1), sent by the customer's CI to `POST /api/ingest/pipelines`. The
+   calculation engine turns them into team KPIs and evidence. This is the recommended path.
+2. **The older stage tables** (`pipeline_stages`, `pipeline_execution_summary`), which hold sample data or
+   values edited in Manual metrics. The CI/CD pipeline page reads them only for a team that never sent a
+   pipeline run.
+
+### 1. Raw pipeline runs (v2 phase 1)
+
+**Sending.** One run per request or a batch, with its stages and their durations and results. Format,
+fields and examples: [INTEGRATION_GUIDE.md, section 4A.2](INTEGRATION_GUIDE.md#4a2-pipeline-runs).
+Stored in `pipeline_runs_raw` and `pipeline_stage_runs` (migration
+`20261129000000_raw_ingestion_phase1.sql`).
+
+**Metrics calculated** per team and UTC day ([`server/lib/calc/engine.ts`](../server/lib/calc/engine.ts)):
+
+| Metric | KPI column | Formula |
+|---|---|---|
+| Average build time | `avg_build_time_minutes` | median pipeline duration, minutes; cancelled runs excluded |
+| Pipeline success rate | — | successful ÷ (successful + failed) runs × 100; cancelled runs excluded |
+| First-time pass rate | `first_time_pass_rate` | runs whose first attempt passed ÷ runs × 100 |
+| Parallel test efficiency | `parallel_test_efficiency` | Σ shard durations ÷ (shards × longest shard) × 100, median over runs with parallel test stages |
+
+Each value is stored with its evidence (formula, inputs, run ids). On Team detail, **Evidence from CI**
+shows the slowest stages, and **How this was calculated** lists the runs behind a value
+(`GET /api/ci/teams/:id/evidence`, `GET /api/ci/teams/:id/metrics/:metric`).
+
+**Recommendations that use pipeline data** ([`server/lib/recommendations/rules.ts`](../server/lib/recommendations/rules.ts)):
+
+- `build_time_regression`: build time rose at least 25 % in 8 weeks and is off target or worsening; names
+  the stage whose median grew most (at least 60 s and 20 %, with 3 or more runs in each window).
+- `failing_stage`: a stage fails at least 15 % of at least 10 runs in 30 days while first-time pass rate
+  needs attention.
+
+**Main branch.** Runs on the team's main branch count (Connect your CI → main branch,
+`PUT /api/ci/teams/:id/main-branch`; default `main` or `master`). A run without a branch counts as a
+main-branch run.
+
+### 2. The CI/CD pipeline page
+
+Component: [`src/components/PipelineVisualization.tsx`](../src/components/PipelineVisualization.tsx).
+Routes in [`server/routes/analytics.ts`](../server/routes/analytics.ts):
+
+| Route | What it returns |
+|---|---|
+| `GET /api/analytics/pipeline-stages?teamId=` | The team's stages (or the company's default stages when the team has none, read-only), each with duration, success rate, CPU, memory, cost per run and bottleneck score, plus the pipeline configuration |
+| `GET /api/analytics/pipeline-history?days=14&teamId=` | Daily stage executions: total, successful, failed runs, failure rate and mean stage duration, from `pipeline_execution_summary` |
+| `PUT /api/analytics/pipeline-stages/:id` | Edit a stage's values (marked as manually edited) |
+| `GET`, `PUT /api/analytics/pipeline-config` | Savings assumptions: time savings %, cost savings %, cost per minute |
+
+**Where the page's data comes from** ([`server/lib/analyticsFromRaw.ts`](../server/lib/analyticsFromRaw.ts)).
+When the team sent pipeline runs (section 1), the page shows their stages (`stages_source: "ci"`):
+
+| Value | Formula |
+|---|---|
+| Stage duration | mean duration of the stage's completed executions (successful or failed) in the last 30 days |
+| Stage success rate | successful ÷ (successful + failed) executions × 100, same 30 days; skipped and cancelled executions are left out |
+| Cost per run | stage duration in minutes × the cost per minute of the pipeline configuration |
+| Order | the order in which the stages start within a run |
+| Stage executions per day | completed stage executions of the runs of that day: total, successful, failed, mean duration |
+
+CPU and memory are not in CI data and are not shown. Stages calculated this way cannot be edited
+(Manual metrics shows them read-only). A team that never sent a pipeline run sees the older stage tables
+(its own stages, else the company default stages).
+
+The history counts **stage executions**, not end-to-end pipeline runs. An empty result shows an empty
+state; nothing is simulated.
+
+**Bottleneck score** per stage (`computeBottleneckScores`, `BOTTLENECK_SCORE_FORMULA` in
+[`server/lib/metricFormulas.ts`](../server/lib/metricFormulas.ts)):
+
+```
+bottleneck score = min(100, duration factor + failure factor), 1 decimal
+duration factor  = min(60, max(0, (z + 2) ÷ 4 × 60))
+                   z = (stage duration − mean stage duration) ÷ standard deviation of stage durations
+failure factor   = (1 − success rate ÷ 100) × 40
+```
+
+Population standard deviation. No score when duration or success rate is missing. Bars turn amber above
+40 and red above 70.
+
+**Savings per stage** are arithmetic what-ifs, not forecasts: time saved per run = stage duration × time
+savings %; cost saved per run = stage cost × cost savings %. The page says when the built-in default
+assumptions are used.
+
+**Who may edit.** The pipeline configuration (one setting per company): super admins and managers. A
+stage: super admins, and managers for the stages of teams in their departments. Everyone with the team in
+scope may read. See [ROLE_ACCESS.md](ROLE_ACCESS.md).
+
+### 3. Company pipeline health
+
+Shown on the overview and used in engineering health ([PRODUCT_GUIDE.md, 3.7 and 3.8](PRODUCT_GUIDE.md#37-pipeline-health-and-bottleneck-score)):
+
+```
+pipeline health = successful ÷ (successful + failed) pipeline runs in the last 30 days × 100
+```
+
+over the active teams in scope, from the pipeline runs they sent (`pipeline_runs_raw`, counted as the engine
+counts them for the daily pipeline success rate). Cancelled runs are excluded; no value without completed
+runs. Weight in engineering health: 0.25.
+
+
+---
+
+## Flaky test intelligence
+
+How QE Navigator finds flaky tests, the flakiness KPI, and what the Flaky tests module shows.
+
+A **flaky test** is a test that both failed and passed on the same code. Plain failures (a test that
+fails every time on a commit) are real failures, not flakiness.
+
+### 1. From raw test reports (recommended)
+
+Send every test report of every CI run, including reruns, to `POST /api/ingest/tests` (JUnit XML, TRX or
+Cucumber JSON; [INTEGRATION_GUIDE.md, section 4A](INTEGRATION_GUIDE.md#4a-raw-ingestion-tests-coverage-pipelines-v2)).
+Send the attempt number of a rerun so reruns are counted.
+
+The calculation engine ([`server/lib/calc/engine.ts`](../server/lib/calc/engine.ts)) then computes per
+team and UTC day:
+
+| Metric | Formula |
+|---|---|
+| Flaky tests | tests that both failed and passed on the same commit within the last 7 days, or failed and then passed in a rerun inside one run |
+| Test flakiness rate (`test_flakiness_rate`) | flaky tests ÷ distinct tests run in the last 7 days × 100 |
+
+Each flaky test is stored in `flaky_test_evidence` with the commit and the ids of the failed and passed
+runs. On Team detail:
+
+- **Evidence from CI** lists the flaky tests of the last 30 days with the runs that prove them
+  (`GET /api/ci/teams/:id/evidence`).
+- **How this was calculated** on the flakiness KPI shows the formula, the counts and the runs
+  (`GET /api/ci/teams/:id/metrics/test_flakiness_rate`).
+
+The flakiness KPI has a default target of ≤ 2 % (watch ≤ 5 %) and is one of the four headline KPI targets.
+
+**Recommendation.** The `flaky_tests` rule fires when flakiness is off target, forecast to miss its target,
+or worsening with flaky tests known. It names up to 5 tests with their failed runs and the rerun time, and
+suggests quarantining them in CI and fixing them this sprint. Its expected effect assumes that fixing the
+listed tests removes 40–80 % of their share of the rate. See
+[metrics_and_calculations.md, section 8](metrics_and_calculations.md#8-recommendations-v2-phase-4).
+
+### 2. The Flaky tests module (Analytics → Flaky tests)
+
+Component: [`src/components/FlakyTestIntelligence.tsx`](../src/components/FlakyTestIntelligence.tsx).
+Route: `GET /api/analytics/flaky-tests?teamId=` ([`server/routes/analytics.ts`](../server/routes/analytics.ts)).
+
+When the team sent test reports (section 1), the module shows the same evidence as Team detail
+([`server/lib/analyticsFromRaw.ts`](../server/lib/analyticsFromRaw.ts), `source: "ci"`), per test (up to 50,
+highest score first):
+
+- the test (suite › name) and the commits on which it failed and passed;
+- **flaky runs**: the runs in which it failed on such a commit, in the last 30 days; its runs and passes in the
+  same 30 days;
+- **flakiness score** = flaky runs ÷ runs of the test in the last 30 days × 100;
+- its last 20 results (pass or fail), first and last seen.
+
+No pattern and no root cause are shown: QE Navigator receives test names, results and durations only (failure
+messages and logs are never sent or kept), so no cause is derived.
+
+A team that never sent a test report sees the older `flaky_tests` table (tracked flaky tests), which holds
+sample data only. For those rows, per test (up to 50, highest stored flakiness score first):
+
+- test name, stored flakiness score, failure pattern label, failures, passes and total runs, first and
+  last seen;
+- the last 20 recorded executions of the test (pass or fail), from `test_executions`;
+- **root cause and suggested fix.** A root cause is shown as verified only when a person or tool stored
+  one. Otherwise the page shows "Pattern: <label> (unverified, not derived from error logs)" and generic
+  guidance for the pattern (timing, environment, data, network, unknown). No error log is analysed.
+
+When the table has no rows for the team, the page shows an empty state; nothing is generated.
+
+### 3. Sample data
+
+With sample data on (operator **Demo Data** or **Populate metrics**, or `npm run seed:demo`), both the raw
+test runs and the `flaky_tests` table are filled for demo teams. Sample rows are marked as sample and can
+be removed. See the README, "Sample (demo) data".
+
+### 4. Who sees what
+
+Everyone with the team in their analytics scope sees the module and the evidence
+([ROLE_ACCESS.md](ROLE_ACCESS.md)).
+
+
+---
+
+## Business impact: correlations and revenue impact
+
+How the Business impact page (Analytics → Business impact) relates a team's quality metrics to its
+business results. The full rules, with every edge case, are in
+[PRODUCT_GUIDE.md, section 3.13](PRODUCT_GUIDE.md#313-business-impact-money-revenue-impact-and-correlations).
+
+Results are exploratory. Correlation does not show causation: two monthly series that share a trend can
+correlate without any causal link. The page says so next to the results.
+
+The page itself explains all of this: **How this works** (an expander at the top of every tab,
+`src/components/BusinessImpactHowItWorks.tsx`) covers what goes in, how links are found, how the money
+figures are derived, which inputs are assumptions and what the labels mean; every figure and every tile on
+Details opens **How this was calculated** with its formula, its inputs and its sample size.
+
+### Data
+
+Monthly values per team, entered on the page (or by the session API, see
+[INTEGRATION_GUIDE.md, section 5.2](INTEGRATION_GUIDE.md#52-business-impact-monthly-data-business-impact-money-what-if-details-all-teams)),
+or sample data.
+
+| Kind | Fields (`server/routes/analytics.ts`) |
+|---|---|
+| Quality metrics (`BI_QUALITY_FIELDS`) | test coverage, defect density, defect escape rate, MTTR, deployment frequency, lead time, code quality score, change failure rate |
+| Business KPIs (`BI_KPI_FIELDS`) | monthly revenue, active users, churn rate, feature adoption rate, NPS, CSAT, support ticket volume |
+
+Units: one value per month. Deployment frequency is **deployments per month** (its KPI target is per week and
+is converted with × 52 ÷ 12). Quality metrics are entered, or for sample data the month's average of the team's
+daily KPI values (the values on Team detail, calculated from CI data where connected). Business KPIs are always
+company data (finance, product analytics, CRM, surveys, support); QE Navigator does not measure them.
+
+Routes: `GET /api/analytics/business-impact-v2/:teamId`, and `POST` sub-routes `quality-metrics`,
+`business-kpis`, `context`, `bulk-save` and `calculate-correlations`.
+
+### Correlations
+
+`CORRELATION_METHOD` in [`server/routes/analytics.ts`](../server/routes/analytics.ts):
+
+- Pearson r for each quality × business pair, over the months where both values exist, in the same month
+  (no lag). Recalculated from the stored months on every page load (the stored correlation rows are a cache).
+- Two-sided Student t-test, df = n − 2, exact p.
+- Benjamini–Hochberg false-discovery-rate correction across all pairs tested for the team.
+- **Significant when q < 0.05.**
+- Needs at least 6 months of each series and 6 paired months. Pairs with zero variance are skipped.
+- Strength label: |r| ≥ 0.7 strong, ≥ 0.5 moderate, ≥ 0.3 weak, otherwise none.
+
+**Summary.** Details shows a summary written by fixed rules (`server/lib/correlationSummary.ts`, returned
+as `plainSummary` by the GET): the months and pairs tested, the significant pairs in plain words (direction, r, q,
+months), a warning when half or more of the pairs are significant (one shared movement, not many separate effects),
+and, when none is, the strongest pair and the |r| needed for p < 0.05 with that many months. **Generate AI summary**
+asks the Groq service when `GROQ_API_KEY` is set (`POST …/ai-analysis`, rate limited) and labels the text as AI
+output; without the key, or when the provider fails, the endpoint returns the rule-based summary
+(`source: 'rules'`) instead of an error.
+
+### Revenue impact
+
+Code: [`server/lib/revenueImpact.ts`](../server/lib/revenueImpact.ts), [`server/lib/stats.ts`](../server/lib/stats.ts).
+Routes: `GET /api/revenue-impact/teams/:teamId`, `GET /api/revenue-impact/teams/:teamId/what-if?metric=&change=`,
+`GET /api/revenue-impact/rollup`.
+
+- **Revenue per metric.** Ordinary least-squares slope b of monthly revenue on each quality metric, with
+  its standard error, t-test (df = n − 2) and 95 % range. Shown from 6 paired months. Significant when
+  p < 0.05; not corrected for multiple comparisons.
+- **Company-wide slope** (`pooledRevenueFit`). When the team's own slope is not significant (or the metric did not
+  change), the company's teams are fitted together, each against its own averages: x = metric − team average,
+  y = revenue ÷ team average revenue − 1; b = Σxy ÷ Σx² (share of revenue per +1 unit), SE with
+  df = N − teams − 1, 95 % range, at least 2 teams of the same kind of source (sample or recorded) with 6 months each.
+  If that slope is significant, the team's $ slope = b × the team's average monthly revenue, labelled
+  **Company-wide evidence**; the team's own fit stays visible next to it. Only counts leave the company fit, no
+  other team's figures.
+- **Where the money is going now:** quality below target (b × gap to the target, for significant
+  slopes; metrics below target are counted first, so a metric already at its target never hides a gap in a
+  metric that moves with it), open technical debt (monthly cost of delay), downtime (minutes × cost per minute), support
+  tickets (tickets × ticket cost), churn (churn % × monthly revenue). The causes overlap, so there is no
+  total.
+- **What you gain when these are fixed**, biggest first, and **where to put the money first** (by
+  monthly gain, or by return on cost for debt items with an effort estimate).
+- **What-if:** projected monthly change = b × change, with the range; disabled when the slope is not
+  significant; values outside the recorded range are flagged as extrapolation.
+- **All teams:** the sum over the teams of the caller's scope (super admins: the company; managers:
+  their departments).
+
+Rates (hourly rate, ticket cost, revenue per user, downtime cost per minute, SLA penalty) come from
+Parameters → Financial and ROI settings (team, else department, else company). They are **assumptions the
+company sets**; built-in defaults are labelled "(default)" and "Default rates".
+
+Confidence labels: **Strong evidence** (the team's own slope, p < 0.01), **Some evidence** (p < 0.05),
+**Company-wide evidence** (see above), **Cost estimate** (arithmetic on entered impact and the rates; no statistics).
+
+What the page does not claim: that a metric causes revenue to move, a forecast, or that reaching a target brings the
+money back. The figures are associations in the company's own monthly history.
+
+### Sample data
+
+The demo generator (`server/seeds/demoData.ts`, also used by the operator's Demo Data and Populate metrics and the
+Meridian reseed) writes 12 months per team: quality as the month's averages of the team's daily KPI values
+(deployments per month = weekly average × days ÷ 7), business KPIs following the team's health (revenue grows slowly
+and moves with quality), context (downtime from the availability KPI), the correlations cache and the data status.
+For a filled company it also adds the **Financial and ROI settings** the sample assumes, only where the company has
+none of its own: developer hourly rate 85, support ticket cost 30, SLA breach penalty 2500 (company), and per team
+the revenue per user (the team's sample revenue per active user) and the downtime cost per minute (the team's monthly
+revenue ÷ 43 200 minutes). The sample technical debt's cost of delay uses the same rates.
+
+### Who sees and edits what
+
+Everyone with the team in scope reads Money, What-if and Details. The All teams roll-up is for super
+admins and managers. Editing business data and running correlations: super admins, managers for their
+departments, team leads for the teams they lead. See [ROLE_ACCESS.md](ROLE_ACCESS.md).

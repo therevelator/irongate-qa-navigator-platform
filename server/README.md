@@ -11,7 +11,7 @@ cp .env.example .env    # set DATABASE_URL (PostgreSQL) and JWT_SECRET
 npm run server          # http://localhost:3000, restarts on change
 ```
 
-The schema is `supabase/migrations/`, applied in file-name order. See [docs/QUICK_START.md](../docs/QUICK_START.md).
+The schema is `supabase/migrations/`, applied in file-name order. See [docs/TECHNICAL_DOCUMENTATION.md](../docs/TECHNICAL_DOCUMENTATION.md#run-it-locally).
 
 ## Layout
 
@@ -37,6 +37,6 @@ placeholders).
 
 - Every route: [docs/METRICS_API_INDEX.md](../docs/METRICS_API_INDEX.md).
 - Who may call what: [docs/ROLE_ACCESS.md](../docs/ROLE_ACCESS.md) and `lib/userPolicy.ts`.
-- Sign-in and sessions: [docs/authentication/AUTH_DEVELOPER_GUIDE.md](../docs/authentication/AUTH_DEVELOPER_GUIDE.md).
+- Sign-in and sessions: [docs/TECHNICAL_DOCUMENTATION.md](../docs/TECHNICAL_DOCUMENTATION.md#authentication-and-authorisation-in-the-code).
 - Sending data: [docs/INTEGRATION_GUIDE.md](../docs/INTEGRATION_GUIDE.md).
 - Scheduled jobs and environment variables: [docs/DEPLOYMENT_GUIDE.md](../docs/DEPLOYMENT_GUIDE.md).

@@ -1434,6 +1434,22 @@ Why: a manager or executive reads the state of quality on a phone in one minute,
 - Share link: `/summary`; whoever opens it signs in and sees the summary of their own scope. Navigation: super admins and managers;
   every role with a team in scope may open the link (their teams only).
 
+### Next move: Time lost, Findings, Outcomes, Data readiness
+
+Four pages (menu group "Next move") that go from a metric to a decision: what is costing time, why, what to do next, who
+does it and whether it worked. For every role with a team in scope, for that scope. The need, what they solve, why a
+customer buys them, each page and how they are built: [NEXT_MOVE.md](NEXT_MOVE.md).
+
+| Page | Shows |
+|---|---|
+| Time lost (`/time-lost`) | Hours lost in the last 7 days and over 12 weeks, by cause (slow pipeline stages, failed runs that passed on a rerun, blocked work, failed changes, waiting for review); each team's state and its one thing this week |
+| Findings (`/findings`) | The problems behind the hours, the costliest first, each with its records, a next step, an owner form and the text of a ticket; the team's recommendations are part of the list |
+| Outcomes (`/outcomes`) | Every finding from suggested to verified or "did not hold"; the verdict comes from the KPI 14 and 30 days after the action was done; prints as the monthly outcomes report |
+| Data readiness (`/data-readiness`) | Per team and source: connected, stale or missing; what each gap blocks, the fix and the effort; what the Exporter saw |
+
+Hours are measured from records (rules in [metrics_and_calculations.md, section 11](metrics_and_calculations.md#11-hours-lost-per-week)).
+They are not a money figure. QE Navigator suggests; the team does the fix in its own tools.
+
 ### Compare teams
 
 Why: side-by-side evidence for coaching and resourcing decisions (`/compare`, [`server/lib/compare.ts`](../server/lib/compare.ts)).

@@ -17,7 +17,7 @@ unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 | [docs/INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) | For developers: sending data to the platform (API keys, the KPI ingestion API, every metric's unit and range, backfill, retries) with curl / Node / Python / CI examples, runnable scripts in [docs/integration-examples/](docs/integration-examples/), and what cannot be sent via API yet |
 | [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) | Direct and adjacent competitors, gaps and positioning (sources checked 18 Nov 2026) |
 | [docs/pitch/](docs/pitch/) | Source of the 11-slide pitch deck, with speaker notes and the placeholders to fill |
-| [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) | Every current document, what it is for and who reads it; old documents are in [docs/archive/](docs/archive/) |
+| [docs/README.md](docs/README.md) | Every document, what it is for and who reads it |
 | [docs/reports/](docs/reports/) | The accuracy audits and the consistency report that led to the "no invented numbers" fixes |
 | [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md) | **Who can see and do what**: a plain-English summary per role and the matrix per page and module (scope rules), derived from the code |
 | [docs/reports/r2-final-review.md](docs/reports/r2-final-review.md) | Release R2 final review: findings, fixes, deferred items; per-role security matrix in `tests/api/r2-security-matrix.test.ts` |
@@ -646,7 +646,12 @@ curl -sS --fail-with-body -X POST "https://<host>/api/ingest/static-analysis?tea
   files), `/test-management` (test cases and executions → `automation_coverage`, `automation_roi`; engine group `automation`),
   `/pull-requests` and `/calendar` (→ developer metrics, [`server/lib/developerFromRaw.ts`](server/lib/developerFromRaw.ts)).
   People arrive as pseudonyms and are kept only for users who enabled developer insights.
-- **Exporter 0.4.0** connectors: GitHub Actions, GitLab CI, Bitbucket Cloud and Data Center, Jenkins, Azure DevOps,
+- **Next move** ([docs/NEXT_MOVE.md](docs/NEXT_MOVE.md)): Time lost, Findings, Outcomes and Data readiness. Hours lost per week
+  by cause from raw records ([`packages/engine/src/calc/lostHours.ts`](packages/engine/src/calc/lostHours.ts),
+  [`server/lib/lostHours.ts`](server/lib/lostHours.ts)); findings with their records and a next step; verdicts read from the tracked
+  actions' checkpoints; connected sources with the fix for each gap ([`server/routes/navigator.ts`](server/routes/navigator.ts),
+  `src/components/navigator/`). Migration `supabase/migrations/20261210000000_navigator.sql`.
+- **Exporter 0.5.0** connectors: GitHub Actions, GitLab CI, Bitbucket Cloud and Data Center, Jenkins, Azure DevOps,
   SonarQube, Jira, Linear, PagerDuty, Opsgenie, TestRail, Xray Cloud, Zephyr Scale, Google Calendar, Microsoft 365
   (`exporter/README.md`). Tested against stand-ins of each vendor's documented API, not against the real services.
 - **Live data only** ([`server/lib/liveData.ts`](server/lib/liveData.ts)): the company setting that refuses typed metrics and

@@ -114,6 +114,8 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | TV mode (`/tv?team=`, team picker, rotation through the teams of the scope; team figures, open alerts, wellbeing pulse with the 3-response minimum) | any team | scope | scope | scope | scope |
 | Executive summary (`/summary`, `GET /api/summary`: QA score, risks, most improved, alerts, last week's changes) | company | their departments | their teams | their teams | their teams |
 | Executive summary: money at risk (the revenue roll-up of the scope) | company | their departments | — | — | — |
+| Time lost, Findings, Outcomes, Data readiness (`/time-lost`, `/findings`, `/outcomes`, `/data-readiness`; `GET /api/navigator/*`: hours lost per week, findings, verdicts of the tracked actions, connected sources) | company | their departments | their teams | their teams | their teams |
+| Findings: assign an owner (accept a recommendation, or a tracked action on the cause's KPI) | any team | their departments' teams | teams they lead | — | — |
 | Compare teams (only with 2+ teams in scope) | 2–4 teams of the company | of scope | of scope, if on 2+ teams | of scope, if on 2+ teams | of scope, if on 2+ teams |
 | Analytics: Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline | any team | scope | scope | scope | scope |
 | Analytics: Developer productivity | rows of opted-in people | same, in scope | same, in scope | own row, team averages (≥ 3) | own row, team averages (≥ 3) |
@@ -255,6 +257,7 @@ The navigation drawer and the Analytics hub show only the pages the person may o
 |---|---|
 | Overview, Notifications (bell), TV mode (for the teams in scope) | everyone |
 | Executive summary | super admins, managers (the address opens for every role with a team in scope, for that scope) |
+| Time lost, Findings, Outcomes, Data readiness (group "Next move") | everyone with at least one team in scope |
 | Analytics and its modules | everyone with at least one team in scope |
 | Compare teams | super admins, managers, and anyone assigned to two or more teams (`canCompareTeams`: nothing to compare with one team) |
 | Users, Teams | super admins, managers, team leads |

@@ -1019,10 +1019,10 @@ data, no error message. Kept per API key (`exporter_heartbeats`), shown in Conne
 
 ```bash
 # The five-minute path (details per tool: exporter/README.md)
-docker build -f exporter/Dockerfile -t qe-exporter:0.4.0 .
-docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.4.0 setup   # open the printed link
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.4.0 preview
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.4.0 sync                                 # then every 15 minutes
+docker build -f exporter/Dockerfile -t qe-exporter:0.5.0 .
+docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 setup   # open the printed link
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 preview
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 sync                                 # then every 15 minutes
 ```
 
 Verified against a local instance by `tests/api/exporter-batch.test.ts` (the envelope: every id check, dry run, idempotency,
@@ -1319,6 +1319,22 @@ Calculated per developer of the team (an opted-in member), over the last 30 days
 | Workload balance | the existing derived score of the five values |
 
 A working day is a day whose calendar was read and that is not out of office. A value without records stays empty.
+
+### 4F.4 POST /api/ingest/discovery
+
+What the QE Navigator Exporter found for a team in a CI source on its last run (envelope kind `discovery`, from Exporter 0.5.0).
+One item; the latest report replaces the one before for that team and source. It feeds the Data readiness page
+([NEXT_MOVE.md](NEXT_MOVE.md#35-the-exporters-discovery-report)) and no metric.
+
+```json
+[{ "from": "2026-11-20T00:00:00Z", "to": "2026-11-23T00:00:00Z",
+   "counts": { "pipelineRuns": 14, "testReports": 0, "coverageReports": 9, "deployments": 2 },
+   "runsWithoutTests": 14, "runsWithoutCoverage": 5, "unmapped": ["pipeline nightly-load is not mapped"] }]
+```
+
+`counts` takes `pipelineRuns`, `testReports`, `coverageReports`, `sarifReports`, `deployments`, `commits`, `pullRequests`,
+`performanceRuns`, `issues`, `incidents` (whole numbers); `unmapped` at most 50 names, `notes` at most 20 sentences. Any other
+field is refused.
 
 ## 5. All other data: how it can be sent today
 

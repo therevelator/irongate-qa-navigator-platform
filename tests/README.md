@@ -17,4 +17,4 @@ CI (`.github/workflows/ci.yml`) prepares a Postgres 16 database with `scripts/ci
 with `scripts/ci/start-services.sh` and runs the API and database suites and the `@smoke` UI subset;
 `.github/workflows/ui-tests.yml` runs the full UI suite.
 
-Older scenario lists that were here are in [docs/archive/tests/](../docs/archive/tests/).
+Older scenario lists that were here were removed on 23 Nov 2026 (git history: `docs/archive/tests/`).

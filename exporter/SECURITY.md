@@ -99,6 +99,7 @@ requests are sent without an author, the author's e-mail address is not even rea
 | `pull-requests` | `id` (the number), `repo`, `state`, `openedAt`, `firstReviewAt`, `mergedAt`, `closedAt`; `author` only with `privacy.developerMetrics: true`, as the pseudonym of section 3. No title, branch, description, reviewer or comment |
 | `test-management` | a case: `type`, `key`, `automated`, `manualEstimateSeconds`, `archived`, `updatedAt`; an execution: `type`, `key`, `case`, `automated`, `status`, `executedAt`, `durationSeconds`. No title, step, precondition, comment or person |
 | `calendar` (only with `privacy.developerMetrics: true`) | `person` (the pseudonym), `day`, `workStart`, `workEnd`, `utcOffsetMinutes`, `outOfOffice`, `busy[]` (`start`, `end`). Only free/busy is requested from the calendar service: no title, attendee, location or description is read |
+| `discovery` (from 0.5.0; one per team and CI source, per run) | `from`, `to` (the window the run read), `counts` (`pipelineRuns`, `testReports`, `coverageReports`, `sarifReports`, `deployments`, `commits`, `pullRequests`, `performanceRuns`), `runsWithoutTests`, `runsWithoutCoverage`, `unmapped` (at most 50 names of jobs, pipelines or repositories that are not mapped to a team). Counts and names only: no record of the tool, no person |
 
 ### 4.3 Heartbeat (every run)
 
@@ -212,13 +213,13 @@ npm run build                    # prints the size and the SHA-256, writes dist/
 sha256sum -c dist/SHA256SUMS
 ```
 
-The image: `docker build -f exporter/Dockerfile -t qe-exporter:0.4.0 .` from the repository root
+The image: `docker build -f exporter/Dockerfile -t qe-exporter:0.5.0 .` from the repository root
 (`exporter/Dockerfile.dockerignore` sends only the Exporter and the shared allow-list) runs the type check, the allow-list
 drift check, the build and the tests, then copies only `qe-exporter.mjs` and `SHA256SUMS` into a distroless base pinned by
 digest. To check the file inside an image against your own build:
 
 ```bash
-docker run --rm --entrypoint /nodejs/bin/node qe-exporter:0.4.0 -e \
+docker run --rm --entrypoint /nodejs/bin/node qe-exporter:0.5.0 -e \
   "const f=require('fs');console.log(require('crypto').createHash('sha256').update(f.readFileSync('/app/qe-exporter.mjs')).digest('hex'))"
 ```
 

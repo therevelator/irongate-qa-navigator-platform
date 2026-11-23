@@ -11,9 +11,9 @@ Where to find each metric's definition and every API route, by area. Routes are 
 | Every formula, with the code that computes it | [metrics_and_calculations.md](metrics_and_calculations.md) |
 | Every metric: meaning, target, update interval, production source | [PRODUCT_GUIDE.md, section 3](PRODUCT_GUIDE.md#3-the-metrics) |
 | Units, ranges and keys accepted by the ingestion APIs | [INTEGRATION_GUIDE.md](INTEGRATION_GUIDE.md) |
-| CI/CD pipeline page and pipeline metrics | [CI_CD_PIPELINE_METRICS.md](CI_CD_PIPELINE_METRICS.md) |
-| Flaky tests | [flaky_test_intelligence.md](flaky_test_intelligence.md) |
-| Business impact correlations and revenue impact | [business_impact_correlation.md](business_impact_correlation.md) |
+| CI/CD pipeline page and pipeline metrics | [metrics_and_calculations.md](metrics_and_calculations.md#cicd-pipeline-metrics-and-the-pipeline-page) |
+| Flaky tests | [metrics_and_calculations.md](metrics_and_calculations.md#flaky-test-intelligence) |
+| Business impact correlations and revenue impact | [metrics_and_calculations.md](metrics_and_calculations.md#business-impact-correlations-and-revenue-impact) |
 
 Code that defines metrics: `KPI_COLUMNS` in [`server/lib/kpiIngest.ts`](../server/lib/kpiIngest.ts) (writable
 KPI columns), `METRICS_CONFIG` in [`src/config/metricsConfig.ts`](../src/config/metricsConfig.ts) (default
@@ -59,6 +59,18 @@ targets), [`server/lib/metricFormulas.ts`](../server/lib/metricFormulas.ts) (sha
 | `GET /api/ci/status` | Connect your CI: last data received per team and kind |
 | `PUT /api/ci/teams/:id/main-branch` | Set a team's main branch |
 | `GET`, `PUT /api/ci/services`, `DELETE /api/ci/services/:service` | Service (or project key) → team mapping |
+
+### Next move: hours lost, findings, outcomes, readiness (`server/routes/navigator.ts`)
+
+| Route | Purpose |
+|---|---|
+| `GET /api/navigator/status` | Hours lost per week by cause (12 weeks), each team's state and its one thing this week |
+| `GET /api/navigator/findings[?team=]` | Findings of the scope, the costliest first |
+| `GET /api/navigator/outcomes[?month=YYYY-MM]` | Findings without an owner and the tracked actions by verdict |
+| `GET /api/navigator/readiness` | Connected sources per team, gaps with their fix, the Exporter's discovery report |
+| `POST /api/ingest/discovery?team=&source=` (API key) | The Exporter's discovery report (also envelope kind `discovery`) |
+
+Definitions: [metrics_and_calculations.md, section 11](metrics_and_calculations.md#11-hours-lost-per-week); the pages: [NEXT_MOVE.md](NEXT_MOVE.md).
 
 ### Forecasts and recommendations (`server/routes/improve.ts`)
 

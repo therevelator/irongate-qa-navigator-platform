@@ -156,6 +156,16 @@ under each risk and the KPIs on target now but forecast to miss. Tests: `tests/a
 `recommendation-rules.test.ts`, `improve.test.ts`, UI `team/improve.spec.ts` (IMP-01 … 09, A11Y-42 … 45), manual cases in
 "Team improve".
 
+### Phase 4b — Next move: hours lost, findings, outcomes, data readiness (built, 23 Nov 2026)
+
+Built on phases 1 to 4, described in [NEXT_MOVE.md](NEXT_MOVE.md): hours lost per week by cause from the raw records (slow
+stages, failed runs that passed on a rerun, blocked work, failed changes, waiting for review), findings with their records and a
+next step (the phase 4 recommendations are part of them), the verdict of each tracked action read from its 14- and 30-day
+checkpoints, and connected sources per team with the fix for each gap (with the Exporter's discovery report, Exporter 0.5.0).
+Migration `20261210000000_navigator.sql`; tests `tests/api/lost-hours.test.ts`, `tests/api/navigator.test.ts`,
+`exporter/test/discovery.test.ts`, UI `navigator/next-move.spec.ts`. The hours are the measured part of phase 5's "hours on
+rework, reruns, blocked work": phase 5 adds the cost model on top; no money figure is shown yet.
+
 ### Phase 5 — Invest (for the business)
 
 - **Cost model** set once by a super admin: revenue per product / service per hour, average engineering cost per hour,

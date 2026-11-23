@@ -815,6 +815,7 @@ Three more kinds have no example file here (`test-management` does: it comes aft
 | `test-management` | 1–2000 (test cases and executions) | `automation_coverage`, `automation_roi` (engine group `automation`) |
 | `pull-requests` | 1–1000 | developer metrics: PR merge time, code review time |
 | `calendar` | 1–2000 (one item = one person's working day, free/busy only) | developer metrics: meeting time, focus time, context switches |
+| `discovery` | 1 (what the Exporter found for the team in a CI source: counts per kind, runs without a test or coverage report, names not mapped) | the Data readiness page ([NEXT_MOVE.md](NEXT_MOVE.md#35-the-exporters-discovery-report)); no metric |
 
 The ids in the files are placeholders (`"<companyId>"`, `"<departmentId>"`, `"<teamId>"`). You get the real ones
 from Admin console → Connect your CI, or from `GET /api/ingest/exporter/context`.
