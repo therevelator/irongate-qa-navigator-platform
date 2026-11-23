@@ -62,7 +62,7 @@ export const CONFIDENCE_TEXT: Record<string, { label: string; tone: Tone; help: 
 
 const short = (sha?: string | null) => (sha ? sha.slice(0, 8) : '—');
 const fmtMs = (ms: number) => (ms >= 60_000 ? `${(ms / 60_000).toFixed(1)} min` : ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${ms} ms`);
-const fmtCi = (v: number, unit: string | null) => (unit === 'tests' ? `${v}` : `${v.toFixed(unit === 'min' ? 2 : 1)}${unit === '%' ? ' %' : unit ? ` ${unit}` : ''}`);
+const fmtCi = (v: number, unit: string | null) => (unit === 'tests' ? `${v}` : `${v.toFixed(unit === 'min' ? (Number.isInteger(v) ? 0 : 2) : 1)}${unit === '%' ? ' %' : unit ? ` ${unit}` : ''}`);
 const fmtValue = (v: number, unit: string | null, key?: string) => (key && DELIVERY_KEYS.includes(key) ? fmtDelivery(key, v, unit) : key && PHASE3_KEYS.includes(key) ? fmtWork(key, v, unit) : fmtCi(v, unit));
 const covTone = (pct: number): Tone => (pct >= 80 ? 'good' : pct >= 50 ? 'warn' : 'bad');
 
@@ -349,7 +349,7 @@ export const HowCalculatedDialog: React.FC<{ teamId: string; metric: string | nu
             <div>
               <p className="text-2xl font-semibold tabular-nums text-slate-900 dark:text-white" data-testid="how-calculated-value">{fmtValue(calc.value, calc.unit, calc.metric)}</p>
               <p className="mt-1 text-slate-700 dark:text-slate-300" data-testid="how-calculated-formula"><span className="font-medium">Formula:</span> {calc.formula}</p>
-              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Based on {calc.sampleSize} {noun}{calc.sampleSize === 1 ? '' : 's'} ({help}).{calc.sample ? ' Calculated from sample CI data: shown as evidence, not written to the team’s KPIs.' : calc.kpiColumn ? ' Written to the team’s KPI as source “computed”.' : ' Shown here only (no KPI column).'}</p>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Based on {calc.sampleSize} {noun}{calc.sampleSize === 1 ? '' : 's'} ({help}).{calc.sample ? (calc.kpiColumn ? ' Calculated from sample CI data; the team’s KPI shows this value.' : ' Calculated from sample CI data; shown here only (no KPI column).') : calc.kpiColumn ? ' Written to the team’s KPI as source “computed”.' : ' Shown here only (no KPI column).'}</p>
               {cardSource && cardSource !== 'computed' && calc.kpiColumn && !calc.sample && (
                 <p className="mt-1 text-xs text-amber-800 dark:text-amber-300" data-testid="how-calculated-other-source">The card shows the latest value from “{cardSource === 'synthetic' ? 'sample data' : cardSource}”; this is the value calculated from CI data.</p>
               )}

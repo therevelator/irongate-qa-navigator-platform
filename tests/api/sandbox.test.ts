@@ -64,7 +64,8 @@ import { JWT_SECRET } from '../../server/middleware/auth';
 import { hashApiKey } from '../../server/middleware/apiKey';
 import resetBackground from '../../netlify/functions/sandbox-reset-background';
 
-jest.setTimeout(240_000);
+// A sandbox build writes a year of sample raw data and its calculated values for five teams (about 1.5 min locally).
+jest.setTimeout(600_000);
 
 const app = buildApp((a) => {
   a.use('/api/teams', teamsRoutes);
@@ -337,12 +338,13 @@ describe('Demo sandbox', () => {
     expect((await as('team_lead').get(`/api/teams/${mobile}`)).status).toBe(200);
 
     const recs = await query<any[]>(`SELECT id, title FROM recommendations WHERE company_id = ? AND team_id = ? AND status = 'open' ORDER BY rank LIMIT 2`, [S, mobile]);
-    expect(recs.length).toBe(2);
+    // An improving team may have a single open recommendation: it is dismissed, reopened and then accepted.
+    expect(recs.length).toBeGreaterThanOrEqual(1);
     const dismissed = await as('team_lead').post(`/api/improve/recommendations/${recs[0].id}/dismiss`, { reason: 'Visit evil.example for a prize' });
     expect(dismissed.status).toBe(200);
     expect((await one('SELECT status, dismiss_reason FROM recommendations WHERE id = $1', [recs[0].id]))).toEqual({ status: 'dismissed', dismiss_reason: 'Other' });
     expect((await as('team_lead').post(`/api/improve/recommendations/${recs[0].id}/reopen`)).status).toBe(200);
-    const accepted = await as('team_lead').post(`/api/improve/recommendations/${recs[1].id}/accept`, { title: 'Defaced title' });
+    const accepted = await as('team_lead').post(`/api/improve/recommendations/${recs[recs.length - 1].id}/accept`, { title: 'Defaced title' });
     expect(accepted.status).toBe(201);
     const act = await one('SELECT title, status FROM team_actions WHERE id = $1', [accepted.body.actionId]);
     expect(act.title).not.toMatch(/Defaced/);
@@ -445,11 +447,11 @@ describe('Demo sandbox', () => {
   });
 
   test('SB-010 the reset ends sessions, wipes changes, is idempotent and touches nothing else', async () => {
-    const s = await startSession('team_lead');
+    // The CTO (company-wide) dismisses an open recommendation of any team (SB-005 may have accepted the team lead's only one).
+    const s = await startSession('cto');
     const cookie = cookieOf(s);
     expect((await request(app).get('/api/auth/me').set('Cookie', cookie)).status).toBe(200);
-    const mobile = teamIds()[0];
-    const rec = await one(`SELECT id FROM recommendations WHERE company_id = $1 AND team_id = $2 AND status = 'open' ORDER BY rank LIMIT 1`, [S, mobile]);
+    const rec = await one(`SELECT id FROM recommendations WHERE company_id = $1 AND status = 'open' ORDER BY team_id, rank LIMIT 1`, [S]);
     await request(app).post(`/api/improve/recommendations/${rec.id}/dismiss`).set('Cookie', cookie).send({ reason: 'Other' });
     expect(Number((await one(`SELECT count(*) AS n FROM recommendations WHERE company_id = $1 AND status <> 'open'`, [S])).n)).toBeGreaterThan(0);
 

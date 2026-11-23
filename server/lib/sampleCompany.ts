@@ -12,8 +12,7 @@ import { query } from '../../src/lib/db';
  * of a real company; that company is still real.
  *
  * Every synthetic generator (POST /api/analytics/update-daily, POST /api/analytics/seed-data, the
- * interval and pipeline generators in server/jobs, server/seeders/pipelineSeeder.ts,
- * server/seeds/seedProductivitySnapshots.ts) checks this, whatever ENABLE_SYNTHETIC_DATA says.
+ * interval and pipeline generators in server/jobs, server/seeders/pipelineSeeder.ts) checks this, whatever ENABLE_SYNTHETIC_DATA says.
  */
 export const SAMPLE_COMPANY_PREFIX = 'demo-';
 

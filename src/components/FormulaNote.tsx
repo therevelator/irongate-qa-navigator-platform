@@ -74,6 +74,7 @@ export function sourceLabel(source: string | null | undefined): string {
   if (!s) return 'not recorded';
   if (s === 'manual') return 'manual entry';
   if (s === 'synthetic') return 'sample data';
+  if (s === 'computed') return 'calculated from CI data';
   if (s === 'unknown') return 'unknown source';
   return `ingestion API (${source})`;
 }

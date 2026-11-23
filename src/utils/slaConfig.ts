@@ -14,8 +14,6 @@ const DEFAULT_SLA_CONFIG: SLAConfig = {
 const CACHE_TTL = 60000; // 1 minute
 const cache = new Map<string, { config: SLAConfig; at: number }>();
 
-export const loadSLAConfig = (teamId?: string): SLAConfig => cache.get(teamId ?? '')?.config ?? DEFAULT_SLA_CONFIG;
-
 /**
  * SLA thresholds for a team, resolved by the server with the one inheritance rule
  * (team, then department, then company). Without a team: company settings.
@@ -48,5 +46,3 @@ export const fetchSLAConfig = async (teamId?: string): Promise<SLAConfig> => {
 };
 
 export const invalidateSLACache = () => cache.clear();
-
-export const getDefaultSLAConfig = (): SLAConfig => DEFAULT_SLA_CONFIG;

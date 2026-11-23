@@ -18,7 +18,7 @@ scripts/reseed/build.sh /path/to/out 2026-11-19
    engineer shared by two teams, a leaver (deactivated) and two pending invitations.
    `npm run seed:demo -- --fill-existing --company mft-meridian` then fills every module with a
    **full year** of consistent sample history (sample rows: the nightly refresh keeps them
-   current), with `SAMPLE_HISTORY_DAYS=365`, `SAMPLE_EVENT_DAYS=365`, `SAMPLE_PERF_DAYS=180`,
+   current; the KPIs are calculated from the sample raw data, see below), with `SAMPLE_HISTORY_DAYS=365`, `SAMPLE_EVENT_DAYS=365`, `SAMPLE_PERF_DAYS=180`,
    `SAMPLE_DEV_DAYS=365`, `SAMPLE_PULSE_WEEKS=52` (a pulse every sprint), the teams' stories from
    `stories.json` (`SAMPLE_TEAM_STORIES`: health per days ago) and releases at sprint ends
    (`SAMPLE_SPRINT_RELEASES=2026-11-09`: most deployments of a sprint on its last Thursday and
@@ -48,66 +48,93 @@ Order on the target database: apply every migration (at least
 `20261125000000_platform_operators.sql`), then `000_wipe.sql`, `001.sql` … in order, then
 `operator.sql`.
 
+## Sample KPIs are calculated from sample raw data
+
+Every KPI that QE Navigator can calculate from raw data (coverage, pass rates, flakiness, build and test time, pipeline
+success, parallel efficiency, the DORA and reliability values, the defect, sprint and code quality values) is, for a sample
+team, **calculated by the engine from the team's sample raw data**, exactly as for a real team. `--fill-existing`, the demo
+seed and the nightly refresh (`--refresh-dates`, demo-refresh) do, in one transaction (`server/seeds/demoSeed.ts`):
+
+1. the rows the raw data refers to (company, departments, teams, sprints);
+2. the sample raw data of every **complete** day after the last one present (a new team: its whole KPI history and 28 days
+   before it, so the 7- and 28-day windows are full; then each night the day that just ended), shaped by the team's story:
+   test runs on main (7 commits a weekday, 5 at weekends, reruns), per-test results, a coverage report per commit, pipeline
+   runs with stages, production deploys with commits, incidents (a minor one every week for every team), issues and sprints,
+   and a nightly static-analysis report (`server/seeds/demoRaw.ts`, `demoWork.ts`), and the values the engine calculates
+   for those days (`metric_evidence`, one pass per team);
+3. the dataset, built with those values: the KPI snapshots (field source `computed`), metric values, alerts, business
+   impact months and company snapshots hold the calculated values, so a tile, its trend, "How this was calculated", the
+   evidence panels, TV mode and the executive summary show one number. Only automation coverage and ROI (no raw source)
+   keep the story's values (field source `synthetic`, shown as "Sample data").
+
+A day is never added half-way, so the values of a day never change once calculated; today's snapshot carries the last
+complete day's values forward and gets its own when the refresh adds the day. Per-test results of sample runs are kept
+40 days (the evidence views look back 30). A sample company (no real KPI in any team) gets the sample's update
+intervals (`SAMPLE_INTERVALS`: two days for the daily CI values, three for the deployment-based ones, 15 days for sprint
+values), so no tile turns stale between two nightly refreshes. `tests/api/sample-consistency.test.ts` checks all of it
+against a running API.
+
+The standalone scripts below (`raw-sample-sql.ts`) only add raw rows to a live company; they cannot make its existing KPI
+snapshots agree with the raw data. For a live sample company, reseed it (the steps at the top of this file).
+
+## Reseed one live sample company (keeps every other company)
+
+For a live database that also holds other companies, the sample of one sample company (Meridian, or the demo company
+`demo-northwind`) is rewritten without the full wipe above. Deploy the code first (the nightly refresh must use the same
+generator), back up, then from a trusted machine with the production `DATABASE_URL`:
+
+```bash
+# 1. Remove the company's generated data (one transaction; refuses a company with real KPI data). Kept: the company,
+#    departments, teams, the people of showcase.sql with their passwords, role assignments, team memberships,
+#    invitations, and every record of what people did (audit log, sign-ins, sessions, activity, jobs).
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v company=mft-meridian -f scripts/reseed/clear-sample-company.sql
+# 2. Write the sample again (the settings of build.sh), then the Scrum layer and the forecasts.
+DATABASE_URL=... SAMPLE_HISTORY_DAYS=365 SAMPLE_EVENT_DAYS=365 SAMPLE_PERF_DAYS=180 SAMPLE_DEV_DAYS=365 SAMPLE_PULSE_WEEKS=52 \
+  SAMPLE_TEAM_STORIES=scripts/reseed/stories.json SAMPLE_SPRINT_RELEASES=2026-11-09 \
+  npm run seed:demo -- --fill-existing --company mft-meridian
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/reseed/showcase-content.sql
+DATABASE_URL=... npx tsx scripts/reseed/improve-refresh.ts --company mft-meridian
+# The demo company: step 1 with company=demo-northwind, then `npm run seed:demo` (its people are sample people too).
+```
+
 ## v2 raw CI data (phase 1)
 
-`npm run seed:demo -- --fill-existing` (step 2) now also adds 14 days of **sample raw CI data** to every filled team (test runs
-with per-test results, coverage reports with per-file coverage, pipeline runs with stages; `server/seeds/demoRaw.ts`),
-following the teams' stories, and calculates its evidence (`metric_evidence`, `flaky_test_evidence`); the export includes
-these tables. Sample raw data is never written as KPI values. Off with `SAMPLE_RAW_DATA=false`.
-
-To add it to a **live** company without a reseed (nothing is wiped; existing rows are skipped; re-running adds only the
-missing days):
+To add sample raw data to a **live** company without a reseed (nothing is wiped; existing rows are skipped; re-running adds
+only the missing days):
 
 ```bash
 npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories scripts/reseed/stories.json \
   --names "Payments Core,Lending Journey,Mobile Experience" --out /path/to/out
-# → raw-sample-mft-meridian.sql (≈ 47 kB of plain SQL: generate_series, no psql meta-commands) and
+# → raw-sample-mft-meridian.sql (plain SQL: generate_series, no psql meta-commands) and
 #   raw-sample-mft-meridian-remove.sql (removes the sample raw rows of these teams only)
 ```
 
 Apply migration `20261129000000_raw_ingestion_phase1.sql` first, then run the file in the SQL console or through the
-Management API. The evidence views work at once; the "Calculated from CI data" values and "How this was calculated" appear
-with the nightly sample refresh (demo-refresh, 02:17 UTC; it also adds each new day of sample raw data), or at once with
-the platform operator panel's **Refresh sample data now**.
+Management API.
 
 ## v2 deployments, commits and incidents (phase 2)
 
-The sample refresh and `--fill-existing` also add **35 days** of sample deployments (with their commits) and incidents (with
-their status updates) per team, following the stories (Payments Core deploys often in small batches with few failed changes;
-Lending Journey deploys less, with longer lead times, more rollbacks, hotfixes and incidents; Mobile Experience in between),
-and calculate their evidence (DORA tiles, never KPI values). For a **live** company that already has the phase-1 sample:
+For a **live** company that already has the phase-1 sample:
 
 ```bash
 npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories scripts/reseed/stories.json \
   --names "Payments Core,Lending Journey,Mobile Experience" --out /path/to/out --delivery-only
-# → delivery-sample-mft-meridian.sql (≈ 41 kB, re-runnable: existing rows are skipped, open sample incidents are closed once
-#   their time has passed) and delivery-sample-mft-meridian-remove.sql (sample rows of these teams only)
+# → delivery-sample-mft-meridian.sql and delivery-sample-mft-meridian-remove.sql (sample rows of these teams only)
 ```
 
-Apply migration `20261130000000_raw_ingestion_phase2_delivery.sql` first. The deploy and incident lists work at once; the DORA
-values ("How this was calculated") appear with the nightly sample refresh or the operator panel's **Refresh sample data now**.
+Apply migration `20261130000000_raw_ingestion_phase2_delivery.sql` first.
 
 ## v2 issues and static analysis (phase 3)
 
-The sample refresh and `--fill-existing` also add **a year of sample issues and weekly SARIF reports** per team, derived **in the
-database from the team's own KPI history** (`server/seeds/demoWork.ts`): the sprints of `sprint_velocity` with stories and tasks
-adding up to their committed and delivered points (the rest carried over and completed in the next sprint), time logged in the
-ratio of the snapshot's sizing accuracy and blocked periods adding up to its blocked time, bugs found in production and before
-release at the snapshot's defect escape rate and defect density (code size from the team's latest coverage report), and a weekly
-SonarQube report whose findings give the snapshot's code quality score with the scoring formula. So the calculated values match
-the KPIs already shown (sprint values exactly, the defect values within the noise of whole bugs). Evidence only. For a **live**
-company that already has the phase-1 sample:
+For a **live** company that already has the phase-1 sample (the targets come from its KPI snapshots):
 
 ```bash
 npx tsx scripts/reseed/raw-sample-sql.ts --company mft-meridian --stories scripts/reseed/stories.json \
   --names "Payments Core,Lending Journey,Mobile Experience" --out /path/to/out --work-only
-# → work-sample-mft-meridian.sql (≈ 70 kB of PL/pgSQL blocks, re-runnable: existing rows are skipped) and
-#   work-sample-mft-meridian-remove.sql (the sample issues, sprints and reports of these teams only)
+# → work-sample-mft-meridian.sql (PL/pgSQL blocks, re-runnable) and work-sample-mft-meridian-remove.sql
 ```
 
-Apply migration `20261201000000_raw_ingestion_phase3_work_quality.sql` first. The sprint, escaped-defect and report lists work at
-once; the calculated values ("How this was calculated") appear with the nightly sample refresh or the operator panel's **Refresh
-sample data now**.
+Apply migration `20261201000000_raw_ingestion_phase3_work_quality.sql` first.
 
 ## Business impact: financial settings and deployments per month
 
