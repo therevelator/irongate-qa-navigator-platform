@@ -1,6 +1,6 @@
 # Manual test cases
 
-475 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+481 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx` (the six cases of "Next move", TC-NM-001 to TC-NM-006, were added here on 23 Nov 2026 and are not in the spreadsheet yet).
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -55,6 +55,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Analytics](#analytics) (4)
 - [Resilience](#resilience) (8)
 - [Live smoke](#live-smoke) (4)
+- [Next move](#next-move) (6)
 
 ## Sign-in and sessions
 
@@ -12129,3 +12130,112 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 **Notes:** Read-only: change nothing. Tagged @smoke and @readonly; can be run on the deployed site. The theme choice is stored per browser only.
 
 *Automated:* `tests/e2e/readonly/live-smoke.spec.ts › Live smoke (read-only) › LIVE-04 unknown addresses lead to the overview; the theme switch works; the phone layout fits`
+
+## Next move
+
+### TC-NM-001: Time lost shows the hours of the last 7 days, the five causes and every team
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6a.1
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Signed in as admin@irongate.com (password demo123)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open the menu and choose Time lost (group Next move), or open /time-lost. | The page title reads "… h a week are lost to problems we can name". A card "Hours lost, last 7 days" shows one large number, a badge comparing it with 12 weeks ago, a line of 12 weekly points and a coloured bar. |
+| 2 | Read the table "Where the hours go, and how they moved". | Five causes (Slow pipeline stages, Failed runs that passed on a rerun, Blocked work, Failed changes, Waiting for review) and a Total row, each with 12 weeks ago, Now and Change. The Now column adds up to the large number. |
+| 3 | Look at the list "Teams: where each one stands, and its one thing this week". | One row per team of the company, worst first, each with a state badge (Slipping, Cannot say yet, Steady or Improving), hours a week, a "This week" line and a data readiness bar. |
+| 4 | Click "About this page". | Three texts open: What it does, What it is good for, Where the numbers come from. |
+| 5 | Click "See what we found". | The Findings page opens (/findings). |
+
+*Automated:* `tests/e2e/navigator/next-move.spec.ts › Next move pages › NM-01 Time lost: hours, causes and teams`
+
+### TC-NM-002: A finding opens to its evidence, the owner form and the text of a ticket
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6a.2, F6a.3
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Signed in as admin@irongate.com (password demo123)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /findings. | A numbered list of findings, the one with the most hours a week first. Each shows a cause tag (or KPI), the team, a title, a sentence with numbers, a next step and either an owner or "No owner". |
+| 2 | Click the first finding. | It opens: Evidence, the records behind it, a 12-week line (for a finding with a cause), the confidence with its reason, and on the right Owner, Expected effect (when there is one) and "As a ticket" with a Copy button. |
+| 3 | For a finding with "No owner", look at Owner. | An Owner list, a Due date and an "Assign owner" button are shown. Do not press it in this test. |
+| 4 | Choose the finding's team in the list at the top right. | A card "The one thing this week" appears with five steps: Finding, Evidence, Next step, Owner, Verdict. The list below shows that team's findings only. |
+
+**Notes:** Read-only: nothing is assigned.
+
+*Automated:* `tests/e2e/navigator/next-move.spec.ts › Next move pages › NM-02 Findings: evidence, owner form and ticket text`
+
+### TC-NM-003: Outcomes shows every finding from suggested to verified
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6a.4
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Signed in as admin@irongate.com (password demo123)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /outcomes. | The title reads "N fixes confirmed by the numbers". A card shows the hours lost now and 12 weeks ago, by cause. |
+| 2 | Look at the five columns. | Suggested, Owned, Waiting for verdict, Verified, Did not hold, each with a count. Cards in the last three show the KPI before and after and a badge per checkpoint (At completion, After 14 days, After 30 days). |
+| 3 | Choose last month in the period list. | The board stays; the done columns now hold only actions done in that month. |
+| 4 | Look for "Print report". | The button is there (pressing it opens the browser's print dialog; the printed page has no controls). |
+
+*Automated:* `tests/e2e/navigator/next-move.spec.ts › Next move pages › NM-03 Outcomes: from suggested to verified`
+
+### TC-NM-004: Data readiness lists every team with its sources and states the rule
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6a.5
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Signed in as admin@irongate.com (password demo123)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /data-readiness. | The title reads "N of M teams are fully measurable". A table has one row per team and the columns CI runs, Test reports, Coverage, Deployments, Incidents, Issues, then Pull requests, Load tests and Test management marked optional, and Readiness. |
+| 2 | Hover a cell. | A tooltip names the source and its state (connected, nothing new since a date, missing, or not connected (optional)). |
+| 3 | Scroll down. | Tables of gaps (when there are any) give, per team and source, what it blocks, the fix and the effort. A card names the QE Navigator Exporter and its last delivery, or says none was received. |
+| 4 | Click "About this page". | "Where the numbers come from" starts with "A source is connected when the team sent a record of that kind in the last 30 days". |
+
+*Automated:* `tests/e2e/navigator/next-move.spec.ts › Next move pages › NM-04 Data readiness: teams, sources and the rule`
+
+### TC-NM-005: A viewer sees the pages for their own teams and cannot assign an owner
+
+**Type:** Negative · **Priority:** High · **Role:** Viewer · **Flow:** F6a.1, F6a.3
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Signed in as viewer@irongate.com (password demo123)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Open /time-lost. | The page opens. The team list holds only the teams the viewer is assigned to. |
+| 2 | Open /findings and open a finding, if there is one. | Under Owner there is no "Assign owner" button; a sentence says who may assign actions. |
+
+*Automated:* `tests/e2e/navigator/next-move.spec.ts › Next move pages › NM-05 a viewer sees their own teams and cannot assign`
+
+### TC-NM-006: The four pages fit a phone without sideways scrolling
+
+**Type:** Positive · **Priority:** High · **Role:** Super admin · **Flow:** F6a.1
+
+**Preconditions**
+
+- App running at the test URL (e.g. http://localhost:5173; API at http://localhost:3000/api) with the demo company NovaTech loaded
+- Signed in as admin@irongate.com (password demo123)
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Set the browser to a phone size (390 px wide) and open /time-lost, /findings, /outcomes and /data-readiness in turn. | Each page shows its content in one column. |
+| 2 | Try to scroll each page sideways. | The page does not scroll horizontally (wide tables scroll inside their own box). |
+
+*Automated:* `tests/e2e/navigator/next-move.spec.ts › Next move pages › NM-06 no sideways scrolling on a phone`
