@@ -33,8 +33,15 @@ export function canCompareTeams(actor: PolicyActor): boolean {
   return teams.size >= 2;
 }
 
+/**
+ * Not offered to a company in live operation (server/lib/liveData.ts): the page for typing metrics, and the
+ * modules whose data no connected tool holds (Performance: no source; Developer productivity: typed only).
+ */
+export const LIVE_HIDDEN_VIEWS: readonly string[] = ['manual-metrics', 'performance-metrics', 'developer-productivity'];
+
 export function canOpenView(actor: PolicyActor | null | undefined, view: string): boolean {
   if (!actor || !actor.id) return view === 'dashboard';
+  if (actor.liveDataOnly && LIVE_HIDDEN_VIEWS.includes(view)) return false;
   if (view === 'compare') return canUseAnalytics(actor) && canCompareTeams(actor);
   if ((ANALYTICS_VIEWS as readonly string[]).includes(view)) return canUseAnalytics(actor);
   switch (view) {

@@ -28,6 +28,8 @@ export interface User {
   emailVerified: boolean;
   /** The company hides the "Includes sample data" notices (companies.settings.hideSampleDataNotice), e.g. for a demo. */
   hideSampleNotice?: boolean;
+  /** The company is in live operation (companies.settings.liveDataOnly): metrics only from raw data, nothing typed. */
+  liveDataOnly?: boolean;
   /** A demo sandbox session (/try; server/lib/sandbox.ts): which persona, and where the banner links to. */
   sandbox?: { persona: string | null; bookDemoUrl: string; startPilotUrl: string; expiresAt: string | null } | null;
 }

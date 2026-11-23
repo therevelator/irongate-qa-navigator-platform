@@ -17,6 +17,7 @@ import {
   clearSessionCookie, currentSessionPersistent, endUserSessions, issueSessionCookie, wantsPersistentSession, lifetimeHours, lifetimeSettingSql, refuseSession, sessionProblem, SESSION_EXPIRED_MESSAGE, SESSION_ENDED_MESSAGE,
   companyProblem, companyStatusSql, hideSampleNoticeSql, sessionIdOf, COMPANY_SUSPENDED, COMPANY_SUSPENDED_MESSAGE,
 } from '../lib/sessions';
+import { liveDataOnlySql } from '../lib/liveData';
 import { recordAuthEvent } from '../lib/authEvents';
 import { authenticateToken, type AuthRequest } from '../middleware/auth';
 import { passwordProblem } from '../../src/lib/passwordPolicy';
@@ -196,7 +197,7 @@ router.post('/register', authLimiter, async (req, res) => {
 
     // Get created user
     const user = await queryOne<any>(
-      `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id, ${hideSampleNoticeSql('users')} AS hide_sample_notice
+      `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id, ${hideSampleNoticeSql('users')} AS hide_sample_notice, ${liveDataOnlySql('users')} AS live_data_only
        FROM users WHERE id = ?`,
       [userId]
     );
@@ -235,7 +236,7 @@ router.post('/login', authLimiter, async (req, res) => {
     const user = await queryOne<any>(
       `SELECT id, email, password_hash, first_name, last_name, role, 
               company_id, department_id, primary_team_id, is_active, ${companyStatusSql('users')} AS company_status,
-              ${hideSampleNoticeSql('users')} AS hide_sample_notice,
+              ${hideSampleNoticeSql('users')} AS hide_sample_notice, ${liveDataOnlySql('users')} AS live_data_only,
               (locked_until IS NOT NULL AND locked_until > now()) AS locked
        FROM users WHERE LOWER(email) = LOWER(?)`,
       [email]
@@ -399,7 +400,7 @@ router.get('/me', async (req, res) => {
               u.sessions_valid_after, ${lifetimeSettingSql('u')} AS session_lifetime, ${companyStatusSql('u')} AS company_status,
               (SELECT s.revoked_at FROM user_sessions s WHERE s.id = ?::text AND s.user_id = u.id) AS session_revoked_at,
               EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = ?::text AND s.user_id = u.id) AS session_exists,
-              ${hideSampleNoticeSql('u')} AS hide_sample_notice
+              ${hideSampleNoticeSql('u')} AS hide_sample_notice, ${liveDataOnlySql('u')} AS live_data_only
        FROM users u WHERE u.id = ?`,
       [sessionIdOf(decoded), sessionIdOf(decoded), decoded.userId]
     );

@@ -85,11 +85,12 @@ const OperatorCompany: React.FC<{ company: { id: string; name: string }; onBack:
 
   const editCompany = () => setForm({
     title: 'Edit company',
-    initial: { name, domain: info?.domain ?? '', hideSampleDataNotice: !!info?.hideSampleDataNotice },
+    initial: { name, domain: info?.domain ?? '', hideSampleDataNotice: !!info?.hideSampleDataNotice, liveDataOnly: !!info?.liveDataOnly },
     fields: [
       { name: 'name', label: 'Name', required: true },
       { name: 'domain', label: 'E-mail domain', required: true },
       { name: 'hideSampleDataNotice', label: 'Hide the sample-data notices in the app', type: 'checkbox' },
+      { name: 'liveDataOnly', label: 'Live data only: metrics come from raw data (the Exporter), nothing is typed in', type: 'checkbox' },
     ],
     submit: (v) => opFetch(base, { method: 'PUT', body: v }),
   });

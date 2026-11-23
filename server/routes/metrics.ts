@@ -1,3 +1,4 @@
+import { isLiveDataOnly, LIVE_MANUAL_MESSAGE } from '../lib/liveData';
 import express from 'express';
 import { randomUUID } from 'crypto';
 import { afterKpiWrite } from '../lib/alerts';
@@ -306,6 +307,8 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     // Tenant + role scope: team must belong to the caller's company and the
     // caller must be allowed to write it (team_lead -> own team only).
     if (!(await assertTeamWrite(req, res, teamId))) return;
+    // A company in live operation types no metric (server/lib/liveData.ts).
+    if (await isLiveDataOnly(req.companyId)) return res.status(403).json({ error: LIVE_MANUAL_MESSAGE, code: 'live_data_only' });
 
     key = normaliseIdempotencyKey(req.get('Idempotency-Key'), 'Idempotency-Key');
     if (key) {
@@ -375,6 +378,7 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { teamId, developerId } = req.body ?? {};
     if (!assertSomeTeamWrite(req, res)) return;
+    if (await isLiveDataOnly(req.companyId)) return res.status(403).json({ error: LIVE_MANUAL_MESSAGE, code: 'live_data_only' });
     if (!teamId || !developerId) {
       return res.status(400).json({ error: 'Team ID and developer ID are required' });
     }

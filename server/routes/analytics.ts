@@ -28,6 +28,7 @@ import { getFinancialConfig } from '../lib/financialConfig';
 import { correlationSummaryHtml } from '../lib/correlationSummary';
 import { BI_CONTEXT_RANGES, BI_KPI_RANGES, BI_QUALITY_RANGES, DEBT_IMPACT_FIELDS, bulkMonthErrors, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 import { markValueSources } from '../lib/businessImpactSources';
+import { isLiveDataOnly, LIVE_MANUAL_MESSAGE } from '../lib/liveData';
 import { rawFlakyTests, rawPipelineHistory, rawPipelineStages, rawTestExecutions, RAW_FLAKY_SCORE_FORMULA } from '../lib/analyticsFromRaw';
 
 /** The monthly Business impact columns of each table (the values whose source is recorded). */
@@ -39,6 +40,9 @@ const pickNums = (body: any, cols: string[]): Record<string, number | null> =>
   Object.fromEntries(cols.map((c) => { const v = body?.[c]; const n = v === null || v === undefined || v === '' ? null : Number(v); return [c, Number.isFinite(n as number) ? n : null]; }));
 
 const router = express.Router();
+
+const LIVE_QUALITY_MESSAGE =
+  'The monthly quality values of this company are derived from its calculated KPI values and are not entered by hand.';
 
 /**
  * Analytics scope (audited for the team-scoped Analytics modules).
@@ -945,6 +949,7 @@ router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
     if (!canManageCompanyData(req)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
+    if (await isLiveDataOnly(companyId)) return res.status(403).json({ error: LIVE_MANUAL_MESSAGE, code: 'live_data_only' });
     const { id } = req.params;
     const { team_id, duration, success_rate, cpu_usage, memory_usage, cost_per_run } = req.body;
 
@@ -1403,6 +1408,8 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
   try {
     const { teamId } = req.params;
     if (!(await assertTeamWrite(req, res, teamId))) return;
+    // In live operation the monthly quality values are the ones derived from the team's KPI values; none is typed.
+    if (await isLiveDataOnly(req.user?.companyId)) return res.status(403).json({ error: LIVE_QUALITY_MESSAGE, code: 'live_data_only' });
     const { month_year, ...metrics } = req.body;
 
     if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
@@ -1709,9 +1716,12 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
     const manuallyEdited = !isSyntheticPayload;
 
     let saved = 0;
+    // In live operation the quality side is derived from the KPI values: the quality part of each month is left out.
+    const live = await isLiveDataOnly(req.user?.companyId);
 
     for (const month of monthlyData) {
-      const { month_year, quality, kpis, context } = month;
+      const { month_year, kpis, context } = month;
+      const quality = live ? null : month.quality;
 
       if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) continue;
 
@@ -1808,7 +1818,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
       saved++;
     }
 
-    res.json({ success: true, monthsSaved: saved, dataSource });
+    res.json({ success: true, monthsSaved: saved, dataSource, ...(live ? { qualityDerived: true } : {}) });
   } catch (error) {
     if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Error bulk saving:', error);
