@@ -129,7 +129,7 @@ test.describe('Connect your CI', { tag: [TAG.area('admin'), TAG.area('ci-evidenc
     await expect(page.getByRole('dialog')).toContainText('Shown here only (no KPI column)');
     await page.keyboard.press('Escape');
     // A metric with a KPI column: the card offers the calculation, written as source "computed".
-    await expect(page.getByTestId('kpi-source-first_time_pass_rate')).toContainText('computed');
+    await expect(page.getByTestId('kpi-source-first_time_pass_rate')).toContainText('Calculated from CI data');
     await page.getByTestId('how-calculated-first_time_pass_rate').click();
     await expect(page.getByRole('dialog')).toContainText('Written to the team’s KPI as source “computed”');
   });

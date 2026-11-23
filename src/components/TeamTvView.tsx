@@ -10,7 +10,7 @@ import { applyTheme, isDarkTheme, isThemeId, THEME_OPTIONS, tvTheme as tvThemeFo
 import { canRequestTeamInsights } from '../../server/lib/userPolicy';
 import { policyActorOf } from '../lib/policyActor';
 import { generateDetailedKPIs, getThreshold, statusFor } from '../data/detailedKPIs';
-import { describeChange } from '../data/kpiTrend';
+import { describeChange, historyToValueDay } from '../data/kpiTrend';
 import { formatAsOf } from '../data/advancedFeatures';
 import { cx } from './ui';
 import { basedOnText } from '../../server/lib/metricFormulas';
@@ -745,6 +745,9 @@ const mostCommon = (xs: (string | null)[]) => {
   return best;
 };
 
+/** The KPIs the QA score is calculated from (metricFormulas.ts qaScoreComposite). */
+const QA_INPUTS = ['testCoverage', 'defectEscapeRate', 'changeFailureRate', 'codeQualityScore'];
+
 function buildModel(data: TvSummary): TvModel {
   const latest = data.latest;
   // Judged with the targets valid at the values' dates (target history); stale values are shown, not judged.
@@ -760,7 +763,8 @@ function buildModel(data: TvSummary): TvModel {
   const kpis: TvKpi[] = TV_KPIS.map((d) => {
     const kpi = all.find((k) => k.id === d.id)!;
     const history = hist(kpi.historyKey);
-    return { kpi, label: d.label, digits: d.digits, history, change: describeChange(history, kpi.lowerIsBetter, !!kpi.threshold), stale: kpi.value == null ? null : staleOf(kpi.key) };
+    const change = describeChange(historyToValueDay(history, latest?.kpiStaleness?.[kpi.key]?.recordedAt), kpi.lowerIsBetter, !!kpi.threshold);
+    return { kpi, label: d.label, digits: d.digits, history, change, stale: kpi.value == null ? null : staleOf(kpi.key) };
   });
 
   const trends = TV_TRENDS.map((t) => {
@@ -790,7 +794,8 @@ function buildModel(data: TvSummary): TvModel {
   return {
     qaStatus,
     qaThreshold: { good: qaT.good, warning: qaT.warning },
-    qaChange: describeChange(hist('qa_score'), false, true),
+    // The QA score changes with its inputs: compared with the day before the newest of them was recorded.
+    qaChange: describeChange(historyToValueDay(hist('qa_score'), QA_INPUTS.map((k) => latest?.kpiStaleness?.[k]?.recordedAt ?? '').sort().pop() || null), false, true),
     kpis,
     trends,
     offTarget,
