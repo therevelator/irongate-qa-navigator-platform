@@ -32,6 +32,10 @@ import ParametersConfiguration from './components/ParametersConfiguration';
 import TeamTvView from './components/TeamTvView';
 import CompareTeams from './components/CompareTeams';
 import ExecutiveSummary from './components/ExecutiveSummary';
+import TimeLost from './components/navigator/TimeLost';
+import Findings from './components/navigator/Findings';
+import Outcomes from './components/navigator/Outcomes';
+import DataReadiness from './components/navigator/DataReadiness';
 import UploadFiles from './components/UploadFiles';
 import { openTvMode, METRICS_UPDATED_EVENT } from './components/tv/tvNavigation';
 import { AnalyticsScopeGate } from './components/AnalyticsScopeBar';
@@ -68,7 +72,11 @@ const VIEW_TO_PATH: Record<string, string> = {
   'notifications': '/notifications',
   'tv': '/tv',
   'summary': '/summary',
-  'compare': '/compare'
+  'compare': '/compare',
+  'time-lost': '/time-lost',
+  'findings': '/findings',
+  'outcomes': '/outcomes',
+  'data-readiness': '/data-readiness'
 };
 
 const PATH_TO_VIEW = Object.entries(VIEW_TO_PATH).reduce((acc, [view, path]) => {
@@ -359,6 +367,10 @@ function App() {
 
   if (currentView === 'compare') return renderLayout(<CompareTeams />);
   if (currentView === 'summary') return renderLayout(<ExecutiveSummary />);
+  if (currentView === 'time-lost') return renderLayout(<TimeLost onNavigate={handleViewChange} />);
+  if (currentView === 'findings') return renderLayout(<Findings />);
+  if (currentView === 'outcomes') return renderLayout(<Outcomes onNavigate={handleViewChange} />);
+  if (currentView === 'data-readiness') return renderLayout(<DataReadiness />);
   if (currentView === 'activity') return renderLayout(<ActivityLog />);
   if (currentView === 'user-activity') return renderLayout(<UserActivity />);
   if (currentView === 'ingestion-log') return renderLayout(<IngestionLog />);

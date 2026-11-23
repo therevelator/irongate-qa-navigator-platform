@@ -45,10 +45,20 @@ const REC_SQL = `
 
 async function findingsFor(teams: TeamRow[], lost: Map<string, TeamLostHours>): Promise<Map<string, FindingJson[]>> {
   const recs = teams.length ? await query<any[]>(REC_SQL, [teams.map((t) => t.id)]) : [];
+  // A finding built from a cause is owned once the team tracks an action on that cause's KPI (or with its title).
+  const tracked = teams.length ? await query<any[]>(
+    `SELECT a.id, a.team_id, a.title, a.status, a.due_date, a.metric_key, NULLIF(TRIM(COALESCE(o.first_name, '') || ' ' || COALESCE(o.last_name, '')), '') AS owner
+       FROM team_actions a LEFT JOIN users o ON o.id = a.owner_id
+      WHERE a.team_id = ANY(?::text[]) AND a.status IN ('open', 'in_progress') AND a.recommendation_id IS NULL ORDER BY a.created_at DESC`, [teams.map((t) => t.id)]) : [];
   const out = new Map<string, FindingJson[]>();
   for (const t of teams) {
     const l = lost.get(t.id);
     out.set(t.id, teamFindings(t, l?.weeks ?? [], l?.detail ?? { slow_stage: [], flaky_rerun: [], blocked: [], failed_change: [], review_wait: null }, l?.samples ?? {}, recs.filter((r: any) => r.team_id === t.id)));
+    for (const f of out.get(t.id)!) {
+      if (f.action || f.recommendationId) continue;
+      const a = tracked.find((x: any) => x.team_id === t.id && ((f.metricKey && x.metric_key === f.metricKey) || x.title === f.title));
+      if (a) f.action = { id: a.id, title: a.title, status: a.status, owner: a.owner ?? null, dueDate: a.due_date ? String(a.due_date).slice(0, 10) : null };
+    }
   }
   return out;
 }

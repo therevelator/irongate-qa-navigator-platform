@@ -379,7 +379,7 @@ export function moreIngestHandler(kind: MoreKind) {
         let changed = 0;
         let response: Record<string, unknown> = {};
         if (kind === 'discovery') {
-          const version = /qe-exporter\/([0-9][0-9A-Za-z.+-]*)/.exec(String(req.get('User-Agent') ?? ''))?.[1] ?? null;
+          const version = /qe-exporter\/(\d+\.\d+\.\d+[0-9A-Za-z.+-]{0,20})/.exec(`${req.get('User-Agent') ?? ''} ${(caller as { client?: string | null }).client ?? ''}`)?.[1] ?? null;
           await storeDiscovery(client, caller.companyId, team, source, parsed as Discovery, version);
           changed = 1;
           response = { report: 'stored' };
