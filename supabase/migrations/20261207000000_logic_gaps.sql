@@ -67,8 +67,8 @@ DECLARE
 BEGIN
   IF p_month !~ '^\d{4}-\d{2}$' THEN RETURN; END IF;
   SELECT company_id INTO v_company FROM public.teams WHERE id = p_team_id;
-  -- Sample companies keep their generated monthly data (never mixed with values derived here).
-  IF v_company IS NULL OR v_company LIKE 'demo-%' THEN RETURN; END IF;
+  -- Sample companies and the demo sandbox keep their generated monthly data (never mixed with values derived here).
+  IF v_company IS NULL OR v_company LIKE 'demo-%' OR v_company = 'sandbox-demo' THEN RETURN; END IF;
   v_from := (p_month || '-01')::date;
 
   WITH daily AS (
@@ -137,7 +137,7 @@ BEGIN
   FOR r IN
     SELECT DISTINCT mv.team_id, to_char(mv.recorded_at AT TIME ZONE 'UTC', 'YYYY-MM') AS month
       FROM public.metric_values mv JOIN public.teams t ON t.id = mv.team_id
-     WHERE t.company_id NOT LIKE 'demo-%' AND lower(mv.source) <> 'synthetic' AND mv.superseded_by IS NULL
+     WHERE t.company_id NOT LIKE 'demo-%' AND t.company_id <> 'sandbox-demo' AND lower(mv.source) <> 'synthetic' AND mv.superseded_by IS NULL
        AND mv.metric_key IN ('test_coverage', 'defect_density', 'defect_escape_rate', 'mttr_hours', 'deployment_frequency_per_week',
                              'lead_time_days', 'code_quality_score', 'change_failure_rate')
   LOOP

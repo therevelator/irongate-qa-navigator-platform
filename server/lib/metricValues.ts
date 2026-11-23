@@ -16,6 +16,8 @@
 import type pg from 'pg';
 import { randomUUID } from 'crypto';
 import { toPgPlaceholders } from '../../src/lib/db';
+import { isSampleCompanyId } from './sampleCompany';
+import { isSandboxCompany } from './sandboxConfig';
 
 /** The KPI columns the monthly quality side of Business impact is derived from (business_impact_quality_metrics). */
 export const BUSINESS_QUALITY_KPIS = new Set(['test_coverage', 'defect_density', 'defect_escape_rate', 'mttr_hours', 'deployment_frequency_per_week',
@@ -78,7 +80,7 @@ export async function writeMetricValues(client: pg.PoolClient, input: MetricValu
   const day = new Date(input.recordedAt).toISOString().slice(0, 10);
   await q(client, 'SELECT public.refresh_kpi_snapshots(?, ?::date, ?::text[])', [input.teamId, day, metrics]);
   // The month's quality side of Business impact follows the KPI values (migration 20261207000000; sample data never).
-  if (input.source.toLowerCase() !== 'synthetic' && metrics.some((m) => BUSINESS_QUALITY_KPIS.has(m)) && (await businessQualityReady(client))) {
+  if (input.source.toLowerCase() !== 'synthetic' && !isSampleCompanyId(input.companyId) && !isSandboxCompany(input.companyId) && metrics.some((m) => BUSINESS_QUALITY_KPIS.has(m)) && (await businessQualityReady(client))) {
     await q(client, 'SELECT public.refresh_business_quality_month(?, ?)', [input.teamId, day.slice(0, 7)]);
   }
   return { day, valueIds };
