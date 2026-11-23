@@ -336,7 +336,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
 
   return (
     <div className="ig-page min-h-screen bg-gray-50 dark:bg-slate-950 p-4 sm:p-6 lg:p-8" data-testid="users-page">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
@@ -824,7 +824,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
       {/* Engineer workload overview - managers only. Ordered by status (most at risk first), not a leaderboard. */}
       {
         (user?.role === 'super_admin' || user?.role === 'qa_manager' || user?.role === 'team_lead') && Object.values(userMetrics).some(Boolean) && (
-          <div className="max-w-7xl mx-auto mt-8 mb-6">
+          <div className="max-w-[1400px] mx-auto mt-8 mb-6">
             <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-5">
               <div className="mb-4">
                 <h3 className="text-sm font-semibold text-slate-900 dark:text-white">Engineer workload overview</h3>

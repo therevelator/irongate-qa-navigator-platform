@@ -258,7 +258,7 @@ const ExecutiveSummary: React.FC = () => {
   );
 
   const shell = (children: React.ReactNode) => (
-    <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-8" data-testid="executive-summary">
+    <div className="mx-auto w-full max-w-[1400px] px-4 py-6 sm:px-8 sm:py-8" data-testid="executive-summary">
       <div className="flex flex-col gap-4">
         {header}
         {freshness}
