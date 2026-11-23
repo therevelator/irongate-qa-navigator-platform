@@ -7,7 +7,7 @@ production sources, screens) is in [PRODUCT_GUIDE.md, section 3](PRODUCT_GUIDE.m
 Principle: **raw data in, we calculate.** Customers send the raw output of their tools (test reports,
 coverage reports, pipeline runs, deployments, commits, incidents); the calculation engine turns it into
 metrics and keeps the evidence. The older KPI ingestion API (`POST /api/ingest/kpis`), where a customer
-sends a finished value, still works and is used for metrics that have no raw source yet. Nothing is
+sends a finished value, still works for companies not in live operation (all 23 KPIs have a raw source). Nothing is
 invented: a metric without data shows "—" or "No data recorded".
 
 ## Contents
@@ -151,6 +151,28 @@ Issues (Jira, Linear, JSON) and static analysis (SARIF) are calculated by
 [`server/lib/calc/work.ts`](../server/lib/calc/work.ts) and [`server/lib/calc/quality.ts`](../server/lib/calc/quality.ts).
 The rules are documented in [V2_PLAN.md](V2_PLAN.md) ("Calculation rules (phase 3)") and the input
 formats in [INTEGRATION_GUIDE.md, section 4C](INTEGRATION_GUIDE.md#4c-raw-ingestion-issues-and-static-analysis-v2).
+
+### Test automation (group `automation`)
+
+Input: `POST /api/ingest/test-management` (test cases and executions of TestRail, Xray Cloud, Zephyr Scale) and the issues labelled
+`test-automation`. Code: [`packages/engine/src/calc/automation.ts`](../packages/engine/src/calc/automation.ts),
+[`server/lib/calc/automation.ts`](../server/lib/calc/automation.ts).
+
+| Metric | KPI column | Formula |
+|---|---|---|
+| Test automation coverage | `automation_coverage` | automated test cases ÷ test cases × 100, over the cases known at the end of the day; archived cases not counted |
+| Automation ROI | `automation_roi` | (time saved − time invested) ÷ time invested × 100 over the 30 days ending the day; time saved = Σ (manual estimate − run duration, never below 0) over the automated executions of cases with an estimate; time invested = time logged on the test-automation issues resolved in the period; no value without both |
+
+### Developer metrics and performance (not KPIs)
+
+- **Developer metrics** ([`server/lib/developerFromRaw.ts`](../server/lib/developerFromRaw.ts)), per opted-in developer over 30 days:
+  PR merge time = mean hours opened → merged; code review time = mean hours opened → first review by someone else; meeting time =
+  mean hours per working day in busy intervals inside the working hours (overlaps once); focus time = mean hours per working day in
+  free blocks of at least 2 hours; context switches = mean number of separate busy blocks per working day; workload balance and DDPS
+  as in section 9. Recalculated on arrival and nightly, with a daily snapshot.
+- **Performance** ([`server/lib/ingest/performanceReports.ts`](../server/lib/ingest/performanceReports.ts)): p50, p95, p99, throughput
+  per minute and error rate per request name are read from the k6, JMeter or Gatling result file; the page shows the latest run of
+  each day. Nothing is aggregated across runs.
 
 ## 7. Forecasts (v2 phase 4)
 

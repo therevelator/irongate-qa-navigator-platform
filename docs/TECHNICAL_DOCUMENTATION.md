@@ -45,7 +45,8 @@ belong to the earlier MySQL setup and are not used.
 1. The browser calls `/api/...` with the session cookie `irongate_token`. On Netlify the redirect sends it to
    the `api` function; locally Vite's app calls the API on port 3000.
 2. `requestContext` assigns a request id (`X-Request-Id`), the client IP and the route pattern.
-3. CORS (exact origins), JSON and form parsers (skipped for the raw ingestion routes, which read their own
+3. CORS (exact origins), JSON and form parsers (skipped for the raw ingestion routes, including `server/routes/ingestMore.ts`:
+   load-test results, test management, pull requests, calendars; they read their own
    body up to 20 MB, gzip allowed), the general rate limit.
 4. The router's `authenticateToken` verifies the JWT, then loads the user's current row and role
    assignments in one query (`loadAccessContext`), and checks the session row in `user_sessions` and the

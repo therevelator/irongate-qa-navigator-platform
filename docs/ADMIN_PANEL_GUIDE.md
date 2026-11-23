@@ -102,6 +102,10 @@ Super admins (any team), managers (their departments) and team leads (teams they
 values, developer metrics and technical-debt ROI inputs by hand. A manual value goes through the same write
 path as the ingestion API, with the source `manual`.
 
+Manual metrics is for demos, trials and companies not yet connected. In a company in live operation (**Live data only**,
+set by platform support) the page is not offered and typed metrics are refused: every metric comes from raw data and
+is calculated by QE Navigator (PRODUCT_GUIDE.md, section 4.3).
+
 **CI/CD pipeline stages** (super admins and managers). The **Pipeline Metrics Configuration** (time and cost
 savings %, cost per minute) is one company-wide value: only a super admin can save it; managers see it
 read-only. A team's own stages can be edited by a super admin or by a manager of the team's department.
@@ -152,7 +156,7 @@ account is never locked out and its sign-in is not rate limited, however many wr
 
 **What it changes.** Everything in any company: create a company (first department, team and first person
 with a password or an invitation), rename it, its e-mail domain, sign-in length, hide the sample-data
-notices, **suspend / reactivate**, delete (type its name); departments, teams, people, role assignments,
+notices, **Live data only** (Edit company: metrics only from raw data, nothing typed, no finished values), **suspend / reactivate**, delete (type its name); departments, teams, people, role assignments,
 passwords and reset links, sign out everywhere, **Clear lockout** (a person locked out after 5 wrong
 passwords in a row can sign in again at once: both the failed-attempt count and the lock end), invitations, KPI targets, configuration, update intervals,
 alert rules, API keys, saved views and single sessions. Changes the company app also offers run through the

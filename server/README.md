@@ -17,6 +17,8 @@ The schema is `supabase/migrations/`, applied in file-name order. See [docs/QUIC
 
 | Path | Contents |
 |---|---|
+| `routes/ingestMore.ts` | Raw ingestion of load-test results, test management records, pull requests and calendar free/busy (`lib/ingest/performanceReports.ts`, `lib/calc/automation.ts`, `lib/developerFromRaw.ts`) |
+| `lib/analyticsFromRaw.ts`, `lib/liveData.ts` | The Analytics modules read from the raw tables; the Live data only company setting |
 | `index.ts` | App setup: request context, CORS (exact origins), body parsers (skipped for raw ingestion), rate limit, routers, `/health`, WebSocket, static files in production |
 | `routes/` | One router per area, mounted under `/api/...` |
 | `middleware/` | `auth.ts` (session), `apiKey.ts` (ingestion keys), `access.ts`, `rateLimit.ts`, `errorHandler.ts` |

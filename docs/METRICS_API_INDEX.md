@@ -43,7 +43,10 @@ targets), [`server/lib/metricFormulas.ts`](../server/lib/metricFormulas.ts) (sha
 | `POST /api/ingest/incidents` | Incidents (MTTR, MTBF, availability); v2 phase 2 |
 | `POST /api/ingest/issues` | Issues from Jira, Linear or JSON; v2 phase 3 |
 | `POST /api/ingest/static-analysis` | SARIF 2.1.0 reports; v2 phase 3 |
-| `POST /api/ingest/kpis` | Finished KPI values, for metrics with no raw source yet |
+| `POST /api/ingest/kpis` | Finished KPI values, for companies not in live operation (every KPI has a raw source) |
+| `POST /api/ingest/performance` | Load-test result files (k6, JMeter, Gatling) → the Performance page |
+| `POST /api/ingest/test-management` | Test cases and executions → `automation_coverage`, `automation_roi` |
+| `POST /api/ingest/pull-requests`, `POST /api/ingest/calendar` | Pull requests and free/busy per person and day → the developer metrics |
 
 ### Raw data evidence and CI setup (`server/routes/ci.ts`)
 

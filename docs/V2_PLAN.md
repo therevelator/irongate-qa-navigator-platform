@@ -266,6 +266,11 @@ No database change. Slack / Teams digests remain for later.
 3. Phase 3 — done (issues and SARIF, work and code-quality metrics, work evidence, recommendations wired).
 4. Phases 4 and 5 (they need phases 1–3 data to be credible; forecasts can start after phase 1).
 5. Phase 6 — done (executive phone summary and wall-screen TV mode); Slack / Teams digests later.
+6. No typed-in metric (November 2026) — done: the Analytics modules read the raw tables; load-test results (Performance), test
+   management records (automation coverage and ROI) and pull requests with calendar free/busy (developer metrics) are raw sources
+   too, read by the Exporter (TestRail, Xray Cloud, Zephyr Scale, Google Calendar, Microsoft 365, and the Git and CI connectors);
+   the company setting **Live data only** turns typed metrics and finished values off. Reference: docs/INTEGRATION_GUIDE.md 4F,
+   docs/PRODUCT_GUIDE.md 4.2f and 4.3.
 
 ## Retention note (November 2026)
 

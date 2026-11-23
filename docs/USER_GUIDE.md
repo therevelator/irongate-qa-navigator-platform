@@ -191,7 +191,8 @@ For super admins, managers and team leads, within their scope. Details: [ADMIN_P
   the records stored, updated and already stored, the rows left out and why, the metrics recalculated, and
   a link to its ingestion log entry. *What is stored* lists the field allow-list; a super admin can turn off
   **Store issue and incident titles** (the titles already stored are deleted; lists show the key only).
-- **Manual metrics:** enter team KPIs and developer metrics by hand. The company-wide pipeline
+- **Manual metrics:** enter team KPIs and developer metrics by hand (not offered when your company is in live operation:
+  its metrics are then calculated from the raw data your tools hold). The company-wide pipeline
   configuration and the company default pipeline stages are changed by super admins only; managers edit
   the pipeline stages of their own departments' teams.
 - **Activity:** the change history with undo. **Ingestion log:** every data import (uploads show who

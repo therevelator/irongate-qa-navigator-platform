@@ -63,6 +63,14 @@ with `privacy.sendTitles` / `sendLinks` (default off); people only as `HMAC-SHA2
 (QE Navigator never receives the salt). Commit authors, where a source gives them in a commit list, are turned into a
 salted hash by QE Navigator and never stored as names.
 
+**The one exception, off by default: developer metrics.** With `privacy.developerMetrics: true` the author of a pull request and
+the person of a calendar day are sent as `sha256(lower(e-mail address) + ":" + your company id)`. This is a pseudonym, not
+anonymisation: QE Navigator can compute the same value for the e-mail addresses of its own users, which is how a record is
+matched to a user. QE Navigator keeps it only when it matches an active user who enabled developer insights; a pull request
+of anyone else is stored without an author and a calendar day of anyone else is not stored. From a calendar only free/busy
+is requested (start and end of busy intervals): no title, attendee, location or description. With the setting off, pull
+requests are sent without an author, the author's e-mail address is not even read, and calendars are not sent.
+
 ## 4. Exact fields
 
 ### 4.1 The envelope
@@ -226,7 +234,8 @@ Verified: unit and stand-in tests for every connector (pagination, rate limits, 
 credentials, expired and oversized artifacts, zip bombs, XML entities), the minimisation of report files, the setup page
 (loopback only, the token, Host and Origin checks, the credentials file's modes, no secret in logs, preview or diagnostics),
 and end-to-end tests against a local QE Navigator with stand-in vendors. Not verified: runs against the real GitHub, GitLab,
-Bitbucket, Jenkins, Azure DevOps, SonarQube, Jira, Linear, PagerDuty and Opsgenie services, and the OAuth flows against
+Bitbucket, Jenkins, Azure DevOps, SonarQube, Jira, Linear, PagerDuty, Opsgenie, TestRail, Xray, Zephyr Scale, Google Calendar
+and Microsoft 365 services, and the OAuth flows against
 the real vendors (the stand-ins follow their documented responses; a first `check` and `preview` on your side is the real
 test).
 
