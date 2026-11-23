@@ -14,6 +14,7 @@ import { WELLBEING_BANDS } from '../../server/lib/pulseRules';
 import { useAuth } from '../contexts/AuthContext';
 import { Page, PageIntro, Card, Badge, SegmentedControl, EmptyState, buttonClass, inputClass, cx, type Tone } from './ui';
 import ScoreVisual from './ScoreVisual';
+import { batteryBand, topLightRgb } from '../lib/batteryScale';
 import KpiStatusModal, { type KpiStatusTeam, type KpiTab } from './KpiStatusModal';
 import { openTvMode } from './tv/tvNavigation';
 import { ConfidenceNote, type ConfidenceInfo } from './MetricQuality';
@@ -622,8 +623,17 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
   const scoped = !!s?.scope && !s.scope.companyWide;
   const qaTitle = !scoped ? 'Global QA score' : s?.scope?.teamCount === 1 ? 'QA score' : 'QA score of your teams';
 
+  // Top light (src/styles/top-light.css): the hero battery's band colour, none without a score.
+  const topLight = topLightRgb(qa);
+
   return (
-    <Card padded={false} className="overflow-hidden">
+    <Card
+      padded={false}
+      className={cx('overflow-hidden', topLight && 'top-light')}
+      style={topLight ? ({ '--tl': topLight } as React.CSSProperties) : undefined}
+      data-testid="company-hero"
+      data-top-light={topLight ? batteryBand(qa)!.key : 'none'}
+    >
       <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-3.5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between sm:px-6">
         <h2 className="text-sm font-semibold text-slate-900 dark:text-white" data-testid="hero-title">{scoped ? (s?.scope?.teamCount === 1 ? 'Your team' : 'Your teams') : 'Company status'}</h2>
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">

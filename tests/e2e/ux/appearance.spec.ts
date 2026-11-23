@@ -335,6 +335,79 @@ test.describe('Appearance: battery style', { tag: [TAG.area('ux')] }, () => {
   });
 });
 
+/**
+ * Top light on the Overview's Company status card (src/styles/top-light.css): a lit rim on the top
+ * and side edges plus a haze, in the hero battery's band colour; no light without a score; the flat
+ * 2D appearance keeps the rim only.
+ */
+test.describe('Appearance: top light', { tag: [TAG.area('ux')] }, () => {
+  const BAND_RGB: Record<string, string> = { red: '224, 57, 47', deepAmber: '234, 108, 18', amber: '245, 160, 14', yellow: '236, 208, 34', lightGreen: '147, 209, 85', green: '39, 172, 79' };
+
+  test('APR-09 the Company status card is lit in its battery band colour, follows the score (94, 52, 24), has no light without a score, and keeps only the rim in 2D', async ({ signInAs, page, app }) => {
+    let score: number | null = 94;
+    await page.route(`${API_URL}/analytics/company-summary*`, async (route) => {
+      const res = await route.fetch();
+      const body = await res.json();
+      const o = body.data && 'globalQaScore' in body.data ? body.data : body;
+      o.globalQaScore = score;
+      await route.fulfill({ response: res, json: body });
+    });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await signInAs('admin');
+    const hero = page.getByTestId('company-hero');
+    const light = () => hero.evaluate((el) => {
+      const rim = getComputedStyle(el, '::after');
+      const haze = getComputedStyle(el, '::before');
+      return {
+        band: el.getAttribute('data-top-light'),
+        battery: el.querySelector('[data-battery-band]')?.getAttribute('data-battery-band') ?? null,
+        rim: rim.content === 'none' ? null : rim.backgroundImage,
+        rimEvents: rim.pointerEvents,
+        haze: haze.content === 'none' ? null : haze.backgroundImage,
+        hazeEvents: haze.pointerEvents,
+        title: getComputedStyle(el.querySelector('[data-testid="hero-title"]')!).color,
+      };
+    });
+
+    let titleColour = '';
+    for (const [v, band] of [[94, 'green'], [52, 'amber'], [24, 'red']] as const) {
+      score = v;
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await expect(hero).toHaveAttribute('data-top-light', band);
+      const l = await light();
+      expect(l.battery, `battery band at QA ${v}`).toBe(band);
+      expect(l.rim, `rim at QA ${v}`).toContain(`rgba(${BAND_RGB[band]}`);
+      expect(l.haze, `haze at QA ${v}`).toContain(`rgba(${BAND_RGB[band]}`);
+      // The rim lights the top and fades out going down: no colour at the bottom of the card.
+      expect(l.rim).toMatch(/transparent|rgba\(0, 0, 0, 0\)/);
+      expect([l.rimEvents, l.hazeEvents]).toEqual(['none', 'none']);
+      if (!titleColour) titleColour = l.title;
+      expect(l.title, 'the light never tints the text').toBe(titleColour);
+    }
+
+    // No score: no light, like the battery's empty shell.
+    score = null;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(hero.locator('[data-battery-band]').first()).toHaveAttribute('data-battery-band', 'none');
+    await expect(hero).toHaveAttribute('data-top-light', 'none');
+    const none = await light();
+    expect([none.rim, none.haze]).toEqual([null, null]);
+    expect(await hero.evaluate((el) => el.classList.contains('top-light'))).toBe(false);
+
+    // Flat 2D: the rim stays (band colour), the haze goes.
+    score = 52;
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await expect(hero).toHaveAttribute('data-top-light', 'amber');
+    await app.setScoreDepth('2D');
+    const flat = await light();
+    expect(flat.rim).toContain(`rgba(${BAND_RGB.amber}`);
+    expect(flat.haze).toBeNull();
+    await app.setScoreDepth('3D');
+    expect((await light()).haze).toContain(`rgba(${BAND_RGB.amber}`);
+    await page.evaluate(() => localStorage.removeItem('irongate_score_depth'));
+  });
+});
+
 test.describe('Appearance accessibility', { tag: [TAG.a11y, TAG.area('ux')] }, () => {
   const cases = [
     { id: 'A11Y-20', theme: 'Light', display: 'Gauge' },
