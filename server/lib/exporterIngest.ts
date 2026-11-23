@@ -18,17 +18,21 @@ export class EnvelopeError extends Error {
 }
 
 /** The envelope kinds and the ingestion handler each one goes through. */
-export const EXPORTER_KINDS = ['test-report', 'coverage', 'pipeline-runs', 'deployments', 'commits', 'incidents', 'issues', 'sarif', 'kpis'] as const;
+export const EXPORTER_KINDS = ['test-report', 'coverage', 'pipeline-runs', 'deployments', 'commits', 'incidents', 'issues', 'sarif', 'kpis',
+  'performance', 'test-management', 'pull-requests', 'calendar'] as const;
 export type ExporterKind = (typeof EXPORTER_KINDS)[number];
-export type HandlerKind = 'tests' | 'coverage' | 'pipelines' | 'deployments' | 'commits' | 'incidents' | 'issues' | 'static-analysis' | 'kpis';
+export type HandlerKind = 'tests' | 'coverage' | 'pipelines' | 'deployments' | 'commits' | 'incidents' | 'issues' | 'static-analysis' | 'kpis'
+  | 'performance' | 'test-management' | 'pull-requests' | 'calendar';
 export const HANDLER_OF: Record<ExporterKind, HandlerKind> = {
   'test-report': 'tests', coverage: 'coverage', 'pipeline-runs': 'pipelines', deployments: 'deployments', commits: 'commits',
   incidents: 'incidents', issues: 'issues', sarif: 'static-analysis', kpis: 'kpis',
+  performance: 'performance', 'test-management': 'test-management', 'pull-requests': 'pull-requests', calendar: 'calendar',
 };
 
 /** Items per envelope (the limits of the handler each kind goes through). */
 export const MAX_ITEMS: Record<ExporterKind, number> = {
   'test-report': 50, coverage: 50, sarif: 50, 'pipeline-runs': 100, deployments: 500, commits: 500, incidents: 500, issues: 1000, kpis: 100,
+  performance: 20, 'test-management': 2000, 'pull-requests': 1000, calendar: 2000,
 };
 export const MAX_FILES_PER_REPORT = 50;
 
@@ -156,6 +160,12 @@ export function submissionsOf(env: Envelope): Submission[] {
     });
     return [{ handler, index: null, body: Buffer.from(JSON.stringify(list), 'utf8'), contentType: 'application/json', query: {} }];
   }
+  // Load-test results, test management records, pull requests and calendar days (server/routes/ingestMore.ts): the items go
+  // to the handler as one list; it checks every field of every item (an unknown field is refused there).
+  if (env.kind === 'performance' || env.kind === 'test-management' || env.kind === 'pull-requests' || env.kind === 'calendar') {
+    env.items.forEach((raw, i) => { if (!isObj(raw)) throw new EnvelopeError(400, `items[${i}] must be an object`); });
+    return [{ handler, index: null, body: Buffer.from(JSON.stringify(env.items), 'utf8'), contentType: 'application/json', query: { team, source: env.source } }];
+  }
   // Event kinds: the items go to the handler as one list, in its QE Navigator JSON format. No field is silently
   // ignored: a field the parser does not read (or an alias of one) is refused.
   for (const [i, raw] of env.items.entries()) {
@@ -194,7 +204,8 @@ export interface HeartbeatBody { exporter: string; version: string; sources: Arr
 const SEMVER = /^\d{1,4}\.\d{1,5}\.\d{1,6}$/;
 /** qe-exporter/<version>; qe-collector/<version> from releases before 0.3.0. */
 const CLIENT = /^(qe-exporter|qe-collector)\/(\d{1,4}\.\d{1,5}\.\d{1,6}[0-9A-Za-z.+-]{0,20})$/;
-export const SOURCE_TYPES = ['jira', 'linear', 'pagerduty', 'opsgenie', 'github', 'gitlab', 'jenkins', 'azure-devops', 'sonarqube', 'bitbucket', 'bitbucket-dc'];
+export const SOURCE_TYPES = ['jira', 'linear', 'pagerduty', 'opsgenie', 'github', 'gitlab', 'jenkins', 'azure-devops', 'sonarqube', 'bitbucket', 'bitbucket-dc',
+  'testrail', 'xray', 'zephyr', 'google-calendar', 'microsoft-365', 'kpis'];
 
 /** Validate a heartbeat: the version, the sources with their status (no data). Fields of releases before 0.3.0 are accepted and ignored. */
 export function validateHeartbeat(body: unknown): HeartbeatBody {

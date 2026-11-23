@@ -34,10 +34,10 @@ export function canCompareTeams(actor: PolicyActor): boolean {
 }
 
 /**
- * Not offered to a company in live operation (server/lib/liveData.ts): the page for typing metrics, and the
- * modules whose data no connected tool holds (Performance: no source; Developer productivity: typed only).
+ * Not offered to a company in live operation (server/lib/liveData.ts): the page for typing metrics. Every module
+ * has a raw source (Performance: load-test result files; Developer productivity: pull requests and calendars).
  */
-export const LIVE_HIDDEN_VIEWS: readonly string[] = ['manual-metrics', 'performance-metrics', 'developer-productivity'];
+export const LIVE_HIDDEN_VIEWS: readonly string[] = ['manual-metrics'];
 
 export function canOpenView(actor: PolicyActor | null | undefined, view: string): boolean {
   if (!actor || !actor.id) return view === 'dashboard';

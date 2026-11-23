@@ -35,6 +35,7 @@ import {
   type Envelope, type HandlerKind, type Submission,
 } from '../lib/exporterIngest';
 import { rawIngestHandler, summaryItem, text } from './ingestRaw';
+import { moreIngestHandler } from './ingestMore';
 import { deliveryIngestHandler } from './ingestDelivery';
 import { handleIssues, handleStaticAnalysis } from './ingestWork';
 import { handleKpis } from './ingest';
@@ -55,6 +56,10 @@ const HANDLERS: Record<HandlerKind, IngestHandler> = {
   'static-analysis': handleStaticAnalysis,
   // Called lazily: server/routes/ingest.ts mounts this router, so its exports are read at request time.
   kpis: (req, res) => handleKpis(req, res),
+  performance: moreIngestHandler('performance'),
+  'test-management': moreIngestHandler('test-management'),
+  'pull-requests': moreIngestHandler('pull-requests'),
+  calendar: moreIngestHandler('calendar'),
 };
 
 /** The one answer for an id that is not the caller's to write to, whether it exists elsewhere or not at all. */

@@ -19,6 +19,8 @@ import { KPI_COLUMNS, recordKpiValues, withTransaction, type KpiColumn } from '.
 import { computeDeliveryDays, WINDOW_DAYS, CHANGE_FAILURE_WINDOW_HOURS } from './delivery';
 import { computeWorkDays, phase3Tables, SPRINT_STALE_DAYS } from './work';
 import { computeQualityDays, REPORT_STALE_DAYS } from './quality';
+import { automationTables, computeAutomationDays } from './automation';
+import { refreshRecentDeveloperMetrics } from '../developerFromRaw';
 import { buildMetrics, ALL_GROUPS, confidenceFor, type ComputedMetric, type Confidence, type MetricGroup, type MetricSpec } from '../../../packages/engine/src/index';
 import { computeCiDay, pickCoverageReport, type CiData } from '../../../packages/engine/src/calc/ci';
 
@@ -123,6 +125,7 @@ export async function recomputeTeamDays(client: pg.PoolClient, teamId: string, d
   const delivery = groups.includes('delivery') ? await computeDeliveryDays(client, teamId, list) : none;
   const work = groups.includes('work') ? await computeWorkDays(client, teamId, list) : none;
   const quality = groups.includes('quality') ? await computeQualityDays(client, teamId, list) : none;
+  const automation = groups.includes('automation') ? await computeAutomationDays(client, teamId, list) : none;
   const groupKeys = Object.keys(METRICS).filter((k) => groups.includes(groupOf(k)));
   // Sample (demo) issues and static-analysis reports are evidence only: never written as KPI values.
   const sampleOnly = new Set<MetricGroup>();
@@ -137,7 +140,7 @@ export async function recomputeTeamDays(client: pg.PoolClient, teamId: string, d
   // one multi-row upsert, one delete of the values that have no data any more) and the KPI values day by day.
   const perDay = new Map<string, ComputedMetric[]>();
   for (const day of list) {
-    const computed = [...(groups.includes('ci') ? await computeTeamDay(client, teamId, day) : []), ...(delivery.get(day) ?? []), ...(work.get(day) ?? []), ...(quality.get(day) ?? [])];
+    const computed = [...(groups.includes('ci') ? await computeTeamDay(client, teamId, day) : []), ...(delivery.get(day) ?? []), ...(work.get(day) ?? []), ...(quality.get(day) ?? []), ...(automation.get(day) ?? [])];
     // One value per metric and day (a later one replaces an earlier one, as consecutive upserts did).
     perDay.set(day, Array.from(new Map(computed.map((m) => [m.key, m])).values()));
   }
@@ -273,11 +276,12 @@ export async function recomputeTeamRange(client: pg.PoolClient, teamId: string, 
   const delivery = groups.includes('delivery') ? await computeDeliveryDays(client, teamId, list) : none;
   const work = groups.includes('work') ? await computeWorkDays(client, teamId, list) : none;
   const quality = groups.includes('quality') ? await computeQualityDays(client, teamId, list) : none;
+  const automation = groups.includes('automation') ? await computeAutomationDays(client, teamId, list) : none;
   const groupKeys = Object.keys(METRICS).filter((k) => groups.includes(groupOf(k)));
   const results: DayResult[] = [];
   const out: unknown[][] = [];
   for (const day of list) {
-    const computed = [...(ci ? computeCiDay(day, ci) : []), ...(delivery.get(day) ?? []), ...(work.get(day) ?? []), ...(quality.get(day) ?? [])];
+    const computed = [...(ci ? computeCiDay(day, ci) : []), ...(delivery.get(day) ?? []), ...(work.get(day) ?? []), ...(quality.get(day) ?? []), ...(automation.get(day) ?? [])];
     const res: DayResult = { day, metrics: [] };
     for (const m of computed) {
       const spec = METRICS[m.key];
@@ -336,6 +340,7 @@ export async function refreshFlakyEvidence(client: pg.PoolClient, teamId: string
 export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CALC_RECOMPUTE_BUDGET_MS) || 25_000): Promise<{ teams: number; values: number; skipped: number }> {
   const started = Date.now();
   const phase3 = await (async () => { const c = await pool.connect(); try { return await phase3Tables(c); } finally { c.release(); } })();
+  const automation = await (async () => { const c = await pool.connect(); try { return await automationTables(c); } finally { c.release(); } })();
   const teams = (await pool.query(
     `SELECT team_id FROM (
        SELECT team_id FROM test_runs WHERE day >= CURRENT_DATE - $1::int AND NOT is_sample
@@ -347,7 +352,9 @@ export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CA
        ${phase3 ? `-- Work values look back up to 42 days (the latest closed sprint), code quality 30 days (the latest report).
        UNION SELECT team_id FROM issues WHERE (opened_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} OR resolved_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} OR resolved_at IS NULL) AND NOT is_sample
        UNION SELECT team_id FROM issue_sprints WHERE completed_at >= CURRENT_DATE - $1::int - ${SPRINT_STALE_DAYS} AND NOT is_sample
-       UNION SELECT team_id FROM analysis_reports WHERE day >= CURRENT_DATE - $1::int - ${REPORT_STALE_DAYS} AND NOT is_sample` : ''}) x
+       UNION SELECT team_id FROM analysis_reports WHERE day >= CURRENT_DATE - $1::int - ${REPORT_STALE_DAYS} AND NOT is_sample` : ''}
+       ${automation ? `-- Automation coverage is the state of the test cases: a team with cases has a value every day.
+       UNION SELECT team_id FROM tm_cases WHERE NOT archived` : ''}) x
       ORDER BY md5(team_id || CURRENT_DATE::text)` /* a different order every day: no team waits behind the budget twice */, [days])).rows;
   let values = 0;
   let done = 0;
@@ -361,6 +368,8 @@ export async function recomputeRecent(days = 8, budgetMs = Number(process.env.CA
     });
     done++;
   }
+  // The developer metrics calculated from pull requests and calendars follow the same nightly run (their window moves on).
+  await refreshRecentDeveloperMetrics(pool, Math.max(2_000, budgetMs - (Date.now() - started))).catch((e) => console.error('[developer-metrics] nightly refresh failed:', (e as Error).message));
   return { teams: done, values, skipped: teams.length - done };
 }
 

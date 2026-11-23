@@ -4,12 +4,12 @@ import { signInWithForm } from '../support/auth';
 
 /**
  * LIVE-UI-01: a company in live operation (companies.settings.liveDataOnly, set by platform support in the
- * operator panel; server/lib/liveData.ts) is not offered the page for typing metrics, nor the modules no
- * connected tool feeds (Performance, Developer productivity): not in the navigation, and their addresses
- * answer "You don't have access". With the setting off they are there as before.
+ * operator panel; server/lib/liveData.ts) is not offered the page for typing metrics: not in the navigation,
+ * and its address answers "You don't have access". Every module stays (each has a raw source). With the
+ * setting off Manual metrics is there as before.
  */
 test.describe('Live data only', { tag: [TAG.area('admin')] }, () => {
-  test('LIVE-UI-01 typed-metric pages are offered only while the company is not in live operation', async ({ freshCompany, page, app }) => {
+  test('LIVE-UI-01 Manual metrics is offered only while the company is not in live operation', async ({ freshCompany, page, app }) => {
     await page.goto('/');
     await signInWithForm(page, { email: freshCompany.email, password: freshCompany.password });
     await expect(page.getByTestId('nav-manual-metrics')).toHaveCount(1, { timeout: 30000 });
@@ -21,9 +21,9 @@ test.describe('Live data only', { tag: [TAG.area('admin')] }, () => {
     await signInWithForm(page, { email: freshCompany.email, password: freshCompany.password });
     await expect(page.getByTestId('nav-admin')).toHaveCount(1, { timeout: 30000 });
     await expect(page.getByTestId('nav-manual-metrics')).toHaveCount(0);
-    await expect(page.getByTestId('nav-performance-metrics')).toHaveCount(0);
-    await expect(page.getByTestId('nav-developer-productivity')).toHaveCount(0);
-    // The modules fed by raw data stay.
+    // Every module stays: each one is fed by raw data.
+    await expect(page.getByTestId('nav-performance-metrics')).toHaveCount(1);
+    await expect(page.getByTestId('nav-developer-productivity')).toHaveCount(1);
     await expect(page.getByTestId('nav-flaky-test-intelligence')).toHaveCount(1);
     await expect(page.getByTestId('nav-pipeline-visualization')).toHaveCount(1);
 

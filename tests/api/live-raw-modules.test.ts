@@ -17,7 +17,7 @@ import { createGolden, removeGolden, GOLDEN_ADMIN_EMAIL, GOLDEN_COMPANY } from '
  *   LRM-06  SonarQube's coverage totals (Exporter envelope): accepted, the percentage calculated here
  *   LIVE-01 the setting reaches the signed-in user (/auth/me)
  *   LIVE-02 Manual metrics, developer metrics: refused (403, code live_data_only)
- *   LIVE-03 POST /ingest/kpis: a calculated KPI is refused, a KPI without a raw source is accepted
+ *   LIVE-03 POST /ingest/kpis: a finished value is refused for every KPI (all 23 are calculated from raw data)
  *   LIVE-04 Business impact: typed quality values refused or left out; business figures saved
  *   LIVE-05 with the setting off again, manual entry works as before
  */
@@ -169,16 +169,14 @@ describe('Live data only', () => {
     expect(Number((await db.query(`SELECT COUNT(*) AS n FROM metric_values WHERE team_id = $1 AND source = 'manual'`, [TEAM])).rows[0].n)).toBe(0);
   });
 
-  it('LIVE-03 a finished value is refused for a calculated KPI and accepted for one with no raw source', async () => {
+  it('LIVE-03 a finished value is refused: every KPI is calculated from raw data', async () => {
     if (!up) return;
     const kpis = (metrics: object) => request(API_URL).post('/api/ingest/kpis').set('Authorization', `Bearer ${apiKey}`).send({ teamId: TEAM, source: 'jenkins', metrics });
     const refused = await kpis({ test_coverage: 80, automation_coverage: 61.5 });
     expect(refused.status).toBe(400);
     expect(JSON.stringify(refused.body)).toContain('test_coverage is calculated by QE Navigator');
-    expect(JSON.stringify(refused.body)).not.toContain('automation_coverage is calculated');
-    const ok = await kpis({ automation_coverage: 61.5 });
-    expect(ok.status).toBe(200);
-    expect(ok.body.status).toBe('accepted');
+    expect(JSON.stringify(refused.body)).toContain('automation_coverage is calculated by QE Navigator');
+    expect((await kpis({ automation_roi: 12 })).status).toBe(400);
   });
 
   it('LIVE-04 Business impact: quality values are not typed; business figures are', async () => {

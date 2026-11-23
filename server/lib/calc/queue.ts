@@ -48,7 +48,7 @@ export const KICK_HOLD_SECONDS = 15 * 60;
 /** Time budget of one background run (the function is stopped at 15 minutes). */
 export const BACKGROUND_BUDGET_MS = Number(process.env.CALC_DRAIN_BUDGET_MS) || 12 * 60_000;
 
-const KINDS: readonly MetricGroup[] = ['ci', 'delivery', 'work', 'quality'];
+const KINDS: readonly MetricGroup[] = ['ci', 'delivery', 'work', 'quality', 'automation'];
 const DAY = 86_400_000;
 
 /* ------------------------------------------------------------------------------------------

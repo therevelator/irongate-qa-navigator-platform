@@ -24,7 +24,7 @@ test('only relative imports and node:crypto / node:zlib', () => {
 
 test('the version and the metric catalogue', () => {
   assert.match(E.ENGINE_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.equal(Object.keys(E.METRICS).length, 30);
+  assert.equal(Object.keys(E.METRICS).length, 32);
   for (const m of Object.values(E.METRICS)) assert.ok(m.formula && m.unit && m.label, m.key);
   assert.equal(E.EVIDENCE_FOR_KPI.test_coverage, 'line_coverage');
   assert.match(E.buildMetrics({ changeFailureWindowHours: 48 }).change_failure_rate.formula, /within 48 h/);

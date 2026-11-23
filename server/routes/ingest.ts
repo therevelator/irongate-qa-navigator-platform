@@ -19,6 +19,7 @@ import rawIngestRoutes from './ingestRaw';
 import deliveryIngestRoutes from './ingestDelivery';
 import workIngestRoutes from './ingestWork';
 import exporterIngestRoutes from './ingestExporter';
+import moreIngestRoutes from './ingestMore';
 import { logRejected, requestHash, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 
 const router = express.Router();
@@ -241,6 +242,7 @@ function sourcesOf(items: ItemSummary[]): string | null {
 router.use(rawIngestRoutes);
 router.use(deliveryIngestRoutes);
 router.use(workIngestRoutes);
+router.use(moreIngestRoutes);
 router.use(exporterIngestRoutes);
 
 export default router;

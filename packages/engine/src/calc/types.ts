@@ -1,7 +1,7 @@
 /** Types shared by the metric calculations. */
 
-export type MetricGroup = 'ci' | 'delivery' | 'work' | 'quality';
-export const ALL_GROUPS: MetricGroup[] = ['ci', 'delivery', 'work', 'quality'];
+export type MetricGroup = 'ci' | 'delivery' | 'work' | 'quality' | 'automation';
+export const ALL_GROUPS: MetricGroup[] = ['ci', 'delivery', 'work', 'quality', 'automation'];
 
 export interface MetricSpec {
   key: string;
@@ -10,7 +10,7 @@ export interface MetricSpec {
   /** The KPI column the value is written to (dashboards, alerts, targets, QA score), or null when the value is evidence only. */
   kpi: string | null;
   formula: string;
-  /** 'ci' (phase 1: tests, coverage, pipelines; default), 'delivery' (phase 2: deployments, incidents), 'work' (phase 3: issues) or 'quality' (phase 3: static analysis). */
+  /** 'ci' (phase 1: tests, coverage, pipelines; default), 'delivery' (phase 2: deployments, incidents), 'work' (phase 3: issues), 'quality' (phase 3: static analysis) or 'automation' (test management: cases and executions). */
   group?: MetricGroup;
 }
 

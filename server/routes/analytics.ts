@@ -29,7 +29,7 @@ import { correlationSummaryHtml } from '../lib/correlationSummary';
 import { BI_CONTEXT_RANGES, BI_KPI_RANGES, BI_QUALITY_RANGES, DEBT_IMPACT_FIELDS, bulkMonthErrors, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 import { markValueSources } from '../lib/businessImpactSources';
 import { isLiveDataOnly, LIVE_MANUAL_MESSAGE } from '../lib/liveData';
-import { rawFlakyTests, rawPipelineHistory, rawPipelineStages, rawTestExecutions, RAW_FLAKY_SCORE_FORMULA } from '../lib/analyticsFromRaw';
+import { rawFlakyTests, rawPerformance, rawPipelineHistory, rawPipelineStages, rawTestExecutions, RAW_FLAKY_SCORE_FORMULA } from '../lib/analyticsFromRaw';
 
 /** The monthly Business impact columns of each table (the values whose source is recorded). */
 const BI_QUALITY_COLS = BI_QUALITY_RANGES.map((r) => r.column);
@@ -362,6 +362,11 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
     if (!scope) return;
     const teamId = scope.teamId;
 
+    // The load-test results the team's pipelines keep (k6, JMeter, Gatling), when any were received: per day and
+    // endpoint the latest run. The older module table holds sample data only.
+    const raw = await rawPerformance({ companyId, teamId }, numDays);
+    if (raw) return res.json({ metrics: raw.metrics, source: 'ci', sample: raw.sample });
+
     let sql = `
       SELECT 
         pm.id,
@@ -402,7 +407,7 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
       timestamp: m.timestamp
     }));
 
-    res.json({ metrics: result });
+    res.json({ metrics: result, source: 'module', sample: false });
   } catch (error) {
     console.error('Error fetching performance metrics:', error);
     res.status(500).json({ error: 'Failed to fetch performance metrics' });

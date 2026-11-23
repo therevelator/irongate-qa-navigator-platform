@@ -5,6 +5,7 @@
  *   Flaky tests       flaky_test_evidence + test_results / test_runs
  *   Test execution    test_runs
  *   CI/CD pipeline    pipeline_stage_runs + pipeline_runs_raw
+ *   Performance       performance_results + performance_runs (load-test result files: k6, JMeter, Gatling)
  *
  * Each function returns null when the scope (one team, or every team of the company the caller may
  * see) has no raw data of that kind at all; the route then falls back to the older module tables
@@ -37,7 +38,7 @@ function scopeSql(alias: string, s: RawScope): { sql: string; params: unknown[] 
 const n = (v: unknown): number | null => (v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v));
 const round = (v: number, d = 1): number => Math.round(v * 10 ** d) / 10 ** d;
 
-async function hasRows(table: 'test_runs' | 'pipeline_runs_raw', s: RawScope): Promise<{ any: boolean; sampleOnly: boolean }> {
+async function hasRows(table: 'test_runs' | 'pipeline_runs_raw' | 'performance_runs', s: RawScope): Promise<{ any: boolean; sampleOnly: boolean }> {
   const w = scopeSql('x', s);
   const r = await queryOne<any>(
     `SELECT EXISTS (SELECT 1 FROM ${table} x WHERE ${w.sql}) AS any_rows,
@@ -296,4 +297,53 @@ export async function rawPipelineHistory(s: RawScope, days: number): Promise<{ h
     };
   });
   return { history, sample: has.sampleOnly };
+}
+
+// ---------------------------------------------------------------------------------------------
+// Performance: load-test results
+// ---------------------------------------------------------------------------------------------
+
+export interface RawPerformanceRow {
+  id: string;
+  endpoint: string;
+  method: null;
+  response_time_p50: number | null;
+  response_time_p95: number | null;
+  response_time_p99: number | null;
+  /** Requests per minute. */
+  throughput: number | null;
+  error_rate: number | null;
+  recorded_date: string;
+  timestamp: string;
+  tool: string;
+  run: string;
+  requests: number | null;
+}
+
+/**
+ * The load-test results of the scope in the last `days` days: per day and endpoint, the values of the latest run
+ * of that day (one run's own percentiles; runs are never averaged together). null when the scope never sent a
+ * load-test result, or the tables do not exist yet (a deploy before migration 20261209000000).
+ */
+export async function rawPerformance(s: RawScope, days: number): Promise<{ metrics: RawPerformanceRow[]; sample: boolean } | null> {
+  const exists = await queryOne<any>(`SELECT to_regclass('public.performance_runs') IS NOT NULL AS ok`, []);
+  if (!exists?.ok) return null;
+  const has = await hasRows('performance_runs', s);
+  if (!has.any) return null;
+  const w = scopeSql('p', s);
+  const rows = await query<any[]>(
+    `SELECT DISTINCT ON (p.team_id, p.day, r.endpoint)
+            r.id, r.endpoint, r.requests, r.p50_ms::float8 AS p50, r.p95_ms::float8 AS p95, r.p99_ms::float8 AS p99,
+            r.throughput_per_minute::float8 AS tpm, r.error_rate::float8 AS error_rate, to_char(p.day, 'YYYY-MM-DD') AS day, p.tool, p.run_key
+       FROM performance_results r JOIN performance_runs p ON p.id = r.run_id
+      WHERE ${w.sql} AND p.day >= CURRENT_DATE - CAST(? AS INTEGER)
+      ORDER BY p.team_id, p.day DESC, r.endpoint, p.started_at DESC LIMIT 500`, [...w.params, days]);
+  const metrics = (rows as any[]).map((r): RawPerformanceRow => ({
+    id: r.id, endpoint: r.endpoint, method: null,
+    response_time_p50: n(r.p50) === null ? null : Math.round(n(r.p50) as number), response_time_p95: n(r.p95) === null ? null : Math.round(n(r.p95) as number),
+    response_time_p99: n(r.p99) === null ? null : Math.round(n(r.p99) as number),
+    throughput: n(r.tpm) === null ? null : Math.round(n(r.tpm) as number), error_rate: n(r.error_rate),
+    recorded_date: r.day, timestamp: r.day, tool: r.tool, run: r.run_key, requests: n(r.requests),
+  }));
+  return { metrics, sample: has.sampleOnly };
 }
