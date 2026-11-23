@@ -63,6 +63,14 @@ with `privacy.sendTitles` / `sendLinks` (default off); people only as `HMAC-SHA2
 (QE Navigator never receives the salt). Commit authors, where a source gives them in a commit list, are turned into a
 salted hash by QE Navigator and never stored as names.
 
+**The one exception, off by default: developer metrics.** With `privacy.developerMetrics: true` the author of a pull request and
+the person of a calendar day are sent as `sha256(lower(e-mail address) + ":" + your company id)`. This is a pseudonym, not
+anonymisation: QE Navigator can compute the same value for the e-mail addresses of its own users, which is how a record is
+matched to a user. QE Navigator keeps it only when it matches an active user who enabled developer insights; a pull request
+of anyone else is stored without an author and a calendar day of anyone else is not stored. From a calendar only free/busy
+is requested (start and end of busy intervals): no title, attendee, location or description. With the setting off, pull
+requests are sent without an author, the author's e-mail address is not even read, and calendars are not sent.
+
 ## 4. Exact fields
 
 ### 4.1 The envelope
@@ -82,10 +90,16 @@ salted hash by QE Navigator and never stored as names.
 | `test-report` | `commit`, `branch`, `run`, `attempt`, `startedAt`, `format` (when written out here), `files[]` (`name`, `content`: the minimised report text) |
 | `coverage` | the same, plus `changedLines` (`{"path": [line numbers]}` of the run's commit) |
 | `sarif` | the same, plus `repo`, `loc` (lines of code, SonarQube); one minimised SARIF file per item |
+| `coverage` from SonarQube (only with `coverage: true`) | four totals of the latest analysis (lines to cover, lines covered, conditions to cover, conditions covered) as a coverage file of totals, with `repo` and `loc`; no file names |
 | `deployments` | `id`, `environment`, `production`, `service`, `commit`, `previousCommit`, `startedAt`, `finishedAt`, `result`, `rollbackOf`, `hotfix`, `url` (only with `sendLinks`), `commits[]` (`sha`, `authoredAt`, `committedAt`) |
 | `issues` | `key`, `type`, `status`, `statusCategory`, `resolution`, `environment` (production / pre-release only), `storyPoints`, `estimateHours`, `timeLoggedHours`, `createdAt`, `resolvedAt`, `updatedAt`, `sprints[]` (id, state, dates; names with `sendTitles`), `transitions[]` (status / sprint / flagged changes with their times); opt-in `title`, `url`, `assigneeHash` (`qe-exporter check` prints the list for your settings) |
 | `incidents` | `id`, `service`, `severity`, `status`, `at`, `openedAt`, `acknowledgedAt`, `resolvedAt`, `updates[]` (status, time), `deploymentId`, `category`, `outage`; opt-in `title`, `url`, `responderHash` |
 | `kpis` | `recordedAt`, `metrics` (QE Navigator KPI columns → numbers, from your own KPI file) |
+| `performance` | `run`, `attempt`, `commit`, `branch`, `repo`, `startedAt`, `files[]`: a k6 summary export reduced to the HTTP metrics (duration percentiles, request count and rate, failed share), JMeter's `statistics.json` or Gatling's `stats.json` reduced to the numbers per request name; a query string in a request name is cut; thresholds, checks, tags and options are dropped |
+| `pull-requests` | `id` (the number), `repo`, `state`, `openedAt`, `firstReviewAt`, `mergedAt`, `closedAt`; `author` only with `privacy.developerMetrics: true`, as the pseudonym of section 3. No title, branch, description, reviewer or comment |
+| `test-management` | a case: `type`, `key`, `automated`, `manualEstimateSeconds`, `archived`, `updatedAt`; an execution: `type`, `key`, `case`, `automated`, `status`, `executedAt`, `durationSeconds`. No title, step, precondition, comment or person |
+| `calendar` (only with `privacy.developerMetrics: true`) | `person` (the pseudonym), `day`, `workStart`, `workEnd`, `utcOffsetMinutes`, `outOfOffice`, `busy[]` (`start`, `end`). Only free/busy is requested from the calendar service: no title, attendee, location or description is read |
+| `discovery` (from 0.5.0; one per team and CI source, per run) | `from`, `to` (the window the run read), `counts` (`pipelineRuns`, `testReports`, `coverageReports`, `sarifReports`, `deployments`, `commits`, `pullRequests`, `performanceRuns`), `runsWithoutTests`, `runsWithoutCoverage`, `unmapped` (at most 50 names of jobs, pipelines or repositories that are not mapped to a team). Counts and names only: no record of the tool, no person |
 
 ### 4.3 Heartbeat (every run)
 
@@ -147,6 +161,12 @@ host other than its base URL (a "next" link or a download URL pointing elsewhere
 | Linear | Personal API key, permission **Read**, or OAuth with your own application (scope read) | Membership of the teams read | GraphQL queries only (no mutation exists in the code) |
 | PagerDuty | **Read-only** REST API key | | `GET /log_entries`, `GET /incidents/{id}/log_entries`, `GET /services` (check) |
 | Opsgenie | API integration key with **Read** access only | | `GET /v2/alerts`, `GET /v2/teams` |
+| Pull requests (with `pullRequests: true`) | the Git tool's credential above | GitHub: also **Pull requests: read**; GitLab: `read_api`; Bitbucket Cloud: also **Pull requests: Read**; Azure DevOps: **Code (Read)** | GitHub `GET /repos/{r}/pulls`, `/pulls/{n}/reviews`, `/pulls/{n}/commits`; GitLab `GET /projects/{id}/merge_requests`, `…/notes`, `…/commits`; Bitbucket `GET /repositories/{r}/pullrequests`, `…/activity`, `…/commits`; Azure `GET _apis/git/pullrequests`, `…/threads` |
+| TestRail | E-mail + API key of a dedicated user (Basic) | A **read-only** role on the projects | `GET get_case_types`, `get_project`, `get_suites`, `get_cases`, `get_runs`, `get_tests`, `get_results_for_run` |
+| Xray Cloud | Xray API key (client id + secret), exchanged at `POST /authenticate` | Browse on the projects | GraphQL queries `getTests`, `getTestExecutions` (never a mutation) |
+| Zephyr Scale Cloud | API access token (Bearer) | Browse on the projects | `GET /testcases`, `/testexecutions`, `/statuses` |
+| Google Calendar | Service account with domain-wide delegation, acting as one user of your domain | Scope **calendar.freebusy** only | `POST <token endpoint>` (signed assertion), `POST /calendar/v3/freeBusy` (a query) |
+| Microsoft 365 | App registration, client credentials | Application permission **Calendars.ReadBasic.All** only | `POST /{tenant}/oauth2/v2.0/token`, `POST /v1.0/users/{user}/calendar/getSchedule` (a query) |
 | QE Navigator | Company API key `igk_…` (Admin console → API keys) | Ingestion only: writes data for your company's teams, reads nothing. Use one key per Exporter so it can be revoked alone. | |
 
 Rate limits are respected: 429 / 5xx and GitHub's secondary limits (403 with Retry-After) are retried with jittered backoff
@@ -193,13 +213,13 @@ npm run build                    # prints the size and the SHA-256, writes dist/
 sha256sum -c dist/SHA256SUMS
 ```
 
-The image: `docker build -f exporter/Dockerfile -t qe-exporter:0.3.0 .` from the repository root
+The image: `docker build -f exporter/Dockerfile -t qe-exporter:0.5.0 .` from the repository root
 (`exporter/Dockerfile.dockerignore` sends only the Exporter and the shared allow-list) runs the type check, the allow-list
 drift check, the build and the tests, then copies only `qe-exporter.mjs` and `SHA256SUMS` into a distroless base pinned by
 digest. To check the file inside an image against your own build:
 
 ```bash
-docker run --rm --entrypoint /nodejs/bin/node qe-exporter:0.3.0 -e \
+docker run --rm --entrypoint /nodejs/bin/node qe-exporter:0.5.0 -e \
   "const f=require('fs');console.log(require('crypto').createHash('sha256').update(f.readFileSync('/app/qe-exporter.mjs')).digest('hex'))"
 ```
 
@@ -215,7 +235,8 @@ Verified: unit and stand-in tests for every connector (pagination, rate limits, 
 credentials, expired and oversized artifacts, zip bombs, XML entities), the minimisation of report files, the setup page
 (loopback only, the token, Host and Origin checks, the credentials file's modes, no secret in logs, preview or diagnostics),
 and end-to-end tests against a local QE Navigator with stand-in vendors. Not verified: runs against the real GitHub, GitLab,
-Bitbucket, Jenkins, Azure DevOps, SonarQube, Jira, Linear, PagerDuty and Opsgenie services, and the OAuth flows against
+Bitbucket, Jenkins, Azure DevOps, SonarQube, Jira, Linear, PagerDuty, Opsgenie, TestRail, Xray, Zephyr Scale, Google Calendar
+and Microsoft 365 services, and the OAuth flows against
 the real vendors (the stand-ins follow their documented responses; a first `check` and `preview` on your side is the real
 test).
 

@@ -360,7 +360,7 @@ company app's handler as a super admin of that company, without a user id):
 - **Companies**: create (first department and team, and a first person with a password or an
   invitation; their role is Super admin by default, or Manager of the first department, or Team lead /
   Software engineer / Viewer of the first team: "Every company needs a super admin to manage it; you can
-  also manage it yourself from this panel."), edit the name, e-mail domain and "hide the sample-data notices", how long sign-ins last,
+  also manage it yourself from this panel."), edit the name, e-mail domain, "hide the sample-data notices" and "Live data only" (section 4.3: metrics only from raw data, nothing typed), how long sign-ins last,
   **Suspend** / **Reactivate**, **Delete** (type the company's name; every table of the company goes);
 - **Departments**: add, edit, add / remove managers, delete (refused while it has active teams or people);
 - **Teams**: add, edit, move to another department, set the lead, archive / restore, delete for good
@@ -518,8 +518,8 @@ QE Navigator calculates the metric itself (source `computed`; formulas in
 
 **Where they come from today:** the KPI ingestion API (`POST /api/ingest/kpis`, any source label) or Manual
 metrics (source `manual`), generated sample data (source `synthetic`), values calculated from raw data (source `computed`: also
-the raw data a customer's QE Navigator Exporter sends, section 4.2d) or KPI values an Exporter sends for metrics with no raw source
-(source `exporter.<source>`).
+the raw data a customer's QE Navigator Exporter sends, section 4.2d; all 23 KPIs have a raw source) or finished KPI values an Exporter
+sends from a KPI file when the company is not in live operation (source `exporter.<source>`).
 **Where they should come from in production:** the systems in the last column, via a small job or CI step
 that reads them and pushes to the ingestion API.
 
@@ -534,11 +534,11 @@ and can be changed per company in **Administration → Update frequency** (a "mo
 | Metric (`column`) | Formula (at the source) | Unit, range | Better | Target / watch | Update interval | Production source |
 |---|---|---|---|---|---|---|
 | Test coverage (`test_coverage`) | lines executed by automated tests ÷ total executable lines × 100 | %, 0–100 | higher | ≥ 80 / ≥ 70 | 1 day | SonarQube / SonarCloud `coverage`; JaCoCo (Java); Istanbul / nyc (JavaScript), via Jenkins or GitHub Actions |
-| Test flakiness rate (`test_flakiness_rate`) | flaky test runs ÷ total test runs × 100 (flaky = same test failed and passed on the same commit) | %, 0–100 | lower | ≤ 2 / ≤ 5 | 1 day | JUnit XML across reruns; Jenkins test report API; GitHub Actions re-run attempts |
+| Test flakiness rate (`test_flakiness_rate`) | from raw test reports: flaky tests ÷ distinct tests run in the last 7 days × 100 (flaky = the same test failed and passed on the same commit); as a finished value: flaky test runs ÷ total test runs × 100 | %, 0–100 | lower | ≤ 2 / ≤ 5 | 1 day | JUnit XML across reruns; Jenkins test report API; GitHub Actions re-run attempts |
 | Defect density (`defect_density`) | confirmed bugs in the period ÷ (lines of code ÷ 1,000) | defects per KLOC, 0–999.999 | lower | ≤ 0.5 / ≤ 1.0 | 1 week | Jira bug count (JQL) ÷ SonarQube `ncloc` |
 | Defect escape rate (`defect_escape_rate`) | bugs found in production ÷ all bugs found × 100 | %, 0–100 | lower | ≤ 5 / ≤ 10 | 1 week | Jira bugs split by environment / "found in" field; optionally Zendesk / ServiceNow tickets linked to Jira |
 | Code quality score (`code_quality_score`) | Maintainability rating × 0.40 + Reliability × 0.35 + Security × 0.25, ratings A=100, B=80, C=60, D=40, E=20 (the Manual metrics calculator; an integration may send its own 0–100 score) | 0–100, whole number | higher | ≥ 80 / ≥ 60 | 1 day | SonarQube `sqale_rating`, `reliability_rating`, `security_rating` |
-| Test automation coverage (`automation_coverage`) | automated test cases ÷ total test cases × 100 | %, 0–100 | higher | ≥ 70 / ≥ 50 | 1 week | TestRail, Xray (Jira), Zephyr Scale |
+| Test automation coverage (`automation_coverage`) | automated test cases ÷ total test cases × 100 (calculated from the test management records; archived cases not counted) | %, 0–100 | higher | ≥ 70 / ≥ 50 | 1 week | TestRail, Xray Cloud, Zephyr Scale (the Exporter) |
 | Automation ROI (`automation_roi`) | (time saved − time invested) ÷ time invested × 100 | %, −9,999.99 to 9,999.99 | none (no target) | — | 1 month | TestRail / Xray run times; Jira worklogs / Tempo |
 
 #### Speed and efficiency
@@ -559,7 +559,7 @@ and can be changed per company in **Administration → Update frequency** (a "mo
 | Sprint velocity (`sprint_velocity`) | story points of issues Done at sprint close | points, whole number | none (no target; compare only with the team's own history) | — | 2 weeks | Jira Software Agile REST API / velocity chart |
 | Sprint commitment rate (`sprint_commitment_rate`) | completed points ÷ points committed at sprint start × 100 (can exceed 100) | %, 0–999.99 | higher | ≥ 90 / ≥ 75 | 2 weeks | Jira sprint report / Agile REST API |
 | Sprint carryover (`sprint_carryover`) | points not completed at close ÷ committed points × 100 | %, 0–100 | lower | ≤ 10 / ≤ 20 | 2 weeks | Jira sprint report / Agile REST API |
-| First-time pass rate (`first_time_pass_rate`) | stories with 0 QA rejections ÷ stories tested × 100 | %, 0–100 | higher | ≥ 85 / ≥ 70 | 1 day | Jira (status transitions back from QA); optionally test management |
+| First-time pass rate (`first_time_pass_rate`) | from raw CI data: pipeline runs whose first attempt passed ÷ runs × 100; as a finished value: stories with 0 QA rejections ÷ stories tested × 100 | %, 0–100 | higher | ≥ 85 / ≥ 70 | 1 day | Jira (status transitions back from QA); optionally test management |
 | Blocked time (`blocked_time_hours`) | Σ (unblocked time − blocked time) over the sprint's tickets | hours, whole number | lower | ≤ 4 / ≤ 12 | 1 day | Jira (blocked flag / status history) |
 | Task sizing accuracy (`sizing_accuracy`) | actual effort ÷ estimated effort (1.0 = perfect) | ratio, 0–99.99 | closer to 1.0 | within ±0.15 of 1.0 / within ±0.3 (Team detail colours only; no stored target) | 2 weeks | Jira time tracking; Tempo Timesheets |
 
@@ -570,7 +570,7 @@ and can be changed per company in **Administration → Update frequency** (a "mo
 | Change failure rate (`change_failure_rate`) | deployments that caused a failure ÷ total deployments × 100 | %, 0–100 | lower | ≤ 5 / ≤ 15 | 1 week | Deployment pipeline (rollbacks, hotfixes); PagerDuty / Opsgenie incidents linked to deploys; optionally Jira |
 | Mean time between failures (`mtbf_hours`) | total operational hours ÷ failures | hours, whole number | higher | ≥ 720 / ≥ 168 | 1 week | PagerDuty / Opsgenie; Datadog / Prometheus |
 | System availability (`system_availability`) | (total time − downtime) ÷ total time × 100 | %, 3 decimals, up to 100.000 | higher | ≥ 99.9 / ≥ 99 | 1 day | Datadog SLOs; Prometheus; Statuspage / uptime monitors |
-| Infrastructure failures (`infrastructure_failures`) | count of test / pipeline failures caused by infrastructure in the period | count per month, whole number | lower | ≤ 1 / ≤ 3 | 1 week | Jenkins / GitHub Actions failure classification; JUnit reports |
+| Infrastructure failures (`infrastructure_failures`) | from raw incidents: incidents of category "infrastructure" opened in the 28 days (when incidents carry a category); as a finished value: count of test / pipeline failures caused by infrastructure in the period | count per month, whole number | lower | ≤ 1 / ≤ 3 | 1 week | Jenkins / GitHub Actions failure classification; JUnit reports |
 
 #### Why each KPI matters (one line each)
 
@@ -798,10 +798,13 @@ turnaround (hours), focus time (hours/day), meeting time (hours/day), context sw
 | Meeting time | lower | ≤ 2 h/day / ≤ 4 h/day |
 | Context switches | lower | ≤ 3/day / ≤ 6/day |
 
-Today: entered in **Manual metrics → Developer Productivity Metrics** (`POST /api/metrics/developer`; super admin,
-manager, team lead) or sample data. The KPI ingestion API does not accept developer metrics. Production:
-GitHub / GitLab (PR opened → merged, review requested → first review), Google Calendar / Microsoft 365 (meeting
-hours, free blocks of focus time), issue tracker / IDE activity (context switches).
+Where they come from: calculated from records (section 4.2f, [`server/lib/developerFromRaw.ts`](../server/lib/developerFromRaw.ts)):
+PR merge time and review turnaround from the pull requests the Exporter reads (GitHub, GitLab, Bitbucket Cloud, Azure DevOps: opened →
+merged, opened → first review by someone else), meeting time, focus time (free blocks of two hours or more) and context switches
+(separate busy blocks per working day) from calendar free/busy (Google Calendar, Microsoft 365), over the last 30 days, for the people
+who enabled developer insights. A row calculated this way has source `computed`. For companies not in live operation they can also be
+entered in **Manual metrics → Developer Productivity Metrics** (`POST /api/metrics/developer`; super admin, manager, team lead), or be
+sample data.
 
 **Workload balance (derived), 0–100, higher is better, target ≥ 70, watch ≥ 50** (`calculateWorkloadBalance` in
 [`src/data/advancedFeatures.ts`](../src/data/advancedFeatures.ts)):
@@ -887,9 +890,9 @@ given by the people themselves.
 
 | Module | What it shows | Calculation notes | Data today | Production source |
 |---|---|---|---|---|
-| Flaky tests | Up to 50 flaky tests of the team, sorted by stored flakiness score, with failure pattern, recent runs, root cause and suggested fix | Pattern guidance is generic text per stored pattern label; when no root cause is stored the API says "unverified, not derived from error logs" | Sample data only | JUnit results across reruns from Jenkins / GitHub Actions; a flaky-test detector |
-| Test execution | Suite runs over time (pass / fail / duration), filters, execution flow | Stored run results | Sample data only | CI test reports (JUnit XML), TestRail runs |
-| Performance | Daily p50 / p95 / p99 response time per endpoint, error rate, SLA breaches | An endpoint is in breach when its p95 is above **Parameters → Performance SLA → P95 response time** (default 500 ms) or its error rate above the error-rate threshold (default 1 %) | Sample data only | k6 / JMeter / Gatling results, APM (Datadog, New Relic) |
+| Flaky tests | Up to 50 flaky tests of the team, sorted by stored flakiness score, with failure pattern, recent runs, root cause and suggested fix | Pattern guidance is generic text per stored pattern label; when no root cause is stored the API says "unverified, not derived from error logs" (for a team that sent test reports: the tests that failed and passed on the same commit, section 4.2a) | The test reports the team's CI sent; sample data for a team that never sent one | JUnit results across reruns from Jenkins / GitHub Actions; a flaky-test detector |
+| Test execution | Suite runs over time (pass / fail / duration), filters, execution flow | One row per test report received (`test_runs`) | The test reports the team's CI sent; sample data for a team that never sent one | CI test reports (the Exporter, or the raw ingestion API) |
+| Performance | Daily p50 / p95 / p99 response time per endpoint, error rate, SLA breaches | An endpoint is in breach when its p95 is above **Parameters → Performance SLA → P95 response time** (default 500 ms) or its error rate above the error-rate threshold (default 1 %) | The load-test result files the team's pipelines keep (k6, JMeter, Gatling; section 4.2f): the latest run of each day per endpoint. Sample data for a team that never sent one | k6 / JMeter / Gatling results (the Exporter reads them from the CI artifacts) |
 
 The team-level flakiness KPI (`test_flakiness_rate`) is separate from the per-test list. When sample generation is on,
 it is calculated from pipeline runs: a test-stage run is flaky when it failed on a commit on which the same stage also
@@ -1127,7 +1130,8 @@ only ever makes outbound HTTPS calls to QE Navigator. **QE Navigator calculates 
   credentials go to a 0600 file in a 0700 folder and are never sent to QE Navigator. `check` validates the setup, `preview` shows
   the exact JSON that would be sent (nothing is sent), `sync` sends, `diagnose` writes a redacted support file.
 - What it reads: GitHub Actions, GitLab CI, Bitbucket Cloud and Data Center, Jenkins, Azure DevOps, SonarQube, Jira, Linear,
-  PagerDuty, Opsgenie, and a KPI file for values no tool records (automation coverage, automation ROI).
+  PagerDuty, Opsgenie, TestRail, Xray Cloud, Zephyr Scale, Google Calendar and Microsoft 365 (and a KPI file of finished values, for
+  companies not in live operation).
 - What it sends: JSON envelopes `{ companyId, departmentId, teamId, source, kind, items }` to `POST /api/ingest/exporter/batch`:
   test and coverage report files as files (without failure messages and output), SARIF without messages, pipeline runs,
   deployments with their commits (sha and times), incidents and issues through the field allow-list, KPI values. QE Navigator
@@ -1143,6 +1147,26 @@ only ever makes outbound HTTPS calls to QE Navigator. **QE Navigator calculates 
 - Security posture for the customer's review: [`exporter/SECURITY.md`](../exporter/SECURITY.md) (data flow and exact fields, how
   the ids are validated, where credentials live, permissions per vendor, network, verification of the bundle and the image).
 - Try it with made-up data: [`deploy/exporter-test/`](../deploy/exporter-test/README.md).
+
+### 4.2f Load-test results, test management, pull requests and calendars
+
+Why: Performance, automation coverage and ROI, and the developer metrics were the last numbers someone had to type. They now come from
+records too (reference: docs/INTEGRATION_GUIDE.md section 4F; [`server/routes/ingestMore.ts`](../server/routes/ingestMore.ts)).
+
+- **Performance**: the result files of load tests a pipeline keeps (a k6 summary export, JMeter's `statistics.json`, Gatling's
+  `stats.json`), read by the Exporter from the CI artifacts and parsed by QE Navigator. The Performance page shows per day and endpoint
+  the latest run's p50, p95, p99, throughput and error rate.
+- **Automation coverage and automation ROI**: from the test cases and executions of TestRail, Xray Cloud or Zephyr Scale.
+  Coverage = automated cases ÷ cases. ROI = (time saved − time invested) ÷ time invested over 30 days: time saved from the automated
+  executions of cases with a manual estimate, time invested from the time logged on the issues the customer marks as test-automation
+  work. Both are calculated by the engine (group `automation`) with "How this was calculated".
+- **Developer metrics**: PR merge time and code review time from pull requests (GitHub, GitLab, Bitbucket Cloud, Azure DevOps); meeting
+  time, focus time and context switches from calendar free/busy (Google Calendar, Microsoft 365: start and end of busy intervals only,
+  never a title or an attendee); workload balance and DDPS from those ([`server/lib/developerFromRaw.ts`](../server/lib/developerFromRaw.ts)).
+- **People and privacy.** A person arrives as a pseudonym, `sha256(lower(e-mail) + ":" + company id)`, computed by the Exporter and only
+  when the customer turns on `privacy.developerMetrics`. QE Navigator can compute the same value for its own users, and keeps a
+  pseudonym only for an active user who enabled developer insights (section 6); a pull request of anyone else is stored without an
+  author, a calendar day of anyone else is not stored. The k-anonymity rule for team figures is unchanged.
 
 ### 4.2e Upload files ("Level 0": no token, no network access, no CI step)
 
@@ -1173,7 +1197,24 @@ connection from an agent. They can still export files. Upload files is the zero-
 **Administration → Manual metrics** (super admin, manager, team lead; team scope enforced by the server). Sections: current
 metrics, team KPIs by category (with calculators such as the code-quality rating calculator), developer productivity metrics per
 member, technical-debt ROI impact per item, and CI/CD pipeline stages. Team KPIs go through the same path as the API with source
-`manual`, can be backdated with a "recorded at" time, and appear in the ingestion log.
+`manual`, can be backdated with a "recorded at" time, and appear in the ingestion log. Stages calculated from the pipeline runs a
+team's CI sent are shown read-only.
+
+**Live data only.** Manual metrics is for demos, trials and companies not yet connected. For a company in live operation platform
+support turns on **Live data only** (operator panel → the company → Edit company; `companies.settings.liveDataOnly`,
+[`server/lib/liveData.ts`](../server/lib/liveData.ts)). Every metric then comes from raw data and is calculated by QE Navigator:
+
+- Manual metrics is not in the navigation, and typed team KPIs, developer metrics and pipeline stage edits are refused by the API
+  (`403`, `code: "live_data_only"`).
+- A finished value is refused for every KPI, whoever sends it (`POST /api/ingest/kpis`, the Exporter's KPI file): QE Navigator
+  calculates all 23 from raw data (automation coverage and ROI from the test management records).
+- The monthly quality values of Business impact are the ones derived from the KPI values; they are shown read-only. The business
+  figures (revenue, users, churn …) are still entered: no tool of ours measures them.
+- Every module stays: Performance reads the load-test results a team's pipelines keep, Developer productivity the pull requests and
+  calendars of the people who enabled developer insights (section 4.2f).
+
+What people still set in live operation is configuration and assumptions, not metrics: targets, update frequency, financial and SLA
+settings, alert rules, and the anonymous pulse survey answers.
 
 ### 4.4 Ingestion log
 
@@ -1392,6 +1433,22 @@ Why: a manager or executive reads the state of quality on a phone in one minute,
 - Works offline-ish: the last summary stays on screen with the time it was loaded and reloads when the network is back.
 - Share link: `/summary`; whoever opens it signs in and sees the summary of their own scope. Navigation: super admins and managers;
   every role with a team in scope may open the link (their teams only).
+
+### Next move: Time lost, Findings, Outcomes, Data readiness
+
+Four pages (menu group "Next move") that go from a metric to a decision: what is costing time, why, what to do next, who
+does it and whether it worked. For every role with a team in scope, for that scope. The need, what they solve, why a
+customer buys them, each page and how they are built: [NEXT_MOVE.md](NEXT_MOVE.md).
+
+| Page | Shows |
+|---|---|
+| Time lost (`/time-lost`) | Hours lost in the last 7 days and over 12 weeks, by cause (slow pipeline stages, failed runs that passed on a rerun, blocked work, failed changes, waiting for review); each team's state and its one thing this week |
+| Findings (`/findings`) | The problems behind the hours, the costliest first, each with its records, a next step, an owner form and the text of a ticket; the team's recommendations are part of the list |
+| Outcomes (`/outcomes`) | Every finding from suggested to verified or "did not hold"; the verdict comes from the KPI 14 and 30 days after the action was done; prints as the monthly outcomes report |
+| Data readiness (`/data-readiness`) | Per team and source: connected, stale or missing; what each gap blocks, the fix and the effort; what the Exporter saw |
+
+Hours are measured from records (rules in [metrics_and_calculations.md, section 11](metrics_and_calculations.md#11-hours-lost-per-week)).
+They are not a money figure. QE Navigator suggests; the team does the fix in its own tools.
 
 ### Compare teams
 
@@ -1798,9 +1855,10 @@ negative cases, accessibility, phone layouts) in four shards on pull requests, `
   PagerDuty over the internet; the QE Navigator Exporter (section 4.2d) reads them inside the customer's network. TestRail and Datadog
   have no connector; their KPIs are pushed to the ingestion API or entered by hand. The metric catalog lists, per KPI, the exact field or
   API to read in each system.
-- **Only team KPIs can be ingested.** Developer metrics, technical-debt items, pipeline runs and stages, test cases and executions, flaky tests and
-  performance results have no ingestion endpoint. Developer metrics, debt-item impact and pipeline stages can be edited in Manual metrics; the rest
-  is populated only by sample data today.
+- **Every module has a raw source.** Pipeline health, the CI/CD pipeline stages and their history, Test execution, Flaky tests, the
+  technical-debt items, Performance (load-test result files), automation coverage and ROI (test management records) and the developer
+  metrics (pull requests and calendars) are calculated from the raw data teams send (section 4.2a to 4.2f). What stays typed: the business
+  figures of Business impact, the financial settings and the targets.
 - **Developer metrics have no history from manual entry.** `developer_metrics` holds one current row per developer and team; DDPS history
   (`developer_productivity_snapshots`) is written only by the seed.
 - **Company snapshots are stored only when someone opens the executive briefing**, so the briefing's 30-day history depends on usage.
@@ -1821,8 +1879,8 @@ Still open:
   the UI.
 - Formula mode is offered to super admins only (a product decision: it is a demo and audit aid; `canUseFormulaMode`).
 - Several older admin screens (Admin console, Users page) still decide some buttons from the display role; the API enforces the shared rules.
-- No ingestion API for monthly business series, debt items, pipeline runs or test executions; business-impact `deployment_frequency` is per month
-  while the KPI is per week.
+- No ingestion API for the monthly business series (revenue, users, churn …): they are entered on the Business impact page; its quality side is
+  derived from the KPI values. Business-impact `deployment_frequency` is per month while the KPI is per week.
 
 ---
 

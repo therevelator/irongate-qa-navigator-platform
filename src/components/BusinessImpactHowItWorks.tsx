@@ -5,7 +5,7 @@ import { REVENUE_MIN_PAIRED_MONTHS, REVENUE_OVERLAP_R } from '../../server/lib/r
 /**
  * "How this works" on Business impact: what goes in, how the correlations and the money figures
  * are calculated, which inputs are assumptions the company sets, what the confidence labels mean
- * and what the page does not claim. Kept in step with docs/business_impact_correlation.md and the
+ * and what the page does not claim. Kept in step with docs/metrics_and_calculations.md (Business impact) and the
  * code it describes (server/routes/analytics.ts computeCorrelationMatrix, server/lib/revenueImpact.ts).
  */
 const H: React.FC<{ children: React.ReactNode }> = ({ children }) => (

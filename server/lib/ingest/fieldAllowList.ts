@@ -114,9 +114,13 @@ const PERSON_ALIASES: Record<MinimiseKind, Record<string, string>> = {
   },
 };
 
-/** Labels the calculations read: where a defect was found, or what the issue is. */
+/** The label that marks a work item of test automation (its time logged is the time invested of automation ROI). */
+export const AUTOMATION_LABEL = 'test-automation';
+
+/** Labels the calculations read: where a defect was found, what the issue is, or that it is test-automation work. */
 export function usefulLabel(label: string): boolean {
   const l = label.trim().toLowerCase();
+  if (l === AUTOMATION_LABEL) return true;
   if (/^(?:env|environment|found[-_ ]?in)[:=_\- ]+.+$/.test(l)) return true;
   if (/^(prod|production|prd|live|escaped|customer[-_ ]?reported|found[-_ ]in[-_ ]prod(uction)?|staging|stage|uat|qa|dev|test|preprod|pre-prod|sit)$/.test(l)) return true;
   if (/^(bug|defect|regression|feature|story|user story|improvement|enhancement|task|chore|spike)$/.test(l) || /\bbug\b|\bdefect\b/.test(l)) return true;

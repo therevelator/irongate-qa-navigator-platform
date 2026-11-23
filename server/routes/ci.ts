@@ -228,7 +228,8 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
       : group === 'quality' ? `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = ? AND is_sample) AND NOT EXISTS (SELECT 1 FROM analysis_reports WHERE team_id = ? AND NOT is_sample)`
       : `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM test_runs WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM coverage_reports WHERE team_id = ? AND is_sample)
           OR EXISTS (SELECT 1 FROM pipeline_runs_raw WHERE team_id = ? AND is_sample)`;
-    const sample = !!(await queryOne<any>(sampleSql, group === 'ci' ? [team.id, team.id, team.id] : [team.id, team.id]));
+    // Test management records are never sample data.
+    const sample = group === 'automation' ? false : !!(await queryOne<any>(sampleSql, group === 'ci' ? [team.id, team.id, team.id] : [team.id, team.id]));
     const reasonsOf = new Map(failedDeployments.map((f) => [f.id, f.reasons]));
     res.json({
       sample,

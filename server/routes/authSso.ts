@@ -6,6 +6,7 @@ import { query, queryOne } from '../../src/lib/db';
 import { JWT_SECRET } from '../middleware/auth';
 import { inviteLimiter } from '../middleware/rateLimit';
 import { issueSessionCookie, hideSampleNoticeSql, COMPANY_SUSPENDED_MESSAGE, type SessionCookieOptions } from '../lib/sessions';
+import { liveDataOnlySql } from '../lib/liveData';
 import { recordAuthEvent } from '../lib/authEvents';
 import { recordAudit } from '../lib/audit';
 import {
@@ -231,7 +232,7 @@ router.post('/invitations/accept', inviteLimiter, async (req, res) => {
     await setSessionCookie(res, userId, { method: 'invitation' });
     const user = await queryOne<any>(
       `SELECT id, email, first_name, last_name, role, company_id, department_id, primary_team_id, is_active, email_verified, created_at,
-              ${hideSampleNoticeSql('users')} AS hide_sample_notice
+              ${hideSampleNoticeSql('users')} AS hide_sample_notice, ${liveDataOnlySql('users')} AS live_data_only
          FROM users WHERE id = ?`,
       [userId]
     );

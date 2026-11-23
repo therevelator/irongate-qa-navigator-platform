@@ -89,6 +89,11 @@ export interface PolicyActor {
    * the display columns only), they are derived from role / departmentId / primaryTeamId.
    */
   grants?: Grant[];
+  /**
+   * The actor's company is in live operation (companies.settings.liveDataOnly; server/lib/liveData.ts):
+   * pages for typing metrics and modules with no raw data source are not offered. Set by the app only.
+   */
+  liveDataOnly?: boolean;
 }
 
 export interface PolicyTarget {

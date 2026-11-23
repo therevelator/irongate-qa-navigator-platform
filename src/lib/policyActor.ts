@@ -13,6 +13,7 @@ export function policyActorOf(user: User | null | undefined): PolicyActor {
     departmentId: user?.departmentId ?? null,
     primaryTeamId: user?.primaryTeamId ?? null,
     grants: user?.assignments?.map((a) => ({ role: a.role, scopeType: a.scopeType, scopeId: a.scopeId })),
+    liveDataOnly: !!user?.liveDataOnly,
   };
 }
 

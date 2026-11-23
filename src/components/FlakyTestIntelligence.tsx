@@ -59,6 +59,8 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId })
   const [flakyTests, setFlakyTests] = useState<FlakyTestRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // 'ci': calculated from the test reports the team's CI sent (no stored pattern, no stored score).
+  const [fromCi, setFromCi] = useState(false);
 
   useEffect(() => {
     const fetchFlakyTests = async () => {
@@ -66,6 +68,7 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId })
         const response = await fetch(`${API_URL}/analytics/flaky-tests${teamId ? `?teamId=${encodeURIComponent(teamId)}` : ''}`, { credentials: 'include' });
         if (response.ok) {
           const data = await response.json();
+          setFromCi(data.source === 'ci');
           // Server-side placeholder rows (id 'sample-*') are not real detections.
           setFlakyTests((data.flakyTests || []).filter((t: FlakyTestRow) => !String(t.id).startsWith('sample-')));
         } else {
@@ -92,7 +95,9 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId })
     <Page>
       <PageIntro
         title="Flaky tests"
-        description="Tests recorded as flaky, with their most recent executions. Failure patterns are stored classifications and have not been verified against logs."
+        description={fromCi
+          ? 'Tests that failed and passed on the same commit in the test reports your CI sent in the last 30 days, with their most recent runs. Calculated by QE Navigator; no error log is analysed.'
+          : 'Tests recorded as flaky, with their most recent executions. Failure patterns are stored classifications and have not been verified against logs.'}
         actions={
           <ExportCsvButton
             what="Flaky tests"
@@ -112,14 +117,16 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId })
 
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatTile label="Flaky tests tracked" value={loading ? '—' : totalFlaky} />
-        <StatTile label="Mean flakiness score" value={avgFlakiness ?? '—'} caption="Stored score (0–100) per test" />
+        <StatTile label="Mean flakiness score" value={avgFlakiness ?? '—'} caption={fromCi ? 'Flaky runs ÷ runs of the test in 30 days × 100' : 'Stored score (0–100) per test'} />
         <StatTile label="Score above 70" value={loading ? '—' : criticalTests} tone={criticalTests > 0 ? 'bad' : 'neutral'} />
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <span className="text-sm text-slate-500 dark:text-slate-400">Pattern</span>
-        <SegmentedControl value={selectedPattern} onChange={setSelectedPattern} options={PATTERNS} />
-      </div>
+      {!fromCi && (
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          <span className="text-sm text-slate-500 dark:text-slate-400">Pattern</span>
+          <SegmentedControl value={selectedPattern} onChange={setSelectedPattern} options={PATTERNS} />
+        </div>
+      )}
 
       {loading ? (
         <Card>
@@ -133,7 +140,9 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId })
         <Card>
           <EmptyState
             title="No flaky tests recorded"
-            description="No tests have been recorded as flaky for this scope. Tests appear here once flaky results are recorded."
+            description={fromCi
+              ? 'No test failed and passed on the same commit in the reports received in the last 30 days.'
+              : 'No test reports have been received for this team. Flaky tests appear here once your CI sends its test reports (Connect your CI).'}
           />
         </Card>
       ) : filteredTests.length === 0 ? (
@@ -141,7 +150,7 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId })
       ) : (
         <div className="space-y-4">
           {filteredTests.map(test => (
-            <FlakyTestCard key={test.id} test={test} />
+            <FlakyTestCard key={test.id} test={test} fromCi={fromCi} />
           ))}
         </div>
       )}
@@ -149,7 +158,7 @@ const FlakyTestIntelligence: React.FC<FlakyTestIntelligenceProps> = ({ teamId })
   );
 };
 
-const FlakyTestCard: React.FC<{ test: FlakyTestRow }> = ({ test }) => {
+const FlakyTestCard: React.FC<{ test: FlakyTestRow; fromCi?: boolean }> = ({ test, fromCi = false }) => {
   const { isDark } = useTheme();
   const historyData = useMemo(() => {
     const seen = new Set<string>();
@@ -180,10 +189,12 @@ const FlakyTestCard: React.FC<{ test: FlakyTestRow }> = ({ test }) => {
           <div className="min-w-0 flex-1">
             <div className="mb-2 flex flex-wrap items-center gap-2">
               <h3 className="truncate text-sm font-semibold text-slate-900 dark:text-white">{test.test_name}</h3>
-              <Badge tone="neutral">Pattern: {test.failure_pattern || 'unknown'} (unverified)</Badge>
+              {fromCi
+                ? <Badge tone="neutral">Failed and passed on the same commit</Badge>
+                : <Badge tone="neutral">Pattern: {test.failure_pattern || 'unknown'} (unverified)</Badge>}
             </div>
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-              <span>{test.occurrences ?? '—'} recorded failures</span>
+              <span>{test.occurrences ?? '—'} {fromCi ? 'flaky runs' : 'recorded failures'}</span>
               <span>{daysSinceFirst != null ? `First detected ${daysSinceFirst} days ago` : 'First detected —'}</span>
               <span>
                 {passRateNum != null ? `${passRateNum.toFixed(1)}% passed in last ${historyCount} runs` : 'No executions recorded'}
@@ -255,7 +266,9 @@ const FlakyTestCard: React.FC<{ test: FlakyTestRow }> = ({ test }) => {
             <div className="rounded-md border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
               <h4 className="mb-1 text-xs font-medium text-slate-500 dark:text-slate-400">Root cause</h4>
               <p className="text-sm text-slate-800 dark:text-slate-200">
-                {rootCause ?? `Not determined. The "${test.failure_pattern || 'unknown'}" pattern is a stored classification; no error logs have been analysed.`}
+                {rootCause ?? (fromCi
+                  ? 'Not determined. QE Navigator receives test names, results and durations only; failure messages and logs are never sent, so no cause is derived.'
+                  : `Not determined. The "${test.failure_pattern || 'unknown'}" pattern is a stored classification; no error logs have been analysed.`)}
               </p>
               {test.suggested_fix && (
                 <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">General guidance for this pattern: {test.suggested_fix}</p>

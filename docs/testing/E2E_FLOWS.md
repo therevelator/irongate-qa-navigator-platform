@@ -155,6 +155,18 @@ Derived from the code, then checked against the documentation:
 | F6.25 | Executive summary: "at this rate …" under each risk; KPIs forecast to miss within 8 weeks | All (scope) | — | IMP-09 | — |
 | F6.13 | Team AI toggle | A, M, L (own) | E V | legacy:team-lead-rbac "Toggle AI" | legacy:team-lead-rbac |
 
+## 6a. Next move: Time lost, Findings, Outcomes, Data readiness
+
+Spec: `tests/e2e/navigator/next-move.spec.ts`. API and calculation: `tests/api/navigator.test.ts`, `tests/api/lost-hours.test.ts`.
+
+| ID | Flow | Can | Must not | Happy path | Negative |
+|---|---|---|---|---|---|
+| F6a.1 | Time lost: hours of the last 7 days, five causes with their change, teams with their one thing this week | Everyone, for the teams in scope | Teams outside the scope (not listed; NAV-07) | NM-01, NM-05 (viewer scope), NM-06 (phone) | NAV-01 (signed out: 401), NAV-07 |
+| F6a.2 | Findings: ranked by hours; evidence, records, ticket text; one team's one thing this week | Everyone, for the teams in scope | — | NM-02 | NAV-07 (another team's findings: empty) |
+| F6a.3 | Findings: assign an owner | A, M (dept), L (own) | E V (no owner form) | NAV-04 (API), NM-02 (form shown) | NM-05 (viewer: no form) |
+| F6a.4 | Outcomes: suggested, owned, waiting for verdict, verified, did not hold; period; print | Everyone, for the teams in scope | — | NM-03, NAV-04 | — |
+| F6a.5 | Data readiness: sources per team, gaps with their fix, the Exporter's observations | Everyone, for the teams in scope | — | NM-04, NAV-05 | NAV-06 (a report with an unknown field is refused) |
+
 ## 7. Analytics, compare, saved views
 
 | ID | Flow | Can | Must not | Happy path | Negative |

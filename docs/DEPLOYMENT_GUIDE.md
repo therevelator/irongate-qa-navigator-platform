@@ -40,6 +40,10 @@ same. On Netlify there is no WebSocket; pages refresh on load and on their own t
 Row Level Security is enabled on every table with no policies; the app connects as the owner. Do not add
 policies unless you start using the Supabase client libraries.
 
+**Latest migrations.** `20261209000000_more_raw_sources.sql` (load tests, test management, pull requests, calendars) and
+`20261210000000_navigator.sql` (hours lost per week, the Exporter's discovery report). Until the second one is applied the
+Next move pages say so and show nothing; no other page depends on it.
+
 **New migrations.** Add a file `supabase/migrations/<YYYYMMDDHHMMSS>_<name>.sql`, written so it can run twice
 (`IF NOT EXISTS`, `ON CONFLICT`). Apply it to each environment with `psql` before or together with the deploy
 that needs it. CI applies every migration to a fresh database on each push, so a broken migration fails

@@ -17,7 +17,7 @@
 import type { GitLabSource, HttpSettings } from '../../config';
 import { requireSecret } from '../../config';
 import { SourceClient, SourceError } from '../client';
-import { changedLinesOf, kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
+import { pullRequest, changedLinesOf, kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
 
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled' | undefined> = { success: 'success', failed: 'failed', canceled: 'cancelled' };
 const JOB_RESULT: Record<string, 'success' | 'failed' | 'cancelled' | 'skipped'> = { success: 'success', failed: 'failed', canceled: 'cancelled', skipped: 'skipped', manual: 'skipped' };
@@ -28,7 +28,7 @@ export class GitLabAdapter implements CiAdapter {
   private client: SourceClient;
   private ids = new Map<string, number>();
 
-  constructor(private src: GitLabSource, http: HttpSettings, private opts: { links: boolean }, env: NodeJS.ProcessEnv = process.env) {
+  constructor(private src: GitLabSource, http: HttpSettings, private opts: import('./common').CiOptions, env: NodeJS.ProcessEnv = process.env) {
     const token = requireSecret(src.tokenEnv, `sources.${src.name} (a GitLab access token with the read_api scope)`, env);
     this.client = new SourceClient({
       source: src.name, baseUrl: src.apiUrl, caFile: src.caFile, http, headers: src.auth === 'oauth' ? { Authorization: `Bearer ${token}` } : { 'PRIVATE-TOKEN': token },
@@ -81,6 +81,40 @@ export class GitLabAdapter implements CiAdapter {
       const id = await this.projectId(path);
       yield* this.pipelines(path, id, team, since, until);
       yield* this.deployments(path, id, team, since, until);
+      if (this.src.pullRequests) yield* this.mergeRequests(path, id, team, since, until);
+    }
+  }
+
+  /**
+   * The merge requests updated in the window: created, merged and closed times, the first note or approval by someone
+   * other than the author, and (developer metrics only) the author's e-mail address from a commit, sent as a pseudonym.
+   */
+  private async *mergeRequests(path: string, id: number, team: string, since: Date, until: Date): AsyncGenerator<CiPage> {
+    let count = 0;
+    for await (const list of this.pages<any>(`/projects/${id}/merge_requests`, { state: 'all', updated_after: since.toISOString(), updated_before: until.toISOString(), order_by: 'updated_at', sort: 'asc' }, this.src.maxRunsPerRepo)) {
+      const page: CiPage = { records: [], skipped: [], changedAt: null };
+      for (const mr of list) {
+        const opened = ms(mr.created_at);
+        if (opened === null || count++ >= this.src.maxRunsPerRepo) continue;
+        try {
+          const author = String(mr.author?.username ?? '');
+          const notes = ((await this.client.getOptional<any[]>(`/projects/${id}/merge_requests/${mr.iid}/notes`, { sort: 'asc', per_page: 100 })) ?? [])
+            // A review: a comment, or the system note of an approval, by someone other than the author.
+            .filter((n) => String(n.author?.username ?? '') !== author && (!n.system || /^approved/i.test(String(n.body ?? '')))).map((n) => ms(n.created_at)).filter((t): t is number => t !== null);
+          let email: string | null = null;
+          if (this.opts.person) email = (((await this.client.getOptional<any[]>(`/projects/${id}/merge_requests/${mr.iid}/commits`, { per_page: 1 })) ?? [])[0]?.author_email as string | undefined) ?? null;
+          page.records.push(pullRequest(team, {
+            id: String(mr.iid), repo: path, authorEmail: email, state: mr.state === 'merged' ? 'merged' : mr.state === 'closed' ? 'closed' : 'open',
+            openedAt: opened, firstReviewAt: notes.length ? Math.min(...notes) : null, mergedAt: ms(mr.merged_at), closedAt: ms(mr.closed_at),
+          }, this.opts));
+        } catch (e) {
+          if (e instanceof SourceError && e.auth) throw e;
+          page.skipped.push({ id: `${path}!${mr.iid}`, reason: (e as Error).message });
+        }
+        const upd = ms(mr.updated_at);
+        if (upd && (!page.changedAt || new Date(upd).toISOString() > page.changedAt)) page.changedAt = new Date(upd).toISOString();
+      }
+      yield page;
     }
   }
 
@@ -131,7 +165,7 @@ export class GitLabAdapter implements CiAdapter {
       suite: String(c.classname ?? s.name ?? ''), name: String(c.name ?? ''), status: CASE[String(c.status)] ?? 'skipped', durationMs: Math.round(Number(c.execution_time ?? 0) * 1000),
     })));
     // Coverage, SARIF (and test files when there is no test report): the job artifact archives.
-    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: Array<'tests' | 'coverage' | 'sarif'> }> = [];
+    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: import('./common').ArtifactKind[] }> = [];
     for (const j of jobs) {
       const archive = (j.artifacts ?? []).find((a: any) => a.file_type === 'archive');
       if (!archive) continue;
@@ -144,7 +178,7 @@ export class GitLabAdapter implements CiAdapter {
       if (!d.ok) { page.skipped.push({ id: aid, reason: `artifacts ${d.reason}: ${d.message}` }); continue; }
       files.push({ artifact: String(j.name), name: String(archive.filename ?? 'artifacts.zip'), data: d.body, kinds });
     }
-    const found = files.length ? findReports(files) : { tests: [], coverage: [], sarif: [], files: 0, skipped: [] };
+    const found = files.length ? findReports(files) : { tests: [], coverage: [], sarif: [], performance: [], files: 0, skipped: [] };
     page.skipped.push(...found.skipped.map((x) => ({ id: `${path}!${pid}/${x.id}`, reason: x.reason })));
     // GitLab gives its parsed JUnit results as JSON only: written out as a JUnit file (form, not content).
     if (cases.length) out.push(reportItem('test-report', team, [junitOf(cases, Math.round(Number(tr?.total_time ?? 0) * 1000) || undefined)], meta, { format: 'junit' }));

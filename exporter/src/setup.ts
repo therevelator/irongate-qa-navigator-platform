@@ -61,6 +61,11 @@ export function secretsOf(type: SourceType, auth: string | null): Array<{ env: s
     case 'linear': return auth === 'oauth' ? [] : [{ env: d, label: 'Personal API key (read)' }];
     case 'pagerduty': return [{ env: d, label: 'Read-only REST API key' }];
     case 'opsgenie': return [{ env: d, label: 'API key (Read access only)' }];
+    case 'testrail': return [{ env: 'TESTRAIL_USER', label: 'TestRail user (e-mail address)' }, { env: d, label: 'API key of that user (read-only access)' }];
+    case 'xray': return [{ env: 'XRAY_CLIENT_ID', label: 'Xray API key: client id' }, { env: d, label: 'Xray API key: client secret' }];
+    case 'zephyr': return [{ env: d, label: 'Zephyr Scale API access token' }];
+    case 'google-calendar': return [{ env: d, label: 'Service account private key (PEM; scope calendar.freebusy only)', multiline: true }];
+    case 'microsoft-365': return [{ env: d, label: 'App registration client secret (permission Calendars.ReadBasic.All)' }];
     default: return [];
   }
 }
@@ -149,12 +154,15 @@ export async function runSetup(o: SetupOptions): Promise<number> {
     const type = String(body?.type ?? '') as SourceType;
     if (!SOURCE_TYPES.includes(type)) throw new ConfigError('Choose a tool');
     const name = String(body?.name || type).toLowerCase();
-    const settings = body?.settings && typeof body.settings === 'object' ? body.settings : {};
+    const settings = body?.settings && typeof body.settings === 'object' ? { ...body.settings } : {};
+    // Developer metrics are a setting of the whole Exporter (privacy.developerMetrics): turned on from the source that needs it.
+    const developerMetrics = settings.developerMetrics === 'yes' || type === 'google-calendar' || type === 'microsoft-365';
+    delete settings.developerMetrics;
     const mapKey = MAP_KEY[type] ?? 'teams';
     const entry: Record<string, unknown> = { ...settings, type, name };
     if (name !== type && !settings.tokenEnv) entry.tokenEnv = `${DEFAULT_TOKEN_ENV[type]}_${name.toUpperCase().replace(/[^A-Z0-9]/g, '_')}`.slice(0, 64);
     if (body?.mapping && typeof body.mapping === 'object') entry[mapKey] = body.mapping;
-    const next = { ...raw, sources: [...(raw.sources ?? []).filter((s: any) => s.name !== name), entry] };
+    const next = { ...raw, ...(developerMetrics ? { privacy: { ...(raw.privacy ?? {}), developerMetrics: true } } : {}), sources: [...(raw.sources ?? []).filter((s: any) => s.name !== name), entry] };
     validate(next, configPath); // refuses unknown settings, secrets in the config, bad URLs and team ids
     // Secrets go to the credentials file only (never into the config).
     const tokenEnv = String(entry.tokenEnv ?? DEFAULT_TOKEN_ENV[type]);
@@ -335,21 +343,30 @@ const APP = `<p><small>Everything you enter stays on this machine: secrets go to
 <section id="list"><h2>3. Your tools</h2><div id="sources"></div></section>
 <section><h2>4. Next</h2><p>Run <code>qe-exporter preview</code> to see exactly what would be sent (nothing is sent), then <code>qe-exporter sync</code>.</p></section>
 <script>
-const FIELDS={github:[['apiUrl','API URL (GitHub Enterprise: https://host/api/v3)','https://api.github.com'],['auth','Sign-in','token|app|oauth'],['appId','GitHub App id (auth app)',''],['installationId','Installation id (auth app)',''],['environments','Production environments (comma separated)','production']],
-gitlab:[['apiUrl','API URL','https://gitlab.com/api/v4'],['auth','Sign-in','token|oauth'],['environments','Production environments','production']],
-bitbucket:[['auth','Sign-in','app-password|oauth'],['environments','Production environments','production']],
+const PR=[['pullRequests','Read pull requests (developer metrics)','no|yes'],['developerMetrics','Send pull request authors as pseudonyms QE Navigator can match to its users','no|yes']];
+const CAL=[['workStart','Working day starts','09:00'],['workEnd','Working day ends','17:00'],['timeZone','Time zone (IANA)','Europe/Dublin']];
+const FIELDS={github:[['apiUrl','API URL (GitHub Enterprise: https://host/api/v3)','https://api.github.com'],['auth','Sign-in','token|app|oauth'],['appId','GitHub App id (auth app)',''],['installationId','Installation id (auth app)',''],['environments','Production environments (comma separated)','production'],...PR],
+gitlab:[['apiUrl','API URL','https://gitlab.com/api/v4'],['auth','Sign-in','token|oauth'],['environments','Production environments','production'],...PR],
+bitbucket:[['auth','Sign-in','app-password|oauth'],['environments','Production environments','production'],...PR],
 'bitbucket-dc':[['baseUrl','Bitbucket Data Center URL','https://bitbucket.example.com'],['environments','Production environments','production']],
 jenkins:[['baseUrl','Jenkins URL','https://jenkins.example.com']],
-'azure-devops':[['orgUrl','Organization URL','https://dev.azure.com/your-org'],['project','Project',''],['environments','Production environments','Production']],
-sonarqube:[['baseUrl','SonarQube URL','https://sonarcloud.io'],['auth','Token type','bearer|basic']],
+'azure-devops':[['orgUrl','Organization URL','https://dev.azure.com/your-org'],['project','Project',''],['environments','Production environments','Production'],...PR],
+sonarqube:[['baseUrl','SonarQube URL','https://sonarcloud.io'],['auth','Token type','bearer|basic'],['coverage','Also read coverage (when your CI keeps no coverage report)','no|yes']],
 jira:[['baseUrl','Jira URL','https://your-site.atlassian.net'],['auth','Sign-in','basic|bearer'],['jql','JQL (which issues)','project in (PAY)']],
-linear:[['auth','Sign-in','key|oauth']],pagerduty:[],opsgenie:[['region','Region','us|eu']]};
+linear:[['auth','Sign-in','key|oauth']],pagerduty:[],opsgenie:[['region','Region','us|eu']],
+testrail:[['baseUrl','TestRail URL','https://your-company.testrail.io'],['automatedField','Case field that says how a case is automated','custom_automation_type']],
+xray:[['apiUrl','Xray Cloud API URL','https://xray.cloud.getxray.app/api/v2']],
+zephyr:[['apiUrl','Zephyr Scale API URL','https://api.zephyrscale.smartbear.com/v2'],['automatedField','Custom field that says a case is automated','Automated']],
+'google-calendar':[['serviceAccount','Service account e-mail',''],['subject','Acts as (a user of your domain)',''],...CAL],
+'microsoft-365':[['tenantId','Tenant id',''],['clientId','App registration (client) id',''],...CAL]};
 const SECRETS={github:{token:[['GITHUB_TOKEN','Fine-grained token (Actions, Contents, Deployments, Metadata: read)']],app:[['GITHUB_APP_PRIVATE_KEY','GitHub App private key (PEM)']],oauth:[]},
 gitlab:{token:[['GITLAB_TOKEN','Access token (read_api)']],oauth:[]},bitbucket:{'app-password':[['BITBUCKET_USERNAME','Bitbucket username'],['BITBUCKET_APP_PASSWORD','App password (Account, Repositories, Pipelines: Read)']],oauth:[]},
 'bitbucket-dc':{'':[['BITBUCKET_TOKEN','HTTP access token (Read)']]},jenkins:{'':[['JENKINS_USER','Jenkins user'],['JENKINS_TOKEN','API token']]},'azure-devops':{'':[['AZURE_DEVOPS_TOKEN','Personal access token (Read)']]},
 sonarqube:{'':[['SONAR_TOKEN','User token (Browse)']]},jira:{basic:[['JIRA_EMAIL','Account e-mail'],['JIRA_TOKEN','API token']],bearer:[['JIRA_TOKEN','Personal access token']]},
-linear:{key:[['LINEAR_API_KEY','Personal API key']],oauth:[]},pagerduty:{'':[['PAGERDUTY_TOKEN','Read-only REST API key']]},opsgenie:{'':[['OPSGENIE_API_KEY','API key (read)']]}};
-const MAPLABEL={github:'owner/repo',gitlab:'group/project',bitbucket:'workspace/repo','bitbucket-dc':'PROJECT/repo',jenkins:'folder/job','azure-devops':'pipeline name',sonarqube:'project key',jira:'project key',linear:'team key',pagerduty:'service name',opsgenie:'Opsgenie team'};
+linear:{key:[['LINEAR_API_KEY','Personal API key']],oauth:[]},pagerduty:{'':[['PAGERDUTY_TOKEN','Read-only REST API key']]},opsgenie:{'':[['OPSGENIE_API_KEY','API key (read)']]},
+testrail:{'':[['TESTRAIL_USER','TestRail user (e-mail)'],['TESTRAIL_API_KEY','API key (read-only user)']]},xray:{'':[['XRAY_CLIENT_ID','Xray API key: client id'],['XRAY_CLIENT_SECRET','Xray API key: client secret']]},zephyr:{'':[['ZEPHYR_TOKEN','Zephyr Scale API access token']]},
+'google-calendar':{'':[['GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY','Service account private key (PEM; scope calendar.freebusy only)']]},'microsoft-365':{'':[['MS365_CLIENT_SECRET','App registration client secret (Calendars.ReadBasic.All)']]}};
+const MAPLABEL={github:'owner/repo',gitlab:'group/project',bitbucket:'workspace/repo','bitbucket-dc':'PROJECT/repo',jenkins:'folder/job','azure-devops':'pipeline name',sonarqube:'project key',jira:'project key',linear:'team key',pagerduty:'service name',opsgenie:'Opsgenie team',testrail:'TestRail project id',xray:'Jira project key',zephyr:'Jira project key','google-calendar':'person e-mail (stays here)','microsoft-365':'person e-mail (stays here)'};
 let S=null;const $=(id)=>document.getElementById(id);const esc=(s)=>String(s??'').replace(/[&<>"']/g,(c)=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function api(path,body){const r=await fetch(path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j;}
 function teamOptions(sel){const deps=(S&&S.context&&S.context.departments)||[];return '<option value="">— team —</option>'+deps.map(d=>'<optgroup label="'+esc(d.name)+'">'+d.teams.map(t=>'<option value="'+esc(t.id)+'"'+(t.id===sel?' selected':'')+'>'+esc(t.name)+' ('+esc(t.id)+')</option>').join('')+'</optgroup>').join('');}

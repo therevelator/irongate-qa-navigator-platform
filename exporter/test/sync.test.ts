@@ -30,7 +30,7 @@ function mockQe(s: MockServer, opts: { refuse?: (item: any) => string | null; st
     assert.equal(r.headers.authorization, `Bearer ${API_KEY}`);
     assert.equal(r.headers['content-encoding'], 'gzip');
     assert.equal(r.headers['content-type'], 'application/gzip');
-    assert.match(String(r.headers['user-agent']), /^qe-exporter\/0\.3\.0 /);
+    assert.match(String(r.headers['user-agent']), /^qe-exporter\/0\.5\.0 /);
     assert.ok(r.headers['x-exporter-host']);
     const e = r.json;
     assert.deepEqual(Object.keys(e).sort(), ['companyId', 'departmentId', 'items', 'kind', 'source', 'teamId']);

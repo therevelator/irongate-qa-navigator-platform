@@ -60,6 +60,8 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedSuite, setSelectedSuite] = useState<string>('all');
   const [chartPeriod, setChartPeriod] = useState<Period>('7d');
+  // 'ci': the runs are the test reports the team's CI sent (one row per report received).
+  const [fromCi, setFromCi] = useState(false);
 
   useEffect(() => {
     const fetchExecutions = async () => {
@@ -68,6 +70,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
         if (response.ok) {
           const data = await response.json();
           setExecutions(data.executions || []);
+          setFromCi(data.source === 'ci');
           setLoadError(null);
         } else {
           setLoadError(await loadErrorMessage(response, 'the test runs'));
@@ -256,7 +259,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
     <Page>
       <PageIntro
         title="Test execution timeline"
-        description={`Test suite runs recorded in the last ${FETCH_DAYS} days${truncated ? ` (showing the ${API_ROW_LIMIT} most recent; counts below cover only these)` : ''}.`}
+        description={`${fromCi ? 'Test runs from the reports your CI sent' : 'Test suite runs recorded'} in the last ${FETCH_DAYS} days${truncated ? ` (showing the ${API_ROW_LIMIT} most recent; counts below cover only these)` : ''}.`}
         actions={
           executions.length > 0 ? (
             <>
@@ -288,7 +291,7 @@ const TestExecutionTimeline: React.FC<TestExecutionTimelineProps> = ({ teamId })
         <Card>
           <EmptyState
             title="No test runs in this period"
-            description={`No test suite runs have been recorded in the last ${FETCH_DAYS} days. Runs appear here once they are recorded for your company or team.`}
+            description={`No test reports have been received in the last ${FETCH_DAYS} days. Runs appear here once your CI sends its test reports (Connect your CI).`}
           />
         </Card>
       ) : (

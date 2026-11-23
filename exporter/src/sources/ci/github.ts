@@ -22,7 +22,7 @@ import type { GitHubSource, HttpSettings } from '../../config';
 import { requireSecret, ConfigError } from '../../config';
 import { SourceClient, SourceError, nextLink } from '../client';
 import { log } from '../../log';
-import { changedLinesOf, kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
+import { pullRequest, changedLinesOf, kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
 
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled' | null> = {
   success: 'success', failure: 'failed', timed_out: 'failed', startup_failure: 'failed', cancelled: 'cancelled', skipped: null, neutral: null, action_required: null, stale: null,
@@ -46,7 +46,7 @@ export class GitHubAdapter implements CiAdapter {
   private appToken: { token: string; expires: number } | null = null;
   private privateKey: string | null = null;
 
-  constructor(private src: GitHubSource, http: HttpSettings, private opts: { links: boolean }, env: NodeJS.ProcessEnv = process.env) {
+  constructor(private src: GitHubSource, http: HttpSettings, private opts: import('./common').CiOptions, env: NodeJS.ProcessEnv = process.env) {
     let auth = '';
     if (src.auth === 'token' || src.auth === 'oauth') auth = `Bearer ${requireSecret(src.tokenEnv, `sources.${src.name} (a GitHub token with read access to Actions, Contents and Deployments)`, env)}`;
     else {
@@ -117,6 +117,42 @@ export class GitHubAdapter implements CiAdapter {
     for (const [repo, team] of Object.entries(this.src.teams)) {
       yield* this.runs(repo, team, since, until);
       yield* this.deployments(repo, team, since, until);
+      if (this.src.pullRequests) yield* this.pullRequests(repo, team, since, until);
+    }
+  }
+
+  /**
+   * The pull requests updated in the window: opened, merged and closed times, the first review submitted by someone
+   * other than the author, and (developer metrics only) the author's e-mail address from the first commit, sent as a pseudonym.
+   */
+  private async *pullRequests(repo: string, team: string, since: Date, until: Date): AsyncGenerator<CiPage> {
+    let count = 0;
+    for await (const list of this.pages<any>(`/repos/${repo}/pulls`, { state: 'all', sort: 'updated', direction: 'desc' }, null, this.src.maxRunsPerRepo)) {
+      const page: CiPage = { records: [], skipped: [], changedAt: null };
+      let older = false;
+      for (const pr of list) {
+        const updated = ms(pr.updated_at);
+        if (updated !== null && updated < since.getTime()) { older = true; break; }
+        const opened = ms(pr.created_at);
+        if (opened === null || opened >= until.getTime() || count++ >= this.src.maxRunsPerRepo) continue;
+        try {
+          const login = String(pr.user?.login ?? '');
+          const reviews = ((await this.client.getOptional<any[]>(`/repos/${repo}/pulls/${pr.number}/reviews`, { per_page: 100 })) ?? [])
+            .filter((r) => r.submitted_at && String(r.user?.login ?? '') !== login).map((r) => ms(r.submitted_at)).filter((t): t is number => t !== null);
+          let email: string | null = null;
+          if (this.opts.person) email = (((await this.client.getOptional<any[]>(`/repos/${repo}/pulls/${pr.number}/commits`, { per_page: 1 })) ?? [])[0]?.commit?.author?.email as string | undefined) ?? null;
+          page.records.push(pullRequest(team, {
+            id: String(pr.number), repo, authorEmail: email, state: pr.merged_at ? 'merged' : pr.state === 'closed' ? 'closed' : 'open',
+            openedAt: opened, firstReviewAt: reviews.length ? Math.min(...reviews) : null, mergedAt: ms(pr.merged_at), closedAt: ms(pr.closed_at),
+          }, this.opts));
+        } catch (e) {
+          if (e instanceof SourceError && e.auth) throw e;
+          page.skipped.push({ id: `${repo}#${pr.number}`, reason: (e as Error).message });
+        }
+        if (updated && (!page.changedAt || new Date(updated).toISOString() > page.changedAt)) page.changedAt = new Date(updated).toISOString();
+      }
+      yield page;
+      if (older) break;
     }
   }
 
@@ -169,7 +205,7 @@ export class GitHubAdapter implements CiAdapter {
     // Artifacts: test, coverage and SARIF reports.
     const arts: any[] = [];
     for await (const p of this.pages<any>(`/repos/${repo}/actions/runs/${run.id}/artifacts`, {}, 'artifacts')) arts.push(...p);
-    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: Array<'tests' | 'coverage' | 'sarif'> }> = [];
+    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: import('./common').ArtifactKind[] }> = [];
     for (const a of arts) {
       const kinds = kindsOf(String(a.name), this.src.artifacts);
       if (!kinds.length) continue;

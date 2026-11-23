@@ -28,7 +28,7 @@ test.describe('QE Navigator Exporter', { tag: [TAG.area('admin'), TAG.area('ci-e
     await expect(agent).not.toContainText('privacy mode');
     await expect(page.getByTestId('connect-ci-company-id')).toHaveText(freshCompany.id);
     const code = agent.getByTestId('connect-ci-agent-snippet');
-    await expect(code).toContainText('qe-exporter:0.3.0 setup');
+    await expect(code).toContainText('qe-exporter:0.5.0 setup');
     await agent.getByRole('tab', { name: 'Config file' }).click();
     await expect(code).toContainText(`companyId: ${freshCompany.id}`);
     await expect(code).toContainText(`${freshCompany.teamId}: ${freshCompany.departmentId}`);

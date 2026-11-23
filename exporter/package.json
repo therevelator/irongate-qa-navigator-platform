@@ -1,6 +1,6 @@
 {
   "name": "qe-exporter",
-  "version": "0.3.0",
+  "version": "0.5.0",
   "description": "QE Navigator Exporter: reads your CI, code quality, issue and incident tools inside your network with your own credentials and sends the raw data to QE Navigator as JSON over outbound HTTPS. QE Navigator calculates; the Exporter calculates nothing.",
   "license": "UNLICENSED",
   "private": true,

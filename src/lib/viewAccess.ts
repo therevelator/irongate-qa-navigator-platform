@@ -33,8 +33,15 @@ export function canCompareTeams(actor: PolicyActor): boolean {
   return teams.size >= 2;
 }
 
+/**
+ * Not offered to a company in live operation (server/lib/liveData.ts): the page for typing metrics. Every module
+ * has a raw source (Performance: load-test result files; Developer productivity: pull requests and calendars).
+ */
+export const LIVE_HIDDEN_VIEWS: readonly string[] = ['manual-metrics'];
+
 export function canOpenView(actor: PolicyActor | null | undefined, view: string): boolean {
   if (!actor || !actor.id) return view === 'dashboard';
+  if (actor.liveDataOnly && LIVE_HIDDEN_VIEWS.includes(view)) return false;
   if (view === 'compare') return canUseAnalytics(actor) && canCompareTeams(actor);
   if ((ANALYTICS_VIEWS as readonly string[]).includes(view)) return canUseAnalytics(actor);
   switch (view) {
@@ -42,8 +49,12 @@ export function canOpenView(actor: PolicyActor | null | undefined, view: string)
     case 'notifications':
       return true;
     case 'summary':
-      // Executive summary: every role with a team in their analytics scope (the summary covers
-      // that scope); the navigation offers it to super admins and managers (showSummaryInNav).
+    case 'time-lost':
+    case 'findings':
+    case 'outcomes':
+    case 'data-readiness':
+      // Executive summary and the "next move" pages (Time lost, Findings, Outcomes, Data readiness): every role
+      // with a team in their analytics scope (they cover that scope); the navigation offers it to super admins and managers (showSummaryInNav).
       return canUseAnalytics(actor);
     case 'tv':
       // TV mode: every role may open it, for the teams of their analytics scope (the API refuses

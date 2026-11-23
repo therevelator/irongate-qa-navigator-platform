@@ -17,7 +17,7 @@ export const MAX_UPLOAD_BYTES = (Number(process.env.RAW_UPLOAD_MAX_MB) || 20) * 
 export const MAX_UNCOMPRESSED_BYTES = 100 * 1024 * 1024;
 
 /** The raw ingestion paths (the app-wide JSON / form parsers skip them; they read the body here). */
-export const RAW_INGEST_PATH = /\/ingest\/(tests|coverage|pipelines|deployments|commits|incidents|issues|static-analysis|exporter\/batch|exporter\/heartbeat|collector\/heartbeat)\/?$/;
+export const RAW_INGEST_PATH = /\/ingest\/(tests|coverage|pipelines|deployments|commits|incidents|issues|static-analysis|performance|test-management|pull-requests|calendar|discovery|exporter\/batch|exporter\/heartbeat|collector\/heartbeat)\/?$/;
 /** File uploads (server/routes/uploads.ts): multipart bodies read here too. */
 export const UPLOAD_BODY_PATH = /\/uploads\/(preview|commit)\/?$/;
 export const isRawIngestPath = (path: string) => RAW_INGEST_PATH.test(path) || UPLOAD_BODY_PATH.test(path);

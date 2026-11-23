@@ -21,6 +21,7 @@ with real data.
    - 4B. [Raw ingestion: deployments, commits, incidents (v2)](#4b-raw-ingestion-deployments-commits-incidents-v2)
    - 4C. [Raw ingestion: issues and static analysis (v2)](#4c-raw-ingestion-issues-and-static-analysis-v2)
    - 4D. [QE Navigator Exporter: your CI and tools read from inside your network, no pipeline changes](#4d-qe-navigator-exporter-your-ci-and-tools-read-from-inside-your-network-no-pipeline-changes)
+   - 4F. [Raw ingestion: load-test results, test management, pull requests, calendars](#4f-raw-ingestion-load-test-results-test-management-pull-requests-calendars)
    - 4E. [Upload files: no API key, no network access, no CI step ("Level 0")](#4e-upload-files-no-api-key-no-network-access-no-ci-step-level-0) (4E.6: the field allow-list)
 5. [All other data: how it can be sent today](#5-all-other-data-how-it-can-be-sent-today)
 6. [Code: curl, Node.js, Python, retries, batching, backfill](#6-code-curl-nodejs-python-retries-batching-backfill)
@@ -37,11 +38,26 @@ with real data.
 
 ## 1. Overview: what data each screen needs
 
-IronGate has **one external write API**: `POST /api/ingest/kpis`, authenticated with a company API key. It
-accepts the **23 team KPIs** (section 4.3). Everything computed from those KPIs (QA score, DORA level, targets,
-staleness, alerts, company aggregates, rankings, TV mode, PDF report, CSV export) fills itself once the KPIs
-arrive. Everything else is entered in the app, written by internal (browser-session) endpoints, comes from the
-pulse survey, or **has no write path at all yet** (section 12).
+QE Navigator takes **raw data** and calculates the metrics itself. The raw ingestion API (sections 4A–4C: test and
+coverage reports, pipeline runs, deployments, commits, incidents, issues, SARIF) and the **QE Navigator Exporter**
+(section 4D), which reads your tools from inside your network and sends the same raw data, feed all 23 team KPIs
+(section 4.3), the evidence behind them, the Flaky tests, Test execution, CI/CD pipeline and Performance modules, pipeline
+health, the technical debt items, the developer metrics and the monthly quality side of Business impact (section 4F: load-test
+results, test management, pull requests, calendars). Everything computed from the KPIs (QA score,
+DORA level, targets, staleness, alerts, company aggregates, rankings, TV mode, PDF report, CSV export) fills itself.
+
+`POST /api/ingest/kpis` (section 4), where you send a finished value, is the older path. It remains for companies not yet
+sending raw data.
+
+What is still entered by people: the monthly business figures of Business impact (revenue, users, churn: no tool of
+ours measures them), the financial and SLA settings, targets, and the wellbeing pulse answers.
+
+**Live data only.** For a company in live operation, platform support turns on *Live data only* (operator panel →
+company → Edit company; `companies.settings.liveDataOnly`, `server/lib/liveData.ts`). Then: Manual metrics, developer
+metrics and pipeline stage edits are refused (`403`, `code: "live_data_only"`) and not offered in the app;
+`POST /api/ingest/kpis` and the Exporter's KPI file take no finished value for any of the 23 KPIs (`400`,
+"… is calculated by QE Navigator from raw data …"): QE Navigator calculates them all; the monthly quality values of
+Business impact are only the derived ones.
 
 IronGate never pulls from your Jira, Jenkins and so on from the internet. Either a small job or a CI step reads your tools and
 pushes to IronGate, or you run the **QE Navigator Exporter** (section 4D) inside your network: it reads GitHub Actions,
@@ -54,18 +70,18 @@ by a script that logs in as a user (section 3.6, caveats apply); **None** = no w
 
 | Screen (path) | Data it needs | How to send it | Typical source systems |
 |---|---|---|---|
-| **Overview / dashboard** (`/`) | Team KPIs (QA score inputs: test coverage, defect escape rate, change failure rate, code quality; automation coverage; flakiness); the four DORA KPIs; pipeline runs (pipeline health); technical debt items (tech debt health); pulse survey answers (wellbeing); developer metrics (workload balance) | KPIs: **API**. Pipeline runs: **None**. Debt items: **None** (impact fields: UI / Session). Pulse: people answer in the app. Developer metrics: **UI / Session** | SonarQube, JaCoCo / Istanbul, Jira, TestRail / Xray, GitHub / GitLab / Jenkins / Argo CD, PagerDuty / Opsgenie |
+| **Overview / dashboard** (`/`) | Team KPIs (QA score inputs: test coverage, defect escape rate, change failure rate, code quality; automation coverage; flakiness); the four DORA KPIs; pipeline runs (pipeline health); technical debt items (tech debt health); pulse survey answers (wellbeing); developer metrics (workload balance) | KPIs: **raw data** (4A–4D) or **API**. Pipeline runs: **raw data** (`pipeline-runs`). Debt items: **raw data** (derived from the static-analysis findings; impact fields: UI / Session). Pulse: people answer in the app. Developer metrics: **UI / Session** | SonarQube, JaCoCo / Istanbul, Jira, TestRail / Xray, GitHub / GitLab / Jenkins / Argo CD, PagerDuty / Opsgenie |
 | **Teams, Team detail** (`/teams`) | All 23 KPIs with provenance and staleness; QA score; DORA level; technical debt score; developer summary | KPIs: **API**; developer metrics: **UI / Session**; debt: see above | as above |
 | **Team TV mode** (`/tv`), **Compare teams** (`/compare`), **Team rankings**, **Reports** (PDF), **CSV export**, **Saved views** | Team KPIs (the PDF uses 14 of them), QA score | **API** | as above |
 | **Notifications / alerts** (`/notifications`) | Derived: KPI off target, metric stale, QA score drop, ingestion failures | Nothing to send: evaluated after every KPI write and hourly | — |
-| **Analytics → Flaky tests** (`/analytics/flaky-tests`) | Flaky tests (`flaky_tests`) and per-test execution history (`test_executions`) | **None** | JUnit XML across reruns, Jenkins / GitHub Actions, a flaky-test detector |
-| **Analytics → Test execution** (`/analytics/timeline`) | Suite runs (`test_execution_runs`) | **None** | CI test reports, TestRail / Xray runs |
-| **Analytics → Technical debt** (`/analytics/technical-debt`) | Debt items (`technical_debt`); per-item ROI inputs; financial settings | Items: **None**. ROI inputs and effort: **UI** (Manual metrics → Technical Debt ROI Impact) / **Session**. Financial settings: **UI** (Parameters) / **Session** | SonarQube issues / technical debt, Jira issues labelled as debt, finance |
+| **Analytics → Flaky tests** (`/analytics/flaky-tests`) | Tests that failed and passed on the same commit, with their recent runs (`flaky_test_evidence`, `test_results`) | **Raw data**: test reports (4A, 4D) | JUnit XML across reruns, Jenkins / GitHub Actions, a flaky-test detector |
+| **Analytics → Test execution** (`/analytics/timeline`) | Test runs, one per report received (`test_runs`) | **Raw data**: test reports (4A, 4D) | CI test reports, TestRail / Xray runs |
+| **Analytics → Technical debt** (`/analytics/technical-debt`) | Debt items (`technical_debt`); per-item ROI inputs; financial settings | Items: **raw data** (derived from the latest main-branch static-analysis findings, with SonarQube's remediation effort). ROI inputs and effort: **UI** (Manual metrics → Technical Debt ROI Impact) / **Session**. Financial settings: **UI** (Parameters) / **Session** | SonarQube issues / technical debt, Jira issues labelled as debt, finance |
 | **Analytics → Performance** (`/analytics/performance`) | Daily p50 / p95 / p99, throughput, error rate per endpoint (`performance_metrics`); SLA thresholds | Measurements: **None**. Thresholds: **UI** (Parameters → Performance SLA) / **Session** | k6, JMeter, Gatling, Datadog / New Relic APM |
-| **Analytics → CI/CD pipeline** (`/analytics/pipeline`) | Pipeline stages (`pipeline_stages`), stage execution history (`pipeline_execution_summary`), cost settings | Stages: edit existing only, **UI / Session**; history: **None**; cost settings: **UI / Session** | Jenkins / GitHub Actions / GitLab stage timings |
+| **Analytics → CI/CD pipeline** (`/analytics/pipeline`) | The stages of the pipeline runs received and their daily executions (`pipeline_stage_runs`, `pipeline_runs_raw`), cost settings | Stages and history: **raw data** (`pipeline-runs` with stages; 4A.2, 4D); cost settings: **UI / Session** | Jenkins / GitHub Actions / GitLab stage timings |
 | **Analytics → Developer productivity** (`/analytics/productivity`) | Current developer metrics (`developer_metrics`); DDPS history (`developer_productivity_snapshots`); opt-in flags | Current metrics: **UI / Session**. History: **None**. Opt-in: **UI** (Users page) | GitHub / GitLab PR timings, Google Calendar / Microsoft 365, issue tracker |
 | **Analytics → Wellbeing pulse** (`/analytics/pulse`) | Anonymous survey answers | People answer in the app; deliberately **no import** | — |
-| **Analytics → Business impact** (`/analytics/business-impact`: Money, What-if, Details, All teams) | Monthly quality metrics, monthly business KPIs, monthly context (downtime, incidents), open debt items, financial settings, KPI targets | Monthly data: **UI** (the page) / **Session**. Debt and settings: see above | Finance / BI (revenue), Amplitude / Mixpanel (active users, adoption), CRM / billing (churn), survey tools (NPS, CSAT), Zendesk / ServiceNow (tickets), PagerDuty / Opsgenie (downtime) |
+| **Analytics → Business impact** (`/analytics/business-impact`: Money, What-if, Details, All teams) | Monthly quality metrics, monthly business KPIs, monthly context (downtime, incidents), open debt items, financial settings, KPI targets | Monthly quality metrics: **derived** from the team's KPI values at every KPI write (or UI / Session, never in live operation). Business KPIs and context: **UI** (the page) / **Session**. Debt and settings: see above | Finance / BI (revenue), Amplitude / Mixpanel (active users, adoption), CRM / billing (churn), survey tools (NPS, CSAT), Zendesk / ServiceNow (tickets), PagerDuty / Opsgenie (downtime) |
 | **Administration → Ingestion log** (`/ingestion-log`) | Every KPI write request | Automatic | — |
 
 Configuration that changes how data is judged (not data itself): KPI targets, update frequency (staleness),
@@ -288,7 +304,7 @@ department or team (section 5.9). **Expected interval** is the default of **Admi
 | `sprint_velocity` | story points of issues Done at sprint close | points | 0–100,000, **integer** | none (compare with the team's own history) | — | 2 weeks |
 | `sprint_commitment_rate` | completed points ÷ points committed at sprint start × 100 (can exceed 100) | % | 0–999.99 | higher | ≥ 90 / ≥ 75 | 2 weeks |
 | `sprint_carryover` | points not completed at close ÷ committed points × 100 | % | 0–100 | lower | ≤ 10 / ≤ 20 | 2 weeks |
-| `first_time_pass_rate` | stories with 0 QA rejections ÷ stories tested × 100 | % | 0–100 | higher | ≥ 85 / ≥ 70 | 1 day |
+| `first_time_pass_rate` | calculated from raw data: pipeline runs whose first attempt passed ÷ runs × 100 (test runs' first attempts when there is no pipeline data). When you send a finished value instead: stories with 0 QA rejections ÷ stories tested × 100 | % | 0–100 | higher | ≥ 85 / ≥ 70 | 1 day |
 | `blocked_time_hours` | Σ(unblocked − blocked) over the sprint's tickets | hours | 0–100,000, **integer** | lower | ≤ 4 / ≤ 12 | 1 day |
 | `sizing_accuracy` | actual effort ÷ estimated effort (1.0 = perfect) | ratio | 0–99.99 | closer to 1.0 (no stored target; Team detail colours ±0.15 / ±0.3) | — | 2 weeks |
 
@@ -919,7 +935,7 @@ It replaces the QE Navigator Collector (releases up to 0.2.0, which calculated v
 | | |
 |---|---|
 | Form | One file `qe-exporter.mjs` (Node 20+, no runtime dependencies, built only from `exporter/src`) or a distroless container (`docker build -f exporter/Dockerfile .` from the repository root: non-root 65532, read-only file system, no shell). Examples: `exporter/deploy/` (Kubernetes CronJob + NetworkPolicy, systemd timer, cron); a local trial with made-up data: `deploy/exporter-test/`. |
-| Sources | GitHub Actions, GitLab CI, **Bitbucket Cloud** (Pipelines with steps, test reports, deployments, commits) and **Bitbucket Data Center** (builds reported on commits, deployments, commits), Jenkins, Azure DevOps, SonarQube / SonarCloud, Jira (Cloud, Server, Data Center), Linear, PagerDuty, Opsgenie, and a KPI file for values no tool records as raw data (automation coverage, automation ROI). |
+| Sources | GitHub Actions, GitLab CI, **Bitbucket Cloud** (Pipelines with steps, test reports, deployments, commits) and **Bitbucket Data Center** (builds reported on commits, deployments, commits), Jenkins, Azure DevOps, SonarQube / SonarCloud (findings and lines of code; with `coverage: true` also its coverage totals, for teams whose CI keeps no coverage report), Jira (Cloud, Server, Data Center), Linear, PagerDuty, Opsgenie, and a KPI file for values no tool records as raw data (automation coverage, automation ROI). |
 | What it sends | Test reports and coverage reports as **files** (the text of the JUnit / TRX / Cucumber, lcov / Cobertura / JaCoCo / Istanbul file, recognised by content; a CI that gives results only as JSON is written out as a JUnit file), with failure messages, stack traces, output and properties stripped; SARIF without messages; pipeline runs with their stages; deployments with the commits they shipped (sha and times); incidents and issues through the field allow-list (4E.6) and the Exporter's stricter send policy; the lines a commit changed (line numbers only) for the coverage of changed code. Never: credentials, descriptions, comments, logs, commit messages, names or e-mail addresses. |
 | Endpoints | `POST /api/ingest/exporter/batch` (4D.1), `GET /api/ingest/exporter/context` (4D.2), `POST /api/ingest/exporter/heartbeat` (4D.3). The endpoints of 4A–4C keep working for pipelines that send directly. |
 | Commands | `setup` (a page on 127.0.0.1 with a one-time token: API key, connect each tool, test it, map each source to a department and team) · `check` (config, each source, the key's company, departments and teams, a dry run per team) · `preview` (every envelope exactly as `sync` would send it, with the three ids; **nothing is sent**, not even to QE Navigator) · `sync` (incremental; `--since` backfills) · `diagnose` (a redacted diagnostics file). |
@@ -959,8 +975,8 @@ received (100 MB uncompressed). `Idempotency-Key` header: a re-sent batch is ans
 | `departmentId` | A department of that company. |
 | `teamId` | An **active** team of that department and company. The only team the items may write to: an item naming another team is refused, and no service or project-key mapping is used. |
 | `source` | The Exporter source's name (`github`, `jira`, …): shown in the logs. |
-| `kind` | One of `test-report`, `coverage`, `sarif`, `pipeline-runs`, `deployments`, `commits`, `incidents`, `issues`, `kpis`. |
-| `items` | At most 50 report items (`test-report`, `coverage`, `sarif`), 100 `pipeline-runs` or `kpis`, 500 `deployments`, `commits` or `incidents`, 1,000 `issues`. |
+| `kind` | One of `test-report`, `coverage`, `sarif`, `pipeline-runs`, `deployments`, `commits`, `incidents`, `issues`, `kpis`, `performance`, `test-management`, `pull-requests`, `calendar`. |
+| `items` | At most 50 report items (`test-report`, `coverage`, `sarif`), 100 `pipeline-runs` or `kpis`, 500 `deployments`, `commits` or `incidents`, 1,000 `issues` or `pull-requests`, 20 `performance`, 2,000 `test-management` or `calendar`. |
 
 Items per kind (each goes through the existing ingestion handler of 4A–4C, with its parsers, limits and storage):
 
@@ -971,7 +987,8 @@ Items per kind (each goes through the existing ingestion handler of 4A–4C, wit
 - `deployments`: deployment JSON (4B.1): `id, environment, production, service, commit, previousCommit?, startedAt, finishedAt, result, rollbackOf?, hotfix?, commits: [{ sha, authoredAt, committedAt }]`.
 - `commits`: commit batches (4B.2): `{ deployment?, branch?, commits: [{ sha, authoredAt, committedAt, author? }] }` (an author becomes a salted hash on our side).
 - `incidents`: incident JSON (4B.3); `issues`: issue JSON (4C.1); both through the field allow-list.
-- `kpis`: `{ recordedAt?, metrics: { <KPI column>: number } }` (section 7: for values with no raw source, such as `automation_coverage` and `automation_roi`); stored with source `exporter.<source>`.
+- `kpis`: `{ recordedAt?, metrics: { <KPI column>: number } }`: finished values, for companies not in live operation (a company in live operation refuses them: every KPI has a raw source); stored with source `exporter.<source>`.
+- `performance`, `test-management`, `pull-requests`, `calendar`: the items of section 4F (load-test result files; test cases and executions; pull requests; free/busy per person and day).
 
 Checks, in this order, before anything is read further: the key (valid, not revoked: `401`); a missing `companyId`,
 `departmentId` or `teamId` (`400`); `companyId` not the key's (`403 companyId does not match this API key`); the department
@@ -1002,10 +1019,10 @@ data, no error message. Kept per API key (`exporter_heartbeats`), shown in Conne
 
 ```bash
 # The five-minute path (details per tool: exporter/README.md)
-docker build -f exporter/Dockerfile -t qe-exporter:0.3.0 .
-docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 setup   # open the printed link
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 preview
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.3.0 sync                                 # then every 15 minutes
+docker build -f exporter/Dockerfile -t qe-exporter:0.5.0 .
+docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 setup   # open the printed link
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 preview
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 sync                                 # then every 15 minutes
 ```
 
 Verified against a local instance by `tests/api/exporter-batch.test.ts` (the envelope: every id check, dry run, idempotency,
@@ -1231,6 +1248,94 @@ database on the upload and the API path, the titles setting, scope, zip-slip, zi
 `tests/api/upload-netlify.test.ts` (through the Netlify function; the per-company rate limit),
 `tests/e2e/admin/upload-files.spec.ts` (UPL-01–03, A11Y-71–74).
 
+## 4F. Raw ingestion: load-test results, test management, pull requests, calendars
+
+Four more kinds of raw data, so that no module needs a typed-in value (`server/routes/ingestMore.ts`, migration
+`20261209000000_more_raw_sources.sql`). The QE Navigator Exporter reads them from your tools and sends them as the envelope kinds
+`performance`, `test-management`, `pull-requests` and `calendar` (4D.1); the endpoints below take the same items directly. JSON (a
+list of items, or an object holding the list), gzip accepted, the team as the query parameter `team`, an optional `source` name, at
+most 10 MB. Same API keys, rate limit and ingestion log as every other endpoint; `?dryRun=true` checks everything and stores nothing.
+Idempotent by each record's own key: the same record again answers `200 "duplicate"`, a changed one replaces the stored one (`201`).
+A field the parser does not read is refused (`400`), not ignored. Nothing sent here is a calculated value.
+
+### 4F.1 POST /api/ingest/performance
+
+The result files of a load test, as the tools write them. One item is one run:
+`{ run, attempt?, commit?, branch?, repo?, startedAt, files: [{ name, content }] }` (1 to 20 files, at most 20 runs per request).
+
+| Tool | File | Read from it |
+|---|---|---|
+| k6 | the summary export (`k6 run --summary-export=summary.json`) | `http_req_duration` (med, p(95), p(99)), `http_reqs` (count, rate), `http_req_failed`: one row, "(all requests)" |
+| JMeter | `statistics.json` of the HTML dashboard report | per label: sampleCount, errorCount / errorPct, medianResTime, pct2ResTime (95), pct3ResTime (99), throughput |
+| Gatling | `js/stats.json` (or `global_stats.json`) of the report | per request: numberOfRequests, percentiles1 (50), percentiles3 (95), percentiles4 (99), meanNumberOfRequestsPerSecond |
+
+The file is recognised by its content (`415` for anything else). Stored in `performance_runs` and `performance_results`. The
+Performance page shows, per day and endpoint, the values of the latest run of that day (runs are never averaged together). The
+Exporter finds these files among the CI artifacts of GitHub Actions, GitLab CI, Jenkins and Azure DevOps (`artifacts.performance`,
+default names `*perf*`, `*load*`, `*k6*`, `*jmeter*`, `*gatling*`) and sends only the numbers per request name.
+
+### 4F.2 POST /api/ingest/test-management
+
+Test cases and test executions of a test management tool (the Exporter reads TestRail, Xray Cloud and Zephyr Scale):
+
+- a case: `{ "type": "case", "key", "automated": true|false, "manualEstimateSeconds"?, "archived"?, "updatedAt"? }`
+- an execution: `{ "type": "execution", "key", "case", "automated": true|false, "status"?, "executedAt", "durationSeconds"? }`
+
+Stored in `tm_cases` and `tm_executions`. Calculated per team and day (`packages/engine/src/calc/automation.ts`, source `computed`,
+with "How this was calculated"):
+
+- **`automation_coverage`** = automated test cases ÷ test cases × 100 (archived cases not counted).
+- **`automation_roi`** = (time saved − time invested) ÷ time invested × 100 over the 30 days ending the day. Time saved = Σ over the
+  automated executions of cases that have a manual estimate: estimate − the run's own duration. Time invested = the time logged on
+  the issues labelled `test-automation` that were resolved in the period (send them with `POST /api/ingest/issues`; the Exporter sets
+  the label from the Jira labels you name in `automationLabels`). Without such an execution or without time invested there is no ROI.
+
+### 4F.3 POST /api/ingest/pull-requests and POST /api/ingest/calendar
+
+The records the developer metrics are calculated from (`server/lib/developerFromRaw.ts`).
+
+- a pull request: `{ "id", "repo"?, "author"?, "state": "open"|"merged"|"closed", "openedAt", "firstReviewAt"?, "mergedAt"?, "closedAt"? }`
+  (`firstReviewAt`: the first review by someone other than the author). The Exporter reads GitHub, GitLab, Bitbucket Cloud and Azure
+  DevOps (`pullRequests: true`).
+- a calendar day: `{ "person", "day": "YYYY-MM-DD", "workStart"?: "09:00", "workEnd"?: "17:00", "utcOffsetMinutes"?, "outOfOffice"?, "busy": [{ "start", "end" }] }`.
+  The Exporter reads Google Calendar and Microsoft 365, free/busy only: no title, attendee or description is requested.
+
+**People.** `author` and `person` must be a pseudonym: `sha256(lower(e-mail) + ":" + company id)`, 64 hex characters (a name or an
+e-mail address is refused). QE Navigator computes the same value for its own users and keeps a pseudonym **only** when it is that of
+an active user who enabled developer insights: otherwise the pull request is stored without an author and the calendar day is not
+stored at all (the answer counts them: `withAuthor`, `notOptedIn`). The Exporter sends pseudonyms only with
+`privacy.developerMetrics: true`.
+
+Calculated per developer of the team (an opted-in member), over the last 30 days, and written to `developer_metrics` (source
+`computed`) with a daily snapshot for the DDPS history; recalculated on arrival and every night:
+
+| Metric | Formula |
+|---|---|
+| PR merge time | mean hours from opened to merged, pull requests they opened, merged in the window |
+| Code review time | mean hours from opened to the first review by someone else |
+| Meeting time | mean hours per working day in busy intervals inside the working hours (overlaps count once) |
+| Focus time | mean hours per working day in free blocks of at least 2 hours inside the working hours |
+| Context switches | mean number of separate busy blocks per working day |
+| Workload balance | the existing derived score of the five values |
+
+A working day is a day whose calendar was read and that is not out of office. A value without records stays empty.
+
+### 4F.4 POST /api/ingest/discovery
+
+What the QE Navigator Exporter found for a team in a CI source on its last run (envelope kind `discovery`, from Exporter 0.5.0).
+One item; the latest report replaces the one before for that team and source. It feeds the Data readiness page
+([NEXT_MOVE.md](NEXT_MOVE.md#35-the-exporters-discovery-report)) and no metric.
+
+```json
+[{ "from": "2026-11-20T00:00:00Z", "to": "2026-11-23T00:00:00Z",
+   "counts": { "pipelineRuns": 14, "testReports": 0, "coverageReports": 9, "deployments": 2 },
+   "runsWithoutTests": 14, "runsWithoutCoverage": 5, "unmapped": ["pipeline nightly-load is not mapped"] }]
+```
+
+`counts` takes `pipelineRuns`, `testReports`, `coverageReports`, `sarifReports`, `deployments`, `commits`, `pullRequests`,
+`performanceRuns`, `issues`, `incidents` (whole numbers); `unmapped` at most 50 names, `notes` at most 20 sentences. Any other
+field is refused.
+
 ## 5. All other data: how it can be sent today
 
 None of the following goes through the ingestion API. Each subsection says plainly what is possible.
@@ -1251,6 +1356,8 @@ None of the following goes through the ingestion API. Each subsection says plain
 
 How to send:
 
+- **Raw records (recommended; the only way in live operation):** pull requests and calendar free/busy (section 4F.3). QE Navigator
+  calculates the five inputs and the derived score per developer who enabled developer insights, and keeps a daily snapshot.
 - **UI:** **Administration → Manual metrics → Developer Productivity Metrics** (super admin, manager, team lead for their team).
 - **Session:** `POST /api/metrics/developer` (roles super admin, manager, team lead; team must be writable by the caller) →
   `200 {"message":"Developer metrics saved successfully","teamId":…,"developerId":…}`; `400 Invalid developer ID`;
@@ -1305,9 +1412,10 @@ How to send:
 `resolved`, `wont_fix`), `effort_hours`, `source` (e.g. "SonarQube"), `file_path`, `line_number`, `assigned_to`, and the ROI inputs
 `affected_users`, `support_tickets_monthly`, `downtime_minutes_monthly`, `revenue_impact_percent`, `sla_breaches_monthly`.
 
-- **Creating items, changing severity, status, title or category: not possible** (no endpoint, no screen). Debt items exist only from
-  sample data today. This blocks the technical debt score, tech debt health (20 % of engineering health) and the debt part of revenue
-  impact for real companies (section 12).
+- **Items come from static analysis.** Each SARIF report (4C.2, or the Exporter's `sarif` kind) refreshes the team's items from the
+  findings of its latest main-branch reports, with SonarQube's remediation effort when sent (`server/lib/techDebtFromAnalysis.ts`). The
+  technical debt score, tech debt health (20 % of engineering health) and the debt part of revenue impact follow. There is no endpoint
+  and no screen to create an item by hand.
 - **ROI inputs and effort of an existing item:** **UI** Administration → Manual metrics → *Technical Debt ROI Impact*;
   **Session** `PUT /api/analytics/technical-debt/:id/impact` (super admin or manager of the item's department) with
   `{ affected_users, support_tickets_monthly, downtime_minutes_monthly, revenue_impact_percent, sla_breaches_monthly, estimated_effort_hours }`.
@@ -1320,24 +1428,31 @@ How to send:
 
 | Table | Shown in | Write path |
 |---|---|---|
-| `pipeline_stages` (name, order, `avg_duration_seconds`, `success_rate` %, `cpu_usage` %, `memory_usage` %, `cost_per_run`) | Stage flow and bottleneck score | **Edit existing stages only**: UI Manual metrics → *CI/CD pipeline stages*; Session `PUT /api/analytics/pipeline-stages/:id` `{ duration (seconds), success_rate, cpu_usage, memory_usage, cost_per_run }` (super admin or manager; omitted fields are kept; writes a `pipeline_stage_history` row). **No way to create a stage.** A team without stages shows the company-level stages. |
-| `pipeline_runs` (status success/failed/running/cancelled, duration, commit, branch, times) | **Pipeline health** gauge (dashboard; 25 % of engineering health) | **None** |
-| `pipeline_execution_summary` (per stage and day: runs, successes, failures, durations, cost) | "Stage executions over 14 days" | **None** |
+| `pipeline_runs_raw`, `pipeline_stage_runs` (the pipeline runs you send, with their stages: 4A.2, or the Exporter's `pipeline-runs`) | **CI/CD pipeline** page: per stage the mean duration and the success rate over the last 30 days, the bottleneck score, the cost per run (duration × the cost per minute of the pipeline settings) and the stage executions per day. **Pipeline health** gauge (dashboard; 25 % of engineering health). | **Raw data.** CPU and memory are not in CI data and stay empty. Stages calculated from CI are not edited. |
+| `pipeline_stages`, `pipeline_execution_summary` (the older module tables) | The same page, only for a team that never sent a pipeline run (sample data) | Edit existing stages: UI Manual metrics → *CI/CD pipeline stages*; Session `PUT /api/analytics/pipeline-stages/:id` (refused in live operation). No way to create a stage. |
 | `pipeline_config` (time / cost savings %, cost per minute) | Savings estimates on the pipeline page | UI Manual metrics; Session `PUT /api/analytics/pipeline-config` (super admin / manager) |
 
-What you *can* send for CI today: the KPIs `avg_build_time_minutes`, `test_execution_time_minutes`, `parallel_test_efficiency`,
-`infrastructure_failures`, `test_flakiness_rate` (API).
+Send the pipeline runs with their stages (4A.2) and the test reports (4A.1), or run the Exporter: the KPIs
+`avg_build_time_minutes`, `test_execution_time_minutes`, `parallel_test_efficiency`, `first_time_pass_rate` and
+`test_flakiness_rate` are then calculated.
 
 ### 5.5 Test executions and flaky tests (Test execution, Flaky tests)
 
-`test_execution_runs`, `test_cases`, `test_executions` and `flaky_tests` have **no write path** (an ingestion endpoint for flaky-test
-results exists only as a commented-out sketch in `server/routes/analytics.ts`). Send the team-level KPIs instead:
-`test_flakiness_rate`, `test_execution_time_minutes`, `automation_coverage`, `first_time_pass_rate` (API).
+Both modules read the test reports you send (4A.1, or the Exporter's `test-report`; `server/lib/analyticsFromRaw.ts`):
+
+- **Flaky tests**: the tests that failed and passed on the same commit in the last 30 days (`flaky_test_evidence`), each with its flaky
+  runs, its runs in the window, a score (flaky runs ÷ runs of the test × 100) and its last 20 results. No cause is derived: failure
+  messages are not kept.
+- **Test execution**: one row per report received in the period (`test_runs`): repository, branch, run and attempt, start, duration,
+  the counts, and "failed" when a test failed or errored.
+
+A team that never sent a test report sees the older module tables (`flaky_tests`, `test_execution_runs`), which hold sample data only.
 
 ### 5.6 Performance tests (Performance page)
 
-`performance_metrics` (per team, day and endpoint: `response_time_p50_ms`, `_p95_ms`, `_p99_ms`, `throughput_per_minute`,
-`error_rate` %) has **no write path**. The SLA thresholds used to flag breaches can be set: Parameters → Performance SLA
+The page reads the load-test results you send (`POST /api/ingest/performance`, or the Exporter's `performance` kind, section
+4F.1): per day and endpoint the latest run's p50, p95 and p99 response time, throughput per minute and error rate. A team that
+never sent a result sees the older `performance_metrics` table (sample data only). The SLA thresholds used to flag breaches can be set: Parameters → Performance SLA
 (`sla_response_time_ms`, default 500; `sla_error_rate_percent`, default 1), section 5.9.
 
 ### 5.7 Incidents
@@ -2013,7 +2128,7 @@ Team KPIs via the API (per team; see the interval column of section 4.3):
 - [ ] `avg_build_time_minutes`, `test_execution_time_minutes` — CI, **hourly** (7.2)
 - [ ] `parallel_test_efficiency`, `test_flakiness_rate` — CI, daily (7.2, 7.6)
 - [ ] `defect_density`, `defect_escape_rate` — Jira (+ SonarQube `ncloc`), weekly (7.4)
-- [ ] `automation_coverage` weekly, `automation_roi` monthly — test management (7.6)
+- [ ] `automation_coverage`, `automation_roi` — calculated from the test management records (4F.2); as finished values only when not in live operation (7.6)
 - [ ] `deployment_frequency_per_week` weekly, `lead_time_days` daily, `change_failure_rate` weekly, `mttr_hours` daily — deploy + incident
       events (7.3). All four are needed for a DORA level.
 - [ ] `mtbf_hours` weekly, `system_availability` daily, `infrastructure_failures` weekly — incidents / monitoring / CI (7.3, 7.6)
@@ -2029,8 +2144,9 @@ Other data (not via the API key):
 - [ ] Technical debt ROI inputs of existing items — Manual metrics or `session_upload.py debt-impact` (5.3)
 - [ ] Pipeline stage figures of existing stages, pipeline cost settings — Manual metrics (5.4)
 - [ ] Pulse survey — ask the team members to answer (5.8)
-- [ ] Accept that these stay empty for now: pipeline runs (pipeline health), stage execution history, test execution, flaky tests,
-      performance, creating debt items, DDPS history (section 12)
+- [ ] Filled by the raw data (4A–4D) without anything else to do: pipeline health, the CI/CD pipeline stages and their history, Test
+      execution, Flaky tests, the technical debt items, the monthly quality side of Business impact
+- [ ] Performance, automation coverage and ROI, developer metrics: section 4F (load-test results, test management, pull requests, calendars)
 
 Monitoring:
 
@@ -2175,27 +2291,19 @@ Data the app displays but that **cannot be sent with an API key today**:
 
 | Data (table) | Screens affected | What exists today |
 |---|---|---|
-| Pipeline runs (`pipeline_runs`) | Dashboard **Pipeline health** gauge (25 % of engineering health) | Nothing (sample data only). Engineering health is computed without it ("n of 4 components"). |
-| Stage execution history (`pipeline_execution_summary`) | CI/CD pipeline: stage executions over 14 days | Nothing (sample data only) |
-| Pipeline stages: creating stages (`pipeline_stages`) | CI/CD pipeline: stage flow, bottleneck score | Edit existing stages only (UI / Session) |
-| Test execution runs (`test_execution_runs`) | Test execution timeline | Nothing |
-| Test cases and executions (`test_cases`, `test_executions`) | Flaky tests: run history | Nothing |
-| Flaky tests (`flaky_tests`) | Flaky tests | Nothing (a commented-out ingest sketch in `server/routes/analytics.ts`) |
-| Performance test results (`performance_metrics`) | Performance | Nothing; SLA thresholds are configurable |
-| Technical debt items: create, severity, status (`technical_debt`) | Technical debt page, tech debt score (Team detail), tech debt health (dashboard, 20 % of engineering health), revenue impact debt figures | Edit ROI inputs and effort of existing items only (UI / Session) |
-| DDPS history (`developer_productivity_snapshots`) | Developer productivity: DDPS history chart | Nothing (sample data only); `POST /api/metrics/developer` keeps only the current row |
-| Developer metrics (`developer_metrics`) | Developer productivity, Team detail, workload balance | UI / Session only (5.1) |
-| Business impact monthly data (`business_impact_*`) | Business impact (all tabs) | UI / Session only (5.2) |
-| Incidents (no table) | — | Only as computed KPIs and monthly downtime (5.7) |
+| Stage CPU and memory (`pipeline_stages.cpu_usage`, `memory_usage`) | CI/CD pipeline | Not in CI data; empty for stages calculated from the runs you send |
+| Developer metrics of people who did not enable developer insights | Developer productivity | By design: a pseudonym is kept only for a user who enabled developer insights (4F.3) |
+| Business impact monthly business KPIs and context (`business_impact_business_kpis`, `business_impact_context`) | Business impact (all tabs) | UI / Session only (5.2); the quality side is derived from the KPI values |
 | Pulse survey answers | Wellbeing pulse, wellbeing on the dashboard | By people in the app only (by design) |
 | Reading data with an API key | — | Keys are write-only; reading needs a user session |
 | Department- or company-level KPIs | — | KPIs are per team; company figures are always derived |
 | Deleting a KPI value | — | Corrections only (4.5) |
 
-Practical consequence for a real (non-demo) company today: team KPIs, QA score, DORA, targets, alerts, TV, compare, rankings, reports and
-the ingestion log can be fully populated by integrations; developer productivity and business impact can be populated by people or by
-session scripts; pipeline health, stage history, test execution, flaky tests, performance, debt items and DDPS history stay empty (empty
-states, never invented values) until write paths exist.
+Practical consequence for a real (non-demo) company today: all 23 team KPIs, QA score, DORA, targets, alerts, TV, compare, rankings,
+reports, the evidence panels, Flaky tests, Test execution, CI/CD pipeline, Performance, pipeline health, technical debt, developer
+productivity (for people who enabled developer insights) and the quality side of Business impact are populated by the raw data; the
+business figures of Business impact, the financial settings and the targets are entered by people; the pulse survey is answered by
+people. A module whose source is not connected shows an empty state, never an invented value.
 
 ---
 

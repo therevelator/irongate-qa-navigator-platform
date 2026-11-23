@@ -19,10 +19,12 @@ import { credentialValue, loadCredentials } from './credentials';
 
 export class ConfigError extends Error {}
 
-export type SourceType = 'jira' | 'linear' | 'pagerduty' | 'opsgenie' | 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-dc' | 'jenkins' | 'azure-devops' | 'sonarqube' | 'kpis';
-export const SOURCE_TYPES: SourceType[] = ['jira', 'linear', 'pagerduty', 'opsgenie', 'github', 'gitlab', 'bitbucket', 'bitbucket-dc', 'jenkins', 'azure-devops', 'sonarqube', 'kpis'];
+export type SourceType = 'jira' | 'linear' | 'pagerduty' | 'opsgenie' | 'github' | 'gitlab' | 'bitbucket' | 'bitbucket-dc' | 'jenkins' | 'azure-devops' | 'sonarqube' | 'kpis'
+  | 'testrail' | 'xray' | 'zephyr' | 'google-calendar' | 'microsoft-365';
+export const SOURCE_TYPES: SourceType[] = ['jira', 'linear', 'pagerduty', 'opsgenie', 'github', 'gitlab', 'bitbucket', 'bitbucket-dc', 'jenkins', 'azure-devops', 'sonarqube', 'kpis',
+  'testrail', 'xray', 'zephyr', 'google-calendar', 'microsoft-365'];
 /** The CI and code-quality sources (read pipelines, tests, coverage, deployments, findings) as opposed to the issue and incident tools. */
-export const CI_TYPES: SourceType[] = ['github', 'gitlab', 'bitbucket', 'bitbucket-dc', 'jenkins', 'azure-devops', 'sonarqube'];
+export const CI_TYPES: SourceType[] = ['github', 'gitlab', 'bitbucket', 'bitbucket-dc', 'jenkins', 'azure-devops', 'sonarqube', 'testrail', 'xray', 'zephyr', 'google-calendar', 'microsoft-365'];
 
 /** What issue and incident records may carry (people are never sent by name; titles and links only when enabled). */
 export interface Privacy {
@@ -32,6 +34,12 @@ export interface Privacy {
   sendLinks: boolean;
   /** none (default): no person is sent at all; hash: a salted HMAC of the assignee / first responder, computed here. */
   people: 'none' | 'hash';
+  /**
+   * Developer metrics (default false). When true, the author of a pull request and the person of a calendar day are sent as
+   * a pseudonym QE Navigator can match to its own users: sha256(lower(e-mail) + ':' + company id). QE Navigator keeps it only
+   * for a user who enabled developer insights. When false, pull requests are sent without an author and calendars are not read.
+   */
+  developerMetrics: boolean;
 }
 
 export interface HttpSettings { timeoutSeconds: number; maxRetries: number; maxRetryWaitSeconds: number; caFile: string | null }
@@ -58,6 +66,8 @@ export interface JiraSource extends SourceBase {
   jql: string;
   fields: { storyPoints: string | null; sprint: string | null; environment: string | null; flagged: string | null };
   pageSize: number;
+  /** Jira labels that mark test-automation work (e.g. automation, qa-automation): such an issue is sent with the label "test-automation" (its time logged is the time invested of automation ROI). */
+  automationLabels: string[];
 }
 
 export interface LinearSource extends SourceBase {
@@ -89,7 +99,7 @@ export interface OpsgenieSource extends SourceBase {
 }
 
 /** Artifact names (globs, * and ?) whose files are read as test reports, coverage reports or SARIF; files are recognised by content. */
-export interface ArtifactSettings { tests: string[]; coverage: string[]; sarif: string[]; maxMB: number }
+export interface ArtifactSettings { tests: string[]; coverage: string[]; sarif: string[]; /** Load-test results: k6 summary export, JMeter statistics.json, Gatling stats.json. */ performance: string[]; maxMB: number }
 
 export interface GitHubSource extends SourceBase {
   type: 'github';
@@ -107,6 +117,8 @@ export interface GitHubSource extends SourceBase {
   environments: string[];
   artifacts: ArtifactSettings;
   maxRunsPerRepo: number;
+  /** Read the pull requests of the mapped repositories (developer metrics). */
+  pullRequests?: boolean;
 }
 
 export interface GitLabSource extends SourceBase {
@@ -117,6 +129,8 @@ export interface GitLabSource extends SourceBase {
   environments: string[];
   artifacts: ArtifactSettings;
   maxRunsPerRepo: number;
+  /** Read the pull requests of the mapped repositories (developer metrics). */
+  pullRequests?: boolean;
 }
 
 /** Bitbucket Cloud (api.bitbucket.org): app password (username + app password) or OAuth with your own OAuth consumer. */
@@ -129,6 +143,8 @@ export interface BitbucketSource extends SourceBase {
   environments: string[];
   artifacts: ArtifactSettings;
   maxRunsPerRepo: number;
+  /** Read the pull requests of the mapped repositories (developer metrics). */
+  pullRequests?: boolean;
 }
 
 /** Bitbucket Data Center / Server: an HTTP access token (Bearer) with read permission; builds from the build status API, deployments from the deployments API (8.x and later). */
@@ -172,6 +188,8 @@ export interface AzureDevOpsSource extends SourceBase {
   releasesUrl: string;
   artifacts: ArtifactSettings;
   maxRunsPerRepo: number;
+  /** Read the pull requests of the mapped repositories (developer metrics). */
+  pullRequests?: boolean;
 }
 
 export interface SonarQubeSource extends SourceBase {
@@ -180,10 +198,70 @@ export interface SonarQubeSource extends SourceBase {
   auth: 'bearer' | 'basic';
   /** Branch to read (empty: the main branch). */
   branch: string | null;
+  /**
+   * Also read the project's coverage totals (lines and conditions to cover and uncovered) and send them as a
+   * coverage report. For teams whose CI keeps no coverage report (Bitbucket). Off by default: a team whose CI
+   * already sends coverage files would get two reports of the same code.
+   */
+  coverage: boolean;
   allowHttp: boolean;
 }
 
-export type CiSourceConfig = GitHubSource | GitLabSource | BitbucketSource | BitbucketDcSource | JenkinsSource | AzureDevOpsSource | SonarQubeSource;
+/** TestRail: test cases (automated or not, estimate) and test results. `teams` maps a TestRail project id to a team. */
+export interface TestRailSource extends SourceBase {
+  type: 'testrail';
+  baseUrl: string;
+  user: string | null;
+  userEnv: string;
+  /** The case field that says how a case is automated (0 / empty = not automated); cases of a type named "Automated" count too. */
+  automatedField: string;
+  allowHttp: boolean;
+}
+/** Xray Cloud (client id + secret): tests with their type, test executions. `teams` maps a Jira project key to a team. */
+export interface XraySource extends SourceBase {
+  type: 'xray';
+  apiUrl: string;
+  clientId: string | null;
+  clientIdEnv: string;
+  /** Test types that are manual (every other type is automated). */
+  manualTypes: string[];
+}
+/** Zephyr Scale Cloud (API access token): test cases and test executions. `teams` maps a Jira project key to a team. */
+export interface ZephyrSource extends SourceBase {
+  type: 'zephyr';
+  apiUrl: string;
+  /** The custom field that says a case is automated, and the values that mean yes; a case with one of `automatedLabels` counts too. */
+  automatedField: string;
+  automatedValues: string[];
+  automatedLabels: string[];
+}
+/** Calendars (free/busy only). `teams` maps a person's e-mail address to a team; the address never leaves (a pseudonym is sent). */
+export interface CalendarSourceBase extends SourceBase {
+  /** Working hours and time zone used for every person (Microsoft 365: the person's own working hours when the tenant gives them). */
+  workStart: string;
+  workEnd: string;
+  timeZone: string;
+  /** Days read before today on the first run and again on every run (calendars change afterwards). */
+  lookbackDays: number;
+}
+export interface GoogleCalendarSource extends CalendarSourceBase {
+  type: 'google-calendar';
+  apiUrl: string;
+  tokenUrl: string;
+  /** The service account's e-mail address (its private key is the secret) and the user it acts as (domain-wide delegation, scope calendar.freebusy). */
+  serviceAccount: string;
+  subject: string;
+}
+export interface Microsoft365Source extends CalendarSourceBase {
+  type: 'microsoft-365';
+  apiUrl: string;
+  loginUrl: string;
+  tenantId: string;
+  clientId: string;
+}
+
+export type CiSourceConfig = GitHubSource | GitLabSource | BitbucketSource | BitbucketDcSource | JenkinsSource | AzureDevOpsSource | SonarQubeSource
+  | TestRailSource | XraySource | ZephyrSource | GoogleCalendarSource | Microsoft365Source;
 export type SourceConfig = JiraSource | LinearSource | PagerDutySource | OpsgenieSource | KpisSource | CiSourceConfig;
 export const isCiSource = (s: SourceConfig): s is CiSourceConfig => CI_TYPES.includes(s.type);
 
@@ -292,13 +370,16 @@ export const DEFAULT_TOKEN_ENV: Record<SourceType, string> = {
   jira: 'JIRA_TOKEN', linear: 'LINEAR_API_KEY', pagerduty: 'PAGERDUTY_TOKEN', opsgenie: 'OPSGENIE_API_KEY',
   github: 'GITHUB_TOKEN', gitlab: 'GITLAB_TOKEN', bitbucket: 'BITBUCKET_APP_PASSWORD', 'bitbucket-dc': 'BITBUCKET_TOKEN', jenkins: 'JENKINS_TOKEN', 'azure-devops': 'AZURE_DEVOPS_TOKEN', sonarqube: 'SONAR_TOKEN',
   kpis: 'QE_KPIS_UNUSED',
+  testrail: 'TESTRAIL_API_KEY', xray: 'XRAY_CLIENT_SECRET', zephyr: 'ZEPHYR_TOKEN', 'google-calendar': 'GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY', 'microsoft-365': 'MS365_CLIENT_SECRET',
 };
 /** The key a source's team mapping is written under in the config (stored as `teams`). */
-export const MAP_KEY: Partial<Record<SourceType, string>> = { github: 'repos', gitlab: 'projects', bitbucket: 'repos', 'bitbucket-dc': 'repos', jenkins: 'jobs', 'azure-devops': 'pipelines', sonarqube: 'projects' };
+export const MAP_KEY: Partial<Record<SourceType, string>> = { github: 'repos', gitlab: 'projects', bitbucket: 'repos', 'bitbucket-dc': 'repos', jenkins: 'jobs', 'azure-devops': 'pipelines', sonarqube: 'projects',
+  testrail: 'projects', xray: 'projects', zephyr: 'projects', 'google-calendar': 'people', 'microsoft-365': 'people' };
 const DEFAULT_ARTIFACTS = {
   tests: ['*test*', '*junit*', '*result*', '*report*', '*.trx', '*cucumber*'],
   coverage: ['*coverage*', '*lcov*', '*cobertura*', '*jacoco*'],
   sarif: ['*sarif*', '*codeql*', '*semgrep*', '*sast*', '*analysis*'],
+  performance: ['*perf*', '*load*', '*k6*', '*jmeter*', '*gatling*'],
 };
 const list = (v: unknown, where: string, def: string[] = []): string[] => {
   if (v === undefined || v === null) return def;
@@ -307,10 +388,10 @@ const list = (v: unknown, where: string, def: string[] = []): string[] => {
 };
 function artifacts(v: unknown, where: string): ArtifactSettings {
   const o = obj(v, where);
-  only(o, ['tests', 'coverage', 'sarif', 'maxMB'], where);
+  only(o, ['tests', 'coverage', 'sarif', 'performance', 'maxMB'], where);
   return {
     tests: list(o.tests, `${where}.tests`, DEFAULT_ARTIFACTS.tests), coverage: list(o.coverage, `${where}.coverage`, DEFAULT_ARTIFACTS.coverage),
-    sarif: list(o.sarif, `${where}.sarif`, DEFAULT_ARTIFACTS.sarif), maxMB: int(o.maxMB, `${where}.maxMB`, 50, 1, 500),
+    sarif: list(o.sarif, `${where}.sarif`, DEFAULT_ARTIFACTS.sarif), performance: list(o.performance, `${where}.performance`, DEFAULT_ARTIFACTS.performance), maxMB: int(o.maxMB, `${where}.maxMB`, 50, 1, 500),
   };
 }
 const NAME = /^[a-z0-9][a-z0-9_-]{0,49}$/;
@@ -336,8 +417,10 @@ function source(raw: unknown, i: number, names: Set<string>): SourceConfig {
   const ciCommon = [...common, 'artifacts', 'maxRunsPerRepo'];
   const maxRuns = () => int(o.maxRunsPerRepo, `${where}.maxRunsPerRepo`, 500, 1, 10000);
   const envs = () => list(o.environments, `${where}.environments`, ['production', 'prod', 'live']);
+  // Pull requests (opened, first review, merged) of the mapped repositories, for the developer metrics (default: not read).
+  const prs = () => (o.pullRequests === 'yes' ? true : o.pullRequests === 'no' ? false : bool(o.pullRequests, `${where}.pullRequests`, false));
   if (type === 'github') {
-    only(o, [...ciCommon, 'apiUrl', 'auth', 'appId', 'installationId', 'privateKeyEnv', 'workflows', 'branches', 'environments'], where);
+    only(o, [...ciCommon, 'apiUrl', 'auth', 'appId', 'installationId', 'privateKeyEnv', 'workflows', 'branches', 'environments', 'pullRequests'], where);
     const auth = str(o.auth, `${where}.auth`, 'token');
     if (auth !== 'token' && auth !== 'app' && auth !== 'oauth') throw new ConfigError(`${where}.auth must be token (a personal access token), app (a GitHub App installation) or oauth (your own OAuth app, connected on the setup page)`);
     const appId = str(o.appId, `${where}.appId`);
@@ -347,23 +430,23 @@ function source(raw: unknown, i: number, names: Set<string>): SourceConfig {
     return {
       ...base, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://api.github.com'), auth, appId, installationId,
       privateKeyEnv: envName(o.privateKeyEnv, `${where}.privateKeyEnv`, 'GITHUB_APP_PRIVATE_KEY'), workflows: list(o.workflows, `${where}.workflows`),
-      branches: list(o.branches, `${where}.branches`), environments: envs(), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(),
+      branches: list(o.branches, `${where}.branches`), environments: envs(), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(), pullRequests: prs(),
     };
   }
   if (type === 'gitlab') {
-    only(o, [...ciCommon, 'apiUrl', 'environments', 'auth'], where);
+    only(o, [...ciCommon, 'apiUrl', 'environments', 'auth', 'pullRequests'], where);
     const auth = str(o.auth, `${where}.auth`, 'token');
     if (auth !== 'token' && auth !== 'oauth') throw new ConfigError(`${where}.auth must be token or oauth`);
-    return { ...base, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://gitlab.com/api/v4'), auth, environments: envs(), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns() };
+    return { ...base, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://gitlab.com/api/v4'), auth, environments: envs(), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(), pullRequests: prs() };
   }
   if (type === 'bitbucket') {
-    only(o, [...ciCommon, 'apiUrl', 'auth', 'username', 'usernameEnv', 'environments'], where);
+    only(o, [...ciCommon, 'apiUrl', 'auth', 'username', 'usernameEnv', 'environments', 'pullRequests'], where);
     const auth = str(o.auth, `${where}.auth`, 'app-password');
     if (auth !== 'app-password' && auth !== 'oauth') throw new ConfigError(`${where}.auth must be app-password (username + app password) or oauth (your own OAuth consumer, connected on the setup page)`);
     for (const r of Object.keys(base.teams)) if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(r)) throw new ConfigError(`${where}.repos.${r} must be workspace/repo`);
     return {
       ...base, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://api.bitbucket.org/2.0'), auth, username: str(o.username, `${where}.username`),
-      usernameEnv: envName(o.usernameEnv, `${where}.usernameEnv`, 'BITBUCKET_USERNAME'), environments: envs(), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(),
+      usernameEnv: envName(o.usernameEnv, `${where}.usernameEnv`, 'BITBUCKET_USERNAME'), environments: envs(), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(), pullRequests: prs(),
     };
   }
   if (type === 'bitbucket-dc') {
@@ -387,23 +470,61 @@ function source(raw: unknown, i: number, names: Set<string>): SourceConfig {
     };
   }
   if (type === 'azure-devops') {
-    only(o, [...ciCommon, 'orgUrl', 'project', 'environments', 'releases', 'releasesUrl'], where);
+    only(o, [...ciCommon, 'orgUrl', 'project', 'environments', 'releases', 'releasesUrl', 'pullRequests'], where);
     const orgUrl = httpsUrl(o.orgUrl, `${where}.orgUrl`);
     const org = new URL(orgUrl).pathname.split('/').filter(Boolean)[0] ?? new URL(orgUrl).hostname.split('.')[0];
     return {
-      ...base, type, orgUrl, project: reqStr(o.project, `${where}.project`), environments: envs(), releases: bool(o.releases, `${where}.releases`, false),
+      ...base, type, orgUrl, project: reqStr(o.project, `${where}.project`), environments: envs(), releases: bool(o.releases, `${where}.releases`, false), pullRequests: prs(),
       releasesUrl: httpsUrl(o.releasesUrl, `${where}.releasesUrl`, `https://vsrm.dev.azure.com/${org}`), artifacts: artifacts(o.artifacts, `${where}.artifacts`), maxRunsPerRepo: maxRuns(),
     };
   }
   if (type === 'sonarqube') {
-    only(o, [...common, 'baseUrl', 'auth', 'branch', 'allowHttp'], where);
+    only(o, [...common, 'baseUrl', 'auth', 'branch', 'coverage', 'allowHttp'], where);
     const auth = str(o.auth, `${where}.auth`, 'bearer');
     if (auth !== 'bearer' && auth !== 'basic') throw new ConfigError(`${where}.auth must be bearer (SonarQube 10+, SonarCloud) or basic (older SonarQube: the token as user name)`);
     const allowHttp = bool(o.allowHttp, `${where}.allowHttp`, false);
-    return { ...base, type, baseUrl: httpsUrl(o.baseUrl, `${where}.baseUrl`, 'https://sonarcloud.io', allowHttp), auth, branch: str(o.branch, `${where}.branch`), allowHttp };
+    // The setup page writes yes / no; a config file may say true / false.
+    const coverage = o.coverage === 'yes' ? true : o.coverage === 'no' ? false : bool(o.coverage, `${where}.coverage`, false);
+    return { ...base, type, baseUrl: httpsUrl(o.baseUrl, `${where}.baseUrl`, 'https://sonarcloud.io', allowHttp), auth, branch: str(o.branch, `${where}.branch`), coverage, allowHttp };
+  }
+  if (type === 'testrail') {
+    only(o, [...common, 'baseUrl', 'user', 'userEnv', 'automatedField', 'allowHttp'], where);
+    const allowHttp = bool(o.allowHttp, `${where}.allowHttp`, false);
+    for (const k of Object.keys(base.teams)) if (!/^\d+$/.test(k)) throw new ConfigError(`${where}.projects.${k} must be a TestRail project id (a number)`);
+    return { ...base, type, baseUrl: httpsUrl(o.baseUrl, `${where}.baseUrl`, undefined, allowHttp), user: str(o.user, `${where}.user`), userEnv: envName(o.userEnv, `${where}.userEnv`, 'TESTRAIL_USER'),
+      automatedField: str(o.automatedField, `${where}.automatedField`, 'custom_automation_type')!, allowHttp };
+  }
+  if (type === 'xray') {
+    only(o, [...common, 'apiUrl', 'clientId', 'clientIdEnv', 'manualTypes'], where);
+    return { ...base, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://xray.cloud.getxray.app/api/v2'), clientId: str(o.clientId, `${where}.clientId`),
+      clientIdEnv: envName(o.clientIdEnv, `${where}.clientIdEnv`, 'XRAY_CLIENT_ID'), manualTypes: list(o.manualTypes, `${where}.manualTypes`, ['Manual']).map((x) => x.toLowerCase()) };
+  }
+  if (type === 'zephyr') {
+    only(o, [...common, 'apiUrl', 'automatedField', 'automatedValues', 'automatedLabels'], where);
+    return { ...base, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://api.zephyrscale.smartbear.com/v2'), automatedField: str(o.automatedField, `${where}.automatedField`, 'Automated')!,
+      automatedValues: list(o.automatedValues, `${where}.automatedValues`, ['true', 'yes', 'automated']).map((x) => x.toLowerCase()),
+      automatedLabels: list(o.automatedLabels, `${where}.automatedLabels`, ['automated', 'automation']).map((x) => x.toLowerCase()) };
+  }
+  if (type === 'google-calendar' || type === 'microsoft-365') {
+    const cal = ['workStart', 'workEnd', 'timeZone', 'lookbackDays'];
+    const hhmm = (v: unknown, k: string, def: string) => { const s = str(v, `${where}.${k}`, def)!; if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(s)) throw new ConfigError(`${where}.${k} must be a time of day as HH:MM`); return s; };
+    const zone = str(o.timeZone, `${where}.timeZone`, 'UTC')!;
+    try { new Intl.DateTimeFormat('en-US', { timeZone: zone }); } catch { throw new ConfigError(`${where}.timeZone must be an IANA time zone such as Europe/Dublin`); }
+    for (const k of Object.keys(base.teams)) if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(k)) throw new ConfigError(`${where}.people: "${k.slice(0, 40)}" must be an e-mail address (it stays here: a pseudonym is sent)`);
+    if (!Object.keys(base.teams).length) throw new ConfigError(`${where}.people must map each person's e-mail address to a QE Navigator team id`);
+    const shared = { workStart: hhmm(o.workStart, 'workStart', '09:00'), workEnd: hhmm(o.workEnd, 'workEnd', '17:00'), timeZone: zone, lookbackDays: int(o.lookbackDays, `${where}.lookbackDays`, 35, 1, 60) };
+    if (shared.workEnd <= shared.workStart) throw new ConfigError(`${where}.workEnd must be after workStart`);
+    if (type === 'google-calendar') {
+      only(o, [...common, ...cal, 'apiUrl', 'tokenUrl', 'serviceAccount', 'subject'], where);
+      return { ...base, ...shared, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://www.googleapis.com/calendar/v3'), tokenUrl: httpsUrl(o.tokenUrl, `${where}.tokenUrl`, 'https://oauth2.googleapis.com/token'),
+        serviceAccount: reqStr(o.serviceAccount, `${where}.serviceAccount`), subject: reqStr(o.subject, `${where}.subject`) };
+    }
+    only(o, [...common, ...cal, 'apiUrl', 'loginUrl', 'tenantId', 'clientId'], where);
+    return { ...base, ...shared, type, apiUrl: httpsUrl(o.apiUrl, `${where}.apiUrl`, 'https://graph.microsoft.com/v1.0'), loginUrl: httpsUrl(o.loginUrl, `${where}.loginUrl`, 'https://login.microsoftonline.com'),
+      tenantId: reqStr(o.tenantId, `${where}.tenantId`), clientId: reqStr(o.clientId, `${where}.clientId`) };
   }
   if (type === 'jira') {
-    only(o, [...common, 'baseUrl', 'deployment', 'auth', 'email', 'emailEnv', 'jql', 'fields', 'pageSize', 'allowHttp'], where);
+    only(o, [...common, 'baseUrl', 'deployment', 'auth', 'email', 'emailEnv', 'jql', 'fields', 'pageSize', 'allowHttp', 'automationLabels'], where);
     const auth = str(o.auth, `${where}.auth`);
     let deployment = str(o.deployment, `${where}.deployment`) as 'cloud' | 'server' | null;
     if (auth && !['basic', 'bearer'].includes(auth)) throw new ConfigError(`${where}.auth must be basic (Jira Cloud: e-mail + API token) or bearer (Server / Data Center: Personal Access Token)`);
@@ -418,7 +539,7 @@ function source(raw: unknown, i: number, names: Set<string>): SourceConfig {
     return {
       ...base, type, baseUrl, deployment, email: str(o.email, `${where}.email`), emailEnv: envName(o.emailEnv, `${where}.emailEnv`, 'JIRA_EMAIL'), jql,
       fields: { storyPoints: fid('storyPoints'), sprint: fid('sprint'), environment: fid('environment'), flagged: fid('flagged') },
-      pageSize: int(o.pageSize, `${where}.pageSize`, 100, 1, 100),
+      pageSize: int(o.pageSize, `${where}.pageSize`, 100, 1, 100), automationLabels: list(o.automationLabels, `${where}.automationLabels`).map((x) => x.toLowerCase()),
     };
   }
   if (type === 'linear') {
@@ -455,7 +576,7 @@ export function parseConfig(raw: unknown, path = '(inline)'): Config {
   const qe = obj(o.qeNavigator, 'qeNavigator');
   only(qe, ['url', 'apiKeyEnv', 'caFile', 'requestsPerMinute', 'timeoutSeconds', 'companyId'], 'qeNavigator');
   const pr = obj(o.privacy, 'privacy');
-  only(pr, ['sendTitles', 'sendLinks', 'people', 'saltEnv', 'mode', 'localEvidenceUrl'], 'privacy');
+  only(pr, ['sendTitles', 'sendLinks', 'people', 'saltEnv', 'developerMetrics', 'mode', 'localEvidenceUrl'], 'privacy');
   for (const k of ['mode', 'localEvidenceUrl']) if (pr[k] !== undefined) ignored.push(`privacy.${k}`);
   const people = str(pr.people, 'privacy.people', 'none');
   if (people !== 'none' && people !== 'hash') throw new ConfigError('privacy.people must be none or hash');
@@ -490,7 +611,7 @@ export function parseConfig(raw: unknown, path = '(inline)'): Config {
       timeoutSeconds: int(qe.timeoutSeconds, 'qeNavigator.timeoutSeconds', 120, 5, 600), companyId,
     },
     teams,
-    privacy: { sendTitles: bool(pr.sendTitles, 'privacy.sendTitles', false), sendLinks: bool(pr.sendLinks, 'privacy.sendLinks', false), people },
+    privacy: { sendTitles: bool(pr.sendTitles, 'privacy.sendTitles', false), sendLinks: bool(pr.sendLinks, 'privacy.sendLinks', false), people, developerMetrics: bool(pr.developerMetrics, 'privacy.developerMetrics', false) },
     peopleSaltEnv: envName(pr.saltEnv, 'privacy.saltEnv', 'QE_PEOPLE_SALT'),
     statePath,
     credentialsPath: str(cr.path, 'credentials.path', join(dirname(path === '(inline)' ? statePath : path), 'qe-exporter-credentials', 'credentials.json'))!,

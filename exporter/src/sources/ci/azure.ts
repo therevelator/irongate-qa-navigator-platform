@@ -18,12 +18,15 @@
 import type { AzureDevOpsSource, HttpSettings } from '../../config';
 import { requireSecret } from '../../config';
 import { SourceClient, SourceError } from '../client';
-import { kindsOf, findReports, parallelGroupOf, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, lcovTotalsOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
+import { pullRequest, kindsOf, findReports, parallelGroupOf, rollbackTracker, secondsBetween, ms, pipelineRun, reportItems, reportItem, junitOf, lcovTotalsOf, deployment, type CiAdapter, type CiPage, type CiRecord } from './common';
 
 const V = '7.1';
 const RESULT: Record<string, 'success' | 'failed' | 'cancelled' | undefined> = { succeeded: 'success', partiallySucceeded: 'failed', failed: 'failed', canceled: 'cancelled' };
 const STEP: Record<string, 'success' | 'failed' | 'cancelled' | 'skipped'> = { succeeded: 'success', succeededWithIssues: 'success', failed: 'failed', canceled: 'cancelled', abandoned: 'cancelled', skipped: 'skipped' };
 const OUTCOME: Record<string, 'passed' | 'failed' | 'error' | 'skipped'> = { Passed: 'passed', Failed: 'failed', Error: 'error', Aborted: 'error', Timeout: 'error' };
+
+/** How far before the window deployments are read to recognise a rollback (a redeploy of an earlier build). */
+const ROLLBACK_LOOKBACK_DAYS = 30;
 
 export class AzureDevOpsAdapter implements CiAdapter {
   kind = 'ci' as const;
@@ -31,7 +34,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
   private vsrm: SourceClient | null = null;
   private defs = new Map<string, { id: number; name: string }>();
 
-  constructor(private src: AzureDevOpsSource, http: HttpSettings, private opts: { links: boolean }, env: NodeJS.ProcessEnv = process.env) {
+  constructor(private src: AzureDevOpsSource, http: HttpSettings, private opts: import('./common').CiOptions, env: NodeJS.ProcessEnv = process.env) {
     const token = requireSecret(src.tokenEnv, `sources.${src.name} (an Azure DevOps personal access token)`, env);
     const headers = { Authorization: 'Basic ' + Buffer.from(`:${token}`).toString('base64') };
     const authHint = 'Use a personal access token with Build (Read), Test Management (Read), Code (Read) and Environment (Read)' + (src.releases ? ' and Release (Read)' : '') + ' on the organisation.';
@@ -113,6 +116,46 @@ export class AzureDevOpsAdapter implements CiAdapter {
     }
     yield await this.environmentDeployments(since, until);
     if (this.vsrm) yield await this.releaseDeployments(since, until);
+    if (this.src.pullRequests) yield await this.pullRequests(since, until);
+  }
+
+  /**
+   * The project's pull requests created or closed in the window (or still open): created and closed times, the first
+   * comment or vote by someone other than the author (from the threads), and (developer metrics only) the author's
+   * sign-in address, sent as a pseudonym. The team is the one mapped to the repository's name (or defaultTeam).
+   */
+  private async pullRequests(since: Date, until: Date): Promise<CiPage> {
+    const page: CiPage = { records: [], skipped: [], changedAt: null };
+    for (let skip = 0; skip < this.src.maxRunsPerRepo; skip += 100) {
+      const list: any[] = (await this.client.get(this.p('/git/pullrequests'), { 'searchCriteria.status': 'all', $top: 100, $skip: skip, 'api-version': V }))?.value ?? [];
+      for (const pr of list) {
+        const opened = ms(pr.creationDate);
+        const closed = ms(pr.closedDate);
+        if (opened === null || opened >= until.getTime()) continue;
+        if (pr.status !== 'active' && (closed ?? opened) < since.getTime() && opened < since.getTime()) continue;
+        const repo = String(pr.repository?.name ?? '');
+        const team = this.src.teams[repo] ?? this.src.defaultTeam;
+        if (!team) { page.skipped.push({ id: `pull request ${pr.pullRequestId}`, reason: `repository ${repo || '?'} is not mapped to a team (pipelines / defaultTeam)` }); continue; }
+        try {
+          const author = String(pr.createdBy?.id ?? '');
+          const threads: any[] = (await this.client.getOptional(this.p(`/git/repositories/${pr.repository?.id}/pullRequests/${pr.pullRequestId}/threads`), { 'api-version': V }))?.value ?? [];
+          const reviews = threads.flatMap((t) => (t.comments ?? []).filter((c: any) => String(c.author?.id ?? '') !== author
+            && (c.commentType !== 'system' || t.properties?.CodeReviewThreadType?.$value === 'VoteUpdate')).map((c: any) => ms(c.publishedDate))).filter((t: number | null): t is number => t !== null);
+          const state = pr.status === 'completed' ? 'merged' : pr.status === 'abandoned' ? 'closed' : 'open';
+          page.records.push(pullRequest(team, {
+            id: String(pr.pullRequestId), repo, authorEmail: this.opts.person ? String(pr.createdBy?.uniqueName ?? '') : null, state,
+            openedAt: opened, firstReviewAt: reviews.length ? Math.min(...reviews) : null, mergedAt: state === 'merged' ? closed : null, closedAt: state === 'closed' ? closed : null,
+          }, this.opts));
+        } catch (e) {
+          if (e instanceof SourceError && e.auth) throw e;
+          page.skipped.push({ id: `pull request ${pr.pullRequestId}`, reason: (e as Error).message });
+        }
+        const at = closed ?? opened;
+        if (!page.changedAt || new Date(at).toISOString() > page.changedAt) page.changedAt = new Date(at).toISOString();
+      }
+      if (list.length < 100) break;
+    }
+    return page;
   }
 
   private async build(team: string, b: any, result: 'success' | 'failed' | 'cancelled', page: CiPage): Promise<CiRecord[]> {
@@ -152,7 +195,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
       }
     }
     // Artifacts (coverage per file, SARIF; test files when there are no test runs).
-    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: Array<'tests' | 'coverage' | 'sarif'> }> = [];
+    const files: Array<{ artifact: string; name: string; data: Buffer; kinds: import('./common').ArtifactKind[] }> = [];
     for (const a of (await this.client.get(this.p(`/build/builds/${b.id}/artifacts`), { 'api-version': V })).value ?? []) {
       const kinds = kindsOf(String(a.name), this.src.artifacts).filter((k) => k !== 'tests' || !cases.length);
       const url = a.resource?.downloadUrl;
@@ -162,7 +205,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
       if (!d.ok) { page.skipped.push({ id: `build ${b.id}/${a.name}`, reason: `artifact ${d.reason}: ${d.message}` }); continue; }
       files.push({ artifact: String(a.name), name: `${a.name}.zip`, data: d.body, kinds });
     }
-    const found = files.length ? findReports(files) : { tests: [], coverage: [], sarif: [], files: 0, skipped: [] };
+    const found = files.length ? findReports(files) : { tests: [], coverage: [], sarif: [], performance: [], files: 0, skipped: [] };
     page.skipped.push(...found.skipped.map((x) => ({ id: `build ${b.id}/${x.id}`, reason: x.reason })));
     // Azure DevOps gives test results as JSON only: written out as a JUnit file (form, not content).
     if (cases.length) out.push(reportItem('test-report', team, [junitOf(cases)], meta, { format: 'junit' }));
@@ -189,11 +232,19 @@ export class AzureDevOpsAdapter implements CiAdapter {
     const envs = ((await this.client.get(this.p('/distributedtask/environments'), { 'api-version': `${V}-preview.1` })).value ?? [])
       .filter((e: any) => this.src.environments.some((x) => x.toLowerCase() === String(e.name).toLowerCase()));
     for (const env of envs) {
-      for await (const recs of this.pages<any>(this.client, this.p(`/distributedtask/environments/${env.id}/environmentdeploymentrecords`), { top: 100, 'api-version': `${V}-preview.1` }, 2000)) {
-        for (const r of recs) {
+      // The records are read 30 days further back than the window and taken in the order they finished: a
+      // redeploy of a build that an earlier record already deployed (not the previous one) is the rollback of the previous one.
+      const all: any[] = [];
+      for await (const recs of this.pages<any>(this.client, this.p(`/distributedtask/environments/${env.id}/environmentdeploymentrecords`), { top: 100, 'api-version': `${V}-preview.1` }, 2000)) all.push(...recs);
+      const rollback = rollbackTracker();
+      const lookback = since.getTime() - ROLLBACK_LOOKBACK_DAYS * 86_400_000;
+      {
+        for (const r of all.filter((x) => (ms(x.finishTime) ?? 0) >= lookback).sort((a, b) => (ms(a.finishTime) ?? 0) - (ms(b.finishTime) ?? 0))) {
           const at = ms(r.finishTime);
-          if (!at || at < since.getTime() || at >= until.getTime()) continue;
+          if (!at || at >= until.getTime()) continue;
           if (!['succeeded', 'failed'].includes(String(r.result))) continue;
+          const rollbackOf = rollback(String(r.definition?.id ?? r.definition?.name ?? ''), `env-${env.id}-${r.id}`, String(r.owner?.id ?? ''), r.result === 'succeeded');
+          if (at < since.getTime()) continue;
           const team = this.teamOf(r.definition);
           if (!team) { page.skipped.push({ id: `deployment ${r.id}`, reason: `pipeline ${r.definition?.name ?? '?'} is not mapped` }); continue; }
           const build = r.owner?.id ? await this.client.getOptional(this.p(`/build/builds/${r.owner.id}`), { 'api-version': V }) : null;
@@ -201,7 +252,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
           const commits = r.result === 'succeeded' && r.owner?.id ? await this.changes(r.owner.id) : [];
           page.records.push(deployment(team, {
             id, environment: String(env.name), service: String(r.definition?.name ?? env.name), commit: String(build?.sourceVersion ?? '').slice(0, 80),
-            startedAt: ms(r.startTime), finishedAt: at, result: r.result === 'succeeded' ? 'success' : 'failure', hotfix: /hotfix/i.test(String(build?.sourceBranch ?? '')), commits,
+            startedAt: ms(r.startTime), finishedAt: at, result: r.result === 'succeeded' ? 'success' : 'failure', rollbackOf, hotfix: /hotfix/i.test(String(build?.sourceBranch ?? '')), commits,
           }));
           const iso = new Date(at).toISOString();
           if (!page.changedAt || iso > page.changedAt) page.changedAt = iso;
@@ -213,11 +264,17 @@ export class AzureDevOpsAdapter implements CiAdapter {
 
   private async releaseDeployments(since: Date, until: Date): Promise<CiPage> {
     const page: CiPage = { records: [], skipped: [], changedAt: null };
-    for await (const list of this.pages<any>(this.vsrm!, this.p('/release/deployments'), { minStartedTime: since.toISOString(), maxStartedTime: until.toISOString(), queryOrder: 'ascending', $top: 100, 'api-version': V }, 5000)) {
+    // Read 30 days further back than the window (ascending), so a redeploy of an earlier build is recognised as a rollback.
+    const rollback = rollbackTracker();
+    const from = new Date(since.getTime() - ROLLBACK_LOOKBACK_DAYS * 86_400_000);
+    for await (const list of this.pages<any>(this.vsrm!, this.p('/release/deployments'), { minStartedTime: from.toISOString(), maxStartedTime: until.toISOString(), queryOrder: 'ascending', $top: 100, 'api-version': V }, 5000)) {
       for (const d of list) {
         if (!this.src.environments.some((x) => x.toLowerCase() === String(d.releaseEnvironment?.name ?? '').toLowerCase())) continue;
         const status = String(d.deploymentStatus);
         if (!['succeeded', 'failed', 'partiallySucceeded'].includes(status)) continue;
+        const shipped = (d.release?.artifacts ?? [])[0]?.definitionReference ?? {};
+        const rollbackOf = rollback(`${d.releaseDefinition?.id ?? d.releaseDefinition?.name ?? ''}:${d.releaseEnvironment?.name ?? ''}`, `release-${d.id}`, String(shipped.version?.id ?? shipped.sourceVersion?.id ?? ''), status === 'succeeded');
+        if ((ms(d.startedOn) ?? ms(d.completedOn) ?? 0) < since.getTime()) continue;
         const team = this.teamOf(d.releaseDefinition);
         if (!team) { page.skipped.push({ id: `release deployment ${d.id}`, reason: `release ${d.releaseDefinition?.name ?? '?'} is not mapped` }); continue; }
         const art = (d.release?.artifacts ?? [])[0]?.definitionReference ?? {};
@@ -227,7 +284,7 @@ export class AzureDevOpsAdapter implements CiAdapter {
         const commits = status === 'succeeded' && Number.isInteger(buildId) && buildId > 0 ? await this.changes(buildId) : [];
         page.records.push(deployment(team, {
           id: `release-${d.id}`, environment: String(d.releaseEnvironment?.name), service: String(d.releaseDefinition?.name ?? ''), commit: String(art.sourceVersion?.id ?? '').slice(0, 80),
-          startedAt: ms(d.startedOn), finishedAt: at, result: status === 'succeeded' ? 'success' : 'failure', hotfix: /hotfix/i.test(String(art.branch?.name ?? '')), commits,
+          startedAt: ms(d.startedOn), finishedAt: at, result: status === 'succeeded' ? 'success' : 'failure', rollbackOf, hotfix: /hotfix/i.test(String(art.branch?.name ?? '')), commits,
         }));
         const iso = new Date(at).toISOString();
         if (!page.changedAt || iso > page.changedAt) page.changedAt = iso;

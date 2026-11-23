@@ -1,3 +1,4 @@
+import { isLiveDataOnly, liveKpiProblems } from '../lib/liveData';
 import express from 'express';
 import { query } from '../../src/lib/db';
 import { authenticateApiKey, ApiKeyRequest } from '../middleware/apiKey';
@@ -18,6 +19,7 @@ import rawIngestRoutes from './ingestRaw';
 import deliveryIngestRoutes from './ingestDelivery';
 import workIngestRoutes from './ingestWork';
 import exporterIngestRoutes from './ingestExporter';
+import moreIngestRoutes from './ingestMore';
 import { logRejected, requestHash, runLogged, findReplay, sendReplay, type IngestCaller, type ItemSummary } from '../lib/ingestionLog';
 
 const router = express.Router();
@@ -89,6 +91,8 @@ export async function handleKpis(req: ApiKeyRequest, res: express.Response) {
   }
 
   // 1. Validate every item before writing anything.
+  // A company in live operation takes no finished value for a KPI QE Navigator calculates itself (server/lib/liveData.ts).
+  const live = await isLiveDataOnly(caller.companyId);
   const errors: Array<{ index: number; errors: string[] }> = [];
   const prepared: Prepared[] = [];
   const summaries: ItemSummary[] = items.map((item, index) => ({
@@ -117,6 +121,7 @@ export async function handleKpis(req: ApiKeyRequest, res: express.Response) {
       if (extra.length) problems.push(`Unexpected field(s): ${extra.join(', ')} (metric values go inside "metrics")`);
       const recordedAt = check(() => parseRecordedAt(item.recordedAt));
       const metrics = check(() => validateKpiValues(item.metrics) as Record<string, number>);
+      if (live && metrics) problems.push(...liveKpiProblems(Object.keys(metrics)));
       const idempotencyKey = check(() => normaliseIdempotencyKey(item.idempotencyKey));
       const sourceRef = check(() => normaliseSourceRef(item.sourceRef));
       if (!problems.length) {
@@ -237,6 +242,7 @@ function sourcesOf(items: ItemSummary[]): string | null {
 router.use(rawIngestRoutes);
 router.use(deliveryIngestRoutes);
 router.use(workIngestRoutes);
+router.use(moreIngestRoutes);
 router.use(exporterIngestRoutes);
 
 export default router;

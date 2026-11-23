@@ -5,6 +5,7 @@ import {
   Calculator, Clock, MonitorPlay, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
   CalendarClock, Trophy, FileText, ChevronRight, Smartphone, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints,
   FileUp,
+  Hourglass, SearchCheck, ClipboardCheck, PlugZap,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import API_URL from '../config/api';
@@ -64,6 +65,15 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
     ],
   },
   {
+    title: 'Next move',
+    items: [
+      { view: 'time-lost', label: 'Time lost', icon: Hourglass, roles: ANALYTICS_ROLES },
+      { view: 'findings', label: 'Findings', icon: SearchCheck, roles: ANALYTICS_ROLES },
+      { view: 'outcomes', label: 'Outcomes', icon: ClipboardCheck, roles: ANALYTICS_ROLES },
+      { view: 'data-readiness', label: 'Data readiness', icon: PlugZap, roles: ANALYTICS_ROLES },
+    ],
+  },
+  {
     title: 'Quality',
     items: [
       { view: 'flaky-test-intelligence', label: 'Flaky tests', icon: Bug, roles: ANALYTICS_ROLES },
@@ -118,6 +128,10 @@ export const PAGE_META: Record<string, { title: string; parent?: string }> = {
   compare: { title: 'Compare teams' },
   tv: { title: 'TV mode' },
   summary: { title: 'Summary' }, // short: the phone top bar has little room
+  'time-lost': { title: 'Time lost', parent: 'Next move' },
+  findings: { title: 'Findings', parent: 'Next move' },
+  outcomes: { title: 'Outcomes', parent: 'Next move' },
+  'data-readiness': { title: 'Data readiness', parent: 'Next move' },
   'flaky-test-intelligence': { title: 'Flaky tests', parent: 'Quality' },
   'test-execution-timeline': { title: 'Test execution', parent: 'Quality' },
   'technical-debt': { title: 'Technical debt', parent: 'Quality' },

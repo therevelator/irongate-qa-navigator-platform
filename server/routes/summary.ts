@@ -7,7 +7,7 @@ import { canSeeAlert } from '../lib/alertPolicy';
 import { teamKpiTrack, KPI_TARGET_KEYS } from '../../src/config/metricsConfig';
 import { QA_SCORE_THRESHOLDS, qaStatusFromScore, toNum } from '../lib/metricFormulas';
 import { evaluateLatestSnapshot, evaluateSnapshot, loadDataClock, type EvalContext } from '../lib/kpiEvaluation';
-import { loadIntervals, referenceFor } from '../lib/staleness';
+import { loadIntervals, referenceFor, referenceForRow } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 import { computeTeamRevenueImpact, loadCompanyPool, teamFigures, type TeamRef } from '../lib/revenueImpactData';
 import { REVENUE_CAVEATS, rollUpRevenue } from '../lib/revenueImpact';
@@ -118,7 +118,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res) => {
         automationCoverage: row ? toNum(row.automation_coverage) : null,
       }, ev?.judge);
       const prev = prevOf.get(t.id);
-      const pev = prev ? evaluateSnapshot(prev, ref, ctx, referenceFor(prev.snapshot_day, now)) : null;
+      const pev = prev ? evaluateSnapshot(prev, ref, ctx, referenceForRow(prev, prev.snapshot_day, now)) : null;
       const colOf: Record<string, string> = { testCoverage: 'test_coverage', automationCoverage: 'automation_coverage', testFlakinessRate: 'test_flakiness_rate', defectEscapeRate: 'defect_escape_rate' };
       const prevValues: SummaryTeamInput['prevValues'] = {};
       for (const key of Object.values(KPI_TARGET_KEYS)) prevValues[key] = values(prev, pev, colOf[key]);

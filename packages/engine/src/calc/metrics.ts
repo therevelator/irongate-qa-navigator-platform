@@ -4,12 +4,13 @@ import { CI_METRICS } from './ci';
 import { deliveryMetrics, DEFAULT_CHANGE_FAILURE_WINDOW_HOURS } from './delivery';
 import { WORK_METRICS } from './work';
 import { QUALITY_METRICS } from './quality';
+import { AUTOMATION_METRICS } from './automation';
 
 export interface MetricOptions { changeFailureWindowHours?: number }
 
 /** Phase 1 (CI), phase 2 (delivery and reliability), phase 3 (work; code quality). */
 export const buildMetrics = (o: MetricOptions = {}): Record<string, MetricSpec> => ({
-  ...CI_METRICS, ...deliveryMetrics(o.changeFailureWindowHours ?? DEFAULT_CHANGE_FAILURE_WINDOW_HOURS), ...WORK_METRICS, ...QUALITY_METRICS,
+  ...CI_METRICS, ...deliveryMetrics(o.changeFailureWindowHours ?? DEFAULT_CHANGE_FAILURE_WINDOW_HOURS), ...WORK_METRICS, ...QUALITY_METRICS, ...AUTOMATION_METRICS,
 });
 
 export const METRICS: Record<string, MetricSpec> = buildMetrics();

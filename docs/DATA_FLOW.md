@@ -683,7 +683,7 @@ onKpiWritten((teamIds) => afterKpiWrite(null, teamIds));
 - All 23 KPI columns can also be sent pre-computed with kind `kpis` (section 4.10). A pre-computed value and a
   computed value are both stored, and the snapshot shows the one with the latest `recordedAt`.
 
-### 3.1 The 30 engine metrics (`packages/engine/src/calc/metrics.ts`)
+### 3.1 The 32 engine metrics (`packages/engine/src/calc/metrics.ts`)
 
 | Indicator (UI) / key | KPI column | Kind: input fields | Calculated at | Formula |
 |---|---|---|---|---|
@@ -720,9 +720,9 @@ onKpiWritten((teamIds) => afterKpiWrite(null, teamIds));
 
 ### 3.2 The 23 KPI columns (`server/lib/kpiIngest.ts` `KPI_COLUMNS`, lines 32–57)
 
-21 of the columns are calculated from raw data by the metric named in 3.1. Two have **no raw input path**:
-`automation_coverage` and `automation_roi`. They can come only from kind `kpis`, `POST /api/ingest/kpis`, Manual
-metrics, a file upload, or sample data.
+All 23 columns are calculated from raw data by the metric named in 3.1. `automation_coverage` and `automation_roi` are
+calculated from the test management records (kind `test-management`, engine group `automation`:
+`packages/engine/src/calc/automation.ts`).
 
 | KPI column | Label, unit, range | From raw data via | Otherwise |
 |---|---|---|---|
@@ -742,8 +742,8 @@ metrics, a file upload, or sample data.
 | `sprint_carryover` | Sprint carryover, %, 0–100 | `carryover` | kpis / manual |
 | `first_time_pass_rate` | First-time pass rate, %, 0–100 | `first_time_pass_rate` | kpis / manual |
 | `blocked_time_hours` | Blocked time, h, 0–100000, whole number | `blocked_time` | kpis / manual |
-| `automation_coverage` | Automation coverage, %, 0–100 | **none** | **kpis / manual only** |
-| `automation_roi` | Automation ROI, %, −9999.99–9999.99 | **none** | **kpis / manual only** |
+| `automation_coverage` | Automation coverage, %, 0–100 | `automation_coverage` | kpis / manual |
+| `automation_roi` | Automation ROI, %, −9999.99–9999.99 | `automation_roi` | kpis / manual |
 | `change_failure_rate` | Change failure rate, %, 0–100 | `change_failure_rate` | kpis / manual |
 | `mtbf_hours` | Mean time between failures, h, 0–1000000, whole number | `mtbf` | kpis / manual |
 | `system_availability` | System availability, %, 0–100 | `availability` | kpis / manual |
@@ -766,7 +766,6 @@ metrics, a file upload, or sample data.
 
 **Indicators with no machine input path** (the status of each is in section 7):
 
-- `automation_coverage` and `automation_roi` (only pre-computed, via kind `kpis`);
 - the Wellbeing (survey) gauge;
 - workload balance, burnout risk and DDPS;
 - the business side of Business impact (revenue, churn, support tickets).
@@ -792,7 +791,7 @@ Every value of the three monthly tables carries its source in `value_sources` (`
 ### 4.1 One request carries one kind
 
 The API is designed so that one envelope carries **one** `kind`, for **one** team. To send "all parameters",
-send one envelope per kind. That is the nine files in [docs/examples/ingest/](examples/ingest/):
+send one envelope per kind. That is the ten files in [docs/examples/ingest/](examples/ingest/):
 
 | File | kind | items per envelope | handler |
 |---|---|---|---|
@@ -804,7 +803,19 @@ send one envelope per kind. That is the nine files in [docs/examples/ingest/](ex
 | `commits.json` | `commits` | 1–500 batches (at most 500 commits in total) | `deliveryIngestHandler('commits')` |
 | `incidents.json` | `incidents` | 1–500 | `deliveryIngestHandler('incidents')` |
 | `issues.json` | `issues` | 1–1000 | `handleIssues` |
+| `test-management.json` | `test-management` | 1–2000 (test cases and executions) | `moreIngestHandler('test-management')` |
 | `kpis.json` | `kpis` | 1–100 | `handleKpis` |
+
+Three more kinds have no example file here (`test-management` does: it comes after `issues.json`, whose issue PAY-109 carries the label `test-automation` and the time invested); the items of all four are described in [INTEGRATION_GUIDE.md, section 4F](INTEGRATION_GUIDE.md#4f-raw-ingestion-load-test-results-test-management-pull-requests-calendars)
+(handler `moreIngestHandler`, `server/routes/ingestMore.ts`):
+
+| kind | items per envelope | what it feeds |
+|---|---|---|
+| `performance` | 1–20 (each item = the load-test result files of one run: k6, JMeter, Gatling) | the Performance page |
+| `test-management` | 1–2000 (test cases and executions) | `automation_coverage`, `automation_roi` (engine group `automation`) |
+| `pull-requests` | 1–1000 | developer metrics: PR merge time, code review time |
+| `calendar` | 1–2000 (one item = one person's working day, free/busy only) | developer metrics: meeting time, focus time, context switches |
+| `discovery` | 1 (what the Exporter found for the team in a CI source: counts per kind, runs without a test or coverage report, names not mapped) | the Data readiness page ([NEXT_MOVE.md](NEXT_MOVE.md#35-the-exporters-discovery-report)); no metric |
 
 The ids in the files are placeholders (`"<companyId>"`, `"<departmentId>"`, `"<teamId>"`). You get the real ones
 from Admin console → Connect your CI, or from `GET /api/ingest/exporter/context`.
@@ -1038,7 +1049,8 @@ Example: [kpis.json](examples/ingest/kpis.json), with all 23 columns.
 stored as `exporter.<source>` (`exporterIngest.ts` 127–135). On `POST /api/ingest/kpis` they are required
 instead.
 
-Use the `kpis` kind for the values that have no raw source (automation coverage and automation ROI). If you send
+Every KPI has a raw source, so the `kpis` kind is only for companies not in live operation (a company in live operation refuses
+finished values: `server/lib/liveData.ts`). If you send
 a column that the engine also calculates, both values are stored, and the snapshot shows the later one.
 
 ### 4.10 The responses
@@ -1178,7 +1190,7 @@ indicator is now fed from the data sent, with a test that proves it.
 | G4b | `repo` and `loc` on test-report and coverage items were accepted and ignored | closed | `repo` stored on test runs and coverage reports, shown and filterable in the evidence; `loc` on coverage stored and used as the lines of code of defect density and the code quality score; `loc` on a test report refused with a message | IE-003, IE-007a, IE-007b |
 | G5a | Fields not read by the parsers were silently ignored (pipeline runs and their stages, deployments, commits, incidents, issues in the envelope; any extra query or multipart field on the direct report endpoints) | closed | refused with 400 and the list of accepted fields (`ITEM_FIELDS`, `STAGE_FIELDS` in `exporterIngest.ts`; `checkReportFields` in `ingestRaw.ts`; `SARIF_REQUEST_FIELDS` in `ingestWork.ts`). Vendor-native bodies on the direct endpoints (a Jira or PagerDuty export) are still minimised by the field allow-list: the fields it drops are documented in section 6. | IE-007b |
 | G5b | The Tech debt health gauge was fed only by edits on the Technical debt page and the sample generator | closed | debt items derived from the SARIF / SonarQube findings (section 3.3); the Exporter's SonarQube connector sends each issue's remediation effort | IE-006b |
-| G5c | Wellbeing, workload balance, burnout risk and DDPS come from the pulse survey and typed-in developer metrics | open | Not started, at the owner's request. Wellbeing stays survey-only. Developer metrics could be derived in part from pull / merge requests (review time, time to merge), which the Exporter does not read yet; focus, meeting and context-switch hours have no source in the connected tools. | |
-| G5d | Automation coverage and automation ROI have no raw source | open | kind `kpis` only (a test-management connector would be needed) | |
-| G6 | Modules that still read sample-only tables (written only by the sample generators): the flaky tests page (`flaky_tests`, `test_executions`), the test execution page (`test_execution_runs`), the CI/CD pipeline page (`pipeline_stages`, `pipeline_execution_summary`), the Performance page (`performance_metrics`) | open | Not started, at the owner's request. Their machine-fed equivalents exist (`flaky_test_evidence`, `test_results`, `test_runs`, `pipeline_stage_runs`); the team page's CI evidence already uses them. | |
+| G5c | Workload balance, burnout risk and DDPS came from typed-in developer metrics | closed | developer metrics calculated from pull requests and calendar free/busy (kinds `pull-requests`, `calendar`; `server/lib/developerFromRaw.ts`); people as pseudonyms kept only for users who enabled developer insights. Wellbeing stays survey-only, by design | `tests/api/more-sources.test.ts` DEV-01 … DEV-03 |
+| G5d | Automation coverage and automation ROI had no raw source | closed | kind `test-management` (TestRail, Xray Cloud, Zephyr Scale connectors in the Exporter); engine group `automation` | `tests/api/more-sources.test.ts` TM-01, TM-02 |
+| G6 | Modules that read sample-only tables | closed | the Flaky tests, Test execution, CI/CD pipeline and Performance pages and pipeline health read the raw tables (`server/lib/analyticsFromRaw.ts`); the older tables are read only for a team that never sent raw data of that kind | `tests/api/live-raw-modules.test.ts`, `tests/api/more-sources.test.ts` PERF-01 |
 | G7 | Derived tables outside the engine | closed | `business_impact_quality_metrics` is re-derived inside every KPI write (`writeMetricValues`, so also at the end of each calculation-queue entry); `technical_debt` items from static analysis inside the SARIF request's transaction. Both are idempotent and follow the latest data. | IE-006b, IE-006c |

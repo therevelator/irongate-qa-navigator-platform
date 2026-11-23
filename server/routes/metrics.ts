@@ -1,3 +1,4 @@
+import { isLiveDataOnly, LIVE_MANUAL_MESSAGE } from '../lib/liveData';
 import express from 'express';
 import { randomUUID } from 'crypto';
 import { afterKpiWrite } from '../lib/alerts';
@@ -26,7 +27,7 @@ import {
   distributionOf,
 } from '../lib/metricFormulas';
 import { evaluateLatestSnapshot, evaluateSnapshot, loadDataClock, type EvalContext, type LatestEvaluation, type SnapshotEvaluation } from '../lib/kpiEvaluation';
-import { loadIntervals, referenceFor, STALENESS_RULE_TEXT } from '../lib/staleness';
+import { loadIntervals, referenceFor, STALENESS_RULE_TEXT, referenceForRow } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 
 /** Round a DB numeric (often a string) to `digits` decimals; null stays null. */
@@ -109,7 +110,7 @@ router.get('/analytics/history', authenticateToken, async (req: any, res) => {
       byDay.get(day)!.push(r);
     }
     const chartData = [...byDay.entries()].map(([day, list]) => {
-      const evs = list.map((r) => ({ r, ev: evaluateSnapshot(r, { id: String(r.team_id), department_id: r.department_id }, ctx, referenceFor(day)) }));
+      const evs = list.map((r) => ({ r, ev: evaluateSnapshot(r, { id: String(r.team_id), department_id: r.department_id }, ctx, referenceForRow(r, day)) }));
       const out: Record<string, any> = { date: day };
       for (const [col, key, digits] of HISTORY_COLUMNS) {
         const vals = evs.filter((x) => x.ev.values[col] && !x.ev.values[col].stale).map((x) => toNum(x.r[col])).filter((v): v is number => v !== null);
@@ -306,6 +307,8 @@ router.post('/manual', authenticateToken, async (req: AuthRequest, res) => {
     // Tenant + role scope: team must belong to the caller's company and the
     // caller must be allowed to write it (team_lead -> own team only).
     if (!(await assertTeamWrite(req, res, teamId))) return;
+    // A company in live operation types no metric (server/lib/liveData.ts).
+    if (await isLiveDataOnly(req.companyId)) return res.status(403).json({ error: LIVE_MANUAL_MESSAGE, code: 'live_data_only' });
 
     key = normaliseIdempotencyKey(req.get('Idempotency-Key'), 'Idempotency-Key');
     if (key) {
@@ -375,6 +378,7 @@ router.post('/developer', authenticateToken, async (req: AuthRequest, res) => {
   try {
     const { teamId, developerId } = req.body ?? {};
     if (!assertSomeTeamWrite(req, res)) return;
+    if (await isLiveDataOnly(req.companyId)) return res.status(403).json({ error: LIVE_MANUAL_MESSAGE, code: 'live_data_only' });
     if (!teamId || !developerId) {
       return res.status(400).json({ error: 'Team ID and developer ID are required' });
     }

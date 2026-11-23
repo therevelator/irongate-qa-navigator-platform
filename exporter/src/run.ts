@@ -13,7 +13,7 @@ import type { Config, KpisSource, SourceConfig } from './config';
 import { ConfigError, isCiSource, mappedTeams, requireSecret, secret, targetProblems } from './config';
 import { log } from './log';
 import { acquireLock, fingerprint, loadState, saveState, sourceState, emptyState, type State } from './state';
-import { finalRecord, PrivacyViolation, type PrivacyContext } from './privacy';
+import { finalRecord, matchablePerson, PrivacyViolation, type PrivacyContext } from './privacy';
 import { JiraAdapter } from './sources/jira';
 import { LinearAdapter } from './sources/linear';
 import { PagerDutyAdapter } from './sources/pagerduty';
@@ -26,7 +26,12 @@ import { BitbucketDcAdapter } from './sources/ci/bitbucketDc';
 import { JenkinsAdapter } from './sources/ci/jenkins';
 import { AzureDevOpsAdapter } from './sources/ci/azure';
 import { SonarQubeAdapter } from './sources/ci/sonarqube';
-import type { CiAdapter } from './sources/ci/common';
+import type { CiAdapter, CiOptions } from './sources/ci/common';
+import { TestRailAdapter } from './sources/tm/testrail';
+import { XrayAdapter } from './sources/tm/xray';
+import { ZephyrAdapter } from './sources/tm/zephyr';
+import { GoogleCalendarAdapter } from './sources/calendar/google';
+import { Microsoft365Adapter } from './sources/calendar/microsoft';
 import { QeClient, QeError, deliver, makeBatches, type Batch, type EnvelopeKind, type Part } from './sender';
 import { allowedFields } from './policy';
 import { refreshOAuth } from './oauth';
@@ -49,7 +54,10 @@ export interface RunOptions {
 type AnyAdapter = Adapter | CiAdapter | KpisAdapter;
 
 export function adapterFor(src: SourceConfig, cfg: Config, privacy: PrivacyContext, env: NodeJS.ProcessEnv): AnyAdapter {
-  const links = { links: cfg.privacy.sendLinks };
+  // Developer metrics (privacy.developerMetrics): a person becomes a pseudonym QE Navigator can match to its own users.
+  const person = cfg.privacy.developerMetrics && cfg.qeNavigator.companyId ? (email: string | null | undefined) => matchablePerson(email, cfg.qeNavigator.companyId) : undefined;
+  const links: CiOptions = { links: cfg.privacy.sendLinks, person };
+  const calendarPerson = (email: string) => (person ? person(email) : null);
   switch (src.type) {
     case 'jira': return new JiraAdapter(src, cfg.http, privacy, env);
     case 'linear': return new LinearAdapter(src, cfg.http, privacy, env);
@@ -63,6 +71,11 @@ export function adapterFor(src: SourceConfig, cfg: Config, privacy: PrivacyConte
     case 'azure-devops': return new AzureDevOpsAdapter(src, cfg.http, links, env);
     case 'sonarqube': return new SonarQubeAdapter(src, cfg.http, env);
     case 'kpis': return new KpisAdapter(src);
+    case 'testrail': return new TestRailAdapter(src, cfg.http, env);
+    case 'xray': return new XrayAdapter(src, cfg.http, env);
+    case 'zephyr': return new ZephyrAdapter(src, cfg.http, env);
+    case 'google-calendar': return new GoogleCalendarAdapter(src, cfg.http, calendarPerson, env);
+    case 'microsoft-365': return new Microsoft365Adapter(src, cfg.http, calendarPerson, env);
   }
 }
 
@@ -158,13 +171,21 @@ export async function collect(adapter: AnyAdapter, src: SourceConfig, cfg: Confi
   }
   if (adapter.kind === 'ci') {
     let maxChanged: string | null = null;
+    const seen: Array<{ team: string; kind: string; id: string }> = [];
     for await (const page of adapter.collect(since, until)) {
       c.skipped.push(...page.skipped);
-      for (const r of page.records) add(r.team, r.kind, { id: r.id, fp: fingerprint(r.item), item: r.item });
+      for (const r of page.records) { add(r.team, r.kind, { id: r.id, fp: fingerprint(r.item), item: r.item }); seen.push({ team: r.team, kind: r.kind, id: r.id }); }
       if (page.changedAt && (!maxChanged || page.changedAt > maxChanged)) maxChanged = page.changedAt;
     }
     c.cursor = maxChanged && maxChanged < until.toISOString() ? maxChanged : until.toISOString();
     c.requests = adapter.requests();
+    for (const [team, report] of discoveryOf(seen, c.skipped, since, until)) {
+      // The window is not part of the fingerprint: the same findings in a later window are not sent again.
+      const { from: _from, to: _to, ...findings } = report;
+      const part = { id: `discovery:${src.name}|${team}`, fp: fingerprint(findings), item: report };
+      if (!o.all && st.sent[part.id] === part.fp) continue;
+      c.groups.set(groupKey(team, 'discovery'), { team, kind: 'discovery', parts: [part] });
+    }
     return c;
   }
   const oldest = until.getTime() - 364 * DAY;
@@ -195,6 +216,39 @@ export async function collect(adapter: AnyAdapter, src: SourceConfig, cfg: Confi
   c.cursor = maxChanged && adapter.kind === 'issues' ? maxChanged : until.toISOString();
   c.requests = adapter.requests();
   return c;
+}
+
+const DISCOVERY_COUNT: Record<string, string> = {
+  'pipeline-runs': 'pipelineRuns', 'test-report': 'testReports', coverage: 'coverageReports', sarif: 'sarifReports', deployments: 'deployments',
+  commits: 'commits', 'pull-requests': 'pullRequests', performance: 'performanceRuns',
+};
+
+/**
+ * What a CI source held for each team in this run's window, for QE Navigator's Data readiness page: how many
+ * records of each kind, how many pipeline runs kept no test report or no coverage file, and what could not be
+ * mapped to a team. Counts and names of jobs or pipelines only; no record of the tool is in it. A team gets a
+ * report when the window held pipeline runs for it (a quiet window says nothing about what its pipelines keep).
+ */
+export function discoveryOf(seen: Array<{ team: string; kind: string; id: string }>, skipped: Array<{ id: string; reason: string }>, since: Date, until: Date): Map<string, Record<string, unknown>> {
+  const out = new Map<string, Record<string, unknown>>();
+  const unmapped = [...new Set(skipped.filter((s) => /not mapped/.test(s.reason)).map((s) => s.reason.replace(/ \(.*$/, '').slice(0, 200)))].sort().slice(0, 50);
+  const runKey = (id: string) => id.slice(id.indexOf(':') + 1);
+  for (const team of new Set(seen.map((s) => s.team))) {
+    const mine = seen.filter((s) => s.team === team);
+    const counts: Record<string, number> = {};
+    for (const s of mine) { const k = DISCOVERY_COUNT[s.kind]; if (k) counts[k] = (counts[k] ?? 0) + 1; }
+    if (!counts.pipelineRuns) continue;
+    const runs = mine.filter((s) => s.kind === 'pipeline-runs').map((s) => runKey(s.id));
+    const withOf = (kind: string) => new Set(mine.filter((s) => s.kind === kind).map((s) => runKey(s.id)));
+    const tests = withOf('test-report');
+    const coverage = withOf('coverage');
+    out.set(team, {
+      from: since.toISOString(), to: until.toISOString(), counts,
+      runsWithoutTests: runs.filter((r) => !tests.has(r)).length, runsWithoutCoverage: runs.filter((r) => !coverage.has(r)).length,
+      ...(unmapped.length ? { unmapped } : {}),
+    });
+  }
+  return out;
 }
 
 /** The longest period of records one envelope covers (issues and incidents: shorter, their calculation reads more days). */

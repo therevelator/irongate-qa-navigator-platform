@@ -14,7 +14,7 @@ import { minimiseReport } from '../../minimise';
 import type { ArtifactSettings } from '../../config';
 
 /** The envelope kinds the CI connectors produce. */
-export type CiKind = 'pipeline-runs' | 'test-report' | 'coverage' | 'sarif' | 'deployments';
+export type CiKind = 'pipeline-runs' | 'test-report' | 'coverage' | 'sarif' | 'deployments' | 'performance' | 'test-management' | 'pull-requests' | 'calendar';
 
 export interface CiRecord {
   kind: CiKind;
@@ -49,10 +49,10 @@ export function globMatch(pattern: string, name: string): boolean {
   return re.test(name);
 }
 
-export type ArtifactKind = 'tests' | 'coverage' | 'sarif';
+export type ArtifactKind = 'tests' | 'coverage' | 'sarif' | 'performance';
 /** Which report kinds an artifact name may hold (by the configured patterns). */
 export const kindsOf = (name: string, a: ArtifactSettings): ArtifactKind[] =>
-  (['tests', 'coverage', 'sarif'] as ArtifactKind[]).filter((k) => a[k].some((p) => globMatch(p, name)));
+  (['tests', 'coverage', 'sarif', 'performance'] as ArtifactKind[]).filter((k) => a[k].some((p) => globMatch(p, name)));
 
 /** What kind of report a file's text is, by its content only (QE Navigator detects the exact format again). */
 export function sniff(name: string, text: string): ArtifactKind | null {
@@ -65,11 +65,18 @@ export function sniff(name: string, text: string): ArtifactKind | null {
   if (/<report[\s>]/.test(head) && /<counter|<package|jacoco/i.test(text.slice(0, 50_000))) return 'coverage';
   if (/^\s*\{/.test(head) && (/"statementMap"\s*:/.test(text.slice(0, 50_000)) || /"total"\s*:\s*\{\s*"lines"/.test(head))) return 'coverage';
   if (/\.(sarif)$/i.test(name) && /"runs"/.test(head)) return 'sarif';
+  // Load-test results: a k6 summary export, JMeter's statistics.json, Gatling's stats.json (numbers per request name only).
+  if (/^\s*\{/.test(head)) {
+    const body = text.slice(0, 200_000);
+    if (/"http_req_duration"\s*:/.test(body) && /"metrics"\s*:/.test(body)) return 'performance';
+    if (/"sampleCount"\s*:/.test(body) && /"medianResTime"\s*:/.test(body)) return 'performance';
+    if (/"numberOfRequests"\s*:/.test(body) && /"percentiles1"\s*:/.test(body)) return 'performance';
+  }
   return null;
 }
 
 export interface ReportFile { name: string; content: string }
-export interface FoundReports { tests: ReportFile[]; coverage: ReportFile[]; sarif: ReportFile[]; files: number; skipped: Array<{ id: string; reason: string }> }
+export interface FoundReports { tests: ReportFile[]; coverage: ReportFile[]; sarif: ReportFile[]; performance: ReportFile[]; files: number; skipped: Array<{ id: string; reason: string }> }
 
 const MAX_FILE = 50 * 1024 * 1024;
 
@@ -78,7 +85,7 @@ const MAX_FILE = 50 * 1024 * 1024;
  * recognised by its content and kept as text when its artifact may hold that kind. Nothing is parsed.
  */
 export function findReports(files: Array<{ artifact: string; name: string; data: Buffer; kinds: ArtifactKind[] }>): FoundReports {
-  const out: FoundReports = { tests: [], coverage: [], sarif: [], files: 0, skipped: [] };
+  const out: FoundReports = { tests: [], coverage: [], sarif: [], performance: [], files: 0, skipped: [] };
   const queue: Array<{ artifact: string; name: string; data: Buffer; kinds: ArtifactKind[] }> = [];
   for (const f of files) {
     if (isZip(f.data)) {
@@ -99,13 +106,48 @@ export function findReports(files: Array<{ artifact: string; name: string; data:
     const kind = sniff(f.name, text);
     if (!kind || !f.kinds.includes(kind)) continue;
     try {
-      out[kind].push({ name: `${f.artifact}/${f.name}`.slice(-255), content: minimiseReport(kind, text) });
+      out[kind].push({ name: `${f.artifact}/${f.name}`.slice(-255), content: kind === 'performance' ? minimisePerformance(text) : minimiseReport(kind, text) });
       out.files++;
     } catch (e) {
       out.skipped.push({ id: `${f.artifact}/${f.name}`, reason: `not sent: ${(e as Error).message}` });
     }
   }
   return out;
+}
+
+/**
+ * A load-test result file as it is sent: the numbers per request name only. k6: the HTTP metrics of the summary;
+ * JMeter and Gatling: the statistics per label. Thresholds, checks, tags, options and any other part are dropped,
+ * and a query string in a request name is cut (it can hold a token).
+ */
+export function minimisePerformance(text: string): string {
+  const doc = JSON.parse(text);
+  const label = (n: unknown) => String(n ?? '').replace(/\?.*$/, '').slice(0, 500);
+  const pick = (o: any, keys: string[]) => Object.fromEntries(keys.filter((k) => o && typeof o[k] !== 'object' && o[k] !== undefined).map((k) => [k, o[k]]));
+  if (doc && typeof doc === 'object' && doc.metrics?.http_req_duration) {
+    const m = doc.metrics;
+    const values = (x: any) => (x && typeof x.values === 'object' ? x.values : x);
+    return JSON.stringify({ metrics: {
+      http_req_duration: pick(values(m.http_req_duration), ['avg', 'min', 'med', 'max', 'p(50)', 'p(90)', 'p(95)', 'p(99)']),
+      http_reqs: pick(values(m.http_reqs), ['count', 'rate']),
+      http_req_failed: pick(values(m.http_req_failed), ['rate', 'value', 'passes', 'fails']),
+    } });
+  }
+  const jm = ['sampleCount', 'errorCount', 'errorPct', 'meanResTime', 'medianResTime', 'minResTime', 'maxResTime', 'pct1ResTime', 'pct2ResTime', 'pct3ResTime', 'throughput'];
+  if (doc && typeof doc === 'object' && Object.values(doc).some((s: any) => s && typeof s === 'object' && 'sampleCount' in s)) {
+    return JSON.stringify(Object.fromEntries(Object.values(doc).filter((s: any) => s && typeof s === 'object' && 'sampleCount' in s).slice(0, 500)
+      .map((s: any) => { const t = s.transaction === 'Total' ? 'Total' : label(s.transaction); return [t, { transaction: t, ...pick(s, jm) }]; })));
+  }
+  const stat = (s: any) => ({
+    name: label(s?.name), numberOfRequests: pick(s?.numberOfRequests, ['total', 'ok', 'ko']), percentiles1: pick(s?.percentiles1, ['total']), percentiles2: pick(s?.percentiles2, ['total']),
+    percentiles3: pick(s?.percentiles3, ['total']), percentiles4: pick(s?.percentiles4, ['total']), meanNumberOfRequestsPerSecond: pick(s?.meanNumberOfRequestsPerSecond, ['total']),
+  });
+  const walk = (n: any, depth: number): any => ({
+    name: label(n?.name), ...(n?.stats ? { stats: stat(n.stats) } : {}),
+    ...(n?.contents && depth < 6 ? { contents: Object.fromEntries(Object.entries(n.contents).slice(0, 500).map(([k, c]) => [k.slice(0, 100), walk(c, depth + 1)])) } : {}),
+  });
+  if (doc?.stats || doc?.contents) return JSON.stringify(walk(doc, 0));
+  return JSON.stringify(stat(doc));
 }
 
 const xml = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '');
@@ -212,7 +254,7 @@ export function changedLinesOf(files: Array<{ filename?: string; patch?: string 
 }
 
 /** The report items of one run: one test report (all its test files), one coverage report, one per SARIF file. */
-export function reportItems(team: string, found: { tests: ReportFile[]; coverage: ReportFile[]; sarif: ReportFile[] }, m: ReportMeta, repo: string | null, changed: Record<string, Array<number | string>> | null = null): CiRecord[] {
+export function reportItems(team: string, found: { tests: ReportFile[]; coverage: ReportFile[]; sarif: ReportFile[]; performance?: ReportFile[] }, m: ReportMeta, repo: string | null, changed: Record<string, Array<number | string>> | null = null): CiRecord[] {
   const out: CiRecord[] = [];
   // The repository travels with every report (a dimension of the evidence in QE Navigator).
   if (found.tests.length) out.push(reportItem('test-report', team, found.tests.slice(0, 50), m, { repo }));
@@ -222,6 +264,13 @@ export function reportItems(team: string, found: { tests: ReportFile[]; coverage
     out.push(c);
   }
   found.sarif.forEach((f, i) => out.push(reportItem('sarif', team, [f], { ...m, run: found.sarif.length > 1 ? `${m.run}:sarif-${i + 1}` : m.run }, { repo })));
+  // Load-test results of the run: the files as files; QE Navigator reads the percentiles, throughput and error rate.
+  if (found.performance?.length) {
+    out.push({ kind: 'performance', team, id: `performance:${m.run}#${m.attempt}`, at: m.startedAt, item: {
+      run: m.run, attempt: m.attempt, ...(m.commit ? { commit: m.commit } : {}), ...(m.branch ? { branch: m.branch } : {}), ...(repo ? { repo } : {}), startedAt: iso(m.startedAt),
+      files: found.performance.slice(0, 20).map((f) => ({ name: f.name, content: f.content })),
+    } });
+  }
   return out;
 }
 
@@ -241,6 +290,55 @@ export function deployment(team: string, d: DeploymentIn): CiRecord {
   };
   return { kind: 'deployments', team, id: `deployment:${d.id}`, item, at: d.finishedAt };
 }
+
+/**
+ * Rollbacks among the deployments of one service and environment, fed in the order they finished:
+ * a successful deployment of a version that an earlier successful deployment already shipped (and that is
+ * not the version of the previous one) rolls the previous one back. Returns the id of the deployment
+ * it rolls back, else null. `version` is what identifies the shipped code: the commit, or the build id
+ * when the CI redeploys builds. A fact about the records (which deployment replaced which), not a metric.
+ */
+export function rollbackTracker(): (group: string, id: string, version: string, ok: boolean) => string | null {
+  const state = new Map<string, { prev: { id: string; version: string } | null; shipped: Array<{ id: string; version: string }> }>();
+  return (group, id, version, ok) => {
+    const st = state.get(group) ?? { prev: null, shipped: [] };
+    state.set(group, st);
+    if (!ok || !version) return null;
+    const rollbackOf = st.prev && st.prev.version !== version && st.shipped.slice(0, -1).some((x) => x.version === version) ? st.prev.id : null;
+    st.prev = { id, version };
+    st.shipped.push({ id, version });
+    return rollbackOf;
+  };
+}
+
+/** What every CI connector is given: whether links are sent, and how a person becomes a pseudonym (null: people are not sent). */
+export interface CiOptions { links: boolean; person?: (email: string | null | undefined) => string | null }
+
+export interface PullRequestIn {
+  id: string; repo: string; authorEmail: string | null; state: 'open' | 'merged' | 'closed';
+  openedAt: number; firstReviewAt: number | null; mergedAt: number | null; closedAt: number | null;
+}
+/**
+ * A pull request as it is sent: its number, repository, state and three times (opened, first review by someone else,
+ * merged), and the author as a pseudonym when developer metrics are on. No title, branch name, description or reviewer.
+ */
+export function pullRequest(team: string, p: PullRequestIn, o: CiOptions): CiRecord {
+  const author = o.person ? o.person(p.authorEmail) : null;
+  const ok = (t: number | null) => (t !== null && t >= p.openedAt ? t : null);
+  const item: Record<string, unknown> = {
+    id: p.id, repo: p.repo.slice(0, 255), ...(author ? { author } : {}), state: p.state, openedAt: iso(p.openedAt),
+    ...(ok(p.firstReviewAt) ? { firstReviewAt: iso(ok(p.firstReviewAt)) } : {}), ...(ok(p.mergedAt) ? { mergedAt: iso(ok(p.mergedAt)) } : {}), ...(ok(p.closedAt) ? { closedAt: iso(ok(p.closedAt)) } : {}),
+  };
+  if (item.state === 'merged' && !item.mergedAt) item.state = 'closed';
+  return { kind: 'pull-requests', team, id: `pr:${p.repo}#${p.id}`, item, at: p.mergedAt ?? p.closedAt ?? p.openedAt };
+}
+
+/** The e-mail address inside "Name <address>" (a git author line), or the string itself when it is an address. */
+export const emailOf = (raw: unknown): string | null => {
+  const s = String(raw ?? '');
+  const m = /<([^<>\s]+@[^<>\s]+)>/.exec(s) ?? /^([^<>\s]+@[^<>\s]+)$/.exec(s.trim());
+  return m ? m[1] : null;
+};
 
 /** A matrix / sharded job name ("test (ubuntu, 18)", "rspec 2/4", "Job 1 of 3") → its group, else null (the CI's own grouping). */
 export function parallelGroupOf(name: string, siblings: string[]): string | null {

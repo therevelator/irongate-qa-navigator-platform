@@ -81,6 +81,7 @@ export function mapApiUser(u: any): User {
     isActive: u.is_active ?? u.isActive ?? true,
     emailVerified: u.email_verified ?? u.emailVerified ?? false,
     hideSampleNotice: !!(u.hide_sample_notice ?? u.hideSampleNotice),
+    liveDataOnly: !!(u.live_data_only ?? u.liveDataOnly),
     sandbox: u.sandbox ?? null,
   };
 }

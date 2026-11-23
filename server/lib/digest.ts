@@ -16,7 +16,7 @@ import { escapeHtml } from './mailer';
 import { canReceiveDigest, canSeeAlert, loadCompanyActors, type CompanyActor } from './alertPolicy';
 import { evaluateCompany, qaScoreOn, RULE_DEFS, SEVERITY_RANK, type Severity } from './alerts';
 import { evaluateSnapshot, type EvalContext } from './kpiEvaluation';
-import { loadIntervals } from './staleness';
+import { loadIntervals, referenceForRow } from './staleness';
 import { loadTargetBook } from './targets';
 import { canViewTeamAnalytics, type PolicyActor } from './userPolicy';
 import { actionsForTeams, type ActionJson } from './actions';
@@ -66,7 +66,7 @@ export async function buildDigest(companyId: string, actor: CompanyActor, now = 
     const row = latestBy.get(t.id);
     if (!row) { digestTeams.push({ id: t.id, name: t.name, qaNow: null, qaNowDay: null, qaBefore: null, qaBeforeDay: null, delta: null, inputsUsed: 0, inputsTotal: 4 }); continue; }
     const day = String(row.snapshot_date).slice(0, 10);
-    const ev = evaluateSnapshot(row, t, ctx, now);
+    const ev = evaluateSnapshot(row, t, ctx, referenceForRow(row, null, now));
     const before = await qaScoreOn(t, ctx, isoDay(Date.parse(`${day}T00:00:00Z`) - 7 * DAY));
     const delta = ev.qa.value !== null && before?.value != null ? Math.round((ev.qa.value - before.value) * 10) / 10 : null;
     digestTeams.push({ id: t.id, name: t.name, qaNow: ev.qa.value, qaNowDay: day, qaBefore: before?.value ?? null, qaBeforeDay: before?.day ?? null, delta, inputsUsed: ev.qa.inputsUsed, inputsTotal: ev.qa.inputsTotal });

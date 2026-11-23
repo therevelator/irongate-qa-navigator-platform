@@ -129,7 +129,7 @@ const NotificationsBell: React.FC<{ onOpenAll: (tab?: 'alerts' | 'inbox' | 'pref
       >
         <Bell size={16} aria-hidden />
         {unread > 0 && (
-          <span data-testid="notifications-unread" className="absolute -right-1.5 -top-1.5 min-w-[1.15rem] rounded-full bg-red-600 px-1 text-center text-[10px] font-semibold leading-[1.15rem] text-white ring-2 ring-white dark:bg-red-500 dark:ring-slate-900">
+          <span data-testid="notifications-unread" className="absolute -right-1.5 -top-1.5 min-w-[1.15rem] rounded-full bg-red-600 px-1 text-center text-[10px] font-semibold leading-[1.15rem] text-white ring-2 ring-white dark:bg-red-700 dark:ring-slate-900">
             {shown}
           </span>
         )}

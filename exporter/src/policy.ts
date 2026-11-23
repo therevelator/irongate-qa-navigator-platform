@@ -10,7 +10,7 @@ export type PolicyKind = 'issue' | 'incident';
 
 export interface FieldRule {
   /** string: trimmed, at most max characters; number: finite and 0..max; time: ISO 8601 (UTC); enum: one of values. */
-  type: 'string' | 'number' | 'boolean' | 'time' | 'enum' | 'hash' | 'list';
+  type: 'string' | 'number' | 'boolean' | 'time' | 'enum' | 'hash' | 'list' | 'tags';
   max?: number;
   values?: readonly string[];
   /** list: the rule set of each element (a nested allow-list). */
@@ -61,6 +61,7 @@ export const SEND_POLICY: Record<PolicyKind, Record<string, FieldRule>> = {
     updatedAt: { type: 'time', why: 'change time (idempotency)' },
     sprints: { type: 'list', of: SPRINT, maxItems: 100, why: 'sprint metrics' },
     transitions: { type: 'list', of: TRANSITION, maxItems: 2000, why: 'status, sprint and flag history (blocked time, commitment)' },
+    labels: { type: 'tags', values: ['test-automation'], why: 'marks test-automation work (automation ROI: time invested); set here from the labels you name, your own labels are not sent' },
     title: { type: 'string', max: 500, optIn: 'titles', why: 'issue title in the evidence (opt-in)' },
     url: { type: 'string', max: 1000, optIn: 'links', why: 'link back to the tracker (opt-in)' },
     assigneeHash: { type: 'hash', optIn: 'people', why: 'salted hash of the assignee, computed locally (opt-in)' },
@@ -110,6 +111,11 @@ function clean(rule: FieldRule, v: unknown, opts: PolicyOptions): unknown {
       return typeof v === 'string' && (rule.values ?? []).includes(v) ? v : undefined;
     case 'hash':
       return typeof v === 'string' && /^[0-9a-f]{16,64}$/.test(v) ? v : undefined;
+    case 'tags': {
+      // A list of fixed words only (never a label as the tool holds it).
+      const tags = Array.isArray(v) ? Array.from(new Set(v.filter((x): x is string => typeof x === 'string' && (rule.values ?? []).includes(x)))) : [];
+      return tags.length ? tags : undefined;
+    }
     case 'list': {
       if (!Array.isArray(v) || !rule.of) return undefined;
       const items = v.slice(0, rule.maxItems ?? 100).map((x) => pick(rule.of!, x, opts)).filter((x): x is Record<string, unknown> => !!x && Object.keys(x).length > 0);

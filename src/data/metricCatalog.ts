@@ -480,8 +480,8 @@ const KPI_ENTRIES: { [K in KpiColumn]: Omit<MetricCatalogEntry, 'key' | 'storedI
     whyItMatters:
       'The share of stories that pass QA without being sent back. Every rejection is rework for both developer and tester; ' +
       'a high rate means clear acceptance criteria and solid local testing, which shortens cycle time.',
-    howCalculated: 'First-time pass rate % = stories with 0 QA rejections ÷ stories tested × 100',
-    calculationNotes: ['Stored as sent (0–100).'],
+    howCalculated: 'From raw CI data: pipeline runs whose first attempt passed ÷ runs × 100 (test runs\' first attempts when there is no pipeline data). As a finished value: stories with 0 QA rejections ÷ stories tested × 100',
+    calculationNotes: ['Calculated by QE Navigator when the team sends pipeline runs or test reports (source "computed"); otherwise stored as sent (0–100).'],
     unit: '%',
     direction: dir('firstTimePassRate'),
     thresholds: fromConfig('firstTimePassRate'),
@@ -517,7 +517,7 @@ const KPI_ENTRIES: { [K in KpiColumn]: Omit<MetricCatalogEntry, 'key' | 'storedI
     whyItMatters:
       'The share of test cases that run automatically instead of by hand. Automated tests run on every change at almost no cost, ' +
       'so higher automation means faster releases and less manual regression effort before each one.',
-    howCalculated: 'Automation coverage % = automated test cases ÷ total test cases × 100',
+    howCalculated: 'Automation coverage % = automated test cases ÷ total test cases × 100 (calculated by QE Navigator from the test management records: TestRail, Xray, Zephyr Scale; archived cases not counted)',
     calculationNotes: [
       'Stored as sent (0–100).',
       `Overview "needs attention" when below ${KPI_TARGETS.automation}% (KPI_TARGETS.automation).`,
@@ -540,7 +540,7 @@ const KPI_ENTRIES: { [K in KpiColumn]: Omit<MetricCatalogEntry, 'key' | 'storedI
     whyItMatters:
       'Compares the manual testing time automation saves with the time spent building and maintaining it. It tells leadership whether automation investment is paying back, ' +
       'and which suites cost more to maintain than they save.',
-    howCalculated: 'Automation ROI % = (time saved − time invested) ÷ time invested × 100',
+    howCalculated: 'Automation ROI % = (time saved − time invested) ÷ time invested × 100, over 30 days. Calculated by QE Navigator: time saved = manual estimate − run duration over the automated executions of cases with an estimate; time invested = time logged on the issues marked as test-automation work',
     calculationNotes: [
       'Calculated outside the app (or in the Manual metrics calculator) and stored as sent; can be negative. No target: shown without a status colour.',
     ],

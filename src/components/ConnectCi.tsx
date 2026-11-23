@@ -285,7 +285,7 @@ export const AGENT_TABS: Array<{ id: AgentTab; label: string; file: string }> = 
   { id: 'kubernetes', label: 'Kubernetes', file: 'CronJob every 15 minutes (exporter/deploy/kubernetes/cronjob.yaml)' },
   { id: 'node', label: 'Node 20 (no container)', file: 'One file, no dependencies: qe-exporter.mjs, with a cron or systemd timer' },
 ];
-export const AGENT_VERSION = '0.3.0';
+export const AGENT_VERSION = '0.5.0';
 
 export type ExporterCi = 'github' | 'gitlab' | 'bitbucket' | 'jenkins' | 'azure-devops' | 'none';
 export const EXPORTER_CIS: Array<{ id: ExporterCi; label: string; file: string }> = [

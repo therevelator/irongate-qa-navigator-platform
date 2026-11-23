@@ -592,7 +592,7 @@ router.get('/companies/:companyId/summary', ...op, view('overview', async (_req,
   const onboardingRow = await queryOne<any>('SELECT dismissed_at, completed_at, updated_at FROM onboarding_state WHERE company_id = ?', [company.id]);
   const lifetime = await queryOne<any>(`SELECT ${lifetimeHoursSql('?')} AS h`, [company.id]);
   res.json({
-    company: { ...company, hideSampleDataNotice: !!company.settings?.hideSampleDataNotice, sessionLifetimeHours: Number(lifetime?.h ?? DEFAULT_SESSION_HOURS) },
+    company: { ...company, hideSampleDataNotice: !!company.settings?.hideSampleDataNotice, liveDataOnly: !!company.settings?.liveDataOnly, sessionLifetimeHours: Number(lifetime?.h ?? DEFAULT_SESSION_HOURS) },
     counts, onboarding, onboardingState: onboardingRow ?? null, sessionLifetimeChoices: SESSION_LIFETIME_CHOICES,
   });
 }));
@@ -1191,10 +1191,15 @@ router.put('/companies/:companyId', ...op, write(async (_req, res, company, b) =
     if (typeof b.hideSampleDataNotice !== 'boolean') throw new OpError(400, 'hideSampleDataNotice must be true or false.');
     settings.hideSampleDataNotice = b.hideSampleDataNotice;
   }
+  // Live operation: metrics only from raw data, nothing typed (server/lib/liveData.ts).
+  if (b.liveDataOnly !== undefined) {
+    if (typeof b.liveDataOnly !== 'boolean') throw new OpError(400, 'liveDataOnly must be true or false.');
+    settings.liveDataOnly = b.liveDataOnly;
+  }
   await query('UPDATE companies SET name = ?, domain = ?, email_domain_public = ?, settings = ?::jsonb, updated_at = now() WHERE id = ?',
     [name, d.domain, d.isPublic, JSON.stringify(settings), company.id]);
   const updated = await queryOne<any>(`SELECT ${COMPANY_COLUMNS} FROM companies WHERE id = ?`, [company.id]);
-  res.json({ company: { ...updated, hideSampleDataNotice: !!updated.settings?.hideSampleDataNotice } });
+  res.json({ company: { ...updated, hideSampleDataNotice: !!updated.settings?.hideSampleDataNotice, liveDataOnly: !!updated.settings?.liveDataOnly } });
 }));
 
 // "Sign-in lasts": the company app's own endpoint.

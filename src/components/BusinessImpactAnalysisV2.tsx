@@ -723,9 +723,9 @@ const BusinessImpactAnalysisV2: React.FC<BusinessImpactAnalysisV2Props> = ({ tea
                     </button>
                     {isExpanded && (
                       <div className="space-y-5 border-t border-slate-200 px-5 py-4 dark:border-slate-800">
-                        <FieldGroup title="Quality metrics">
+                        <FieldGroup title={user?.liveDataOnly ? 'Quality metrics (calculated from your KPI values, not entered)' : 'Quality metrics'}>
                           {QUALITY_METRICS.map(metric => (
-                            <NumberField key={metric.key} label={metric.label} unit={metric.unit} placeholder={metric.description}
+                            <NumberField key={metric.key} label={metric.label} unit={metric.unit} placeholder={metric.description} readOnly={!!user?.liveDataOnly}
                               value={month.quality[metric.key]} onChange={(v) => updateMetric(month.month_year, 'quality', metric.key, v)} />
                           ))}
                         </FieldGroup>
@@ -821,10 +821,10 @@ const FieldGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ ti
   </div>
 );
 
-const NumberField: React.FC<{ label: string; unit?: string; placeholder?: string; value: number | null; onChange: (v: string) => void }> = ({ label, unit, placeholder, value, onChange }) => (
+const NumberField: React.FC<{ label: string; unit?: string; placeholder?: string; value: number | null; onChange: (v: string) => void; readOnly?: boolean }> = ({ label, unit, placeholder, value, onChange, readOnly }) => (
   <label className="block">
     <span className="mb-1 block text-xs text-slate-500 dark:text-slate-400">{label}{unit ? ` (${unit})` : ''}</span>
-    <input type="number" step="0.01" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className={cx(inputClass, 'w-full')} />
+    <input type="number" step="0.01" value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={readOnly ? 'Calculated' : placeholder} readOnly={readOnly} disabled={readOnly} className={cx(inputClass, 'w-full', readOnly && 'cursor-not-allowed opacity-70')} />
   </label>
 );
 

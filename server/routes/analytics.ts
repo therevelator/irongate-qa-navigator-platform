@@ -17,7 +17,7 @@ import { resolveConfigs } from '../lib/configResolver';
 import { isTeamMemberSql } from '../lib/assignments';
 import { recordAudit } from '../lib/audit';
 import { evaluateLatestSnapshot, evaluateSnapshot, loadDataClock, qaConfidenceJson, type EvalContext, type SnapshotEvaluation } from '../lib/kpiEvaluation';
-import { loadIntervals, referenceFor } from '../lib/staleness';
+import { loadIntervals, referenceFor, referenceForRow } from '../lib/staleness';
 import { loadTargetBook } from '../lib/targets';
 import { teamMemberCountSql } from '../lib/teamMembership';
 import { multiTeamDeveloperSummary, teamDeveloperSummary } from '../lib/developerAggregates';
@@ -28,6 +28,8 @@ import { getFinancialConfig } from '../lib/financialConfig';
 import { correlationSummaryHtml } from '../lib/correlationSummary';
 import { BI_CONTEXT_RANGES, BI_KPI_RANGES, BI_QUALITY_RANGES, DEBT_IMPACT_FIELDS, bulkMonthErrors, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 import { markValueSources } from '../lib/businessImpactSources';
+import { isLiveDataOnly, LIVE_MANUAL_MESSAGE } from '../lib/liveData';
+import { rawFlakyTests, rawPerformance, rawPipelineHistory, rawPipelineStages, rawTestExecutions, RAW_FLAKY_SCORE_FORMULA } from '../lib/analyticsFromRaw';
 
 /** The monthly Business impact columns of each table (the values whose source is recorded). */
 const BI_QUALITY_COLS = BI_QUALITY_RANGES.map((r) => r.column);
@@ -38,6 +40,9 @@ const pickNums = (body: any, cols: string[]): Record<string, number | null> =>
   Object.fromEntries(cols.map((c) => { const v = body?.[c]; const n = v === null || v === undefined || v === '' ? null : Number(v); return [c, Number.isFinite(n as number) ? n : null]; }));
 
 const router = express.Router();
+
+const LIVE_QUALITY_MESSAGE =
+  'The monthly quality values of this company are derived from its calculated KPI values and are not entered by hand.';
 
 /**
  * Analytics scope (audited for the team-scoped Analytics modules).
@@ -183,6 +188,10 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
     if (!scope) return;
     const teamId = scope.teamId;
 
+    // The runs the team's CI sent (test_runs), when it sent any; the older module table holds sample data only.
+    const raw = await rawTestExecutions({ companyId, teamId }, numDays);
+    if (raw) return res.json({ executions: raw.executions, source: 'ci', sample: raw.sample });
+
     let sql = `
       SELECT 
         ter.id,
@@ -224,7 +233,7 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
       dependencies: typeof e.dependencies === 'string' ? JSON.parse(e.dependencies) : (e.dependencies || [])
     }));
 
-    res.json({ executions: result });
+    res.json({ executions: result, source: 'module', sample: false });
   } catch (error) {
     console.error('Error fetching test executions:', error);
     res.status(500).json({ error: 'Failed to fetch test executions' });
@@ -248,6 +257,11 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
     const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
     if (!scope) return;
     const teamId = scope.teamId;
+
+    // The tests that failed and passed on the same commit in the reports the team's CI sent
+    // (flaky_test_evidence), when it sent any; the older module table holds sample data only.
+    const raw = await rawFlakyTests({ companyId, teamId });
+    if (raw) return res.json({ flakyTests: raw.tests, source: 'ci', sample: raw.sample, scoreFormula: RAW_FLAKY_SCORE_FORMULA, windowDays: 30 });
 
     let sql = `
       SELECT 
@@ -348,6 +362,11 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
     if (!scope) return;
     const teamId = scope.teamId;
 
+    // The load-test results the team's pipelines keep (k6, JMeter, Gatling), when any were received: per day and
+    // endpoint the latest run. The older module table holds sample data only.
+    const raw = await rawPerformance({ companyId, teamId }, numDays);
+    if (raw) return res.json({ metrics: raw.metrics, source: 'ci', sample: raw.sample });
+
     let sql = `
       SELECT 
         pm.id,
@@ -388,7 +407,7 @@ router.get('/performance-metrics', authenticateToken, async (req: any, res) => {
       timestamp: m.timestamp
     }));
 
-    res.json({ metrics: result });
+    res.json({ metrics: result, source: 'module', sample: false });
   } catch (error) {
     console.error('Error fetching performance metrics:', error);
     res.status(500).json({ error: 'Failed to fetch performance metrics' });
@@ -760,6 +779,15 @@ router.get('/pipeline-history', authenticateToken, async (req: any, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
+    const units = {
+      runs: 'stage executions',
+      avg_duration_seconds: 'mean stage-execution duration, weighted by executions',
+      failure_rate: 'failed / total stage executions for the day, %'
+    };
+    // The stage executions of the pipeline runs the team's CI sent, when it sent any.
+    const raw = await rawPipelineHistory({ companyId, teamId }, numDays);
+    if (raw) return res.json({ history: raw.history, units, source: 'ci', sample: raw.sample });
+
     let sql = `SELECT 
         to_char(execution_date, 'YYYY-MM-DD') as execution_date,
         SUM(total_runs) as total_runs,
@@ -796,14 +824,7 @@ router.get('/pipeline-history', authenticateToken, async (req: any, res) => {
       };
     });
 
-    res.json({
-      history: results,
-      units: {
-        runs: 'stage executions',
-        avg_duration_seconds: 'mean stage-execution duration, weighted by executions',
-        failure_rate: 'failed / total stage executions for the day, %'
-      }
-    });
+    res.json({ history: results, units, source: 'module', sample: false });
   } catch (error) {
     console.error('Error fetching pipeline history:', error);
     res.status(500).json({ error: 'Failed to fetch pipeline history' });
@@ -828,6 +849,29 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
     // Reject team ids that are not in the caller's company.
     if (teamId && !(await getOwnedTeam(req, teamId as string))) {
       return res.status(404).json({ error: 'Team not found' });
+    }
+
+    // The stages of the pipeline runs the team's CI sent (pipeline_stage_runs, last 30 days), when it sent
+    // any: mean duration and success rate per stage, in the order the stages start. CPU, memory and cost
+    // per run are not in CI data and stay empty. These stages are calculated, not editable.
+    const raw = await rawPipelineStages({ companyId, teamId });
+    if (raw) {
+      const costPerMinute = num(toPipelineConfig(config).cost_per_minute);
+      const scores = computeBottleneckScores(raw.stages.map((st) => ({ duration: st.duration, success_rate: st.success_rate }))).results;
+      return res.json({
+        stages: raw.stages.map((st, i) => ({
+          id: st.id, name: st.name, duration: st.duration, success_rate: st.success_rate,
+          resource_usage: { cpu: null, memory: null, cost: st.duration !== null && costPerMinute !== null ? roundTo((st.duration / 60) * costPerMinute, 2) : null },
+          bottleneck_score: scores[i].score, manually_edited: false, updated_at: null,
+          runs: st.runs, failed_runs: st.failed_runs,
+        })),
+        stages_source: 'ci',
+        source: 'ci',
+        sample: raw.sample,
+        window_days: 30,
+        pipeline_runs: raw.pipelineRuns,
+        config: toPipelineConfig(config)
+      });
     }
 
     // One row per stage name: if duplicates exist for the same company/team/name,
@@ -910,6 +954,7 @@ router.put('/pipeline-stages/:id', authenticateToken, async (req: any, res) => {
     if (!canManageCompanyData(req)) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
+    if (await isLiveDataOnly(companyId)) return res.status(403).json({ error: LIVE_MANUAL_MESSAGE, code: 'live_data_only' });
     const { id } = req.params;
     const { team_id, duration, success_rate, cpu_usage, memory_usage, cost_per_run } = req.body;
 
@@ -1368,6 +1413,8 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
   try {
     const { teamId } = req.params;
     if (!(await assertTeamWrite(req, res, teamId))) return;
+    // In live operation the monthly quality values are the ones derived from the team's KPI values; none is typed.
+    if (await isLiveDataOnly(req.user?.companyId)) return res.status(403).json({ error: LIVE_QUALITY_MESSAGE, code: 'live_data_only' });
     const { month_year, ...metrics } = req.body;
 
     if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) {
@@ -1674,9 +1721,12 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
     const manuallyEdited = !isSyntheticPayload;
 
     let saved = 0;
+    // In live operation the quality side is derived from the KPI values: the quality part of each month is left out.
+    const live = await isLiveDataOnly(req.user?.companyId);
 
     for (const month of monthlyData) {
-      const { month_year, quality, kpis, context } = month;
+      const { month_year, kpis, context } = month;
+      const quality = live ? null : month.quality;
 
       if (!month_year || !/^\d{4}-\d{2}$/.test(month_year)) continue;
 
@@ -1773,7 +1823,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
       saved++;
     }
 
-    res.json({ success: true, monthsSaved: saved, dataSource });
+    res.json({ success: true, monthsSaved: saved, dataSource, ...(live ? { qualityDerived: true } : {}) });
   } catch (error) {
     if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
     console.error('Error bulk saving:', error);
@@ -2189,7 +2239,7 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
     ORDER BY ks.team_id, ks.snapshot_date DESC
   `, [companyId, teamIds, teamIds]);
   const prevDist = distributionOf(prevRows.map((r: any) => ({
-    value: evaluateSnapshot(r, { id: r.team_id, department_id: r.department_id }, evalCtx, referenceFor(r.snapshot_day, now)).qa.value,
+    value: evaluateSnapshot(r, { id: r.team_id, department_id: r.department_id }, evalCtx, referenceForRow(r, r.snapshot_day, now)).qa.value,
     weight: weightOf(r.team_id),
   })));
   const prevScore = prevDist.weightedMean;

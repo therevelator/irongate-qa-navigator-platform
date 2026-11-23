@@ -25,7 +25,7 @@ export class BitbucketDcAdapter implements CiAdapter {
   kind = 'ci' as const;
   private client: SourceClient;
 
-  constructor(private src: BitbucketDcSource, http: HttpSettings, private opts: { links: boolean }, env: NodeJS.ProcessEnv = process.env) {
+  constructor(private src: BitbucketDcSource, http: HttpSettings, private opts: import('./common').CiOptions, env: NodeJS.ProcessEnv = process.env) {
     const token = requireSecret(src.tokenEnv, `sources.${src.name} (a Bitbucket Data Center HTTP access token with Read permission)`, env);
     this.client = new SourceClient({
       source: src.name, baseUrl: src.baseUrl, caFile: src.caFile, http, headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },

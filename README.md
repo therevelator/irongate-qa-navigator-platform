@@ -17,7 +17,7 @@ unless the API is started with `ENABLE_SYNTHETIC_DATA=true`.
 | [docs/INTEGRATION_GUIDE.md](docs/INTEGRATION_GUIDE.md) | For developers: sending data to the platform (API keys, the KPI ingestion API, every metric's unit and range, backfill, retries) with curl / Node / Python / CI examples, runnable scripts in [docs/integration-examples/](docs/integration-examples/), and what cannot be sent via API yet |
 | [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) | Direct and adjacent competitors, gaps and positioning (sources checked 18 Nov 2026) |
 | [docs/pitch/](docs/pitch/) | Source of the 11-slide pitch deck, with speaker notes and the placeholders to fill |
-| [docs/DOCUMENTATION_INDEX.md](docs/DOCUMENTATION_INDEX.md) | Every current document, what it is for and who reads it; old documents are in [docs/archive/](docs/archive/) |
+| [docs/README.md](docs/README.md) | Every document, what it is for and who reads it |
 | [docs/reports/](docs/reports/) | The accuracy audits and the consistency report that led to the "no invented numbers" fixes |
 | [docs/ROLE_ACCESS.md](docs/ROLE_ACCESS.md) | **Who can see and do what**: a plain-English summary per role and the matrix per page and module (scope rules), derived from the code |
 | [docs/reports/r2-final-review.md](docs/reports/r2-final-review.md) | Release R2 final review: findings, fixes, deferred items; per-role security matrix in `tests/api/r2-security-matrix.test.ts` |
@@ -193,9 +193,13 @@ sandbox on a new database. Details: [docs/DEPLOYMENT_GUIDE.md, section 8](docs/D
 
 ## Where metrics come from
 
-- **KPI ingestion API** (below): the supported way to feed metrics from CI, issue trackers,
-  code analysis and other tools. There are no built-in Jenkins / Jira / SonarQube connectors.
-- **Manual metrics** page: the same server path, for values entered by hand.
+- **Raw data, calculated here** (the way for a live company): the QE Navigator Exporter (`exporter/`) runs in the
+  customer's network, reads their tools and sends the raw records; the raw ingestion API and Upload files take the
+  same records. QE Navigator calculates all 23 KPIs, the Analytics modules, the technical debt items and the
+  developer metrics from them (sections below, and "Every module from raw data").
+- **KPI ingestion API** (below): finished values, for companies not yet sending raw data.
+- **Manual metrics** page: values entered by hand, for demos and trials. A company in live operation
+  (**Live data only**, set by platform support) is not offered it, and typed or finished values are refused.
 - **Expected update frequency** (Administration): how often each metric should receive a
   value. It schedules nothing; a value older than its interval is stale: shown greyed and left
   out of composite scores (see [Staleness, confidence, …](#staleness-confidence-company-aggregates-and-kpi-targets)).
@@ -630,6 +634,31 @@ curl -sS --fail-with-body -X POST "https://<host>/api/ingest/issues?team=<team i
 curl -sS --fail-with-body -X POST "https://<host>/api/ingest/static-analysis?team=<team id>&commit=$SHA&branch=main&run=$RUN" \
   -H "Authorization: Bearer $IRONGATE_API_KEY" -F report=@results/javascript.sarif
 ```
+
+## Every module from raw data (no typed-in metric)
+
+- **Analytics modules** read the raw tables ([`server/lib/analyticsFromRaw.ts`](server/lib/analyticsFromRaw.ts)): Flaky tests
+  (`flaky_test_evidence`, `test_results`), Test execution (`test_runs`), CI/CD pipeline and pipeline health
+  (`pipeline_stage_runs`, `pipeline_runs_raw`), Performance (`performance_runs`, `performance_results`). The older module
+  tables are read only for a team that never sent raw data of that kind (sample data).
+- **More raw sources** ([`server/routes/ingestMore.ts`](server/routes/ingestMore.ts), migration
+  `supabase/migrations/20261209000000_more_raw_sources.sql`): `POST /api/ingest/performance` (k6, JMeter, Gatling result
+  files), `/test-management` (test cases and executions → `automation_coverage`, `automation_roi`; engine group `automation`),
+  `/pull-requests` and `/calendar` (→ developer metrics, [`server/lib/developerFromRaw.ts`](server/lib/developerFromRaw.ts)).
+  People arrive as pseudonyms and are kept only for users who enabled developer insights.
+- **Next move** ([docs/NEXT_MOVE.md](docs/NEXT_MOVE.md)): Time lost, Findings, Outcomes and Data readiness. Hours lost per week
+  by cause from raw records ([`packages/engine/src/calc/lostHours.ts`](packages/engine/src/calc/lostHours.ts),
+  [`server/lib/lostHours.ts`](server/lib/lostHours.ts)); findings with their records and a next step; verdicts read from the tracked
+  actions' checkpoints; connected sources with the fix for each gap ([`server/routes/navigator.ts`](server/routes/navigator.ts),
+  `src/components/navigator/`). Migration `supabase/migrations/20261210000000_navigator.sql`.
+- **Exporter 0.5.0** connectors: GitHub Actions, GitLab CI, Bitbucket Cloud and Data Center, Jenkins, Azure DevOps,
+  SonarQube, Jira, Linear, PagerDuty, Opsgenie, TestRail, Xray Cloud, Zephyr Scale, Google Calendar, Microsoft 365
+  (`exporter/README.md`). Tested against stand-ins of each vendor's documented API, not against the real services.
+- **Live data only** ([`server/lib/liveData.ts`](server/lib/liveData.ts)): the company setting that refuses typed metrics and
+  finished values (operator panel → Edit company).
+- Tests: `tests/api/live-raw-modules.test.ts`, `tests/api/more-sources.test.ts`, `exporter/test/more-sources.test.ts`,
+  `exporter/test/rollback-coverage.test.ts`, UI `tests/e2e/admin/live-data-only.spec.ts`.
+- Reference: docs/INTEGRATION_GUIDE.md section 4F, docs/PRODUCT_GUIDE.md sections 4.2f and 4.3.
 
 ## Staleness, confidence, company aggregates and KPI targets
 

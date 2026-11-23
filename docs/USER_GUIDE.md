@@ -12,6 +12,7 @@ The full reference for every screen is [PRODUCT_GUIDE.md, section 5](PRODUCT_GUI
 3. [Overview](#3-overview)
 4. [Team detail](#4-team-detail)
 5. [Executive summary and TV mode](#5-executive-summary-and-tv-mode)
+5a. [Next move: Time lost, Findings, Outcomes, Data readiness](#5a-next-move-time-lost-findings-outcomes-data-readiness)
 6. [Analytics and Compare teams](#6-analytics-and-compare-teams)
 7. [Wellbeing pulse](#7-wellbeing-pulse)
 8. [Alerts and notifications](#8-alerts-and-notifications)
@@ -128,6 +129,24 @@ Open a team from the Overview. You see only teams in your scope.
   only, no individual data. The QA score follows your score display: the battery stands beside the big
   score; the gauge, which is wider than tall, sits in the middle of the panel with the score in its centre.
 
+## 5a. Next move: Time lost, Findings, Outcomes, Data readiness
+
+Four pages under **Next move** in the menu, for the teams of your scope. Each has an "About this page" box. The full
+description is in [NEXT_MOVE.md](NEXT_MOVE.md).
+
+- **Time lost**: the hours your teams lost in the last 7 days to slow pipeline stages, failed runs that passed on a
+  rerun, blocked work, failed changes and waiting for review; how that moved in 12 weeks; each team's state and its
+  one thing this week. Click a team to open its findings.
+- **Findings**: the problems behind the hours, the costliest first. Open one to see the records behind it and the
+  next step. Team leads, managers and administrators can **Assign owner** (it becomes an action in the team's Action
+  plan); anyone can **Copy** it as the text of a ticket. Pick a team at the top right to see its one thing this week.
+- **Outcomes**: every finding from *Suggested* to *Verified* or *Did not hold*. The last two are decided by the KPI
+  14 and 30 days after the action was done, not by a person. Pick a month and press **Print report** for the monthly
+  outcomes report.
+- **Data readiness**: which sources each team sends, and for each gap what it blocks and how to close it.
+
+The hours are measured from records. They are not a money figure: multiply by your own hourly cost if you want one.
+
 ## 6. Analytics and Compare teams
 
 **Analytics** opens one team at a time (pick the team at the top). Modules: Flaky tests, Test execution,
@@ -191,7 +210,8 @@ For super admins, managers and team leads, within their scope. Details: [ADMIN_P
   the records stored, updated and already stored, the rows left out and why, the metrics recalculated, and
   a link to its ingestion log entry. *What is stored* lists the field allow-list; a super admin can turn off
   **Store issue and incident titles** (the titles already stored are deleted; lists show the key only).
-- **Manual metrics:** enter team KPIs and developer metrics by hand. The company-wide pipeline
+- **Manual metrics:** enter team KPIs and developer metrics by hand (not offered when your company is in live operation:
+  its metrics are then calculated from the raw data your tools hold). The company-wide pipeline
   configuration and the company default pipeline stages are changed by super admins only; managers edit
   the pipeline stages of their own departments' teams.
 - **Activity:** the change history with undo. **Ingestion log:** every data import (uploads show who
@@ -207,3 +227,72 @@ For super admins, managers and team leads, within their scope. Details: [ADMIN_P
 - **Stale** values are greyed with "Stale since …" and are not judged.
 - **"Based on n of m"** tells you how many inputs a composite used.
 - **Sample data** is marked by a banner. It is generated for demos and can be removed.
+
+---
+
+## Signing in, passwords, sessions and roles
+
+How to get into QE Navigator, keep your account safe, and understand what your role lets you do. The
+complete per-role matrix is in [ROLE_ACCESS.md](ROLE_ACCESS.md).
+
+### Joining
+
+- **By invitation (most people).** An administrator invites you by e-mail to a role on a team, a department
+  or the company. Open the link, enter your first and last name and choose a password, or use Google or
+  Microsoft sign-in if your company offers it and the account has the invited e-mail address. The link
+  expires after 7 days by default. If it has expired, ask for a new one.
+- **Registering.** "Create an account" on the sign-in page registers a **new organisation** with its first
+  department and team, and makes you its super admin. Do not register to join your colleagues: ask for an
+  invitation instead. A company e-mail domain can belong to one organisation only; with a public address
+  (for example gmail.com) there is no such limit.
+
+### Signing in
+
+- E-mail and password, or **Continue with Google / Microsoft** when shown. Single sign-on works only for an
+  existing account or an open invitation with the same verified e-mail address.
+- **Keep me signed in** keeps you signed in after closing the browser, for as long as your company allows
+  (default 7 days). Without it you are signed out when the browser closes.
+- After too many failed attempts from one network, sign-in is paused for a while. Wait and try again, or
+  reset your password.
+- If your organisation's access is suspended, the sign-in page says so. Contact your administrator.
+
+### Passwords
+
+- 10 to 128 characters, at least three of: lower case, upper case, number, symbol. It must not contain the
+  part of your e-mail address before the @.
+- **Forgot password?** on the sign-in page sends a link to your e-mail. It works once and expires after 60
+  minutes. The page always gives the same answer, whether or not the address has an account.
+- Resetting your password signs you out on every device.
+- An administrator can also set a password for you or send you a reset link.
+
+### Your sessions
+
+- **Account menu → Sign out my other devices** ends every session except the one you are using.
+- **Sign out** ends this session.
+- If an administrator signs you out everywhere, deactivates you or your organisation is suspended, your next
+  action takes you back to the sign-in page with a message.
+
+### What your role lets you do
+
+Press the **question mark** in the top bar ("What you can do here") to see the rules for your own account.
+In short:
+
+| Role | Sees | Can change |
+|---|---|---|
+| Super admin | every team of the company | everything in the company: people, teams, departments, targets, settings, API keys |
+| Manager | the teams of the departments they manage | those teams and their people below manager, their targets and alert rules |
+| Team lead | the teams they lead or belong to | those teams' data (manual metrics, actions, alerts, pulse), their software engineers and viewers |
+| Software engineer | the teams they belong to | their own tracked actions' status; answers the wellbeing pulse |
+| Viewer | the teams they are assigned to | nothing (read-only) |
+
+You can hold more than one role (for example viewer of two teams); you get the combined access. Nobody can
+change their own role.
+
+### Privacy
+
+- Your individual developer metrics are shown to others only if you opted in to developer insights, and then
+  only to super admins, managers and team leads of your team. You always see your own.
+- Wellbeing pulse answers are anonymous. Results are shown only as team averages with at least 3 answers.
+  Answering is not recorded in any activity log.
+- Your company's super admins can see a log of sign-ins and requests in the company (User activity), for 90
+  days, without the content of what you sent.
