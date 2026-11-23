@@ -77,6 +77,26 @@ against a running API.
 The standalone scripts below (`raw-sample-sql.ts`) only add raw rows to a live company; they cannot make its existing KPI
 snapshots agree with the raw data. For a live sample company, reseed it (the steps at the top of this file).
 
+## Reseed one live sample company (keeps every other company)
+
+For a live database that also holds other companies, the sample of one sample company (Meridian, or the demo company
+`demo-northwind`) is rewritten without the full wipe above. Deploy the code first (the nightly refresh must use the same
+generator), back up, then from a trusted machine with the production `DATABASE_URL`:
+
+```bash
+# 1. Remove the company's generated data (one transaction; refuses a company with real KPI data). Kept: the company,
+#    departments, teams, the people of showcase.sql with their passwords, role assignments, team memberships,
+#    invitations, and every record of what people did (audit log, sign-ins, sessions, activity, jobs).
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -v company=mft-meridian -f scripts/reseed/clear-sample-company.sql
+# 2. Write the sample again (the settings of build.sh), then the Scrum layer and the forecasts.
+DATABASE_URL=... SAMPLE_HISTORY_DAYS=365 SAMPLE_EVENT_DAYS=365 SAMPLE_PERF_DAYS=180 SAMPLE_DEV_DAYS=365 SAMPLE_PULSE_WEEKS=52 \
+  SAMPLE_TEAM_STORIES=scripts/reseed/stories.json SAMPLE_SPRINT_RELEASES=2026-11-09 \
+  npm run seed:demo -- --fill-existing --company mft-meridian
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f scripts/reseed/showcase-content.sql
+DATABASE_URL=... npx tsx scripts/reseed/improve-refresh.ts --company mft-meridian
+# The demo company: step 1 with company=demo-northwind, then `npm run seed:demo` (its people are sample people too).
+```
+
 ## v2 raw CI data (phase 1)
 
 To add sample raw data to a **live** company without a reseed (nothing is wiped; existing rows are skipped; re-running adds
