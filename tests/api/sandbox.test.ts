@@ -447,11 +447,11 @@ describe('Demo sandbox', () => {
   });
 
   test('SB-010 the reset ends sessions, wipes changes, is idempotent and touches nothing else', async () => {
-    const s = await startSession('team_lead');
+    // The CTO (company-wide) dismisses an open recommendation of any team (SB-005 may have accepted the team lead's only one).
+    const s = await startSession('cto');
     const cookie = cookieOf(s);
     expect((await request(app).get('/api/auth/me').set('Cookie', cookie)).status).toBe(200);
-    const mobile = teamIds()[0];
-    const rec = await one(`SELECT id FROM recommendations WHERE company_id = $1 AND team_id = $2 AND status = 'open' ORDER BY rank LIMIT 1`, [S, mobile]);
+    const rec = await one(`SELECT id FROM recommendations WHERE company_id = $1 AND status = 'open' ORDER BY team_id, rank LIMIT 1`, [S]);
     await request(app).post(`/api/improve/recommendations/${rec.id}/dismiss`).set('Cookie', cookie).send({ reason: 'Other' });
     expect(Number((await one(`SELECT count(*) AS n FROM recommendations WHERE company_id = $1 AND status <> 'open'`, [S])).n)).toBeGreaterThan(0);
 

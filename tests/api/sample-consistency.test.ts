@@ -34,6 +34,8 @@ const DAYS = 30;
 /** Fewest records a value of today may be based on (single-report values: one report). */
 const MIN_SAMPLE: Record<string, number> = {
   code_quality: 1, mttr: 3, mtbf: 3, availability: 3, infrastructure_failures: 3,
+  // A sprint's issues: a small team closes a handful a sprint.
+  velocity: 3, commitment: 3, carryover: 3, blocked_time: 3, sizing_accuracy: 3,
 };
 const minSample = (key: string) => MIN_SAMPLE[key] ?? 5;
 /** Shown on the team page from the team (taskSizingAccuracy), not in the KPI history or TV mode. */
