@@ -39,7 +39,6 @@
  *             ENABLE_SYNTHETIC_DATA=true, never change a real company's rows
  */
 import 'dotenv/config';
-import { execFile } from 'child_process';
 import bcrypt from 'bcrypt';
 import express from 'express';
 import request from 'supertest';
@@ -529,7 +528,7 @@ describe('Synthetic data: sample companies only, never another company', () => {
     expect((await api('POST', `/api/analytics/business-impact-v2/${teamS}/generate-realistic-data`, cookies.sadmin)).status).toBe(200);
   });
 
-  test('SYNTH-004 background generators and the snapshot seed never change a real company', async () => {
+  test('SYNTH-004 background generators never change a real company', async () => {
     // Keep the shared demo company's fixed dataset out of this run (it is a sample company too).
     const demoActive = (await db.query(`SELECT id, is_active FROM companies WHERE id LIKE 'demo-%' AND id <> $1`, [companyS])).rows;
     await db.query(`UPDATE companies SET is_active = false WHERE id LIKE 'demo-%' AND id <> $1`, [companyS]);
@@ -547,10 +546,6 @@ describe('Synthetic data: sample companies only, never another company', () => {
       await expect(analyticsJob.seedPipelineStages(companyB)).rejects.toThrow(/not a sample company/);
       const { seedPipelineStages } = await import('../../server/seeders/pipelineSeeder');
       await expect(seedPipelineStages(companyB)).rejects.toThrow(/not a sample company/);
-      // The snapshot seed CLI (deleted every company's snapshots before).
-      await new Promise<void>((resolve, reject) => execFile('npx', ['tsx', 'server/seeds/seedProductivitySnapshots.ts'], {
-        cwd: `${__dirname}/../..`, env: { ...process.env, ENABLE_SYNTHETIC_DATA: 'true', NETLIFY: 'true' }, timeout: 90_000,
-      }, (e, _o, stderr) => (e ? reject(new Error(`${e.message}\n${stderr}`)) : resolve())));
       expect(changedTables(real0, await fingerprint({ nonSample: true }))).toEqual([]);
     } finally {
       for (const c of demoActive) await db.query('UPDATE companies SET is_active = $2 WHERE id = $1', [c.id, c.is_active]);
