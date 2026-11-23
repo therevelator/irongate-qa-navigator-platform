@@ -960,7 +960,7 @@ Parser: `normaliseIncident`, `deliveryEvents.ts` 369–418. The field allow-list
 | `outage` | no | true / false; default: true for critical or high | `isOutage` |
 | `category` | no | at most 50, lower-cased; `infrastructure` feeds infrastructure failures | `kind`, `type` |
 | `url` | no | at most 1000 | `html_url` |
-| `responder` | no | stored only as a salted hash (`responderHash`) | `assignee`, `owner` |
+| `responder` | no | an e-mail, id or name, or an object `{ email \| emailAddress \| id \| summary \| name }`; stored only as a salted hash (`responderHash`) | `assignee`, `owner` |
 | `responderHash` | no | 8–64 hex (instead of responder) | |
 
 All times must be within 365 days and not in the future.
