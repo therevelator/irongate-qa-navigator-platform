@@ -12,6 +12,8 @@
       "branch": "main",
       "startedAt": "2026-11-20T09:20:00Z",
       "format": "lcov",
+      "repo": "acme/payments-web",
+      "loc": 42800,
       "files": [
         {
           "name": "lcov.info",
@@ -27,6 +29,7 @@
       "branch": "feature/refund-limits",
       "startedAt": "2026-11-20T11:10:00Z",
       "format": "cobertura",
+      "repo": "acme/payments-web",
       "files": [
         {
           "name": "coverage.xml",
@@ -42,6 +45,8 @@
       "branch": "main",
       "startedAt": "2026-11-18T14:00:00Z",
       "format": "jacoco",
+      "repo": "acme/payments-core",
+      "loc": 61250,
       "files": [
         {
           "name": "jacoco.xml",
@@ -56,6 +61,7 @@
       "branch": "main",
       "startedAt": "2026-11-18T15:00:00Z",
       "format": "istanbul",
+      "repo": "acme/payments-web",
       "files": [
         {
           "name": "coverage-final.json",
@@ -70,6 +76,7 @@
       "branch": "release/2026.11",
       "startedAt": "2026-11-17T15:00:00Z",
       "format": "istanbul-summary",
+      "repo": "acme/payments-web",
       "files": [
         {
           "name": "coverage-summary.json",

@@ -65,7 +65,7 @@ interface CompanySummary {
   deliveryPerformanceBasis?: { method: string; teamsClassified: number };
   /** Wellbeing (survey): teams with a shown latest-period result (k-anonymous, server/lib/pulse.ts). */
   developerWellnessBasis?: { method: string; teamsReporting: number; teamsTotal: number; teamsSuppressed: number; responses: number; minResponses: number };
-  pipelineHealthBasis?: { definition: string; successfulRuns: number; totalRuns: number; windowDays: number };
+  pipelineHealthBasis?: { definition: string; successfulRuns: number; totalRuns: number; windowDays: number; teams?: number; avgBuildTimeMinutes?: number | null };
   techDebtBasis?: { openItems: number; totalItems: number };
   /** Teams with a current QA score of the active teams (composite confidence). */
   globalQaScoreConfidence?: ConfidenceInfo;
@@ -613,7 +613,7 @@ const CompanyHero: React.FC<{ summary: CompanySummary | null; state: 'loading' |
       value: num(s?.pipelineHealthScore),
       good: INDEX_GOOD, warn: INDEX_WARN,
       caption: pipe ? (pipe.totalRuns > 0 ? `${pipe.successfulRuns} of ${pipe.totalRuns} runs passed, ${pipe.windowDays} days` : `No completed runs in ${pipe.windowDays} days`) : '',
-      title: pipe?.definition ?? '',
+      title: pipe ? `${pipe.definition}${pipe.avgBuildTimeMinutes != null ? `. Average build time ${pipe.avgBuildTimeMinutes} min.` : ''}` : '',
     },
   ];
 

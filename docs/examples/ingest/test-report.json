@@ -12,6 +12,7 @@
       "branch": "main",
       "startedAt": "2026-11-20T09:05:00Z",
       "format": "junit",
+      "repo": "acme/payments-web",
       "files": [
         {
           "name": "TEST-com.acme.payments.PaymentServiceTest.xml",
@@ -30,6 +31,7 @@
       "branch": "main",
       "startedAt": "2026-11-20T09:31:00Z",
       "format": "junit",
+      "repo": "acme/payments-web",
       "files": [
         {
           "name": "TEST-com.acme.payments.PaymentServiceTest.xml",
@@ -48,6 +50,7 @@
       "branch": "main",
       "startedAt": "2026-11-20T10:00:00Z",
       "format": "trx",
+      "repo": "acme/payments-core",
       "files": [
         {
           "name": "billing-tests.trx",
@@ -62,6 +65,7 @@
       "branch": "feature/refund-limits",
       "startedAt": "2026-11-20T11:00:00Z",
       "format": "cucumber",
+      "repo": "acme/payments-web",
       "files": [
         {
           "name": "cucumber-report.json",

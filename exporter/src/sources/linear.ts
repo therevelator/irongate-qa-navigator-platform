@@ -22,7 +22,7 @@ export function issuesQuery(p: PrivacyContext['privacy']): string {
   issues(first: $first, after: $after, filter: $filter, orderBy: updatedAt, includeArchived: true) {
     pageInfo { hasNextPage endCursor }
     nodes {
-      id identifier createdAt updatedAt completedAt canceledAt estimate ${opt}
+      id identifier createdAt updatedAt completedAt canceledAt estimate priorityLabel ${opt}
       team { key } parent { id } state { name type } labels(first: 50) { nodes { name } } cycle { ${CYCLE} }
       history(first: 50) { pageInfo { hasNextPage endCursor } nodes { ${HISTORY_NODE} } }
     }
@@ -92,6 +92,7 @@ export function mapLinearIssue(raw: any, ctx: LinearMapContext): { id: string; r
     resolution: canceled ? 'Canceled' : raw.completedAt || stateType === 'completed' ? 'Done' : null,
     environment: environmentFromLabels(labels),
     storyPoints: typeof raw.estimate === 'number' ? raw.estimate : null,
+    priority: typeof raw.priorityLabel === 'string' && raw.priorityLabel.trim() ? raw.priorityLabel.slice(0, 50) : null,
     createdAt, resolvedAt: iso(raw.completedAt ?? raw.canceledAt), updatedAt: changedAt,
     sprints: Array.from(sprints.values()), transitions,
     title: ctx.privacy.privacy.sendTitles ? maskTitle(raw.title) : undefined,
@@ -130,7 +131,7 @@ export class LinearAdapter implements Adapter {
   describe(): string[] {
     return [
       `Linear GraphQL at ${this.src.apiUrl} (API key, queries only)`,
-      `issues(filter: {updatedAt >= <cursor>${this.src.teamKeys.length ? `, team.key in [${this.src.teamKeys.join(', ')}]` : ''}}) with identifier, createdAt, updatedAt, completedAt, canceledAt, estimate, team.key, parent.id, state, labels, cycle, history (state and cycle changes)${this.privacy.privacy.sendTitles ? ', title' : ''}${this.privacy.privacy.sendLinks ? ', url' : ''}${this.privacy.privacy.people === 'hash' ? ', assignee.id' : ''}`,
+      `issues(filter: {updatedAt >= <cursor>${this.src.teamKeys.length ? `, team.key in [${this.src.teamKeys.join(', ')}]` : ''}}) with identifier, createdAt, updatedAt, completedAt, canceledAt, estimate, priorityLabel, team.key, parent.id, state, labels, cycle, history (state and cycle changes)${this.privacy.privacy.sendTitles ? ', title' : ''}${this.privacy.privacy.sendLinks ? ', url' : ''}${this.privacy.privacy.people === 'hash' ? ', assignee.id' : ''}`,
       `teams: ${Object.entries(this.src.teams).map(([k, t]) => `${k} → ${t}`).join(', ') || '(none)'}${this.src.defaultTeam ? `; default ${this.src.defaultTeam}` : ''}`,
     ];
   }

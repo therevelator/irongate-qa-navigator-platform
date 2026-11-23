@@ -31,6 +31,8 @@ export interface Finding {
   message: string | null;
   path: string | null;
   line: number | null;
+  /** Remediation effort in minutes (SonarQube "effort" / "debt", e.g. "1h30min", or a number of minutes); null when not given. */
+  effortMinutes?: number | null;
 }
 
 export interface ParsedAnalysis {
@@ -68,6 +70,20 @@ export function severityOf(result: any, rule: any): { severity: FindingSeverity;
   const ss = Number(props['security-severity'] ?? props.securitySeverity);
   if (Number.isFinite(ss) && ss > 0) return { severity: ss >= 9 ? 'critical' : ss >= 7 ? 'high' : ss >= 4 ? 'medium' : 'low', level };
   return { severity: LEVEL[level] ?? 'medium', level };
+}
+
+/** Remediation effort of a finding in minutes: properties effort / debt / remediationEffort ("2d 1h 30min", "45min", 45). */
+export function effortOf(result: any, rule: any): number | null {
+  const props = { ...(rule?.properties ?? {}), ...(result?.properties ?? {}) };
+  const v = props.effort ?? props.debt ?? props.remediationEffort ?? props.remediationEffortMinutes;
+  if (typeof v === 'number') return Number.isFinite(v) && v >= 0 && v <= 1e7 ? Math.round(v) : null;
+  if (typeof v !== 'string' || !v.trim()) return null;
+  if (/^\d+(\.\d+)?$/.test(v.trim())) return Math.min(1e7, Math.round(Number(v)));
+  // SonarQube durations: d (8 hours, its working day), h, min.
+  const re = /(\d+(?:\.\d+)?)\s*(d|h|min|m)\b/g;
+  let total = 0; let any = false; let m: RegExpExecArray | null;
+  while ((m = re.exec(v.toLowerCase()))) { any = true; total += Number(m[1]) * (m[2] === 'd' ? 480 : m[2] === 'h' ? 60 : 1); }
+  return any ? Math.min(1e7, Math.round(total)) : null;
 }
 
 function categoryOf(result: any, rule: any): string | null {
@@ -140,7 +156,7 @@ export function parseSarif(text: string): ParsedAnalysis[] {
       let fingerprint = sha(`${tool}|${ruleId}|${fp}`).slice(0, 60);
       const n = seen.get(fingerprint);
       if (n) { seen.set(fingerprint, n + 1); fingerprint = `${fingerprint.slice(0, 56)}#${n + 1}`; } else seen.set(fingerprint, 1);
-      entry.findings.push({ fingerprint, ruleId, ruleName: str(rule?.name ?? rule?.shortDescription?.text, 255), severity, level, category: categoryOf(res, rule), message, path: uri, line });
+      entry.findings.push({ fingerprint, ruleId, ruleName: str(rule?.name ?? rule?.shortDescription?.text, 255), severity, level, category: categoryOf(res, rule), message, path: uri, line, effortMinutes: effortOf(res, rule) });
     });
     entry.rules = new Set(entry.findings.map((f) => f.ruleId)).size;
     byTool.set(tool, entry);

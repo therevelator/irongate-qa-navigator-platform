@@ -173,7 +173,9 @@ describe('CSV formats and the column mapping', () => {
     expect(pay101.sprints).toEqual([{ id: 'name:Sprint-41', name: 'Sprint 41' }]);
     expect(pay101.transitions).toEqual([{ field: 'status', to: 'Done', toCategory: 'done', at: '2026-11-09T15:30:00.000Z' }]);
     expect((c.records[1].sprints as any[]).map((s) => s.name)).toEqual(['Sprint 41', 'Sprint 42']);
-    expect(c.unusedColumns).toEqual(expect.arrayContaining(['Description', 'Comment', 'Attachment', 'Custom field (Customer notes)', 'Priority']));
+    expect(c.unusedColumns).toEqual(expect.arrayContaining(['Description', 'Comment', 'Attachment', 'Custom field (Customer notes)']));
+    expect(c.unusedColumns).not.toContain('Priority');
+    expect(c.records[0].priority).toBeTruthy();
   });
 
   test('UPP-013 Jira current fields in German: semicolons, dd.MM.yyyy, decimal-comma points, German status and environment', () => {
@@ -265,7 +267,7 @@ describe('Field allow-list (shared with the agent)', () => {
     if (fs.existsSync(vendored)) expect(fs.readFileSync(vendored, 'utf8').endsWith(src)).toBe(true);
   });
 
-  test('UPP-021 descriptions, comments, attachments, custom free text, priority, other labels and raw people never survive minimise', () => {
+  test('UPP-021 descriptions, comments, attachments, custom free text, other labels and raw people never survive minimise (priority is kept)', () => {
     const rec = {
       key: 'PAY-1', type: 'Bug', status: 'Done', description: 'secret', comments: [{ body: 'c', author: 'a@example.com' }], attachment: 'x.png',
       customfield_10050: 'free text', priority: 'High', labels: ['customer-acme', 'production'], assignee: 'dana@example.com', reporter: { emailAddress: 'r@example.com' },
@@ -274,9 +276,10 @@ describe('Field allow-list (shared with the agent)', () => {
     };
     const { record, dropped } = minimise('issue', rec, { storeTitles: true, salt: 'co-1' });
     const s = JSON.stringify(record);
-    for (const bad of ['secret', 'example.com', 'free text', 'High', 'customer-acme', 'x.png', 'goal', 'nested']) expect(s).not.toContain(bad);
+    for (const bad of ['secret', 'example.com', 'free text', 'customer-acme', 'x.png', 'goal', 'nested']) expect(s).not.toContain(bad);
+    expect(record.priority).toBe('High');
     expect(record).toMatchObject({ key: 'PAY-1', type: 'Bug', status: 'Done', title: 'A title', labels: ['production'], sprints: [{ id: 'S1', name: 'Sprint 1', state: 'closed' }] });
-    expect(dropped).toEqual(expect.arrayContaining(['description', 'comments', 'attachment', 'customfield_10050', 'priority', 'assignee', 'reporter', 'fields']));
+    expect(dropped).toEqual(expect.arrayContaining(['description', 'comments', 'attachment', 'customfield_10050', 'assignee', 'reporter', 'fields']));
     const allowed = new Set(storedFieldNames('issue', { storeTitles: true, salt: 'co-1' }));
     expect(Object.keys(record).every((k) => allowed.has(k))).toBe(true);
     expect(usefulLabel('env:staging')).toBe(true);
@@ -332,7 +335,7 @@ describe('Planning a file (the preview)', () => {
     expect(p.dateRange).toEqual({ from: '2026-10-20T10:00:00.000Z', to: '2026-11-08T08:30:00.000Z' });
     expect(p.skipped).toEqual([{ reason: 'Issue key is empty', count: 1, rows: [7] }]);
     expect(p.fields).toEqual(expect.arrayContaining(['key', 'type', 'status', 'transitions', 'createdAt', 'resolvedAt', 'storyPoints', 'sprints', 'environment', 'estimateHours', 'timeLoggedHours', 'title', 'assigneeHash']));
-    expect(p.fields).not.toEqual(expect.arrayContaining(['description', 'comments', 'labels', 'priority', 'assignee']));
+    expect(p.fields).not.toEqual(expect.arrayContaining(['description', 'comments', 'labels', 'assignee']));
     expect(p.dropped).toEqual(expect.arrayContaining(['column “Description”', 'column “Comment”', 'column “Attachment”', 'column “Custom field (Customer notes)”']));
     expect(p.sample).toHaveLength(3);
     const everything = JSON.stringify(p.sample) + p.submissions.map((s) => s.body.toString()).join('');

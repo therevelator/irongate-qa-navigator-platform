@@ -7,6 +7,7 @@
   "items": [
     {
       "key": "PAY-101",
+      "priority": "High",
       "team": "<teamId>",
       "project": "PAY",
       "title": "Partial refunds respect the card network limit",
@@ -82,6 +83,7 @@
     },
     {
       "key": "PAY-102",
+      "priority": "Medium",
       "project": "PAY",
       "title": "Retry refunds after gateway timeouts",
       "type": "Task",
@@ -141,6 +143,7 @@
     },
     {
       "key": "PAY-103",
+      "priority": "Highest",
       "project": "PAY",
       "title": "Refund of a split payment is booked twice",
       "type": "Bug",
@@ -180,6 +183,7 @@
     },
     {
       "key": "PAY-104",
+      "priority": "Low",
       "project": "PAY",
       "title": "Voucher total wrong on the staging checkout",
       "type": "Bug",
@@ -199,6 +203,7 @@
     },
     {
       "key": "PAY-105",
+      "priority": "High",
       "project": "PAY",
       "title": "Refund booked twice (duplicate report)",
       "type": "Bug",
@@ -213,6 +218,7 @@
     },
     {
       "key": "PAY-106",
+      "priority": "Medium",
       "project": "PAY",
       "title": "Show the refund limit on the payment page",
       "type": "Story",
@@ -239,6 +245,7 @@
     },
     {
       "key": "PAY-107",
+      "priority": "Medium",
       "project": "PAY",
       "title": "Refunds 2.0",
       "type": "Epic",
@@ -250,6 +257,7 @@
     },
     {
       "key": "PAY-108",
+      "priority": "Low",
       "project": "PAY",
       "title": "Add the limit to the refund API schema",
       "type": "Sub-task",

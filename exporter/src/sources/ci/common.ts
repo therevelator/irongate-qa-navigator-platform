@@ -136,13 +136,13 @@ export function lcovTotalsOf(t: { linesFound: number; linesHit: number; branches
   return { name: 'coverage-summary.info', content: `TN:\nSF:(total)\nLF:${t.linesFound}\nLH:${t.linesHit}\nBRF:${t.branchesFound}\nBRH:${t.branchesHit}\nend_of_record\n` };
 }
 
-export interface Finding { ruleId: string; severity: 'critical' | 'high' | 'medium' | 'low' | 'info'; path: string | null; line: number | null; fingerprint: string; category: string | null }
+export interface Finding { ruleId: string; severity: 'critical' | 'high' | 'medium' | 'low' | 'info'; path: string | null; line: number | null; fingerprint: string; category: string | null; effortMinutes?: number | null }
 const SEV_PROP: Record<string, string> = { critical: 'blocker', high: 'high', medium: 'medium', low: 'low', info: 'info' };
 /** A SARIF file of findings read from an API (SonarQube): rule, severity, file, fingerprint; no messages. */
 export function sarifOf(tool: string, findings: Finding[]): ReportFile {
   const rules = Array.from(new Set(findings.map((f) => f.ruleId))).map((id) => ({ id }));
   const results = findings.map((f) => ({
-    ruleId: f.ruleId, properties: { severity: SEV_PROP[f.severity] ?? 'medium', ...(f.category ? { category: f.category } : {}) },
+    ruleId: f.ruleId, properties: { severity: SEV_PROP[f.severity] ?? 'medium', ...(f.category ? { category: f.category } : {}), ...(f.effortMinutes !== undefined && f.effortMinutes !== null ? { effort: f.effortMinutes } : {}) },
     ...(f.path ? { locations: [{ physicalLocation: { artifactLocation: { uri: f.path }, ...(f.line ? { region: { startLine: f.line } } : {}) } }] } : {}),
     partialFingerprints: { primaryLocationLineHash: f.fingerprint },
   }));
@@ -214,9 +214,10 @@ export function changedLinesOf(files: Array<{ filename?: string; patch?: string 
 /** The report items of one run: one test report (all its test files), one coverage report, one per SARIF file. */
 export function reportItems(team: string, found: { tests: ReportFile[]; coverage: ReportFile[]; sarif: ReportFile[] }, m: ReportMeta, repo: string | null, changed: Record<string, Array<number | string>> | null = null): CiRecord[] {
   const out: CiRecord[] = [];
-  if (found.tests.length) out.push(reportItem('test-report', team, found.tests.slice(0, 50), m));
+  // The repository travels with every report (a dimension of the evidence in QE Navigator).
+  if (found.tests.length) out.push(reportItem('test-report', team, found.tests.slice(0, 50), m, { repo }));
   if (found.coverage.length) {
-    const c = reportItem('coverage', team, found.coverage.slice(0, 50), m);
+    const c = reportItem('coverage', team, found.coverage.slice(0, 50), m, { repo });
     if (changed) c.item.changedLines = JSON.stringify(changed);
     out.push(c);
   }

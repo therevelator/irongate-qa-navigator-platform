@@ -27,6 +27,15 @@ import { benjaminiHochberg, studentTTwoSidedP } from '../lib/stats';
 import { getFinancialConfig } from '../lib/financialConfig';
 import { correlationSummaryHtml } from '../lib/correlationSummary';
 import { BI_CONTEXT_RANGES, BI_KPI_RANGES, BI_QUALITY_RANGES, DEBT_IMPACT_FIELDS, bulkMonthErrors, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
+import { markValueSources } from '../lib/businessImpactSources';
+
+/** The monthly Business impact columns of each table (the values whose source is recorded). */
+const BI_QUALITY_COLS = BI_QUALITY_RANGES.map((r) => r.column);
+const BI_KPI_COLS = BI_KPI_RANGES.map((r) => r.column);
+const BI_CONTEXT_COLS = BI_CONTEXT_RANGES.map((r) => r.column);
+/** The given columns of a body, as numbers (null when absent). */
+const pickNums = (body: any, cols: string[]): Record<string, number | null> =>
+  Object.fromEntries(cols.map((c) => { const v = body?.[c]; const n = v === null || v === undefined || v === '' ? null : Number(v); return [c, Number.isFinite(n as number) ? n : null]; }));
 
 const router = express.Router();
 
@@ -1438,6 +1447,7 @@ router.post('/business-impact-v2/:teamId/quality-metrics', authenticateToken, as
       ]
     );
 
+    await markValueSources('business_impact_quality_metrics', teamId, month_year, pickNums(metrics, BI_QUALITY_COLS), 'manual');
     res.json({ success: true, message: 'Quality metrics saved' });
   } catch (error) {
     if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
@@ -1496,6 +1506,7 @@ router.post('/business-impact-v2/:teamId/business-kpis', authenticateToken, asyn
       ]
     );
 
+    await markValueSources('business_impact_business_kpis', teamId, month_year, pickNums(kpis, BI_KPI_COLS), 'manual');
     res.json({ success: true, message: 'Business KPIs saved' });
   } catch (error) {
     if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
@@ -1560,6 +1571,7 @@ router.post('/business-impact-v2/:teamId/context', authenticateToken, async (req
       ]
     );
 
+    await markValueSources('business_impact_context', teamId, month_year, pickNums(context, BI_CONTEXT_COLS), 'manual');
     res.json({ success: true, message: 'Context data saved' });
   } catch (error) {
     if (isDataException(error)) return res.status(400).json({ error: dataExceptionMessage(error) });
@@ -1736,6 +1748,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
             manuallyEdited, dataSource
           ]
         );
+        await markValueSources('business_impact_quality_metrics', teamId, month_year, pickNums(quality, BI_QUALITY_COLS), isSyntheticPayload ? 'synthetic' : 'manual');
       }
 
       // Save business KPIs
@@ -1764,6 +1777,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
             manuallyEdited, dataSource
           ]
         );
+        await markValueSources('business_impact_business_kpis', teamId, month_year, pickNums(kpis, BI_KPI_COLS), isSyntheticPayload ? 'synthetic' : 'manual');
       }
 
       // Save context
@@ -1792,6 +1806,7 @@ router.post('/business-impact-v2/:teamId/bulk-save', authenticateToken, async (r
             manuallyEdited
           ]
         );
+        await markValueSources('business_impact_context', teamId, month_year, pickNums(context, BI_CONTEXT_COLS), isSyntheticPayload ? 'synthetic' : 'manual');
       }
 
       saved++;
@@ -2326,24 +2341,33 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
   const doraMean = distributionOf(doraScores).weightedMean;
   const deliveryPerformanceScore = doraMean !== null ? Math.round(doraMean) : null;
 
-  // Pipeline health: successful / (successful + failed) pipeline runs in the last
-  // 30 days, for company-level pipelines (team_id NULL) and active teams.
-  // Running and cancelled runs are excluded. Null when no completed runs.
+  // Pipeline health: successful / (successful + failed) pipeline runs of the active teams in the last 30 days (today
+  // and the 29 days before), as the engine counted them: the inputs of its daily pipeline success rate
+  // (metric_evidence, from the runs ingested into pipeline_runs_raw; every attempt is a run, cancelled runs are left
+  // out). The same evidence feeds the team tiles; sample companies' sample runs go through the same calculation.
   const pipe = await queryOne<any>(`
-    SELECT COUNT(*) FILTER (WHERE pr.status = 'success') AS successful_runs,
-           COUNT(*) FILTER (WHERE pr.status IN ('success', 'failed')) AS total_runs
-    FROM pipeline_runs pr
-    LEFT JOIN teams t ON t.id = pr.team_id
-    WHERE pr.company_id = ?
-      AND pr.started_at >= NOW() - INTERVAL '30 days'
-      AND (pr.team_id IS NULL OR t.is_active = TRUE)
-      AND (?::text[] IS NULL OR pr.team_id = ANY(?::text[]))
+    SELECT COALESCE(SUM((e.inputs->>'successful')::int), 0) AS successful_runs,
+           COALESCE(SUM((e.inputs->>'successful')::int + (e.inputs->>'failed')::int), 0) AS total_runs,
+           COUNT(DISTINCT e.team_id) AS teams,
+           MAX(e.day) AS last_day
+      FROM metric_evidence e JOIN teams t ON t.id = e.team_id
+     WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))
+       AND e.metric_key = 'pipeline_success_rate' AND e.day >= CURRENT_DATE - 29
   `, [companyId, teamIds, teamIds]);
   const pipelineSuccessfulRuns = num(pipe?.successful_runs) ?? 0;
   const pipelineTotalRuns = num(pipe?.total_runs) ?? 0;
   const pipelineHealthScore = pipelineTotalRuns > 0
     ? roundTo((pipelineSuccessfulRuns / pipelineTotalRuns) * 100, 1)
     : null;
+  // Build time beside it, over the same runs: the engine's daily median build time (build_time evidence), weighted by
+  // the runs of each day.
+  const build = await queryOne<any>(`
+    SELECT SUM(e.value * (e.inputs->>'runs')::int) / NULLIF(SUM((e.inputs->>'runs')::int), 0) AS minutes
+      FROM metric_evidence e JOIN teams t ON t.id = e.team_id
+     WHERE t.company_id = ? AND t.is_active = TRUE AND (?::text[] IS NULL OR t.id = ANY(?::text[]))
+       AND e.metric_key = 'build_time' AND e.day >= CURRENT_DATE - 29
+  `, [companyId, teamIds, teamIds]);
+  const pipelineBuildMinutes = roundTo(num(build?.minutes), 1);
 
   // Engineering health: weighted mean over the components that have data
   const healthParts = {
@@ -2473,10 +2497,13 @@ export async function computeCompanyMetrics(companyId: string, teamIds: string[]
       burnoutRisk: devSummary.burnoutOfAverages
     },
     pipelineHealthBasis: {
-      definition: 'Successful pipeline runs / (successful + failed) runs, last 30 days',
+      definition: 'Successful pipeline runs / (successful + failed) runs, last 30 days (the runs your CI sent, as the engine counted them; cancelled runs left out)',
       successfulRuns: pipelineSuccessfulRuns,
       totalRuns: pipelineTotalRuns,
-      windowDays: 30
+      windowDays: 30,
+      teams: num(pipe?.teams) ?? 0,
+      avgBuildTimeMinutes: pipelineBuildMinutes,
+      source: 'pipeline_runs_raw'
     },
     techDebtBasis: { openItems: techDebtOpenItems, totalItems: techDebtTotalItems }
   };

@@ -84,7 +84,7 @@ async function everythingStored(): Promise<string> {
   const payloads = (await db.query(`SELECT payload FROM raw_uploads WHERE company_id = $1 AND payload IS NOT NULL AND kind IN ('issues', 'incidents')`, [GOLDEN_COMPANY])).rows.map((r: any) => gunzipSync(r.payload).toString());
   return [...rows, ...payloads].join('\n');
 }
-const FORBIDDEN = ['TOP-SECRET-DESCRIPTION', 'CONFIDENTIAL-COMMENT', 'CONFIDENTIAL-NOTE', 'corp.example', 'Sam Lee', 'customer-acme', 'Steps:', 'API-DESCRIPTION-SECRET', 'api-comment-secret', 'api.person@corp', 'High'];
+const FORBIDDEN = ['TOP-SECRET-DESCRIPTION', 'CONFIDENTIAL-COMMENT', 'CONFIDENTIAL-NOTE', 'corp.example', 'Sam Lee', 'customer-acme', 'Steps:', 'API-DESCRIPTION-SECRET', 'api-comment-secret', 'api.person@corp'];
 
 beforeAll(async () => {
   up = await backendUp();
@@ -136,7 +136,9 @@ describe('Upload files', () => {
     const [jira, pd] = r.body.files;
     expect(jira).toMatchObject({ name: 'jira.csv', status: 'ready', records: 3, type: { value: 'issues:jira-csv' }, teams: [{ id: EMPTY, records: 3 }] });
     expect(jira.fields).toEqual(expect.arrayContaining(['key', 'title', 'assigneeHash']));
-    expect(jira.dropped).toEqual(expect.arrayContaining(['column “Description”', 'column “Comment”', 'column “Priority”']));
+    expect(jira.dropped).toEqual(expect.arrayContaining(['column “Description”', 'column “Comment”']));
+    // Priority is kept (shown with the defects in the evidence).
+    expect(jira.dropped).not.toContain('column “Priority”');
     expect(jira.sample).toHaveLength(3);
     expect(JSON.stringify(jira.sample)).not.toMatch(/TOP-SECRET|CONFIDENTIAL|corp\.example|Sam Lee/);
     expect(jira.limits.join(' ')).toMatch(/no status-change history/);
@@ -183,15 +185,15 @@ describe('Upload files', () => {
     if (!up) return;
     const all = await everythingStored();
     expect(all).toContain('GUP-1');
-    for (const s of FORBIDDEN.filter((x) => !x.startsWith('api') && x !== 'High' && !x.startsWith('API'))) expect({ s, found: all.includes(s) }).toEqual({ s, found: false });
+    for (const s of FORBIDDEN.filter((x) => !x.startsWith('api') && !x.startsWith('API'))) expect({ s, found: all.includes(s) }).toEqual({ s, found: false });
     const payload = (await db.query(`SELECT payload FROM raw_uploads WHERE team_id = $1 AND kind = 'issues' AND payload IS NOT NULL ORDER BY received_at DESC LIMIT 1`, [EMPTY])).rows[0];
     const kept = JSON.parse(gunzipSync(payload.payload).toString());
     expect(kept.minimised).toBe(true);
     const gup1 = kept.issues.find((i: any) => i.key === 'GUP-1');
     expect(gup1.assigneeHash).toBe(hashPerson(GOLDEN_COMPANY, 'dana.wright@corp.example'));
     expect(gup1.reporterHash).toBe(hashPerson(GOLDEN_COMPANY, 'Sam Lee'));
-    expect(Object.keys(gup1).every((k) => ['key', 'team', 'project', 'type', 'status', 'statusCategory', 'resolution', 'transitions', 'createdAt', 'resolvedAt', 'updatedAt', 'storyPoints', 'sprints', 'environment', 'labels', 'components', 'estimateHours', 'timeLoggedHours', 'url', 'title', 'assigneeHash', 'reporterHash'].includes(k))).toBe(true);
-    expect((await db.query(`SELECT priority, labels FROM issues WHERE team_id = $1 AND external_id = 'GUP-1'`, [EMPTY])).rows[0]).toEqual({ priority: null, labels: ['production'] });
+    expect(Object.keys(gup1).every((k) => ['key', 'team', 'project', 'type', 'status', 'statusCategory', 'resolution', 'transitions', 'createdAt', 'resolvedAt', 'updatedAt', 'storyPoints', 'sprints', 'environment', 'labels', 'components', 'priority', 'estimateHours', 'timeLoggedHours', 'url', 'title', 'assigneeHash', 'reporterHash'].includes(k))).toBe(true);
+    expect((await db.query(`SELECT priority, labels FROM issues WHERE team_id = $1 AND external_id = 'GUP-1'`, [EMPTY])).rows[0]).toEqual({ priority: 'High', labels: ['production'] });
   });
 
   it('UPL-005 the ingestion API path is minimised too: full Jira and PagerDuty JSON leave only allowed fields in the raw copy', async () => {
@@ -214,7 +216,7 @@ describe('Upload files', () => {
     expect(r2.status).toBe(201);
     const payloads = (await db.query(`SELECT payload FROM raw_uploads WHERE team_id = $1 AND kind IN ('issues', 'incidents') AND payload IS NOT NULL`, [PARTIAL])).rows.map((x: any) => gunzipSync(x.payload).toString());
     expect(payloads).toHaveLength(2);
-    for (const p of payloads) for (const s of ['API-DESCRIPTION-SECRET', 'api-comment-secret', 'api.person@corp', 'Api Person', 'customer-acme', 'High']) expect({ s, found: p.includes(s) }).toEqual({ s, found: false });
+    for (const p of payloads) for (const s of ['API-DESCRIPTION-SECRET', 'api-comment-secret', 'api.person@corp', 'Api Person', 'customer-acme']) expect({ s, found: p.includes(s) }).toEqual({ s, found: false });
     expect(payloads.join('')).toContain(hashPerson(GOLDEN_COMPANY, 'api.person@corp.example'));
     const all = await everythingStored();
     for (const s of FORBIDDEN) expect({ s, found: all.includes(s) }).toEqual({ s, found: false });

@@ -61,7 +61,7 @@ export async function loadWorkData(client: pg.PoolClient, teamId: string, from: 
     `SELECT id, external_id, name, started_at, completed_at FROM issue_sprints WHERE team_id = $1 ORDER BY started_at NULLS LAST`, [teamId])).rows;
   const issues = (await client.query(
     `SELECT id, external_id, title, issue_type, status_category, resolution, found_in, environment, story_points::float8 AS points, estimate_hours::float8 AS estimate,
-            time_logged_hours::float8 AS logged, sprint_ids, opened_at, resolved_at, url, components
+            time_logged_hours::float8 AS logged, sprint_ids, opened_at, resolved_at, url, components, priority
        FROM issues
       WHERE team_id = $1 AND opened_at < $3::date + 1
         AND (resolved_at IS NULL OR resolved_at >= $2::date - ${SPRINT_STALE_DAYS + 30} OR opened_at >= $2::date - ${WORK_WINDOW_DAYS + 3})`, [teamId, from, to])).rows;
@@ -72,8 +72,8 @@ export async function loadWorkData(client: pg.PoolClient, teamId: string, from: 
   const tBy = new Map<string, TransitionRow[]>();
   for (const t of trans) { const l = tBy.get(t.issue_id) ?? []; l.push({ field: t.field, from: t.from_value, to: t.to_value, toCategory: t.to_category, at: ms(t.at)! }); tBy.set(t.issue_id, l); }
   const coverage = (await client.query(
-    `SELECT r.id, r.created_at, r.lines_found FROM coverage_reports r JOIN teams t ON t.id = r.team_id
-      WHERE r.team_id = $1 AND r.created_at < $2::date + 1 AND r.lines_found > 0
+    `SELECT r.id, r.created_at, COALESCE(r.lines_of_code, r.lines_found) AS lines_found FROM coverage_reports r JOIN teams t ON t.id = r.team_id
+      WHERE r.team_id = $1 AND r.created_at < $2::date + 1 AND COALESCE(r.lines_of_code, r.lines_found) > 0
         AND (r.branch IS NULL OR r.branch = '' OR (t.main_branch IS NULL AND r.branch IN ('main', 'master')) OR r.branch = t.main_branch)
       ORDER BY r.created_at`, [teamId, to])).rows;
   return {
@@ -81,7 +81,7 @@ export async function loadWorkData(client: pg.PoolClient, teamId: string, from: 
     issues: issues.map((i: any) => ({
       id: i.id, key: i.external_id, title: i.title, type: i.issue_type, statusCategory: i.status_category, resolution: i.resolution, foundIn: i.found_in, environment: i.environment,
       points: i.points, estimate: i.estimate, logged: i.logged, sprintIds: i.sprint_ids ?? [], openedAt: ms(i.opened_at)!, resolvedAt: ms(i.resolved_at), url: i.url,
-      components: i.components ?? [], transitions: tBy.get(i.id) ?? [],
+      components: i.components ?? [], transitions: tBy.get(i.id) ?? [], priority: i.priority ?? null,
     })),
     coverage: coverage.map((c: any) => ({ id: c.id, at: ms(c.created_at)!, linesFound: Number(c.lines_found) })),
     hasSprints: sprints.length > 0,

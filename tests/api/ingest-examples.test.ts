@@ -9,6 +9,12 @@
  *   IE-004  after the calculation queue drained (INGEST_CALC=queued: in the API process; inline: in the request),
  *           all 30 engine metrics have evidence, the 21 KPI columns with a raw source have computed values, the
  *           kpis kind stored all 23 columns, and the QA score is set from computed inputs only
+ *   IE-006  the Overview, the team page and Business impact for this real company: Pipeline health counts the runs
+ *           sent (pipeline_runs_raw through the engine's evidence), Tech debt health comes from the SARIF findings,
+ *           the quality side of Business impact is derived from the KPI values (source "ingested"), and none of
+ *           them reads a sample-only table (the legacy pipeline_runs, generated technical debt, synthetic months)
+ *   IE-007  fields: priority, repo and loc are stored and used (evidence, the repo filter, defect density's lines of
+ *           code); a field the API has no use for is refused with a message, never silently ignored
  *   IE-005  completeness: every field the handlers accept (envelope and report allow-lists, the field allow-list,
  *           the KPI columns) is in the examples, and every other name the parsers read (aliases) is in the doc;
  *           the doc's indicator table names every engine metric and KPI column
@@ -20,7 +26,7 @@ import fs from 'fs';
 import path from 'path';
 import { gzipSync, gunzipSync } from 'zlib';
 import type { Client } from 'pg';
-import { API_URL, backendUp, localDb, login, post } from './helpers/http';
+import { API_URL, backendUp, get, localDb, login, post } from './helpers/http';
 import { createGolden, removeGolden, GOLDEN_ADMIN_EMAIL, GOLDEN_COMPANY } from './helpers/goldenFixture';
 import { FIELD_ALLOW_LIST } from '../../server/lib/ingest/fieldAllowList';
 import { KPI_COLUMNS } from '../../server/lib/kpiIngest';
@@ -118,12 +124,12 @@ describe('docs/examples/ingest: the input JSON of every kind', () => {
   it('IE-003 every field present in the examples was stored', async () => {
     if (!up) return;
     // test-report
-    const runs = await rows(`SELECT run_id, attempt, commit_sha, branch, format, started_at, total, passed, failed, errored, skipped FROM test_runs WHERE team_id = $1`, [TEAM]);
+    const runs = await rows(`SELECT run_id, attempt, commit_sha, branch, format, started_at, total, passed, failed, errored, skipped, repo FROM test_runs WHERE team_id = $1`, [TEAM]);
     expect(runs).toHaveLength(ex['test-report'].items.length);
     for (const it of ex['test-report'].items) {
       const r = runs.find((x: any) => x.run_id === it.run && x.attempt === it.attempt)!;
       expect(r).toBeTruthy();
-      expect([r.commit_sha, r.branch, r.format, ms(r.started_at)]).toEqual([it.commit, it.branch, it.format, ms(it.startedAt)]);
+      expect([r.commit_sha, r.branch, r.format, ms(r.started_at), r.repo]).toEqual([it.commit, it.branch, it.format, ms(it.startedAt), it.repo]);
     }
     const results = await rows(`SELECT r.name, r.status, r.retries FROM test_results r JOIN test_runs t ON t.id = r.test_run_id WHERE t.team_id = $1 AND t.attempt = 1 AND t.run_id = '8812345678'`, [TEAM]);
     expect(results.find((x: any) => x.name === 'refundsPartialAmount')?.status).toBe('failed');
@@ -134,11 +140,11 @@ describe('docs/examples/ingest: the input JSON of every kind', () => {
     expect(Object.fromEntries(uploads.map((u: any) => [u.kind, u.n]))).toMatchObject({ tests: 4, coverage: 5, 'static-analysis': 2, pipelines: 1, deployments: 1, commits: 1, incidents: 1, issues: 1 });
 
     // coverage (diff and changedLines both give changed-line figures)
-    const cov = await rows(`SELECT run_id, attempt, commit_sha, branch, format, created_at, lines_found, branches_found, file_count, changed_lines_found FROM coverage_reports WHERE team_id = $1`, [TEAM]);
+    const cov = await rows(`SELECT run_id, attempt, commit_sha, branch, format, created_at, lines_found, branches_found, file_count, changed_lines_found, repo, lines_of_code FROM coverage_reports WHERE team_id = $1`, [TEAM]);
     expect(cov).toHaveLength(ex.coverage.items.length);
     for (const it of ex.coverage.items) {
       const r = cov.find((x: any) => x.run_id === it.run)!;
-      expect([r.attempt, r.commit_sha, r.branch, r.format, ms(r.created_at)]).toEqual([it.attempt, it.commit, it.branch, it.format, ms(it.startedAt)]);
+      expect([r.attempt, r.commit_sha, r.branch, r.format, ms(r.created_at), r.repo, r.lines_of_code]).toEqual([it.attempt, it.commit, it.branch, it.format, ms(it.startedAt), it.repo, it.loc ?? null]);
       expect(Number(r.lines_found)).toBeGreaterThan(0);
       expect(r.changed_lines_found === null).toBe(!(it.diff || it.changedLines));
     }
@@ -222,7 +228,7 @@ describe('docs/examples/ingest: the input JSON of every kind', () => {
       expect([r.title, r.type_label, r.status, r.status_category, r.resolution ?? null, r.environment, num(r.story_points), num(r.estimate_hours), num(r.time_logged_hours),
         r.labels, r.components, ms(r.opened_at), ms(r.resolved_at), ms(r.source_updated_at), r.url, r.priority])
         .toEqual([it.title, it.type, it.status, it.statusCategory, it.resolution ?? null, it.environment ?? (it.labels?.includes('env:staging') ? 'staging' : null), it.storyPoints ?? null, it.estimateHours ?? null,
-          it.timeLoggedHours ?? null, it.labels ?? [], it.components ?? [], ms(it.createdAt), ms(it.resolvedAt ?? null), ms(it.updatedAt), it.url, null]);
+          it.timeLoggedHours ?? null, it.labels ?? [], it.components ?? [], ms(it.createdAt), ms(it.resolvedAt ?? null), ms(it.updatedAt), it.url, it.priority]);
       expect([...r.sprint_ids].sort()).toEqual([...sprintIds].sort());
       const tr = await rows(`SELECT field, to_value, to_category, at FROM issue_transitions WHERE issue_id = $1`, [r.id]);
       expect(tr.length).toBe((it.transitions?.length ?? 0) + 2 * (it.blocked?.length ?? 0));
@@ -235,7 +241,7 @@ describe('docs/examples/ingest: the input JSON of every kind', () => {
       .toEqual([[s46.id, s46.name, s46.state, ms(s46.startedAt), ms(s46.endsAt), ms(s46.completedAt)], [s47.id, s47.name, s47.state, ms(s47.startedAt), ms(s47.endsAt), null]]);
     const issPayload = JSON.parse(gunzipSync((await rows(`SELECT payload FROM raw_uploads WHERE team_id = $1 AND kind = 'issues'`, [TEAM]))[0].payload).toString());
     const p101 = issPayload.issues.find((x: any) => x.key === 'PAY-101');
-    expect([p101.project, p101.team]).toEqual(['PAY', TEAM]);
+    expect([p101.project, p101.team, p101.priority]).toEqual(['PAY', TEAM, ex.issues.items[0].priority]);
     expect(p101.assigneeHash).toMatch(/^[0-9a-f]{32}$/);
     expect(p101.reporterHash).toMatch(/^[0-9a-f]{32}$/);
     expect(issPayload.issues.find((x: any) => x.key === 'PAY-102').assigneeHash).toBe(ex.issues.items[1].assigneeHash);
@@ -279,6 +285,122 @@ describe('docs/examples/ingest: the input JSON of every kind', () => {
   }, 300_000);
 });
 
+
+describe('the indicators of a real company fed by the examples (no sample-only table, no form)', () => {
+  let cookie = '';
+  beforeAll(async () => { if (up) cookie = (await login(GOLDEN_ADMIN_EMAIL)).cookie; });
+
+  it('IE-006a Pipeline health counts the runs that were sent, through the engine (not the legacy pipeline_runs table)', async () => {
+    if (!up) return;
+    const s = (await get('/api/analytics/company-summary', cookie)).body;
+    // What was sent in the last 30 days (every attempt is a run; cancelled runs are left out), for the active teams.
+    const [sent] = await rows(
+      `SELECT COUNT(*) FILTER (WHERE p.result = 'success')::int AS ok, COUNT(*) FILTER (WHERE p.result IN ('success', 'failed'))::int AS done
+         FROM pipeline_runs_raw p JOIN teams t ON t.id = p.team_id WHERE t.company_id = $1 AND t.is_active AND p.day >= CURRENT_DATE - 29`, [GOLDEN_COMPANY]);
+    expect(sent.done).toBeGreaterThan(0);
+    expect([s.pipelineHealthBasis.successfulRuns, s.pipelineHealthBasis.totalRuns]).toEqual([sent.ok, sent.done]);
+    expect(s.pipelineHealthScore).toBe(Math.round((sent.ok / sent.done) * 1000) / 10);
+    expect((await rows(`SELECT COUNT(*)::int AS n FROM pipeline_runs WHERE company_id = $1`, [GOLDEN_COMPANY]))[0].n).toBe(0);
+    // The build time beside it is the engine's build_time, over the same runs.
+    expect(s.pipelineHealthBasis.avgBuildTimeMinutes).not.toBeNull();
+  });
+
+  it('IE-006b Tech debt health comes from the SARIF findings (one item per repository, tool and severity)', async () => {
+    if (!up) return;
+    const all = await rows(`SELECT title, severity, status, source, impact_score, effort_hours FROM technical_debt WHERE team_id = $1 ORDER BY severity`, [TEAM]);
+    for (const d of all) expect(d.source).toBe('static-analysis');
+    // A severity whose findings are gone in the latest report is resolved; the others are open.
+    const debt = all.filter((d: any) => d.status === 'open');
+    expect(debt.length).toBeGreaterThan(0);
+    // The latest report of acme/payments-api: its findings below info, by severity.
+    const [latest] = await rows(`SELECT id FROM analysis_reports WHERE team_id = $1 ORDER BY analyzed_at DESC LIMIT 1`, [TEAM]);
+    const bySev = await rows(`SELECT severity, COUNT(*)::int AS n FROM analysis_findings WHERE report_id = $1 AND severity <> 'info' GROUP BY severity`, [latest.id]);
+    expect(debt.map((d: any) => [d.severity, d.impact_score]).sort()).toEqual(bySev.map((b: any) => [b.severity, b.n]).sort());
+    const s = (await get('/api/analytics/company-summary', cookie)).body;
+    expect(s.techDebtStatusScore).not.toBeNull();
+    expect(s.techDebtBasis.openItems).toBeGreaterThanOrEqual(debt.length);
+  });
+
+  it('IE-006c the quality side of Business impact fills itself from the KPI values (source "ingested")', async () => {
+    if (!up) return;
+    const months = await rows(`SELECT month_year, test_coverage, defect_escape_rate, change_failure_rate, mttr_hours, code_quality_score, deployment_frequency, lead_time_days, defect_density,
+                                      data_source, value_sources FROM business_impact_quality_metrics WHERE team_id = $1 ORDER BY month_year`, [TEAM]);
+    expect(months.length).toBeGreaterThan(0);
+    const last = months[months.length - 1];
+    expect(last.data_source).toBe('ingested');
+    for (const c of ['test_coverage', 'defect_escape_rate', 'change_failure_rate', 'mttr_hours', 'code_quality_score', 'deployment_frequency', 'lead_time_days', 'defect_density']) {
+      const any = months.find((m: any) => m[c] !== null);
+      expect({ c, value: any ? 'set' : null, source: any?.value_sources[c] }).toEqual({ c, value: 'set', source: 'ingested' });
+    }
+    // The monthly value is the mean of the days' values of that month (deployment frequency per month = per week × 52 / 12).
+    const [cov] = await rows(
+      `SELECT round(avg(value), 2)::float8 AS v FROM (SELECT DISTINCT ON ((recorded_at AT TIME ZONE 'UTC')::date) value FROM metric_values
+         WHERE team_id = $1 AND metric_key = 'test_coverage' AND superseded_by IS NULL AND to_char(recorded_at AT TIME ZONE 'UTC', 'YYYY-MM') = $2
+         ORDER BY (recorded_at AT TIME ZONE 'UTC')::date, recorded_at DESC, received_at DESC) d`, [TEAM, last.month_year]);
+    if (cov.v !== null) expect(Number(last.test_coverage)).toBe(cov.v);
+    const api = (await get(`/api/analytics/business-impact-v2/${TEAM}`, cookie)).body;
+    expect(JSON.stringify(api)).toContain(last.month_year);
+  });
+
+  it('IE-006d a typed-in monthly value is never overwritten by an ingested one, and its source is recorded', async () => {
+    if (!up) return;
+    const [m] = await rows(`SELECT month_year FROM business_impact_quality_metrics WHERE team_id = $1 ORDER BY month_year DESC LIMIT 1`, [TEAM]);
+    const r = await post(`/api/analytics/business-impact-v2/${TEAM}/quality-metrics`, cookie, { month_year: m.month_year, test_coverage: 12.5 });
+    expect(r.status).toBe(200);
+    // A new KPI value of that month re-derives the month: the typed-in coverage stays, the other values follow the data.
+    await db.query(`SELECT public.refresh_business_quality_month($1, $2)`, [TEAM, m.month_year]);
+    const [after] = await rows(`SELECT test_coverage::float8 AS c, data_source, value_sources FROM business_impact_quality_metrics WHERE team_id = $1 AND month_year = $2`, [TEAM, m.month_year]);
+    expect([after.c, after.value_sources.test_coverage, after.data_source]).toEqual([12.5, 'manual', 'mixed']);
+    expect(Object.entries(after.value_sources).filter(([k]) => k !== 'test_coverage').every(([, v]) => v === 'ingested')).toBe(true);
+  });
+
+  it('IE-007a priority, repo and loc are stored and used', async () => {
+    if (!up) return;
+    // priority: in the issue evidence of escape rate.
+    const esc = (await get(`/api/ci/teams/${TEAM}/metrics/escape_rate`, cookie)).body;
+    const p103 = esc.sources.issues.find((i: any) => i.key === 'PAY-103');
+    expect(p103.priority).toBe(ex.issues.items.find((i: any) => i.key === 'PAY-103').priority);
+    // repo: a dimension of the CI evidence, with a filter.
+    const all = (await get(`/api/ci/teams/${TEAM}/evidence`, cookie)).body;
+    expect(all.repos).toEqual(['acme/payments-core', 'acme/payments-web']);
+    const core = (await get(`/api/ci/teams/${TEAM}/evidence?repo=acme/payments-core`, cookie)).body;
+    expect(core.coverage.repo).toBe('acme/payments-core');
+    expect(core.coverage.linesOfCode).toBe(61250);
+    // loc: defect density divides by the loc of the latest main-branch coverage report (lcov, 42,800 lines of code).
+    const dd = (await get(`/api/ci/teams/${TEAM}/metrics/defect_density`, cookie)).body;
+    expect(dd.inputs.linesOfCode).toBe(42800);
+    expect(dd.value).toBe(Math.round((dd.inputs.escapedBugs / 42.8) * 1000) / 1000);
+  });
+
+  it('IE-007b a field QE Navigator has no use for is refused with a message, never ignored', async () => {
+    if (!up) return;
+    const tr = JSON.parse(JSON.stringify(ex['test-report']));
+    tr.items = [{ ...tr.items[0], loc: 1000 }];
+    let r = await send(tr, { dryRun: true });
+    expect([r.status, r.body.error]).toEqual([400, expect.stringContaining('loc is not accepted on a test-report item')]);
+    const pr = JSON.parse(JSON.stringify(ex['pipeline-runs']));
+    pr.items = [{ ...pr.items[0], triggeredBy: 'someone' }];
+    r = await send(pr, { dryRun: true });
+    expect([r.status, r.body.error]).toEqual([400, expect.stringContaining('unknown field(s) triggeredBy')]);
+    const st = JSON.parse(JSON.stringify(ex['pipeline-runs']));
+    st.items = [{ ...st.items[0], stages: [{ ...st.items[0].stages[0], runner: 'x' }] }];
+    r = await send(st, { dryRun: true });
+    expect([r.status, r.body.error]).toEqual([400, expect.stringContaining('unknown field(s) runner')]);
+    for (const kind of ['deployments', 'incidents', 'issues', 'commits'] as const) {
+      const e = JSON.parse(JSON.stringify(ex[kind]));
+      e.items = [{ ...e.items[0], description: 'free text' }];
+      r = await send(e, { dryRun: true });
+      expect({ kind, status: r.status, error: r.body.error }).toEqual({ kind, status: 400, error: expect.stringContaining('unknown field(s) description') });
+    }
+    // The direct endpoints too.
+    const junit = ex['test-report'].items[0].files[0].content;
+    const direct = await fetch(`${API_URL}/api/ingest/tests?team=${TEAM}&dryRun=true&buildNumber=7`, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/xml' }, body: junit });
+    expect([direct.status, (await direct.json() as any).error]).toEqual([400, expect.stringContaining('Unknown field(s): buildNumber')]);
+    const loc = await fetch(`${API_URL}/api/ingest/tests?team=${TEAM}&dryRun=true&loc=100`, { method: 'POST', headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/xml' }, body: junit });
+    expect([loc.status, (await loc.json() as any).error]).toEqual([400, expect.stringContaining('loc is not accepted on a test report')]);
+  });
+});
+
 describe('completeness: the examples and the doc cover every accepted field', () => {
   const src = (f: string) => fs.readFileSync(path.join(ROOT, f), 'utf8');
   /** The body of a function (from its declaration to the first line that is a lone "}"). */
@@ -301,7 +423,6 @@ describe('completeness: the examples and the doc cover every accepted field', ()
     const report = arr(exporter, /const REPORT_FIELDS = (\[[^\]]*\])/);
     const kpiItem = arr(exporter, /filter\(\(k\) => !(\[[^\]]*\])\.includes\(k\)\)/);
     for (const k of ORDER) expect(Object.keys(raw[k]).sort()).toEqual([...envelope].sort());
-    // repo and loc are read for sarif only (dropped for test-report and coverage, exporterIngest.ts).
     const reportUnion = new Set([...used('test-report'), ...used('coverage'), ...used('sarif')]);
     expect(report.filter((f) => !reportUnion.has(f))).toEqual([]);
     expect(kpiItem.filter((f) => !used('kpis').has(f))).toEqual([]);

@@ -261,7 +261,10 @@ describe('POST /api/ingest/exporter/batch', () => {
     expect([inc.status, inc.body.error]).toEqual([201, undefined]);
     expect((await db.query(`SELECT COUNT(*)::int AS n FROM incidents_raw WHERE team_id = $1 AND external_id = 'exb-inc-1'`, [TEAM])).rows[0].n).toBe(1);
 
-    const iss = await send(envelope('issues', [{ key: 'EXB-1', project: 'UNMAPPED', type: 'bug', status: 'Done', statusCategory: 'done', createdAt: at(5), resolvedAt: at(2), environment: 'production', description: 'secret text' }]));
+    // A field QE Navigator does not store (a description) is refused with a message, never silently dropped.
+    const bad = await send(envelope('issues', [{ key: 'EXB-1', project: 'UNMAPPED', type: 'bug', status: 'Done', statusCategory: 'done', createdAt: at(5), resolvedAt: at(2), environment: 'production', description: 'secret text' }]));
+    expect([bad.status, bad.body.error]).toEqual([400, expect.stringContaining('unknown field(s) description')]);
+    const iss = await send(envelope('issues', [{ key: 'EXB-1', project: 'UNMAPPED', type: 'bug', status: 'Done', statusCategory: 'done', createdAt: at(5), resolvedAt: at(2), environment: 'production' }]));
     expect([iss.status, iss.body.error]).toEqual([201, undefined]);
     const issue = await db.query(`SELECT * FROM issues WHERE team_id = $1 AND external_id = 'EXB-1'`, [TEAM]);
     expect(issue.rows.length).toBe(1);

@@ -3,7 +3,8 @@
 This page explains how data gets into QE Navigator and what happens to it. It shows where each step happens in
 the code, and how every indicator on the screens is calculated. Each code excerpt below is copied from the files
 as they are at commit `3e63248` (the version live on app.irongate.ie), with the file path and line numbers.
-Wherever the code does not settle a question, this page says "unclear".
+Wherever the code does not settle a question, this page says "unclear". Sections 3.3, 3.4, 4.3, 4.4, 4.8, 4.11 and 7
+describe the changes that closed the gaps listed in section 7 (they name functions rather than line numbers).
 
 The example requests are in [docs/examples/ingest/](examples/ingest/). The test
 `tests/api/ingest-examples.test.ts` sends every one of them to a local API, as a dry run and then for real. It
@@ -65,7 +66,7 @@ In plain words:
 | `POST /api/ingest/kpis` | Values you calculated yourself (the 23 KPI columns), one item or up to 100 | `server/routes/ingest.ts` 52–221 |
 | File upload (Admin console → Upload files) | Someone drops exported files on the page. Each file becomes requests to the same handlers (`channel: upload`). | `server/lib/ingest/upload.ts` 1–15, `server/routes/uploads.ts` 228 / 278 |
 | Manual entry (Manual metrics page) | A person types KPI values. They go through the same `recordKpiValues` path with `source: manual`. | `server/routes/metrics.ts` 288 |
-| Typed in by people, not machine-ingested | Wellbeing pulse answers (`server/routes/pulse.ts` 125), Business impact monthly figures (`server/routes/analytics.ts` 1397, 1450, 1508, 1677), Financial and ROI settings (Parameters, read by `server/lib/financialConfig.ts`), technical debt items (edited on the Technical debt page, `analytics.ts` 636), developer metrics (`server/routes/metrics.ts` 375) | see each file |
+| Typed in by people, not machine-ingested | Wellbeing pulse answers (`server/routes/pulse.ts` 125), the business side of the Business impact monthly figures (and corrections of the quality side, recorded as `manual`: section 3.4), Financial and ROI settings (Parameters, read by `server/lib/financialConfig.ts`), technical debt items added or edited on the Technical debt page (beside the items derived from static analysis), developer metrics (`server/routes/metrics.ts`) | see each file |
 
 ---
 
@@ -756,23 +757,33 @@ metrics, a file upload, or sample data.
 | QA score (team), with status | database trigger `kpi_snapshots_set_qa_score` and `compute_qa_score`, `supabase/migrations/20261117000000_kpi_integrity_and_ingestion.sql` 42 and 129 | weighted mean of coverage 0.30, 100 − escape rate 0.25, 100 − change failure rate 0.25, code quality 0.20, over the inputs present; NULL without coverage or with fewer than 2 inputs | machine-ingested (coverage, issues, deployments and incidents, SARIF) or kpis / manual |
 | Global QA score (company) | `server/routes/analytics.ts` around 2190–2209 (team scores weighted by team size, stale inputs left out) | weighted mean of the teams' QA scores | as above |
 | Delivery (DORA) gauge | `analytics.ts:2327` | mean of the per-team DORA level scores (Elite / High / Medium / Low, `classifyDoraLevel`), weighted by team size; a team needs all 4 inputs | machine-ingested: deployment frequency, lead time, change failure rate, MTTR |
-| Pipeline health gauge | `analytics.ts:2344` | successful ÷ (successful + failed) runs in 30 days | **the legacy `pipeline_runs` table**, not `pipeline_runs_raw`. Only the sample seeders write it (`server/seeders/pipelineSeeder.ts:258`, `server/seeds/demoData.ts`), so it is **not fed by ingestion**. With real data only, this gauge shows "No completed runs". |
-| Tech debt health gauge | `analytics.ts:2294` | 100 − min(100, open-debt severity weight ÷ active teams) | the `technical_debt` table: sample generator (`server/jobs/analyticsSync.ts:403`) and edits on the Technical debt page. **Not machine-ingested.** |
+| Pipeline health gauge | `computeCompanyMetrics`, `server/routes/analytics.ts` ("Pipeline health") | successful ÷ (successful + failed) runs of the active teams in the last 30 days (today and the 29 days before); beside it the average build time over the same days (the engine's daily `build_time`, weighted by runs) | machine-ingested: kind `pipeline-runs` → `pipeline_runs_raw` → the inputs of the engine's daily `pipeline_success_rate` and `build_time` (`metric_evidence`), the same evidence as the team tiles. Every attempt is a run; cancelled runs are left out. Sample companies' sample runs (`demoRaw`) go through the same tables. The legacy `pipeline_runs` table is no longer read here (section 7, gap G1). |
+| Tech debt health gauge | `computeCompanyMetrics`, `server/routes/analytics.ts` ("Technical debt status") | 100 − min(100, open-debt severity weight ÷ active teams) | the `technical_debt` table, **machine-fed from static analysis**: for each repository and tool, the latest main-branch SARIF / SonarQube report gives one debt item per severity with open findings (critical, high, medium, low), with the summed remediation effort (SonarQube `effort`, the minutes `sqale_index` adds up) as its effort hours; an item whose findings are gone is resolved (`server/lib/techDebtFromAnalysis.ts`, called by `handleStaticAnalysis`). Items people add on the Technical debt page and the sample generator's items (sample companies) are kept beside them. |
 | Wellbeing (survey) gauge | `analytics.ts:2310` (`wellbeingAcrossTeams`, `server/lib/pulse.ts`) | the teams' latest closed pulse period with at least 3 responses | **typed in** by team members (pulse survey, `server/routes/pulse.ts:125`) |
 | Engineering health gauge | `analytics.ts:2359` | weighted mean of delivery 35 %, pipeline 25 %, tech debt 20 %, wellbeing 20 %, over the parts that have data | partly ingested (delivery), partly not (pipeline health, tech debt, wellbeing: see above) |
 | Workload balance, burnout risk, DDPS | `server/lib/developerAggregates.ts`, `server/lib/metricFormulas.ts` (`computeBurnoutRisk` 383, `computeDdps` 335) | see those functions | `developer_metrics`: typed in (`server/routes/metrics.ts` 375) or sample. **Not machine-ingested.** |
-| Business impact: revenue sensitivity, revenue at stake / at risk, roll-up, correlations | `server/lib/revenueImpact.ts` (pure formulas), data from `server/lib/revenueImpactData.ts` | regressions over the team's own monthly history, at least 6 paired months (`REVENUE_MIN_PAIRED_MONTHS`) | the monthly `business_impact_quality_metrics`, `business_impact_business_kpis` and `business_impact_context` tables. **Typed in** on the Business impact page (`analytics.ts` 1397, 1450, 1508, bulk 1677) or generated sample data (`generate-realistic-data`, 1810), plus the Financial and ROI settings and open technical debt. **Not machine-ingested.** Unclear: no code copies the ingested KPI values into the monthly quality table. |
+| Business impact: revenue sensitivity, revenue at stake / at risk, roll-up, correlations | `server/lib/revenueImpact.ts` (pure formulas), data from `server/lib/revenueImpactData.ts` | regressions over the team's own monthly history, at least 6 paired months (`REVENUE_MIN_PAIRED_MONTHS`) | **quality side** (`business_impact_quality_metrics`): derived automatically from the team's KPI values by `public.refresh_business_quality_month` (migration `20261207000000_logic_gaps.sql`), called by `writeMetricValues` after every KPI write: per month, the mean over the month's days of each day's latest value of test coverage, defect density, escape rate, MTTR, lead time, code quality and change failure rate, and deployment frequency per month (per week × 52 ÷ 12); every source but synthetic; sample companies never. **Business side** (`business_impact_business_kpis`, `business_impact_context`): see section 7, gap G2b. Each monthly value records its source (`value_sources`: `manual`, `ingested`, `synthetic`); precedence in section 3.4. Plus the financial settings and the open technical debt. |
 
-**Indicators with no machine input path:**
+**Indicators with no machine input path** (the status of each is in section 7):
 
 - `automation_coverage` and `automation_roi` (only pre-computed, via kind `kpis`);
-- the Pipeline health gauge;
-- the Tech debt health gauge;
 - the Wellbeing (survey) gauge;
 - workload balance, burnout risk and DDPS;
-- every Business impact figure.
+- the business side of Business impact (revenue, churn, support tickets).
 
-Engineering health is mixed: only its delivery part is ingested.
+Engineering health: delivery, pipeline health and technical debt are machine-fed; wellbeing is the survey.
+
+### 3.4 Business impact: where each monthly value comes from
+
+Every value of the three monthly tables carries its source in `value_sources` (`{ "<column>": "manual" | "ingested" | "synthetic" }`); the row's `data_source` summarises it (`ingested`, `manual`, `synthetic` or `mixed`).
+
+| Case | What happens |
+|---|---|
+| A KPI value of the team is written (any source but synthetic) | its month is re-derived; every quality column whose source is `ingested` (or empty) follows the data; a column with no value any more is cleared |
+| A person types a value (single month or bulk, `analytics.ts` "business-impact-v2") | it is stored and recorded as `manual` (`server/lib/businessImpactSources.ts`), also over an ingested value |
+| An ingested value meets a `manual` (or `synthetic`) value | the typed-in value wins: the derivation never overwrites it |
+| A row of generated sample data (`data_source` synthetic) | never touched by the derivation (sample and measured months are never fitted together) |
+| A sample company | nothing is derived (its generated months stay as they are) |
 
 ---
 
@@ -798,10 +809,7 @@ send one envelope per kind. That is the nine files in [docs/examples/ingest/](ex
 The ids in the files are placeholders (`"<companyId>"`, `"<departmentId>"`, `"<teamId>"`). You get the real ones
 from Admin console → Connect your CI, or from `GET /api/ingest/exporter/context`.
 
-Send the kinds in this order: **coverage before issues.** Defect density divides by the lines found of the latest
-main-branch coverage report. It is calculated when the issues' days are recalculated, so a coverage report that
-arrives later is only picked up by the nightly recalculation (`recomputeRecent`, last 8 days). Code quality
-falls back to the coverage lines in the same way when `loc` is not sent.
+The kinds can be sent **in any order**: the values are the same (section 4.11, "Order of arrival").
 
 ### 4.2 The envelope (all kinds)
 
@@ -843,8 +851,8 @@ Allowed item fields: `REPORT_FIELDS` in `server/lib/exporterIngest.ts` line 36. 
 | `startedAt` | no | ISO 8601; not more than 5 minutes in the future, not more than 365 days in the past | default: the report's own time (JUnit `timestamp`, TRX `Times start`, SARIF `invocations[0].endTimeUtc`), else now. Decides the day the values are for. |
 | `diff` | coverage only | text (unified diff), at most 20 MB | changed-code coverage; wins over `changedLines` |
 | `changedLines` | coverage only | a **string** holding JSON `{"path": [12, 13, "20-22"]}` (or `{"files": {…}}`), at most 20 MB | an object instead of a string is refused ("must be a string") |
-| `repo` | sarif only | at most 255 | default from `versionControlProvenance.repositoryUri` (`owner/name`). Accepted but **ignored** on test-report and coverage (`exporterIngest.ts` 112). |
-| `loc` | sarif only | whole number 1–1,000,000,000 (lines of code) | default `runs[].properties.linesOfCode` (or `ncloc`), else the coverage lines found. Accepted but ignored on test-report and coverage. |
+| `repo` | no | at most 255 | the repository. test-report and coverage: stored (`test_runs.repo`, `coverage_reports.repo`), shown with the runs and reports in the evidence, and a filter (`GET /api/ci/teams/:id/evidence?repo=`, which also lists the team's `repos`). sarif: default from `versionControlProvenance.repositoryUri` (`owner/name`); the series of new / fixed findings and the debt items are per repository. Direct endpoints: `repo` (or `repository`). |
+| `loc` | coverage and sarif | whole number 1–1,000,000,000 (lines of code) | coverage: stored (`coverage_reports.lines_of_code`); the lines of code of defect density and of the code quality score's fallback (else the report's lines found). sarif: default `runs[].properties.linesOfCode` (or `ncloc`), else the coverage report's loc or lines found. **Refused on test-report** (400, "loc is not accepted on a test-report item"): a test report has no use for it. |
 
 What the parsers read inside the files:
 
@@ -865,7 +873,7 @@ What the parsers read inside the files:
 Example: [pipeline-runs.json](examples/ingest/pipeline-runs.json). It holds a failed first attempt and a
 successful rerun of the same run, three parallel `unit-tests` shards, a skipped stage, a cancelled run, and a
 nightly run with two parallel e2e stages. Parser: `normaliseRun`, `packages/engine/src/parsers/pipelineEvents.ts`
-lines 80–116. Fields the parser does not read are ignored (not refused).
+lines 80–116. A field not in this table (or a stage field not in it) is refused (400, "unknown field(s) …"), never ignored (`ITEM_FIELDS` and `STAGE_FIELDS`, `server/lib/exporterIngest.ts`). The same rule holds for the item fields of `deployments`, `commits`, `incidents` and `issues`: only the fields and aliases of their tables are accepted in the envelope.
 
 | Field | Required | Unit / validation | Aliases |
 |---|---|---|---|
@@ -996,6 +1004,7 @@ Parser: `jsonIssue`, `packages/engine/src/parsers/issueEvents.ts` 449–496. The
 | `sprints` | no | at most 100; sprint ids, or sprint objects (below) | `sprint` (one sprint) |
 | `labels` | no | at most 50; only labels that name an environment or a type are kept | |
 | `components` | no | at most 50 | |
+| `priority` | no | at most 50; the priority name | |
 | `createdAt` | yes | ISO 8601; not in the future | `created` |
 | `resolvedAt` | no | ISO 8601; kept only when the category is done (default: the last done transition) | `resolved` |
 | `updatedAt` | no | ISO 8601; an older copy never overwrites a newer one | `updated` |
@@ -1010,7 +1019,7 @@ Parser: `jsonIssue`, `packages/engine/src/parsers/issueEvents.ts` 449–496. The
 | sprint `endsAt` | no | ISO 8601 | `endDate`, `end`, `ends_at` |
 | sprint `completedAt` | no | ISO 8601; the sprint's metrics are for this day | `completeDate`, `completed_at` |
 
-The parser also reads `priority`, but the allow-list drops it before storage (`applyIssueAllowList`). Computed
+`priority` (at most 50, e.g. `High`, `P1`) is stored (`issues.priority`) and shown with the issues in the evidence (`GET /api/ci/teams/:id/metrics/:metric` sources, the work page's defect lists); the Exporter reads it from Jira (`priority.name`) and Linear (`priorityLabel`). Computed
 values (`velocity`, `escape_rate`, …) are refused with 400. A top-level `sprints` list (possible on
 `POST /api/ingest/issues`) cannot be sent in the envelope: there, sprints travel inside the issues.
 
@@ -1089,6 +1098,30 @@ calculated in the request:
 | 422 | Idempotency-Key reused with a different body |
 | 500 | server error |
 
+### 4.11 Order of arrival
+
+Every value is the same whatever order the kinds arrive in. Each kind recalculates the days its records affect;
+when a value combines records of two kinds (or a team-wide fact a record can change), the record that arrives
+later also recalculates the days already calculated from the records it combines with
+(`server/lib/calc/dependents.ts`, through the calculation queue like every other recalculation):
+
+| Value | Combines | What the later record recalculates |
+|---|---|---|
+| Defect density | issues and the lines of code of the latest main-branch coverage report as of each day | a main-branch coverage report: the work days already calculated from its day on (`coverageDependentDays`, called by `rawIngestHandler`) |
+| Code quality score | SARIF and, when the report has no `loc`, the coverage report's lines of code | a main-branch coverage report: the quality days already calculated from its day on |
+| New / fixed findings, code quality | the reports of one series | a SARIF report: the quality days from its day on (it re-links the next report of its series) |
+| Change failure rate, incidents per deploy | deployments and incidents (linked by `deploymentId`), rollbacks and hotfixes | any deployment or incident: the delivery days already calculated from its first day on |
+| MTTR, MTBF, availability | incidents (an outage still open counts on every later day; MTBF looks for the previous incident of the service) | the same |
+| Deployment frequency | deployments and the team's first deploy or incident (the period) | the same |
+| Lead time | deployments and commits | a commit batch: the days of the deployments it belongs to; a deployment: its days (it reads the commits stored before it) |
+| Infrastructure failures | incidents, once the team's incidents carry a category | the team's first categorised incident: every delivery day already calculated |
+| Blocked time (Kanban), sprint metrics | issues still active; the team's first sprint switches Kanban metrics to sprint metrics | issues: the work days already calculated from their first day on; the first sprint: every work day already calculated (within the 190-day limit) |
+| First-time pass rate | pipeline runs, else test runs of the day | both recalculate the whole CI day (no extra days needed) |
+
+A day that has no evidence yet has no data a later record could combine with; a day still waiting in the queue is
+calculated later from the data as it is then. `tests/api/order-independence.test.ts` sends the same records in both
+orders to two teams and checks that every value on every day is the same (OI-001 to OI-006).
+
 ---
 
 ## 5. Limits
@@ -1118,7 +1151,7 @@ calculated in the request:
   (`authorHash`, `deliveryEvents.ts` 175–177; `hashPerson`, `fieldAllowList.ts` 126–128). The stored copy of an
   issues or incidents request is the minimised record, never the body as received
   (`server/lib/ingest/minimiseStore.ts`).
-- **No descriptions, comments, attachments, custom free-text fields, work-log text, watchers, priority, due
+- **No descriptions, comments, attachments, custom free-text fields, work-log text, watchers, due
   dates, fix versions or other labels** (`ALWAYS_DROPPED`, `fieldAllowList.ts` 98–102). Fields not on the
   allow-list are dropped.
 - **Titles only by choice.** Issue and incident titles are dropped when the company setting "Store issue and
@@ -1127,3 +1160,25 @@ calculated in the request:
   `change_failure_rate` on a deployment) is refused, because QE Navigator calculates it from the events.
 - **No credentials for your tools.** The Exporter holds the tokens for your tools inside your network. QE
   Navigator only sees the API key, and stores only its hash.
+
+---
+
+## 7. Gaps in the logic, and what was done
+
+Each gap found between the data a customer sends and the indicators they see, with its status. "Closed" means the
+indicator is now fed from the data sent, with a test that proves it.
+
+| # | Gap | Status | What was done | Proof |
+|---|---|---|---|---|
+| G1 | The Pipeline health gauge read the legacy `pipeline_runs` table, which only the sample seeders write: a real customer always saw "No completed runs" | closed | It counts the runs sent (`pipeline_runs_raw`) as the engine counted them: the inputs of the daily `pipeline_success_rate` evidence, the same as the team tiles; the build time over the same days beside it. The legacy table is kept only for the sample-only modules that still write or read it (`server/seeders/pipelineSeeder.ts`, the synthetic flakiness generator in `server/jobs/intervalSync.ts`, `server/seeds/demoCheck.ts`); no indicator reads it. | `ingest-examples.test.ts` IE-006a |
+| G2a | Business impact, quality side: only typed-in or generated months; nothing copied the ingested KPI values into them | closed | `public.refresh_business_quality_month` derives each month from the KPI values after every KPI write, with the source of each value and a precedence (section 3.4); backfilled for the real companies by the migration | IE-006c, IE-006d |
+| G2b | Business impact, business side (revenue, churn, support tickets, downtime): typed in only | open | Not started, at the owner's request ("finish what you have"). Planned: a `business-metrics` envelope kind fed by Exporter connectors to the business systems; downtime from the incidents already ingested. | |
+| G3 | Defect density depended on the order of arrival (issues before coverage gave no value until the nightly recalculation); the same for the code quality score's fallback and for delivery values that look past the 28-day window | closed | section 4.11; `server/lib/calc/dependents.ts` | `order-independence.test.ts` OI-001 to OI-006 (OI-001, OI-002 and OI-006 fail on the previous code) |
+| G4a | Issue `priority` was read and dropped | closed | stored (`issues.priority`), kept by the field allow-list, shown in the issue evidence and the work page; the Exporter reads it from Jira and Linear | IE-003, IE-007a |
+| G4b | `repo` and `loc` on test-report and coverage items were accepted and ignored | closed | `repo` stored on test runs and coverage reports, shown and filterable in the evidence; `loc` on coverage stored and used as the lines of code of defect density and the code quality score; `loc` on a test report refused with a message | IE-003, IE-007a, IE-007b |
+| G5a | Fields not read by the parsers were silently ignored (pipeline runs and their stages, deployments, commits, incidents, issues in the envelope; any extra query or multipart field on the direct report endpoints) | closed | refused with 400 and the list of accepted fields (`ITEM_FIELDS`, `STAGE_FIELDS` in `exporterIngest.ts`; `checkReportFields` in `ingestRaw.ts`; `SARIF_REQUEST_FIELDS` in `ingestWork.ts`). Vendor-native bodies on the direct endpoints (a Jira or PagerDuty export) are still minimised by the field allow-list: the fields it drops are documented in section 6. | IE-007b |
+| G5b | The Tech debt health gauge was fed only by edits on the Technical debt page and the sample generator | closed | debt items derived from the SARIF / SonarQube findings (section 3.3); the Exporter's SonarQube connector sends each issue's remediation effort | IE-006b |
+| G5c | Wellbeing, workload balance, burnout risk and DDPS come from the pulse survey and typed-in developer metrics | open | Not started, at the owner's request. Wellbeing stays survey-only. Developer metrics could be derived in part from pull / merge requests (review time, time to merge), which the Exporter does not read yet; focus, meeting and context-switch hours have no source in the connected tools. | |
+| G5d | Automation coverage and automation ROI have no raw source | open | kind `kpis` only (a test-management connector would be needed) | |
+| G6 | Modules that still read sample-only tables (written only by the sample generators): the flaky tests page (`flaky_tests`, `test_executions`), the test execution page (`test_execution_runs`), the CI/CD pipeline page (`pipeline_stages`, `pipeline_execution_summary`), the Performance page (`performance_metrics`) | open | Not started, at the owner's request. Their machine-fed equivalents exist (`flaky_test_evidence`, `test_results`, `test_runs`, `pipeline_stage_runs`); the team page's CI evidence already uses them. | |
+| G7 | Derived tables outside the engine | closed | `business_impact_quality_metrics` is re-derived inside every KPI write (`writeMetricValues`, so also at the end of each calculation-queue entry); `technical_debt` items from static analysis inside the SARIF request's transaction. Both are idempotent and follow the latest data. | IE-006b, IE-006c |

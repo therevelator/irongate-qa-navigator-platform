@@ -32,6 +32,8 @@ import { parsePipelineBody, type PipelineRunEvent } from '../lib/ingest/pipeline
 import { insertUpload, sha256, storeCoverage, storePipelineRuns, storeTestRun, type RawKind, type UploadMeta } from '../lib/ingest/store';
 import { affectedDays, refreshFlakyEvidence, type DayResult } from '../lib/calc/engine';
 import { calcOrQueue, kickCalc } from '../lib/calc/queue';
+import { coverageDependentDays, daysBack } from '../lib/calc/dependents';
+import { WORK_RECOMPUTE_DAYS } from '../lib/calc/work';
 import { flushBackgroundWrites } from '../lib/opsLog';
 
 const router = express.Router();
@@ -150,6 +152,35 @@ export function noAccess(c: IngestCaller, teamIds: string[]): string {
 
 export const computedOut = (days: DayResult[]) => days.filter((d) => d.metrics.length).map((d) => ({ day: d.day, metrics: d.metrics }));
 
+/** The fields (query parameters or multipart fields) a test or coverage report request may carry. */
+const REPORT_REQUEST_FIELDS: Record<'tests' | 'coverage', string[]> = {
+  tests: ['team', 'teamId', 'commit', 'sha', 'branch', 'run', 'runId', 'attempt', 'format', 'startedAt', 'dryRun', 'repo', 'repository', 'report', 'file'],
+  coverage: ['team', 'teamId', 'commit', 'sha', 'branch', 'run', 'runId', 'attempt', 'format', 'startedAt', 'dryRun', 'repo', 'repository', 'loc', 'linesOfCode',
+    'diff', 'changedLines', 'report', 'file'],
+};
+
+/** No field is silently ignored: a field the request may not carry is refused with the list of the ones it may. */
+export function checkReportFields(kind: 'tests' | 'coverage', fields: Record<string, string>): void {
+  const allowed = REPORT_REQUEST_FIELDS[kind];
+  const extra = Object.keys(fields).filter((k) => !allowed.includes(k));
+  if (!extra.length) return;
+  if (kind === 'tests' && extra.some((k) => k === 'loc' || k === 'linesOfCode')) {
+    throw new HttpError(400, 'loc is not accepted on a test report: lines of code are a property of the code, send them with the coverage report (or the SARIF report)');
+  }
+  if (kind === 'tests' && extra.some((k) => k === 'diff' || k === 'changedLines')) throw new HttpError(400, 'diff and changedLines are for coverage reports');
+  throw new HttpError(400, `Unknown field(s): ${extra.slice(0, 5).join(', ')} (accepted: ${allowed.join(', ')})`);
+}
+
+/** repo (a dimension of the evidence) and loc (lines of code: defect density and code quality) of a report request. */
+export function repoAndLoc(kind: 'tests' | 'coverage', f: Record<string, string>): { repo: string | null; loc: number | null } {
+  const repo = (f.repo ?? f.repository ?? '').trim() || null;
+  if (repo && repo.length > 255) throw new HttpError(400, 'repo must be at most 255 characters');
+  const locRaw = kind === 'coverage' ? (f.loc ?? f.linesOfCode ?? '').trim() : '';
+  const loc = locRaw ? Number(locRaw) : null;
+  if (loc !== null && (!Number.isInteger(loc) || loc < 1 || loc > 1e9)) throw new HttpError(400, 'loc must be a whole number of lines of code (1 to 1,000,000,000)');
+  return { repo, loc };
+}
+
 /** Shared request handling: auth done; reads, validates, logs, stores, computes. */
 export function rawIngestHandler(kind: RawKind) {
   return async (req: ApiKeyRequest, res: express.Response) => {
@@ -176,8 +207,10 @@ export function rawIngestHandler(kind: RawKind) {
 
       if (kind === 'pipelines') return await handlePipelines(req, res, caller, key, hash, input.payload, input.fields, (t, s) => { teamId = t; source = s; });
 
+      checkReportFields(kind as 'tests' | 'coverage', input.fields);
       const c = commonFields(input.fields);
       teamId = c.teamId;
+      const { repo, loc } = repoAndLoc(kind as 'tests' | 'coverage', input.fields);
       const content = text(input.payload);
       const supported: readonly string[] = kind === 'tests' ? TEST_FORMATS : COVERAGE_FORMATS;
       let format = (input.fields.format ?? '').trim().toLowerCase() || null;
@@ -221,7 +254,8 @@ export function rawIngestHandler(kind: RawKind) {
       const runId = c.run ?? `sha:${hash.slice(0, 16)}`;
       const summary = parsedTests
         ? { counts: parsedTests.counts, durationMs: parsedTests.durationMs }
-        : { totals: parsedCov!.totals, files: parsedCov!.files.length, changedLines: changed ? Array.from(changed.values()).reduce((n, s) => n + s.size, 0) : null };
+        : { totals: parsedCov!.totals, files: parsedCov!.files.length, changedLines: changed ? Array.from(changed.values()).reduce((n, s) => n + s.size, 0) : null, ...(loc !== null ? { linesOfCode: loc } : {}) };
+      if (repo) (summary as Record<string, unknown>).repo = repo;
       const items = [summaryItem(c.teamId, source, at.toISOString(), 'written')];
 
       if (c.dryRun) {
@@ -240,7 +274,7 @@ export function rawIngestHandler(kind: RawKind) {
       const outcome = await runLogged(caller, { key, hash, source }, async (client, ingestionId) => {
         const meta: UploadMeta = {
           companyId: caller.companyId, teamId: c.teamId, kind, format: format!, commit: c.commit, branch: c.branch, runId, attempt: c.attempt,
-          payload: input.payload, apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs, summary,
+          payload: input.payload, apiKeyId: caller.apiKeyId ?? null, ingestionId, parseMs, summary, repo, loc,
         };
         const up = await insertUpload(client, meta);
         if ('duplicateOf' in up) {
@@ -263,6 +297,13 @@ export function rawIngestHandler(kind: RawKind) {
         } else {
           const r = await storeCoverage(client, meta, up.id, parsedCov!, at, changed);
           calc = await calcOrQueue(client, caller.companyId, c.teamId, affectedDays('coverage', r.day), { groups: ['ci'], ingestionId, actorId: actorOf(caller) });
+          // Defect density and the code quality score use this report's lines of code from its day on: the work and
+          // quality days already calculated are recalculated too (server/lib/calc/dependents.ts).
+          const dep = await coverageDependentDays(client, c.teamId, r.reportId, r.day, daysBack(WORK_RECOMPUTE_DAYS));
+          for (const [group, list] of [['work', dep.work], ['quality', dep.quality]] as const) {
+            const more = await calcOrQueue(client, caller.companyId, c.teamId, list, { groups: [group], ingestionId, actorId: actorOf(caller) });
+            calc = { days: [...calc.days, ...more.days], queued: calc.queued || more.queued };
+          }
           extra = { coverageReportId: r.reportId, totals: parsedCov!.totals, files: parsedCov!.files.length, changedLines: r.changed };
           valueCount = parsedCov!.files.length;
         }
