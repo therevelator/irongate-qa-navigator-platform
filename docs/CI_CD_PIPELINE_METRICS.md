@@ -7,9 +7,9 @@ There are two sources of pipeline data:
 
 1. **Raw pipeline runs** (v2 phase 1), sent by the customer's CI to `POST /api/ingest/pipelines`. The
    calculation engine turns them into team KPIs and evidence. This is the recommended path.
-2. **The CI/CD pipeline page** (Analytics → CI/CD pipeline), which reads stage tables
-   (`pipeline_stages`, `pipeline_execution_summary`, `pipeline_config`). Today these tables hold sample
-   data or values edited on the page; there is no ingestion endpoint for them.
+2. **The older stage tables** (`pipeline_stages`, `pipeline_execution_summary`), which hold sample data or
+   values edited in Manual metrics. The CI/CD pipeline page reads them only for a team that never sent a
+   pipeline run.
 
 ## 1. Raw pipeline runs (v2 phase 1)
 
@@ -54,6 +54,21 @@ Routes in [`server/routes/analytics.ts`](../server/routes/analytics.ts):
 | `PUT /api/analytics/pipeline-stages/:id` | Edit a stage's values (marked as manually edited) |
 | `GET`, `PUT /api/analytics/pipeline-config` | Savings assumptions: time savings %, cost savings %, cost per minute |
 
+**Where the page's data comes from** ([`server/lib/analyticsFromRaw.ts`](../server/lib/analyticsFromRaw.ts)).
+When the team sent pipeline runs (section 1), the page shows their stages (`stages_source: "ci"`):
+
+| Value | Formula |
+|---|---|
+| Stage duration | mean duration of the stage's completed executions (successful or failed) in the last 30 days |
+| Stage success rate | successful ÷ (successful + failed) executions × 100, same 30 days; skipped and cancelled executions are left out |
+| Cost per run | stage duration in minutes × the cost per minute of the pipeline configuration |
+| Order | the order in which the stages start within a run |
+| Stage executions per day | completed stage executions of the runs of that day: total, successful, failed, mean duration |
+
+CPU and memory are not in CI data and are not shown. Stages calculated this way cannot be edited
+(Manual metrics shows them read-only). A team that never sent a pipeline run sees the older stage tables
+(its own stages, else the company default stages).
+
 The history counts **stage executions**, not end-to-end pipeline runs. An empty result shows an empty
 state; nothing is simulated.
 
@@ -86,5 +101,6 @@ Shown on the overview and used in engineering health ([PRODUCT_GUIDE.md, 3.7 and
 pipeline health = successful ÷ (successful + failed) pipeline runs in the last 30 days × 100
 ```
 
-over company-level pipelines and active teams, from `pipeline_runs`. Running and cancelled runs are
-excluded; no value without completed runs. Weight in engineering health: 0.25.
+over the active teams in scope, from the pipeline runs they sent (`pipeline_runs_raw`, counted as the engine
+counts them for the daily pipeline success rate). Cancelled runs are excluded; no value without completed
+runs. Weight in engineering health: 0.25.

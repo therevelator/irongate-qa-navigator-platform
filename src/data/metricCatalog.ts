@@ -480,8 +480,8 @@ const KPI_ENTRIES: { [K in KpiColumn]: Omit<MetricCatalogEntry, 'key' | 'storedI
     whyItMatters:
       'The share of stories that pass QA without being sent back. Every rejection is rework for both developer and tester; ' +
       'a high rate means clear acceptance criteria and solid local testing, which shortens cycle time.',
-    howCalculated: 'First-time pass rate % = stories with 0 QA rejections ÷ stories tested × 100',
-    calculationNotes: ['Stored as sent (0–100).'],
+    howCalculated: 'From raw CI data: pipeline runs whose first attempt passed ÷ runs × 100 (test runs\' first attempts when there is no pipeline data). As a finished value: stories with 0 QA rejections ÷ stories tested × 100',
+    calculationNotes: ['Calculated by QE Navigator when the team sends pipeline runs or test reports (source "computed"); otherwise stored as sent (0–100).'],
     unit: '%',
     direction: dir('firstTimePassRate'),
     thresholds: fromConfig('firstTimePassRate'),

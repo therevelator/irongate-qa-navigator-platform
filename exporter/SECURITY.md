@@ -82,6 +82,7 @@ salted hash by QE Navigator and never stored as names.
 | `test-report` | `commit`, `branch`, `run`, `attempt`, `startedAt`, `format` (when written out here), `files[]` (`name`, `content`: the minimised report text) |
 | `coverage` | the same, plus `changedLines` (`{"path": [line numbers]}` of the run's commit) |
 | `sarif` | the same, plus `repo`, `loc` (lines of code, SonarQube); one minimised SARIF file per item |
+| `coverage` from SonarQube (only with `coverage: true`) | four totals of the latest analysis (lines to cover, lines covered, conditions to cover, conditions covered) as a coverage file of totals, with `repo` and `loc`; no file names |
 | `deployments` | `id`, `environment`, `production`, `service`, `commit`, `previousCommit`, `startedAt`, `finishedAt`, `result`, `rollbackOf`, `hotfix`, `url` (only with `sendLinks`), `commits[]` (`sha`, `authoredAt`, `committedAt`) |
 | `issues` | `key`, `type`, `status`, `statusCategory`, `resolution`, `environment` (production / pre-release only), `storyPoints`, `estimateHours`, `timeLoggedHours`, `createdAt`, `resolvedAt`, `updatedAt`, `sprints[]` (id, state, dates; names with `sendTitles`), `transitions[]` (status / sprint / flagged changes with their times); opt-in `title`, `url`, `assigneeHash` (`qe-exporter check` prints the list for your settings) |
 | `incidents` | `id`, `service`, `severity`, `status`, `at`, `openedAt`, `acknowledgedAt`, `resolvedAt`, `updates[]` (status, time), `deploymentId`, `category`, `outage`; opt-in `title`, `url`, `responderHash` |

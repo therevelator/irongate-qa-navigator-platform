@@ -116,9 +116,9 @@ GitLab, Bitbucket Cloud and Linear. Jira Cloud's OAuth (3LO) is not offered yet:
 | GitLab CI | pipelines, jobs (retries included), the test report API (written out as a JUnit file), job artifacts, deployments, compare | the same |
 | Bitbucket Cloud | pipelines with their steps and timings, step test reports (written out as a JUnit file), environments, deployments, commits | `pipeline-runs`, `test-report`, `deployments` with `commits` |
 | Bitbucket Data Center | commits, the builds your CI reports on them, deployments | `pipeline-runs`, `deployments` with `commits` (Data Center keeps only test counts, so no test report is sent) |
-| Jenkins | builds, Pipeline stages (`wfapi`), the JUnit plugin's results (written out as a JUnit file), archived artifacts, deployment jobs | `pipeline-runs`, `test-report`, `coverage`, `sarif`, `deployments` |
+| Jenkins | builds, Pipeline stages (`wfapi`), the JUnit plugin's results (written out as a JUnit file), archived artifacts, deployment jobs (a redeploy of an earlier commit is sent as the rollback of the previous deployment) | `pipeline-runs`, `test-report`, `coverage`, `sarif`, `deployments` |
 | Azure DevOps | builds and timelines, test runs (written out as a JUnit file), code coverage, artifacts, environment deployments, releases | the same |
-| SonarQube | the latest analysis, open issues (written out as one SARIF file), lines of code | `sarif` |
+| SonarQube | the latest analysis, open issues (written out as one SARIF file), lines of code; with `coverage: true` also the coverage totals (lines and conditions to cover, uncovered), written out as a coverage file of totals | `sarif`, `coverage` (optional) |
 | Jira, Linear | issues with their changelog, sprints | `issues` |
 | PagerDuty, Opsgenie | incidents / alerts with their status changes | `incidents` |
 | KPI file | `{ "items": [{ "team", "recordedAt", "metrics": { "automation_coverage": 61.5 } }] }` | `kpis` |
@@ -177,7 +177,7 @@ Per source (`sources[]`): `type`, `name`, `tokenEnv`, the team mapping, `default
 | `bitbucket-dc` | `repos` (PROJECT/repo → team) | `baseUrl`, `environments`, `allowHttp` |
 | `jenkins` | `jobs` (folder/job → team) | `baseUrl`, `user` / `userEnv`, `deployJobs`, `deployEnvironment`, `allowHttp` |
 | `azure-devops` | `pipelines` (name or definition id → team) | `orgUrl`, `project`, `environments`, `releases`, `releasesUrl` |
-| `sonarqube` | `projects` (project key → team) | `baseUrl`, `auth: bearer \| basic`, `branch`, `allowHttp` |
+| `sonarqube` | `projects` (project key → team) | `baseUrl`, `auth: bearer \| basic`, `branch`, `coverage` (default `false`: turn it on for teams whose CI keeps no coverage report, e.g. Bitbucket; leave it off when your CI already sends coverage files), `allowHttp` |
 | `jira` | `teams` (project key → team) | `baseUrl`, `auth: basic` (Cloud) or `bearer` (Server / DC), `email` / `emailEnv`, `jql`, `fields`, `pageSize`, `allowHttp` |
 | `linear` | `teams` (team key → team) | `teamKeys`, `apiUrl` |
 | `pagerduty` | `services` (service → team), `teams` (PagerDuty team → team) | `categories`, `serviceIds`, `apiUrl` |

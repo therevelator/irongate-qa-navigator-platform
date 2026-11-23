@@ -40,10 +40,21 @@ listed tests removes 40–80 % of their share of the rate. See
 Component: [`src/components/FlakyTestIntelligence.tsx`](../src/components/FlakyTestIntelligence.tsx).
 Route: `GET /api/analytics/flaky-tests?teamId=` ([`server/routes/analytics.ts`](../server/routes/analytics.ts)).
 
-It reads the `flaky_tests` table (tracked flaky tests), not the raw CI evidence above. Today this table
-holds sample data; there is no ingestion endpoint for it.
+When the team sent test reports (section 1), the module shows the same evidence as Team detail
+([`server/lib/analyticsFromRaw.ts`](../server/lib/analyticsFromRaw.ts), `source: "ci"`), per test (up to 50,
+highest score first):
 
-What it shows, per test (up to 50, highest stored flakiness score first):
+- the test (suite › name) and the commits on which it failed and passed;
+- **flaky runs**: the runs in which it failed on such a commit, in the last 30 days; its runs and passes in the
+  same 30 days;
+- **flakiness score** = flaky runs ÷ runs of the test in the last 30 days × 100;
+- its last 20 results (pass or fail), first and last seen.
+
+No pattern and no root cause are shown: QE Navigator receives test names, results and durations only (failure
+messages and logs are never sent or kept), so no cause is derived.
+
+A team that never sent a test report sees the older `flaky_tests` table (tracked flaky tests), which holds
+sample data only. For those rows, per test (up to 50, highest stored flakiness score first):
 
 - test name, stored flakiness score, failure pattern label, failures, passes and total runs, first and
   last seen;
