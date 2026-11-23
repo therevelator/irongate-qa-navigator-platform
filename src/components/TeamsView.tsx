@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import { Users, Search, Edit2, Trash2, Plus, Bot, Building2, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import Modal from './Modal';
-import { confirmDelete, showCannotDeleteWarning, showSuccess, showAlert } from '../utils/alerts';
+import { confirmDeactivateTeam, showCannotDeleteWarning, showSuccess, showAlert } from '../utils/alerts';
 import API_URL from '../config/api';
 import { Page, PageIntro, Card, Badge, EmptyState, buttonClass, inputClass, scoreTone, toneText, cx } from './ui';
 import { QA_SCORE_THRESHOLDS } from '../../server/lib/metricFormulas';
@@ -151,7 +151,7 @@ const TeamsView: React.FC<TeamsViewProps> = () => {
   };
 
   const deleteTeam = async (team: Team) => {
-    const result = await confirmDelete(team.name, 'team');
+    const result = await confirmDeactivateTeam(team.name);
     if (!result.isConfirmed) return;
     const response = await fetch(`${API_URL}/admin/teams/${team.id}`, { method: 'DELETE', credentials: 'include' });
     if (response.ok) { showSuccess(`${team.name} deactivated`); fetchData(); return; }

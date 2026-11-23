@@ -1,3 +1,4 @@
+import { isProductionRuntime } from './runtimeEnv';
 /**
  * Synthetic (randomly generated) data switch.
  *
@@ -16,8 +17,9 @@
  * production and on Netlify it only fills the caller's own company (no shared accounts).
  */
 export function separateSampleCompanyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  if (isProductionRuntime(env)) return env.DEMO_MODE === 'true';
   if (env.DEMO_MODE !== undefined && env.DEMO_MODE !== '') return env.DEMO_MODE === 'true' || env.DEMO_MODE === '1';
-  return env.NODE_ENV !== 'production' && !env.NETLIFY && !env.AWS_LAMBDA_FUNCTION_NAME;
+  return true;
 }
 
 export function isSyntheticDataEnabled(): boolean {

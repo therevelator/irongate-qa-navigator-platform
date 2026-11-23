@@ -9,7 +9,7 @@ import { randomUUID } from 'crypto';
 import {
   ROLE_HIERARCHY, TEAM_OPTIONAL_ROLES, canAssignRole, canManageUser, canEditUser, canSetJobTitle, canEditAssignment,
   canResetPassword, canDeleteUser, canGrant, canCreateUsers, canManageTeam, canManageDepartment, canManageCompanyConfig,
-  isCompanyAdmin, highestRole, managedDepartmentIds, ledTeamIds, holdsRole, canChangeUserEmail, type PolicyActor,
+  isCompanyAdmin, highestRole, managedDepartmentIds, ledTeamIds, holdsRole, canChangeUserEmail, canOpenUserAdmin, type PolicyActor,
 } from '../lib/userPolicy';
 import { teamMemberCountSql, teamLeadNameSql, teamLeadIdSql } from '../lib/teamMembership';
 import {
@@ -596,12 +596,16 @@ router.post('/users/:id/send-reset-link', authenticateToken, async (req: any, re
   }
 });
 
-// Get all teams (with department names) - everyone can view for dashboard
+// The team directory (with department names): company-visible to people who manage users
+// (canOpenUserAdmin: super admins, managers, team leads; docs/ROLE_ACCESS.md "directory"). Everyone
+// else reads the teams of their scope through GET /api/teams.
 router.get('/teams', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
+    if (!canOpenUserAdmin(actorOf(req))) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
 
-    // Everyone can see all teams in their company for the dashboard
     // member_count / team_lead_name: the shared membership definition (server/lib/teamMembership).
     const teams = await query<any>(
       `SELECT t.*, d.name as department_name,
@@ -905,8 +909,11 @@ router.get('/available-roles', authenticateToken, async (req: any, res) => {
 router.get('/departments', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
+    // The department directory: people who manage users only (as GET /admin/teams).
+    if (!canOpenUserAdmin(actorOf(req))) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
 
-    // Everyone can see all departments in their company for the dashboard
     const departments = await query<any>(
       'SELECT id, name, company_id, created_at FROM departments WHERE company_id = ? AND is_active = true ORDER BY name',
       [companyId]
@@ -1308,7 +1315,9 @@ router.post('/configs', authenticateToken, async (req: any, res) => {
       const d = await queryOne<any>('SELECT id FROM departments WHERE id = ? AND company_id = ?', [deptId, companyId]);
       if (!d) return res.status(404).json({ error: 'Department not found' });
     }
-    if (scopeDept && !canManageDepartment(actor, scopeDept)) {
+    // A QA manager writes only the departments they manage and their teams. A team without a
+    // department belongs to no manager: super admins only (else it passed both checks).
+    if ((deptId || tmId) && !isCompanyAdmin(actor) && (!scopeDept || !canManageDepartment(actor, scopeDept))) {
       return res.status(403).json({ error: 'Can only change settings of your department' });
     }
     const applyAll = applyToAll === true && !deptId && !tmId;

@@ -105,8 +105,8 @@ test.describe('Stored XSS: names with markup are shown as text', { tag: [TAG.are
     await page.locator('h3', { hasText: freshCompany.departmentName }).first().click();
     const teamRow = page.getByTestId('team-row').filter({ hasText: TEAM });
     await teamRow.getByTitle('Delete Team').click();
-    await dialogShowsAsText(page, 'will be permanently deleted.', `${TEAM} will be permanently deleted.`);
-    await page.getByRole('button', { name: 'Yes, delete it!' }).click();
+    await dialogShowsAsText(page, 'Its data and history are kept', `${TEAM} will be deactivated`);
+    await page.getByRole('button', { name: 'Yes, deactivate' }).click();
     await dialogShowsAsText(page, 'Cannot Delete Team', `${FIRST} ${LAST}`);
     await expect(popup(page).locator('li', { hasText: 'onerror' })).toHaveText(`${FIRST} ${LAST}`);
   });
@@ -122,15 +122,15 @@ test.describe('Stored XSS: names with markup are shown as text', { tag: [TAG.are
     const row = page.locator(`[data-testid="team-row"][data-team-id="${freshCompany.teamId}"]`);
     await expect(row).toContainText(TEAM);
     await row.getByTestId('delete-team-btn').click();
-    await dialogShowsAsText(page, 'will be permanently deleted.', `${TEAM} will be permanently deleted.`);
-    await page.getByRole('button', { name: 'Yes, delete it!' }).click();
+    await dialogShowsAsText(page, 'Its data and history are kept', `${TEAM} will be deactivated`);
+    await page.getByRole('button', { name: 'Yes, deactivate' }).click();
     await dialogShowsAsText(page, 'Cannot Delete Team', `${FIRST} ${LAST}`);
     await expect(popup(page).locator('li', { hasText: 'onerror' })).toHaveText(`${FIRST} ${LAST}`);
     await page.getByRole('button', { name: 'I Understand' }).click();
 
     await page.locator(`[data-testid="team-row"][data-team-id="${emptyTeamId}"]`).getByTestId('delete-team-btn').click();
-    await dialogShowsAsText(page, 'will be permanently deleted.', `${emptyTeam} will be permanently deleted.`);
-    await page.getByRole('button', { name: 'Yes, delete it!' }).click();
+    await dialogShowsAsText(page, 'Its data and history are kept', `${emptyTeam} will be deactivated`);
+    await page.getByRole('button', { name: 'Yes, deactivate' }).click();
     await dialogShowsAsText(page, 'deactivated', `${emptyTeam} deactivated`, page.locator('.swal2-toast'));
   });
 

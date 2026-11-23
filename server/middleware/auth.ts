@@ -6,15 +6,15 @@ import type { Grant } from '../lib/userPolicy';
 import { PLATFORM_SUPPORT_REQUEST, platformSupportContext, type PlatformSupportRequest } from '../lib/platformContext';
 import { apiPathOf, isSandboxCompany, sandboxBody, sandboxVerdict, SANDBOX_REFUSED_CODE, SANDBOX_REFUSED_MESSAGE } from '../lib/sandboxConfig';
 import { runAsSandbox } from '../lib/sandboxContext';
+import { resolveJwtSecret, settingsKeyMaterial } from '../lib/runtimeEnv';
 
-// Resolve the signing secret once. In production a secret MUST be provided;
-// we fail closed (throw on startup) rather than fall back to a public default,
-// which would let anyone forge a super_admin token for any company.
-const CONFIGURED_SECRET = process.env.JWT_SECRET || process.env.secrettoken;
-if (!CONFIGURED_SECRET && process.env.NODE_ENV === 'production') {
-  throw new Error('JWT_SECRET (or secrettoken) must be set in production. Refusing to start with a default secret.');
-}
-export const JWT_SECRET = CONFIGURED_SECRET || 'dev-only-insecure-secret-change-me';
+// Resolve the signing secret once. In production (NODE_ENV=production, Netlify or AWS Lambda:
+// server/lib/runtimeEnv.ts) a strong secret MUST be provided; we fail closed (throw on startup)
+// rather than fall back to a public default or accept a placeholder, either of which would let
+// anyone forge a super_admin token for any company. The key of stored secrets (the Slack webhook:
+// SETTINGS_ENCRYPTION_KEY, else this secret) is checked at the same time.
+export const JWT_SECRET = resolveJwtSecret();
+settingsKeyMaterial();
 
 export interface AuthRequest extends Request {
   user?: {

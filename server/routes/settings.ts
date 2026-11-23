@@ -3,7 +3,7 @@ import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken } from '../middleware/auth';
 import { DEFAULT_METRIC_INTERVALS } from '../lib/metricIntervals';
 import { policyActor } from '../middleware/access';
-import { canManageCompanyConfig } from '../lib/userPolicy';
+import { isCompanyAdmin } from '../lib/userPolicy';
 import { recordAudit } from '../lib/audit';
 
 const router = express.Router();
@@ -13,7 +13,7 @@ const router = express.Router();
 // Get all metric intervals for company
 router.get('/metric-intervals', authenticateToken, async (req: any, res) => {
   try {
-    // Readable by every role (Team detail shows staleness to everyone); editing is admin/manager.
+    // Readable by every role (Team detail shows staleness to everyone); editing is super admin only.
     const { companyId } = req.user;
 
     // Get saved intervals
@@ -71,9 +71,10 @@ router.put('/metric-intervals/:metricKey', authenticateToken, async (req: any, r
     const { metricKey } = req.params;
     const { interval_value, interval_unit, custom_label } = req.body;
 
-    // Only admin and manager can update
-    if (!canManageCompanyConfig(policyActor(req))) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+    // The intervals are company-wide values (one row per metric for the company): super admins only
+    // (docs/ROLE_ACCESS.md: "company-wide values stay the super admin's"). Managers read them.
+    if (!isCompanyAdmin(policyActor(req))) {
+      return res.status(403).json({ error: 'Only a super admin can change the company-wide update frequencies' });
     }
 
     const problem = intervalProblem({ metric_key: metricKey, interval_value, interval_unit, custom_label });
@@ -126,9 +127,10 @@ router.put('/metric-intervals', authenticateToken, async (req: any, res) => {
     const { role, companyId, id: userId } = req.user;
     const { intervals } = req.body;
 
-    // Only admin and manager can update
-    if (!canManageCompanyConfig(policyActor(req))) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+    // The intervals are company-wide values (one row per metric for the company): super admins only
+    // (docs/ROLE_ACCESS.md: "company-wide values stay the super admin's"). Managers read them.
+    if (!isCompanyAdmin(policyActor(req))) {
+      return res.status(403).json({ error: 'Only a super admin can change the company-wide update frequencies' });
     }
 
     if (!Array.isArray(intervals) || intervals.length > 200) {
@@ -191,9 +193,10 @@ router.delete('/metric-intervals/:metricKey', authenticateToken, async (req: any
     const { role, companyId } = req.user;
     const { metricKey } = req.params;
 
-    // Only admin and manager can delete
-    if (!canManageCompanyConfig(policyActor(req))) {
-      return res.status(403).json({ error: 'Insufficient permissions' });
+    // The intervals are company-wide values (one row per metric for the company): super admins only
+    // (docs/ROLE_ACCESS.md: "company-wide values stay the super admin's"). Managers read them.
+    if (!isCompanyAdmin(policyActor(req))) {
+      return res.status(403).json({ error: 'Only a super admin can change the company-wide update frequencies' });
     }
 
     await query(

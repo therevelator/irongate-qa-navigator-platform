@@ -2,7 +2,7 @@ import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamWrite, assertTeamAnalytics, getOwnedTeam, canManageCompanyData, policyActor, type OwnedTeam } from '../middleware/access';
-import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageSampleData, canManageTeam, isCompanyAdmin, canRequestExecutiveBriefing, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
+import { ANALYTICS_ROLES, analyticsScopeLevelOf, analyticsTeamsInScope, canManageSampleData, canManageTeam, canWriteTeamData, canWriteSomeTeamData, isCompanyAdmin, canRequestExecutiveBriefing, canViewTeamAnalytics, canViewIndividualDevelopers, defaultAnalyticsTeamId } from '../lib/userPolicy';
 import { aiLimiter } from '../middleware/rateLimit';
 import { updateDailyAnalytics } from '../jobs/analyticsSync';
 import { runDemoSeed, isDemoSeeded, teamsLackingData } from '../seeds/demoSeed';
@@ -636,7 +636,8 @@ router.get('/technical-debt', authenticateToken, async (req: any, res) => {
 router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res) => {
   try {
     const { companyId } = req.user;
-    if (!canManageCompanyData(req)) {
+    // Permission before validation (FI-15): someone who may write no team's data at all gets 403.
+    if (!canWriteSomeTeamData(policyActor(req))) {
       return res.status(403).json({ error: 'Insufficient permissions' });
     }
     const { id } = req.params;
@@ -658,9 +659,15 @@ router.put('/technical-debt/:id/impact', authenticateToken, async (req: any, res
     if (!existing) {
       return res.status(404).json({ error: 'Technical debt item not found' });
     }
-    // A qa_manager may only edit items of teams in their department (canManageTeam).
-    if (existing.team_id && !canManageTeam(policyActor(req), { department_id: existing.department_id })) {
-      return res.status(403).json({ error: 'Can only manage teams in your department' });
+    // Technical-debt ROI inputs are team data (docs/ADMIN_PANEL_GUIDE.md, Manual metrics): super
+    // admins any item, managers the items of their departments' teams, team leads the items of the
+    // teams they lead (canWriteTeamData). An item of no team is company data: super admins only.
+    const actor = policyActor(req);
+    const allowed = existing.team_id
+      ? canWriteTeamData(actor, { id: existing.team_id, department_id: existing.department_id })
+      : isCompanyAdmin(actor);
+    if (!allowed) {
+      return res.status(403).json({ error: 'You can only edit the technical debt of the teams you manage or lead' });
     }
 
     await query(
@@ -1811,6 +1818,8 @@ router.post('/business-impact-v2/:teamId/generate-realistic-data', authenticateT
   try {
     const { teamId } = req.params;
     if (!(await assertTeamWrite(req, res, teamId))) return;
+    // Sample data is the super admin's (canManageSampleData; docs/ROLE_ACCESS.md "Sample (synthetic) data").
+    if (!canManageSampleData(policyActor(req))) return res.status(403).json({ error: 'Only a super admin can generate sample data' });
     // Generated values are never shown for a real company's team, even unsaved (sample companies only).
     if (!isSampleCompanyId(req.user.companyId)) return res.status(403).json({ error: SAMPLE_ONLY_MESSAGE });
     if (!isSyntheticDataEnabled()) {

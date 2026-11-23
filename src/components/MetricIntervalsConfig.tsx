@@ -2,6 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { RotateCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import API_URL from '../config/api';
+import { useAuth } from '../contexts/AuthContext';
+import { isCompanyAdmin } from '../../server/lib/userPolicy';
+import { policyActorOf } from '../lib/policyActor';
 import { Page, PageIntro, Card, CardHeader, Badge, EmptyState, buttonClass, inputClass, cx } from './ui';
 
 interface MetricInterval {
@@ -58,6 +61,9 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = () => {
   const [original, setOriginal] = useState<MetricInterval[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [saving, setSaving] = useState(false);
+  // Company-wide values: only a super admin may change them (the API answers 403 to others).
+  const { user } = useAuth();
+  const canEdit = !!user && isCompanyAdmin(policyActorOf(user));
   const hasChanges = JSON.stringify(intervals) !== JSON.stringify(original);
 
   const fetchIntervals = async () => {
@@ -111,15 +117,19 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = () => {
       <PageIntro
         title="Expected update frequency"
         description="How often each metric is expected to receive a new value. Metrics arrive through the KPI ingestion API or Manual metrics; this setting does not fetch or generate data. A value older than its interval is shown as stale (greyed, with the time it became stale) and is left out of composite scores: QA score, KPI targets and company averages."
-        actions={
+        actions={canEdit ? (
           <>
             {hasChanges && <button className={buttonClass.secondary} onClick={() => setIntervals(original)}>Discard changes</button>}
             <button className={buttonClass.primary} onClick={saveAll} disabled={!hasChanges || saving}>
               {saving ? 'Saving…' : 'Save changes'}
             </button>
           </>
-        }
+        ) : undefined}
       />
+
+      {!canEdit && (
+        <Card><p className="text-sm text-slate-600 dark:text-slate-300" data-testid="intervals-read-only">These are company-wide values: only a super admin can change them.</p></Card>
+      )}
 
       {state === 'loading' && <Card><p className="text-sm text-slate-500 dark:text-slate-400">Loading…</p></Card>}
       {state === 'error' && <Card><EmptyState title="Update frequencies unavailable" description="The settings could not be loaded." /></Card>}
@@ -147,19 +157,21 @@ const MetricIntervalsConfig: React.FC<MetricIntervalsConfigProps> = () => {
                           max={100}
                           aria-label={`${interval.custom_label} interval`}
                           value={interval.interval_value}
+                          disabled={!canEdit}
                           onChange={(e) => change(metricKey, 'interval_value', Math.min(100, Math.max(1, parseInt(e.target.value, 10) || 1)))}
                           className={cx(inputClass, 'w-20')}
                         />
                         <select
                           aria-label={`${interval.custom_label} unit`}
                           value={interval.interval_unit}
+                          disabled={!canEdit}
                           onChange={(e) => change(metricKey, 'interval_unit', e.target.value)}
                           className={cx(inputClass, 'pr-8')}
                         >
                           {INTERVAL_UNITS.map(u => <option key={u.value} value={u.value}>{u.label}</option>)}
                           {interval.interval_unit === 'minutes' && <option value="minutes">minutes</option>}
                         </select>
-                        {!interval.is_default && (
+                        {canEdit && !interval.is_default && (
                           <button onClick={() => reset(metricKey)} className="rounded-md p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700 dark:hover:bg-slate-800 dark:hover:text-slate-200" title="Reset to default" aria-label="Reset to default">
                             <RotateCcw size={15} />
                           </button>

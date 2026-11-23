@@ -116,7 +116,9 @@ test.describe('Teams', { tag: [TAG.area('org')] }, () => {
     await expect(page.getByText('Team updated')).toBeVisible();
     const renamed = page.locator(`[data-testid="team-row"][data-team-name="${name} 2"]`);
     await renamed.getByTestId('delete-team-btn').click();
-    await swalConfirm(page);
+    // The server deactivates the team (data kept), and the dialog says so.
+    await expect(page.getByText('Its data and history are kept, and it can be reactivated.')).toBeVisible();
+    await page.getByRole('button', { name: 'Yes, deactivate' }).click();
     await expect(renamed).toHaveCount(0);
   });
 

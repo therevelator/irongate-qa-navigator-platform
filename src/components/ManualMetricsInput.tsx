@@ -1222,7 +1222,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         })
       );
 
-      await Promise.all(promises);
+      const responses = await Promise.all(promises);
+      if (responses.some((r) => !r.ok)) throw new Error('Some technical debt items could not be saved');
 
       Swal.fire({
         icon: 'success',
@@ -1557,10 +1558,12 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
     return acc;
   }, {} as Record<string, MetricDefinition[]>);
 
-  // Same roles as the server: team KPIs and developer metrics for super_admin, qa_manager
-  // (own department) and team_lead (own team); debt impact and pipeline settings are
-  // company data, edited by super_admin and qa_manager only.
+  // Same roles as the server: team KPIs, developer metrics and technical-debt ROI inputs for
+  // super_admin, qa_manager (own department) and team_lead (own team) (canWriteTeamData);
+  // pipeline settings are company data, edited by super_admin and qa_manager only.
   const canEditCompanyData = !!user && canManageCompanyConfig(policyActorOf(user));
+  const selectedTeam = teams.find((t) => String(t.id) === String(selectedTeamId));
+  const canEditTeamDebt = !!user && !!selectedTeam && canWriteTeamData(policyActorOf(user), { id: String(selectedTeam.id), department_id: selectedTeam.department_id ?? null });
   // Company-wide values (the pipeline configuration and the company default stages) belong to the
   // super admin (docs/ROLE_ACCESS.md); a manager sees them read-only.
   const canEditCompanyWide = !!user && isCompanyAdmin(policyActorOf(user));
@@ -2100,7 +2103,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
         )}
 
         {/* Technical Debt Impact Section */}
-        {canEditCompanyData && selectedTeamId && technicalDebtItems.length > 0 && (
+        {canEditTeamDebt && selectedTeamId && technicalDebtItems.length > 0 && (
           <div className="bg-white dark:bg-slate-900 rounded-lg overflow-hidden">
             {/* Section Header */}
             <button

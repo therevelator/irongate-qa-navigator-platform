@@ -2,6 +2,7 @@ import { createHmac } from 'crypto';
 import type express from 'express';
 import { query } from '../../src/lib/db';
 import { clientIp, ctxOf } from './requestContext';
+import { authEventKeyMaterial } from './runtimeEnv';
 
 /**
  * Sign-in events (table auth_events, migration 20261127000000) and the request facts shared with
@@ -91,7 +92,9 @@ export function parseUserAgent(uaRaw: unknown): DeviceInfo {
   return { browser, os, device };
 }
 
-const hashKey = () => createHmac('sha256', process.env.JWT_SECRET || process.env.secrettoken || 'dev-only-insecure-secret-change-me')
+// Keyed with the signing secret (server/lib/runtimeEnv.ts: required and strong in production; the
+// development constant is used only outside production).
+const hashKey = () => createHmac('sha256', authEventKeyMaterial())
   .update('irongate-auth-event-email-v1').digest();
 
 /** Keyed hash of an e-mail address (lower-cased, trimmed). */

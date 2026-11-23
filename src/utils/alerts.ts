@@ -108,6 +108,25 @@ export const confirmDelete = async (itemName: string, _itemType: string = 'item'
   return { isConfirmed: false };
 };
 
+/**
+ * Confirm "deleting" a team. The server deactivates the team (DELETE /api/admin/teams/:id sets
+ * is_active = false): nothing is erased, so the dialog says that, and it can be reactivated
+ * (POST /api/admin/teams/:id/toggle-status, or platform support). The caller reports the outcome.
+ */
+export const confirmDeactivateTeam = async (teamName: string) => {
+  const name = escapeHtml(teamName);
+  const result = await swalWithStyledButtons.fire({
+    titleText: 'Deactivate this team?',
+    html: `<strong>${name}</strong> will be deactivated: it no longer appears in lists and dashboards. Its data and history are kept, and it can be reactivated.`,
+    icon: 'warning',
+    showCancelButton: true,
+    confirmButtonText: 'Yes, deactivate',
+    cancelButtonText: 'Cancel',
+    reverseButtons: true
+  });
+  return { isConfirmed: result.isConfirmed === true };
+};
+
 /** title, message and confirmText are plain text. */
 export const confirmAction = async (title: string, message: string, confirmText: string = 'Confirm') => {
   const result = await swalWithStyledButtons.fire({
