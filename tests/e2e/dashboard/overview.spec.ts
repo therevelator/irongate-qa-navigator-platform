@@ -69,6 +69,17 @@ test.describe('Overview', { tag: [TAG.area('dashboard')] }, () => {
     expect(scored).toBeLessThanOrEqual(all);
   });
 
+  for (const width of [1280, 1440, 1920]) {
+    test(`DASH-02c the status filters stay on one line at ${width} px`, async ({ signInAs, page }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await signInAs('admin');
+      await expect(cards(page).first()).toBeVisible();
+      const tops = await Promise.all(['All', 'High performing', 'Needs attention'].map(async (label) =>
+        (await page.getByRole('button', { name: new RegExp(`^${label} \\d+$`) }).boundingBox())!.y));
+      expect(new Set(tops.map((y) => Math.round(y))).size).toBe(1);
+    });
+  }
+
   test('DASH-03 search narrows the list; no match says so; markup typed in is only text', { tag: [TAG.negative] }, async ({ signInAs, page }) => {
     await signInAs('viewer');
     let dialogs = 0;

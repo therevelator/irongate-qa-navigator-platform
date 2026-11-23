@@ -377,7 +377,7 @@ const NewDashboard: React.FC<NewDashboardProps> = ({ teams, teamsError, onTeamCl
                 Latest KPI snapshot per team. Colour shows QA status: green ≥ {QA_GOOD}, amber ≥ {QA_WARN}, red below; grey has no data. High performing = QA at or above the team's QA target (≥ {QA_GOOD} unless set otherwise); Needs attention = QA below it. A KPI off its own target shows in amber on the card.
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 xl:shrink-0">
               <div className="max-w-full overflow-x-auto">
                 <SegmentedControl<Filter>
                   value={filter}

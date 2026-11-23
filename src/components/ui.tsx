@@ -115,7 +115,7 @@ export function SegmentedControl<T extends string>({ value, onChange, options }:
   options: { value: T; label: string }[];
 }) {
   return (
-    <div className="inline-flex max-w-full flex-wrap rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
+    <div className="inline-flex max-w-full overflow-x-auto sm:shrink-0 rounded-md border border-slate-200 bg-white p-0.5 dark:border-slate-700 dark:bg-slate-900">
       {options.map((o) => (
         <button
           key={o.value}
