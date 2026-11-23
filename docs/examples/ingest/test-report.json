@@ -1,0 +1,73 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "github-actions",
+  "kind": "test-report",
+  "items": [
+    {
+      "run": "8812345678",
+      "attempt": 1,
+      "commit": "9f3c2a1b7d4e",
+      "branch": "main",
+      "startedAt": "2026-11-20T09:05:00Z",
+      "format": "junit",
+      "files": [
+        {
+          "name": "TEST-com.acme.payments.PaymentServiceTest.xml",
+          "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites name=\"payments-api\" tests=\"4\" failures=\"1\" errors=\"0\" skipped=\"1\" time=\"12.840\">\n  <testsuite name=\"com.acme.payments.PaymentServiceTest\" tests=\"4\" failures=\"1\" errors=\"0\" skipped=\"1\" time=\"12.840\" timestamp=\"2026-11-20T09:05:12\">\n    <testcase classname=\"com.acme.payments.PaymentServiceTest\" name=\"chargesCard\" time=\"3.210\"/>\n    <testcase classname=\"com.acme.payments.PaymentServiceTest\" name=\"refundsPartialAmount\" time=\"4.020\">\n      <failure message=\"expected 40.00 but was 39.99\" type=\"java.lang.AssertionError\">at com.acme.payments.PaymentServiceTest.refundsPartialAmount(PaymentServiceTest.java:88)</failure>\n    </testcase>\n    <testcase classname=\"com.acme.payments.PaymentServiceTest\" name=\"retriesOnTimeout\" time=\"5.610\"/>\n    <testcase classname=\"com.acme.payments.PaymentServiceTest\" name=\"legacyGatewayFallback\" time=\"0\">\n      <skipped message=\"legacy gateway retired\"/>\n    </testcase>\n  </testsuite>\n</testsuites>\n"
+        },
+        {
+          "name": "TEST-com.acme.web.CheckoutPageTest.xml",
+          "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuite name=\"com.acme.web.CheckoutPageTest\" tests=\"3\" failures=\"0\" errors=\"1\" skipped=\"0\" time=\"20.500\" timestamp=\"2026-11-20T09:05:40\">\n  <testcase classname=\"com.acme.web.CheckoutPageTest\" name=\"showsTotals\" time=\"6.100\"/>\n  <testcase classname=\"com.acme.web.CheckoutPageTest\" name=\"appliesVoucher\" time=\"8.300\">\n    <flakyFailure message=\"Timed out waiting for #voucher-field\" type=\"org.openqa.selenium.TimeoutException\"/>\n  </testcase>\n  <testcase classname=\"com.acme.web.CheckoutPageTest\" name=\"loadsAddressBook\" time=\"6.100\">\n    <error message=\"Connection refused: address-service:8080\" type=\"java.net.ConnectException\">java.net.ConnectException: Connection refused</error>\n  </testcase>\n</testsuite>\n"
+        }
+      ]
+    },
+    {
+      "run": "8812345678",
+      "attempt": 2,
+      "commit": "9f3c2a1b7d4e",
+      "branch": "main",
+      "startedAt": "2026-11-20T09:31:00Z",
+      "format": "junit",
+      "files": [
+        {
+          "name": "TEST-com.acme.payments.PaymentServiceTest.xml",
+          "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuites name=\"payments-api\" tests=\"4\" failures=\"0\" errors=\"0\" skipped=\"1\" time=\"12.840\">\n  <testsuite name=\"com.acme.payments.PaymentServiceTest\" tests=\"4\" failures=\"0\" errors=\"0\" skipped=\"1\" time=\"12.840\" timestamp=\"2026-11-20T09:05:12\">\n    <testcase classname=\"com.acme.payments.PaymentServiceTest\" name=\"chargesCard\" time=\"3.210\"/>\n    <testcase classname=\"com.acme.payments.PaymentServiceTest\" name=\"refundsPartialAmount\" time=\"4.020\"></testcase>\n    <testcase classname=\"com.acme.payments.PaymentServiceTest\" name=\"retriesOnTimeout\" time=\"5.610\"/>\n    <testcase classname=\"com.acme.payments.PaymentServiceTest\" name=\"legacyGatewayFallback\" time=\"0\">\n      <skipped message=\"legacy gateway retired\"/>\n    </testcase>\n  </testsuite>\n</testsuites>\n"
+        },
+        {
+          "name": "TEST-com.acme.web.CheckoutPageTest.xml",
+          "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<testsuite name=\"com.acme.web.CheckoutPageTest\" tests=\"3\" failures=\"0\" errors=\"0\" skipped=\"0\" time=\"20.500\" timestamp=\"2026-11-20T09:05:40\">\n  <testcase classname=\"com.acme.web.CheckoutPageTest\" name=\"showsTotals\" time=\"6.100\"/>\n  <testcase classname=\"com.acme.web.CheckoutPageTest\" name=\"appliesVoucher\" time=\"8.300\">\n    <flakyFailure message=\"Timed out waiting for #voucher-field\" type=\"org.openqa.selenium.TimeoutException\"/>\n  </testcase>\n  <testcase classname=\"com.acme.web.CheckoutPageTest\" name=\"loadsAddressBook\" time=\"6.100\"></testcase>\n</testsuite>\n"
+        }
+      ]
+    },
+    {
+      "run": "ado-55120",
+      "attempt": 1,
+      "commit": "4e1f0c9a7b2d",
+      "branch": "main",
+      "startedAt": "2026-11-20T10:00:00Z",
+      "format": "trx",
+      "files": [
+        {
+          "name": "billing-tests.trx",
+          "content": "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<TestRun id=\"5b8f0b52-6f0e-4c7a-9a43-2f1d0f6c1a11\" name=\"billing tests\" xmlns=\"http://microsoft.com/schemas/VisualStudio/TeamTest/2010\">\n  <Times creation=\"2026-11-20T10:00:00.000Z\" start=\"2026-11-20T10:00:01.000Z\" finish=\"2026-11-20T10:00:31.000Z\"/>\n  <Results>\n    <UnitTestResult executionId=\"e1\" testId=\"t1\" testName=\"ParsesInvoice\" outcome=\"Passed\" duration=\"00:00:01.2500000\"/>\n    <UnitTestResult executionId=\"e2\" testId=\"t2\" testName=\"RejectsNegativeTotal\" outcome=\"Failed\" duration=\"00:00:00.5000000\">\n      <Output><ErrorInfo><Message>Expected InvalidTotalException, got none</Message></ErrorInfo></Output>\n    </UnitTestResult>\n    <UnitTestResult executionId=\"e3\" testId=\"t3\" testName=\"RoundsVat\" outcome=\"NotExecuted\" duration=\"00:00:00\"/>\n  </Results>\n  <TestDefinitions>\n    <UnitTest name=\"ParsesInvoice\" id=\"t1\"><TestMethod className=\"Acme.Billing.Tests.InvoiceTests\" name=\"ParsesInvoice\"/></UnitTest>\n    <UnitTest name=\"RejectsNegativeTotal\" id=\"t2\"><TestMethod className=\"Acme.Billing.Tests.InvoiceTests\" name=\"RejectsNegativeTotal\"/></UnitTest>\n    <UnitTest name=\"RoundsVat\" id=\"t3\"><TestMethod className=\"Acme.Billing.Tests.VatTests\" name=\"RoundsVat\"/></UnitTest>\n  </TestDefinitions>\n</TestRun>\n"
+        }
+      ]
+    },
+    {
+      "run": "8812345999",
+      "attempt": 1,
+      "commit": "b71d3e5a90c4",
+      "branch": "feature/refund-limits",
+      "startedAt": "2026-11-20T11:00:00Z",
+      "format": "cucumber",
+      "files": [
+        {
+          "name": "cucumber-report.json",
+          "content": "[\n  {\n    \"uri\": \"features/refunds.feature\",\n    \"name\": \"Refunds\",\n    \"keyword\": \"Feature\",\n    \"elements\": [\n      {\n        \"type\": \"background\",\n        \"keyword\": \"Background\",\n        \"name\": \"\",\n        \"steps\": [\n          {\n            \"keyword\": \"Given \",\n            \"name\": \"a captured card payment of 100.00\",\n            \"result\": {\n              \"status\": \"passed\",\n              \"duration\": 120000000\n            }\n          }\n        ]\n      },\n      {\n        \"type\": \"scenario\",\n        \"keyword\": \"Scenario\",\n        \"name\": \"Refund within the limit\",\n        \"steps\": [\n          {\n            \"keyword\": \"When \",\n            \"name\": \"I refund 40.00\",\n            \"result\": {\n              \"status\": \"passed\",\n              \"duration\": 310000000\n            }\n          },\n          {\n            \"keyword\": \"Then \",\n            \"name\": \"the refund is accepted\",\n            \"result\": {\n              \"status\": \"passed\",\n              \"duration\": 90000000\n            }\n          }\n        ]\n      },\n      {\n        \"type\": \"scenario\",\n        \"keyword\": \"Scenario\",\n        \"name\": \"Refund above the limit is rejected\",\n        \"steps\": [\n          {\n            \"keyword\": \"When \",\n            \"name\": \"I refund 150.00\",\n            \"result\": {\n              \"status\": \"passed\",\n              \"duration\": 280000000\n            }\n          },\n          {\n            \"keyword\": \"Then \",\n            \"name\": \"the refund is rejected with \\\"limit exceeded\\\"\",\n            \"result\": {\n              \"status\": \"failed\",\n              \"duration\": 50000000,\n              \"error_message\": \"Expected status 422 but was 500\"\n            }\n          }\n        ]\n      }\n    ]\n  }\n]"
+        }
+      ]
+    }
+  ]
+}
