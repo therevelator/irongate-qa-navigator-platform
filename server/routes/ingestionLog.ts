@@ -31,7 +31,7 @@ function scopeWhere(actor: PolicyActor, params: any[]): string {
 const COLUMNS = `l.id, l.channel, l.source, l.received_at, l.status, l.idempotency_key, l.http_status, l.team_ids, l.department_ids,
   l.item_count, l.value_count, l.errors, l.items, l.api_key_id, k.name AS api_key_name, k.key_prefix AS api_key_prefix,
   l.actor_id, NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS actor_name, l.response -> 'upload' AS upload,
-  l.response ->> 'client' AS client`;
+  l.response ->> 'client' AS client, l.response ->> 'calculation' AS calculation`;
 const FROM = `FROM ingestion_log l LEFT JOIN api_keys k ON k.id = l.api_key_id LEFT JOIN users u ON u.id = l.actor_id`;
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -61,8 +61,21 @@ router.get('/', authenticateToken, async (req: any, res) => {
       ? await query<any[]>('SELECT id, name FROM teams WHERE company_id = ? AND id = ANY(?::text[])', [req.user.companyId, teamIds])
       : [];
     const teamName = new Map(teams.map((t: any) => [t.id, t.name]));
+    // Requests whose calculation was queued (server/lib/calc/queue.ts): still pending, failed, or done.
+    const queuedTeams = Array.from(new Set(page.filter((r: any) => r.calculation === 'queued').flatMap((r: any) => r.team_ids ?? [])));
+    const waiting = queuedTeams.length
+      ? await query<any[]>(
+        `SELECT team_id, status, enqueued_at FROM calc_queue WHERE company_id = ? AND team_id = ANY(?::text[])
+            AND (status IN ('pending', 'running') OR (status = 'failed' AND updated_at > now() - interval '30 days'))`, [req.user.companyId, queuedTeams]).catch(() => [] as any[])
+      : [];
+    const calculationOf = (r: any): 'pending' | 'failed' | 'done' | null => {
+      if (r.calculation !== 'queued') return null;
+      const mine = waiting.filter((w: any) => (r.team_ids ?? []).includes(w.team_id) && new Date(w.enqueued_at).getTime() <= new Date(r.received_at).getTime() + 5 * 60_000);
+      if (mine.some((w: any) => w.status === 'pending' || w.status === 'running')) return 'pending';
+      return mine.some((w: any) => w.status === 'failed') ? 'failed' : 'done';
+    };
     res.json({
-      entries: page.map((r: any) => ({ ...r, teams: (r.team_ids ?? []).map((id: string) => ({ id, name: teamName.get(id) ?? id })) })),
+      entries: page.map((r: any) => ({ ...r, calculation: calculationOf(r), teams: (r.team_ids ?? []).map((id: string) => ({ id, name: teamName.get(id) ?? id })) })),
       nextBefore: rows.length > limit ? page[page.length - 1].id : null,
     });
   } catch (error) {

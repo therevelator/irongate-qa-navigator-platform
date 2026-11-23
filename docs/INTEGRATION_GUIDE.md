@@ -559,6 +559,11 @@ value opens to its formula, the values used and the source runs ("How this was c
 /api/ci/teams/:id/metrics/:metric`). A late file recalculates the days it affects (for tests, up to 6 days later, the
 flaky window); a nightly job (`calc-recompute`, 03:41 UTC) recalculates the last 8 days of every team with CI data.
 
+On the hosted service the calculation runs in the background, a few seconds to minutes after the request: the answer
+says what was stored and `"calculation": "queued"` (the ingestion log and Connect your CI show **Calculation pending**
+until it is done). A self-hosted Node service calculates in the request, as before (`INGEST_CALC=queued` makes it
+calculate in the background too; `INGEST_CALC=inline` forces the calculation into the request anywhere).
+
 ### 4A.4 Errors
 
 | Status | When |

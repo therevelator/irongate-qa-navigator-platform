@@ -133,24 +133,48 @@ export async function recomputeTeamDays(client: pg.PoolClient, teamId: string, d
     if (so?.work) sampleOnly.add('work');
     if (so?.quality) sampleOnly.add('quality');
   }
+  // Every day's values first (reads only), then the evidence of all the days in three statements (the previous values,
+  // one multi-row upsert, one delete of the values that have no data any more) and the KPI values day by day.
+  const perDay = new Map<string, ComputedMetric[]>();
   for (const day of list) {
     const computed = [...(groups.includes('ci') ? await computeTeamDay(client, teamId, day) : []), ...(delivery.get(day) ?? []), ...(work.get(day) ?? []), ...(quality.get(day) ?? [])];
-    const prev = new Map((await rows(client, 'SELECT metric_key, value::float8 AS value, recorded_at FROM metric_evidence WHERE team_id = $1 AND day = $2::date', [teamId, day])).map((r) => [r.metric_key, r]));
+    // One value per metric and day (a later one replaces an earlier one, as consecutive upserts did).
+    perDay.set(day, Array.from(new Map(computed.map((m) => [m.key, m])).values()));
+  }
+  if (!list.length) return results;
+  const prevAll = new Map<string, any>((await rows(client,
+    `SELECT to_char(day, 'YYYY-MM-DD') AS day, metric_key, value::float8 AS value, recorded_at FROM metric_evidence WHERE team_id = $1 AND day = ANY($2::date[])`, [teamId, list]))
+    .map((r) => [`${r.day}|${r.metric_key}`, r]));
+  const evidence = list.flatMap((day) => perDay.get(day)!.map((m) => {
+    const spec = METRICS[m.key];
+    return { day, key: m.key, value: m.value, unit: spec.unit, formula: spec.formula, inputs: m.inputs, sources: m.sources, n: m.sampleSize, conf: confidenceFor(m.sampleSize), kpi: spec.kpi, at: m.recordedAt };
+  }));
+  const CHUNK = 500;
+  for (let i = 0; i < evidence.length; i += CHUNK) {
+    await client.query(
+      `INSERT INTO metric_evidence (company_id, team_id, day, metric_key, value, unit, formula, inputs, sources, sample_size, confidence, kpi_column, recorded_at, computed_at)
+       SELECT $1, $2, x.day, x.key, x.value, x.unit, x.formula, COALESCE(x.inputs, '{}'::jsonb), COALESCE(x.sources, '{}'::jsonb), x.n, x.conf, x.kpi, x.at, now()
+         FROM jsonb_to_recordset($3::jsonb) AS x(day date, key text, value numeric, unit text, formula text, inputs jsonb, sources jsonb, n int, conf text, kpi text, at timestamptz)
+       ON CONFLICT (team_id, day, metric_key) DO UPDATE SET value = EXCLUDED.value, unit = EXCLUDED.unit, formula = EXCLUDED.formula,
+         inputs = EXCLUDED.inputs, sources = EXCLUDED.sources, sample_size = EXCLUDED.sample_size, confidence = EXCLUDED.confidence,
+         kpi_column = EXCLUDED.kpi_column, recorded_at = EXCLUDED.recorded_at, computed_at = now()`,
+      [team.company_id, teamId, JSON.stringify(evidence.slice(i, i + CHUNK))]
+    );
+  }
+  // A metric that has no data any more (e.g. its only run was removed) loses its evidence row.
+  await client.query(
+    `DELETE FROM metric_evidence e WHERE e.team_id = $1 AND e.day = ANY($2::date[]) AND e.metric_key = ANY($3::text[])
+        AND NOT EXISTS (SELECT 1 FROM unnest($4::date[], $5::text[]) AS k(day, key) WHERE k.day = e.day AND k.key = e.metric_key)`,
+    [teamId, list, groupKeys, evidence.map((x) => x.day), evidence.map((x) => x.key)]);
+  for (const day of list) {
+    const computed = perDay.get(day)!;
     const kpiValues: Record<string, number> = {};
     let recordedAt = '';
     const dayOut: DayResult = { day, metrics: [] };
     for (const m of computed) {
       const spec = METRICS[m.key];
       const conf = confidenceFor(m.sampleSize);
-      await client.query(
-        `INSERT INTO metric_evidence (company_id, team_id, day, metric_key, value, unit, formula, inputs, sources, sample_size, confidence, kpi_column, recorded_at, computed_at)
-         VALUES ($1, $2, $3::date, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11, $12, $13::timestamptz, now())
-         ON CONFLICT (team_id, day, metric_key) DO UPDATE SET value = EXCLUDED.value, unit = EXCLUDED.unit, formula = EXCLUDED.formula,
-           inputs = EXCLUDED.inputs, sources = EXCLUDED.sources, sample_size = EXCLUDED.sample_size, confidence = EXCLUDED.confidence,
-           kpi_column = EXCLUDED.kpi_column, recorded_at = EXCLUDED.recorded_at, computed_at = now()`,
-        [team.company_id, teamId, day, m.key, m.value, spec.unit, spec.formula, JSON.stringify(m.inputs), JSON.stringify(m.sources), m.sampleSize, conf, spec.kpi, m.recordedAt]
-      );
-      const old = prev.get(m.key);
+      const old = prevAll.get(`${day}|${m.key}`);
       const changed = !old || Number(old.value) !== m.value || iso(old.recorded_at) !== m.recordedAt;
       const write = opts.writeKpis !== false && !!spec.kpi && changed && !sampleOnly.has(groupOf(m.key));
       if (write) {
@@ -161,13 +185,10 @@ export async function recomputeTeamDays(client: pg.PoolClient, teamId: string, d
       }
       dayOut.metrics.push({ key: m.key, value: m.value, sampleSize: m.sampleSize, confidence: conf, kpi: spec.kpi, written: write });
     }
-    // A metric that has no data any more (e.g. its only run was removed) loses its evidence row.
-    const keep = computed.map((m) => m.key);
-    await client.query('DELETE FROM metric_evidence WHERE team_id = $1 AND day = $2::date AND metric_key = ANY($4::text[]) AND NOT (metric_key = ANY($3::text[]))', [teamId, day, keep, groupKeys]);
     if (Object.keys(kpiValues).length) {
       // Never later than now (a KPI value is for a moment that has happened).
       const at = new Date(Math.min(new Date(recordedAt).getTime(), Date.now()));
-      await recordKpiValues(teamId, kpiValues, { source: 'computed', recordedAt: at, client, notify: false, actorId: opts.actorId ?? null, ingestionId: opts.ingestionId ?? null });
+      await recordKpiValues(teamId, kpiValues, { source: 'computed', recordedAt: at, client, notify: false, actorId: opts.actorId ?? null, ingestionId: opts.ingestionId ?? null, companyId: team.company_id });
     }
     results.push(dayOut);
   }

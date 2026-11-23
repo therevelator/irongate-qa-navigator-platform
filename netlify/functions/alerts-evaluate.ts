@@ -2,6 +2,7 @@ import type { Config } from '@netlify/functions';
 import { runScheduledEvaluation } from '../../server/lib/alerts';
 import { refreshDueTeams } from '../../server/lib/recommendations/store';
 import { withJobRun } from '../../server/lib/opsLog';
+import { kickPendingCalc } from '../../server/lib/calc/queue';
 
 /**
  * Hourly alert evaluation (Netlify Scheduled Function; the long-running server does the same in
@@ -11,12 +12,15 @@ import { withJobRun } from '../../server/lib/opsLog';
  * the forecasts and recommendations of the teams that are due (none yet, older than 20 hours or
  * older than their newest value; server/lib/recommendations/store.ts refreshDueTeams), oldest
  * first: every team is recalculated about once a day, and the first runs after the migration
- * backfill them all.
+ * backfill them all. First, the safety net of the calculation queue: calc-drain-background is started for every
+ * company whose queued calculations wait (server/lib/calc/queue.ts; normally the ingestion request started it).
  */
 export const IMPROVE_TOTAL_BUDGET_MS = 25_000;
 
 export default async () => {
   const started = Date.now();
+  const kicked = await kickPendingCalc();
+  if (kicked.companies) console.log(`[alerts-evaluate] calculation queue: ${kicked.companies} companies waiting, ${kicked.started} drains started`);
   try {
     const r = await withJobRun('alerts-evaluate', async () => {
       const companies = await runScheduledEvaluation();

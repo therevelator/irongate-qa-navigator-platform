@@ -31,6 +31,8 @@ interface Entry {
   upload?: { file: string; type: string | null; batch: string; part: number; parts: number } | null;
   /** The sending program when it identifies itself: the QE Navigator Exporter ("qe-exporter/<version>"; "qe-collector/…" and "qe-agent/…" from earlier releases). */
   client?: string | null;
+  /** Metrics of a request whose calculation was queued: still being calculated, failed, or done (server/lib/calc/queue.ts). */
+  calculation?: 'pending' | 'failed' | 'done' | null;
   received_at: string;
   status: 'accepted' | 'partial' | 'rejected';
   idempotency_key: string | null;
@@ -281,6 +283,8 @@ const IngestionLog: React.FC = () => {
                         <Badge tone={st.tone}>{st.label}</Badge>
                         <span className="text-sm font-medium text-slate-900 dark:text-white">{e.source ?? 'unknown source'}</span>
                         {viaExporter && <span data-testid="ingestion-entry-agent" title={e.client ?? 'QE Navigator Exporter'}><Badge tone="neutral">Exporter</Badge></span>}
+                        {e.calculation === 'pending' && <span data-testid="ingestion-entry-calc" title="The data is stored; its metrics are being calculated in the background"><Badge tone="warn">Calculation pending</Badge></span>}
+                        {e.calculation === 'failed' && <span data-testid="ingestion-entry-calc" title="The data is stored; calculating its metrics failed. The last 8 days are recalculated every night"><Badge tone="bad">Calculation failed</Badge></span>}
                         <span className="text-xs text-slate-500 dark:text-slate-400">{when(e.received_at)}</span>
                       </span>
                       <span className="mt-1 block truncate text-xs text-slate-500 dark:text-slate-400">

@@ -33,6 +33,18 @@ export interface IngestCaller {
   teamScope?: ReadonlySet<string> | null;
   /** The sending program when it identifies itself (the QE Navigator Exporter: "qe-exporter/<version>"), shown in the log. */
   client?: string | null;
+  /**
+   * Calculation queued by this request (server/lib/calc/queue.ts): set here instead of starting the drain, when the
+   * caller starts one drain for several requests (the Exporter batch).
+   */
+  calcSink?: { queued: boolean } | null;
+  /**
+   * Set by a caller that already checked these (the Exporter batch: its team, in its department, of the key's
+   * company), so the handlers it runs do not read them again: each read is a database round trip (~80 ms in production).
+   */
+  verifiedTeams?: ReadonlyMap<string, string | null> | null;
+  /** Stored results by Idempotency-Key, read for all the parts of a batch in one query (prefetchReplays). */
+  replayCache?: ReadonlyMap<string, Replay | null> | null;
 }
 
 /**
@@ -83,8 +95,9 @@ export interface Replay {
   requestHash: string | null;
 }
 
-/** The stored result of an earlier request with this key (not rejected), if any. */
-export async function findReplay(caller: IngestCaller, key: string): Promise<Replay | null> {
+/** The stored result of an earlier request with this key (not rejected), if any. `fresh` skips the batch's cache. */
+export async function findReplay(caller: IngestCaller, key: string, opts: { fresh?: boolean } = {}): Promise<Replay | null> {
+  if (!opts.fresh && caller.replayCache?.has(key)) return caller.replayCache.get(key) ?? null;
   const row = await queryOne<any>(
     `SELECT http_status, response, request_hash FROM ingestion_log
       WHERE company_id = ? AND COALESCE(api_key_id, actor_id, '') = ? AND idempotency_key = ? AND status <> 'rejected'
@@ -94,8 +107,23 @@ export async function findReplay(caller: IngestCaller, key: string): Promise<Rep
   return row ? { httpStatus: Number(row.http_status) || 200, response: row.response, requestHash: row.request_hash ?? null } : null;
 }
 
-async function departmentsOf(teamIds: string[], companyId: string, client?: pg.PoolClient): Promise<string[]> {
+/** The stored results of several keys in one query (null: none); for findReplay through caller.replayCache. */
+export async function prefetchReplays(caller: IngestCaller, keys: string[]): Promise<Map<string, Replay | null>> {
+  const out = new Map<string, Replay | null>(keys.map((k) => [k, null]));
+  if (!keys.length) return out;
+  const rows = await query<any[]>(
+    `SELECT DISTINCT ON (idempotency_key) idempotency_key, http_status, response, request_hash FROM ingestion_log
+      WHERE company_id = ? AND COALESCE(api_key_id, actor_id, '') = ? AND idempotency_key = ANY(?::text[]) AND status <> 'rejected'
+      ORDER BY idempotency_key, received_at DESC`,
+    [caller.companyId, callerKey(caller), keys]
+  );
+  for (const row of rows) out.set(row.idempotency_key, { httpStatus: Number(row.http_status) || 200, response: row.response, requestHash: row.request_hash ?? null });
+  return out;
+}
+
+async function departmentsOf(teamIds: string[], companyId: string, client?: pg.PoolClient, known?: ReadonlyMap<string, string | null> | null): Promise<string[]> {
   if (!teamIds.length) return [];
+  if (known && teamIds.every((t) => known.has(t))) return Array.from(new Set(teamIds.map((t) => known.get(t)).filter((d): d is string => !!d)));
   const sql = 'SELECT DISTINCT department_id FROM teams WHERE company_id = ? AND id = ANY(?::text[]) AND department_id IS NOT NULL';
   const rows = client ? (await client.query(toPgPlaceholders(sql), [companyId, teamIds])).rows : await query<any>(sql, [companyId, teamIds]);
   return rows.map((r: any) => r.department_id);
@@ -151,7 +179,7 @@ export async function runLogged(
       if (!ins.rows.length) throw new ReplayInstead();
       const ingestionId: string = ins.rows[0].id;
       const outcome = await write(client, ingestionId);
-      const departmentIds = await departmentsOf(outcome.teamIds, caller.companyId, client);
+      const departmentIds = await departmentsOf(outcome.teamIds, caller.companyId, client, caller.verifiedTeams);
       await client.query(
         toPgPlaceholders(
           `UPDATE ingestion_log SET status = ?, source = ?, items = ?::jsonb, errors = ?::jsonb, http_status = ?, response = ?::jsonb,
@@ -165,7 +193,7 @@ export async function runLogged(
     });
   } catch (e) {
     if (e instanceof ReplayInstead && meta.key) {
-      const replay = await findReplay(caller, meta.key);
+      const replay = await findReplay(caller, meta.key, { fresh: true });
       if (replay) return { replay };
     }
     throw e;

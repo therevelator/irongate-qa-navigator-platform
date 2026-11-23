@@ -54,8 +54,97 @@ export async function storeSprints(client: pg.PoolClient, companyId: string, tea
   return { changed, days };
 }
 
-/** Issues: insert or update by team + key, with their changes. `teamOf` resolves each issue's team (already checked). */
+/**
+ * Issues: insert or update by team + key, with their changes. `teamOf` resolves each issue's team (already checked).
+ * Multi-row: the stored issues in one query, the new ones in one INSERT, the changed ones in one UPDATE and every
+ * change in one INSERT. A request that names the same issue twice is stored one issue at a time.
+ */
 export async function storeIssues(client: pg.PoolClient, companyId: string, issues: IssueEvent[], teamOf: (e: IssueEvent) => string, uploadOf: (team: string) => string | null): Promise<StoredIssue[]> {
+  if (!issues.length) return [];
+  const keyOf = (team: string, key: string) => `${team}\u0000${key}`;
+  const keys = issues.map((e) => keyOf(teamOf(e), e.key));
+  if (new Set(keys).size !== keys.length) return storeIssuesOneByOne(client, companyId, issues, teamOf, uploadOf);
+  const prev = new Map<string, any>((await client.query(
+    `SELECT i.id, i.team_id, i.external_id, i.event_hash, i.source_updated_at, i.opened_at, i.resolved_at, i.sprint_ids
+       FROM issues i JOIN unnest($1::text[], $2::text[]) AS x(t, k) ON i.team_id = x.t AND i.external_id = x.k`,
+    [issues.map(teamOf), issues.map((e) => e.key)])).rows.map((r: any) => [keyOf(r.team_id, r.external_id), r]));
+  type Row = { e: IssueEvent; team: string; k: string; hash: string; sprintIds: string[]; status: IssueStatus; days: Set<string>; id: string | null; merged?: string[] };
+  const rows: Row[] = issues.map((e, i) => {
+    const team = teamOf(e);
+    const sprintIds = e.sprints.map((s) => s.id);
+    const hash = sha256(JSON.stringify([e.title, e.type, e.typeLabel, e.status, e.statusCategory, e.resolution, e.priority, e.environment, e.storyPoints, e.estimateHours,
+      e.timeLoggedHours, sprintIds, e.labels, e.components, iso(e.createdAt), iso(e.resolvedAt), e.url]));
+    const days = new Set<string>([dayOf(e.createdAt), ...(e.resolvedAt ? [dayOf(e.resolvedAt)] : [])]);
+    const p = prev.get(keys[i]);
+    if (!p) return { e, team, k: keys[i], hash, sprintIds, status: 'written', days, id: null };
+    const older = p.source_updated_at && e.updatedAt && e.updatedAt.getTime() < new Date(p.source_updated_at).getTime();
+    if (p.event_hash === hash || older) return { e, team, k: keys[i], hash, sprintIds, status: 'duplicate', days, id: p.id };
+    days.add(dayOf(p.opened_at));
+    if (p.resolved_at) days.add(dayOf(p.resolved_at));
+    // The sprints an issue has been in only grow (a webhook may name the current sprint only).
+    return { e, team, k: keys[i], hash, sprintIds, status: 'updated', days, id: p.id, merged: Array.from(new Set([...(p.sprint_ids ?? []), ...sprintIds])) };
+  });
+  const fields = (r: Row) => ({
+    team: r.team, upload: uploadOf(r.team), ext: r.e.key, source: r.e.source, title: r.e.title, type: r.e.type, label: r.e.typeLabel, status: r.e.status, cat: r.e.statusCategory,
+    resolution: r.e.resolution, priority: r.e.priority, env: r.e.environment, found: r.e.foundIn, points: r.e.storyPoints, estimate: r.e.estimateHours, logged: r.e.timeLoggedHours,
+    sprints: r.merged ?? r.sprintIds, labels: r.e.labels, components: r.e.components, opened: iso(r.e.createdAt), resolved: iso(r.e.resolvedAt), updated: iso(r.e.updatedAt),
+    day: dayOf(r.e.createdAt), url: r.e.url, hash: r.hash,
+  });
+  const RECORD = `team text, upload text, ext text, source text, title text, type text, label text, status text, cat text, resolution text, priority text, env text, found text,
+                  points numeric, estimate numeric, logged numeric, sprints text[], labels text[], components text[], opened timestamptz, resolved timestamptz, updated timestamptz,
+                  day date, url text, hash text`;
+  const created = rows.filter((r) => r.status === 'written');
+  if (created.length) {
+    const ids = await client.query(
+      `INSERT INTO issues (company_id, team_id, upload_id, external_id, source, title, issue_type, type_label, status, status_category, resolution, priority, environment, found_in,
+                           story_points, estimate_hours, time_logged_hours, sprint_ids, labels, components, opened_at, resolved_at, source_updated_at, day, url, event_hash)
+       SELECT $1, x.team, x.upload, x.ext, x.source, x.title, x.type, x.label, x.status, x.cat, x.resolution, x.priority, x.env, x.found, x.points, x.estimate, x.logged,
+              x.sprints::varchar[], x.labels::varchar[], x.components::varchar[], x.opened, x.resolved, x.updated, x.day, x.url, x.hash
+         FROM jsonb_to_recordset($2::jsonb) AS x(o int, ${RECORD})
+        ORDER BY x.o
+       RETURNING id, team_id, external_id`,
+      [companyId, JSON.stringify(created.map((r, o) => ({ o, ...fields(r) })))]);
+    const byKey = new Map(ids.rows.map((x: any) => [keyOf(x.team_id, x.external_id), x.id as string]));
+    for (const r of created) r.id = byKey.get(r.k) ?? null;
+  }
+  const changed = rows.filter((r) => r.status === 'updated');
+  if (changed.length) {
+    await client.query(
+      `UPDATE issues i SET upload_id = COALESCE(x.upload, i.upload_id), source = x.source, title = x.title, issue_type = x.type, type_label = x.label, status = x.status,
+              status_category = x.cat, resolution = x.resolution, priority = x.priority, environment = x.env, found_in = x.found, story_points = x.points,
+              estimate_hours = x.estimate, time_logged_hours = x.logged, sprint_ids = x.sprints::varchar[], labels = x.labels::varchar[], components = x.components::varchar[],
+              opened_at = x.opened, resolved_at = x.resolved, source_updated_at = COALESCE(x.updated, i.source_updated_at), day = x.day, url = COALESCE(x.url, i.url),
+              event_hash = x.hash, updated_at = now()
+         FROM jsonb_to_recordset($1::jsonb) AS x(${RECORD})
+        WHERE i.team_id = x.team AND i.external_id = x.ext`,
+      [JSON.stringify(changed.map(fields))]);
+  }
+  const trans = rows.filter((r) => r.id && r.e.transitions.length).flatMap((r) => r.e.transitions.map((t) => ({
+    issue: r.id, team: r.team, upload: uploadOf(r.team), f: t.field, fr: t.from, t: t.to.slice(0, 255), c: t.toCategory, a: iso(t.at),
+  })));
+  if (trans.length) {
+    const byId = new Map(rows.filter((r) => r.id).map((r) => [r.id as string, r]));
+    const CHUNK = 5000;
+    for (let i = 0; i < trans.length; i += CHUNK) {
+      const r = await client.query(
+        `INSERT INTO issue_transitions (issue_id, team_id, field, from_value, to_value, to_category, at, upload_id)
+         SELECT x.issue, x.team, x.f, x.fr, x.t, x.c, x.a, x.upload
+           FROM jsonb_to_recordset($1::jsonb) AS x(issue text, team text, upload text, f text, fr text, t text, c text, a timestamptz)
+         ON CONFLICT (issue_id, field, at, to_value) DO NOTHING RETURNING issue_id, at`,
+        [JSON.stringify(trans.slice(i, i + CHUNK))]);
+      for (const x of r.rows) {
+        const row = byId.get(x.issue_id);
+        if (!row) continue;
+        row.days.add(dayOf(x.at));
+        if (row.status === 'duplicate') row.status = 'updated';
+      }
+    }
+  }
+  return rows.map((r) => ({ key: r.e.key, team: r.team, status: r.status, days: r.status === 'duplicate' ? [] : Array.from(r.days) }));
+}
+
+/** Issues one at a time (the same issue more than once in a request: each one sees the one before it). */
+async function storeIssuesOneByOne(client: pg.PoolClient, companyId: string, issues: IssueEvent[], teamOf: (e: IssueEvent) => string, uploadOf: (team: string) => string | null): Promise<StoredIssue[]> {
   const out: StoredIssue[] = [];
   for (const e of issues) {
     const team = teamOf(e);

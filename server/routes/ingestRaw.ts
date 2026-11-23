@@ -30,7 +30,8 @@ import {
 } from '../lib/ingest/coverageReports';
 import { parsePipelineBody, type PipelineRunEvent } from '../lib/ingest/pipelineEvents';
 import { insertUpload, sha256, storeCoverage, storePipelineRuns, storeTestRun, type RawKind, type UploadMeta } from '../lib/ingest/store';
-import { affectedDays, recomputeTeamDays, refreshFlakyEvidence, type DayResult } from '../lib/calc/engine';
+import { affectedDays, refreshFlakyEvidence, type DayResult } from '../lib/calc/engine';
+import { calcOrQueue, kickCalc } from '../lib/calc/queue';
 import { flushBackgroundWrites } from '../lib/opsLog';
 
 const router = express.Router();
@@ -116,7 +117,8 @@ export function checkTime(at: Date): void {
   if (at.getTime() < now - MAX_AGE_DAYS * 86_400_000) throw new HttpError(400, `The run time is more than ${MAX_AGE_DAYS} days in the past`);
 }
 
-export async function teamOwned(companyId: string, teamId: string): Promise<boolean> {
+export async function teamOwned(companyId: string, teamId: string, caller?: IngestCaller): Promise<boolean> {
+  if (caller?.verifiedTeams?.has(teamId) && caller.companyId === companyId) return true;
   const rows = await query<any[]>('SELECT 1 FROM teams WHERE id = ? AND company_id = ?', [teamId, companyId]);
   return rows.length > 0;
 }
@@ -190,7 +192,7 @@ export function rawIngestHandler(kind: RawKind) {
         throw new HttpError(415, `Unrecognised ${kind === 'tests' ? 'test report' : 'coverage report'} format. Supported: ${supported.join(', ')} (set format= to choose one)`, { supported });
       }
       source = `${kind} (${format})`;
-      if (!(await teamOwned(caller.companyId, c.teamId)) || outOfScope(caller, [c.teamId]).length) throw new HttpError(403, noAccess(caller, [c.teamId]));
+      if (!(await teamOwned(caller.companyId, c.teamId, caller)) || outOfScope(caller, [c.teamId]).length) throw new HttpError(403, noAccess(caller, [c.teamId]));
 
       const t0 = Date.now();
       let parsedTests: ParsedTestReport | null = null;
@@ -249,35 +251,42 @@ export function rawIngestHandler(kind: RawKind) {
             items, errors: [], teamIds: [c.teamId], valueCount: 0, source,
           };
         }
-        let days: DayResult[];
+        let calc: { days: DayResult[]; queued: boolean };
         let extra: Record<string, unknown>;
         let valueCount: number;
         if (parsedTests) {
           const { runId: testRunId, day } = await storeTestRun(client, meta, up.id, parsedTests, at);
           await refreshFlakyEvidence(client, c.teamId, [c.commit]);
-          days = await recomputeTeamDays(client, c.teamId, affectedDays('tests', day), { groups: ['ci'], ingestionId, actorId: actorOf(caller) });
+          calc = await calcOrQueue(client, caller.companyId, c.teamId, affectedDays('tests', day), { groups: ['ci'], ingestionId, actorId: actorOf(caller) });
           extra = { testRunId, counts: parsedTests.counts, durationMs: parsedTests.durationMs };
           valueCount = parsedTests.cases.length;
         } else {
           const r = await storeCoverage(client, meta, up.id, parsedCov!, at, changed);
-          days = await recomputeTeamDays(client, c.teamId, affectedDays('coverage', r.day), { groups: ['ci'], ingestionId, actorId: actorOf(caller) });
+          calc = await calcOrQueue(client, caller.companyId, c.teamId, affectedDays('coverage', r.day), { groups: ['ci'], ingestionId, actorId: actorOf(caller) });
           extra = { coverageReportId: r.reportId, totals: parsedCov!.totals, files: parsedCov!.files.length, changedLines: r.changed };
           valueCount = parsedCov!.files.length;
         }
+        const days = calc.days;
         items[0].metrics = Array.from(new Set(days.flatMap((d) => d.metrics.filter((m) => m.written).map((m) => m.kpi as string))));
         return {
           status: 'accepted', httpStatus: 201,
-          response: { status: 'accepted', kind, format, uploadId: up.id, parseMs, ...extra, computed: computedOut(days) },
+          response: { status: 'accepted', kind, format, uploadId: up.id, parseMs, ...extra, computed: computedOut(days), ...(calc.queued ? { calculation: 'queued' } : {}) },
           items, errors: [], teamIds: [c.teamId], valueCount, source,
         };
       });
       if ('replay' in outcome) return sendReplay(res, outcome.replay, hash);
+      await afterCommit(caller, outcome.outcome);
       await after(caller.companyId, c.teamId, outcome.outcome.items);
       return res.status(outcome.outcome.httpStatus).json(outcome.outcome.response);
     } catch (e) {
       return fail(res, caller, key, hash, teamId, source, e);
     }
   };
+}
+
+/** After the commit of a request whose calculation was queued: start the drain (or tell the Exporter batch). */
+export async function afterCommit(caller: IngestCaller, outcome: { response: any }) {
+  if (outcome.response?.calculation === 'queued') await kickCalc(caller.companyId, caller.calcSink);
 }
 
 export async function after(companyId: string, teamId: string, items: ItemSummary[]) {
@@ -323,7 +332,7 @@ async function handlePipelines(
     throw e;
   }
   for (const r of runs) checkTime(r.startedAt);
-  if (!(await teamOwned(caller.companyId, teamId)) || outOfScope(caller, [teamId]).length) throw new HttpError(403, noAccess(caller, [teamId]));
+  if (!(await teamOwned(caller.companyId, teamId, caller)) || outOfScope(caller, [teamId]).length) throw new HttpError(403, noAccess(caller, [teamId]));
   const dryRun = q.dryRun === 'true' || q.dryRun === '1';
   const source = 'pipelines';
   if (dryRun) {
@@ -343,7 +352,8 @@ async function handlePipelines(
     }
     const stored = await storePipelineRuns(client, caller.companyId, teamId, up.id, runs);
     const fresh = stored.filter((s) => !s.duplicate);
-    const days = fresh.length ? await recomputeTeamDays(client, teamId, Array.from(new Set(fresh.map((s) => s.day))), { groups: ['ci'], ingestionId, actorId: actorOf(caller) }) : [];
+    const calc = await calcOrQueue(client, caller.companyId, teamId, Array.from(new Set(fresh.map((s) => s.day))), { groups: ['ci'], ingestionId, actorId: actorOf(caller) });
+    const days = calc.days;
     if (!fresh.length) {
       // Every run was already stored: keep no upload row for this request.
       items[0].status = 'duplicate';
@@ -352,11 +362,12 @@ async function handlePipelines(
     items[0].metrics = Array.from(new Set(days.flatMap((d) => d.metrics.filter((m) => m.written).map((m) => m.kpi as string))));
     return {
       status: 'accepted', httpStatus: fresh.length ? 201 : 200,
-      response: { status: fresh.length ? 'accepted' : 'duplicate', kind: 'pipelines', uploadId: up.id, runs: stored.map((s) => ({ id: s.id, runId: s.externalId, attempt: s.attempt, status: s.duplicate ? 'duplicate' : 'written' })), computed: computedOut(days) },
+      response: { status: fresh.length ? 'accepted' : 'duplicate', kind: 'pipelines', uploadId: up.id, runs: stored.map((s) => ({ id: s.id, runId: s.externalId, attempt: s.attempt, status: s.duplicate ? 'duplicate' : 'written' })), computed: computedOut(days), ...(calc.queued ? { calculation: 'queued' } : {}) },
       items, errors: [], teamIds: [teamId], valueCount: fresh.length, source,
     };
   });
   if ('replay' in outcome) return sendReplay(res, outcome.replay, hash);
+  await afterCommit(caller, outcome.outcome);
   await after(caller.companyId, teamId, outcome.outcome.items);
   return res.status(outcome.outcome.httpStatus).json(outcome.outcome.response);
 }
