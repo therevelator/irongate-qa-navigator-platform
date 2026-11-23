@@ -2,14 +2,10 @@ name: UI tests
 
 # The full Playwright UI suite (tests/e2e), sharded over four runners and merged into one HTML
 # report. How to run it locally and how to read the report: docs/testing/README.md.
-# The fast @smoke gate runs in ci.yml on every push.
+# The fast @smoke gate is in ci.yml.
 
+# Runs only when started by hand (Actions tab, "Run workflow"). Tests run locally before release.
 on:
-  push:
-    branches: [main, 'claude/**']
-  pull_request:
-  schedule:
-    - cron: '17 3 * * *' # nightly, 03:17 UTC
   workflow_dispatch:
     inputs:
       subset:

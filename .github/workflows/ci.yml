@@ -1,9 +1,7 @@
 name: CI
 
+# Runs only when started by hand (Actions tab, "Run workflow"). Tests run locally before release.
 on:
-  push:
-    branches: ['**']
-  pull_request:
   workflow_dispatch:
 
 concurrency:
