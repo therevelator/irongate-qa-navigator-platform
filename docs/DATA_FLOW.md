@@ -791,7 +791,7 @@ Every value of the three monthly tables carries its source in `value_sources` (`
 ### 4.1 One request carries one kind
 
 The API is designed so that one envelope carries **one** `kind`, for **one** team. To send "all parameters",
-send one envelope per kind. That is the nine files in [docs/examples/ingest/](examples/ingest/):
+send one envelope per kind. That is the ten files in [docs/examples/ingest/](examples/ingest/):
 
 | File | kind | items per envelope | handler |
 |---|---|---|---|
@@ -803,9 +803,10 @@ send one envelope per kind. That is the nine files in [docs/examples/ingest/](ex
 | `commits.json` | `commits` | 1–500 batches (at most 500 commits in total) | `deliveryIngestHandler('commits')` |
 | `incidents.json` | `incidents` | 1–500 | `deliveryIngestHandler('incidents')` |
 | `issues.json` | `issues` | 1–1000 | `handleIssues` |
+| `test-management.json` | `test-management` | 1–2000 (test cases and executions) | `moreIngestHandler('test-management')` |
 | `kpis.json` | `kpis` | 1–100 | `handleKpis` |
 
-Four more kinds have no example file here; their items are described in [INTEGRATION_GUIDE.md, section 4F](INTEGRATION_GUIDE.md#4f-raw-ingestion-load-test-results-test-management-pull-requests-calendars)
+Three more kinds have no example file here (`test-management` does: it comes after `issues.json`, whose issue PAY-109 carries the label `test-automation` and the time invested); the items of all four are described in [INTEGRATION_GUIDE.md, section 4F](INTEGRATION_GUIDE.md#4f-raw-ingestion-load-test-results-test-management-pull-requests-calendars)
 (handler `moreIngestHandler`, `server/routes/ingestMore.ts`):
 
 | kind | items per envelope | what it feeds |

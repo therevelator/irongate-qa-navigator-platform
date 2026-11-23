@@ -7,7 +7,7 @@
  *           Idempotency-Key is replayed; the issues envelope is sent gzipped (Content-Type: application/gzip)
  *   IE-003  every field present in the examples was stored (raw tables, or the minimised copy in raw_uploads)
  *   IE-004  after the calculation queue drained (INGEST_CALC=queued: in the API process; inline: in the request),
- *           all 30 engine metrics have evidence, the 21 KPI columns with a raw source have computed values, the
+ *           all 32 engine metrics have evidence, the 23 KPI columns (all have a raw source) have computed values, the
  *           kpis kind stored all 23 columns, and the QA score is set from computed inputs only
  *   IE-006  the Overview, the team page and Business impact for this real company: Pipeline health counts the runs
  *           sent (pipeline_runs_raw through the engine's evidence), Tech debt health comes from the SARIF findings,
@@ -39,7 +39,7 @@ const DOC = fs.readFileSync(path.join(ROOT, 'docs', 'DATA_FLOW.md'), 'utf8');
 const DEPT = 'golden-dept-b';
 const TEAM = 'golden-team-df-raw';
 const KPI_TEAM = 'golden-team-df-kpis';
-const ORDER = ['coverage', 'test-report', 'sarif', 'pipeline-runs', 'deployments', 'commits', 'incidents', 'issues', 'kpis'] as const;
+const ORDER = ['coverage', 'test-report', 'sarif', 'pipeline-runs', 'deployments', 'commits', 'incidents', 'issues', 'test-management', 'kpis'] as const;
 type Kind = (typeof ORDER)[number];
 
 const DAY = 86_400_000;
@@ -269,13 +269,13 @@ describe('docs/examples/ingest: the input JSON of every kind', () => {
     }
     const evidence = new Set((await rows(`SELECT DISTINCT metric_key FROM metric_evidence WHERE team_id = $1`, [TEAM])).map((r: any) => r.metric_key));
     expect(Object.keys(METRICS).filter((k) => !evidence.has(k))).toEqual([]);
-    expect(Object.keys(METRICS)).toHaveLength(30);
+    expect(Object.keys(METRICS)).toHaveLength(32);
     const computed = new Set((await rows(`SELECT DISTINCT metric_key FROM metric_values WHERE team_id = $1 AND source = 'computed'`, [TEAM])).map((r: any) => r.metric_key));
     const fromRaw = Object.values(METRICS).map((m) => m.kpi).filter((k): k is string => !!k);
-    expect(fromRaw).toHaveLength(21);
+    expect(fromRaw).toHaveLength(23);
     expect(fromRaw.filter((k) => !computed.has(k))).toEqual([]);
-    // No raw source: automation coverage and ROI, from the kpis kind only.
-    expect(Object.keys(KPI_COLUMNS).filter((k) => !fromRaw.includes(k)).sort()).toEqual(['automation_coverage', 'automation_roi']);
+    // Every KPI column has a raw source (automation coverage and ROI: the test-management kind, after the issues).
+    expect(Object.keys(KPI_COLUMNS).filter((k) => !fromRaw.includes(k)).sort()).toEqual([]);
     // The QA score from computed inputs only (the day of the jacoco report, SARIF report 1, the deploys and bugs).
     const [snap] = await rows(`SELECT qa_score, status, field_sources FROM kpi_snapshots WHERE team_id = $1 AND snapshot_date = $2::date`, [TEAM, shiftDay('2026-11-18')]);
     expect(snap.qa_score).not.toBeNull();

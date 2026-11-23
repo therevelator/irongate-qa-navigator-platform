@@ -1,0 +1,173 @@
+{
+  "companyId": "<companyId>",
+  "departmentId": "<departmentId>",
+  "teamId": "<teamId>",
+  "source": "testrail",
+  "kind": "test-management",
+  "items": [
+    {
+      "type": "case",
+      "key": "C-101",
+      "automated": true,
+      "manualEstimateSeconds": 1200,
+      "archived": false,
+      "updatedAt": "2026-11-12T10:00:00Z"
+    },
+    {
+      "type": "case",
+      "key": "C-102",
+      "automated": true,
+      "manualEstimateSeconds": 1200,
+      "archived": false,
+      "updatedAt": "2026-11-12T10:00:00Z"
+    },
+    {
+      "type": "case",
+      "key": "C-103",
+      "automated": true,
+      "manualEstimateSeconds": 900,
+      "archived": false,
+      "updatedAt": "2026-11-12T10:00:00Z"
+    },
+    {
+      "type": "case",
+      "key": "C-104",
+      "automated": false,
+      "manualEstimateSeconds": 1500,
+      "archived": false,
+      "updatedAt": "2026-11-12T10:00:00Z"
+    },
+    {
+      "type": "case",
+      "key": "C-105",
+      "automated": false,
+      "manualEstimateSeconds": 600,
+      "archived": false,
+      "updatedAt": "2026-11-12T10:00:00Z"
+    },
+    {
+      "type": "case",
+      "key": "C-090",
+      "automated": false,
+      "archived": true,
+      "updatedAt": "2026-09-01T10:00:00Z"
+    },
+    {
+      "type": "execution",
+      "key": "R-501",
+      "case": "C-101",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-17T06:01:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-502",
+      "case": "C-102",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-17T06:02:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-503",
+      "case": "C-103",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-17T06:03:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-504",
+      "case": "C-101",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-18T06:04:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-505",
+      "case": "C-102",
+      "automated": true,
+      "status": "failed",
+      "executedAt": "2026-11-18T06:05:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-506",
+      "case": "C-103",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-18T06:06:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-507",
+      "case": "C-101",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-19T06:07:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-508",
+      "case": "C-102",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-19T06:08:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-509",
+      "case": "C-103",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-19T06:09:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-510",
+      "case": "C-101",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-20T06:10:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-511",
+      "case": "C-102",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-20T06:11:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-512",
+      "case": "C-103",
+      "automated": true,
+      "status": "passed",
+      "executedAt": "2026-11-20T06:12:00Z",
+      "durationSeconds": 60
+    },
+    {
+      "type": "execution",
+      "key": "R-600",
+      "case": "C-104",
+      "automated": false,
+      "status": "passed",
+      "executedAt": "2026-11-19T14:00:00Z",
+      "durationSeconds": 1400
+    }
+  ]
+}

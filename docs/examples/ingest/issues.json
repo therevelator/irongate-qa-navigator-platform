@@ -272,6 +272,24 @@
         "1046"
       ],
       "url": "https://acme.atlassian.net/browse/PAY-108"
+    },
+    {
+      "key": "PAY-109",
+      "priority": "Medium",
+      "project": "PAY",
+      "title": "Automate the refund regression cases",
+      "type": "Task",
+      "status": "Done",
+      "statusCategory": "done",
+      "resolution": "Done",
+      "createdAt": "2026-11-10T09:00:00Z",
+      "resolvedAt": "2026-11-14T16:00:00Z",
+      "updatedAt": "2026-11-14T16:00:00Z",
+      "timeLoggedHours": 2,
+      "labels": [
+        "test-automation"
+      ],
+      "url": "https://acme.atlassian.net/browse/PAY-109"
     }
   ]
 }
