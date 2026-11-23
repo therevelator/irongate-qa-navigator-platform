@@ -1,7 +1,8 @@
 /**
  * Demo freshness (npm run seed:demo -- --refresh-dates, runRefreshDates in server/seeds/demoSeed.ts):
- *   REFRESH-001  it only adds rows: every non-sample row (real KPI snapshots, non-synthetic metric
- *                values, users, teams) is unchanged, and a second run on the same day adds nothing;
+ *   REFRESH-001  it only adds rows: every non-sample row (real KPI snapshots, metric values that are not
+ *                the sample's, users, teams) is unchanged, and a second run on the same day adds nothing
+ *                (the sample adds whole days only, so a later run the same day finds nothing new);
  *   REFRESH-002  a real team without sample rows never receives sample data or demo assignments.
  * Runs against DATABASE_URL (local only); the database is the seeded test database.
  */
@@ -13,7 +14,7 @@ const local = ['127.0.0.1', 'localhost'].includes(url.hostname);
 
 const FINGERPRINT = `SELECT md5(string_agg(x, ',' ORDER BY x)) AS h FROM (
   SELECT 'k' || t::text AS x FROM kpi_snapshots t WHERE id NOT LIKE 'demo-%'
-  UNION ALL SELECT 'm' || t::text FROM metric_values t WHERE source <> 'synthetic'
+  UNION ALL SELECT 'm' || t::text FROM metric_values t WHERE source <> 'synthetic' AND COALESCE(idempotency_key, '') NOT LIKE 'backfill:demo-%'
   UNION ALL SELECT 'u' || t::text FROM users t WHERE id NOT LIKE 'demo-%'
   UNION ALL SELECT 't' || t::text FROM teams t WHERE id NOT LIKE 'demo-%') q`;
 

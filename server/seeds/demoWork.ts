@@ -1,33 +1,48 @@
 /**
- * Sample (demo) issues and static-analysis reports for v2 phase 3, for the last year, DERIVED FROM THE
- * TEAM'S OWN KPI HISTORY so that the values QE Navigator calculates from them match what the team's
- * pages already show (no number that contradicts them):
+ * Sample (demo) issues and static-analysis reports for v2 phase 3, shaped by the team's story: the story's
+ * values (the seed's targets: server/seeds/demoSeed.ts, table sample_kpi_targets; kpi_snapshots for a
+ * standalone script) decide how many bugs, how much blocked time and which code quality the raw data
+ * holds. The engine calculates the team's values from these issues and reports, and the sample's KPI
+ * snapshots are those values (so a tile and its evidence are one number):
  *
  *   sprints        the team's sprints of sprint_velocity (names and dates as the app shows them); per
  *                  closed sprint, stories and tasks whose story points add up to its committed points,
  *                  the delivered points completed before the sprint closed and the rest carried over into
  *                  the next sprint (and completed there); time logged against the original estimate in the
  *                  ratio of sizing_accuracy, and blocked periods adding up to blocked_time_hours (both from
- *                  the KPI snapshot of the sprint's last day)
+ *                  the target of the sprint's last day)
  *   bugs           per two weeks (the sprint periods), bugs found in production and before release so that
  *                  over 28 days the escape rate is defect_escape_rate and production bugs ÷ KLOC is
  *                  defect_density (KLOC from the team's latest coverage report), with cumulative rounding;
- *                  a few bugs without an environment and a few closed as Cannot Reproduce (not counted)
- *   SARIF reports  a weekly SonarQube report (Friday) whose findings by severity give the code_quality_score
- *                  of that day with the scoring formula (server/lib/calc/quality.ts), findings that persist
- *                  between reports (new and fixed ones every week)
+ *                  a few bugs without an environment and a few closed as Cannot Reproduce (not counted);
+ *                  a bug still open when its day is added is resolved by a later run when its fix time comes
+ *   SARIF reports  a nightly SonarQube analysis of main (17:00 UTC) whose findings by severity give the
+ *                  code_quality_score target of that day with the scoring formula (server/lib/calc/quality.ts),
+ *                  findings that persist between reports (new and fixed ones every week)
  *
  * Plain SQL (PL/pgSQL blocks), so the same statements fill the demo seed, the nightly sample refresh and
  * a live company (scripts/reseed/raw-sample-sql.ts --work-only). Rows are sample rows: ids start with
- * "demo-raw-", is_sample = true; evidence only, never written to the KPI storage. Idempotent: what exists
- * is skipped, so the nightly refresh adds the new sprint, bugs and report only. A team with real issues
- * (or real reports) gets none. The blocks do nothing on a database without the phase-3 tables.
+ * "demo-raw-", is_sample = true. Only the days from `from` to `to` are added (whole days), and what exists
+ * is skipped, so the nightly refresh adds the new day's sprint, bugs and report only and a day's data never
+ * changes once added. A team with real issues (or real reports) gets none. The blocks do nothing on a
+ * database without the phase-3 tables.
  */
 import { createHash } from 'crypto';
 import { RAW_SAMPLE_PREFIX, vocabularyFor } from './demoRaw';
 import { SCORE_SCALE, SEVERITY_WEIGHTS } from '../lib/calc/quality';
 
 export interface WorkSampleTeam { id: string; companyId: string; name: string }
+export interface WorkSampleOptions {
+  /** First and last day to add (YYYY-MM-DD; default the last year up to today). Each run adds whole days only. */
+  from?: string;
+  to?: string;
+  /**
+   * Where the sample's targets come from: a table with team_id, snapshot_date and the KPI columns (default
+   * kpi_snapshots; the seed passes its temporary table of the story's values, sample_kpi_targets).
+   */
+  targets?: string;
+}
+const isoDay = (d: Date) => d.toISOString().slice(0, 10);
 
 const lit = (s: string) => `'${s.replace(/'/g, "''")}'`;
 const arr = (xs: string[]) => `ARRAY[${xs.map(lit).join(', ')}]::text[]`;
@@ -71,7 +86,11 @@ const RULES: Record<'critical' | 'high' | 'medium' | 'low', Array<[string, strin
 const CHURN = { critical: 0.08, high: 0.25, medium: 0.6, low: 1.2 };
 
 /** The statements that add the sample issues and reports of one team (run in order). */
-export function workSampleSqlForTeam(team: WorkSampleTeam): string[] {
+export function workSampleSqlForTeam(team: WorkSampleTeam, opts: WorkSampleOptions = {}): string[] {
+  const FROM = `DATE '${opts.from ?? isoDay(new Date(Date.now() - 372 * 86_400_000))}'`;
+  const TO = `DATE '${opts.to ?? isoDay(new Date())}'`;
+  const TARGETS = opts.targets ?? 'kpi_snapshots';
+  if (!/^[a-z_][a-z0-9_.]*$/.test(TARGETS)) throw new Error('bad targets table');
   const T = lit(team.id);
   const CO = lit(team.companyId);
   const K = short(team.id);
@@ -102,14 +121,16 @@ BEGIN
   -- 1. Sprints: stories and tasks per closed sprint of sprint_velocity.
   prev_sid := NULL;
   FOR sp IN SELECT sprint_name, start_date, end_date, committed_points, delivered_points FROM sprint_velocity
-             WHERE team_id = t AND end_date >= (now() AT TIME ZONE 'UTC')::date - 372 ORDER BY end_date LOOP
+             WHERE team_id = t AND end_date >= ${FROM} - 28 AND end_date <= ${TO} ORDER BY end_date LOOP
     sid := pk || '-' || regexp_replace(sp.sprint_name, '[^A-Za-z0-9]+', '-', 'g');
     s_start := (sp.start_date::timestamp + interval '9 hours') AT TIME ZONE 'UTC';
     s_end := (sp.end_date::timestamp + interval '15 hours') AT TIME ZONE 'UTC';
     IF s_end > now() THEN EXIT; END IF;
     IF EXISTS (SELECT 1 FROM issue_sprints WHERE team_id = t AND external_id = sid) THEN prev_sid := sid; CONTINUE; END IF;
+    -- A sprint before the first day to add that is not there (before the sample's history) is not added now.
+    IF sp.end_date < ${FROM} THEN prev_sid := NULL; CONTINUE; END IF;
     snap_b := NULL; snap_s := NULL;
-    SELECT blocked_time_hours::float8, sizing_accuracy::float8 INTO snap_b, snap_s FROM kpi_snapshots
+    SELECT blocked_time_hours::float8, sizing_accuracy::float8 INTO snap_b, snap_s FROM ${TARGETS}
      WHERE team_id = t AND snapshot_date <= sp.end_date ORDER BY snapshot_date DESC LIMIT 1;
     INSERT INTO issue_sprints (id, company_id, team_id, external_id, name, state, started_at, ends_at, completed_at, is_sample)
     VALUES (pfx || 'sp-' || substr(md5(sid), 1, 12), co, t, sid, sp.sprint_name, 'closed', s_start, s_end, s_end, TRUE) ON CONFLICT DO NOTHING;
@@ -196,11 +217,11 @@ BEGIN
   IF anchor IS NULL THEN RETURN; END IF;
   first_period := anchor - 14 * ((anchor - DATE '2025-01-01') / 14);
   ps := first_period;
-  WHILE ps <= (now() AT TIME ZONE 'UTC')::date LOOP
+  WHILE ps <= ${TO} LOOP
     pe := ps + 14;
     snap_e := NULL; snap_d := NULL;
-    SELECT defect_escape_rate::float8, defect_density::float8 INTO snap_e, snap_d FROM kpi_snapshots
-     WHERE team_id = t AND snapshot_date <= least(pe - 1, (now() AT TIME ZONE 'UTC')::date) ORDER BY snapshot_date DESC LIMIT 1;
+    SELECT defect_escape_rate::float8, defect_density::float8 INTO snap_e, snap_d FROM ${TARGETS}
+     WHERE team_id = t AND snapshot_date <= least(pe - 1, ${TO}) ORDER BY snapshot_date DESC LIMIT 1;
     IF snap_e IS NOT NULL AND snap_d IS NOT NULL AND snap_e > 0 THEN
       x_e := snap_d * kloc / 2.0;
       x_n := greatest(0, x_e / (snap_e / 100.0) - x_e);
@@ -221,13 +242,14 @@ BEGIN
           r := ${R(`t || ps::text || k::text || 'xt'`)};
           env := CASE WHEN ${R(`t || ps::text || k::text || 'xe'`)} < 0.55 THEN NULL ELSE 'Production' END;
         END IF;
-        CONTINUE WHEN ps < (now() AT TIME ZONE 'UTC')::date - 372;
         bid := pfx || 'b-' || to_char(ps, 'YYYYMMDD') || '-' || k;
         bopen := (ps::timestamp AT TIME ZONE 'UTC') + make_interval(mins => floor(least(0.9999, greatest(0, r)) * 14 * 1440)::int);
+        -- Only the days being added (a day's bugs are added once, whole).
+        CONTINUE WHEN (bopen AT TIME ZONE 'UTC')::date < ${FROM} OR (bopen AT TIME ZONE 'UTC')::date > ${TO};
         CONTINUE WHEN bopen > now() - interval '30 minutes';
-        -- The extras are closed within two days (never counted while still open).
-        CONTINUE WHEN k > 200 AND bopen > now() - interval '3 days';
-        bres := bopen + make_interval(hours => CASE WHEN k > 200 THEN 4 + floor(${R(`bid || 'rs'`)} * 40) ELSE 6 + floor(${R(`bid || 'rs'`)} * 140) END::int);
+        bres := bopen + make_interval(hours => CASE WHEN k > 200 THEN 1 + floor(${R(`bid || 'rs'`)} * 3) ELSE 6 + floor(${R(`bid || 'rs'`)} * 140) END::int);
+        -- The extras are added once closed (they are never counted).
+        CONTINUE WHEN k > 200 AND bres > now();
         INSERT INTO issues (id, company_id, team_id, external_id, source, title, issue_type, type_label, status, status_category, resolution, priority, environment, found_in,
                             sprint_ids, labels, components, opened_at, resolved_at, source_updated_at, day, is_sample, created_at)
         VALUES (bid, co, t, pk || '-' || (base + k), 'jira',
@@ -238,15 +260,19 @@ BEGIN
                 CASE WHEN env IS NULL THEN NULL WHEN env = 'Production' THEN 'production' ELSE 'pre_release' END,
                 ARRAY[]::varchar[], CASE WHEN env = 'Production' THEN ARRAY['customer-reported']::varchar[] ELSE ARRAY[]::varchar[] END,
                 ARRAY[areas[1 + floor(${R(`bid || 'ar'`)} * 6)::int]]::varchar[], bopen, CASE WHEN bres <= now() THEN bres END, least(bres, now()), (bopen AT TIME ZONE 'UTC')::date, TRUE, bopen)
-        ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, status_category = EXCLUDED.status_category, resolution = EXCLUDED.resolution, resolved_at = EXCLUDED.resolved_at,
-                                       source_updated_at = EXCLUDED.source_updated_at, updated_at = now()
-          WHERE issues.is_sample AND issues.resolved_at IS DISTINCT FROM EXCLUDED.resolved_at;
+        ON CONFLICT (id) DO NOTHING;
       END LOOP;
       acc_e := acc_e + x_e;
       acc_n := acc_n + x_n;
     END IF;
     ps := pe;
   END LOOP;
+  -- Bugs still open whose fix time has come: resolved (the time follows from the bug; open and fixed bugs count alike).
+  UPDATE issues SET status = 'Done', status_category = 'done', resolution = 'Done',
+         resolved_at = opened_at + make_interval(hours => (6 + floor(${R(`id || 'rs'`)} * 140))::int),
+         source_updated_at = opened_at + make_interval(hours => (6 + floor(${R(`id || 'rs'`)} * 140))::int), updated_at = now()
+   WHERE team_id = t AND is_sample AND issue_type = 'bug' AND resolved_at IS NULL AND id LIKE pfx || 'b-%'
+     AND opened_at + make_interval(hours => (6 + floor(${R(`id || 'rs'`)} * 140))::int) <= now();
 END $work$`;
 
   const W = SEVERITY_WEIGHTS;
@@ -268,17 +294,16 @@ BEGIN
   ${sev('high', 'h')}
   ${sev('medium', 'm')}
   ${sev('low', 'l')}
-  -- Every Friday of the last year (17:00 UTC), oldest first.
-  d := (now() AT TIME ZONE 'UTC')::date - 364;
-  d := d + ((5 - extract(isodow FROM d)::int + 7) % 7);
-  prev := NULL;
-  WHILE d <= (now() AT TIME ZONE 'UTC')::date LOOP
+  -- The nightly analysis of main (17:00 UTC) of every day being added, oldest first.
+  d := ${FROM};
+  SELECT id INTO prev FROM analysis_reports WHERE team_id = t AND is_sample AND day < d ORDER BY day DESC LIMIT 1;
+  WHILE d <= ${TO} LOOP
     at := (d::timestamp + interval '17 hours') AT TIME ZONE 'UTC';
     EXIT WHEN at > now();
     rep := pfx || 'sa-' || to_char(d, 'YYYYMMDD');
-    IF EXISTS (SELECT 1 FROM analysis_reports WHERE id = rep) THEN prev := rep; d := d + 7; CONTINUE; END IF;
-    SELECT code_quality_score::float8 INTO q FROM kpi_snapshots WHERE team_id = t AND snapshot_date <= d ORDER BY snapshot_date DESC LIMIT 1;
-    IF q IS NULL OR q <= 0 THEN d := d + 7; CONTINUE; END IF;
+    IF EXISTS (SELECT 1 FROM analysis_reports WHERE id = rep) THEN prev := rep; d := d + 1; CONTINUE; END IF;
+    SELECT code_quality_score::float8 INTO q FROM ${TARGETS} WHERE team_id = t AND snapshot_date <= d ORDER BY snapshot_date DESC LIMIT 1;
+    IF q IS NULL OR q <= 0 THEN d := d + 1; CONTINUE; END IF;
     -- Weighted findings that give this score: 100 × e^(−w ÷ KLOC ÷ ${SCORE_SCALE}) = q.
     w := -${SCORE_SCALE} * ln(least(q, 100) / 100.0) * kloc;
     cnt := ARRAY[0, 0, 0, 0];
@@ -286,7 +311,7 @@ BEGIN
     cnt[2] := floor(rem / 12)::int; rem := rem - ${W.high} * cnt[2];
     cnt[3] := floor(rem / 3)::int; rem := rem - ${W.medium} * cnt[3];
     cnt[4] := round(rem / ${W.low})::int;
-    wk := (d - DATE '2025-01-03') / 7;
+    wk := d - DATE '2025-01-03';
     INSERT INTO analysis_reports (id, company_id, team_id, tool, tool_version, repo, branch, commit_sha, run_id, attempt, analyzed_at, day, lines_of_code,
                                   findings, critical, high, medium, low, info, suppressed, rules, is_sample, created_at)
     VALUES (rep, co, t, 'SonarQube', '10.6', repo, 'main', substr(md5(t || d::text || 'sa'), 1, 12), 'sonar-' || to_char(d, 'YYYYMMDD'), 1, at, d, round(kloc * 1000)::int,
@@ -296,7 +321,7 @@ BEGIN
       ids := CASE si WHEN 1 THEN rid_c WHEN 2 THEN rid_h WHEN 3 THEN rid_m ELSE rid_l END;
       names := CASE si WHEN 1 THEN rnm_c WHEN 2 THEN rnm_h WHEN 3 THEN rnm_m ELSE rnm_l END;
       msgs := CASE si WHEN 1 THEN rms_c WHEN 2 THEN rms_h WHEN 3 THEN rms_m ELSE rms_l END;
-      a := floor(churn[si] * wk)::int;
+      a := floor(churn[si] * wk / 7.0)::int;
       FOR i IN a..(a + cnt[si] - 1) LOOP
         fp := substr(md5(t || sev[si] || i::text), 1, 40);
         INSERT INTO analysis_findings (id, report_id, team_id, fingerprint, rule_id, rule_name, severity, level, category, message, path, line)
@@ -316,7 +341,7 @@ BEGIN
        WHERE id = rep;
     END IF;
     prev := rep;
-    d := d + 7;
+    d := d + 1;
   END LOOP;
 END $sarif$`;
   return [issues, sarif];

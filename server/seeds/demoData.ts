@@ -21,6 +21,7 @@ import { readFileSync } from 'fs';
 import { computeQaScore, computeDdps, TECH_DEBT_SEVERITY_WEIGHTS } from '../lib/metricFormulas';
 import { calculateWorkloadBalance } from '../../src/data/advancedFeatures';
 import { DEFAULT_METRIC_INTERVALS } from '../lib/metricIntervals';
+import { KPI_COLUMNS as KPI_COLUMN_SPECS, type KpiColumn } from '../lib/kpiIngest';
 import { savedViewsSql } from './demoSavedViews';
 import { K_ANONYMITY_MIN } from '../lib/privacy';
 import { DEFAULT_ANCHOR, PULSE_QUESTIONS, periodFor, wellbeingScore, type CadenceRow, type PulseCadence } from '../lib/pulseRules';
@@ -172,8 +173,15 @@ function did(...parts: Array<string | number>): string {
 export type SqlValue = string | number | boolean | null | undefined | { json: unknown } | { sql: string };
 export type Row = Record<string, SqlValue>;
 
+/**
+ * Rows that replace the sample's own earlier version (ON CONFLICT (id) DO UPDATE of `set`, only where `where` holds
+ * for the existing row): the days whose calculated values the run has just added (a day's snapshot is first written
+ * with the values carried forward from the day before, and gets its own when the day is complete).
+ */
+export interface Upsert { set: string[]; where: string; extra?: string }
+
 export type Segment =
-  | { kind: 'insert'; table: string; rows: Row[]; guard?: string }
+  | { kind: 'insert'; table: string; rows: Row[]; guard?: string; upsert?: Upsert }
   | { kind: 'sql'; label: string; sql: string };
 
 /** Guard value meaning "do not emit this row" (the team already has real data there). */
@@ -184,6 +192,15 @@ export class Dataset {
   /** Guard key -> SQL condition; guarded rows are emitted inside DO blocks (IF condition). */
   readonly guards = new Map<string, string>();
   private byKey = new Map<string, Row[]>();
+  /**
+   * The story's values per sample team and day (the generated KPI model), the targets the sample raw data
+   * is shaped by (server/seeds/demoWork.ts: bugs, sprints' blocked time and sizing, code quality).
+   */
+  readonly targets: Array<{ teamId: string; date: string; values: Record<string, number> }> = [];
+  /** Health 0..1 of each sample team per day (index = days before today): what its sample raw data follows. */
+  readonly health = new Map<string, number[]>();
+  /** Days of KPI history of this dataset (SAMPLE_HISTORY_DAYS or the shape's). */
+  historyDays = 0;
 
   constructor(readonly today: string) {}
 
@@ -192,20 +209,20 @@ export class Dataset {
     return key;
   }
 
-  private segment(table: string, guard: string | undefined): Row[] {
-    const key = `${guard ?? ''}#${table}`;
+  private segment(table: string, guard: string | undefined, upsert?: Upsert): Row[] {
+    const key = `${guard ?? ''}#${table}${upsert ? '#upsert' : ''}`;
     let rows = this.byKey.get(key);
     if (!rows) {
       rows = [];
       this.byKey.set(key, rows);
-      this.segments.push({ kind: 'insert', table, rows, guard });
+      this.segments.push({ kind: 'insert', table, rows, guard, upsert });
     }
     return rows;
   }
 
-  add(table: string, row: Row, guard?: string): void {
+  add(table: string, row: Row, guard?: string, upsert?: Upsert): void {
     if (guard === SKIP) return;
-    this.segment(table, guard).push(row);
+    this.segment(table, guard, upsert).push(row);
   }
 
   /** Fix the insert position of tables (parents before children) before rows are added. */
@@ -256,7 +273,11 @@ export function renderStatements(ds: Dataset, maxBatchBytes = 200_000): Rendered
     let size = head.length;
     const flush = () => {
       if (!batch.length) return;
-      out.push({ table: seg.table, rows: batch.length, sql: `${head}${batch.join(',\n')}\nON CONFLICT DO NOTHING;`, guard });
+      const u = seg.upsert;
+      const conflict = u
+        ? `ON CONFLICT (id) DO UPDATE SET ${u.set.map((c) => `"${c}" = EXCLUDED."${c}"`).join(', ')}${u.extra ? `, ${u.extra}` : ''}\n  WHERE ${u.where} AND (${u.set.map((c) => `${seg.table}."${c}"`).join(', ')}${u.extra ? `, ${seg.table}.field_sources` : ''}) IS DISTINCT FROM (${u.set.map((c) => `EXCLUDED."${c}"`).join(', ')}${u.extra ? ', EXCLUDED.field_sources' : ''})`
+        : 'ON CONFLICT DO NOTHING';
+      out.push({ table: seg.table, rows: batch.length, sql: `${head}${batch.join(',\n')}\n${conflict};`, guard });
       batch = [];
       size = head.length;
     };
@@ -277,7 +298,7 @@ export function renderStatements(ds: Dataset, maxBatchBytes = 200_000): Rendered
  * at apply time whether a team still lacks that data (safe on a database that differs from
  * the one the plan was read from).
  */
-export function renderScript(ds: Dataset, maxBlockBytes = 1_200_000): RenderedStatement[] {
+export function renderScript(ds: Dataset, maxBlockBytes = 1_200_000, only?: Set<string>): RenderedStatement[] {
   const out: RenderedStatement[] = [];
   let block: RenderedStatement[] = [];
   let size = 0;
@@ -292,6 +313,7 @@ export function renderScript(ds: Dataset, maxBlockBytes = 1_200_000): RenderedSt
     size = 0;
   };
   for (const st of renderStatements(ds)) {
+    if (only && !only.has(st.table)) continue;
     if (!st.guard) { flush(); out.push(st); continue; }
     if (block.length && (block[0].guard !== st.guard || size + st.sql.length > maxBlockBytes)) flush();
     block.push(st);
@@ -359,6 +381,9 @@ const TEAMS: TeamDef[] = ([
     areas: ['Daily ETL', 'Regulatory report', 'Finance dashboard', 'Data quality check', 'Schema migration', 'Backfill job', 'Customer export', 'Event stream'],
     endpoints: [['/data/api/reports', 'GET', 380], ['/data/api/exports', 'POST', 520], ['/data/api/metrics', 'GET', 150], ['/data/api/events', 'POST', 45]] },
 ] as Array<Omit<TeamDef, 'id' | 'phase' | 'sprintOffset'>>).map((t, i) => ({ ...t, id: `demo-team-${t.key}`, phase: i * 0.7, sprintOffset: i % 2 === 0 ? 0 : 7 }));
+
+/** The demo company's team ids. */
+export const NORTHWIND_TEAM_IDS = TEAMS.map((t) => t.id);
 
 // [first, last, role, dept key, team key | null]
 const PEOPLE: Array<[string, string, UserDef['role'], string, string | null]> = [
@@ -681,7 +706,56 @@ function metricValue(team: TeamDef, m: MetricDef, t: number, date: string): numb
 // Build
 // ============================================================================
 
-export interface BuildOptions { today?: string; shape?: SampleShape }
+/**
+ * Values calculated by the engine from a team's sample raw data (metric_evidence): KPI column → the values per
+ * day, oldest first, with the time each is for. The sample's KPI snapshots hold these for every column the
+ * engine calculates (the latest value on or before the snapshot day, as for a real team), so a tile and its
+ * evidence are the same number.
+ */
+export type ComputedKpis = Map<string, Map<string, Array<{ day: string; value: number; at: string }>>>;
+
+export interface BuildOptions {
+  today?: string; shape?: SampleShape; computed?: ComputedKpis;
+  /** First day whose calculated values this run added: the sample's KPI rows from this day on replace their earlier version. */
+  updateFrom?: string;
+}
+
+/** KPI columns the engine calculates from raw data (server/lib/calc/engine.ts EVIDENCE_FOR_KPI). */
+export const CALCULATED_KPI_COLUMNS = [
+  'test_coverage', 'first_time_pass_rate', 'test_flakiness_rate', 'test_execution_time_minutes', 'avg_build_time_minutes', 'parallel_test_efficiency',
+  'deployment_frequency_per_week', 'lead_time_days', 'change_failure_rate', 'mttr_hours', 'mtbf_hours', 'system_availability', 'infrastructure_failures',
+  'defect_escape_rate', 'defect_density', 'sprint_velocity', 'sprint_commitment_rate', 'sprint_carryover', 'blocked_time_hours', 'sizing_accuracy', 'code_quality_score',
+] as const;
+/** Story values the sample raw data is shaped by (Dataset.targets). */
+const TARGET_COLUMNS = ['defect_escape_rate', 'defect_density', 'code_quality_score', 'blocked_time_hours', 'sizing_accuracy'];
+/** Days of story values before the KPI history (the raw sample's warm-up days and a sprint). */
+export const TARGET_EXTRA_DAYS = 28 + 14;
+
+/** A calculated value as its KPI column stores it (whole numbers in integer columns, the column's range). */
+export function kpiColumnValue(col: string, v: number): number {
+  const spec = KPI_COLUMN_SPECS[col as KpiColumn];
+  if (!spec) return v;
+  const x = Math.min(spec.max, Math.max(spec.min, v));
+  return 'integer' in spec && spec.integer ? Math.round(x) : x;
+}
+
+/**
+ * The update intervals the sample companies expect (Administration → Update frequency). The sample is fed by
+ * the nightly refresh, which adds each complete day after it ends: daily values are up to two days old just
+ * before it runs (three for the deployment-based ones, which only change on weekdays), and a sprint's values
+ * change when the next sprint is closed (two weeks) and added the night after. Every other metric keeps its default.
+ */
+export const SAMPLE_INTERVALS: Record<string, { interval_value: number; interval_unit: 'days' | 'weeks' }> = {
+  test_coverage: { interval_value: 2, interval_unit: 'days' }, test_flakiness_rate: { interval_value: 2, interval_unit: 'days' },
+  code_quality_score: { interval_value: 2, interval_unit: 'days' }, avg_build_time_minutes: { interval_value: 2, interval_unit: 'days' },
+  test_execution_time_minutes: { interval_value: 2, interval_unit: 'days' }, parallel_test_efficiency: { interval_value: 2, interval_unit: 'days' },
+  first_time_pass_rate: { interval_value: 2, interval_unit: 'days' },
+  lead_time_days: { interval_value: 3, interval_unit: 'days' }, mttr_hours: { interval_value: 3, interval_unit: 'days' }, system_availability: { interval_value: 3, interval_unit: 'days' },
+  sprint_velocity: { interval_value: 15, interval_unit: 'days' }, sprint_commitment_rate: { interval_value: 15, interval_unit: 'days' },
+  sprint_carryover: { interval_value: 15, interval_unit: 'days' }, blocked_time_hours: { interval_value: 15, interval_unit: 'days' },
+  sizing_accuracy: { interval_value: 15, interval_unit: 'days' },
+};
+export const sampleMetricIntervals = () => DEFAULT_METRIC_INTERVALS.map((mi) => ({ ...mi, ...(SAMPLE_INTERVALS[mi.metric_key] ?? {}) }));
 
 export interface DemoSummary {
   companyId: string;
@@ -714,7 +788,8 @@ function checkDate(today: string): string {
 export function buildDemoDataset(opts: BuildOptions = {}): Dataset {
   const today = checkDate(opts.today ?? todayUtc());
   const ds = new Dataset(today);
-  emitCompany(ds, { id: DEMO_COMPANY_ID, isDemo: true, teams: NORTHWIND_TEAMS, teamCount: NORTHWIND_TEAMS.length, realDebt: [], extraHappiness: [] });
+  ds.historyDays = HISTORY_DAYS;
+  emitCompany(ds, { id: DEMO_COMPANY_ID, isDemo: true, teams: NORTHWIND_TEAMS, teamCount: NORTHWIND_TEAMS.length, realDebt: [], extraHappiness: [] }, opts.computed, opts.updateFrom);
   ds.sql('saved_views', savedViewsSql(DEMO_COMPANY_ID));
   return ds;
 }
@@ -724,13 +799,14 @@ export function buildFillDataset(companies: CompanyInput[], opts: BuildOptions =
   const today = checkDate(opts.today ?? todayUtc());
   return withShape(opts.shape, () => {
     const ds = new Dataset(today);
+    ds.historyDays = HISTORY_DAYS;
     for (const c of companies) {
       // Stories given in code (SampleShape.stories) end at the team's health today.
       for (const t of c.teams) {
         const story = SHAPE.stories?.[t.id];
         if (story) { t.story = story; t.h = round(storyAt(story, 0), 3); }
       }
-      emitCompany(ds, c);
+      emitCompany(ds, c, opts.computed, opts.updateFrom);
       ds.sql('saved_views', savedViewsSql(c.id));
     }
     return ds;
@@ -781,6 +857,25 @@ export function sampleRates(team: TeamDef, isDemo: boolean): { hourly: number; t
  * company has none of its own for that key (at the team, its department or the company), so real
  * settings always win.
  */
+/**
+ * The sample's update intervals (SAMPLE_INTERVALS) for a filled company whose KPI values are all sample values
+ * (no real KPI snapshot in any team) and that has set none of its own; otherwise the company's settings stand.
+ */
+function emitSampleIntervals(ds: Dataset, company: CompanyInput): void {
+  if (company.isDemo || !company.teams.some((t) => !t.groups || t.groups.has('kpi'))) return;
+  const C = literal(company.id);
+  const g = ds.guard(`mui:${company.id}`, `EXISTS (SELECT 1 FROM companies WHERE id = ${C})
+    AND NOT EXISTS (SELECT 1 FROM metric_update_intervals WHERE company_id = ${C})
+    AND NOT EXISTS (SELECT 1 FROM kpi_snapshots ks JOIN teams t ON t.id = ks.team_id WHERE t.company_id = ${C} AND ks.id NOT LIKE '${DEMO_PREFIX}%')`);
+  const created = ts(addDays(ds.today, -365), 9);
+  for (const mi of sampleMetricIntervals()) {
+    ds.add('metric_update_intervals', {
+      id: did('mi', sha1(`${company.id}|${mi.metric_key}`).slice(0, 20)), company_id: company.id, metric_key: mi.metric_key,
+      interval_value: mi.interval_value, interval_unit: mi.interval_unit, custom_label: mi.custom_label, updated_by: null, created_at: created, updated_at: created,
+    }, g);
+  }
+}
+
 function emitSampleFinancialSettings(ds: Dataset, company: CompanyInput): void {
   if (company.isDemo) return;
   const C = literal(company.id);
@@ -804,7 +899,9 @@ function emitSampleFinancialSettings(ds: Dataset, company: CompanyInput): void {
   }
 }
 
-function emitCompany(ds: Dataset, company: CompanyInput): void {
+interface FieldSourceRow { source: string; recorded_at?: string; carried_forward?: boolean }
+
+function emitCompany(ds: Dataset, company: CompanyInput, computed?: ComputedKpis, updateFrom?: string): void {
   const today = ds.today;
   // Teams with something to fill (a team whose every group already has real data only
   // contributes its real KPIs to the company snapshots).
@@ -900,7 +997,7 @@ function emitCompany(ds: Dataset, company: CompanyInput): void {
 
   ds.add('pipeline_config', { id: 'demo-pipeline-config', company_id: DEMO_COMPANY_ID, time_savings_percent: 30, cost_savings_percent: 25, cost_per_minute: PIPELINE_COST_PER_MINUTE, created_at: ts(D(400), 12), updated_at: ts(D(400), 12) });
 
-  for (const mi of DEFAULT_METRIC_INTERVALS) {
+  for (const mi of sampleMetricIntervals()) {
     ds.add('metric_update_intervals', {
       id: did('mi', mi.metric_key), company_id: DEMO_COMPANY_ID, metric_key: mi.metric_key,
       interval_value: mi.interval_value, interval_unit: mi.interval_unit, custom_label: mi.custom_label,
@@ -1069,11 +1166,12 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
   // KPI snapshots: one per team per day, today and the previous HISTORY_DAYS days
   // --------------------------------------------------------------------------
   type KpiRow = Record<string, number>;
-  const kpi = new Map<string, KpiRow>(); // `${team}|${date}`
-  const kpiOf = (team: TeamDef, t: number): KpiRow => {
+  // The story's values (the generated model): the targets the sample raw data is shaped by.
+  const synth = new Map<string, KpiRow>(); // `${team}|${date}`
+  const storyOf = (team: TeamDef, t: number): KpiRow => {
     const date = D(t);
     const k = `${team.key}|${date}`;
-    let row = kpi.get(k);
+    let row = synth.get(k);
     if (!row) {
       row = {};
       for (const m of KPI_METRICS) row[m.col] = metricValue(team, m, t, date);
@@ -1083,19 +1181,65 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
         row.sprint_commitment_rate = round((s.delivered / s.committed) * 100, 2);
         row.sprint_carryover = round((s.carryover / s.committed) * 100, 2);
       }
-      kpi.set(k, row);
+      synth.set(k, row);
     }
     return row;
   };
-  const fieldSources = { json: Object.fromEntries(KPI_COLUMNS.map(c => [c, { source: 'synthetic' }])) };
+  // A team's KPIs on a day: what the engine calculated from its sample raw data (the latest value on or before
+  // the day, as the KPI storage carries it forward), for every column it calculates; the story's values for the
+  // rest (automation coverage and ROI: no raw source) and before the first calculated value.
+  const kpi = new Map<string, { row: KpiRow; sources: Record<string, FieldSourceRow> }>();
+  const calcOf = (team: TeamDef) => computed?.get(team.id);
+  const latestOn = (list: Array<{ day: string; value: number; at: string }>, date: string) => {
+    let lo = 0, hi = list.length - 1, found = -1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (list[mid].day <= date) { found = mid; lo = mid + 1; } else hi = mid - 1; }
+    return found >= 0 ? list[found] : null;
+  };
+  const kpiCell = (team: TeamDef, t: number) => {
+    const date = D(t);
+    const k = `${team.key}|${date}`;
+    let cell = kpi.get(k);
+    if (!cell) {
+      const row: KpiRow = { ...storyOf(team, t) };
+      const sources: Record<string, FieldSourceRow> = Object.fromEntries(KPI_COLUMNS.map(c => [c, { source: 'synthetic' }]));
+      const calc = calcOf(team);
+      if (calc) {
+        for (const col of CALCULATED_KPI_COLUMNS) {
+          const v = calc.get(col) ? latestOn(calc.get(col)!, date) : null;
+          if (!v) continue;
+          row[col] = kpiColumnValue(col, v.value);
+          const end = `${date}T23:59:59.999Z`;
+          sources[col] = { source: 'computed', recorded_at: v.at < end ? v.at : end, ...(v.day < date ? { carried_forward: true } : {}) };
+        }
+      }
+      cell = { row, sources };
+      kpi.set(k, cell);
+    }
+    return cell;
+  };
+  const kpiOf = (team: TeamDef, t: number): KpiRow => kpiCell(team, t).row;
+  for (const team of teams) {
+    if (team.groups && !team.groups.has('kpi')) continue;
+    for (let t = HISTORY_DAYS + TARGET_EXTRA_DAYS; t >= 0; t--) {
+      const row = storyOf(team, t);
+      ds.targets.push({ teamId: team.id, date: D(t), values: Object.fromEntries(TARGET_COLUMNS.filter(c => row[c] !== undefined).map(c => [c, row[c]])) });
+    }
+    ds.health.set(team.id, Array.from({ length: HISTORY_DAYS + TARGET_EXTRA_DAYS + 1 }, (_, t) => round(teamHealth(team, t), 3)));
+  }
+  // The calculated columns of the days whose values this run added replace what was carried forward into them.
+  const kpiUpsert: Upsert = {
+    set: [...CALCULATED_KPI_COLUMNS],
+    extra: `field_sources = kpi_snapshots.field_sources || COALESCE((SELECT jsonb_object_agg(e.key, e.value) FROM jsonb_each(EXCLUDED.field_sources) e WHERE e.key = ANY(ARRAY[${CALCULATED_KPI_COLUMNS.map((c) => `'${c}'`).join(', ')}])), '{}'::jsonb)`,
+    where: `kpi_snapshots.id LIKE '${DEMO_PREFIX}%' AND NOT COALESCE(kpi_snapshots.manually_edited, FALSE)`,
+  };
   for (const team of teams) {
     for (let t = HISTORY_DAYS; t >= 0; t--) {
       const date = D(t);
-      const row = kpiOf(team, t);
+      const { row, sources } = kpiCell(team, t);
       ds.add('kpi_snapshots', {
         id: did('kpi', team.key, compact(date)), team_id: team.id, snapshot_date: date,
-        ...row, created_at: ts(date, 0, 5), manually_edited: false, field_sources: fieldSources,
-      }, G(ds, team, 'kpi'));
+        ...row, created_at: ts(date, 0, 5), manually_edited: false, field_sources: { json: sources },
+      }, G(ds, team, 'kpi'), updateFrom && calcOf(team) && date >= updateFrom ? kpiUpsert : undefined);
     }
   }
 
@@ -1688,6 +1832,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
   // Financial and ROI rates (Parameters → Financial and ROI settings) of the sample: the cost of
   // delay below and the Business impact / Technical debt pages use the same values.
   emitSampleFinancialSettings(ds, company);
+  emitSampleIntervals(ds, company);
   for (const team of teams) {
     const cfg = sampleRates(team, company.isDemo);
     const rng = new Rng('debt', team.key);
@@ -1779,7 +1924,8 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       kSeries.push(kpis);
       qualityByTeamMonth.set(`${team.key}|${ym}`, q);
       kpisByTeamMonth.set(`${team.key}|${ym}`, kpis);
-      ds.add('business_impact_quality_metrics', { id: did('biq', team.key, ym), team_id: team.id, month_year: ym, ...q, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) }, gBi);
+      ds.add('business_impact_quality_metrics', { id: did('biq', team.key, ym), team_id: team.id, month_year: ym, ...q, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) }, gBi,
+        updateFrom && calcOf(team) && ym >= monthOf(updateFrom) ? { set: Object.keys(q), where: `business_impact_quality_metrics.id LIKE '${DEMO_PREFIX}%' AND NOT COALESCE(business_impact_quality_metrics.manually_edited, FALSE)` } : undefined);
       ds.add('business_impact_business_kpis', { id: did('bik', team.key, ym), team_id: team.id, month_year: ym, ...kpis, manually_edited: false, data_source: 'synthetic', created_at: ts(`${ym}-01`, 6), updated_at: ts(`${ym}-01`, 6) }, gBi);
       const workingDays = [...Array(daysInMonth(ym))].filter((_, i) => isWeekday(`${ym}-${String(i + 1).padStart(2, '0')}`)).length;
       const deploysPerMonth = q.deployment_frequency;
@@ -1928,6 +2074,8 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
     const health = wellness === null
       ? (delivery * 0.35 + pipeline * 0.25 + debtScore * 0.2) / 0.8
       : delivery * 0.35 + pipeline * 0.25 + debtScore * 0.2 + wellness * 0.2;
+    const companyCols = ['engineering_health_score', 'delivery_performance_score', 'developer_wellness_index', 'tech_debt_status_score', 'pipeline_health_score',
+      'avg_qa_score', 'avg_test_coverage', 'avg_defect_escape_rate', 'avg_flakiness_rate', 'automation_coverage'];
     ds.add('company_kpi_snapshots', {
       id: demoIntId(companyId, date), company_id: companyId, snapshot_date: date,
       engineering_health_score: Math.round(health), delivery_performance_score: Math.round(delivery), developer_wellness_index: wellness === null ? null : Math.round(wellness),
@@ -1935,7 +2083,7 @@ WHERE id = ${literal(l.userId)} AND NOT EXISTS (SELECT 1 FROM teams t WHERE t.id
       avg_test_coverage: round(meanOf(rows.map(k => k.test_coverage)), 1), avg_defect_escape_rate: round(meanOf(rows.map(k => k.defect_escape_rate)), 1),
       avg_flakiness_rate: round(meanOf(rows.map(k => k.test_flakiness_rate)), 1), automation_coverage: round(meanOf(rows.map(k => k.automation_coverage)), 1),
       created_at: ts(date, 0, 10),
-    }, companyGuard);
+    }, companyGuard, updateFrom && date >= updateFrom ? { set: companyCols, where: `company_kpi_snapshots.id >= ${DEMO_INT_ID_MIN}` } : undefined);
   }
 
   // One seeder run record per company (fixed id: inserted once, never duplicated).

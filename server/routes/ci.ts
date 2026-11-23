@@ -214,7 +214,7 @@ router.get('/teams/:id/metrics/:metric', authenticateToken, async (req: AuthRequ
     const reportRows = ids(s.analysisReports).length
       ? await query<any[]>(`SELECT id, tool, repo, branch, commit_sha, analyzed_at, lines_of_code, findings, critical, high, medium, low, info, new_findings, fixed_findings FROM analysis_reports WHERE team_id = ? AND id = ANY(?::text[]) ORDER BY analyzed_at DESC`, [team.id, ids(s.analysisReports)])
       : [];
-    // Sample (demo) raw data: shown as evidence, never written to the KPI storage.
+    // Sample (demo) raw data: the sample KPI snapshots hold these values (server/seeds/demoSeed.ts).
     const sampleSql = delivery
       ? `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM deployments_raw WHERE team_id = ? AND is_sample) OR EXISTS (SELECT 1 FROM incidents_raw WHERE team_id = ? AND is_sample)`
       : group === 'work' ? `SELECT 1 AS x WHERE EXISTS (SELECT 1 FROM issues WHERE team_id = ? AND is_sample) AND NOT EXISTS (SELECT 1 FROM issues WHERE team_id = ? AND NOT is_sample)`
