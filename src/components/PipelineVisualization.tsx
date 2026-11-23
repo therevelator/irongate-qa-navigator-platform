@@ -131,7 +131,7 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ teamId })
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<PipelineConfig | null>(null);
   const [history, setHistory] = useState<PipelineHistoryPoint[]>([]);
-  const [stagesSource, setStagesSource] = useState<'team' | 'company_default' | null>(null);
+  const [stagesSource, setStagesSource] = useState<'team' | 'company_default' | 'ci' | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -226,7 +226,9 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ teamId })
     <Page>
       <PageIntro
         title="CI/CD pipeline"
-        description={`Stage-level duration, success rate and cost${
+        description={stagesSource === 'ci'
+          ? 'Stage-level duration and success rate, calculated from the pipeline runs your CI sent in the last 30 days. Cost per run is the stage duration × the cost per minute set for the company.'
+          : `Stage-level duration, success rate and cost${
           teamId
             ? stagesSource === 'company_default'
               ? '. The selected team has no stages of its own, so the company default pipeline is shown'
@@ -245,7 +247,7 @@ const PipelineVisualization: React.FC<PipelineVisualizationProps> = ({ teamId })
               { header: 'Memory', value: (st) => st.memory },
               { header: 'Cost per run ($)', value: (st) => st.cost },
               { header: 'Bottleneck score', value: (st) => st.bottleneck_score },
-              { header: 'Source', value: () => (stagesSource === 'company_default' ? 'Company default pipeline' : 'Team pipeline') },
+              { header: 'Source', value: () => (stagesSource === 'ci' ? 'Calculated from CI pipeline runs (last 30 days)' : stagesSource === 'company_default' ? 'Company default pipeline' : 'Team pipeline') },
             ]}
           />
         }
@@ -452,7 +454,7 @@ const StageDetailCard: React.FC<StageDetailCardProps> = ({ stage, stageIndex, to
             ['CPU', fmtPct(stage.cpu, 0)],
             ['Memory', fmtPct(stage.memory, 0)],
             ['Cost / run', fmtMoney(stage.cost)],
-          ].map(([k, v]) => (
+          ].filter(([k]) => !((k === 'CPU' && stage.cpu == null) || (k === 'Memory' && stage.memory == null))).map(([k, v]) => (
             <div key={k}>
               <dt className="text-xs text-slate-500 dark:text-slate-400">{k}</dt>
               <dd className={cx('font-medium tabular-nums', k === 'Success' ? `${successTone(stage.success_rate) === 'bad' ? 'text-red-700 dark:text-red-400' : 'text-slate-900 dark:text-white'}` : 'text-slate-900 dark:text-white')}>{v}</dd>

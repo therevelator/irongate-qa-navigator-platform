@@ -28,6 +28,7 @@ import { getFinancialConfig } from '../lib/financialConfig';
 import { correlationSummaryHtml } from '../lib/correlationSummary';
 import { BI_CONTEXT_RANGES, BI_KPI_RANGES, BI_QUALITY_RANGES, DEBT_IMPACT_FIELDS, bulkMonthErrors, dataExceptionMessage, isDataException, parseRangedFields } from '../lib/inputRanges';
 import { markValueSources } from '../lib/businessImpactSources';
+import { rawFlakyTests, rawPipelineHistory, rawPipelineStages, rawTestExecutions, RAW_FLAKY_SCORE_FORMULA } from '../lib/analyticsFromRaw';
 
 /** The monthly Business impact columns of each table (the values whose source is recorded). */
 const BI_QUALITY_COLS = BI_QUALITY_RANGES.map((r) => r.column);
@@ -183,6 +184,10 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
     if (!scope) return;
     const teamId = scope.teamId;
 
+    // The runs the team's CI sent (test_runs), when it sent any; the older module table holds sample data only.
+    const raw = await rawTestExecutions({ companyId, teamId }, numDays);
+    if (raw) return res.json({ executions: raw.executions, source: 'ci', sample: raw.sample });
+
     let sql = `
       SELECT 
         ter.id,
@@ -224,7 +229,7 @@ router.get('/test-executions', authenticateToken, async (req: any, res) => {
       dependencies: typeof e.dependencies === 'string' ? JSON.parse(e.dependencies) : (e.dependencies || [])
     }));
 
-    res.json({ executions: result });
+    res.json({ executions: result, source: 'module', sample: false });
   } catch (error) {
     console.error('Error fetching test executions:', error);
     res.status(500).json({ error: 'Failed to fetch test executions' });
@@ -248,6 +253,11 @@ router.get('/flaky-tests', authenticateToken, async (req: any, res) => {
     const scope = await resolveAnalyticsTeam(req, res, requestedTeamId);
     if (!scope) return;
     const teamId = scope.teamId;
+
+    // The tests that failed and passed on the same commit in the reports the team's CI sent
+    // (flaky_test_evidence), when it sent any; the older module table holds sample data only.
+    const raw = await rawFlakyTests({ companyId, teamId });
+    if (raw) return res.json({ flakyTests: raw.tests, source: 'ci', sample: raw.sample, scoreFormula: RAW_FLAKY_SCORE_FORMULA, windowDays: 30 });
 
     let sql = `
       SELECT 
@@ -760,6 +770,15 @@ router.get('/pipeline-history', authenticateToken, async (req: any, res) => {
       return res.status(404).json({ error: 'Team not found' });
     }
 
+    const units = {
+      runs: 'stage executions',
+      avg_duration_seconds: 'mean stage-execution duration, weighted by executions',
+      failure_rate: 'failed / total stage executions for the day, %'
+    };
+    // The stage executions of the pipeline runs the team's CI sent, when it sent any.
+    const raw = await rawPipelineHistory({ companyId, teamId }, numDays);
+    if (raw) return res.json({ history: raw.history, units, source: 'ci', sample: raw.sample });
+
     let sql = `SELECT 
         to_char(execution_date, 'YYYY-MM-DD') as execution_date,
         SUM(total_runs) as total_runs,
@@ -796,14 +815,7 @@ router.get('/pipeline-history', authenticateToken, async (req: any, res) => {
       };
     });
 
-    res.json({
-      history: results,
-      units: {
-        runs: 'stage executions',
-        avg_duration_seconds: 'mean stage-execution duration, weighted by executions',
-        failure_rate: 'failed / total stage executions for the day, %'
-      }
-    });
+    res.json({ history: results, units, source: 'module', sample: false });
   } catch (error) {
     console.error('Error fetching pipeline history:', error);
     res.status(500).json({ error: 'Failed to fetch pipeline history' });
@@ -828,6 +840,29 @@ router.get('/pipeline-stages', authenticateToken, async (req: any, res) => {
     // Reject team ids that are not in the caller's company.
     if (teamId && !(await getOwnedTeam(req, teamId as string))) {
       return res.status(404).json({ error: 'Team not found' });
+    }
+
+    // The stages of the pipeline runs the team's CI sent (pipeline_stage_runs, last 30 days), when it sent
+    // any: mean duration and success rate per stage, in the order the stages start. CPU, memory and cost
+    // per run are not in CI data and stay empty. These stages are calculated, not editable.
+    const raw = await rawPipelineStages({ companyId, teamId });
+    if (raw) {
+      const costPerMinute = num(toPipelineConfig(config).cost_per_minute);
+      const scores = computeBottleneckScores(raw.stages.map((st) => ({ duration: st.duration, success_rate: st.success_rate }))).results;
+      return res.json({
+        stages: raw.stages.map((st, i) => ({
+          id: st.id, name: st.name, duration: st.duration, success_rate: st.success_rate,
+          resource_usage: { cpu: null, memory: null, cost: st.duration !== null && costPerMinute !== null ? roundTo((st.duration / 60) * costPerMinute, 2) : null },
+          bottleneck_score: scores[i].score, manually_edited: false, updated_at: null,
+          runs: st.runs, failed_runs: st.failed_runs,
+        })),
+        stages_source: 'ci',
+        source: 'ci',
+        sample: raw.sample,
+        window_days: 30,
+        pipeline_runs: raw.pipelineRuns,
+        config: toPipelineConfig(config)
+      });
     }
 
     // One row per stage name: if duplicates exist for the same company/team/name,

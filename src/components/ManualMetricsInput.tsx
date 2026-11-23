@@ -734,7 +734,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   const [fieldSources, setFieldSources] = useState<Record<string, FieldSource>>({});
   const [teamDebtScore, setTeamDebtScore] = useState<number | null>(null);
   const [financialDefaultsUsed, setFinancialDefaultsUsed] = useState<string[]>([]);
-  const [stagesSource, setStagesSource] = useState<'team' | 'company_default' | null>(null);
+  const [stagesSource, setStagesSource] = useState<'team' | 'company_default' | 'ci' | null>(null);
   const [pipelineConfigIsDefault, setPipelineConfigIsDefault] = useState(false);
 
   useEffect(() => {
@@ -876,7 +876,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
           updated_at: s.updated_at ?? null
         }));
         setPipelineStages(stages);
-        setStagesSource(data.stages_source === 'team' || data.stages_source === 'company_default' ? data.stages_source : null);
+        setStagesSource(data.stages_source === 'team' || data.stages_source === 'company_default' || data.stages_source === 'ci' ? data.stages_source : null);
         setPipelineConfigIsDefault(data.config?.is_default === true);
         
         // Also get config from response
@@ -1567,7 +1567,8 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
   // Company-wide values (the pipeline configuration and the company default stages) belong to the
   // super admin (docs/ROLE_ACCESS.md); a manager sees them read-only.
   const canEditCompanyWide = !!user && isCompanyAdmin(policyActorOf(user));
-  const stagesReadOnly = stagesSource !== 'team' && !canEditCompanyWide;
+  // Stages calculated from the pipeline runs the team's CI sent are never edited by hand.
+  const stagesReadOnly = stagesSource === 'ci' || (stagesSource !== 'team' && !canEditCompanyWide);
   if (!user || !canWriteSomeTeamData(policyActorOf(user))) {
     return (
       <Page>
@@ -2372,7 +2373,7 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                       className="mt-3"
                       rows={[
                         ['Statistics', `over the ${pipelineStats.stagesWithDuration} stages with a duration: mean ${fmtNum(pipelineStats.meanDuration, 1)} s, standard deviation ${fmtNum(pipelineStats.stdDev, 1)} s (values in the form)`],
-                        ['Stages', stagesSource === 'team' ? "this team's own stages (pipeline_stages.team_id = team)" : stagesSource === 'company_default' ? 'company default stages (pipeline_stages.team_id is empty): the team has none of its own' : 'not recorded'],
+                        ['Stages', stagesSource === 'ci' ? 'calculated from the pipeline runs the CI sent (pipeline_stage_runs, last 30 days)' : stagesSource === 'team' ? "this team's own stages (pipeline_stages.team_id = team)" : stagesSource === 'company_default' ? 'company default stages (pipeline_stages.team_id is empty): the team has none of its own' : 'not recorded'],
                         ['Computed', 'on read by GET /api/analytics/pipeline-stages with computeBottleneckScores() (server/lib/metricFormulas.ts); the score is recalculated after saving'],
                         ['Colour', 'score > 70 red, > 40 amber, otherwise green (this page)'],
                         ['Used in', 'CI/CD pipeline page (bottleneck badges and stage details)'],
@@ -2590,7 +2591,9 @@ const ManualMetricsInput: React.FC<ManualMetricsInputProps> = ({ onBack }) => {
                 {/* Save Pipeline Button (hidden for company default stages unless super admin) */}
                 {stagesReadOnly ? (
                   <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="pipeline-stages-readonly">
-                    These are the company default stages (this team has none of its own): only a super admin can change them.
+                    {stagesSource === 'ci'
+                      ? 'These stages are calculated from the pipeline runs this team\'s CI sent in the last 30 days. They are not edited by hand.'
+                      : 'These are the company default stages (this team has none of its own): only a super admin can change them.'}
                   </p>
                 ) : <div className="flex justify-end mt-4">
                   <button
