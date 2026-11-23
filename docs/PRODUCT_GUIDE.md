@@ -1242,6 +1242,7 @@ Escape):
   colour on the plain shell, a plain nib, no glass, rims, edges or shadow; the gauge's value arc in the band's flat colour, no gradient,
   highlight, bevel or shadow filter). The liquid wave, where shown, is a flat crest in the same colour in 2D; motion still stops with
   reduced motion. It applies everywhere the score display does, TV mode included. `data-score-depth` on `<html>` and on each visual.
+  In 2D the Overview's Company status top light keeps only its rim (no haze or glow).
 - **Signed-out screens** (sign-in, registration, invitation and password pages) always use the classic Light look (blue brand panel,
   white form), whatever theme is chosen; the chosen theme returns once the person is signed in.
 - The choices are kept in the browser (localStorage `irongate_theme_mode`, `irongate_score_display`, `irongate_battery_style`, `irongate_score_depth`) and applied before the first
@@ -1258,6 +1259,10 @@ Why: the one-page answer to "how is quality across the company, and which teams 
 - **Company status**: the **Global QA score** battery (team-size-weighted, with risk badge, trend vs 7–14 days ago, "based on n of m
   teams", and the distribution: unweighted mean, median, weakest 25 %, minimum), the rule-based summary sentence, "data as of" and the
   oldest team snapshot date.
+  The card is lit from an unseen source above it ("top light", `src/styles/top-light.css`): a thin rim along the top edge and down the
+  left and right edges, brightest at the top corners and fading out going down (no bottom rim), plus a soft haze from the top, in the
+  hero battery's band colour (`topLightRgb()` in `src/lib/batteryScale.ts`). Decorative only (behind the text, not clickable, no
+  animation); softer in the light themes, rim only in flat 2D, and no light without a score. Only this card has it (not TV mode).
 - **Executive gauges** (battery indicators): Engineering health, Delivery (DORA), Wellbeing (survey), Tech debt health, Pipeline
   health, each with its basis ("Excludes … (no data)", "n teams with all 4 DORA inputs", "n of m teams · k responses", "n open of m
   items", "n of m runs passed, 30 days").

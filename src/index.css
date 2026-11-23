@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "./styles/themes.css";
+@import "./styles/top-light.css";
 
 /* Class-based dark mode (applies when .dark is on <html>) */
 @variant dark (&:where(.dark, .dark *));

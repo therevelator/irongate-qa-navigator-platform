@@ -22,8 +22,9 @@ export const PageIntro: React.FC<{ title: string; description?: React.ReactNode;
   </div>
 );
 
-export const Card: React.FC<{ children: React.ReactNode; className?: string; padded?: boolean }> = ({ children, className, padded = true }) => (
+export const Card: React.FC<{ children: React.ReactNode; className?: string; padded?: boolean } & Omit<React.HTMLAttributes<HTMLElement>, 'className' | 'children'>> = ({ children, className, padded = true, ...rest }) => (
   <section
+    {...rest}
     className={cx(
       'rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900',
       padded && 'p-5',

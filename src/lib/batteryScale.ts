@@ -67,6 +67,18 @@ export function batteryBand(value: number | null | undefined): BatteryBand | nul
   return band;
 }
 
+/**
+ * The colour of the Overview hero's top light (src/styles/top-light.css) as an "r g b" triplet for
+ * the --tl custom property: the flat colour of the value's band, so it matches the hero battery.
+ * Null for a missing value: no light, like the battery's empty shell.
+ */
+export function topLightRgb(value: number | null | undefined): string | null {
+  const band = batteryBand(value);
+  if (!band) return null;
+  const n = parseInt(band.flat.slice(1), 16);
+  return `${(n >> 16) & 255} ${(n >> 8) & 255} ${n & 255}`;
+}
+
 /** WCAG relative luminance of a #rrggbb colour. */
 export function relativeLuminance(hex: string): number {
   const n = parseInt(hex.replace('#', ''), 16);
