@@ -130,12 +130,16 @@ describe('Pulse recipients: team members only', () => {
 
   it('PSTK-005: the pending-survey banner never asks the stakeholder (an engineer who has not answered is asked)', async () => {
     if (!up) return;
-    // The survey went out long enough ago for the banner.
-    await db.query(`UPDATE pulse_sends SET created_at = now() - interval '4 days' WHERE team_id = $1`, [T]);
-    await db.query(`UPDATE pulse_recipients SET first_sent_at = now() - interval '4 days' WHERE team_id = $1`, [T]).catch(() => undefined);
+    // The survey went out on the first day of the current period, and "today" is 4 days later (still inside the
+    // period, whatever the weekday the test runs on), long enough ago for the banner.
+    const { period } = await sendStatus(team);
+    const day = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+    const today = day(period.start, 4) < period.end ? day(period.start, 4) : day(period.end, -1);
+    await db.query(`UPDATE pulse_sends SET created_at = $2::date + interval '9 hours' WHERE team_id = $1`, [T, period.start]);
+    await db.query(`UPDATE pulse_recipients SET first_sent_at = $2::date + interval '9 hours' WHERE team_id = $1`, [T, period.start]).catch(() => undefined);
     const actor = async (id: string, role: string) => ({ id, role, grants: await loadGrants(CO, id) });
-    const eng = await pendingSurveysFor(await actor('pstk-e1', 'qa_engineer') as any, CO);
-    const stake = await pendingSurveysFor(await actor(STAKEHOLDER, 'viewer') as any, CO);
+    const eng = await pendingSurveysFor(await actor('pstk-e1', 'qa_engineer') as any, CO, today);
+    const stake = await pendingSurveysFor(await actor(STAKEHOLDER, 'viewer') as any, CO, today);
     expect(stake).toEqual([]);
     expect(eng.map((p) => p.teamId)).toEqual([T]);
   });
