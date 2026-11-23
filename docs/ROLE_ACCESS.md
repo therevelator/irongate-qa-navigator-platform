@@ -47,8 +47,8 @@ or a manager of two departments); their access is the union. Data never crosses 
   the wellbeing pulse of their teams. Can update the status of a tracked action they own.
 - **Viewer** (Product Owner, stakeholder, auditor). Sees the teams they are assigned to, read-only, and nothing of other
   teams. A viewer of one team (for example Olivia Grant, Product Owner of Payments Core) sees that team on the overview,
-  its team detail, TV mode, Compare (that team only) and the Analytics modules; any other team's page and API answer
-  403.
+  its team detail, TV mode and the Analytics modules; any other team's page and API answer 403. Compare teams is not
+  offered to anyone with a single team (nothing to compare); a team lead, software engineer or viewer on two or more teams has it.
 
 ## Demo sandbox visitors (/try)
 
@@ -114,7 +114,7 @@ API answers 403; a typed address opens the overview with "You don't have access 
 | TV mode (`/tv?team=`, team picker, rotation through the teams of the scope; team figures, open alerts, wellbeing pulse with the 3-response minimum) | any team | scope | scope | scope | scope |
 | Executive summary (`/summary`, `GET /api/summary`: QA score, risks, most improved, alerts, last week's changes) | company | their departments | their teams | their teams | their teams |
 | Executive summary: money at risk (the revenue roll-up of the scope) | company | their departments | — | — | — |
-| Compare teams | 2–4 teams of the company | of scope | of scope | of scope | of scope |
+| Compare teams (only with 2+ teams in scope) | 2–4 teams of the company | of scope | of scope, if on 2+ teams | of scope, if on 2+ teams | of scope, if on 2+ teams |
 | Analytics: Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline | any team | scope | scope | scope | scope |
 | Analytics: Developer productivity | rows of opted-in people | same, in scope | same, in scope | own row, team averages (≥ 3) | own row, team averages (≥ 3) |
 | Analytics: Team rankings | teams of the company (by department) | scope | scope | scope | scope |
@@ -255,7 +255,8 @@ The navigation drawer and the Analytics hub show only the pages the person may o
 |---|---|
 | Overview, Notifications (bell), TV mode (for the teams in scope) | everyone |
 | Executive summary | super admins, managers (the address opens for every role with a team in scope, for that scope) |
-| Analytics and its modules, Compare teams | everyone with at least one team in scope |
+| Analytics and its modules | everyone with at least one team in scope |
+| Compare teams | super admins, managers, and anyone assigned to two or more teams (`canCompareTeams`: nothing to compare with one team) |
 | Users, Teams | super admins, managers, team leads |
 | Departments, User activity | super admins |
 | Activity, Ingestion log, Admin console, Update frequency, Parameters | super admins, managers |

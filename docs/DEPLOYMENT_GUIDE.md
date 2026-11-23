@@ -61,11 +61,12 @@ Netlify functions on Netlify:
 | Function | Schedule (UTC) | What it does |
 |---|---|---|
 | `api` | every `/api/*` request | the Express app |
-| `alerts-evaluate` | hourly at :15 | alert evaluation, action outcomes, notifications; then forecasts and recommendations of due teams |
+| `alerts-evaluate` | hourly at :15 | starts `calc-drain-background` for companies whose queued calculations wait (safety net); alert evaluation, action outcomes, notifications; then forecasts and recommendations of due teams |
 | `weekly-digest` | Monday 07:00 | weekly digest e-mails |
 | `pulse-auto-send` | hourly at :40 | automatic wellbeing pulse e-mails per team cadence |
 | `calc-recompute` | daily 03:41 | recalculates the last days of metrics from raw data |
-| `db-keepalive` | 06:00 and 18:00 | keeps the database awake; retention cleanup (logs, sessions, sign-in events, raw payloads) |
+| `db-keepalive` | 06:00 and 18:00 | keeps the database awake; retention cleanup (logs, sessions, sign-in events, raw payloads, done calculation-queue entries); the same safety net as `alerts-evaluate` |
+| `calc-drain-background` | on demand | the calculation queue (`server/lib/calc/queue.ts`, table `calc_queue`): an ingestion request stores the raw records and queues the affected days; this function (up to 15 minutes, started with a signed token by the request, by itself when work remains, and by the safety net) recalculates them in chunks. Outcome in Scheduled jobs (`calc-queue`) |
 | `demo-refresh` | daily 02:17 | starts `demo-refresh-background`, which adds the missing recent days of sample data (never real data) |
 | `demo-data-background` | on demand | the operator's Demo Data and Populate metrics jobs (up to 15 minutes) |
 | `sandbox-reset` | daily 02:47 | starts `sandbox-reset-background`, which rebuilds the demo sandbox behind `/try` (section 8) |

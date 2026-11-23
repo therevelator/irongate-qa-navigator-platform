@@ -44,7 +44,7 @@ test.describe('Navigation per role', { tag: [TAG.area('navigation')] }, () => {
         await expect(page.getByTestId('access-denied')).toHaveCount(0);
         await page.goto(forbidden[0].path);
         await expect(page.getByTestId('access-denied')).toBeVisible();
-        await app.go('nav-compare', 'Compare teams');
+        await app.go('nav-technical-debt', 'Technical debt');
         await app.go('nav-dashboard', 'Overview');
         await expect(page.getByTestId('access-denied')).toHaveCount(0);
       });
@@ -151,7 +151,8 @@ test.describe('Routes, history and the navigation drawer', { tag: [TAG.area('nav
   });
 
   test('NAV-17 the brand button returns to the overview from any page', async ({ signInAs, page, app }) => {
-    await signInAs('lead', '/compare');
+    await signInAs('manager', '/compare');
+    await expect(app.title).toHaveText('Compare teams');
     await page.getByRole('button', { name: 'QE Navigator, go to overview' }).click();
     await expect(app.title).toHaveText('Overview');
   });

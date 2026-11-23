@@ -26,7 +26,7 @@ import { API_KEY_PREFIX, authenticateApiKey, ApiKeyRequest } from '../middleware
 import { exporterVersionOf, hostLabelOf, keyPrefixOf, recordDelivery, storedCount } from '../lib/exporterDeliveries';
 import { ingestLimiter } from '../middleware/rateLimit';
 import { KpiValidationError, normaliseIdempotencyKey } from '../lib/kpiIngest';
-import { agentClient, findReplay, logRejected, requestHash, sendReplay, type IngestCaller } from '../lib/ingestionLog';
+import { agentClient, findReplay, logRejected, prefetchReplays, requestHash, sendReplay, type IngestCaller } from '../lib/ingestionLog';
 import { BodyError, maybeGunzip, readBody, MAX_UPLOAD_BYTES } from '../lib/ingest/body';
 import { invokeHandler, type IngestHandler } from '../lib/ingest/invoke';
 import {
@@ -37,6 +37,7 @@ import { rawIngestHandler, summaryItem, text } from './ingestRaw';
 import { deliveryIngestHandler } from './ingestDelivery';
 import { handleIssues, handleStaticAnalysis } from './ingestWork';
 import { handleKpis } from './ingest';
+import { triggerCalcDrain, type CalcSink } from '../lib/calc/queue';
 
 const router = express.Router();
 
@@ -176,7 +177,12 @@ router.post('/exporter/batch', ingestLimiter, batchAuth, async (req: ApiKeyReque
     await checkIds(base.companyId, env);
     idsOk = true;
     const subs = submissionsOf(env);
-    const caller: IngestCaller = { ...base, teamScope: new Set([env.teamId]) };
+    // The parts report a queued calculation here; the batch then starts one drain (server/lib/calc/queue.ts).
+    const sink: CalcSink = { queued: false };
+    // The team was checked above (active, in the department, of the key's company); a re-sent batch's parts are read
+    // in one query. Neither is read again by the handlers (each read is a round trip, ~80 ms in production).
+    const replayCache = key && !dryRun ? await prefetchReplays(base, subs.map((_s, i) => partKey(key!, i))) : null;
+    const caller: IngestCaller = { ...base, teamScope: new Set([env.teamId]), calcSink: sink, verifiedTeams: new Map([[env.teamId, env.departmentId]]), replayCache };
     const ids = { companyId: env.companyId, departmentId: env.departmentId, teamId: env.teamId, source: env.source, kind: env.kind };
 
     // 1. Every part checked by its handler first (a dry run that writes nothing, not even a log row).
@@ -210,8 +216,12 @@ router.post('/exporter/batch', ingestLimiter, batchAuth, async (req: ApiKeyReque
     const http = failed ? (failed === items.length ? Math.max(...items.map((x) => x.httpStatus)) : 207) : written ? 201 : 200;
     const stored = items.filter((x) => x.status === 'written' && !x.replayed).reduce((n, x) => n + storedCount(x.result), 0);
     const firstError = items.find((x) => x.status === 'rejected')?.result?.error;
+    // The metrics: calculated in the background when the parts queued them (Netlify), else already calculated.
+    const queued = items.some((x) => x.result?.calculation === 'queued');
+    if (sink.queued) await triggerCalcDrain(base.companyId).catch(() => undefined);
+    const calculation = queued || sink.queued ? 'queued' : written ? 'done' : 'none';
     await delivery(status, http, { recordsStored: stored, ...(failed ? { reasonCode: 'item_refused', reason: String(firstError ?? 'refused') } : status === 'duplicate' ? { reasonCode: 'duplicate' } : {}) });
-    return res.status(http).json({ status, ...ids, written, duplicate: items.filter((x) => x.status === 'duplicate').length, rejected: failed, recordsStored: stored, items });
+    return res.status(http).json({ status, ...ids, written, duplicate: items.filter((x) => x.status === 'duplicate').length, rejected: failed, recordsStored: stored, calculation, items });
   } catch (e) {
     if (e instanceof EnvelopeError || e instanceof BodyError) {
       return reject(e.status, e.message, e instanceof EnvelopeError && e.details.length ? { details: e.details } : {});

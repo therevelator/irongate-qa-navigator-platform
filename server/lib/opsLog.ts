@@ -132,7 +132,7 @@ onRequestEnd((req, res, ctx) => {
 });
 
 /** Scheduled job names (Netlify functions; the long-running server's crons use the same names). */
-export const JOB_NAMES = ['alerts-evaluate', 'weekly-digest', 'pulse-auto-send', 'db-keepalive', 'demo-refresh', 'demo-refresh-background', 'demo-data', 'calc-recompute', 'sandbox-reset', 'sandbox-reset-background'] as const;
+export const JOB_NAMES = ['alerts-evaluate', 'weekly-digest', 'pulse-auto-send', 'db-keepalive', 'demo-refresh', 'demo-refresh-background', 'demo-data', 'calc-recompute', 'calc-queue', 'sandbox-reset', 'sandbox-reset-background'] as const;
 export type JobName = typeof JOB_NAMES[number];
 
 /**

@@ -25,6 +25,7 @@
  * Evidence follows the analytics scope (the same rule as the KPI history).
  */
 import express from 'express';
+import { calcStatusByTeam } from '../lib/calc/queue';
 import { pool, query, queryOne } from '../../src/lib/db';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { assertTeamAnalytics, policyActor } from '../middleware/access';
@@ -276,9 +277,12 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
     const beats = await query<any[]>(
       `SELECT h.api_key_id, k.name AS key_name, k.revoked_at, h.exporter_version, h.sources, h.details, h.first_seen, h.last_seen, h.beats
          FROM exporter_heartbeats h LEFT JOIN api_keys k ON k.id = h.api_key_id WHERE h.company_id = ? ORDER BY h.last_seen DESC LIMIT 20`, [companyId]).catch(() => [] as any[]);
+    // Calculations queued in the background (server/lib/calc/queue.ts): "calculation pending" per team.
+    const calc = await calcStatusByTeam(companyId);
     res.json({
       companyId,
       activeKeys: keys[0]?.n ?? 0,
+      calculationPending: [...calc.values()].filter((c) => c.pending).length,
       rejectedLast7Days: rejected[0]?.n ?? 0,
       exporters: beats.map((b: any) => ({
         apiKeyName: b.key_name ?? null, keyRevoked: !!b.revoked_at, version: b.exporter_version,
@@ -296,6 +300,7 @@ router.get('/status', authenticateToken, async (req: AuthRequest, res) => {
         return {
           id: t.id, name: t.name, department: t.department_name, departmentId: t.department_id, mainBranch: t.main_branch, tests: of('tests'), coverage: of('coverage'), pipelines: of('pipelines'),
           deployments: of('deployments'), commits: of('commits'), incidents: of('incidents'), issues: of('issues'), staticAnalysis: of('static-analysis'),
+          calculation: calc.get(t.id) ?? { pending: false, from: null, to: null, since: null, failed: 0 },
         };
       }),
     });

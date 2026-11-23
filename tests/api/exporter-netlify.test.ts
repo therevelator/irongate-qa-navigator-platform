@@ -5,6 +5,8 @@
  *   EXN-001  context, a gzipped (base64) batch accepted into the named team, and a foreign companyId refused (403)
  *   EXN-002  how Netlify really delivers gzip: labelled application/gzip it arrives base64 and is accepted; labelled
  *            application/json it arrives as broken text and gets a 400 that says to use application/gzip
+ *   EXN-003  on Netlify the batch is stored and its calculation queued, not run in the request (calculation "queued",
+ *            no evidence yet); the background function calc-drain-background then calculates it
  */
 import { gzipSync } from 'zlib';
 import type { Client } from 'pg';
@@ -78,5 +80,28 @@ describe('Exporter envelope through the Netlify function', () => {
     const broken = await handler(textEvent, {});
     expect(broken.statusCode).toBe(400);
     expect(JSON.parse(broken.body).error).toMatch(/application\/gzip/);
+  });
+
+  it('EXN-003 the batch does not calculate in the request on Netlify; the background function does', async () => {
+    if (!up) return;
+    const auth = { authorization: `Bearer ${apiKey}` };
+    await db.query(`DELETE FROM metric_evidence WHERE team_id = 'golden-team-empty'`);
+    const env = {
+      companyId: GOLDEN_COMPANY, departmentId: 'golden-dept-b', teamId: 'golden-team-empty', source: 'github', kind: 'pipeline-runs',
+      items: [0, 1, 2].map((i) => ({ id: `exn-3-${i}`, attempt: 1, name: 'ci', commit: `eeee03${i}`, branch: 'main', startedAt: at(3 - i), finishedAt: at(2.99 - i), result: i ? 'success' : 'failure', stages: [] })),
+    };
+    const r = await handler(event('POST', '/api/ingest/exporter/batch', { ...auth, 'content-type': 'application/json' }, JSON.stringify(env)), {});
+    expect(r.statusCode).toBe(201);
+    expect(JSON.parse(r.body)).toMatchObject({ status: 'accepted', recordsStored: 3, calculation: 'queued' });
+    expect((await db.query(`SELECT COUNT(*)::int AS n FROM metric_evidence WHERE team_id = 'golden-team-empty'`)).rows[0].n).toBe(0);
+    expect((await db.query(`SELECT COUNT(*)::int AS n FROM calc_queue WHERE team_id = 'golden-team-empty' AND status = 'pending'`)).rows[0].n).toBeGreaterThan(0);
+    const { default: background } = await import('../../netlify/functions/calc-drain-background');
+    const { CALC_DRAIN_HEADER, calcDrainToken } = await import('../../server/lib/calc/queue');
+    await (background as any)(new Request('https://example.test/.netlify/functions/calc-drain-background', {
+      method: 'POST', headers: { [CALC_DRAIN_HEADER]: calcDrainToken()!, 'content-type': 'application/json' }, body: JSON.stringify({ companyId: GOLDEN_COMPANY }),
+    }));
+    expect((await db.query(`SELECT COUNT(*)::int AS n FROM calc_queue WHERE team_id = 'golden-team-empty' AND status <> 'done'`)).rows[0].n).toBe(0);
+    const rate = (await db.query(`SELECT value::float8 AS v FROM metric_evidence WHERE team_id = 'golden-team-empty' AND metric_key = 'pipeline_success_rate' AND day = $1::date`, [at(3).slice(0, 10)])).rows;
+    expect(rate.length).toBe(1);
   });
 });

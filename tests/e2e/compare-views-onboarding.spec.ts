@@ -40,10 +40,12 @@ test.describe('Compare teams, saved views, CSV export, onboarding', { tag: ['@ar
     await setupAuth(page, 'qa_engineer');
     const scope = await (await page.request.get(`${API}/api/analytics/scope`)).json();
     await page.goto(`${APP}/compare`);
-    await expect(page.locator('[data-testid="compare-teams"]')).toBeVisible();
     if ((scope.teams ?? []).length < 2) {
-      await expect(page.getByText('Not enough teams to compare')).toBeVisible();
+      // One team: Compare teams is not offered (src/lib/viewAccess.ts canCompareTeams); the address opens the overview.
+      await expect(page.getByTestId('access-denied')).toContainText("You don't have access to Compare teams.");
+      await expect(page.locator('[data-testid="compare-teams"]')).toHaveCount(0);
     } else {
+      await expect(page.locator('[data-testid="compare-teams"]')).toBeVisible();
       for (const chip of await page.locator('[data-testid="compare-chip"]').allTextContents()) {
         expect(scope.teams.some((t: any) => chip.includes(t.name.slice(0, 10)))).toBe(true);
       }

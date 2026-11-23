@@ -4,7 +4,7 @@ import {
   grantsOf, isCompanyAdmin, ledTeamIds, managedDepartmentIds, DEVELOPER_INSIGHT_ROLES, type PolicyActor,
 } from '../../server/lib/userPolicy';
 import { ROLE_LABELS } from '../../server/lib/roleLabels';
-import { canUseAnalytics } from './viewAccess';
+import { canCompareTeams, canUseAnalytics } from './viewAccess';
 
 /**
  * "What you can do here" (the help button in the top bar): the signed-in person's roles and
@@ -50,7 +50,8 @@ export function accessSummary(actor: PolicyActor, assignments: AssignmentLike[],
   const cannot: string[] = [];
   const add = (allowed: boolean, yes: string, no?: string) => { if (allowed) can.push(yes); else if (no) cannot.push(no); };
 
-  add(analytics, 'Open the overview, team dashboards, TV mode, Compare teams and the Analytics modules for the teams in your scope, with their targets and trends.');
+  // Compare teams only for someone with two or more teams to compare (canCompareTeams), as in the navigation.
+  add(analytics, `Open the overview, team dashboards, ${canCompareTeams(actor) ? 'TV mode, Compare teams' : 'TV mode'} and the Analytics modules for the teams in your scope, with their targets and trends.`);
   add(analytics, 'See wellbeing pulse results (team averages of at least 3 answers) and alerts and tracked actions of your teams.');
   if (assignments.some((a) => a.scopeType === 'team')) can.push('Answer the wellbeing pulse of the teams you belong to (anonymously).');
   const seesOthers = grantsOf(actor).some((g) => DEVELOPER_INSIGHT_ROLES.includes(g.role));

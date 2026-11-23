@@ -3,6 +3,7 @@ import { DEMO } from '../support/roles';
 import { API_URL } from '../support/env';
 import { uid } from '../support/ids';
 import { sql } from '../support/db';
+import { createFixtureUser, deleteFixtureUser } from '../support/data';
 import type { Page } from '@playwright/test';
 
 /**
@@ -57,10 +58,44 @@ test.describe('Compare teams', { tag: [TAG.area('compare')] }, () => {
     expect(await chips(page).count()).toBeLessThanOrEqual(4);
   });
 
-  test('CMP-03 a team outside the scope in the address is not compared', { tag: [TAG.negative, TAG.role('engineer')] }, async ({ signInAs, page }) => {
-    await signInAs('engineer', `/compare?teams=${DEMO.engineerTeam.id},${DEMO.otherTeam.id}`);
-    await expect(page.getByTestId('compare-teams')).toBeVisible();
-    await expect(page.getByTestId('compare-team-card').filter({ hasText: DEMO.otherTeam.name })).toHaveCount(0);
+  test('CMP-03 a software engineer on one team is not offered Compare teams: not in the navigation, the address is refused', { tag: [TAG.negative, TAG.role('engineer')] }, async ({ signInAs, page, app }) => {
+    // engineer@ has one team (DEMO.engineerTeam): nothing to compare (src/lib/viewAccess.ts canCompareTeams).
+    await signInAs('engineer');
+    await expect.poll(() => app.navItems()).not.toContain('nav-compare');
+    await page.goto(`/compare?teams=${DEMO.engineerTeam.id},${DEMO.otherTeam.id}`);
+    await expect(page.getByTestId('dashboard')).toBeVisible();
+    await expect(app.title).toHaveText('Overview');
+    await expect(page.getByTestId('access-denied')).toContainText("You don't have access to Compare teams.");
+    await expect(page.getByTestId('compare-teams')).toHaveCount(0);
+  });
+
+  test('CMP-03b an engineer on two teams compares them; a team outside the scope in the address is not compared', { tag: [TAG.negative, TAG.role('engineer')] }, async ({ signInAs, page, app }) => {
+    // A software engineer shared by two teams (engineer's team and the lead's team) keeps Compare teams,
+    // and the address cannot widen the team scope.
+    const user = await createFixtureUser({ teamId: DEMO.engineerTeam.id });
+    try {
+      await sql(`INSERT INTO role_assignments (id, company_id, user_id, role, scope_type, scope_id) VALUES ($1, $2, $3, 'qa_engineer', 'team', $4)`,
+        [`${user.id}-ra2`, DEMO.companyId, user.id, DEMO.leadTeam.id]);
+      await signInAs(user);
+      await expect.poll(() => app.navItems()).toContain('nav-compare');
+      await page.goto(`/compare?teams=${DEMO.engineerTeam.id},${DEMO.otherTeam.id}`);
+      await expect(app.title).toHaveText('Compare teams');
+      await expect(page.getByTestId('compare-teams')).toBeVisible();
+      // The team outside the scope is dropped from the address; only the engineer's own team stays chosen.
+      await expect(chips(page)).toHaveCount(1);
+      await expect(chips(page).filter({ hasText: DEMO.engineerTeam.name })).toHaveCount(1);
+      await expect(page.getByTestId('compare-add').locator('option', { hasText: DEMO.otherTeam.name })).toHaveCount(0);
+      // The engineer's second team can be added: both are compared, never the outside team.
+      await page.getByTestId('compare-add').selectOption(DEMO.leadTeam.id);
+      await expect(page.getByTestId('compare-team-card')).toHaveCount(2);
+      await expect(page.getByTestId('compare-team-card').filter({ hasText: DEMO.otherTeam.name })).toHaveCount(0);
+      const res = await page.request.get(`${API_URL}/compare/teams?ids=${DEMO.engineerTeam.id},${DEMO.otherTeam.id}`);
+      expect(res.status()).toBe(403);
+      const ok = await page.request.get(`${API_URL}/compare/teams?ids=${DEMO.engineerTeam.id},${DEMO.leadTeam.id}`);
+      expect(ok.status()).toBe(200);
+    } finally {
+      await deleteFixtureUser(user.id);
+    }
   });
 
   test('CMP-04 a failed comparison request shows a message', { tag: [TAG.negative] }, async ({ signInAs, page }) => {

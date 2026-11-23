@@ -30,10 +30,11 @@ import { insertUpload, sha256 } from '../lib/ingest/store';
 import { ISSUE_FORMATS, detectIssueFormat, parseIssueBody, type IssueEvent, type IssueFormat, type SprintRef } from '../lib/ingest/issueEvents';
 import { looksLikeSarif, parseSarif, severityCounts, STATIC_ANALYSIS_FORMATS, type ParsedAnalysis } from '../lib/ingest/sarif';
 import { storeAnalysis, storeIssues, storeSprints, type StoredIssue } from '../lib/ingest/workStore';
-import { recomputeTeamDays, type DayResult } from '../lib/calc/engine';
+import type { DayResult } from '../lib/calc/engine';
+import { calcOrQueue } from '../lib/calc/queue';
 import { workAffectedDays } from '../lib/calc/work';
 import { qualityAffectedDays } from '../lib/calc/quality';
-import { HttpError, actorOf, after, callerOf, checkTime, commonFields, computedOut, fail, noAccess, outOfScope, readInput, summaryItem, teamOwned, text } from './ingestRaw';
+import { HttpError, actorOf, after, afterCommit, callerOf, checkTime, commonFields, computedOut, fail, noAccess, outOfScope, readInput, summaryItem, teamOwned, text } from './ingestRaw';
 import { applyIssueAllowList, minimisedIssuePayload, storeTitlesOf } from '../lib/ingest/minimiseStore';
 
 const router = express.Router();
@@ -111,7 +112,7 @@ export async function handleIssues(req: ApiKeyRequest, res: express.Response) {
     // Field allow-list (server/lib/ingest/fieldAllowList.ts): only allowed issue fields are stored.
     const storeTitles = await storeTitlesOf(caller.companyId);
     applyIssueAllowList(parsed.issues, storeTitles);
-    if (defTeam && (!(await teamOwned(caller.companyId, defTeam)) || outOfScope(caller, [defTeam]).length)) throw new HttpError(403, noAccess(caller, [defTeam]));
+    if (defTeam && (!(await teamOwned(caller.companyId, defTeam, caller)) || outOfScope(caller, [defTeam]).length)) throw new HttpError(403, noAccess(caller, [defTeam]));
     const teamOf = await resolveTeams(caller.companyId, parsed.issues);
     const teams = Array.from(new Set([...teamOf.values(), ...(parsed.issues.length === 0 && defTeam ? [defTeam] : [])]));
     if (!teams.length && parsed.sprints.length) throw new HttpError(400, 'team is required for sprints sent without issues (query parameter team)');
@@ -177,10 +178,13 @@ export async function handleIssues(req: ApiKeyRequest, res: express.Response) {
       const stored: StoredIssue[] = await storeIssues(client, caller.companyId, parsed.issues, (e) => teamOf.get(e)!, uploadOf);
       const computed: Array<{ team: string; days: DayResult[] }> = [];
       const items: ItemSummary[] = [];
+      let queued = false;
       for (const t of teams) {
         const changed = stored.filter((s) => s.team === t && s.status !== 'duplicate');
         const days = workAffectedDays([...changed.flatMap((s) => s.days), ...(sprintDays.get(t) ?? [])]);
-        const result = days.length ? await recomputeTeamDays(client, t, days, { groups: ['work'], ingestionId, actorId: actorOf(caller) }) : [];
+        const calc = await calcOrQueue(client, caller.companyId, t, days, { groups: ['work'], ingestionId, actorId: actorOf(caller) });
+        queued ||= calc.queued;
+        const result = calc.days;
         computed.push({ team: t, days: result });
         const any = changed.length > 0 || (sprintDays.get(t) ?? []).length > 0;
         if (!any && uploads.get(t)?.fresh) await client.query('DELETE FROM raw_uploads WHERE id = $1', [uploads.get(t)!.id]);
@@ -198,12 +202,14 @@ export async function handleIssues(req: ApiKeyRequest, res: express.Response) {
           issues: stored.map((s) => ({ key: s.key, team: s.team, status: s.status })), sprints: sprintChanges,
           ...(parsed.ignored.length ? { ignored: parsed.ignored } : {}),
           computed: computed.map((c) => ({ team: c.team, days: computedOut(c.days.filter((d) => d.day >= recent)), daysRecalculated: c.days.length })).filter((c) => c.daysRecalculated),
+          ...(queued ? { calculation: 'queued' } : {}),
           ...(anyWritten ? {} : { message: 'These issues were already received; nothing changed.' }),
         },
         items, errors: [], teamIds: teams, valueCount: stored.filter((s) => s.status !== 'duplicate').length, source: src,
       };
     });
     if ('replay' in outcome) return sendReplay(res, outcome.replay, hash);
+    await afterCommit(caller, outcome.outcome);
     for (const item of outcome.outcome.items) if (item.teamId) await after(caller.companyId, item.teamId, [item]);
     return res.status(outcome.outcome.httpStatus).json(outcome.outcome.response);
   } catch (e) {
@@ -232,7 +238,7 @@ export async function handleStaticAnalysis(req: ApiKeyRequest, res: express.Resp
     try { probe = JSON.parse(content); } catch { probe = null; }
     if (!looksLikeSarif(probe)) throw new HttpError(415, 'Unrecognised static-analysis format. Supported: sarif (SARIF 2.1.0 JSON: {"version": "2.1.0", "runs": [...]})', { supported: STATIC_ANALYSIS_FORMATS });
     source = 'static-analysis (sarif)';
-    if (!(await teamOwned(caller.companyId, c.teamId)) || outOfScope(caller, [c.teamId]).length) throw new HttpError(403, noAccess(caller, [c.teamId]));
+    if (!(await teamOwned(caller.companyId, c.teamId, caller)) || outOfScope(caller, [c.teamId]).length) throw new HttpError(403, noAccess(caller, [c.teamId]));
     const t0 = Date.now();
     let reports: ParsedAnalysis[];
     try { reports = parseSarif(content); } catch (e) { if (e instanceof ReportError) throw new HttpError(400, e.message); throw e; }
@@ -284,15 +290,17 @@ export async function handleStaticAnalysis(req: ApiKeyRequest, res: express.Resp
         days.push(s.day);
         out.push({ id: s.reportId, tool: r.tool, toolVersion: r.toolVersion, findings: r.findings.length, bySeverity: severityCounts(r.findings), suppressed: r.suppressed, rules: r.rules, newFindings: s.newFindings, fixedFindings: s.fixedFindings, duplicate: s.duplicate });
       }
-      const result = await recomputeTeamDays(client, c.teamId, qualityAffectedDays(days), { groups: ['quality'], ingestionId, actorId: actorOf(caller) });
+      const calc = await calcOrQueue(client, caller.companyId, c.teamId, qualityAffectedDays(days), { groups: ['quality'], ingestionId, actorId: actorOf(caller) });
+      const result = calc.days;
       items[0].metrics = Array.from(new Set(result.flatMap((d) => d.metrics.filter((m) => m.written).map((m) => m.kpi as string))));
       return {
         status: 'accepted', httpStatus: 201,
-        response: { status: 'accepted', kind: 'static-analysis', format: 'sarif', uploadId: up.id, repo, branch, commit, parseMs, reports: out, computed: computedOut(result) },
+        response: { status: 'accepted', kind: 'static-analysis', format: 'sarif', uploadId: up.id, repo, branch, commit, parseMs, reports: out, computed: computedOut(result), ...(calc.queued ? { calculation: 'queued' } : {}) },
         items, errors: [], teamIds: [c.teamId], valueCount: reports.reduce((n, r) => n + r.findings.length, 0), source: src,
       };
     });
     if ('replay' in outcome) return sendReplay(res, outcome.replay, hash);
+    await afterCommit(caller, outcome.outcome);
     await after(caller.companyId, c.teamId, outcome.outcome.items);
     return res.status(outcome.outcome.httpStatus).json(outcome.outcome.response);
   } catch (e) {

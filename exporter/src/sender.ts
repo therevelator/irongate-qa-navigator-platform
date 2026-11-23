@@ -27,18 +27,21 @@ export interface Envelope { companyId: string; departmentId: string; teamId: str
 /**
  * Items and uncompressed bytes per envelope, below what QE Navigator takes for each kind, and small enough that one
  * request makes QE Navigator recalculate only a few weeks (items are sent oldest first): a long backfill becomes many
- * short requests rather than a few long ones.
+ * short requests rather than a few long ones. QE Navigator stores each report file of a batch in its own transaction
+ * (about 9 database round trips each) and may answer within 10 seconds only (a hosted plan's limit), so file kinds
+ * (test reports, coverage, SARIF) and KPI value sets go a few per envelope; event kinds are stored with multi-row
+ * statements and are not limited by that (earlier releases sent up to 25 files and 100 KPI sets per envelope).
  */
 export const LIMITS: Record<EnvelopeKind, { items: number; bytes: number }> = {
-  'test-report': { items: 25, bytes: 15 * 1024 * 1024 },
-  coverage: { items: 25, bytes: 15 * 1024 * 1024 },
-  sarif: { items: 25, bytes: 15 * 1024 * 1024 },
+  'test-report': { items: 5, bytes: 15 * 1024 * 1024 },
+  coverage: { items: 5, bytes: 15 * 1024 * 1024 },
+  sarif: { items: 5, bytes: 15 * 1024 * 1024 },
   'pipeline-runs': { items: 100, bytes: 900 * 1024 },
   deployments: { items: 100, bytes: 4.5 * 1024 * 1024 },
   commits: { items: 200, bytes: 4.5 * 1024 * 1024 },
   incidents: { items: 50, bytes: 4.5 * 1024 * 1024 },
   issues: { items: 25, bytes: 9 * 1024 * 1024 },
-  kpis: { items: 100, bytes: 1024 * 1024 },
+  kpis: { items: 10, bytes: 1024 * 1024 },
 };
 
 export interface Part { id: string; fp: string; item: Record<string, unknown> }

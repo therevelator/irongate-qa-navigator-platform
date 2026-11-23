@@ -1,6 +1,6 @@
 # Manual test cases
 
-474 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
+475 manual test cases, one for each automated UI test in `tests/e2e`. The same cases, with columns to record results, are in `MANUAL_TEST_CASES.xlsx`.
 
 Environment: run the app locally (`npm run dev`, http://localhost:5173) with the demo data loaded; demo accounts use the password `demo123`. Only cases of type "Read-only (live site)" are safe on a live site.
 
@@ -19,7 +19,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 - [Business impact](#business-impact) (13)
 - [Analytics modules](#analytics-modules) (18)
 - [Developer insights](#developer-insights) (3)
-- [Compare teams](#compare-teams) (7)
+- [Compare teams](#compare-teams) (8)
 - [Saved views](#saved-views) (5)
 - [CSV export](#csv-export) (1)
 - [Onboarding](#onboarding) (4)
@@ -524,7 +524,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Software engineer (engineer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | Open the navigation (menu button) and click Compare teams. | The top bar title reads Compare teams. |
+| 2 | Open the navigation (menu button) and click Wellbeing pulse. | The top bar title reads Wellbeing pulse. |
 | 3 | Open the navigation and click the Sign out button (door icon at the bottom, next to your name). | The sign-in screen with the heading Sign in is shown. |
 | 4 | Click the browser's Back button. | The sign-in screen is still shown; no app page appears. |
 | 5 | Reload the page (F5). | The sign-in screen is still shown. |
@@ -573,7 +573,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | In Browser A, sign in as the test person with the form. | The overview opens. |
-| 2 | In Browser A, open the navigation and click Compare teams. | The title reads Compare teams. |
+| 2 | In Browser A, open the navigation and click Wellbeing pulse. | The title reads Wellbeing pulse. |
 | 3 | In Browser B, sign in as admin@irongate.com / demo123, open Users, search for the test person, click its key button (Reset Password) and click 'Sign out everywhere'. | A confirmation message says the person was signed out on every device. |
 | 4 | Back in Browser A, open the navigation and click Technical debt. | The sign-in screen appears with the notice 'Your session has ended. Please sign in again.' |
 | 5 | Look at the address bar in Browser A. | It still contains /analytics/technical-debt. |
@@ -1713,7 +1713,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Team lead (lead@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
 | 2 | Click the menu button (Open navigation) at the left of the top bar and wait a moment for the drawer to settle. | The navigation drawer opens. |
-| 3 | Read every entry of the drawer from top to bottom (group headings Quality, Delivery, Organisation, Administration, Platform are not entries). | The entries are exactly, in this order: Overview, Analytics, Compare teams, TV mode, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports, Users, Teams, Manual metrics. |
+| 3 | Read every entry of the drawer from top to bottom (group headings Quality, Delivery, Organisation, Administration, Platform are not entries). | The entries are exactly, in this order: Overview, Analytics, TV mode, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports, Users, Teams, Manual metrics. Compare teams is not listed: this demo account has one team, so there is nothing to compare. |
 | 4 | Check that no other entry is present. | None of these entries is shown: Departments, Activity, User activity, Admin console, Update frequency, Parameters, Ingestion log, Platform. |
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 lead sees exactly the navigation entries of the role`
@@ -1735,7 +1735,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Team lead (lead@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses after the site address and press Enter: / → Overview; /analytics → Analytics; /compare → Compare teams; /analytics/flaky-tests → Flaky tests; /analytics/timeline → Test execution; /analytics/technical-debt → Technical debt; /analytics/performance → Performance; /analytics/pipeline → CI/CD pipeline; /analytics/productivity → Developer productivity; /analytics/pulse → Wellbeing pulse; /analytics/business-impact → Business impact; /analytics/gamification → Team rankings; /analytics/reports → Reports; /notifications → Notifications; /users → Users; /teams → Teams; /manual-metrics → Manual metrics. | Each page opens with the top bar title given after the arrow, and the address bar keeps exactly that address (no redirect to the overview). |
+| 2 | One after another, type each of these addresses after the site address and press Enter: / → Overview; /analytics → Analytics; /analytics/flaky-tests → Flaky tests; /analytics/timeline → Test execution; /analytics/technical-debt → Technical debt; /analytics/performance → Performance; /analytics/pipeline → CI/CD pipeline; /analytics/productivity → Developer productivity; /analytics/pulse → Wellbeing pulse; /analytics/business-impact → Business impact; /analytics/gamification → Team rankings; /analytics/reports → Reports; /notifications → Notifications; /users → Users; /teams → Teams; /manual-metrics → Manual metrics. | Each page opens with the top bar title given after the arrow, and the address bar keeps exactly that address (no redirect to the overview). |
 | 3 | Watch the page while doing so. | No page is blank or shows an error. |
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-02 lead: every page of the role opens from its address with its title`
@@ -1764,9 +1764,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Team lead (lead@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses and press Enter: /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Departments."); it has keyboard focus. |
+| 2 | One after another, type each of these addresses and press Enter: /compare, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Compare teams." or "You don't have access to Departments."); it has keyboard focus. |
 | 3 | Click the × (Dismiss) on the message. | The message disappears. |
-| 4 | Type the first address again, then open Compare teams from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
+| 4 | Type the first address again, then open Technical debt from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
 
 **Notes:** The access message is the same for every guarded page (FI-14, fixed).
 
@@ -1790,7 +1790,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Software engineer (engineer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
 | 2 | Click the menu button (Open navigation) at the left of the top bar and wait a moment for the drawer to settle. | The navigation drawer opens. |
-| 3 | Read every entry of the drawer from top to bottom (group headings Quality, Delivery, Organisation, Administration, Platform are not entries). | The entries are exactly, in this order: Overview, Analytics, Compare teams, TV mode, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports. |
+| 3 | Read every entry of the drawer from top to bottom (group headings Quality, Delivery, Organisation, Administration, Platform are not entries). | The entries are exactly, in this order: Overview, Analytics, TV mode, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports. Compare teams is not listed: this demo account has one team, so there is nothing to compare. |
 | 4 | Check that no other entry is present. | None of these entries is shown: Users, Teams, Departments, Activity, User activity, Admin console, Manual metrics, Update frequency, Parameters, Ingestion log, Platform. |
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 engineer sees exactly the navigation entries of the role`
@@ -1812,7 +1812,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Software engineer (engineer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses after the site address and press Enter: / → Overview; /analytics → Analytics; /compare → Compare teams; /analytics/flaky-tests → Flaky tests; /analytics/timeline → Test execution; /analytics/technical-debt → Technical debt; /analytics/performance → Performance; /analytics/pipeline → CI/CD pipeline; /analytics/productivity → Developer productivity; /analytics/pulse → Wellbeing pulse; /analytics/business-impact → Business impact; /analytics/gamification → Team rankings; /analytics/reports → Reports; /notifications → Notifications. | Each page opens with the top bar title given after the arrow, and the address bar keeps exactly that address (no redirect to the overview). |
+| 2 | One after another, type each of these addresses after the site address and press Enter: / → Overview; /analytics → Analytics; /analytics/flaky-tests → Flaky tests; /analytics/timeline → Test execution; /analytics/technical-debt → Technical debt; /analytics/performance → Performance; /analytics/pipeline → CI/CD pipeline; /analytics/productivity → Developer productivity; /analytics/pulse → Wellbeing pulse; /analytics/business-impact → Business impact; /analytics/gamification → Team rankings; /analytics/reports → Reports; /notifications → Notifications. | Each page opens with the top bar title given after the arrow, and the address bar keeps exactly that address (no redirect to the overview). |
 | 3 | Watch the page while doing so. | No page is blank or shows an error. |
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-02 engineer: every page of the role opens from its address with its title`
@@ -1844,9 +1844,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Software engineer (engineer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses and press Enter: /users, /teams, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /manual-metrics, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Departments."); it has keyboard focus. |
+| 2 | One after another, type each of these addresses and press Enter: /compare, /users, /teams, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /manual-metrics, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Compare teams." or "You don't have access to Departments."); it has keyboard focus. |
 | 3 | Click the × (Dismiss) on the message. | The message disappears. |
-| 4 | Type the first address again, then open Compare teams from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
+| 4 | Type the first address again, then open Technical debt from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
 
 **Notes:** The access message is the same for every guarded page (FI-14, fixed).
 
@@ -1870,7 +1870,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
 | 2 | Click the menu button (Open navigation) at the left of the top bar and wait a moment for the drawer to settle. | The navigation drawer opens. |
-| 3 | Read every entry of the drawer from top to bottom (group headings Quality, Delivery, Organisation, Administration, Platform are not entries). | The entries are exactly, in this order: Overview, Analytics, Compare teams, TV mode, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports. |
+| 3 | Read every entry of the drawer from top to bottom (group headings Quality, Delivery, Organisation, Administration, Platform are not entries). | The entries are exactly, in this order: Overview, Analytics, TV mode, Flaky tests, Test execution, Technical debt, Performance, CI/CD pipeline, Developer productivity, Wellbeing pulse, Business impact, Team rankings, Reports. Compare teams is not listed: this demo account has one team, so there is nothing to compare. |
 | 4 | Check that no other entry is present. | None of these entries is shown: Users, Teams, Departments, Activity, User activity, Admin console, Manual metrics, Update frequency, Parameters, Ingestion log, Platform. |
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-01 viewer sees exactly the navigation entries of the role`
@@ -1892,7 +1892,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses after the site address and press Enter: / → Overview; /analytics → Analytics; /compare → Compare teams; /analytics/flaky-tests → Flaky tests; /analytics/timeline → Test execution; /analytics/technical-debt → Technical debt; /analytics/performance → Performance; /analytics/pipeline → CI/CD pipeline; /analytics/productivity → Developer productivity; /analytics/pulse → Wellbeing pulse; /analytics/business-impact → Business impact; /analytics/gamification → Team rankings; /analytics/reports → Reports; /notifications → Notifications. | Each page opens with the top bar title given after the arrow, and the address bar keeps exactly that address (no redirect to the overview). |
+| 2 | One after another, type each of these addresses after the site address and press Enter: / → Overview; /analytics → Analytics; /analytics/flaky-tests → Flaky tests; /analytics/timeline → Test execution; /analytics/technical-debt → Technical debt; /analytics/performance → Performance; /analytics/pipeline → CI/CD pipeline; /analytics/productivity → Developer productivity; /analytics/pulse → Wellbeing pulse; /analytics/business-impact → Business impact; /analytics/gamification → Team rankings; /analytics/reports → Reports; /notifications → Notifications. | Each page opens with the top bar title given after the arrow, and the address bar keeps exactly that address (no redirect to the overview). |
 | 3 | Watch the page while doing so. | No page is blank or shows an error. |
 
 *Automated:* `tests/e2e/navigation/navigation.spec.ts › Navigation per role › NAV-02 viewer: every page of the role opens from its address with its title`
@@ -1924,9 +1924,9 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | Sign in as Viewer (viewer@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. | The overview opens (top bar title Overview). |
-| 2 | One after another, type each of these addresses and press Enter: /users, /teams, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /manual-metrics, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Departments."); it has keyboard focus. |
+| 2 | One after another, type each of these addresses and press Enter: /compare, /users, /teams, /departments, /activity, /user-activity, /ingestion-log, /admin-panel, /manual-metrics, /metric-intervals, /parameters-config. | Each time the overview (dashboard) is shown with the title Overview, the address bar changes back to /, and an alert at the top reads "You don't have access to <page name>." (for example "You don't have access to Compare teams." or "You don't have access to Departments."); it has keyboard focus. |
 | 3 | Click the × (Dismiss) on the message. | The message disappears. |
-| 4 | Type the first address again, then open Compare teams from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
+| 4 | Type the first address again, then open Technical debt from the navigation and come back to Overview. | The message is shown again after the redirect and is gone after the page change. |
 
 **Notes:** The access message is the same for every guarded page (FI-14, fixed).
 
@@ -2151,7 +2151,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ### TC-AUTH-078: The brand button returns to the overview from any page
 
-**Type:** Positive · **Priority:** Low · **Role:** Team lead · **Flow:** F4.9
+**Type:** Positive · **Priority:** Low · **Role:** Manager · **Flow:** F4.9
 
 **Preconditions**
 
@@ -2161,11 +2161,11 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 **Test data**
 
-- Team lead: lead@irongate.com / demo123
+- Manager: manager@irongate.com / demo123
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Team lead (lead@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. Then type /compare after the site address in the address bar and press Enter. | The page at /compare opens. |
+| 1 | Sign in as Manager (manager@irongate.com / demo123) on the sign-in screen: type the e-mail in Email address, the password in Password and click Sign in. Then type /compare after the site address in the address bar and press Enter. | The page at /compare opens. |
 | 2 | Check the top bar title. | Compare teams. |
 | 3 | Click the QE Navigator brand (shield and name) in the top bar (button 'QE Navigator, go to overview'). | The overview opens (title Overview). |
 
@@ -2212,7 +2212,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open http://localhost:5173/ and sign in as Viewer: E-mail address viewer@irongate.com, Password demo123, click Sign in. | The Overview page opens (top bar title "Overview"). |
 | 2 | Click the question-mark button "What you can do here" in the top bar. | A panel "What you can do here" opens below the button; keyboard focus moves into it. |
-| 3 | Read the panel. | A chip "Viewer · The Away Team"; the sentence "You see The Away Team. Other teams are not shown to you."; under "You can" the overview, team dashboards, TV mode, Compare and Analytics for the teams in scope, pulse results and answering the pulse; under "You cannot" among others "Change settings, KPI targets or alert rules." and "Invite people or change anyone's access." |
+| 3 | Read the panel. | A chip "Viewer · The Away Team"; the sentence "You see The Away Team. Other teams are not shown to you."; under "You can" the overview, team dashboards, TV mode and Analytics for the teams in scope (no Compare teams: the viewer has one team), pulse results and answering the pulse; under "You cannot" among others "Change settings, KPI targets or alert rules." and "Invite people or change anyone's access." |
 | 4 | Press Escape. | The panel closes and the focus is back on the question-mark button. |
 | 5 | Open the panel again and click somewhere on the overview outside it. | The panel closes. |
 
@@ -6283,7 +6283,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 *Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Compare teams › CMP-02 an address with unknown ids, too many ids or a bad window falls back safely`
 
-### TC-DASH-064: A team outside the scope in the address is not compared
+### TC-DASH-064: A software engineer on one team is not offered Compare teams: not in the navigation, the address is refused
 
 **Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F7.10
 
@@ -6299,13 +6299,12 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Software engineer (engineer@irongate.com / demo123), then open http://localhost:5173/compare?teams=team-1764026202608-vcbic0w8g,team-1764026236967-uphpblii4. | Sign-in succeeds and the page at /compare?teams=team-1764026202608-vcbic0w8g,team-1764026236967-uphpblii4 opens inside the app frame. |
-| 2 | Look at the page. | The Compare teams page opens. |
-| 3 | Look for a team card of QualityCowboys. | No card or data of QualityCowboys is shown. |
+| 1 | Sign in as Software engineer (engineer@irongate.com / demo123) and open the navigation (menu button). | The overview opens; the navigation has no Compare teams entry (the demo engineer has one team, Mavericks). |
+| 2 | Type /compare?teams=team-1764026202608-vcbic0w8g,team-1764026236967-uphpblii4 after the site address and press Enter. | The overview is shown (title Overview) with the alert "You don't have access to Compare teams."; no error page and no Compare teams page. |
 
-**Notes:** Access control check.
+**Notes:** Access control check: Compare teams needs two or more teams to compare (a company or department scope, or 2+ teams).
 
-*Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Compare teams › CMP-03 a team outside the scope in the address is not compared`
+*Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Compare teams › CMP-03 a software engineer on one team is not offered Compare teams: not in the navigation, the address is refused`
 
 ### TC-DASH-065: A failed comparison request shows a message
 
@@ -6372,8 +6371,8 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 | Step | Action | Expected result |
 |---|---|---|
-| 1 | Sign in as Software engineer (engineer@irongate.com / demo123), then open http://localhost:5173/compare. | Sign-in succeeds and the page at /compare opens inside the app frame. |
-| 2 | Look at the page. | The Compare teams page opens. If the engineer's scope has fewer than two teams (normal for the demo engineer: only Mavericks) the message "Not enough teams to compare" is shown; otherwise every chip is a team of the engineer's scope. |
+| 1 | Sign in as Software engineer (engineer@irongate.com / demo123), then open http://localhost:5173/compare. | Sign-in succeeds. |
+| 2 | Look at the page. | If the engineer's scope has fewer than two teams (normal for the demo engineer: only Mavericks) the overview is shown with "You don't have access to Compare teams."; otherwise the Compare teams page opens and every chip is a team of the engineer's scope. |
 | 3 | In a new tab of the same browser open http://localhost:3000/api/compare/teams?ids=team-1764026202608-vcbic0w8g,no-such-team. | The API answers 403 (forbidden); no comparison data is returned. |
 
 **Notes:** Access control check.
@@ -6394,6 +6393,32 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 | 2 | Open /compare?teams=team-1764200682441-sckxod8xd,team-1764026202608-vcbic0w8g. | Under each value: "On target · Target ≥ 80%", "Off target · …" or "Watch: 70–80% · Target ≥ 80%"; under each QA score the target (and the watch band for Watch). |
 
 *Automated:* `tests/e2e/team/team-detail-header.spec.ts › Team detail header › TDH-06 Compare says status and target under each value`
+
+### TC-DASH-119: An engineer on two teams compares them; a team outside the scope in the address is not compared
+
+**Type:** Negative · **Priority:** High · **Role:** Software engineer · **Flow:** F7.10
+
+**Preconditions**
+
+- App running at the test URL (http://localhost:5173, API at http://localhost:3000/api) with the NovaTech demo data loaded
+- A software engineer with qa_engineer assignments on two teams: Mavericks (team-1764026202608-vcbic0w8g) and The Away Team (team-1764200682441-sckxod8xd); the automated test creates one and deletes it afterwards
+
+**Test data**
+
+- Address: /compare?teams=team-1764026202608-vcbic0w8g,team-1764026236967-uphpblii4
+
+| Step | Action | Expected result |
+|---|---|---|
+| 1 | Sign in as the two-team engineer and open the navigation. | Compare teams is listed. |
+| 2 | Open /compare?teams=team-1764026202608-vcbic0w8g,team-1764026236967-uphpblii4. | The Compare teams page opens with one chip, Mavericks; QualityCowboys is dropped from the choice and is not in the Add team list. |
+| 3 | In Add team choose The Away Team. | Two team cards are shown: Mavericks and The Away Team; no card or data of QualityCowboys. |
+| 4 | In a new tab open http://localhost:3000/api/compare/teams?ids=team-1764026202608-vcbic0w8g,team-1764026236967-uphpblii4, then ...?ids=team-1764026202608-vcbic0w8g,team-1764200682441-sckxod8xd. | The first answers 403 (QualityCowboys is outside the scope); the second answers 200 with both teams. |
+
+**After the test:** Delete the two-team engineer if it was created for this test.
+
+**Notes:** Access control check.
+
+*Automated:* `tests/e2e/compare/compare-and-views.spec.ts › Compare teams › CMP-03b an engineer on two teams compares them; a team outside the scope in the address is not compared`
 
 ## Saved views
 
@@ -11465,7 +11490,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 |---|---|---|
 | 1 | Open http://localhost:5173, enter E-mail address viewer@irongate.com and Password demo123, then click Sign in. | The Overview page opens: the top bar title reads "Overview" and the "Team performance" section lists team cards. |
 | 2 | Click the menu (burger) button at the left of the top bar to open the navigation drawer. | The navigation drawer opens and lists the navigation entries in groups (Quality, Delivery, Organisation, Administration). |
-| 3 | Read the navigation entries. | Overview and Analytics (plus the analytics modules such as Compare teams, Flaky tests, Reports) are visible. |
+| 3 | Read the navigation entries. | Overview and Analytics (plus the analytics modules such as Flaky tests, Reports) are visible; Compare teams is not (the demo viewer has one team). |
 | 4 | Look for management entries. | Users, Teams, Departments, Admin console, Manual metrics, Update frequency and Parameters are NOT shown. |
 
 *Automated:* `tests/e2e/viewer-rbac.spec.ts › Viewer Role-Based Access Control › Viewer has minimal access to features`
@@ -11898,7 +11923,7 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 ### TC-ROLE-039: A hanging company-summary request does not block the overview or other pages
 
-**Type:** Negative · **Priority:** Medium · **Role:** Team lead · **Flow:** F16.5, F5.1
+**Type:** Negative · **Priority:** Medium · **Role:** Manager · **Flow:** F16.5, F5.1
 
 **Preconditions**
 
@@ -11908,13 +11933,13 @@ Environment: run the app locally (`npm run dev`, http://localhost:5173) with the
 
 **Test data**
 
-- E-mail: lead@irongate.com
+- E-mail: manager@irongate.com
 - Password: demo123
 
 | Step | Action | Expected result |
 |---|---|---|
 | 1 | In DevTools > Network request blocking, add the pattern */api/analytics/company-summary* and enable it. | The pattern is listed and active. |
-| 2 | Open http://localhost:5173, enter E-mail address lead@irongate.com and Password demo123, then click Sign in. | The Overview page opens: the top bar title reads "Overview" and the "Team performance" section lists team cards. |
+| 2 | Open http://localhost:5173, enter E-mail address manager@irongate.com and Password demo123, then click Sign in. | The Overview page opens: the top bar title reads "Overview" and the "Team performance" section lists team cards. |
 | 3 | Look at the "Team performance" grid. | Team cards are shown even though the company summary does not load. |
 | 4 | Open the navigation and click Compare teams. | The top bar title reads "Compare teams" and the Compare teams page is shown. |
 | 5 | Remove the blocking pattern. | — |
