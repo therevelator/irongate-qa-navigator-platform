@@ -132,11 +132,27 @@ describe(`Sample data consistency (${API_URL})`, () => {
         }
         if (!NO_TREND.has(col) && !(hist?.[col] ?? []).some((p) => String(p.date).slice(0, 10) === today)) add(today, col, null, null, 'no trend point for today');
       }
-      await pool(jobs, 8, async ({ col, day, value }) => {
-        const ev = await get(`/api/ci/teams/${team.id}/metrics/${col}?date=${day}`, team.cookie);
+      // Every point against the evidence row the endpoint serves (the latest day on or before it), read from the database;
+      // the endpoint itself for the first and the middle day of the window (the rest would cost thousands of requests and
+      // the API's rate limit is shared with the other suites).
+      const evRows = (await db.query(
+        `SELECT metric_key, day::text AS day, value::float8 AS value FROM metric_evidence WHERE team_id = $1 AND day <= CURRENT_DATE ORDER BY metric_key, day`,
+        [team.id])).rows as Array<{ metric_key: string; day: string; value: number }>;
+      const evOn = (key: string, day: string) => {
+        let found: number | null = null;
+        for (const r of evRows) if (r.metric_key === key && r.day <= day) found = r.value;
+        return found;
+      };
+      const viaApi = new Set([firstDay, iso(new Date(Date.now() - Math.floor(DAYS / 2) * 86_400_000))]);
+      await pool(jobs, 4, async ({ col, day, value }) => {
         compared++;
-        if (ev.status !== 200) add(day, col, value, ev.status, 'no calculation for the trend point');
-        else if (!same(value, kpiColumnValue(col, ev.body.value))) add(day, col, value, ev.body.value, 'trend ≠ calculated value');
+        const stored = evOn(EVIDENCE_FOR_KPI[col]!, day);
+        if (stored === null) add(day, col, value, null, 'no calculation for the trend point');
+        else if (!same(value, kpiColumnValue(col, stored))) add(day, col, value, stored, 'trend ≠ calculated value');
+        if (!viaApi.has(day)) return;
+        const ev = await get(`/api/ci/teams/${team.id}/metrics/${col}?date=${day}`, team.cookie);
+        if (ev.status !== 200) add(day, col, value, ev.status, 'no calculation for the trend point (API)');
+        else if (!same(value, kpiColumnValue(col, ev.body.value))) add(day, col, value, ev.body.value, 'trend ≠ calculated value (API)');
       });
 
       // The evidence panels ("Calculated from CI data", deliveries, work and code quality) and TV mode.
