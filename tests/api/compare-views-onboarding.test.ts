@@ -342,7 +342,11 @@ describe('Compare, saved views, onboarding API', () => {
 
       expect((await post('/api/admin/invitations', cookie, { email: `onb-invitee-${s}@onb${s}.test`, role: 'qa_engineer', scopeId: teamId })).status).toBe(201);
       st = (await get('/api/onboarding', cookie)).body;
-      expect(st).toMatchObject({ completed: 5, complete: true, show: false });
+      expect(st).toMatchObject({ completed: 5, complete: false, show: true });
+      // The last step: how often the team's data is collected.
+      expect((await put(`/api/collection-schedule/teams/${teamId}`, cookie, { cadence: 'weekly', intervals: { ci: 60 } })).status).toBe(200);
+      st = (await get('/api/onboarding', cookie)).body;
+      expect(st).toMatchObject({ completed: 6, complete: true, show: false });
       expect(st.completedAt).toBeTruthy();
 
       // Completed once = never shown again, even when a step reads as open later.

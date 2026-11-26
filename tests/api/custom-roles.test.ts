@@ -191,7 +191,7 @@ describe('custom roles over the API', () => {
  *        for a new account, recorded in the change history, and a wrong body is refused.
  */
 describe('Developer insights: the person\'s own choice', () => {
-  const base = process.env.API_URL || 'http://localhost:3002';
+  const base = (process.env.API_BASE_URL || process.env.API_URL || 'http://localhost:3000').replace(/\/api$/, '');
   it('CR-08 a person turns their own developer insights on and off', async () => {
     const stamp = Date.now();
     const reg = await fetch(`${base}/api/auth/register`, {

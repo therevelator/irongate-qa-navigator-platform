@@ -3,7 +3,7 @@
  * Takes the screenshots used in the feature guides (docs/pdf/src/screens/<slug>.jpg) from a running app with the
  * demonstration data, in the Porcelain theme.
  *
- *   APP_URL=http://localhost:5173 DEMO_EMAIL=admin@irongate.com DEMO_PASSWORD=… npm run docs:pdf:screens
+ *   APP_URL=http://localhost:5173 API_URL=http://localhost:3000/api DEMO_EMAIL=admin@irongate.com DEMO_PASSWORD=… npm run docs:pdf:screens
  *
  * Then `npm run docs:pdf` puts them into the PDFs. A page that fails to load is skipped and reported; its guide
  * is built without a picture.
@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(HERE, 'src', 'screens');
 const APP = process.env.APP_URL ?? 'http://localhost:5173';
+const API = process.env.API_URL ?? 'http://localhost:3000/api';
 const EMAIL = process.env.DEMO_EMAIL ?? 'admin@irongate.com';
 const PASSWORD = process.env.DEMO_PASSWORD ?? 'demo123';
 
@@ -41,7 +42,7 @@ await context.addInitScript(() => {
   } catch { /* storage unavailable */ }
 });
 const page = await context.newPage();
-const login = await context.request.post(`${APP}/api/auth/login`, { data: { email: EMAIL, password: PASSWORD } });
+const login = await context.request.post(`${API}/auth/login`, { data: { email: EMAIL, password: PASSWORD } });
 if (!login.ok()) { console.error(`Sign-in failed (${login.status()}). Is the app running at ${APP} with the demo data?`); process.exit(1); }
 
 const snap = async (slug) => {
@@ -64,7 +65,7 @@ try {
   await page.getByTestId('team-card').first().click();
   await page.getByTestId('section-switch').waitFor({ timeout: 15000 });
   await snap('team-page');
-  await page.goto(`${APP}/tv`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${APP}/tv?theme=porcelain`, { waitUntil: 'domcontentloaded' });
   await snap('tv-mode');
 } catch (e) { failed.push(`team-page / tv-mode: ${String(e.message).split('\n')[0]}`); }
 await browser.close();
