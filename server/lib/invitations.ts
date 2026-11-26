@@ -79,7 +79,8 @@ export async function findByToken(token: unknown) {
   return queryOne<any>(
     `SELECT i.*, ${statusSql('i')} AS status, c.name AS company_name,
             CASE i.scope_type WHEN 'company' THEN c.name WHEN 'department' THEN d.name ELSE t.name END AS scope_name,
-            NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS invited_by_name
+            NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), '') AS invited_by_name,
+            (SELECT cr.name FROM custom_roles cr WHERE cr.id = i.custom_role_id AND cr.archived_at IS NULL) AS custom_role_name
        FROM invitations i
        JOIN companies c ON c.id = i.company_id
        LEFT JOIN departments d ON i.scope_type = 'department' AND d.id = i.scope_id
@@ -97,12 +98,25 @@ const STATUS_MESSAGE: Record<string, string> = {
 };
 export const statusMessage = (s: string) => STATUS_MESSAGE[s] ?? 'This invitation link is not valid.';
 
+/** Everything an invitation gives, one line per assignment: "Scrum Master of Payments". */
+export function invitationAccess(inv: { role: string; scope_type?: string; scope_name?: string | null; custom_role_name?: string | null; extra_grants?: unknown }): string[] {
+  const line = (roleName: string, scopeName?: string | null) => `${roleName}${scopeName ? ` of ${scopeName}` : ''}`;
+  const extras = Array.isArray(inv.extra_grants) ? (inv.extra_grants as any[]) : [];
+  return [
+    line(inv.custom_role_name ?? ROLE_NAMES[inv.role] ?? inv.role, inv.scope_name),
+    ...extras.map((x) => line(x?.roleName ?? ROLE_NAMES[x?.role] ?? String(x?.role ?? ''), x?.scopeName)),
+  ];
+}
+
 /** Send (or re-send) the invitation email. Never throws: a failed send is reported to the caller. */
 export async function sendInvitationEmail(args: {
   to: string; token: string; companyName: string; inviterName: string | null; role: string; scopeName: string | null; expiresAt: Date;
+  /** All the assignments of the invitation (invitationAccess); without it, the role and scope above. */
+  access?: string[];
 }): Promise<MailResult & { link: string }> {
   const link = inviteLink(args.token);
-  const what = `${ROLE_NAMES[args.role] ?? args.role}${args.scopeName ? ` of ${args.scopeName}` : ''}`;
+  const lines = args.access?.length ? args.access : [`${ROLE_NAMES[args.role] ?? args.role}${args.scopeName ? ` of ${args.scopeName}` : ''}`];
+  const what = lines.length <= 1 ? lines.join('') : `${lines.slice(0, -1).join(', ')} and ${lines[lines.length - 1]}`;
   const by = args.inviterName ? `${args.inviterName} invited you` : 'You are invited';
   const expires = args.expiresAt.toUTCString();
   const text = `${by} to join ${args.companyName} on QE Navigator as ${what}.\n\nAccept the invitation and choose your password:\n${link}\n\nThe link works once and expires on ${expires}. If you did not expect this email, ignore it.`;

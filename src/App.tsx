@@ -18,6 +18,7 @@ import PDFReportGenerator from './components/PDFReportGenerator';
 import UsersView from './components/UsersView';
 import TeamsView from './components/TeamsView';
 import DepartmentsView from './components/DepartmentsView';
+import RolesView from './components/RolesView';
 import ActivityLog from './components/ActivityLog';
 import UserActivity from './components/UserActivity';
 import { trackScreen } from './lib/activityTracker';
@@ -51,6 +52,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'users': '/users',
   'teams': '/teams',
   'departments': '/departments',
+  'roles': '/roles',
   'activity': '/activity',
   'user-activity': '/user-activity',
   'ingestion-log': '/ingestion-log',
@@ -332,6 +334,7 @@ function App() {
   // Views
   if (currentView === 'users') return renderLayout(<UsersView is3DMode={is3DMode} />);
   if (currentView === 'teams') return renderLayout(<TeamsView is3DMode={is3DMode} />);
+  if (currentView === 'roles') return renderLayout(<RolesView />);
   if (currentView === 'departments') {
     return renderLayout(
       <DepartmentsView

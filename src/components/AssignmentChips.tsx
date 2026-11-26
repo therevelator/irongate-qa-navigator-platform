@@ -5,7 +5,7 @@ import API_URL from '../config/api';
 import Modal from './Modal';
 import { buttonClass, cx, inputClass } from './ui';
 import { canGrant, ROLE_RANK, highestRole, isCompanyAdmin, type PolicyActor } from '../../server/lib/userPolicy';
-import { ROLE_LABELS, type GrantRoleOption } from '../lib/policyActor';
+import { ROLE_LABELS, grantBody, type GrantRoleOption } from '../lib/policyActor';
 
 /**
  * A user's role assignments as chips (role · scope), with remove buttons and "Add" for the
@@ -22,7 +22,12 @@ export interface AssignmentRow {
   scope_name: string | null;
   department_id: string | null;
   department_name: string | null;
+  custom_role_id?: string | null;
+  custom_role_name?: string | null;
 }
+
+/** The name shown for an assignment: its custom role, else its access level. */
+export const assignmentRoleName = (a: { role: string; custom_role_name?: string | null }) => a.custom_role_name ?? ROLE_LABELS[a.role] ?? a.role;
 
 const CHIP_TONE: Record<string, string> = {
   super_admin: 'bg-brand-50 text-brand-800 ring-brand-200 dark:bg-brand-950/40 dark:text-brand-200 dark:ring-brand-900',
@@ -62,7 +67,7 @@ export const AssignmentChips: React.FC<{
     setBusy(a.id);
     try {
       await call('DELETE', `${API_URL}/admin/users/${user.id}/assignments/${a.id}`);
-      toast.success(`${name}: removed ${ROLE_LABELS[a.role] ?? a.role} of ${a.scope_name ?? ''}`);
+      toast.success(`${name}: removed ${assignmentRoleName(a)} of ${a.scope_name ?? ''}`);
       setConfirming(null);
       onChanged();
     } catch (e: any) {
@@ -79,12 +84,12 @@ export const AssignmentChips: React.FC<{
       {list.map((a) => (
         <span key={a.id} className={cx('inline-flex max-w-full items-center gap-1 rounded-full py-0.5 pl-2.5 text-xs font-medium ring-1 ring-inset', CHIP_TONE[a.role] ?? CHIP_TONE.viewer, canRemove(a) ? 'pr-1' : 'pr-2.5')} data-testid="assignment-chip">
           <span className="truncate" title={a.department_name && a.scope_type === 'team' ? `${a.scope_name} (${a.department_name})` : a.scope_name ?? ''}>
-            {ROLE_LABELS[a.role] ?? a.role} · {a.scope_type === 'company' ? 'Organisation' : a.scope_name ?? '—'}
+            {assignmentRoleName(a)} · {a.scope_type === 'company' ? 'Organisation' : a.scope_name ?? '—'}
           </span>
           {canRemove(a) && (
             <button type="button" onClick={() => setConfirming(a)} disabled={busy === a.id}
               className="rounded-full p-0.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 focus:outline-none focus:ring-2 focus:ring-brand-500/40 dark:hover:bg-slate-700 dark:hover:text-white"
-              aria-label={`Remove ${ROLE_LABELS[a.role] ?? a.role} of ${a.scope_name ?? 'the organisation'} from ${name}`}>
+              aria-label={`Remove ${assignmentRoleName(a)} of ${a.scope_name ?? 'the organisation'} from ${name}`}>
               <X size={12} aria-hidden="true" />
             </button>
           )}
@@ -101,7 +106,7 @@ export const AssignmentChips: React.FC<{
         {confirming && (
           <div className="space-y-4" data-testid="confirm-remove-assignment">
             <p className="text-sm text-slate-700 dark:text-slate-300">
-              Remove <strong>{ROLE_LABELS[confirming.role] ?? confirming.role}</strong> of <strong>{scopeText(confirming)}</strong> from {name}?
+              Remove <strong>{assignmentRoleName(confirming)}</strong> of <strong>{scopeText(confirming)}</strong> from {name}?
               They lose the access it gives on their next request. The change is recorded in the change history.
             </p>
             <div className="flex justify-end gap-2">
@@ -144,8 +149,8 @@ const AddAssignmentDialog: React.FC<{
     setError(null);
     setBusy(true);
     try {
-      await call('POST', `${API_URL}/admin/users/${userId}/assignments`, { role, scopeId, replaceLead: leadTaken && replaceLead });
-      toast.success(`${userName}: added ${ROLE_LABELS[role]} of ${scope?.name ?? ''}`);
+      await call('POST', `${API_URL}/admin/users/${userId}/assignments`, { ...grantBody(role, scopeId), replaceLead: leadTaken && replaceLead });
+      toast.success(`${userName}: added ${opt?.label ?? ROLE_LABELS[role]} of ${scope?.name ?? ''}`);
       onAdded();
     } catch (err: any) {
       setError(err.message);

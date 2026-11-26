@@ -12,7 +12,7 @@ import {
   assignmentScopesSql, userTeamIdsSql, userDepartmentIdsSql, AssignmentError, type ScopeInfo,
 } from '../lib/assignments';
 import { auditedUserChange, recordAudit, undoEntry, canUndoEntry, isReversible, REVERSIBLE_ACTIONS, UndoError, type AuditEntry } from '../lib/audit';
-import { newToken, sendInvitationEmail, statusSql, INVITE_TTL_HOURS, EMAIL_RE, ROLE_NAMES, reissueInvitation } from '../lib/invitations';
+import { newToken, sendInvitationEmail, invitationAccess, statusSql, INVITE_TTL_HOURS, EMAIL_RE, ROLE_NAMES, reissueInvitation } from '../lib/invitations';
 
 /**
  * Organisation administration (mounted inside /api/admin):
@@ -304,7 +304,7 @@ async function deliver(req: any, inv: { id: string; email: string; role: string;
   const me = await queryOne<any>('SELECT first_name, last_name, email FROM users WHERE id = ?', [req.user.id]);
   const mail = await sendInvitationEmail({
     to: inv.email, token, companyName: company?.name ?? 'your organisation', inviterName: me ? fullName(me) : null,
-    role: inv.role, scopeName: inv.scope_name, expiresAt,
+    role: inv.role, scopeName: inv.scope_name, expiresAt, access: invitationAccess(inv),
   });
   return {
     delivery: { delivered: mail.delivered, channel: mail.channel, error: mail.error ?? null },

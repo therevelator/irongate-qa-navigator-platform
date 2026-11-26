@@ -19,6 +19,8 @@ interface InvitationInfo {
   roleName: string;
   scopeType: 'company' | 'department' | 'team';
   scopeName: string | null;
+  /** Every assignment the invitation gives; more than one for people who work with several teams. */
+  access?: string[];
   companyName: string;
   invitedBy: string | null;
   expiresAt: string;
@@ -163,6 +165,11 @@ const AcceptInvite: React.FC = () => {
         {info.invitedBy ? `${info.invitedBy} invited you` : 'You are invited'} as <span className="font-medium text-slate-900 dark:text-white">{info.roleName}</span>
         {scope ? <> of <span className="font-medium text-slate-900 dark:text-white">{scope}</span></> : null}.
       </p>
+      {info.access && info.access.length > 1 && (
+        <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm text-slate-600 dark:text-slate-300" data-testid="invite-access">
+          {info.access.map((a) => <li key={a}>{a}</li>)}
+        </ul>
+      )}
       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">The link works once and expires on {new Date(info.expiresAt).toLocaleString()}.</p>
 
       {error && (

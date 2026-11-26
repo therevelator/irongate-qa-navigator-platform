@@ -12,7 +12,7 @@ import { recordAudit } from '../lib/audit';
 import {
   providerConfig, enabledProviders, beginSignIn, checkState, completeSignIn, appBaseUrl, SsoError, PROVIDER_LABEL, type ProviderId,
 } from '../lib/sso';
-import { acceptInvitation, findByToken, openInvitationForEmail, statusMessage, InvitationError, ROLE_NAMES } from '../lib/invitations';
+import { acceptInvitation, findByToken, invitationAccess, openInvitationForEmail, statusMessage, InvitationError, ROLE_NAMES } from '../lib/invitations';
 import { isProductionRuntime } from '../lib/runtimeEnv';
 
 /**
@@ -208,7 +208,9 @@ router.get('/invitations/:token', inviteLimiter, async (req, res) => {
       status: 'open',
       email: inv.email,
       role: inv.role,
-      roleName: ROLE_NAMES[inv.role] ?? inv.role,
+      roleName: inv.custom_role_name ?? ROLE_NAMES[inv.role] ?? inv.role,
+      // Every assignment the invitation gives, in words (the first one is roleName of scopeName).
+      access: invitationAccess(inv),
       scopeType: inv.scope_type,
       scopeName: inv.scope_name,
       companyName: inv.company_name,

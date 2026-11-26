@@ -38,11 +38,11 @@ const ONE_TEAM = ANALYTICS.filter((id) => id !== 'nav-compare');
 /** The executive summary is in the navigation of super admins and managers (after the overview). */
 const WITH_SUMMARY = ['nav-dashboard', 'nav-summary', ...ANALYTICS.slice(1)];
 export const NAV_BY_ROLE: Record<Role, string[]> = {
-  admin: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-departments', 'nav-activity', 'nav-user-activity', 'nav-admin',
+  admin: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-departments', 'nav-roles', 'nav-activity', 'nav-user-activity', 'nav-admin',
     'nav-manual-metrics', 'nav-upload-files', 'nav-metric-intervals', 'nav-parameters-config', 'nav-ingestion-log'],
-  manager: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-activity', 'nav-admin', 'nav-manual-metrics', 'nav-upload-files', 'nav-metric-intervals',
+  manager: [...WITH_SUMMARY, 'nav-users', 'nav-teams', 'nav-roles', 'nav-activity', 'nav-admin', 'nav-manual-metrics', 'nav-upload-files', 'nav-metric-intervals',
     'nav-parameters-config', 'nav-ingestion-log'],
-  lead: [...ONE_TEAM, 'nav-users', 'nav-teams', 'nav-manual-metrics', 'nav-upload-files'],
+  lead: [...ONE_TEAM, 'nav-users', 'nav-teams', 'nav-roles', 'nav-manual-metrics', 'nav-upload-files'],
   engineer: [...ONE_TEAM],
   viewer: [...ONE_TEAM],
 };
@@ -55,6 +55,7 @@ export const RESTRICTED_PAGES: Array<{ path: string; title: string; allowed: Rol
   { path: '/users', title: 'Users', allowed: ['admin', 'manager', 'lead'] },
   { path: '/teams', title: 'Teams', allowed: ['admin', 'manager', 'lead'] },
   { path: '/departments', title: 'Departments', allowed: ['admin'] },
+  { path: '/roles', title: 'Roles', allowed: ['admin', 'manager', 'lead'] },
   { path: '/activity', title: 'Activity', allowed: ['admin', 'manager'] },
   { path: '/user-activity', title: 'User activity', allowed: ['admin'] },
   { path: '/ingestion-log', title: 'Ingestion log', allowed: ['admin', 'manager'] },

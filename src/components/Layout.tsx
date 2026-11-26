@@ -2,7 +2,7 @@ import { downloadPagePdf } from '../lib/pagePdf';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BrandMark from './BrandMark';
 import {
-  LayoutDashboard, BarChart3, LogOut, MonitorSmartphone, Shield, Users as UsersIcon, UsersRound, Building2, Menu, X,
+  LayoutDashboard, BarChart3, LogOut, MonitorSmartphone, Shield, KeyRound, Users as UsersIcon, UsersRound, Building2, Menu, X,
   Calculator, Clock, MonitorPlay, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
   CalendarClock, Trophy, FileText, ChevronRight, Smartphone, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints,
   FileUp,
@@ -12,7 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import API_URL from '../config/api';
 import toast, { Toaster } from 'react-hot-toast';
 import {
-  ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canUploadFiles, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin,
+  ANALYTICS_ROLES as POLICY_ANALYTICS_ROLES, canInvite, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog, canUploadFiles, canViewUserActivity, canWriteSomeTeamData, isCompanyAdmin,
   type PolicyActor,
 } from '../../server/lib/userPolicy';
 import { policyActorOf, ROLE_LABELS } from '../lib/policyActor';
@@ -100,6 +100,7 @@ const NAV_GROUPS: { title?: string; items: NavItem[] }[] = [
       { view: 'users', label: 'Users', icon: UsersIcon, can: canOpenUserAdmin },
       { view: 'teams', label: 'Teams', icon: UsersRound, can: canOpenUserAdmin },
       { view: 'departments', label: 'Departments', icon: Building2, can: isCompanyAdmin },
+      { view: 'roles', label: 'Roles', icon: KeyRound, can: canInvite },
       { view: 'activity', label: 'Activity', icon: History, can: canViewActivity },
       { view: 'user-activity', label: 'User activity', icon: Footprints, can: canViewUserActivity },
     ],
@@ -146,6 +147,7 @@ export const PAGE_META: Record<string, { title: string; parent?: string }> = {
   users: { title: 'Users', parent: 'Organisation' },
   teams: { title: 'Teams', parent: 'Organisation' },
   departments: { title: 'Departments', parent: 'Organisation' },
+  roles: { title: 'Roles', parent: 'Organisation' },
   activity: { title: 'Activity', parent: 'Organisation' },
   'user-activity': { title: 'User activity', parent: 'Organisation' },
   'admin-panel': { title: 'Admin console', parent: 'Administration' },

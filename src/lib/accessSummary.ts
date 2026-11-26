@@ -18,6 +18,7 @@ export interface AssignmentLike {
   scopeType: string;
   scopeId: string;
   scopeName?: string | null;
+  customRoleName?: string | null;
 }
 
 export interface AccessSummary {
@@ -33,7 +34,7 @@ const list = (names: string[]) => (names.length <= 1 ? names.join('') : `${names
 
 export function accessSummary(actor: PolicyActor, assignments: AssignmentLike[], companyName?: string | null): AccessSummary {
   const nameOf = (a: AssignmentLike) => a.scopeName || (a.scopeType === 'company' ? companyName || 'the company' : a.scopeId);
-  const roles = assignments.map((a) => `${ROLE_LABELS[a.role] ?? a.role} · ${nameOf(a)}${a.scopeType === 'department' ? ' (department)' : ''}`);
+  const roles = assignments.map((a) => `${a.customRoleName ?? ROLE_LABELS[a.role] ?? a.role} · ${nameOf(a)}${a.scopeType === 'department' ? ' (department)' : ''}`);
   const teams = assignments.filter((a) => a.scopeType === 'team').map(nameOf);
   const depts = assignments.filter((a) => a.scopeType === 'department').map(nameOf);
   const company = isCompanyAdmin(actor);
