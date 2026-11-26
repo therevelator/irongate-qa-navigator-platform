@@ -21,13 +21,20 @@ npm run docs:pdf -- flaky     # only the ones whose path contains "flaky"
 npm run docs:pdf:screens      # retake the screenshots from a running app with the demo data (then rebuild)
 ```
 
-Headless Chromium (Playwright, already a dev dependency) prints them; Inter is embedded from `src/fonts`. Each file is
-then rewritten with `pdftocairo` (poppler-utils: `brew install poppler` / `apt install poppler-utils`), which stores
-the fonts in the plain WinAnsi form every viewer reads. Chromium's own output showed as random letters in simpler
-viewers such as the GitHub mobile app. The build stops if any font is left in another form, which happens when a
-character outside Windows-1252 is used (write `›` or "to" instead of an arrow). The rewrite drops clickable links, so
-addresses are printed as text. Commit the PDFs
-with the content change, so nobody needs to build to read them.
+Headless Chromium (Playwright, already a dev dependency) prints them; `pdftocairo` and `pdfinfo` (poppler-utils:
+`brew install poppler` / `apt install poppler-utils`) are needed too. Commit the PDFs with the content change, so
+nobody needs to build to read them.
+
+**The finished PDFs contain no fonts.** Chromium's own output showed as random letters in simpler viewers such as the
+GitHub mobile app, so every page is converted to vector outlines: identical to look at, sharp at any zoom, and
+impossible to garble. The price is that text cannot be selected or searched and links are not clickable (addresses are
+printed as text). The readable text of every document is in `src/content/`. The build stops if a font is left in a file.
+
+**Every use-case document is exactly three pages.** The build scales the text slightly until it is, and stops if the
+content is too short or too long for that. Each has: what the person is accountable for, the questions they bring, use
+cases, a worked example with numbers, a "when this happens, do that" table, their rhythm, the first 30 days, the numbers
+they watch, limits and mistakes to avoid (`src/content/70-*.mjs`, `71-*.mjs` and `75-role-extras.mjs`). Each feature
+guide has an example and "your first five minutes" (`65-feature-extras.mjs`).
 
 ## Rules the content follows
 

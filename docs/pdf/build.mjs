@@ -78,7 +78,9 @@ function featureHtml(f) {
     chips: [['Menu', f.menu ?? `${f.group} → ${f.name}`], ['Who opens it', f.access], ...(f.address ? [['Address', `\`${f.address}\``]] : [])],
   })}
 ${shot(f.slug, `${f.name} in the Porcelain theme, with demonstration data.`)}
-<h2>What it does</h2>${card('', ul(f.does))}
+<h2>What it does</h2><div class="card">${ul(f.does)}</div>
+${f.example ? `<h2>An example</h2><div class="card avoid">${paras(f.example)}<p class="small muted">The figures are an illustration.</p></div>` : ''}
+${f.steps?.length ? `<h2>Your first five minutes here</h2><div class="card avoid">${steps(f.steps)}</div>` : ''}
 <h2>What it is good for</h2>${card('', ul(f.goodFor))}
 <h2>Why you need it</h2><div class="card avoid">${paras(f.why)}${sources(f.sources)}</div>
 <h2>Who uses it, and for what</h2><div class="card">${table(['Role', 'What they do here'], f.roles, 'wrap')}</div>
@@ -97,9 +99,13 @@ function roleHtml(r) {
 <h2>The questions they bring</h2>${card('', ul(r.questions))}
 <h2>Use cases</h2>
 ${r.useCases.map((u, i) => `<div class="card usecase"><h3>${i + 1}. ${md(u.title)}</h3><p><strong>Situation.</strong> ${md(u.when)}</p><p><strong>In QE Navigator.</strong> ${md(u.how)}</p><p><strong>Result.</strong> ${md(u.result)}</p><p class="where">${esc(u.where)}</p></div>`).join('')}
+${r.example ? `<h2>A worked example: ${esc(r.example.title.toLowerCase())}</h2><div class="card avoid">${steps(r.example.steps)}<p class="small muted">The figures are an illustration.</p></div>` : ''}
+${r.playbook ? `<h2>When this happens, do that</h2><div class="card">${table(['Signal', 'Open', 'Do'], r.playbook, 'wrap')}</div>` : ''}
 <h2>Their rhythm</h2><div class="card">${table(['When', 'What they open, and why'], r.rhythm, 'wrap')}</div>
+${r.first30 ? `<h2>The first 30 days</h2><div class="card avoid">${table(['When', 'What to do'], r.first30, 'wrap')}</div>` : ''}
 <h2>Numbers they watch</h2>${card('', ul(r.metrics))}
 <h2>Limits that protect the team</h2>${card('', ul(r.limits))}
+${r.mistakes ? `<h2>Mistakes to avoid</h2>${card('', ul(r.mistakes))}` : ''}
 ${r.why ? `<h2>Why it matters</h2><div class="card avoid">${paras(r.why)}${sources(r.sources)}</div>` : ''}`;
 }
 
@@ -129,10 +135,22 @@ const page = (body, deck) => `<!doctype html><html lang="en"><head><meta charset
 async function load() {
   const out = [];
   const dir = path.join(SRC, 'content');
-  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).sort()) {
-    const mod = await import(pathToFileURL(path.join(dir, file)).href);
-    for (const f of mod.features ?? []) out.push({ file: `features/${f.file ?? f.slug}.pdf`, title: f.name, html: featureHtml(f) });
-    for (const r of mod.roles ?? []) out.push({ file: `use-cases/${r.slug}.pdf`, title: `Use cases: ${r.role}`, html: roleHtml(r) });
+  const mods = [];
+  for (const file of fs.readdirSync(dir).filter((f) => f.endsWith('.mjs')).sort()) mods.push(await import(pathToFileURL(path.join(dir, file)).href));
+  const featureExtras = Object.assign({}, ...mods.map((m) => m.featureExtras ?? {}));
+  const roleExtras = Object.assign({}, ...mods.map((m) => m.roleExtras ?? {}));
+  for (const mod of mods) {
+    for (const f0 of mod.features ?? []) {
+      const f = { ...f0, ...(featureExtras[f0.slug] ?? {}) };
+      if (!f.example || !f.steps) throw new Error(`${f.slug}: no example or first steps in 65-feature-extras.mjs`);
+      out.push({ file: `features/${f.file ?? f.slug}.pdf`, title: f.name, html: featureHtml(f) });
+    }
+    for (const r0 of mod.roles ?? []) {
+      const r = { ...r0, ...(roleExtras[r0.slug] ?? {}) };
+      if (!r.example) throw new Error(`${r.slug}: no worked example in 75-role-extras.mjs`);
+      // Every use-case document is exactly three pages: the text is scaled slightly until it is.
+      out.push({ file: `use-cases/${r.slug}.pdf`, title: `Use cases: ${r.role}`, html: roleHtml(r), pages: 3 });
+    }
     for (const d of mod.docs ?? []) out.push({ file: `${d.file}.pdf`, title: d.title, html: docHtml(d) });
     for (const d of mod.decks ?? []) out.push({ file: `${d.file}.pdf`, title: d.title, html: deckHtml(d), deck: true });
   }
@@ -145,12 +163,12 @@ const footer = (title) => `<style>${FONTS}</style><div style="width:100%;font-fa
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const documents = (await load()).filter((d) => !only.length || only.some((o) => d.file.includes(o)));
 /*
- * Fonts. Chromium writes text with subset fonts in a two-byte encoding (Type 0 / Identity-H). Chrome, Acrobat,
- * Preview and pdf.js read that; some simpler viewers (the GitHub mobile app is one) do not, and show the glyph
- * numbers as random letters. So every PDF is rewritten with poppler's pdftocairo, which embeds the same fonts as
- * simple TrueType subsets in the standard WinAnsi encoding: the form every viewer handles, and one in which even
- * a viewer that ignores embedded fonts still shows the right letters. That is also why only Windows-1252
- * characters are used. The rewrite drops link annotations, so addresses are printed as text.
+ * Text as drawings. Chromium writes text with subset fonts in a two-byte encoding that some viewers (the GitHub
+ * mobile app is one) cannot read: they show random letters. Re-embedding the fonts in a simpler form helps some
+ * viewers and not others, and we cannot test them all. So the finished PDFs contain no fonts at all: every page is
+ * converted to vector outlines (pdftocairo -svg, then printed again). It looks identical, stays sharp at any zoom
+ * and cannot be garbled. The price: text cannot be selected or searched, links are not clickable (addresses are
+ * printed), and files are about three times larger. The readable text of every document is in src/content.
  */
 let cairo = true;
 try { execFileSync('pdftocairo', ['-v'], { stdio: 'ignore' }); } catch { cairo = false; }
@@ -158,6 +176,7 @@ if (!cairo) { console.error('pdftocairo (poppler-utils) is required: without it 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qe-pdf-'));
 const browser = await chromium.launch(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {});
 const tab = await browser.newPage();
+const tab2 = await browser.newPage();
 // The Porcelain glow (soft radial gradients) is painted once as a small image: as CSS gradients with transparency
 // Chromium writes them into every PDF as large shadings (about 0.5 MB per document).
 await tab.setViewportSize({ width: 1280, height: 720 });
@@ -169,6 +188,7 @@ for (const d of documents) {
   const raw = path.join(tmp, 'raw.pdf');
   await tab.setContent(page(d.html, d.deck), { waitUntil: 'load' });
   await tab.evaluate(() => document.fonts.ready);
+  const pageCount = () => Number(/Pages:\s+(\d+)/.exec(execFileSync('pdfinfo', [raw]).toString())[1]);
   if (d.deck) {
     // A slide with more content than fits is scaled down as a whole (never clipped): its body shrinks in small
     // steps until it fits above the footer.
@@ -180,14 +200,38 @@ for (const d of documents) {
     });
     await tab.pdf({ path: raw, width: '13.333in', height: '7.5in', printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
   } else {
-    await tab.pdf({
+    const print = () => tab.pdf({
       path: raw, format: 'A4', printBackground: true, displayHeaderFooter: true, headerTemplate: '<span></span>', footerTemplate: footer(d.title),
       margin: { top: '14mm', bottom: '16mm', left: '16mm', right: '16mm' },
     });
+    await print();
+    if (d.pages) {
+      // Scale the text in small steps until the document has the wanted number of pages, then as large as fits.
+      let zoom = 1;
+      const set = async (z) => { zoom = z; await tab.evaluate((v) => { document.body.style.zoom = String(v); }, z); await print(); return pageCount(); };
+      let n = pageCount();
+      for (let i = 0; i < 40 && n > d.pages && zoom > 0.7; i++) n = await set(zoom - 0.02);
+      for (let i = 0; i < 40 && n <= d.pages && zoom < 1.4; i++) { n = await set(zoom + 0.02); if (n > d.pages) { n = await set(zoom - 0.02); break; } }
+      if (n !== d.pages) throw new Error(`${d.file}: ${n} pages, wanted ${d.pages} (zoom ${zoom.toFixed(2)}): add or cut content`);
+    }
   }
-  execFileSync('pdftocairo', ['-pdf', raw, target]);
-  const fonts = execFileSync('pdffonts', [target]).toString();
-  if (/Type 3|CID|Identity/.test(fonts)) throw new Error(`${d.file}: a font is not in the simple WinAnsi form (a character outside Windows-1252, or a font that is not Inter PDF?)\n${fonts}`);
+  // Each page as outlines, then one PDF again.
+  const info = execFileSync('pdfinfo', [raw]).toString();
+  const [, w, h] = /Page size:\s+([\d.]+) x ([\d.]+)/.exec(info);
+  let pagesHtml = `<style>@page{size:${w}pt ${h}pt;margin:0}body{margin:0}img{display:block;width:${w}pt;height:${h}pt;break-after:page}img:last-child{break-after:auto}</style>`;
+  for (let n = 1; n <= pageCount(); n++) {
+    const svg = path.join(tmp, `p${n}.svg`);
+    execFileSync('pdftocairo', ['-svg', '-f', String(n), '-l', String(n), raw, svg]);
+    pagesHtml += `<img src="${pathToFileURL(svg).href}">`;
+  }
+  const flat = path.join(tmp, 'flat.html');
+  fs.writeFileSync(flat, pagesHtml);
+  await tab2.goto(pathToFileURL(flat).href, { waitUntil: 'load' });
+  await tab2.pdf({ path: target, width: `${w / 72}in`, height: `${h / 72}in`, printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
+  const fonts = execFileSync('pdffonts', [target]).toString().trim().split('\n').slice(2);
+  if (fonts.length) throw new Error(`${d.file}: the finished PDF still contains fonts\n${fonts.join('\n')}`);
+  const done = Number(/Pages:\s+(\d+)/.exec(execFileSync('pdfinfo', [target]).toString())[1]);
+  if (done !== pageCount()) throw new Error(`${d.file}: ${done} pages after conversion, ${pageCount()} before`);
   console.log(`  ${d.file}`);
 }
 await browser.close();
