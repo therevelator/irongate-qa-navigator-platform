@@ -73,7 +73,7 @@ export const features = [
       'Calculates a **technical debt score** (0–100, lower is better) from the open items by severity.',
       'Plots effort against cost, so the cheap fixes with a high cost of delay stand out.',
       'Uses your own rates (developer hour, support ticket, downtime minute, SLA penalty, revenue per user) from Parameters; a built-in default is always labelled as a default.',
-      'Shows the code-quality findings from static analysis: new, fixed, by severity and by rule.',
+      'Feeds **Tech debt health** on the Overview and the technical-debt recommendation on the team page; the code-quality findings from static analysis (new, fixed, by rule) are in the team page\'s Evidence.',
     ],
     goodFor: [
       'A debt conversation with product in the language of return: "40 hours, pays back in two months".',

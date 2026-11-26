@@ -84,7 +84,7 @@ export const features = [
       'Turns the answers of a closed period into a **0–100 score** with bands (on target from 70, watch from 50) and a trend over up to twelve periods.',
       'Shows a result **only with three or more answers**; below that it says "Not shown".',
       'Runs every week, two weeks, month or quarter per team; can be sent automatically.',
-      'Lets the lead **send the survey**, **remind those who have not answered** (without revealing who to anyone but the mail system), and see the response rate.',
+      'Lets the lead **send the survey** and see the response rate. Members who have not answered get a banner and e-mail reminders; after a delay you set (5 days by default) the lead or manager is told **who has not answered yet**, never what anyone answered.',
       'Feeds the Wellbeing indicator of the Overview and 20% of Engineering health.',
     ],
     goodFor: [
@@ -94,7 +94,7 @@ export const features = [
     ],
     why: [
       'Delivery metrics describe the work; they say nothing about the people doing it until the damage shows as defects, missed dates and resignations. DORA\'s research has repeatedly linked burnout with organisational conditions such as unstable priorities, and found better performance in teams with a healthy culture. The only way to know how people are is to ask them, regularly, in a way they trust.',
-      'Trust is the whole design. Answers are anonymous, results are hidden below three responses, comments are visible only to roles given that permission, and there is no import: nobody can answer for someone else. The score is never built from activity data.',
+      'Trust is the whole design. Answers are stored without a person or a time, so they cannot be matched to anyone; the survey itself tells people that their manager can see whether they responded, not what they answered. Results are hidden below three responses, comments are visible only to roles given that permission, and there is no import: nobody can answer for someone else. The score is never built from activity data.',
     ],
     sources: [DORA],
     roles: [
@@ -106,7 +106,7 @@ export const features = [
     ],
     data: ['Only the answers given by the people themselves in QE Navigator. Response rate = answers ÷ members the survey was e-mailed to.'],
     read: ['Look at the trend and at the lowest of the five statements: that one names the problem.', 'A low response rate is a result too: ask why people do not answer.'],
-    limits: ['No individual answers, ever.', 'A three-answer minimum protects anonymity; very small teams may prefer a higher bar and a longer period.'],
+    limits: ['No individual answers, ever.', 'Whether someone has answered is known (it is how reminders work); what they answered is not.', 'A three-answer minimum protects anonymity; very small teams may prefer a higher bar and a longer period.'],
     related: ['Team page', 'TV mode', 'Developer productivity'],
   },
   {

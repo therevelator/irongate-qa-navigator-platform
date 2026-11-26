@@ -12,7 +12,7 @@ const deck = (r) => ({
   ],
 });
 
-const PRIVACY = ['Privacy by design', ['Individual developer data is off until the person turns it on.', 'Wellbeing answers are anonymous; results need three answers.', 'Answering the survey is never logged.']];
+const PRIVACY = ['Privacy by design', ['Individual developer data is off until the person turns it on.', 'Wellbeing answers are anonymous; results need three answers.', 'Your lead can see whether you answered, never what you answered.']];
 
 export const decks = [
   {
@@ -121,7 +121,7 @@ export const decks = [
     signin: [
       ['Accept the invitation', ': the page lists exactly what you are getting. Choose a password or use single sign-on.'],
       ['Open the Overview', ': your department\'s teams, with their status.'],
-      ['Open one team', ' and switch through the sections: Recommendations, People, KPIs, Evidence.'],
+      ['Open one team', ' and switch through the sections: Recommendations and actions, People and wellbeing, KPIs, Evidence.'],
       ['Open the bell → Preferences', ': keep the weekly digest on; choose the severity worth an interruption.'],
       ['Open Organisation → Users', ' and check who already has access to your teams.'],
     ],
@@ -208,7 +208,7 @@ export const decks = [
     ],
     routine: [['When a build fails', ['Flaky tests first.']], ['Each sprint', ['The team\'s improvement and its outcome.']], ['Each survey period', ['The pulse.']]],
     know: [
-      ['Your data is yours', ['Nobody sees your individual row unless you turn developer insights on.', 'Pulse answers are anonymous; results need three answers; answering is not logged.', 'Calendar data is busy/free times only: never a title or an attendee.']],
+      ['Your data is yours', ['Nobody sees your individual row unless you turn developer insights on.', 'Pulse answers are anonymous and results need three answers. Your lead can see whether you answered, never what.', 'Calendar data is busy/free times only: never a title or an attendee.']],
       ['What it is for', ['Team and system improvement.', 'Not performance review, ranking or pay.', 'Failure logs stay in your CI: QE Navigator stores results, not output.']],
     ],
   }),
@@ -382,7 +382,7 @@ export const decks = [
   deck({
     file: '10-executive-sponsor', role: 'Executive Sponsor', article: 'an',
     lead: 'You sponsor engineering or quality at executive level. One page, one minute, on your phone.',
-    glance: 'Recommended role "Executive Sponsor": read-only with the money view, on the teams or departments you sponsor.',
+    glance: 'Recommended role "Executive Sponsor": read-only with the money view, on each team you sponsor.',
     see: ['Score, status and trend of your scope.', 'The three biggest risks and improvements.', 'Money at risk, as a range.'],
     change: ['Nothing.', 'Your notification preferences.'],
     not: ['Individual data.', 'Survey comments.', 'Operational detail, unless you open it.'],
@@ -404,7 +404,7 @@ export const decks = [
     pages: [
       ['Executive summary', 'The one-minute read', 'Weekly'],
       ['Outcomes', 'Did the investments work?', 'Monthly'],
-      ['Business impact → All teams', 'The budget case', 'Quarterly'],
+      ['Business impact', 'The budget case, per team', 'Quarterly'],
       ['Overview', 'The five executive indicators', 'Monthly'],
     ],
     routine: [['Weekly', ['The summary.']], ['Monthly', ['Outcomes.']], ['Quarterly', ['Money and budget.']]],

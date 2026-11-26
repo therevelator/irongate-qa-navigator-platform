@@ -8,7 +8,7 @@ const DORA_GUIDE = ['DORA, guide to the software delivery metrics', 'https://dor
 export const roles = [
   {
     slug: '01-cto-vp-engineering', role: 'CTO / VP Engineering', aka: 'Chief Technology Officer, VP or SVP Engineering, Head of Engineering',
-    navigatorRole: 'Super admin, or the recommended **Executive Sponsor** role on the departments they follow', scope: 'The whole organisation',
+    navigatorRole: 'Super admin; or, for a read-only view, the recommended **Executive Sponsor** role on the teams they follow', scope: 'The whole organisation',
     oneLine: 'Needs to know whether engineering is getting faster and safer, where money is at risk, and whether last quarter\'s investments worked, in the time between two meetings.',
     accountable: 'The output and health of the whole engineering organisation: delivery speed, stability, cost, and the ability to keep both improving. Answers to the CEO and the board for engineering risk and for the return on the engineering budget.',
     questions: [
@@ -166,13 +166,13 @@ export const roles = [
   },
   {
     slug: '08-cfo-finance', role: 'CFO / Finance partner', aka: 'Finance Business Partner, Controller',
-    navigatorRole: 'Recommended role: **Executive Sponsor** on the departments they follow', scope: 'The departments they partner with',
+    navigatorRole: 'Recommended role: **Executive Sponsor** (read-only with the money view), given on each team they follow', scope: 'The teams they partner with',
     oneLine: 'Needs engineering\'s cost-of-quality claims to rest on assumptions finance has set and can inspect.',
     accountable: 'The budget, the return on spend, and the credibility of numbers presented to the board.',
     questions: ['What does poor quality cost us per month?', 'Which assumptions is that built on, and who set them?', 'What did the improvement work return?', 'Where does the next unit of budget pay back fastest?'],
     useCases: [
-      { title: 'Owning the assumptions', when: 'Setup, then yearly.', how: 'Supplies the rates for **Parameters → Financial and ROI settings**: developer hour, support ticket, downtime minute, SLA penalty, revenue per user.', result: 'Every money figure in the product uses finance\'s numbers; defaults are labelled as defaults.', where: 'Parameters' },
-      { title: 'Checking a budget request', when: 'Engineering asks for a platform investment.', how: 'Opens **Business impact → All teams** and "How this was calculated" on the figures in the request.', result: 'Approves or challenges on the method, not on trust.', where: 'Business impact' },
+      { title: 'Owning the assumptions', when: 'Setup, then yearly.', how: 'Supplies the rates a super admin or manager enters under **Parameters → Financial and ROI settings**: developer hour, support ticket, downtime minute, SLA penalty, revenue per user.', result: 'Every money figure in the product uses finance\'s numbers; defaults are labelled as defaults.', where: 'Parameters' },
+      { title: 'Checking a budget request', when: 'Engineering asks for a platform investment.', how: 'Opens **Business impact** for the teams in the request and "How this was calculated" on its figures.', result: 'Approves or challenges on the method, not on trust.', where: 'Business impact' },
       { title: 'Return on improvement', when: 'Quarterly review.', how: 'Reads **Outcomes**: actions verified, with before and after.', result: 'Evidence that the spend returned something measurable.', where: 'Outcomes' },
     ],
     rhythm: [['Quarterly', 'Business impact roll-up and Outcomes.'], ['Yearly', 'Review the financial rates.']],

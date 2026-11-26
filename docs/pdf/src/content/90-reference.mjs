@@ -55,14 +55,14 @@ export const docs = [
     blocks: [
       { h2: 'Roles and the role to give them in QE Navigator' },
       { table: { wrap: true, head: ['Role in the company', 'Role in QE Navigator', 'Applies on'], rows: [
-        ['CTO / VP Engineering', 'Super admin, or Executive Sponsor', 'Organisation / departments'],
+        ['CTO / VP Engineering', 'Super admin, or Executive Sponsor (read-only)', 'Organisation / teams'],
         ['Head of QA / QE Director', 'Super admin, or Manager', 'Organisation / departments'],
         ['Engineering Manager', 'Engineering Manager (manager level)', 'Department'],
         ['Delivery / Programme Manager', 'Delivery Manager (manager level, no personal data)', 'Department'],
         ['Release Manager', 'Viewer or Software engineer', 'Teams'],
         ['Scrum Master / Agile Coach', 'Scrum Master', 'Each team served'],
         ['Product Owner / Product Manager', 'Product Owner (viewer with money)', 'Teams'],
-        ['CFO / Finance partner', 'Executive Sponsor', 'Departments'],
+        ['CFO / Finance partner', 'Executive Sponsor', 'Teams'],
         ['Team Lead / Tech Lead', 'Team lead', 'Team'],
         ['QA Lead / Test Manager', 'Quality Lead (team-lead level)', 'Team'],
         ['QA / Test Automation Engineer', 'Software engineer', 'Team'],

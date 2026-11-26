@@ -47,12 +47,12 @@ export const features = [
     slug: 'team-page', file: '02-team-page', group: 'Overview', name: 'Team page', menu: 'Overview → a team card', access: 'Everyone assigned to the team, the managers of its department, super admins',
     oneLine: 'Everything about one team in one place, one section at a time: what to do next, the people, every KPI, and the evidence behind each number.',
     does: [
-      'Opens on one section instead of a long scroll. Buttons at the top switch between **Recommendations & actions**, **Team & wellbeing**, **KPIs**, **Evidence** and **Insights**; **Everything** shows all of them, and your choice is remembered.',
+      'Opens on one section instead of a long scroll. Buttons at the top switch between **Recommendations and actions**, **People and wellbeing**, **KPIs**, **Evidence** and **AI insights**; **Everything** shows all of them, and your choice is remembered.',
       '**Recommendations**: up to six things to do next, ranked by expected effect. Each has the numbers it is based on, a confidence, the expected effect on one metric as a range, a concrete next step and the evidence (the flaky tests, the files with the least coverage, the stage that grew, the longest incidents).',
       '**Action plan**: tracked actions with owner, due date, status and linked KPI. One click turns a recommendation into an action; later the page says whether the metric moved since.',
       '**KPIs** in four groups (Quality & testing, Speed & efficiency, Agile & process, Reliability & stability): value, target, status, source and date, a history chart and a **forecast** ("misses its target around 18 Dec").',
       '**Evidence**: the metrics calculated from your CI data, the flaky tests with the runs that prove them, the slowest tests, the failing stages, recent deploys, failed changes, incidents, the last sprints, escaped defects and code-quality findings. **How this was calculated** opens the formula and the exact records behind any number.',
-      '**Team & wellbeing**: members and roles, the anonymous pulse result with its response rate, and for the lead the panel to send the survey.',
+      '**People and wellbeing**: members and roles, the anonymous pulse result with its response rate, and for the lead the panel to send the survey.',
       '**Download PDF** (top bar) prints the whole page with every section opened, whatever is on screen.',
     ],
     goodFor: [
