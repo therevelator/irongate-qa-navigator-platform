@@ -2,7 +2,7 @@
 const DORA = ['DORA, Accelerate State of DevOps research', 'https://dora.dev/research/'];
 const DX_2024 = ['Atlassian & DX, State of Developer Experience 2024', 'https://www.atlassian.com/blog/developer/developer-experience-report-2024'];
 const CISQ = ['CISQ, The Cost of Poor Software Quality in the US: A 2022 Report', 'https://www.it-cisq.org/the-cost-of-poor-quality-software-in-the-us-a-2022-report/'];
-const SCRUM = ['The Scrum Guide (2020)', 'https://scrumguides.org/scrum-guide.html'];
+const SCRUM = ['The Scrum Guide, 2020', 'https://scrumguides.org/scrum-guide.html'];
 const DORA_GUIDE = ['DORA, guide to the software delivery metrics', 'https://dora.dev/guides/dora-metrics/'];
 
 export const roles = [

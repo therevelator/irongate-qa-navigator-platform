@@ -1,7 +1,7 @@
 /** Use cases by role: team, engineering and assurance roles. */
-const GOOGLE_FLAKY = ['Google Testing Blog, "Flaky Tests at Google and How We Mitigate Them" (2016)', 'https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html'];
-const SPACE = ['Forsgren et al., "The SPACE of Developer Productivity", ACM Queue (2021)', 'https://queue.acm.org/detail.cfm?id=3454124'];
-const DEVEX = ['Noda, Storey, Forsgren, Greiler, "DevEx: What Actually Drives Productivity", ACM Queue (2023)', 'https://queue.acm.org/detail.cfm?id=3595878'];
+const GOOGLE_FLAKY = ['Google Testing Blog, "Flaky Tests at Google and How We Mitigate Them", 2016', 'https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html'];
+const SPACE = ['Forsgren et al., "The SPACE of Developer Productivity", ACM Queue, 2021', 'https://queue.acm.org/detail.cfm?id=3454124'];
+const DEVEX = ['Noda, Storey, Forsgren, Greiler, "DevEx: What Actually Drives Productivity", ACM Queue, 2023', 'https://queue.acm.org/detail.cfm?id=3595878'];
 const DORA = ['DORA, Accelerate State of DevOps research', 'https://dora.dev/research/'];
 const WP29 = ['Article 29 Working Party, Opinion 2/2017 on data processing at work', 'https://ec.europa.eu/newsroom/article29/items/610169'];
 
