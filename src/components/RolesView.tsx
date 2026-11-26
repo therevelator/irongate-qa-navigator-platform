@@ -83,7 +83,7 @@ const RolesView: React.FC = () => {
       setData(await res.json());
       setLoadError(null);
     } catch {
-      setLoadError(NETWORK_ERROR);
+      setLoadError(NETWORK_ERROR('the roles'));
     }
   }, []);
   useEffect(() => { load(); }, [load]);
