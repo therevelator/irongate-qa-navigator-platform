@@ -11,6 +11,8 @@
  * (what was current on that day). Stale values are still shown (greyed, "stale since"), but
  * composites (QA score, KPI targets, company aggregates) leave them out.
  */
+import { loadSchedules, type DataGroup, type TeamSchedule } from './collectionSchedule';
+import { METRICS } from '../../packages/engine/src/calc/metrics';
 import { query } from '../../src/lib/db';
 import { DEFAULT_METRIC_INTERVALS } from './metricIntervals';
 
@@ -44,6 +46,32 @@ export async function loadIntervals(companyId: string): Promise<IntervalMap> {
   for (const r of rows) {
     const ms = Number(r.interval_value) * (INTERVAL_UNIT_MS[r.interval_unit] ?? 0);
     if (Number.isFinite(ms) && ms > 0) out[r.metric_key] = ms;
+  }
+  // The teams' collection schedules travel with the map (not enumerable: the map stays metric → ms for everyone else).
+  const schedules = await loadSchedules(companyId).catch(() => new Map<string, Partial<TeamSchedule>>());
+  if (schedules.size) Object.defineProperty(out, TEAM_SCHEDULES, { value: schedules, enumerable: false });
+  return out;
+}
+
+const TEAM_SCHEDULES = Symbol('teamSchedules');
+/** Collection may run late by this factor of its interval before a value counts as stale. */
+export const COLLECTION_GRACE = 2;
+const GROUP_OF_COLUMN: Record<string, DataGroup> = Object.fromEntries(
+  Object.values(METRICS).filter((m) => m.kpi).map((m) => [m.kpi as string, (m.group ?? 'ci') as DataGroup])); // the CI metrics carry no group: it is the default
+
+/**
+ * The expected intervals for one team: the company's, except that a metric whose data the team chose to collect
+ * less often (collection_schedules) is expected no sooner than COLLECTION_GRACE × that interval. A team that reads
+ * its pipelines once a day is not shown as stale an hour after the last run.
+ */
+export function intervalsForTeam(intervals: IntervalMap, teamId: string | null | undefined): IntervalMap {
+  const schedules = (intervals as any)[TEAM_SCHEDULES] as Map<string, Partial<TeamSchedule>> | undefined;
+  const mine = teamId ? schedules?.get(String(teamId)) : undefined;
+  if (!mine) return intervals;
+  const out: IntervalMap = { ...intervals };
+  for (const [column, group] of Object.entries(GROUP_OF_COLUMN)) {
+    const minutes = mine[group];
+    if (minutes && out[column] !== undefined) out[column] = Math.max(out[column], minutes * 60_000 * COLLECTION_GRACE);
   }
   return out;
 }

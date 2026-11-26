@@ -238,6 +238,6 @@ export function validateHeartbeat(body: unknown): HeartbeatBody {
 }
 
 /** The latest Exporter release this server knows (an older Exporter is shown as outdated). */
-export const LATEST_EXPORTER_VERSION = '0.5.0';
+export const LATEST_EXPORTER_VERSION = '0.6.0';
 const cmp = (a: string, b: string) => { const x = a.split('.').map(Number); const y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) - (y[i] ?? 0); return 0; };
 export const isOutdated = (version: string) => cmp(version, LATEST_EXPORTER_VERSION) < 0;

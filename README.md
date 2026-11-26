@@ -651,7 +651,7 @@ curl -sS --fail-with-body -X POST "https://<host>/api/ingest/static-analysis?tea
   [`server/lib/lostHours.ts`](server/lib/lostHours.ts)); findings with their records and a next step; verdicts read from the tracked
   actions' checkpoints; connected sources with the fix for each gap ([`server/routes/navigator.ts`](server/routes/navigator.ts),
   `src/components/navigator/`). Migration `supabase/migrations/20261210000000_navigator.sql`.
-- **Exporter 0.5.0** connectors: GitHub Actions, GitLab CI, Bitbucket Cloud and Data Center, Jenkins, Azure DevOps,
+- **Exporter 0.6.0** connectors: GitHub Actions, GitLab CI, Bitbucket Cloud and Data Center, Jenkins, Azure DevOps,
   SonarQube, Jira, Linear, PagerDuty, Opsgenie, TestRail, Xray Cloud, Zephyr Scale, Google Calendar, Microsoft 365
   (`exporter/README.md`). Tested against stand-ins of each vendor's documented API, not against the real services.
 - **Live data only** ([`server/lib/liveData.ts`](server/lib/liveData.ts)): the company setting that refuses typed metrics and

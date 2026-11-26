@@ -82,7 +82,7 @@ export class QeError extends Error {
 
 export interface PostResult { status: number; body: any; replayed: boolean }
 
-export interface ExporterContext { company: { id: string; name: string | null }; apiKey?: { name: string }; departments: Array<{ id: string; name: string; teams: Array<{ id: string; name: string }> }> }
+export interface ExporterContext { company: { id: string; name: string | null }; apiKey?: { name: string }; schedule?: { defaultMinutes: number; teams: Record<string, Record<string, number>> }; departments: Array<{ id: string; name: string; teams: Array<{ id: string; name: string }> }> }
 
 export class QeClient {
   private last = 0;

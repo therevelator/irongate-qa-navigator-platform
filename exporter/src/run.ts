@@ -36,6 +36,9 @@ import { QeClient, QeError, deliver, makeBatches, type Batch, type EnvelopeKind,
 import { allowedFields } from './policy';
 import { refreshOAuth } from './oauth';
 import { VERSION } from './version';
+import { isDue, scheduleFrom, type Schedule } from './schedule';
+
+const intervalText = (m: number) => (m % 1440 === 0 ? (m === 1440 ? 'once a day' : `every ${m / 1440} days`) : m % 60 === 0 ? (m === 60 ? 'every hour' : `every ${m / 60} hours`) : `every ${m} minutes`);
 
 export const EXIT = { OK: 0, INTERNAL: 1, CONFIG: 2, SOURCE: 3, QE: 4, LOCKED: 5, PARTIAL: 6 } as const;
 
@@ -48,6 +51,8 @@ export interface RunOptions {
   offline?: boolean;
   /** preview: include what was already delivered. */
   all?: boolean;
+  /** sync: read every source now, whatever the collection schedule says. */
+  force?: boolean;
   out?: (text: string) => void;
 }
 
@@ -488,9 +493,21 @@ export async function runSync(cfg: Config, o: RunOptions = {}): Promise<number> 
     const save = () => saveState(cfg.statePath, st0);
     try { await refreshOAuth(cfg, env); } catch (e) { codes.push(errorExit(e, 'oauth')); }
     const budget = { extraRequests: 40 };
+    // The collection schedule the company set (QE Navigator → Update frequency). Not asked for a backfill, one named
+    // source or --force: those read now. Without an answer every source is read, as before 0.6.0.
+    let schedule: Schedule | null = null;
+    if (!o.since && !o.source && !o.force) {
+      try { schedule = scheduleFrom(await qe.context()); } catch (e) { log.info(`No collection schedule from QE Navigator (${(e as Error).message.slice(0, 120)}): reading every source`); }
+    }
+    const now = (o.now ?? (() => new Date()))();
     for (const src of selected(cfg, o.source)) {
       const t0 = Date.now();
       const st = sourceState(state, src.name);
+      const due = isDue(src, schedule, st.lastSuccessAt, now);
+      if (!due.due) {
+        log.info(`${src.name}: not due (read ${intervalText(due.minutes)}; next read after ${due.nextAt})`, { source: src.name, intervalMinutes: due.minutes });
+        continue;
+      }
       try {
         const adapter = adapterFor(src, cfg, privacy, env);
         const c = await collect(adapter, src, cfg, state, privacy, o);

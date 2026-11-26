@@ -213,13 +213,13 @@ npm run build                    # prints the size and the SHA-256, writes dist/
 sha256sum -c dist/SHA256SUMS
 ```
 
-The image: `docker build -f exporter/Dockerfile -t qe-exporter:0.5.0 .` from the repository root
+The image: `docker build -f exporter/Dockerfile -t qe-exporter:0.6.0 .` from the repository root
 (`exporter/Dockerfile.dockerignore` sends only the Exporter and the shared allow-list) runs the type check, the allow-list
 drift check, the build and the tests, then copies only `qe-exporter.mjs` and `SHA256SUMS` into a distroless base pinned by
 digest. To check the file inside an image against your own build:
 
 ```bash
-docker run --rm --entrypoint /nodejs/bin/node qe-exporter:0.5.0 -e \
+docker run --rm --entrypoint /nodejs/bin/node qe-exporter:0.6.0 -e \
   "const f=require('fs');console.log(require('crypto').createHash('sha256').update(f.readFileSync('/app/qe-exporter.mjs')).digest('hex'))"
 ```
 

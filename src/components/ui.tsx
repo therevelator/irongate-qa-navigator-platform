@@ -150,3 +150,38 @@ export const EmptyState: React.FC<{ title: string; description?: string; icon?: 
     {description && <p className="mt-1 max-w-sm text-sm text-slate-500 dark:text-slate-400">{description}</p>}
   </div>
 );
+
+/**
+ * Sections of a long page shown one at a time: a row of buttons, each showing only its own section, plus
+ * "Everything". The sections stay mounted (their data is loaded once) and are only hidden; in print every section
+ * is shown, so "Download PDF" holds the whole page. The choice is remembered per browser.
+ */
+export const ALL_SECTIONS = 'all';
+
+export function useSectionChoice(storageKey: string, fallback: string): [string, (id: string) => void] {
+  const read = () => { try { return window.localStorage.getItem(storageKey) || fallback; } catch { return fallback; } };
+  const [value, setValue] = React.useState<string>(read);
+  const set = (id: string) => { setValue(id); try { window.localStorage.setItem(storageKey, id); } catch { /* the choice just is not remembered */ } };
+  return [value, set];
+}
+
+export const SectionSwitch: React.FC<{ sections: Array<{ id: string; label: string; count?: React.ReactNode }>; value: string; onChange: (id: string) => void; label: string }> = ({ sections, value, onChange, label }) => (
+  <div className="sticky top-0 z-20 -mx-1 flex flex-wrap gap-1.5 rounded-lg border border-slate-200 bg-white/95 p-1.5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 print:hidden" role="tablist" aria-label={label} data-testid="section-switch">
+    {[...sections, { id: ALL_SECTIONS, label: 'Everything' }].map((s) => {
+      const on = (sections.some((x) => x.id === value) ? value : ALL_SECTIONS) === s.id;
+      return (
+        <button key={s.id} type="button" role="tab" aria-selected={on} onClick={() => onChange(s.id)} data-testid={`section-tab-${s.id}`}
+          className={cx('inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium transition-colors',
+            on ? 'bg-brand-700 text-white' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800')}>
+          {s.label}{'count' in s && s.count != null ? <span className={cx('rounded-full px-1.5 text-[11px] tabular-nums', on ? 'bg-white/20' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>{s.count}</span> : null}
+        </button>
+      );
+    })}
+  </div>
+);
+
+export const SectionPanel: React.FC<{ id: string; value: string; known: string[]; children: React.ReactNode }> = ({ id, value, known, children }) => {
+  const current = known.includes(value) ? value : ALL_SECTIONS;
+  const on = current === ALL_SECTIONS || current === id;
+  return <div role="tabpanel" data-section={id} data-shown={on} className={cx('space-y-6', !on && 'hidden print:block')}>{children}</div>;
+};

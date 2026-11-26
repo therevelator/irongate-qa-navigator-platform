@@ -1,3 +1,4 @@
+import { downloadPagePdf } from '../lib/pagePdf';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import BrandMark from './BrandMark';
 import {
@@ -5,7 +6,7 @@ import {
   Calculator, Clock, MonitorPlay, SlidersHorizontal, Bug, Wrench, GitBranch, TrendingUp, Gauge, Activity, Inbox,
   CalendarClock, Trophy, FileText, ChevronRight, Smartphone, Pin, PinOff, PanelLeftClose, History, GitCompareArrows, HeartPulse, Footprints,
   FileUp,
-  Hourglass, SearchCheck, ClipboardCheck, PlugZap,
+  Hourglass, SearchCheck, ClipboardCheck, PlugZap, FileDown,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import API_URL from '../config/api';
@@ -474,6 +475,11 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
               <p className="truncate text-xs text-slate-500 dark:text-slate-400" data-testid="header-person-title">{personTitle}</p>
             </div>
             <span className="hidden h-6 w-px bg-slate-200 dark:bg-slate-700 lg:block" aria-hidden="true" />
+            <button type="button" onClick={() => downloadPagePdf(meta.title, profile?.companyName ?? null)} title="Download this page as a PDF, with every section expanded"
+              aria-label="Download this page as a PDF" data-testid="download-page-pdf"
+              className="hidden h-9 items-center gap-1.5 rounded-md border border-slate-200 px-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800 sm:inline-flex">
+              <FileDown size={16} aria-hidden /> <span className="hidden xl:inline">Download PDF</span>
+            </button>
             <AccessHelp summary={help} />
             <NotificationsBell
               onOpenAll={(tab = 'alerts') => {
@@ -490,6 +496,12 @@ const Layout: React.FC<LayoutProps> = ({ children, currentView, onViewChange, on
         <SandboxBanner />
         {onOpenPulse && <PulsePendingBanner userId={user?.id ? String(user.id) : null} onOpen={onOpenPulse} />}
         <main id="main-scroll" className="flex-1 overflow-auto flex flex-col">
+          <div className="print-only px-4 pt-2 sm:px-8" data-testid="print-header">
+            <div className="flex items-center justify-between border-b border-slate-300 pb-3">
+              <span className="flex items-center gap-3"><BrandMark height={36} /><span className="text-base font-semibold text-slate-900">QE Navigator · {meta.title}</span></span>
+              <span className="text-xs text-slate-600">{profile?.companyName ? `${profile.companyName} · ` : ''}{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            </div>
+          </div>
           <div className="flex-1">{children}</div>
           <footer className="px-4 sm:px-8 py-4 border-t border-slate-200 dark:border-slate-800 text-xs text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2">
             <span>© {new Date().getFullYear()} IronGate Software Ltd. All rights reserved.</span>

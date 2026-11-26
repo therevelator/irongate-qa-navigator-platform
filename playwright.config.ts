@@ -55,6 +55,10 @@ export default defineConfig({
 
   use: {
     baseURL,
+    // The team page shows one section at a time and remembers the choice (qe.team.section). The tests written
+    // before that expect every section on screen, so each context starts with "Everything" chosen; the tests of
+    // the sections themselves pick a section first (tests/e2e/admin/collection-frequency.spec.ts, SEC-01).
+    storageState: { cookies: [], origins: [{ origin: new URL(baseURL).origin, localStorage: [{ name: 'qe.team.section', value: 'all' }] }] },
     actionTimeout: 15 * 1000,
     navigationTimeout: 30 * 1000,
     trace,

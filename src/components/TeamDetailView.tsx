@@ -24,7 +24,7 @@ import ScoreVisual from './ScoreVisual';
 import { statusWithTarget, targetLabel, watchBand } from '../lib/targetText';
 import { qaScoreInputLosses } from '../../server/lib/metricFormulas';
 import { ROLE_LABELS, ROLE_LABELS_PLURAL } from '../../server/lib/roleLabels';
-import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, cx, toneText, buttonClass } from './ui';
+import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, cx, toneText, buttonClass, SectionPanel, SectionSwitch, useSectionChoice } from './ui';
 import type { Tone } from './ui';
 import MetricInfoTrigger from './MetricInfoTrigger';
 import { FormulaSwitch } from './FormulaNote';
@@ -375,6 +375,16 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
   const policyActor = user ? policyActorOf(user) : null;
   const policyTeam = { id: String(team.id), department_id: (team as any).department_id != null ? String((team as any).department_id) : null };
   const canViewDeveloperInsights = !!policyActor && canViewIndividualDevelopers(policyActor, policyTeam);
+  // Sections of the page below the headline scores; "insights" only for those who may see developer insights.
+  const sectionList = [
+    { id: 'recommendations', label: 'Recommendations and actions' },
+    { id: 'people', label: 'People and wellbeing' },
+    { id: 'kpis', label: 'KPIs' },
+    { id: 'evidence', label: 'Evidence' },
+    ...(canViewDeveloperInsights ? [{ id: 'insights', label: 'AI insights' }] : []),
+  ];
+  const sectionIds = sectionList.map((x) => x.id);
+  const [section, setSection] = useSectionChoice('qe.team.section', 'recommendations');
   const canViewOwnRow = !canViewDeveloperInsights && !!policyActor && canViewTeamAnalytics(policyActor, policyTeam);
   // TV mode uses the analytics scope (GET /api/tv/teams/:id enforces the same rule).
   const canOpenTv = !!policyActor && canViewTeamAnalytics(policyActor, policyTeam);
@@ -765,11 +775,17 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
         </div>
       </div>
 
+      {/* The rest of the page, one section at a time (or everything): less scrolling. All are shown in print. */}
+      <SectionSwitch label="Sections of the team page" sections={sectionList} value={section} onChange={setSection} />
+
+      <SectionPanel id="recommendations" value={section} known={sectionIds}>
       {/* Improve: what to do next (ranked recommendations) and the tracked actions */}
       <RecommendationsPanel teamId={String(team.id)} teamName={team.name} improve={improve} onActionCreated={() => setActionsReloadKey((n) => n + 1)} />
 
       <ActionsPanel teamId={String(team.id)} teamName={team.name} draft={actionDraft} onDraftUsed={clearActionDraft} reloadKey={actionsReloadKey} onChanged={improve.reload} />
+      </SectionPanel>
 
+      <SectionPanel id="people" value={section} known={sectionIds}>
       {/* Team members */}
       {showMembers && info('team_members', (
         <Card padded={false}>
@@ -846,6 +862,9 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
       {/* Wellbeing (survey): anonymous pulse results of the team (k-anonymous, closed periods only) */}
       {info('wellbeing_survey', <PulseTeamSummary teamId={String(team.id)} onOpen={onOpenPulse ? () => onOpenPulse(String(team.id)) : undefined} />, { variant: 'section' })}
 
+      </SectionPanel>
+
+      <SectionPanel id="kpis" value={section} known={sectionIds}>
       {/* KPI categories */}
       {categories.map(category => (
         <section key={category.id}>
@@ -923,11 +942,14 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
           </div>
         </section>
       ))}
+      </SectionPanel>
 
+      <SectionPanel id="evidence" value={section} known={sectionIds}>
       <CiEvidenceSection teamId={String(team.id)} evidence={ciEvidence} delivery={delivery} work={work} onExplain={(metric) => setExplain({ metric, source: null })} canConnect={user?.role === 'super_admin'} />
-      <HowCalculatedDialog teamId={String(team.id)} metric={explain?.metric ?? null} cardSource={explain?.source ?? null} onClose={() => setExplain(null)} />
 
+      </SectionPanel>
 
+      <SectionPanel id="insights" value={section} known={sectionIds}>
       {/* AI insights (the earlier rule-based / LLM team recommendations) */}
       {canViewDeveloperInsights && info('team_recommendations', (
         <Card>
@@ -1073,6 +1095,8 @@ const TeamDetailView: React.FC<TeamDetailViewProps> = ({ team, onBack, onOpenTv,
         variant: 'section',
         value: devAISuggestions?.developers?.length ? `${devAISuggestions.developers.length} developers · ${devAISuggestions.source === 'groq' ? 'AI' : 'rule-based'}` : undefined,
       })}
+      </SectionPanel>
+      <HowCalculatedDialog teamId={String(team.id)} metric={explain?.metric ?? null} cardSource={explain?.source ?? null} onClose={() => setExplain(null)} />
     </Page>
   );
 };

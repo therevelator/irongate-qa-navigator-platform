@@ -398,3 +398,19 @@ body {
   animation-timing-function: linear;
   animation-fill-mode: forwards;
 }
+
+/* Printing a page ("Download PDF" in the top bar, src/lib/pagePdf.ts): only the page content, at full length. */
+.print-only { display: none; }
+@media print {
+  @page { margin: 14mm 12mm; }
+  html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
+  .ig-app-bg { display: block !important; height: auto !important; background: #fff !important; }
+  .ig-app-bg > div, #main-scroll { display: block !important; height: auto !important; overflow: visible !important; }
+  #app-navigation, .ig-app-bg header, .ig-app-bg footer, [data-testid='section-switch'], [data-no-print] { display: none !important; }
+  .print-only { display: block; }
+  section, table, [data-testid='finding'], [data-testid='outcome-action'] { break-inside: avoid; }
+  h2, h3 { break-after: avoid; }
+  * { animation: none !important; transition: none !important; }
+  .sticky { position: static !important; }
+  button { box-shadow: none !important; }
+}
