@@ -12,7 +12,7 @@ export function policyActorOf(user: User | null | undefined): PolicyActor {
     role: user?.role ?? '',
     departmentId: user?.departmentId ?? null,
     primaryTeamId: user?.primaryTeamId ?? null,
-    grants: user?.assignments?.map((a) => ({ role: a.role, scopeType: a.scopeType, scopeId: a.scopeId })),
+    grants: user?.assignments?.map((a) => ({ role: a.role, scopeType: a.scopeType, scopeId: a.scopeId, customRoleId: a.customRoleId ?? null, customRoleName: a.customRoleName ?? null, added: a.added ?? null, removed: a.removed ?? null })),
     liveDataOnly: !!user?.liveDataOnly,
   };
 }

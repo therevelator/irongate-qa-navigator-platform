@@ -73,9 +73,76 @@ export const ROLE_HIERARCHY: Record<string, string[]> = {
 
 /** One active role assignment. scopeId is the company, department or team id. */
 export interface Grant {
+  /** The access level. For a custom role this is its base level (scope, rank and people management follow it). */
   role: Role | string;
   scopeType: ScopeType | string;
   scopeId: string;
+  /** The company's custom role behind this assignment, when there is one (custom_roles). */
+  customRoleId?: string | null;
+  customRoleName?: string | null;
+  /** Permissions the custom role adds to / removes from its level's recommended set (CAPABILITIES). */
+  added?: string[] | null;
+  removed?: string[] | null;
+}
+
+/* ------------------------------------------------------------------------------------------
+ * Permissions of a role
+ *
+ * Each access level comes with a recommended set of permissions (LEVEL_CAPABILITIES): what the five roles could
+ * always do. A company's custom role starts from one level and adds or removes permissions from that set.
+ * A permission is held over a team when an assignment that covers the team (the company, the team's department or
+ * the team itself) has it. What is NOT a permission here stays with the level: who may invite, manage and assign
+ * people (the role hierarchy below), team and department settings, and the company's configuration.
+ * ---------------------------------------------------------------------------------------- */
+
+export type Capability = 'view_individuals' | 'view_wellbeing_comments' | 'view_money' | 'view_logs' | 'write_team_data' | 'run_pulse';
+
+export const CAPABILITIES: Array<{ key: Capability; group: 'See' | 'Change'; label: string; description: string; scopes?: ScopeType[] }> = [
+  { key: 'view_individuals', group: 'See', label: 'Individual developer metrics and AI insights',
+    description: 'The per-person rows of a team (only for people who enabled developer insights), the AI insights and developer recommendations, the executive briefing and the weekly digest.' },
+  { key: 'view_wellbeing_comments', group: 'See', label: 'Wellbeing survey comments',
+    description: 'The anonymous free-text comments of the wellbeing pulse (the scores are visible to everyone who sees the team).' },
+  { key: 'view_money', group: 'See', label: 'Money at risk and the revenue roll-up',
+    description: 'The revenue at stake across the teams in scope, on the Executive summary and Business impact → All teams.' },
+  { key: 'view_logs', group: 'See', label: 'Activity and Ingestion logs', scopes: ['company', 'department'],
+    description: 'Who changed what, and what data arrived, for the departments the role is assigned on. Only roles assigned on a department or the company.' },
+  { key: 'write_team_data', group: 'Change', label: 'Actions, alerts and team data',
+    description: 'Create, assign and close tracked actions, accept recommendations, acknowledge alerts, upload files, enter metrics, set how often data is collected.' },
+  { key: 'run_pulse', group: 'Change', label: 'Send the wellbeing survey',
+    description: 'Send the wellbeing pulse to the team and set its reminders.' },
+];
+export const CAPABILITY_KEYS = CAPABILITIES.map((c) => c.key);
+export const isCapability = (v: unknown): v is Capability => typeof v === 'string' && (CAPABILITY_KEYS as string[]).includes(v);
+
+/** The recommended permissions of each access level: exactly what the level could do before custom roles existed. */
+export const LEVEL_CAPABILITIES: Record<string, Capability[]> = {
+  super_admin: [...CAPABILITY_KEYS],
+  qa_manager: [...CAPABILITY_KEYS],
+  team_lead: ['view_individuals', 'view_wellbeing_comments', 'write_team_data', 'run_pulse'],
+  qa_engineer: [],
+  viewer: [],
+};
+
+const LEVEL_SCOPE: Record<string, ScopeType> = { super_admin: 'company', qa_manager: 'department', team_lead: 'team', qa_engineer: 'team', viewer: 'team' };
+
+/** The permissions a custom role may change, per base level (a team-level role cannot hold a department-only one). */
+export function editableCapabilities(baseRole: string): Capability[] {
+  const scope = LEVEL_SCOPE[baseRole];
+  return CAPABILITIES.filter((c) => !c.scopes || c.scopes.includes(scope)).map((c) => c.key);
+}
+
+/** The effective permissions of a level with a custom role's changes. */
+export function capabilitiesOf(role: string, added?: string[] | null, removed?: string[] | null): Capability[] {
+  const allowed = editableCapabilities(role);
+  const base = (LEVEL_CAPABILITIES[role] ?? []).filter((c) => !(removed ?? []).includes(c));
+  const extra = (added ?? []).filter((c): c is Capability => isCapability(c) && allowed.includes(c));
+  return CAPABILITY_KEYS.filter((c) => base.includes(c) || extra.includes(c));
+}
+
+/** Does this assignment carry the permission? A super admin always does. */
+export function grantHas(g: Grant, cap: Capability): boolean {
+  if (g.role === 'super_admin') return true;
+  return capabilitiesOf(g.role, g.added, g.removed).includes(cap);
 }
 
 export interface PolicyActor {
@@ -166,6 +233,28 @@ export function rolesOnTeam(actor: PolicyActor, team: ScopeTeam): string[] {
     else if (g.scopeType === 'team' && g.scopeId === team.id) out.push(g.role);
   }
   return out;
+}
+
+/** The assignments of the actor that cover this team (the company, the team's department, the team itself). */
+export function grantsOnTeam(actor: PolicyActor, team: ScopeTeam): Grant[] {
+  return grantsOf(actor).filter((g) => g.scopeType === 'company'
+    || (g.scopeType === 'department' && !!team.department_id && g.scopeId === team.department_id)
+    || (g.scopeType === 'team' && g.scopeId === team.id));
+}
+
+/** Does the actor hold the permission over this team? */
+export function capOnTeam(actor: PolicyActor, team: ScopeTeam, cap: Capability): boolean {
+  return grantsOnTeam(actor, team).some((g) => grantHas(g, cap));
+}
+
+/** Does the actor hold the permission anywhere (optionally only through assignments on these scope types)? */
+export function capAnywhere(actor: PolicyActor, cap: Capability, scopes?: ScopeType[]): boolean {
+  return grantsOf(actor).some((g) => (!scopes || scopes.includes(g.scopeType as ScopeType)) && grantHas(g, cap));
+}
+
+/** Departments over which the actor holds the permission through a department assignment. */
+export function departmentsWithCap(actor: PolicyActor, cap: Capability): string[] {
+  return grantsOf(actor).filter((g) => g.scopeType === 'department' && grantHas(g, cap)).map((g) => g.scopeId);
 }
 
 /** Highest role among the actor's grants (falls back to the display role). */
@@ -280,6 +369,8 @@ export function canGrant(actor: PolicyActor, grant: Grant, team?: ScopeTeam | nu
   if (ROLE_SCOPE[grant.role as Role] !== grant.scopeType) return false;
   if (hasCompany(actor)) return true;
   if (grant.scopeType !== 'team' || !team || team.id !== grant.scopeId) return false;
+  // Nobody hands out a permission they do not hold over that team themselves (a custom role's additions).
+  if ((grant.added ?? []).some((c) => isCapability(c) && !capOnTeam(actor, team, c))) return false;
   if (['team_lead', 'qa_engineer', 'viewer'].includes(grant.role) && !!team.department_id && managedDepartmentIds(actor).includes(team.department_id)) return true;
   if (['qa_engineer', 'viewer'].includes(grant.role) && ledTeamIds(actor).includes(team.id)) return true;
   return false;
@@ -307,7 +398,7 @@ export function canManageDepartment(actor: PolicyActor, departmentId: string | n
 
 /** Team data writes (AI toggle, metrics): canManageTeam, plus team_lead on a team they lead. */
 export function canWriteTeamData(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
-  return canManageTeam(actor, team) || ledTeamIds(actor).includes(team.id);
+  return capOnTeam(actor, team, 'write_team_data');
 }
 
 /**
@@ -359,17 +450,18 @@ export function canRequestTeamInsights(actor: PolicyActor, team: ScopeTeam): boo
 
 /** Company executive briefing (AI summary of the company dashboard): super_admin, QA managers, team leads. */
 export function canRequestExecutiveBriefing(actor: PolicyActor): boolean {
-  return grantsOf(actor).some((g) => DEVELOPER_INSIGHT_ROLES.includes(g.role));
+  return capAnywhere(actor, 'view_individuals');
 }
 
 /** Manual metrics page (team KPIs, developer metrics): anyone who may write the data of at least one team. */
 export function canWriteSomeTeamData(actor: PolicyActor): boolean {
-  return hasCompany(actor) || managedDepartmentIds(actor).length > 0 || ledTeamIds(actor).length > 0;
+  return capAnywhere(actor, 'write_team_data');
 }
 
 /** Users / Teams admin pages: anyone who manages users of some scope (super_admin, QA managers, team leads). */
 export function canOpenUserAdmin(actor: PolicyActor): boolean {
-  return canWriteSomeTeamData(actor);
+  // Whoever may manage people: the access level, not a permission of a custom role.
+  return hasCompany(actor) || managedDepartmentIds(actor).length > 0 || ledTeamIds(actor).length > 0;
 }
 
 /**
@@ -387,6 +479,11 @@ export function canSetJobTitle(actor: PolicyActor): boolean {
 
 /** Loading or refreshing sample data (the demo seed): company administrators. */
 export function canManageSampleData(actor: PolicyActor): boolean {
+  return hasCompany(actor);
+}
+
+/** Create, change and archive the company's custom roles: super admins only. */
+export function canManageRoles(actor: PolicyActor): boolean {
   return hasCompany(actor);
 }
 
@@ -452,7 +549,7 @@ export function canViewTeamMembers(actor: PolicyActor, team: ScopeTeam): boolean
 
 /** May the actor see other developers' individual metrics for this team? */
 export function canViewIndividualDevelopers(actor: PolicyActor, team: ScopeTeam): boolean {
-  return rolesOnTeam(actor, team).some((r) => DEVELOPER_INSIGHT_ROLES.includes(r));
+  return capOnTeam(actor, team, 'view_individuals');
 }
 
 /**
@@ -478,7 +575,7 @@ export function canViewDeveloperRow(
 
 /** Who may open the Activity page: super_admin (whole company) and QA managers (their departments). */
 export function canViewActivity(actor: PolicyActor): boolean {
-  return hasCompany(actor) || managedDepartmentIds(actor).length > 0;
+  return capAnywhere(actor, 'view_logs', ['company', 'department']);
 }
 
 /**
@@ -492,7 +589,7 @@ export function canViewUserActivity(actor: PolicyActor): boolean {
 /** May the actor see this audit entry? super_admin: all; QA manager: entries of a department they manage. */
 export function canViewAuditEntry(actor: PolicyActor, entry: { department_ids?: string[] | null }): boolean {
   if (hasCompany(actor)) return true;
-  const mine = managedDepartmentIds(actor);
+  const mine = departmentsWithCap(actor, 'view_logs');
   return (entry.department_ids ?? []).some((d) => mine.includes(d));
 }
 
@@ -502,13 +599,13 @@ export function canViewAuditEntry(actor: PolicyActor, entry: { department_ids?: 
 
 /** Who may open the Ingestion log: super_admin (whole company) and QA managers (entries of their departments). */
 export function canViewIngestionLog(actor: PolicyActor): boolean {
-  return hasCompany(actor) || managedDepartmentIds(actor).length > 0;
+  return capAnywhere(actor, 'view_logs', ['company', 'department']);
 }
 
 /** May the actor see this ingestion log entry? super_admin: all; QA manager: entries touching a team of their departments. */
 export function canViewIngestionEntry(actor: PolicyActor, entry: { department_ids?: string[] | null }): boolean {
   if (hasCompany(actor)) return true;
-  const mine = managedDepartmentIds(actor);
+  const mine = departmentsWithCap(actor, 'view_logs');
   return (entry.department_ids ?? []).some((d) => mine.includes(d));
 }
 
@@ -541,8 +638,7 @@ export function canCompareTeams(actor: PolicyActor, teams: ScopeTeam[]): boolean
  * QA managers (their departments); the teams summed are those of analyticsTeamsInScope.
  */
 export function canViewRevenueRollup(actor: PolicyActor): boolean {
-  const level = analyticsScopeLevelOf(actor);
-  return level === 'company' || level === 'department';
+  return capAnywhere(actor, 'view_money');
 }
 
 export interface SavedViewRef {
@@ -596,7 +692,7 @@ export function canViewPulseResults(actor: PolicyActor, team: ScopeTeam): boolea
 
 /** May the actor read the free-text comments (shown with the aggregate only)? Leads, managers and admins of the team. */
 export function canViewPulseComments(actor: PolicyActor, team: ScopeTeam): boolean {
-  return canViewIndividualDevelopers(actor, team);
+  return capOnTeam(actor, team, 'view_wellbeing_comments');
 }
 
 /**
@@ -614,7 +710,7 @@ export function canSetPulseCadence(actor: PolicyActor, team: { id: string; depar
  * (canSetPulseCadence: QA managers of the team's department, super_admin) and the team's lead.
  */
 export function canSetPulseReminders(actor: PolicyActor, team: { id: string; department_id?: string | null }): boolean {
-  return canSetPulseCadence(actor, team) || ledTeamIds(actor).includes(team.id);
+  return canSetPulseCadence(actor, team) || capOnTeam(actor, team, 'run_pulse');
 }
 
 /**
@@ -622,5 +718,5 @@ export function canSetPulseReminders(actor: PolicyActor, team: { id: string; dep
  * team's results and is its lead, a QA manager of its department or super_admin.
  */
 export function canSendPulseSurvey(actor: PolicyActor, team: ScopeTeam): boolean {
-  return canViewPulseResults(actor, team) && canWriteTeamData(actor, team);
+  return canViewPulseResults(actor, team) && capOnTeam(actor, team, 'run_pulse');
 }

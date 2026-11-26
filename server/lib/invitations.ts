@@ -66,6 +66,13 @@ export async function reissueInvitation(args: { companyId: string; invitation: {
   return { token, expiresAt };
 }
 
+/** The custom role of an invitation if it still exists; a role archived since then falls back to its base level. */
+async function liveCustomRole(exec: Exec, companyId: string, id: unknown): Promise<string | null> {
+  if (typeof id !== 'string' || !id) return null;
+  const [cr] = await exec<any>('SELECT id FROM custom_roles WHERE id = ? AND company_id = ? AND archived_at IS NULL', [id, companyId]);
+  return cr?.id ?? null;
+}
+
 /** The invitation behind a token (any status), with names for the accept page. */
 export async function findByToken(token: unknown) {
   if (typeof token !== 'string' || !token.startsWith('igi_') || token.length > 200) return null;
@@ -176,7 +183,7 @@ export async function acceptInvitation(args: {
 
     let grant: Grant;
     try {
-      grant = (await resolveGrant(inv.company_id, { role: inv.role, scopeType: inv.scope_type, scopeId: inv.scope_id }, exec)).grant;
+      grant = (await resolveGrant(inv.company_id, { role: inv.role, scopeType: inv.scope_type, scopeId: inv.scope_id, customRoleId: await liveCustomRole(exec, inv.company_id, inv.custom_role_id) }, exec)).grant;
     } catch (e) {
       if (e instanceof AssignmentError) throw new InvitationError(409, `The invitation cannot be used any more: ${e.message}. Ask for a new invitation.`);
       throw e;
@@ -197,6 +204,18 @@ export async function acceptInvitation(args: {
       if (e instanceof AssignmentError) throw new InvitationError(409, `The invitation cannot be used any more: ${e.message}`);
       throw e;
     }
+    // The further access the invitation carries (invitations.extra_grants), each granted like the first.
+    const extraGrants: Grant[] = [];
+    for (const raw of Array.isArray(inv.extra_grants) ? inv.extra_grants : []) {
+      try {
+        const x = await resolveGrant(inv.company_id, { role: raw.role, scopeType: raw.scopeType, scopeId: raw.scopeId, customRoleId: await liveCustomRole(exec, inv.company_id, raw.customRoleId) }, exec);
+        await grantAssignment(exec, { companyId: inv.company_id, userId: user.id, grant: x.grant, actorId: inv.invited_by });
+        extraGrants.push(x.grant);
+      } catch (e) {
+        if (e instanceof AssignmentError) throw new InvitationError(409, `The invitation cannot be used any more: ${e.message}. Ask for a new invitation.`);
+        throw e;
+      }
+    }
     await syncUserDisplay(exec, user.id, { primaryTeamId: grant.scopeType === 'team' ? grant.scopeId : null, departmentId, fallbackRole: inv.role });
     await exec('UPDATE invitations SET accepted_user_id = ? WHERE id = ?', [user.id, inv.id]);
     if (args.sso) {
@@ -206,7 +225,7 @@ export async function acceptInvitation(args: {
     await recordAudit({
       companyId: inv.company_id, actorId: user.id, action: 'invitation.accept', entityType: 'invitation', entityId: inv.id,
       summary: `${first} ${last} (${inv.email}) accepted the invitation as ${ROLE_NAMES[inv.role] ?? inv.role}${args.sso ? ` (${args.sso.provider} sign-in)` : ''}`,
-      after: { userId: user.id, grant }, departmentIds: [departmentId], subjectIds: [user.id, inv.id],
+      after: { userId: user.id, grant, extraGrants }, departmentIds: [departmentId], subjectIds: [user.id, inv.id],
     }, exec);
     return { userId: user.id, companyId: inv.company_id };
   });

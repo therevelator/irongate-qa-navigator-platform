@@ -47,6 +47,7 @@ async function assignmentsOf(user: { id: string; company_id: string }) {
   return rows.map((r) => ({
     id: r.id, role: r.role, scopeType: r.scope_type, scopeId: r.scope_id, scopeName: r.scope_name,
     departmentId: r.department_id, departmentName: r.department_name,
+    customRoleId: r.custom_role_id ?? null, customRoleName: r.custom_role_name ?? null, added: r.added ?? null, removed: r.removed ?? null,
   }));
 }
 

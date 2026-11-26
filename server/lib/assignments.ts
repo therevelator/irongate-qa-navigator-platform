@@ -46,6 +46,11 @@ export interface AssignmentRow {
   department_name: string | null;
   created_at: string;
   created_by: string | null;
+  /** The company's custom role of the assignment (its name and permission changes), when there is one. */
+  custom_role_id?: string | null;
+  custom_role_name?: string | null;
+  added?: string[] | null;
+  removed?: string[] | null;
 }
 
 const ACTIVE = 'ra.revoked_at IS NULL';
@@ -161,8 +166,10 @@ export async function loadAccessContext(userId: string, sessionId: string | null
             (SELECT c.status FROM companies c WHERE c.id = u.company_id) AS company_status,
             s.revoked_at AS session_revoked_at, s.last_seen_at AS session_last_seen_at, (s.id IS NOT NULL) AS session_exists,
             COALESCE((
-              SELECT json_agg(json_build_object('role', ra.role, 'scopeType', ra.scope_type, 'scopeId', ra.scope_id) ORDER BY ra.created_at)
+              SELECT json_agg(json_build_object('role', ra.role, 'scopeType', ra.scope_type, 'scopeId', ra.scope_id,
+                                                'customRoleId', cr.id, 'customRoleName', cr.name, 'added', cr.added, 'removed', cr.removed) ORDER BY ra.created_at)
                 FROM role_assignments ra
+                LEFT JOIN custom_roles cr ON cr.id = ra.custom_role_id AND cr.archived_at IS NULL AND cr.base_role = ra.role
                WHERE ra.user_id = u.id AND ra.company_id = u.company_id AND ra.revoked_at IS NULL
             ), '[]'::json) AS grants
        FROM users u LEFT JOIN user_sessions s ON s.id = ?::text AND s.user_id = u.id
@@ -176,21 +183,29 @@ export async function loadAccessContext(userId: string, sessionId: string | null
 /** Active grants of a user (company-checked). */
 export async function loadGrants(companyId: string, userId: string, exec: Exec = execOn()): Promise<Grant[]> {
   const rows = await exec<any>(
-    `SELECT role, scope_type, scope_id FROM role_assignments
-      WHERE company_id = ? AND user_id = ? AND revoked_at IS NULL ORDER BY created_at`,
+    `SELECT ra.role, ra.scope_type, ra.scope_id, cr.id AS custom_role_id, cr.name AS custom_role_name, cr.added, cr.removed
+       FROM role_assignments ra LEFT JOIN custom_roles cr ON cr.id = ra.custom_role_id AND cr.archived_at IS NULL AND cr.base_role = ra.role
+      WHERE ra.company_id = ? AND ra.user_id = ? AND ra.revoked_at IS NULL ORDER BY ra.created_at`,
     [companyId, userId]
   );
-  return rows.map((r) => ({ role: r.role, scopeType: r.scope_type, scopeId: r.scope_id }));
+  return rows.map((r) => ({ role: r.role, scopeType: r.scope_type, scopeId: r.scope_id, ...customOf(r) }));
 }
+
+/** The custom-role part of a grant from a row that joined custom_roles (nothing for a plain level). */
+export const customOf = (r: any): Partial<Grant> => (r.custom_role_id
+  ? { customRoleId: r.custom_role_id, customRoleName: r.custom_role_name ?? null, added: r.added ?? [], removed: r.removed ?? [] }
+  : {});
 
 /** Active assignments with scope names, for the given users (null = everyone in the company). */
 export async function listAssignments(companyId: string, userIds: string[] | null, exec: Exec = execOn()): Promise<AssignmentRow[]> {
   return exec<AssignmentRow>(
     `SELECT ra.id, ra.user_id, ra.role, ra.scope_type, ra.scope_id, ra.created_at, ra.created_by,
+            cr.id AS custom_role_id, cr.name AS custom_role_name, cr.added, cr.removed,
             CASE ra.scope_type WHEN 'company' THEN c.name WHEN 'department' THEN d.name ELSE t.name END AS scope_name,
             CASE ra.scope_type WHEN 'department' THEN d.id WHEN 'team' THEN t.department_id ELSE NULL END AS department_id,
             CASE ra.scope_type WHEN 'department' THEN d.name WHEN 'team' THEN td.name ELSE NULL END AS department_name
        FROM role_assignments ra
+       LEFT JOIN custom_roles cr ON cr.id = ra.custom_role_id AND cr.archived_at IS NULL AND cr.base_role = ra.role
        LEFT JOIN companies c ON ra.scope_type = 'company' AND c.id = ra.scope_id
        LEFT JOIN departments d ON ra.scope_type = 'department' AND d.id = ra.scope_id
        LEFT JOIN teams t ON ra.scope_type = 'team' AND t.id = ra.scope_id
@@ -255,7 +270,15 @@ export interface ScopeInfo {
 }
 
 /** Normalise and validate a grant for this company (scope exists and is active). */
-export async function resolveGrant(companyId: string, input: { role?: unknown; scopeType?: unknown; scopeId?: unknown }, exec: Exec = execOn()): Promise<{ grant: Grant; scope: ScopeInfo }> {
+export async function resolveGrant(companyId: string, input: { role?: unknown; scopeType?: unknown; scopeId?: unknown; customRoleId?: unknown }, exec: Exec = execOn()): Promise<{ grant: Grant; scope: ScopeInfo }> {
+  // A custom role: the assignment is on its base level, with the role's permission changes.
+  if (typeof input.customRoleId === 'string' && input.customRoleId) {
+    const [cr] = await exec<any>('SELECT id, name, base_role, added, removed FROM custom_roles WHERE id = ? AND company_id = ? AND archived_at IS NULL', [input.customRoleId, companyId]);
+    if (!cr) throw new AssignmentError(400, 'That role was not found in your company (it may have been archived)');
+    if (input.role !== undefined && input.role !== null && input.role !== '' && input.role !== cr.base_role) throw new AssignmentError(400, `The role "${cr.name}" is based on ${cr.base_role}`);
+    const plain = await resolveGrant(companyId, { role: cr.base_role, scopeType: input.scopeType, scopeId: input.scopeId }, exec);
+    return { grant: { ...plain.grant, customRoleId: cr.id, customRoleName: cr.name, added: cr.added ?? [], removed: cr.removed ?? [] }, scope: plain.scope };
+  }
   const role = typeof input.role === 'string' ? (input.role as Role) : null;
   if (!role || !(role in ROLE_SCOPE)) throw new AssignmentError(400, 'role must be one of super_admin, qa_manager, team_lead, qa_engineer, viewer');
   const scopeType = ROLE_SCOPE[role];
@@ -317,10 +340,10 @@ export async function grantAssignment(
 ): Promise<GrantResult> {
   const { companyId, userId, grant, actorId } = args;
   const [existing] = await exec<any>(
-    `SELECT id, role FROM role_assignments WHERE user_id = ? AND scope_type = ? AND scope_id = ? AND revoked_at IS NULL FOR UPDATE`,
+    `SELECT id, role, custom_role_id FROM role_assignments WHERE user_id = ? AND scope_type = ? AND scope_id = ? AND revoked_at IS NULL FOR UPDATE`,
     [userId, grant.scopeType, grant.scopeId]
   );
-  if (existing && existing.role === grant.role) return { id: existing.id, replaced: null, previousLeadId: null, changed: false };
+  if (existing && existing.role === grant.role && (existing.custom_role_id ?? null) === (grant.customRoleId ?? null)) return { id: existing.id, replaced: null, previousLeadId: null, changed: false };
 
   let previousLeadId: string | null = null;
   if (grant.role === 'team_lead') {
@@ -345,8 +368,8 @@ export async function grantAssignment(
   }
   if (existing) await exec(`UPDATE role_assignments SET revoked_at = now(), revoked_by = ? WHERE id = ?`, [actorId, existing.id]);
   const [row] = await exec<any>(
-    `INSERT INTO role_assignments (company_id, user_id, role, scope_type, scope_id, created_by) VALUES (?, ?, ?, ?, ?, ?) RETURNING id`,
-    [companyId, userId, grant.role, grant.scopeType, grant.scopeId, actorId]
+    `INSERT INTO role_assignments (company_id, user_id, role, scope_type, scope_id, created_by, custom_role_id) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id`,
+    [companyId, userId, grant.role, grant.scopeType, grant.scopeId, actorId, grant.customRoleId ?? null]
   );
   return {
     id: row.id,

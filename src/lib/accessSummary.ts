@@ -1,7 +1,7 @@
 import {
   canInvite, canManageCompanyConfig, canManageSampleData, canOpenUserAdmin, canRequestExecutiveBriefing, canSetJobTitle,
   canUseFormulaMode, canViewActivity, canViewIngestionLog, canViewRevenueRollup, canViewUserActivity, canWriteSomeTeamData, canUploadFiles,
-  grantsOf, isCompanyAdmin, ledTeamIds, managedDepartmentIds, DEVELOPER_INSIGHT_ROLES, type PolicyActor,
+  grantsOf, isCompanyAdmin, ledTeamIds, managedDepartmentIds, DEVELOPER_INSIGHT_ROLES, capAnywhere, type PolicyActor,
 } from '../../server/lib/userPolicy';
 import { ROLE_LABELS } from '../../server/lib/roleLabels';
 import { canCompareTeams, canUseAnalytics } from './viewAccess';
@@ -54,7 +54,7 @@ export function accessSummary(actor: PolicyActor, assignments: AssignmentLike[],
   add(analytics, `Open the overview, team dashboards, ${canCompareTeams(actor) ? 'TV mode, Compare teams' : 'TV mode'} and the Analytics modules for the teams in your scope, with their targets and trends.`);
   add(analytics, 'See wellbeing pulse results (team averages of at least 3 answers) and alerts and tracked actions of your teams.');
   if (assignments.some((a) => a.scopeType === 'team')) can.push('Answer the wellbeing pulse of the teams you belong to (anonymously).');
-  const seesOthers = grantsOf(actor).some((g) => DEVELOPER_INSIGHT_ROLES.includes(g.role));
+  const seesOthers = capAnywhere(actor, 'view_individuals');
   add(seesOthers,
     'See individual developer metrics of people in your scope who opted in to developer insights.',
     'See other people\'s individual developer metrics (you see only your own row).');
