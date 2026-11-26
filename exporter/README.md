@@ -149,11 +149,20 @@ The exact fields: [SECURITY.md](SECURITY.md). The JSON envelope: QE Navigator's 
 | `qe-exporter preview` | Reads the sources and prints a JSON report: per source the window, what is new per team and kind, skipped records with the reason, and **every request exactly as `sync` would send it** (URL, headers with the key redacted, the body with `companyId`, `departmentId`, `teamId`). **Nothing is sent** (no request to QE Navigator at all) and nothing is stored. `--all`: include what was already delivered. `--out FILE`. |
 | `qe-exporter sync` | Reads what changed since the last run (the cursor minus `overlapMinutes`) and sends it, then a heartbeat. Re-running sends nothing already delivered. |
 | `qe-exporter sync --since 2026-01-01` | Backfill from a date (QE Navigator keeps 13 months; incidents older than 364 days are skipped). |
+| `qe-exporter sync --force` | Reads every source now, whatever the collection schedule says (below). |
 | `qe-exporter diagnose` | Writes a diagnostics file (`--out FILE`): versions, the config without secrets (which secrets are set and where from), per source the cursor, last success and error counts. No record and no name. Nothing is sent. |
 
 Options: `-c FILE` (default `$QE_EXPORTER_CONFIG`, else `./qe-exporter.yaml`, `./qe-exporter.json`, or an earlier release's
 file), `--source NAME`, `--state FILE`, `--log-format json|text`, `-v / --verbose` (requests, retries, timings; never
 secrets). `QE_NAVIGATOR_URL` overrides `qeNavigator.url`.
+
+**Collection schedule.** Schedule `sync` every 15 minutes and let QE Navigator decide what each run reads: under
+Administration → Update frequency a company sets, per team, how often each kind of data is collected (pipelines and
+tests, deployments and incidents, issues, static analysis, test management, pull requests and calendars; from 15
+minutes to 30 days, pre-filled with a recommendation for the team's release rhythm). Each run loads that schedule with
+the company context and skips a source that was read less than its shortest due interval ago; `-v` logs what was
+skipped and why. `--force`, `--source NAME` and `--since DATE` ignore the schedule. Without a schedule (or with a QE
+Navigator that does not send one) everything is read on every run, as before 0.6.0.
 
 **Exit codes** (for schedulers): `0` ok · `1` internal error · `2` configuration or usage (also: company or a team's
 department missing) · `3` a source could not be read · `4` QE Navigator refused (an id that is not yours: 403) or could not

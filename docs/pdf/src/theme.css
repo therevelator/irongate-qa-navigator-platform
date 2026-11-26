@@ -1,0 +1,112 @@
+/* Porcelain print theme for the QE Navigator PDFs: the app's Porcelain palette (src/styles/themes.css),
+   warm pearl paper, frosted white cards, charcoal text, the brand blue for accents. */
+:root {
+  --paper: #f3f0ea;
+  --card: #fdfcfa;
+  --raised: #f8f5f0;
+  --line: rgb(160 145 125 / 0.28);
+  --line-2: rgb(150 135 115 / 0.4);
+  --ink: oklch(0.21 0.006 60);
+  --ink-2: oklch(0.36 0.01 60);
+  --ink-3: oklch(0.52 0.012 70);
+  --brand: oklch(0.43 0.07 255);
+  --brand-strong: oklch(0.36 0.058 255);
+  --brand-soft: oklch(0.945 0.018 255);
+  --brand-line: oklch(0.82 0.048 255);
+  --good: #166534; --good-soft: #e7f3ea;
+  --warn: #92400e; --warn-soft: #fbf0dc;
+  --glow:
+    radial-gradient(520px 300px at 8% -10%, rgb(255 233 208 / 0.75), transparent 65%),
+    radial-gradient(480px 340px at 100% 0%, rgb(224 231 255 / 0.7), transparent 60%),
+    radial-gradient(520px 380px at 60% 115%, rgb(246 224 238 / 0.5), transparent 65%),
+    linear-gradient(180deg, #faf8f4 0%, #f1ede6 100%);
+}
+* { box-sizing: border-box; }
+html { background: var(--paper); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+body { margin: 0; font-family: "Inter PDF", "Inter", "DejaVu Sans", sans-serif; color: var(--ink); font-size: 9.6pt; line-height: 1.5;  }
+h1, h2, h3, h4, p, ul, ol, table, figure { margin: 0; }
+strong { font-weight: 600; }
+a { color: var(--brand); text-decoration: none; }
+code { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 0.9em; background: var(--raised); border: 0.5pt solid var(--line); border-radius: 3pt; padding: 0 2.5pt; }
+
+/* ---------- documents (A4 portrait) ---------- */
+.cover { border: 0.75pt solid var(--line-2); border-radius: 12pt; padding: 20pt 22pt 18pt; margin-bottom: 14pt; box-shadow: inset 0 1px 0 #fff; }
+.cover-top { display: flex; align-items: center; gap: 10pt; margin-bottom: 16pt; }
+.cover-top img { height: 34pt; width: auto; }
+.cover-brand { font-size: 10.5pt; font-weight: 600; letter-spacing: -0.01em; }
+.cover-brand span { display: block; font-size: 7.6pt; font-weight: 500; color: var(--ink-3); letter-spacing: 0.06em; text-transform: uppercase; }
+.kicker { font-size: 7.8pt; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brand); margin-bottom: 4pt; }
+h1 { font-size: 24pt; line-height: 1.12; letter-spacing: -0.022em; font-weight: 700; }
+.lead { margin-top: 8pt; font-size: 11.4pt; line-height: 1.45; color: var(--ink-2); max-width: 150mm; }
+.chips { display: flex; flex-wrap: wrap; gap: 5pt; margin-top: 13pt; }
+.chip { font-size: 7.8pt; background: rgb(255 255 255 / 0.75); border: 0.5pt solid var(--line-2); border-radius: 99pt; padding: 2.5pt 8pt; color: var(--ink-2); }
+.chip b { font-weight: 600; color: var(--ink); }
+
+h2 { font-size: 13pt; letter-spacing: -0.012em; font-weight: 700; margin: 16pt 0 7pt; break-after: avoid; display: flex; align-items: center; gap: 7pt; }
+h2::before { content: ""; width: 3pt; height: 13pt; border-radius: 2pt; background: var(--brand); flex: none; }
+h3 { font-size: 10.4pt; font-weight: 600; margin: 0 0 3pt; break-after: avoid; }
+p + p { margin-top: 5pt; }
+.card { background: var(--card); border: 0.6pt solid var(--line); border-radius: 9pt; padding: 11pt 13pt; box-shadow: inset 0 1px 0 #fff; }
+.card + .card { margin-top: 7pt; }
+.avoid { break-inside: avoid; }
+ul { padding-left: 13pt; }
+li { margin: 2.5pt 0; padding-left: 1pt; }
+li::marker { color: var(--brand); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 7pt; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 7pt; }
+.grid2 .card + .card, .grid3 .card + .card { margin-top: 0; }
+.muted { color: var(--ink-3); }
+.small { font-size: 8.4pt; }
+table { width: 100%; border-collapse: collapse; font-size: 8.8pt; }
+th { text-align: left; font-weight: 600; font-size: 7.6pt; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-3); padding: 0 8pt 5pt 0; border-bottom: 0.75pt solid var(--line-2); vertical-align: bottom; }
+td { padding: 5.5pt 8pt 5.5pt 0; border-bottom: 0.5pt solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tr { break-inside: avoid; }
+td:first-child { font-weight: 600; white-space: nowrap; }
+td.wrap:first-child, table.wrap td:first-child { white-space: normal; }
+.callout { background: var(--brand-soft); border: 0.6pt solid var(--brand-line); border-radius: 9pt; padding: 9pt 12pt; color: var(--brand-strong); break-inside: avoid; margin-top: 7pt; }
+.callout.warn { background: var(--warn-soft); border-color: #e9cf9b; color: #6b3a0a; }
+.callout.good { background: var(--good-soft); border-color: #b9dcc2; color: #14532d; }
+.callout b { font-weight: 700; }
+.shot { margin: 12pt 0 2pt; break-inside: avoid; }
+.shot img { display: block; width: 100%; border-radius: 8pt; border: 0.75pt solid var(--line-2); box-shadow: 0 10pt 22pt -14pt rgb(90 70 45 / 0.5); }
+.shot figcaption { font-size: 7.8pt; color: var(--ink-3); margin-top: 4pt; text-align: center; }
+.steps { counter-reset: step; list-style: none; padding: 0; }
+.steps > li { counter-increment: step; position: relative; padding: 0 0 0 24pt; margin: 0 0 7pt; break-inside: avoid; }
+.steps > li::before { content: counter(step); position: absolute; left: 0; top: 0.5pt; width: 15pt; height: 15pt; border-radius: 50%; background: var(--brand); color: #fff; font-size: 8pt; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.steps b { display: block; }
+.usecase { break-inside: avoid; }
+.usecase .where { font-size: 8.2pt; color: var(--brand); font-weight: 600; margin-top: 4pt; }
+.tag { display: inline-block; font-size: 7.4pt; font-weight: 600; border-radius: 99pt; padding: 1pt 6.5pt; background: var(--brand-soft); color: var(--brand-strong); border: 0.5pt solid var(--brand-line); margin-right: 3pt; }
+.source { font-size: 7.8pt; color: var(--ink-3); }
+.source a { color: var(--ink-3); text-decoration: underline; }
+
+/* ---------- decks (16:9 slides) ---------- */
+body.deck { font-size: 13pt; }
+.slide { width: 13.333in; height: 7.5in; padding: 0.55in 0.7in 0.5in; position: relative; break-after: page; overflow: hidden; display: flex; flex-direction: column; }
+.slide:last-child { break-after: auto; }
+.slide-head { display: flex; align-items: center; justify-content: space-between; font-size: 10.5pt; color: var(--ink-3); margin-bottom: 0.28in; }
+.slide-head .who { display: flex; align-items: center; gap: 8pt; font-weight: 600; color: var(--ink-2); }
+.slide-head img { height: 22pt; }
+.slide h1 { font-size: 40pt; max-width: 9.6in; }
+.slide h2 { font-size: 31pt; margin: 0 0 6pt; letter-spacing: -0.02em; display: block; }
+.slide h2::before { display: none; }
+.slide .sub { font-size: 16.5pt; color: var(--ink-2); max-width: 10.4in; margin-bottom: 0.22in; line-height: 1.4; }
+.slide .lead { font-size: 17pt; max-width: 9.6in; margin-top: 14pt; }
+.slide .body { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-start; margin-bottom: 0.12in; }
+.slide .card { padding: 18pt 20pt; border-radius: 12pt; background: rgb(253 252 250 / 0.82); }
+.slide .card h3 { font-size: 17pt; margin-bottom: 7pt; }
+.slide .card p, .slide .card li { font-size: 14.4pt; line-height: 1.42; color: var(--ink-2); }
+.slide .grid2, .slide .grid3 { gap: 16pt; }
+.slide .steps > li { padding-left: 40pt; margin-bottom: 15pt; font-size: 15pt; color: var(--ink-2); }
+.slide .steps > li::before { width: 27pt; height: 27pt; font-size: 13pt; }
+.slide .steps b { color: var(--ink); font-size: 16.5pt; }
+.slide table { font-size: 14pt; }
+.slide th { font-size: 10pt; }
+.slide td { padding: 8.5pt 14pt 8.5pt 0; }
+.slide .foot { position: absolute; left: 0.7in; right: 0.7in; bottom: 0.26in; display: flex; justify-content: space-between; font-size: 9pt; color: var(--ink-3); }
+.slide.title { justify-content: center; }
+.slide.title .kicker { font-size: 11pt; margin-bottom: 10pt; }
+.slide.title .logo { height: 64pt; width: auto; align-self: flex-start; margin-bottom: 0.4in; }
+.slide .callout { font-size: 13.6pt; margin-top: 16pt; padding: 12pt 16pt; }
+.num { font-size: 34pt; font-weight: 700; letter-spacing: -0.02em; color: var(--brand); line-height: 1; margin-bottom: 4pt; }

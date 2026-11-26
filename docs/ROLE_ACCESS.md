@@ -94,6 +94,34 @@ to developer insights. Averages of individuals and pulse results are shown only 
 The **directory** (names of departments and teams, used to assign people and send invitations: `/api/admin/teams`,
 `/api/admin/departments`) is company-visible to people who manage users; it carries no KPIs.
 
+## Custom roles and permissions
+
+The five roles above are **access levels**. A company can also define its own roles (Organisation → **Roles**,
+`/api/roles`, [`server/lib/customRoles.ts`](../server/lib/customRoles.ts)): a name, one access level, and
+permissions added to or removed from that level's recommended set. The level keeps deciding where the role is
+assigned (a team or a department), whom the person may invite and manage, and the settings pages; the six
+permissions decide the rest.
+
+| Permission | Key | Recommended for | Gives |
+|---|---|---|---|
+| Individual developer metrics and AI insights | `view_individuals` | manager, team lead | per-person rows (only of people whose developer insights are on), AI insights, developer recommendations, executive briefing, weekly digest |
+| Wellbeing survey comments | `view_wellbeing_comments` | manager, team lead | the anonymous free-text comments |
+| Money at risk and the revenue roll-up | `view_money` | manager | money on the Executive summary and Business impact → All teams |
+| Activity and Ingestion logs | `view_logs` | manager | the two logs, for the departments of the assignment (department-level roles only) |
+| Actions, alerts and team data | `write_team_data` | manager, team lead | tracked actions, recommendations, acknowledging alerts, uploads, manual metrics, collection frequency |
+| Send the wellbeing survey | `run_pulse` | manager, team lead | sending the pulse and its reminders |
+
+Rules: only super admins create, change and archive roles (everyone who invites reads the page); the super admin
+role is fixed; nobody grants a role with a permission they do not hold on that team or department
+(`canGrant`); a change to a role applies to everyone holding it on their next request; archiving a role leaves
+its people on the level. A permission is held over a team when an assignment covering the team carries it.
+Recommended roles to start from: Scrum Master, Product Owner, Quality Lead, DevOps / Platform Engineer,
+Engineering Manager, Delivery Manager, Executive Sponsor.
+
+Wherever the matrix below says "team lead" or "manager" for one of these six things, read "a role with that
+permission on the team"; with no custom roles defined the two are the same. Tests: `tests/api/custom-roles.test.ts`,
+`tests/e2e/admin/roles.spec.ts`.
+
 ## Matrix
 
 "Scope" = the teams in scope as above. "Own" = the person's own data. "—" = not offered (navigation entry hidden; the
@@ -261,6 +289,7 @@ The navigation drawer and the Analytics hub show only the pages the person may o
 | Analytics and its modules | everyone with at least one team in scope |
 | Compare teams | super admins, managers, and anyone assigned to two or more teams (`canCompareTeams`: nothing to compare with one team) |
 | Users, Teams | super admins, managers, team leads |
+| Roles | everyone who may invite (super admins, managers, team leads); only super admins change roles |
 | Departments, User activity | super admins |
 | Activity, Ingestion log, Admin console, Update frequency, Parameters | super admins, managers |
 | Manual metrics, Upload files | super admins, managers, team leads |

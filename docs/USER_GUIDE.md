@@ -87,6 +87,11 @@ The company (or your part of it) on one page:
 
 Open a team from the Overview. You see only teams in your scope.
 
+The page shows **one section at a time**. The buttons under the header switch between Recommendations &
+actions, Team & wellbeing, KPIs, Evidence and Insights; **Everything** shows all of them. Your choice is
+remembered in the browser. **Download PDF** in the top bar (on every page of the app) prints the page with
+every section and every collapsed part opened, in the light theme, whatever is on screen.
+
 - **QA score card:** the battery or gauge, the score with status and target, the change against 30 days
   earlier, a 30 / 90 day trend, the team's rank among the teams you can see, and the input that costs
   the score most.
@@ -285,13 +290,18 @@ In short:
 | Software engineer | the teams they belong to | their own tracked actions' status; answers the wellbeing pulse |
 | Viewer | the teams they are assigned to | nothing (read-only) |
 
-You can hold more than one role (for example viewer of two teams); you get the combined access. Nobody can
-change their own role.
+You can hold more than one role (for example viewer of two teams, or Scrum Master of three teams in two
+departments); you get the combined access. Nobody can change their own role.
+
+Your company can also define its own roles (Scrum Master, Product Owner, …) on top of these levels, with
+permissions added or removed. Organisation → **Roles** shows what each one gives, if you may invite people.
 
 ### Privacy
 
-- Your individual developer metrics are shown to others only if you opted in to developer insights, and then
-  only to super admins, managers and team leads of your team. You always see your own.
+- Your individual developer metrics are kept and shown to others only while your **developer insights** are
+  on, and then only to roles your company gave the individual-metrics permission on your team. The switch is
+  at the top of **Developer productivity**: off by default, yours to turn on or off; every change is in the
+  change history. You always see your own row.
 - Wellbeing pulse answers are anonymous. Results are shown only as team averages with at least 3 answers.
   Answering is not recorded in any activity log.
 - Your company's super admins can see a log of sign-ins and requests in the company (User activity), for 90

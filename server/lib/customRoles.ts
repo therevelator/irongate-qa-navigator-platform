@@ -23,7 +23,7 @@ export const ROLE_TEMPLATES: RoleTemplate[] = [
   { key: 'product_owner', name: 'Product Owner', baseRole: 'viewer',
     description: 'Reads the team’s quality and delivery, and what quality costs in money. Changes nothing.',
     added: ['view_money'], removed: [] },
-  { key: 'qa_lead', name: 'QA Lead', baseRole: 'team_lead',
+  { key: 'quality_lead', name: 'Quality Lead', baseRole: 'team_lead',
     description: 'Leads quality for the team: everything a team lead sees and does.',
     added: [], removed: [] },
   { key: 'devops_engineer', name: 'DevOps / Platform Engineer', baseRole: 'qa_engineer',

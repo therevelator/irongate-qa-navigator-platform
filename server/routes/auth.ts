@@ -348,6 +348,40 @@ router.post('/reset-password', resetPasswordLimiter, async (req, res) => {
   }
 });
 
+// Developer insights, the person's own choice: whether their individual developer metrics are kept and shown to
+// the roles allowed to see individual rows. Off by default. Recorded in the change history.
+router.get('/me/developer-insights', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const u = await queryOne<any>('SELECT developer_insights_enabled FROM users WHERE id = ?', [req.user!.id]);
+    res.json({ enabled: !!u?.developer_insights_enabled });
+  } catch (e) {
+    console.error('Developer insights read error:', e);
+    res.status(500).json({ error: 'Failed to read your developer insights setting' });
+  }
+});
+
+router.put('/me/developer-insights', authenticateToken, async (req: AuthRequest, res) => {
+  try {
+    const me = req.user!;
+    if (typeof req.body?.enabled !== 'boolean') return res.status(400).json({ error: 'enabled must be true or false' });
+    const enabled: boolean = req.body.enabled;
+    const u = await queryOne<any>('SELECT first_name, last_name, email, department_id, developer_insights_enabled FROM users WHERE id = ? AND company_id = ?', [me.id, me.companyId]);
+    if (!u) return res.status(404).json({ error: 'User not found' });
+    if (!!u.developer_insights_enabled !== enabled) {
+      await query('UPDATE users SET developer_insights_enabled = ?, updated_at = NOW() WHERE id = ? AND company_id = ?', [enabled, me.id, me.companyId]);
+      await recordAudit({
+        companyId: me.companyId, actorId: me.id, action: 'user.developer_insights', entityType: 'user', entityId: me.id,
+        summary: `${`${u.first_name ?? ''} ${u.last_name ?? ''}`.trim() || u.email} turned their own developer insights ${enabled ? 'on' : 'off'}`,
+        after: { developer_insights_enabled: enabled }, departmentIds: [u.department_id], subjectIds: [me.id],
+      });
+    }
+    res.json({ enabled });
+  } catch (e) {
+    console.error('Developer insights update error:', e);
+    res.status(500).json({ error: 'Failed to change your developer insights setting' });
+  }
+});
+
 // "Sign out my other devices": every other session of the caller ends; this browser gets a new
 // session cookie (issued after the cut-off, so it stays valid). Platform support sessions end too.
 router.post('/sessions/sign-out-others', authenticateToken, async (req: AuthRequest, res) => {

@@ -88,7 +88,7 @@ describe('custom roles over the API', () => {
     expect(res.body.canManage).toBe(true);
     expect(res.body.levels.map((l: any) => l.key)).toEqual(['super_admin', 'qa_manager', 'team_lead', 'qa_engineer', 'viewer']);
     expect(res.body.capabilities.map((c: any) => c.key)).toEqual(CAPABILITY_KEYS);
-    expect(res.body.templates.map((t: any) => t.key)).toEqual(['scrum_master', 'product_owner', 'qa_lead', 'devops_engineer', 'engineering_manager', 'delivery_manager', 'executive_sponsor']);
+    expect(res.body.templates.map((t: any) => t.key)).toEqual(['scrum_master', 'product_owner', 'quality_lead', 'devops_engineer', 'engineering_manager', 'delivery_manager', 'executive_sponsor']);
     expect(res.body.roles).toEqual([]);
   });
 
@@ -183,5 +183,31 @@ describe('custom roles over the API', () => {
       { scope_id: SMALL, role: 'qa_engineer', name: 'Scrum Master' },
       { scope_id: 'golden-team-stale', role: 'viewer', name: null },
     ]);
+  });
+});
+
+/**
+ * CR-08  developer insights is the person's own switch: GET/PUT /api/auth/me/developer-insights, off by default
+ *        for a new account, recorded in the change history, and a wrong body is refused.
+ */
+describe('Developer insights: the person\'s own choice', () => {
+  const base = process.env.API_URL || 'http://localhost:3002';
+  it('CR-08 a person turns their own developer insights on and off', async () => {
+    const stamp = Date.now();
+    const reg = await fetch(`${base}/api/auth/register`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ firstName: 'Own', lastName: 'Choice', email: `owner@di-${stamp}.apitest.example`, password: 'Str0ng!Passw0rd#2026', companyName: `DI ${stamp}`, departmentName: 'Eng', teamName: 'Core' }),
+    });
+    expect(reg.status).toBeLessThan(300);
+    const cookie = (reg.headers.get('set-cookie') ?? '').split(';')[0];
+    const call = (method: string, body?: object) => fetch(`${base}/api/auth/me/developer-insights`, {
+      method, headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: body ? JSON.stringify(body) : undefined,
+    });
+    expect(await (await call('GET')).json()).toEqual({ enabled: false });
+    expect((await call('PUT', { enabled: 'yes' })).status).toBe(400);
+    expect(await (await call('PUT', { enabled: true })).json()).toEqual({ enabled: true });
+    expect(await (await call('GET')).json()).toEqual({ enabled: true });
+    expect(await (await call('PUT', { enabled: false })).json()).toEqual({ enabled: false });
+    expect((await fetch(`${base}/api/auth/me/developer-insights`)).status).toBe(401);
   });
 });

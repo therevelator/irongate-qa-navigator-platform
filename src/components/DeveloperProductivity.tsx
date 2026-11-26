@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { API_URL } from '../config/api';
 import { useTheme } from '../contexts/ThemeContext';
+import MyDeveloperInsights from './MyDeveloperInsights';
 import { Page, PageIntro, Card, CardHeader, Badge, StatTile, EmptyState, SegmentedControl, inputClass } from './ui';
 import {
   BURNOUT_DEFINITION,
@@ -266,6 +267,8 @@ const DeveloperProductivity: React.FC<DeveloperProductivityProps> = ({ teamId })
           )
         }
       />
+
+      <MyDeveloperInsights />
 
       {loadError ? (
         <div role="alert" data-testid="load-error" className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">

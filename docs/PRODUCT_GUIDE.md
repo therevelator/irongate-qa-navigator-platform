@@ -106,6 +106,11 @@ Tables: `companies`, `departments`, `teams`, `users`, `team_members`, `role_assi
 
 ### Roles and assignments
 
+**Custom roles.** The five roles are access levels; a company adds its own roles on top (Organisation → Roles): a level plus
+permissions added or removed from its recommended set, starting from recommended roles such as Scrum Master or Product Owner.
+An invitation can carry several assignments (a role on each of several teams or departments). Reference:
+[ROLE_ACCESS.md](ROLE_ACCESS.md#custom-roles-and-permissions); migration `20261212000000_custom_roles.sql`.
+
 Access comes from **role assignments** (table `role_assignments`): a role on a scope. A person can hold
 several assignments, for example manager of two departments, or software engineer on two teams. Every access
 decision on the server and in the UI goes through the same rules in
@@ -1227,6 +1232,18 @@ per-source "last received" overview. This is where you check whether CI integrat
 
 **Administration → Update frequency** sets, per company, how often each metric is expected to receive a value (defaults in section
 3.2). It schedules nothing; it only decides when a value becomes stale.
+
+**Collection frequency (how often data is taken).** The same page has **How often data is collected**: per team, an interval for
+each of six kinds of data (`ci` pipelines, tests and coverage; `delivery` deployments and incidents; `work` issues and sprints;
+`quality` static analysis; `automation` test management; `people` pull requests and calendars), from 15 minutes to 30 days. The form
+is pre-filled from the team's release rhythm with our recommendation (`RECOMMENDED` in
+[`server/lib/collectionSchedule.ts`](../server/lib/collectionSchedule.ts): continuous 15 min / 15 min / 1 h / 1 d / 1 d / 4 h;
+weekly 1 h / 1 h / 4 h / 1 d / 1 d / 1 d; every two weeks 4 h / 1 h / 12 h / 1 d / 1 d / 1 d; monthly 1 d / 1 h / 1 d / 7 d / 7 d /
+1 d) and every value stays editable, at setup (step 5 of the onboarding checklist) and later. Without a stored schedule a team
+reads everything every 15 minutes. The Exporter gets the schedule with its context (`schedule` in
+`GET /api/ingest/exporter/context`) and skips sources that are not due; staleness allows twice the chosen interval, so a team is
+not called stale for collecting less often. API: `GET /api/collection-schedule`, `PUT /api/collection-schedule/teams/:id`
+(people who may write the team's data; audited). Migration `20261211000000_collection_schedule.sql`.
 
 ### 4.6 Configuration inheritance
 
