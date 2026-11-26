@@ -1019,10 +1019,10 @@ data, no error message. Kept per API key (`exporter_heartbeats`), shown in Conne
 
 ```bash
 # The five-minute path (details per tool: exporter/README.md)
-docker build -f exporter/Dockerfile -t qe-exporter:0.5.0 .
-docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 setup   # open the printed link
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 preview
-docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.5.0 sync                                 # then every 15 minutes
+docker build -f exporter/Dockerfile -t qe-exporter:0.6.0 .
+docker run --rm -it -p 127.0.0.1:8788:8788 -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.6.0 setup   # open the printed link
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.6.0 preview
+docker run --rm -v qe-exporter:/var/lib/qe-exporter qe-exporter:0.6.0 sync                                 # then every 15 minutes
 ```
 
 Verified against a local instance by `tests/api/exporter-batch.test.ts` (the envelope: every id check, dry run, idempotency,

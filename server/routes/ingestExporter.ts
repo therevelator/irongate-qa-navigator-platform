@@ -21,6 +21,7 @@
  *                                        for Connect your CI → Exporter status. /collector/heartbeat is the same, for
  *                                        releases before 0.3.0.
  */
+import { DEFAULT_INTERVAL_MINUTES, loadSchedules } from '../lib/collectionSchedule';
 import express from 'express';
 import { query, queryOne } from '../../src/lib/db';
 import { API_KEY_PREFIX, authenticateApiKey, ApiKeyRequest } from '../middleware/apiKey';
@@ -286,6 +287,8 @@ router.get('/exporter/context', ingestLimiter, authenticateApiKey, async (req: A
     res.json({
       company: { id: company?.id ?? companyId, name: company?.name ?? null },
       apiKey: { name: req.apiKey!.name },
+      // How often to read each kind of data, per team (minutes); a team or group that is not listed uses the default.
+      schedule: { defaultMinutes: DEFAULT_INTERVAL_MINUTES, teams: Object.fromEntries(await loadSchedules(companyId)) },
       departments: deps.map((d: any) => ({ id: d.id, name: d.name, teams: teams.filter((t: any) => t.department_id === d.id).map((t: any) => ({ id: t.id, name: t.name })) })),
     });
   } catch (e) {

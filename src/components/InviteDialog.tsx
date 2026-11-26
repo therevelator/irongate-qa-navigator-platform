@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { Copy, MailCheck, MailWarning, RefreshCw, Send, XCircle } from 'lucide-react';
+import { Copy, MailCheck, MailWarning, Plus, RefreshCw, Send, Trash2, XCircle } from 'lucide-react';
 import API_URL from '../config/api';
 import Modal from './Modal';
 import { Badge, buttonClass, cx, inputClass, type Tone } from './ui';
-import { ROLE_LABELS } from '../lib/policyActor';
+import { ROLE_LABELS, grantBody } from '../lib/policyActor';
 import type { GrantRoleOption } from '../lib/policyActor';
 
 /**
- * Invitations (Users page): invite a person by email to one role assignment, and the list of
- * invitations with resend / revoke. Who may invite to what is the shared rule canGrant
+ * Invitations (Users page): invite a person by email to one or several role assignments (a Scrum Master of
+ * team X in one department and teams A and B in another), and the list of invitations with resend / revoke.
+ * The roles offered are the access levels and the company's own roles (Organisation → Roles). Who may invite to what is the shared rule canGrant
  * (server/lib/userPolicy.ts), passed in as `options`. When no email could be sent (SMTP not
  * configured, or it failed) the link is shown to copy — never a silent failure.
  */
@@ -28,12 +29,23 @@ export interface Invitation {
   send_count: number;
   accepted_at: string | null;
   invited_by_name: string | null;
+  custom_role_name?: string | null;
+  /** Further assignments given with the same invitation. */
+  extra_grants?: Array<{ role: string; scopeType: string; scopeId: string; scopeName?: string | null; roleName?: string | null }> | null;
 }
+
+/** Everything an invitation gives, in words: "Scrum Master of Payments; Scrum Master of Checkout". */
+export const invitationAccess = (i: Invitation): string[] => [
+  `${i.custom_role_name ?? ROLE_LABELS[i.role] ?? i.role} of ${i.scope_name ?? '—'}`,
+  ...(i.extra_grants ?? []).map((x) => `${x.roleName ?? ROLE_LABELS[x.role] ?? x.role} of ${x.scopeName ?? '—'}`),
+];
+
+interface AccessRow { key: number; role: string; scopeId: string }
+const MAX_EXTRA = 20;
 
 interface Delivery { delivered: boolean; channel: 'resend' | 'smtp' | 'log'; error: string | null }
 interface SendResult { invitation: Invitation; delivery: Delivery; link: string | null }
 
-const ROLE_NAMES = ROLE_LABELS;
 const STATUS: Record<Invitation['status'], { label: string; tone: Tone }> = {
   open: { label: 'Pending', tone: 'brand' },
   expired: { label: 'Expired', tone: 'warn' },
@@ -92,6 +104,7 @@ export const InviteDialog: React.FC<{
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('');
   const [scopeId, setScopeId] = useState('');
+  const [extras, setExtras] = useState<AccessRow[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<SendResult | null>(null);
@@ -99,7 +112,7 @@ export const InviteDialog: React.FC<{
   useEffect(() => {
     if (!isOpen) return;
     const first = options.find((o) => o.role === 'qa_engineer') ?? options[0];
-    setEmail(''); setError(null); setResult(null);
+    setEmail(''); setError(null); setResult(null); setExtras([]);
     setRole(first?.role ?? '');
     setScopeId(first?.scopes[0]?.id ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when the dialog opens
@@ -109,6 +122,25 @@ export const InviteDialog: React.FC<{
   const scopes = roleOption?.scopes ?? [];
   const scopeLabel = roleOption?.scopes[0]?.scopeType === 'department' ? 'Department' : roleOption?.scopes[0]?.scopeType === 'company' ? 'Organisation' : 'Team';
 
+  // One assignment per team or department: a place already chosen is not offered again.
+  const usedScopes = (exceptKey?: number) => new Set([scopeId, ...extras.filter((x) => x.key !== exceptKey).map((x) => x.scopeId)]);
+  const addRow = () => {
+    const used = usedScopes();
+    // The same role on another place is the usual case; else the first role with a free place.
+    const candidates = [roleOption, ...options].filter((o): o is GrantRoleOption => !!o && o.scopes[0]?.scopeType !== 'company');
+    for (const o of candidates) {
+      const free = o.scopes.find((s) => !used.has(s.id));
+      if (free) return setExtras((rows) => [...rows, { key: Date.now() + rows.length, role: o.role, scopeId: free.id }]);
+    }
+    setError('There is no other team or department you can add.');
+  };
+  const setRow = (key: number, patch: Partial<AccessRow>) => setExtras((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
+  const nameOf = (r: string, s: string) => {
+    const o = options.find((x) => x.role === r);
+    return `${o?.label ?? r} of ${o?.scopes.find((x) => x.id === s)?.name ?? '—'}`;
+  };
+  const isCompanyRole = roleOption?.scopes[0]?.scopeType === 'company';
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -116,7 +148,10 @@ export const InviteDialog: React.FC<{
     if (!role || !scopeId) return setError('Choose a role and where it applies.');
     setBusy(true);
     try {
-      const data: SendResult = await postJson(`${API_URL}/admin/invitations`, { email: email.trim(), role, scopeId });
+      const data: SendResult = await postJson(`${API_URL}/admin/invitations`, {
+        email: email.trim(), ...grantBody(role, scopeId),
+        ...(extras.length && !isCompanyRole ? { extraGrants: extras.map((x) => grantBody(x.role, x.scopeId)) } : {}),
+      });
       setResult(data);
       onSent();
       if (data.delivery.delivered) toast.success(`Invitation sent to ${data.invitation.email}`);
@@ -128,15 +163,15 @@ export const InviteDialog: React.FC<{
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Invite a person" subtitle="They choose their own password (or use single sign-on) and get exactly this assignment." size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Invite a person" subtitle="They choose their own password (or use single sign-on) and get exactly the access you choose here." size="md" scrollBody>
       {result ? (
         <div className="space-y-4">
           <DeliveryResult email={result.invitation.email} result={result} />
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            {ROLE_NAMES[result.invitation.role]} of {result.invitation.scope_name}. Expires {new Date(result.invitation.expires_at).toLocaleString()}.
+            {invitationAccess(result.invitation).join('; ')}. Expires {new Date(result.invitation.expires_at).toLocaleString()}.
           </p>
           <div className="flex justify-end gap-2">
-            <button type="button" className={buttonClass.secondary} onClick={() => { setResult(null); setEmail(''); }}>Invite another</button>
+            <button type="button" className={buttonClass.secondary} onClick={() => { setResult(null); setEmail(''); setExtras([]); }}>Invite another</button>
             <button type="button" className={buttonClass.primary} onClick={onClose}>Done</button>
           </div>
         </div>
@@ -155,7 +190,12 @@ export const InviteDialog: React.FC<{
               <label htmlFor="invite-role" className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Role</label>
               <select id="invite-role" value={role} className={cx(inputClass, 'w-full')} data-testid="invite-role"
                 onChange={(e) => { setRole(e.target.value); setScopeId(options.find((o) => o.role === e.target.value)?.scopes[0]?.id ?? ''); }}>
-                {options.map((o) => <option key={o.role} value={o.role}>{o.label}</option>)}
+                {options.filter((o) => !o.customRoleId).map((o) => <option key={o.role} value={o.role}>{o.label}</option>)}
+                {options.some((o) => o.customRoleId) && (
+                  <optgroup label="Your roles">
+                    {options.filter((o) => o.customRoleId).map((o) => <option key={o.role} value={o.role}>{o.label}</option>)}
+                  </optgroup>
+                )}
               </select>
             </div>
             <div>
@@ -171,6 +211,48 @@ export const InviteDialog: React.FC<{
           </div>
           {role === 'team_lead' && scopes.find((s) => s.id === scopeId)?.leadName && (
             <p className="text-xs text-amber-700 dark:text-amber-400">This team already has a lead. Invite the person as a software engineer, then change the lead on the Departments page.</p>
+          )}
+          {roleOption?.description && <p className="text-xs text-slate-500 dark:text-slate-400" data-testid="invite-role-description">{roleOption.description}</p>}
+          {!isCompanyRole && (
+            <fieldset className="rounded-md border border-slate-200 p-3 dark:border-slate-800" data-testid="invite-extra">
+              <legend className="px-1 text-xs font-semibold text-slate-600 dark:text-slate-300">More access with the same invitation</legend>
+              {extras.length === 0 && <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">For someone who works with several teams or departments: add each one, with the role they have there.</p>}
+              <ul className="space-y-2">
+                {extras.map((x, n) => {
+                  const o = options.find((opt) => opt.role === x.role);
+                  const used = usedScopes(x.key);
+                  return (
+                    <li key={x.key} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2" data-testid="invite-extra-row">
+                      <select aria-label={`Role of additional access ${n + 1}`} value={x.role} className={cx(inputClass, 'w-full')} data-testid="invite-extra-role"
+                        onChange={(e) => { const next = options.find((opt) => opt.role === e.target.value); setRow(x.key, { role: e.target.value, scopeId: (next?.scopes.find((s) => !used.has(s.id)) ?? next?.scopes[0])?.id ?? '' }); }}>
+                        {options.filter((opt) => opt.scopes[0]?.scopeType !== 'company').map((opt) => <option key={opt.role} value={opt.role}>{opt.label}</option>)}
+                      </select>
+                      <select aria-label={`Team or department of additional access ${n + 1}`} value={x.scopeId} className={cx(inputClass, 'w-full')} data-testid="invite-extra-scope"
+                        onChange={(e) => setRow(x.key, { scopeId: e.target.value })}>
+                        {(o?.scopes ?? []).filter((s) => s.id === x.scopeId || !used.has(s.id)).map((s) => (
+                          <option key={s.id} value={s.id}>{s.name}{s.departmentName ? ` (${s.departmentName})` : ''}</option>
+                        ))}
+                      </select>
+                      <button type="button" className={cx(buttonClass.secondary, 'h-9 px-2.5')} onClick={() => setExtras((rows) => rows.filter((r) => r.key !== x.key))} aria-label={`Remove additional access ${n + 1}`}>
+                        <Trash2 size={15} aria-hidden="true" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              <button type="button" className={cx(buttonClass.secondary, 'mt-2 h-8 px-2.5 text-xs')} onClick={addRow} disabled={extras.length >= MAX_EXTRA} data-testid="invite-extra-add">
+                <Plus size={14} aria-hidden="true" /> Add a team or department
+              </button>
+            </fieldset>
+          )}
+          {role && scopeId && (
+            <div className="rounded-md bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-800/60 dark:text-slate-300" data-testid="invite-summary">
+              <p className="mb-1 font-semibold text-slate-700 dark:text-slate-200">This invitation gives</p>
+              <ul className="list-disc space-y-0.5 pl-4">
+                <li>{nameOf(role, scopeId)}</li>
+                {!isCompanyRole && extras.map((x) => <li key={x.key}>{nameOf(x.role, x.scopeId)}</li>)}
+              </ul>
+            </div>
           )}
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" className={buttonClass.secondary} onClick={onClose}>Cancel</button>
@@ -248,7 +330,7 @@ export const InvitationsPanel: React.FC<{ reloadKey: number }> = ({ reloadKey })
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-slate-900 dark:text-white">{i.email}</p>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {ROLE_NAMES[i.role] ?? i.role} of {i.scope_name ?? '—'}
+                  {invitationAccess(i).join('; ')}
                   {' · '}
                   {i.status === 'accepted' && i.accepted_at ? `accepted ${new Date(i.accepted_at).toLocaleDateString()}`
                     : i.status === 'open' ? `expires ${new Date(i.expires_at).toLocaleDateString()}`

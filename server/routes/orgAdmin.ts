@@ -12,7 +12,7 @@ import {
   assignmentScopesSql, userTeamIdsSql, userDepartmentIdsSql, AssignmentError, type ScopeInfo,
 } from '../lib/assignments';
 import { auditedUserChange, recordAudit, undoEntry, canUndoEntry, isReversible, REVERSIBLE_ACTIONS, UndoError, type AuditEntry } from '../lib/audit';
-import { newToken, sendInvitationEmail, statusSql, INVITE_TTL_HOURS, EMAIL_RE, ROLE_NAMES, reissueInvitation } from '../lib/invitations';
+import { newToken, sendInvitationEmail, invitationAccess, statusSql, INVITE_TTL_HOURS, EMAIL_RE, ROLE_NAMES, reissueInvitation } from '../lib/invitations';
 
 /**
  * Organisation administration (mounted inside /api/admin):
@@ -64,7 +64,9 @@ async function loadAssignable(req: any, res: any): Promise<any | null> {
   return target;
 }
 
-const scopeLabel = (g: Grant, scope: ScopeInfo) => `${ROLE_NAMES[g.role] ?? g.role} of ${scope.name}`;
+const scopeLabel = (g: Grant, scope: ScopeInfo) => `${g.customRoleName ?? ROLE_NAMES[g.role] ?? g.role} of ${scope.name}`;
+/** Further assignments one invitation may carry besides the first. */
+const MAX_EXTRA_GRANTS = 20;
 
 /* ------------------------------------------------------------------------------------------
  * Role assignments
@@ -256,7 +258,8 @@ router.post('/audit/:id/undo', authenticateToken, async (req: any, res) => {
  * Invitations
  * ---------------------------------------------------------------------------------------- */
 
-const INVITATION_COLUMNS = `i.id, i.email, i.role, i.scope_type, i.scope_id, i.created_at, i.expires_at, i.last_sent_at, i.send_count,
+const INVITATION_COLUMNS = `i.id, i.email, i.role, i.scope_type, i.scope_id, i.created_at, i.extra_grants, i.custom_role_id,
+  (SELECT cr.name FROM custom_roles cr WHERE cr.id = i.custom_role_id AND cr.archived_at IS NULL) AS custom_role_name, i.expires_at, i.last_sent_at, i.send_count,
   i.accepted_at, i.accepted_user_id, i.revoked_at, ${statusSql('i')} AS status,
   CASE i.scope_type WHEN 'company' THEN c.name WHEN 'department' THEN d.name ELSE t.name END AS scope_name,
   CASE i.scope_type WHEN 'department' THEN d.id WHEN 'team' THEN t.department_id ELSE NULL END AS department_id,
@@ -301,7 +304,7 @@ async function deliver(req: any, inv: { id: string; email: string; role: string;
   const me = await queryOne<any>('SELECT first_name, last_name, email FROM users WHERE id = ?', [req.user.id]);
   const mail = await sendInvitationEmail({
     to: inv.email, token, companyName: company?.name ?? 'your organisation', inviterName: me ? fullName(me) : null,
-    role: inv.role, scopeName: inv.scope_name, expiresAt,
+    role: inv.role, scopeName: inv.scope_name, expiresAt, access: invitationAccess(inv),
   });
   return {
     delivery: { delivered: mail.delivered, channel: mail.channel, error: mail.error ?? null },
@@ -319,6 +322,21 @@ router.post('/invitations', authenticateToken, async (req: any, res) => {
     if (!EMAIL_RE.test(email) || email.length > 255) return res.status(400).json({ error: 'Enter a valid email address' });
     const { grant, scope } = await resolveGrant(companyId, req.body ?? {});
     if (!canGrant(actor, grant, scope.team)) return res.status(403).json({ error: 'You cannot invite someone to this role and scope' });
+    // Further access given with the same invitation (a Scrum Master of three teams, …): each one is checked like the first.
+    const extraInput: unknown = req.body?.extraGrants;
+    if (extraInput !== undefined && (!Array.isArray(extraInput) || extraInput.length > MAX_EXTRA_GRANTS)) {
+      return res.status(400).json({ error: `extraGrants must be a list of at most ${MAX_EXTRA_GRANTS} assignments` });
+    }
+    const extras: Array<{ grant: Grant; scope: ScopeInfo }> = [];
+    const seen = new Set([`${grant.scopeType}:${grant.scopeId}`]);
+    for (const raw of (extraInput as unknown[] | undefined) ?? []) {
+      const x = await resolveGrant(companyId, (raw ?? {}) as Record<string, unknown>);
+      if (!canGrant(actor, x.grant, x.scope.team)) return res.status(403).json({ error: `You cannot invite someone as ${scopeLabel(x.grant, x.scope)}` });
+      const key = `${x.grant.scopeType}:${x.grant.scopeId}`;
+      if (seen.has(key)) return res.status(400).json({ error: `${x.scope.name} is listed twice: one assignment per team or department` });
+      seen.add(key);
+      extras.push(x);
+    }
 
     if (await isOperatorEmail(email)) return res.status(409).json({ error: 'This e-mail address cannot be used for a company account.' });
     const existing = await queryOne<any>('SELECT id, company_id FROM users WHERE LOWER(email) = LOWER(?)', [email]);
@@ -329,9 +347,10 @@ router.post('/invitations', authenticateToken, async (req: any, res) => {
           : 'This email address is already registered.',
       });
     }
-    if (grant.role === 'team_lead') {
-      const lead = await queryOne<any>(`SELECT 1 FROM role_assignments WHERE scope_type = 'team' AND scope_id = ? AND role = 'team_lead' AND revoked_at IS NULL`, [grant.scopeId]);
-      if (lead) return res.status(409).json({ error: `${scope.name} already has a team lead. Invite them as a software engineer, then change the lead on the Departments page.` });
+    for (const x of [{ grant, scope }, ...extras]) {
+      if (x.grant.role !== 'team_lead') continue;
+      const lead = await queryOne<any>(`SELECT 1 FROM role_assignments WHERE scope_type = 'team' AND scope_id = ? AND role = 'team_lead' AND revoked_at IS NULL`, [x.grant.scopeId]);
+      if (lead) return res.status(409).json({ error: `${x.scope.name} already has a team lead. Invite them as a software engineer, then change the lead on the Departments page.` });
     }
 
     const { token, hash } = newToken();
@@ -350,14 +369,16 @@ router.post('/invitations', authenticateToken, async (req: any, res) => {
       );
       if (open) throw new AssignmentError(409, 'This person already has an open invitation. Resend or revoke it.');
       const [row] = await exec<any>(
-        `INSERT INTO invitations (company_id, email, role, scope_type, scope_id, token_hash, invited_by, expires_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
-        [companyId, email, grant.role, grant.scopeType, grant.scopeId, hash, actor.id, expiresAt.toISOString()]
+        `INSERT INTO invitations (company_id, email, role, scope_type, scope_id, token_hash, invited_by, expires_at, custom_role_id, extra_grants)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb) RETURNING id`,
+        [companyId, email, grant.role, grant.scopeType, grant.scopeId, hash, actor.id, expiresAt.toISOString(), grant.customRoleId ?? null,
+          JSON.stringify(extras.map((x) => ({ role: x.grant.role, scopeType: x.grant.scopeType, scopeId: x.grant.scopeId, customRoleId: x.grant.customRoleId ?? null, scopeName: x.scope.name, roleName: x.grant.customRoleName ?? null })))]
       );
       await recordAudit({
         companyId, actorId: actor.id, action: 'invitation.create', entityType: 'invitation', entityId: row.id,
-        summary: `Invited ${email} as ${scopeLabel(grant, scope)}`, after: { email, grant, expiresAt },
-        departmentIds: [scope.departmentId], subjectIds: [row.id],
+        summary: `Invited ${email} as ${[{ grant, scope }, ...extras].map((x) => scopeLabel(x.grant, x.scope)).join('; ')}`.slice(0, 480),
+        after: { email, grant, extraGrants: extras.map((x) => x.grant), expiresAt },
+        departmentIds: [scope.departmentId, ...extras.map((x) => x.scope.departmentId)], subjectIds: [row.id],
       }, exec);
       return row;
     });

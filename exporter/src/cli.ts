@@ -38,6 +38,7 @@ Options:
   -c, --config FILE  Config file (default: $QE_EXPORTER_CONFIG or ./qe-exporter.yaml / ./qe-exporter.json)
   --since DATE       Read from this date (YYYY-MM-DD or ISO time), e.g. a backfill
   --source NAME      Only this source
+  --force            sync: read every source now, whatever the collection schedule in QE Navigator says
   --state FILE       State file (overrides state.path)
   --offline          check: do not contact QE Navigator
   --all              preview / sync: include what was already delivered
@@ -57,6 +58,7 @@ export interface Args {
   command: string | null;
   config: string | null;
   since: Date | null;
+  force: boolean;
   source: string | null;
   state: string | null;
   offline: boolean;
@@ -70,7 +72,7 @@ export interface Args {
 }
 
 export function parseArgs(argv: string[]): Args {
-  const a: Args = { command: null, config: null, since: null, source: null, state: null, offline: false, all: false, out: null, verbose: false, logFormat: null, help: false, host: null, port: null };
+  const a: Args = { command: null, config: null, since: null, source: null, state: null, offline: false, all: false, force: false, out: null, verbose: false, logFormat: null, help: false, host: null, port: null };
   for (let i = 0; i < argv.length; i++) {
     const x = argv[i];
     const [flag, inline] = x.startsWith('--') && x.includes('=') ? [x.slice(0, x.indexOf('=')), x.slice(x.indexOf('=') + 1)] : [x, undefined];
@@ -90,6 +92,7 @@ export function parseArgs(argv: string[]): Args {
         break;
       }
       case '--source': a.source = value(); break;
+      case '--force': a.force = true; break;
       case '--state': a.state = value(); break;
       case '--offline': a.offline = true; break;
       case '--all': a.all = true; break;
@@ -154,7 +157,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env)
     log.error((e as Error).message);
     return EXIT.CONFIG;
   }
-  const opts = { since: args.since, source: args.source, env, offline: args.offline, all: args.all };
+  const opts = { since: args.since, source: args.source, env, offline: args.offline, all: args.all, force: args.force };
   try {
     if (args.command === 'check') return await runCheck(cfg, opts);
     if (args.command === 'preview') {

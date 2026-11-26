@@ -1,6 +1,6 @@
 import {
   ANALYTICS_ROLES, analyticsScopeLevelOf, canManageCompanyConfig, canOpenUserAdmin, canViewActivity, canViewIngestionLog,
-  canUploadFiles, canViewUserActivity, canWriteSomeTeamData, grantsOf, isCompanyAdmin, type PolicyActor,
+  canInvite, canUploadFiles, canViewUserActivity, canWriteSomeTeamData, grantsOf, isCompanyAdmin, type PolicyActor,
 } from '../../server/lib/userPolicy';
 
 /**
@@ -65,6 +65,9 @@ export function canOpenView(actor: PolicyActor | null | undefined, view: string)
       return canOpenUserAdmin(actor);
     case 'departments':
       return isCompanyAdmin(actor);
+    case 'roles':
+      // Roles: everyone who invites people reads what each role gives; only super admins change them (the page and the API).
+      return canInvite(actor);
     case 'activity':
       return canViewActivity(actor);
     case 'user-activity':

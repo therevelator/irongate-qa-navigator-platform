@@ -16,8 +16,8 @@ test.describe('Onboarding, API keys and ingestion', { tag: [TAG.area('onboarding
     const list = page.getByTestId('onboarding-checklist');
     await expect(list).toBeVisible();
     for (const k of ['departments', 'teams']) await expect(page.getByTestId(`onboarding-step-${k}`)).toHaveAttribute('data-done', 'true');
-    for (const k of ['people', 'targets', 'data']) await expect(page.getByTestId(`onboarding-step-${k}`)).toHaveAttribute('data-done', 'false');
-    await expect(page.getByTestId('onboarding-progress')).toHaveText('2 of 5 steps done');
+    for (const k of ['people', 'targets', 'collection', 'data']) await expect(page.getByTestId(`onboarding-step-${k}`)).toHaveAttribute('data-done', 'false');
+    await expect(page.getByTestId('onboarding-progress')).toHaveText('2 of 6 steps done');
 
     // Invite people -> the Users page; an invitation ticks the step.
     await page.getByTestId('onboarding-step-people').getByRole('button').click();
@@ -30,7 +30,7 @@ test.describe('Onboarding, API keys and ingestion', { tag: [TAG.area('onboarding
     await page.getByRole('button', { name: 'Done' }).click();
     await app.go('nav-dashboard', 'Overview');
     await expect(page.getByTestId('onboarding-step-people')).toHaveAttribute('data-done', 'true');
-    await expect(page.getByTestId('onboarding-progress')).toHaveText('3 of 5 steps done');
+    await expect(page.getByTestId('onboarding-progress')).toHaveText('3 of 6 steps done');
   });
 
   test('ONB-02 hiding the checklist and showing it again', async ({ freshCompany, signInAs, page }) => {

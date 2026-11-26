@@ -42,7 +42,9 @@ policies unless you start using the Supabase client libraries.
 
 **Latest migrations.** `20261209000000_more_raw_sources.sql` (load tests, test management, pull requests, calendars) and
 `20261210000000_navigator.sql` (hours lost per week, the Exporter's discovery report). Until the second one is applied the
-Next move pages say so and show nothing; no other page depends on it.
+Next move pages say so and show nothing; no other page depends on it. `20261211000000_collection_schedule.sql` (collection
+frequency per team) and `20261212000000_custom_roles.sql` (custom roles, several assignments per invitation) must be applied
+**before** the release that contains them is deployed: sign-in loads assignments together with their custom role.
 
 **New migrations.** Add a file `supabase/migrations/<YYYYMMDDHHMMSS>_<name>.sql`, written so it can run twice
 (`IF NOT EXISTS`, `ON CONFLICT`). Apply it to each environment with `psql` before or together with the deploy

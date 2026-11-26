@@ -76,7 +76,7 @@ const fmtH = (v: number | null) => (v == null ? '—' : `${v.toFixed(1)}h`);
 
 import API_URL from '../config/api';
 import { canEditUser, canEditAssignment, canManageUser, canDeleteUser, canResetPassword, canAssignRole, canCreateUsers, canInvite, canSetJobTitle, canChangeUserEmail, highestRole, TEAM_OPTIONAL_ROLES, type PolicyActor } from '../../server/lib/userPolicy';
-import { policyActorOf, grantableOptions } from '../lib/policyActor';
+import { policyActorOf, grantableOptions, withCustomRoles, type CustomRoleRef } from '../lib/policyActor';
 import { InviteDialog, InvitationsPanel } from './InviteDialog';
 import { AssignmentChips, type AssignmentRow } from './AssignmentChips';
 import { buttonClass } from './ui';
@@ -289,10 +289,18 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
     assignments: u.assignments ? u.assignments.map((a) => ({ role: a.role, scope_type: a.scope_type, scope_id: a.scope_id, department_id: a.department_id })) : null,
   });
   // Assignments the signed-in user may give (shared rule canGrant), for chips and invitations.
-  const grantOptions = useMemo(
-    () => grantableOptions(policyActorOf(user), user?.companyId ?? '', 'Organisation', departments, teams),
-    [user, departments, teams],
-  );
+  // The company's own roles (Organisation → Roles) are offered after the access levels.
+  const [customRoles, setCustomRoles] = useState<CustomRoleRef[]>([]);
+  useEffect(() => {
+    fetch(`${API_URL}/roles`, { credentials: 'include' })
+      .then((r) => (r.ok ? r.json() : { roles: [] }))
+      .then((d) => setCustomRoles(d.roles ?? []))
+      .catch(() => setCustomRoles([]));
+  }, []);
+  const grantOptions = useMemo(() => {
+    const me = policyActorOf(user);
+    return withCustomRoles(me, grantableOptions(me, user?.companyId ?? '', 'Organisation', departments, teams), customRoles, teams);
+  }, [user, departments, teams, customRoles]);
   const mayInvite = !!user && canInvite(actor) && grantOptions.length > 0;
   const canEditTarget = (u: User) => !!user && canEditUser(actor, asTarget(u));
   const canManageTarget = (u: User) => !!user && canManageUser(actor, asTarget(u));
@@ -406,7 +414,7 @@ const UsersView: React.FC<UsersViewProps> = ({ is3DMode = true }) => {
                 { header: 'Role', value: (u) => ROLE_LABELS[u.role] ?? u.role },
                 { header: 'Department', value: (u) => u.department_name ?? '' },
                 { header: 'Team', value: (u) => u.team_name ?? '' },
-                { header: 'Assignments', value: (u) => (u.assignments ?? []).map((a) => `${ROLE_LABELS[a.role] ?? a.role}: ${a.scope_name ?? a.scope_id}`).join('; ') },
+                { header: 'Assignments', value: (u) => (u.assignments ?? []).map((a) => `${a.custom_role_name ?? ROLE_LABELS[a.role] ?? a.role}: ${a.scope_name ?? a.scope_id}`).join('; ') },
                 { header: 'Active', value: (u) => (u.is_active ? 'yes' : 'no') },
               ]}
             />

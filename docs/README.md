@@ -17,6 +17,7 @@ a section of the bigger one.
 |---|---|---|
 | [USER_GUIDE.md](USER_GUIDE.md) | How to use the screens, by task; signing in, passwords, sessions and roles | company users |
 | [ADMIN_PANEL_GUIDE.md](ADMIN_PANEL_GUIDE.md) | Running a company (people, teams, parameters, logs) and the platform operator panel | company administrators, IronGate support |
+| [pdf/](pdf/README.md) | PDFs in the Porcelain theme: a guide per page of the menu (what it does, what it is good for, why you need it), use cases for 16 roles, the initial process as a presentation per role, and how often data is collected | customers, sales, customer success |
 | [ROLE_ACCESS.md](ROLE_ACCESS.md) | Who can see and do what, per role and page, derived from the code | everyone; testers for expected results |
 
 ## Data in

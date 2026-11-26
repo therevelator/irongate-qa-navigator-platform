@@ -12,7 +12,7 @@
 import { KPI_COLUMN_NAMES } from './kpiIngest';
 import { qaScoreComposite, type QaScoreComposite } from './metricFormulas';
 import { query } from '../../src/lib/db';
-import { hasSampleData, loadIntervals, referenceFor, referenceForRow, valueInfo, type IntervalMap, type ValueInfo } from './staleness';
+import { hasSampleData, intervalsForTeam, loadIntervals, referenceFor, referenceForRow, valueInfo, type IntervalMap, type ValueInfo } from './staleness';
 import { loadTargetBook, TARGET_METRICS, TARGET_METRIC_KEYS, type TargetBook, type TargetMetric, type TeamRef } from './targets';
 import { KPI_TARGET_KEYS, KPI_TARGETS, type KpiTargetCheck } from '../../src/config/metricsConfig';
 
@@ -73,7 +73,7 @@ const dayOfIso = (iso: string | null | undefined) => (iso ? new Date(iso).toISOS
  */
 export function evaluateSnapshot(row: Record<string, any>, team: TeamRef, ctx: EvalContext, reference: number): SnapshotEvaluation {
   const now = ctx.now ?? Date.now();
-  const values = valueInfo(row, KPI_COLUMN_NAMES, ctx.intervals, reference);
+  const values = valueInfo(row, KPI_COLUMN_NAMES, intervalsForTeam(ctx.intervals, team.id), reference);
   const stale = Object.keys(values).filter((c) => values[c].stale);
   const qa = qaScoreComposite(row, stale);
   const staleness: SnapshotEvaluation['staleness'] = {};

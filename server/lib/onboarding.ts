@@ -21,7 +21,7 @@
  */
 import { queryOne } from '../../src/lib/db';
 
-export type OnboardingStepKey = 'departments' | 'teams' | 'people' | 'targets' | 'data';
+export type OnboardingStepKey = 'departments' | 'teams' | 'people' | 'targets' | 'collection' | 'data';
 
 export interface OnboardingStep {
   key: OnboardingStepKey;
@@ -76,6 +76,8 @@ export async function onboardingStatus(companyId: string): Promise<OnboardingSta
     `SELECT COUNT(*) AS n FROM (SELECT 1 FROM metric_values WHERE company_id = ? AND COALESCE(source, '') <> 'synthetic' LIMIT 1) x`,
     [companyId]
   ));
+  // A team whose collection frequency was chosen (or confirmed as recommended) by a person.
+  const scheduled = n(await queryOne<{ n: unknown }>(`SELECT COUNT(DISTINCT team_id) AS n FROM collection_schedules WHERE company_id = ?`, [companyId]).catch(() => null));
   const state = await queryOne<{ dismissed_at: string | null; completed_at: string | null }>(
     `SELECT dismissed_at, completed_at FROM onboarding_state WHERE company_id = ?`, [companyId]
   );
@@ -96,6 +98,10 @@ export async function onboardingStatus(companyId: string): Promise<OnboardingSta
     {
       key: 'targets', label: 'Set KPI targets', done: targets > 0, count: targets, view: 'parameters-config', actionLabel: 'Open Parameters',
       description: 'Until you set your own, teams are judged against the built-in default targets.',
+    },
+    {
+      key: 'collection', label: 'Choose how often data is collected', done: scheduled > 0, count: scheduled, view: 'metric-intervals', actionLabel: 'Open Update frequency',
+      description: 'Per team: say how often it releases and accept or change the recommended intervals. Until then every source is read every 15 minutes.',
     },
     {
       key: 'data', label: 'Send the first data', done: ingested + realValues > 0, count: ingested + realValues, view: 'admin-panel', actionLabel: 'Create an API key',

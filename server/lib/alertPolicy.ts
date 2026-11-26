@@ -20,7 +20,7 @@
  */
 import { listAssignments, execOn, type Exec } from './assignments';
 import {
-  assignedTeamIds, managedDepartmentIds, canManageCompanyConfig, canSetTargets, canViewTeamAnalytics, canWriteTeamData, isCompanyAdmin, DEVELOPER_INSIGHT_ROLES, grantsOf,
+  assignedTeamIds, managedDepartmentIds, canManageCompanyConfig, canSetTargets, canViewTeamAnalytics, canWriteTeamData, isCompanyAdmin, capAnywhere, DEVELOPER_INSIGHT_ROLES, grantsOf,
   type Grant, type PolicyActor, type ScopeTeam,
 } from './userPolicy';
 
@@ -57,7 +57,7 @@ export const canManageNotificationSettings = (actor: PolicyActor) => isCompanyAd
 export const canRunEvaluation = (actor: PolicyActor) => isCompanyAdmin(actor);
 
 /** Digest recipients: anyone holding a super_admin, QA manager or team lead assignment. */
-export const canReceiveDigest = (actor: PolicyActor) => grantsOf(actor).some((g) => DEVELOPER_INSIGHT_ROLES.includes(g.role));
+export const canReceiveDigest = (actor: PolicyActor) => capAnywhere(actor, 'view_individuals');
 
 export const canSeeActions = (actor: PolicyActor, team: ScopeTeam) => canViewTeamAnalytics(actor, team);
 export const canManageActions = (actor: PolicyActor, team: ScopeTeam) => canWriteTeamData(actor, team);

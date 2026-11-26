@@ -30,7 +30,7 @@ function mockQe(s: MockServer, opts: { refuse?: (item: any) => string | null; st
     assert.equal(r.headers.authorization, `Bearer ${API_KEY}`);
     assert.equal(r.headers['content-encoding'], 'gzip');
     assert.equal(r.headers['content-type'], 'application/gzip');
-    assert.match(String(r.headers['user-agent']), /^qe-exporter\/0\.5\.0 /);
+    assert.match(String(r.headers['user-agent']), /^qe-exporter\/0\.6\.0 /);
     assert.ok(r.headers['x-exporter-host']);
     const e = r.json;
     assert.deepEqual(Object.keys(e).sort(), ['companyId', 'departmentId', 'items', 'kind', 'source', 'teamId']);
@@ -125,9 +125,11 @@ describe('sync', () => {
     assert.ok(!readFileSync(cfg.statePath, 'utf8').includes('jira-secret'), 'no secret in the state');
 
     // Second run: the sources are read again (overlap), nothing new is sent.
-    const before = qe.requests.length;
+    // (From 0.6.0 a run first asks QE Navigator for the collection schedule: one GET, no data.)
+    const batchCount = () => qe.requests.filter((r) => r.method === 'POST' && r.path === '/api/ingest/exporter/batch').length;
+    const before = batchCount();
     assert.equal(await runSync(cfg, { env: ENV }), EXIT.OK);
-    assert.equal(qe.requests.length, before, 'idempotent re-run: no request to QE Navigator');
+    assert.equal(batchCount(), before, 'idempotent re-run: nothing is sent to QE Navigator');
     const jql = vendors.requests.filter((r) => r.path === '/rest/api/3/search/jql').at(-1)!.query.get('jql')!;
     assert.match(jql, /updated >= "2026\/11\/21 09:51"/, 'cursor minus the 10-minute overlap, Europe/Dublin');
   });

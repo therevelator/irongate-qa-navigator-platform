@@ -30,10 +30,25 @@ one of their assignments covers it: the whole company for a super admin, the dep
 manager, the team for the team roles. Data never crosses companies. Nobody may change their own role, give
 themselves an assignment, or manage someone of their own rank or above.
 
+**Your own roles.** Organisation → **Roles** shows the five levels with the permissions each comes with, a set
+of recommended roles (Scrum Master, Product Owner, Quality Lead, DevOps / Platform Engineer, Engineering
+Manager, Delivery Manager, Executive Sponsor) and the roles your company created. A super admin creates a role
+from a recommendation or from scratch: a name, a level, and six permissions pre-ticked with our recommendation
+(individual metrics, survey comments, money, logs, team data, sending the survey). Roles can be edited later
+(everyone holding the role follows on their next page; "Back to recommended" restores the level's set) and
+archived (people stay on the level). Details: [ROLE_ACCESS.md](ROLE_ACCESS.md#custom-roles-and-permissions).
+
 The rules are in [`server/lib/userPolicy.ts`](../server/lib/userPolicy.ts) and are used by both the API and
 the UI. The **Help** button in the top bar shows them for the signed-in person.
 
 ## 2. People: Users page and invitations
+
+**Several assignments in one invitation.** In **Invite a person** choose the role (a level or one of your
+roles) and where it applies, then **Add a team or department** for each further place, each with its own role:
+a Scrum Master of team X in one department and of teams A and B in another is one invitation. The summary
+"This invitation gives" lists everything before sending; the e-mail, the invitations list and the page the
+person accepts on list the same. Each assignment is checked like a single one (you can only give what you
+hold), at most 20 further ones, one per team or department.
 
 **Users** (super admins: everyone; managers: people of their departments; team leads: people of the teams
 they lead).
@@ -93,8 +108,19 @@ company values read-only):
 - **Session settings** (super admins): how long a sign-in lasts (default 7 days).
 - "Apply to every department and team" copies a company value down (super admins).
 
-**Update frequency** (super admins and managers): how often each metric is expected to arrive. A value
-older than its interval is marked stale and not judged.
+**Update frequency** (super admins and managers) has two parts.
+
+- **How often data is collected**, per team: choose the team's release rhythm (daily or continuous, weekly,
+  every two weeks, monthly or less) and the form fills in our recommended interval for each of six kinds of
+  data (pipelines, tests and coverage; deployments and incidents; issues and sprints; static analysis; test
+  management; pull requests and calendars). Every interval can be changed, from 15 minutes to 30 days, at
+  setup and at any time later; "Back to recommended" restores ours. A team never set up reads everything every
+  15 minutes. The Exporter (0.6.0 and later) reads this schedule on every run and skips the sources that are
+  not due. It is step 5 of the onboarding checklist. People with the team-data permission can change their
+  own team's schedule.
+- **Expected update frequency**: how often each metric is expected to arrive. A value older than its interval
+  is marked stale and not judged; a team that chose to collect a kind of data less often is allowed twice
+  that interval before its values are called stale.
 
 ## 6. Manual metrics
 

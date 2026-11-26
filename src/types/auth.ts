@@ -42,6 +42,11 @@ export interface UserAssignment {
   scopeName: string | null;
   departmentId: string | null;
   departmentName: string | null;
+  /** The company's custom role of this assignment, with the permissions it adds to / removes from its level. */
+  customRoleId?: string | null;
+  customRoleName?: string | null;
+  added?: string[] | null;
+  removed?: string[] | null;
 }
 
 export interface AuthState {

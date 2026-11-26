@@ -308,7 +308,7 @@ describe('Compare, saved views, onboarding API', () => {
     }
     const res = await get('/api/onboarding', c.admin);
     expect(res.status).toBe(200);
-    expect(res.body.steps.map((s: any) => s.key)).toEqual(['departments', 'teams', 'people', 'targets', 'data']);
+    expect(res.body.steps.map((s: any) => s.key)).toEqual(['departments', 'teams', 'people', 'targets', 'collection', 'data']);
     expect(res.body.completed).toBe(res.body.steps.filter((s: any) => s.done).length);
   });
 
@@ -327,8 +327,8 @@ describe('Compare, saved views, onboarding API', () => {
     const steps = async () => Object.fromEntries(((await get('/api/onboarding', cookie)).body.steps as any[]).map((x) => [x.key, x.done]));
     try {
       let st = (await get('/api/onboarding', cookie)).body;
-      expect(st).toMatchObject({ completed: 2, total: 5, show: true, dismissed: false });
-      expect(await steps()).toEqual({ departments: true, teams: true, people: false, targets: false, data: false });
+      expect(st).toMatchObject({ completed: 2, total: 6, show: true, dismissed: false });
+      expect(await steps()).toEqual({ departments: true, teams: true, people: false, targets: false, collection: false, data: false });
 
       // Saving the company-wide targets unchanged ("Save for all departments") confirms them.
       const confirm = await put('/api/targets', cookie, { scopeType: 'company', scopeId: companyId, targets: {}, applyToAll: true });
@@ -342,7 +342,11 @@ describe('Compare, saved views, onboarding API', () => {
 
       expect((await post('/api/admin/invitations', cookie, { email: `onb-invitee-${s}@onb${s}.test`, role: 'qa_engineer', scopeId: teamId })).status).toBe(201);
       st = (await get('/api/onboarding', cookie)).body;
-      expect(st).toMatchObject({ completed: 5, complete: true, show: false });
+      expect(st).toMatchObject({ completed: 5, complete: false, show: true });
+      // The last step: how often the team's data is collected.
+      expect((await put(`/api/collection-schedule/teams/${teamId}`, cookie, { cadence: 'weekly', intervals: { ci: 60 } })).status).toBe(200);
+      st = (await get('/api/onboarding', cookie)).body;
+      expect(st).toMatchObject({ completed: 6, complete: true, show: false });
       expect(st.completedAt).toBeTruthy();
 
       // Completed once = never shown again, even when a step reads as open later.

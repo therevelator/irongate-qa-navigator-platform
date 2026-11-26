@@ -18,6 +18,7 @@ import PDFReportGenerator from './components/PDFReportGenerator';
 import UsersView from './components/UsersView';
 import TeamsView from './components/TeamsView';
 import DepartmentsView from './components/DepartmentsView';
+import RolesView from './components/RolesView';
 import ActivityLog from './components/ActivityLog';
 import UserActivity from './components/UserActivity';
 import { trackScreen } from './lib/activityTracker';
@@ -32,6 +33,7 @@ import ParametersConfiguration from './components/ParametersConfiguration';
 import TeamTvView from './components/TeamTvView';
 import CompareTeams from './components/CompareTeams';
 import ExecutiveSummary from './components/ExecutiveSummary';
+import CollectionSchedule from './components/CollectionSchedule';
 import TimeLost from './components/navigator/TimeLost';
 import Findings from './components/navigator/Findings';
 import Outcomes from './components/navigator/Outcomes';
@@ -50,6 +52,7 @@ const VIEW_TO_PATH: Record<string, string> = {
   'users': '/users',
   'teams': '/teams',
   'departments': '/departments',
+  'roles': '/roles',
   'activity': '/activity',
   'user-activity': '/user-activity',
   'ingestion-log': '/ingestion-log',
@@ -331,6 +334,7 @@ function App() {
   // Views
   if (currentView === 'users') return renderLayout(<UsersView is3DMode={is3DMode} />);
   if (currentView === 'teams') return renderLayout(<TeamsView is3DMode={is3DMode} />);
+  if (currentView === 'roles') return renderLayout(<RolesView />);
   if (currentView === 'departments') {
     return renderLayout(
       <DepartmentsView
@@ -378,7 +382,7 @@ function App() {
   if (currentView === 'notifications') return renderLayout(<NotificationsCenter />);
   if (currentView === 'admin-panel') return renderLayout(<AdminPanel />);
   if (currentView === 'manual-metrics') return renderLayout(<ManualMetricsInput onBack={() => handleViewChange('dashboard')} />);
-  if (currentView === 'metric-intervals') return renderLayout(<MetricIntervalsConfig onBack={() => handleViewChange('dashboard')} />);
+  if (currentView === 'metric-intervals') return renderLayout(<><div className="mx-auto w-full max-w-[1400px] px-4 pt-6 sm:px-8 sm:pt-8"><CollectionSchedule /></div><MetricIntervalsConfig onBack={() => handleViewChange('dashboard')} /></>);
   if (currentView === 'parameters-config') return renderLayout(<ParametersConfiguration onBack={() => handleViewChange('admin-panel')} />);
 
   return (
