@@ -13,11 +13,14 @@ import { chromium } from 'playwright';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { execFileSync } from 'node:child_process';
+import os from 'node:os';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const SRC = path.join(HERE, 'src');
 const ROOT = path.resolve(HERE, '..', '..');
-const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+// Only characters of the standard Windows-1252 set reach the page (see "Fonts" below): arrows become ›.
+const esc = (s) => String(s ?? '').replace(/→/g, '›').replace(/−/g, '-').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 /** Inline markup in content strings: **bold**, `code`, [text](url). Everything else is escaped. */
 const md = (s) => esc(s)
   .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
@@ -38,7 +41,8 @@ const callout = (text, kind = '') => (text ? `<div class="callout ${kind}">${md(
 /** A step is a bold title and a sentence under it; content may write the sentence as a continuation (": the page…"). */
 const sentence = (d) => { const t = String(d ?? '').replace(/^[:\s]+/, ''); return t ? t[0].toUpperCase() + t.slice(1) : ''; };
 const steps = (items) => `<ol class="steps">${items.map(([t, d]) => `<li><b>${md(String(t).replace(/[.:]$/, ''))}</b>${md(sentence(d))}</li>`).join('')}</ol>`;
-const sources = (list) => (list?.length ? `<p class="source" style="margin-top:6pt">Sources: ${list.map(([t, u]) => `<a href="${esc(u)}">${esc(t)}</a>`).join(' · ')}</p>` : '');
+// The address is printed: the final PDFs carry no clickable links (see "Fonts" below).
+const sources = (list) => (list?.length ? `<p class="source" style="margin-top:6pt">Sources: ${list.map(([t, u]) => `${esc(t)}: ${esc(u.replace(/^https?:\/\//, ''))}`).join(' · ')}</p>` : '');
 
 const cover = ({ kicker, title, lead, chips = [] }) => `
 <header class="cover avoid">
@@ -135,11 +139,23 @@ async function load() {
   return out;
 }
 
-const footer = (title) => `<div style="width:100%;font-family:Inter,sans-serif;font-size:7pt;color:#7a7268;padding:0 16mm;display:flex;justify-content:space-between;">
+const footer = (title) => `<style>${FONTS}</style><div style="width:100%;font-family:'Inter PDF',sans-serif;font-size:7pt;color:#7a7268;padding:0 16mm;display:flex;justify-content:space-between;">
   <span>IronGate QE Navigator · ${esc(title)}</span><span><span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`;
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const documents = (await load()).filter((d) => !only.length || only.some((o) => d.file.includes(o)));
+/*
+ * Fonts. Chromium writes text with subset fonts in a two-byte encoding (Type 0 / Identity-H). Chrome, Acrobat,
+ * Preview and pdf.js read that; some simpler viewers (the GitHub mobile app is one) do not, and show the glyph
+ * numbers as random letters. So every PDF is rewritten with poppler's pdftocairo, which embeds the same fonts as
+ * simple TrueType subsets in the standard WinAnsi encoding: the form every viewer handles, and one in which even
+ * a viewer that ignores embedded fonts still shows the right letters. That is also why only Windows-1252
+ * characters are used. The rewrite drops link annotations, so addresses are printed as text.
+ */
+let cairo = true;
+try { execFileSync('pdftocairo', ['-v'], { stdio: 'ignore' }); } catch { cairo = false; }
+if (!cairo) { console.error('pdftocairo (poppler-utils) is required: without it the PDFs are unreadable in some viewers.\n  macOS: brew install poppler   Debian/Ubuntu: apt install poppler-utils'); process.exit(1); }
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'qe-pdf-'));
 const browser = await chromium.launch(process.env.PW_CHROMIUM_PATH ? { executablePath: process.env.PW_CHROMIUM_PATH } : {});
 const tab = await browser.newPage();
 // The Porcelain glow (soft radial gradients) is painted once as a small image: as CSS gradients with transparency
@@ -150,6 +166,7 @@ GLOW = `data:image/jpeg;base64,${(await tab.screenshot({ type: 'jpeg', quality: 
 for (const d of documents) {
   const target = path.join(HERE, d.file);
   fs.mkdirSync(path.dirname(target), { recursive: true });
+  const raw = path.join(tmp, 'raw.pdf');
   await tab.setContent(page(d.html, d.deck), { waitUntil: 'load' });
   await tab.evaluate(() => document.fonts.ready);
   if (d.deck) {
@@ -161,14 +178,18 @@ for (const d of documents) {
         while (body.scrollHeight > body.clientHeight + 1 && zoom > 0.6) { zoom -= 0.03; body.style.zoom = String(zoom); }
       }
     });
-    await tab.pdf({ path: target, width: '13.333in', height: '7.5in', printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
+    await tab.pdf({ path: raw, width: '13.333in', height: '7.5in', printBackground: true, margin: { top: '0', bottom: '0', left: '0', right: '0' } });
   } else {
     await tab.pdf({
-      path: target, format: 'A4', printBackground: true, displayHeaderFooter: true, headerTemplate: '<span></span>', footerTemplate: footer(d.title),
+      path: raw, format: 'A4', printBackground: true, displayHeaderFooter: true, headerTemplate: '<span></span>', footerTemplate: footer(d.title),
       margin: { top: '14mm', bottom: '16mm', left: '16mm', right: '16mm' },
     });
   }
+  execFileSync('pdftocairo', ['-pdf', raw, target]);
+  const fonts = execFileSync('pdffonts', [target]).toString();
+  if (/Type 3|CID|Identity/.test(fonts)) throw new Error(`${d.file}: a font is not in the simple WinAnsi form (a character outside Windows-1252, or a font that is not Inter PDF?)\n${fonts}`);
   console.log(`  ${d.file}`);
 }
 await browser.close();
+fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`${documents.length} PDF${documents.length === 1 ? '' : 's'} written to docs/pdf/`);

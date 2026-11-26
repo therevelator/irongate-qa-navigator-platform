@@ -21,7 +21,12 @@ npm run docs:pdf -- flaky     # only the ones whose path contains "flaky"
 npm run docs:pdf:screens      # retake the screenshots from a running app with the demo data (then rebuild)
 ```
 
-Headless Chromium (Playwright, already a dev dependency) prints them; Inter is embedded from `src/fonts`. Commit the PDFs
+Headless Chromium (Playwright, already a dev dependency) prints them; Inter is embedded from `src/fonts`. Each file is
+then rewritten with `pdftocairo` (poppler-utils: `brew install poppler` / `apt install poppler-utils`), which stores
+the fonts in the plain WinAnsi form every viewer reads. Chromium's own output showed as random letters in simpler
+viewers such as the GitHub mobile app. The build stops if any font is left in another form, which happens when a
+character outside Windows-1252 is used (write `›` or "to" instead of an arrow). The rewrite drops clickable links, so
+addresses are printed as text. Commit the PDFs
 with the content change, so nobody needs to build to read them.
 
 ## Rules the content follows

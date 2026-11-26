@@ -1,8 +1,8 @@
 /** Feature guides: the "Delivery" menu group. */
 const EVERYONE = 'Every role, for the teams they are assigned to';
 const DORA = ['DORA, Accelerate State of DevOps research', 'https://dora.dev/research/'];
-const SPACE = ['Forsgren et al., "The SPACE of Developer Productivity", ACM Queue (2021)', 'https://queue.acm.org/detail.cfm?id=3454124'];
-const DEVEX = ['Noda, Storey, Forsgren, Greiler, "DevEx: What Actually Drives Productivity", ACM Queue (2023)', 'https://queue.acm.org/detail.cfm?id=3595878'];
+const SPACE = ['Forsgren et al., "The SPACE of Developer Productivity", ACM Queue, 2021', 'https://queue.acm.org/detail.cfm?id=3454124'];
+const DEVEX = ['Noda, Storey, Forsgren, Greiler, "DevEx: What Actually Drives Productivity", ACM Queue, 2023', 'https://queue.acm.org/detail.cfm?id=3595878'];
 const DORA_GUIDE = ['DORA, guide to the software delivery metrics (pitfalls)', 'https://dora.dev/guides/dora-metrics/'];
 
 export const features = [

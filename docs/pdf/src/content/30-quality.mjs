@@ -1,6 +1,6 @@
 /** Feature guides: the "Quality" menu group. */
 const EVERYONE = 'Every role, for the teams they are assigned to';
-const GOOGLE_FLAKY = ['Google Testing Blog, "Flaky Tests at Google and How We Mitigate Them" (2016)', 'https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html'];
+const GOOGLE_FLAKY = ['Google Testing Blog, "Flaky Tests at Google and How We Mitigate Them", 2016', 'https://testing.googleblog.com/2016/05/flaky-tests-at-google-and-how-we.html'];
 const ATLASSIAN_FLAKY = ['Atlassian Engineering, "Taming test flakiness"', 'https://www.atlassian.com/blog/how-we-build/taming-test-flakiness-how-we-built-a-scalable-tool-to-detect-and-manage-flaky-tests'];
 const CISQ = ['CISQ, The Cost of Poor Software Quality in the US: A 2022 Report', 'https://www.it-cisq.org/the-cost-of-poor-quality-software-in-the-us-a-2022-report/'];
 
